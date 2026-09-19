@@ -11,6 +11,7 @@
 
 use crate::state::{AppState, CmdError, CmdResult};
 use havenkeys_core::crypto::kdf::KdfParams;
+use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
 use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings};
 use havenkeys_core::totp::TotpCode;
@@ -30,6 +31,8 @@ pub fn vault_status(state: State<'_, AppState>) -> CmdResult<VaultStatus> {
     Ok(state.vault()?.status()?)
 }
 
+/// Create a vault protected by the master password and a new Secret Key.
+/// The key is saved on this device; the UI then shows the Emergency Kit.
 #[tauri::command]
 pub async fn create_vault(app: AppHandle, password: SecretString) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
@@ -37,9 +40,22 @@ pub async fn create_vault(app: AppHandle, password: SecretString) -> CmdResult<V
         return Err(havenkeys_core::Error::VaultExists.into());
     }
     vault::check_new_master_password(&password)?;
+    let secret_key = SecretKey::generate()?;
+    // Saved before the vault exists, so the vault can never exist without it.
+    state
+        .device
+        .lock()
+        .map_err(|_| CmdError::internal())?
+        .set_secret_key(&secret_key)
+        .map_err(|_| CmdError::internal())?;
     // Argon2id runs off the async runtime and without holding the vault lock.
     let prepared = tauri::async_runtime::spawn_blocking(move || {
-        vault::prepare_new_vault(&password, KdfParams::generate()?, AppState::now_ms())
+        vault::prepare_new_vault_with_secret_key(
+            &password,
+            &secret_key,
+            KdfParams::generate()?,
+            AppState::now_ms(),
+        )
     })
     .await
     .map_err(|_| CmdError::internal())??;
@@ -58,12 +74,40 @@ pub async fn create_vault(app: AppHandle, password: SecretString) -> CmdResult<V
     Ok(status)
 }
 
+/// Unlock. Vaults with a Secret Key use `secret_key` when the user typed one
+/// from the Emergency Kit (it is then saved here once the unlock succeeds),
+/// and otherwise the one saved on this device.
 #[tauri::command]
-pub async fn unlock_vault(app: AppHandle, password: SecretString) -> CmdResult<VaultStatus> {
+pub async fn unlock_vault(
+    app: AppHandle,
+    password: SecretString,
+    secret_key: Option<SecretString>,
+) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
+    let stored = state
+        .device
+        .lock()
+        .map_err(|_| CmdError::internal())?
+        .secret_key();
+    let typed = match secret_key {
+        Some(t) if !t.is_empty() => Some(SecretKey::parse(t.expose())?),
+        _ => None,
+    };
     let ticket = state.vault()?.begin_unlock()?;
+    if ticket.needs_secret_key() && stored.is_none() && typed.is_none() {
+        // Back to LOCKED without a lock event: nothing was ever open.
+        let r = state
+            .vault()?
+            .finish_unlock(ticket, Err(havenkeys_core::Error::SecretKeyRequired));
+        return Err(r
+            .err()
+            .unwrap_or(havenkeys_core::Error::SecretKeyRequired)
+            .into());
+    }
+    let key_text = typed.as_ref().map(|k| k.to_text());
     let joined = tauri::async_runtime::spawn_blocking(move || {
-        let key = ticket.derive(&password);
+        let sk = typed.as_ref().or(stored.as_ref());
+        let key = ticket.derive_with_secret_key(&password, sk);
         (ticket, key)
     })
     .await;
@@ -87,6 +131,15 @@ pub async fn unlock_vault(app: AppHandle, password: SecretString) -> CmdResult<V
     // never be overtaken by this one. `notify` never blocks.
     state.notify_unlocked();
     drop(v);
+    // A Secret Key typed from the Emergency Kit proved correct: remember it.
+    if let Some(text) = key_text {
+        if let Ok(k) = SecretKey::parse(text.expose()) {
+            if let Ok(mut d) = state.device.lock() {
+                let _ = d.set_secret_key(&k);
+            }
+        }
+    }
+    state.sync.request();
     Ok(status)
 }
 
@@ -106,18 +159,26 @@ pub async fn change_master_password(
     state.touch();
     vault::check_new_master_password(&new)?;
     let kdf = KdfParams::generate()?;
+    let secret_key = state
+        .device
+        .lock()
+        .map_err(|_| CmdError::internal())?
+        .secret_key();
     let ticket = state.vault()?.begin_rekey()?;
     // Both Argon2id runs happen without the vault lock, so locking (button,
     // auto-lock, window close) is never delayed; the commit re-checks the
     // lock epoch and the header.
     let (ticket, rekeyed) = tauri::async_runtime::spawn_blocking(move || {
-        let rekeyed = ticket.derive(&current, &new, kdf);
+        let rekeyed = ticket.derive_with_secret_key(&current, &new, kdf, secret_key.as_ref());
         (ticket, rekeyed)
     })
     .await
     .map_err(|_| CmdError::internal())?;
     let mut v = state.vault()?;
     v.commit_rekey(ticket, rekeyed)?;
+    drop(v);
+    // Other devices pick up the new header from the sync folder.
+    state.sync.request();
     Ok(())
 }
 
@@ -229,7 +290,9 @@ pub fn copy_secret(
 #[tauri::command]
 pub fn create_item(state: State<'_, AppState>, input: ItemInput) -> CmdResult<ItemOverview> {
     state.touch();
-    Ok(state.vault()?.create_item(input, AppState::now_ms())?)
+    let item = state.vault()?.create_item(input, AppState::now_ms())?;
+    state.sync.request();
+    Ok(item)
 }
 
 #[tauri::command]
@@ -239,13 +302,17 @@ pub fn update_item(
     input: ItemInput,
 ) -> CmdResult<ItemOverview> {
     state.touch();
-    Ok(state.vault()?.update_item(&id, input, AppState::now_ms())?)
+    let item = state.vault()?.update_item(&id, input, AppState::now_ms())?;
+    state.sync.request();
+    Ok(item)
 }
 
 #[tauri::command]
 pub fn delete_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<()> {
     state.touch();
-    Ok(state.vault()?.delete_item(&id)?)
+    state.vault()?.delete_item(&id, AppState::now_ms())?;
+    state.sync.request();
+    Ok(())
 }
 
 // ------------------------------------------------------------------ generator

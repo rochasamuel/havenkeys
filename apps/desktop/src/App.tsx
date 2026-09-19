@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { VaultStatus } from "./lib/types";
+import type { DeviceStatus, VaultStatus } from "./lib/types";
+import { EmergencyKit } from "./components/EmergencyKit";
 import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
 import { UnlockScreen } from "./views/UnlockScreen";
@@ -13,11 +14,15 @@ export function App() {
   // component state) is unmounted and discarded.
   const [session, setSession] = useState(0);
   const [fatal, setFatal] = useState(false);
+  const [device, setDevice] = useState<DeviceStatus | null>(null);
+  // Right after creating a vault: show the Emergency Kit before the vault.
+  const [showKit, setShowKit] = useState(false);
 
   useEffect(() => {
     api.status().then(setStatus, () => setFatal(true));
     const unlisten = api.onLocked((reason) => {
       setLockReason(reason);
+      setShowKit(false);
       setSession((s) => s + 1);
       setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0 } : s));
     });
@@ -26,6 +31,12 @@ export function App() {
 
   const unlocked = status?.state === "unlocked";
   useActivityReporter(unlocked);
+
+  // Whether this device must be given the Secret Key (safe while locked).
+  useEffect(() => {
+    if (unlocked) return;
+    api.deviceStatus().then(setDevice, () => setDevice(null));
+  }, [unlocked, session]);
 
   // The theme lives in the encrypted settings; apply it once they're readable.
   useEffect(() => {
@@ -61,11 +72,30 @@ export function App() {
         key={session}
         mode={status.vaultExists ? "unlock" : "create"}
         lockReason={lockReason}
-        onUnlocked={(s) => {
+        needsSecretKey={device?.needsSecretKey ?? false}
+        usesSecretKey={device?.keyScheme === "password_and_secret_key"}
+        onUnlocked={(s, created) => {
           setLockReason(null);
+          setShowKit(created);
           setStatus(s);
         }}
       />
+    );
+  }
+
+  if (showKit) {
+    return (
+      <main className="kit-screen">
+        <div className="kit-intro">
+          <h1>Save your Emergency Kit</h1>
+          <p>
+            Your vault is protected by your master password <em>and</em> a Secret Key created just now. This computer
+            remembers the Secret Key. You will need it to open your vault anywhere else, or on this computer if its
+            HavenKeys data is lost.
+          </p>
+        </div>
+        <EmergencyKit key={session} onDone={() => setShowKit(false)} />
+      </main>
     );
   }
 

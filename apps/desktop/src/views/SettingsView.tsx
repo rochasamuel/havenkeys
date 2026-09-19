@@ -4,6 +4,7 @@ import type { Settings, Theme } from "../lib/types";
 import { applyTheme } from "../lib/theme";
 import { useToast } from "../components/Toast";
 import { ImportSection } from "./ImportSection";
+import { SyncSection } from "./SyncSection";
 
 const autoLockChoices = [
   { value: 5, label: "After 5 minutes" },
@@ -140,7 +141,7 @@ export function SettingsView({ onImported }: { onImported: () => void }) {
             </select>
           </label>
           <p className="muted">
-            The vault also locks when the computer sleeps and when you quit HavenKeys. Closing the window keeps
+            The vault also locks when the screen locks, when the computer sleeps, and when you quit HavenKeys. Closing the window keeps
             HavenKeys in the tray.
           </p>
           <label className="control">
@@ -178,6 +179,8 @@ export function SettingsView({ onImported }: { onImported: () => void }) {
         </div>
       )}
 
+      <SyncSection />
+
       <ImportSection onImported={onImported} />
 
       <ChangePassword />
@@ -185,9 +188,9 @@ export function SettingsView({ onImported }: { onImported: () => void }) {
       <div className="settings-block">
         <h3>About</h3>
         <p className="muted">
-          HavenKeys 0.1.0. Your vault is stored only on this computer and encrypted with AES-256-GCM under a key
-          derived from your master password with Argon2id. This software has not undergone an independent security
-          audit.
+          HavenKeys 0.1.0. Your vault is encrypted with AES-256-GCM under a key derived from your master password (with
+          Argon2id) and your Secret Key. It stays on this computer unless you turn on sync. This software has not
+          undergone an independent security audit.
         </p>
       </div>
     </section>

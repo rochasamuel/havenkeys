@@ -6,7 +6,10 @@
 
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
-use crate::crypto::keys::{derive_data_key, derive_kek, Key256, KEY_LEN};
+use crate::crypto::keys::{
+    derive_data_key, derive_kek, derive_kek_with_secret_key, Key256, KEY_LEN,
+};
+use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
 use crate::import::{ImportReport, ImportedItem};
 use crate::model::{
@@ -16,7 +19,7 @@ use crate::model::{
 };
 use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::secret::SecretString;
-use crate::store::{HeaderRecord, Store};
+use crate::store::{HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -47,12 +50,12 @@ pub struct VaultStatus {
     pub damaged_items: usize,
 }
 
-struct Session {
-    vault_id: Uuid,
-    data_key: Key256,
-    overviews: HashMap<Uuid, ItemOverview>,
-    settings: Settings,
-    damaged_items: usize,
+pub(crate) struct Session {
+    pub(crate) vault_id: Uuid,
+    pub(crate) data_key: Key256,
+    pub(crate) overviews: HashMap<Uuid, ItemOverview>,
+    pub(crate) settings: Settings,
+    pub(crate) damaged_items: usize,
 }
 
 /// Snapshot of what is needed to derive the KEK, taken under the vault lock
@@ -60,6 +63,7 @@ struct Session {
 pub struct UnlockTicket {
     vault_id: Uuid,
     kdf: KdfParams,
+    key_scheme: KeyScheme,
     epoch: u64,
 }
 
@@ -67,12 +71,51 @@ pub struct UnlockTicket {
 pub struct UnlockKey(Key256);
 
 impl UnlockTicket {
+    /// Does unlocking this vault need the Secret Key?
+    pub fn needs_secret_key(&self) -> bool {
+        self.key_scheme == KeyScheme::PasswordAndSecretKey
+    }
+
+    /// Password-only vaults. Slow (Argon2id).
     pub fn derive(&self, password: &SecretString) -> Result<UnlockKey> {
+        self.derive_with_secret_key(password, None)
+    }
+
+    /// Any vault: the Secret Key is required for key scheme 2 and ignored
+    /// otherwise. Slow (Argon2id).
+    pub fn derive_with_secret_key(
+        &self,
+        password: &SecretString,
+        secret_key: Option<&SecretKey>,
+    ) -> Result<UnlockKey> {
         if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
             return Err(Error::UnlockFailed);
         }
-        let master = derive_master_key(password, &self.kdf)?;
-        Ok(UnlockKey(derive_kek(&master, &self.vault_id)?))
+        Ok(UnlockKey(derive_kek_for(
+            self.key_scheme,
+            password,
+            &self.kdf,
+            &self.vault_id,
+            secret_key,
+        )?))
+    }
+}
+
+/// The KEK for a key scheme. Scheme 2 without a Secret Key is refused before
+/// any expensive work.
+pub(crate) fn derive_kek_for(
+    scheme: KeyScheme,
+    password: &SecretString,
+    kdf: &KdfParams,
+    vault_id: &Uuid,
+    secret_key: Option<&SecretKey>,
+) -> Result<Key256> {
+    match (scheme, secret_key) {
+        (KeyScheme::PasswordOnly, _) => derive_kek(&derive_master_key(password, kdf)?, vault_id),
+        (KeyScheme::PasswordAndSecretKey, Some(sk)) => {
+            derive_kek_with_secret_key(&derive_master_key(password, kdf)?, sk, vault_id)
+        }
+        (KeyScheme::PasswordAndSecretKey, None) => Err(Error::SecretKeyRequired),
     }
 }
 
@@ -166,34 +209,83 @@ pub struct RekeyTicket {
 pub struct Rekeyed {
     kdf: KdfParams,
     wrapped_vault_key: Vec<u8>,
+    key_scheme: KeyScheme,
 }
 
 impl RekeyTicket {
-    /// Verify `current`, then wrap the same vault key under `new`. Slow.
+    pub fn key_scheme(&self) -> KeyScheme {
+        self.header.key_scheme
+    }
+
+    /// Verify `current`, then wrap the same vault key under `new`, keeping
+    /// the key scheme. Password-only vaults. Slow.
     pub fn derive(
         &self,
         current: &SecretString,
         new: &SecretString,
         new_kdf: KdfParams,
     ) -> Result<Rekeyed> {
+        self.derive_with_secret_key(current, new, new_kdf, None)
+    }
+
+    /// Master password change for any vault; the Secret Key (required for
+    /// scheme 2) stays the same. Slow.
+    pub fn derive_with_secret_key(
+        &self,
+        current: &SecretString,
+        new: &SecretString,
+        new_kdf: KdfParams,
+        secret_key: Option<&SecretKey>,
+    ) -> Result<Rekeyed> {
         check_new_master_password(new)?;
+        let scheme = self.header.key_scheme;
+        let vault_key = self.unwrap(current, secret_key)?;
         let h = &self.header;
-        let old_kek = derive_kek(&derive_master_key(current, &h.kdf)?, &h.vault_id)?;
-        let vault_key = unwrap_vault_key(&old_kek, h.vault_id, &h.wrapped_vault_key)?;
-        let new_kek = derive_kek(&derive_master_key(new, &new_kdf)?, &h.vault_id)?;
-        let wrapped_vault_key = wrap_vault_key(&new_kek, h.vault_id, &vault_key)?;
+        let new_kek = derive_kek_for(scheme, new, &new_kdf, &h.vault_id, secret_key)?;
         Ok(Rekeyed {
+            wrapped_vault_key: wrap_vault_key(&new_kek, h.vault_id, &vault_key)?,
             kdf: new_kdf,
-            wrapped_vault_key,
+            key_scheme: scheme,
         })
+    }
+
+    /// Add a Secret Key to a password-only vault (key scheme 1 → 2). The
+    /// master password stays the same; the vault key is re-wrapped. Slow.
+    pub fn derive_secret_key_upgrade(
+        &self,
+        password: &SecretString,
+        new_secret_key: &SecretKey,
+        new_kdf: KdfParams,
+    ) -> Result<Rekeyed> {
+        if self.header.key_scheme != KeyScheme::PasswordOnly {
+            return Err(Error::InvalidInput("this vault already has a Secret Key"));
+        }
+        let vault_key = self.unwrap(password, None)?;
+        let h = &self.header;
+        let kek = derive_kek_with_secret_key(
+            &derive_master_key(password, &new_kdf)?,
+            new_secret_key,
+            &h.vault_id,
+        )?;
+        Ok(Rekeyed {
+            wrapped_vault_key: wrap_vault_key(&kek, h.vault_id, &vault_key)?,
+            kdf: new_kdf,
+            key_scheme: KeyScheme::PasswordAndSecretKey,
+        })
+    }
+
+    fn unwrap(&self, password: &SecretString, secret_key: Option<&SecretKey>) -> Result<Key256> {
+        let h = &self.header;
+        let kek = derive_kek_for(h.key_scheme, password, &h.kdf, &h.vault_id, secret_key)?;
+        unwrap_vault_key(&kek, h.vault_id, &h.wrapped_vault_key)
     }
 }
 
 /// A fully prepared new vault (keys derived, header built). Produced without
 /// touching the service so the slow KDF runs outside any lock.
 pub struct PreparedVault {
-    header: HeaderRecord,
-    vault_key: Key256,
+    pub(crate) header: HeaderRecord,
+    pub(crate) vault_key: Key256,
 }
 
 pub fn check_new_master_password(password: &SecretString) -> Result<()> {
@@ -217,7 +309,7 @@ fn wrap_vault_key(kek: &Key256, vault_id: Uuid, vault_key: &Key256) -> Result<Ve
     )
 }
 
-fn unwrap_vault_key(kek: &Key256, vault_id: Uuid, wrapped: &[u8]) -> Result<Key256> {
+pub(crate) fn unwrap_vault_key(kek: &Key256, vault_id: Uuid, wrapped: &[u8]) -> Result<Key256> {
     let plain = blob::open(
         kek,
         &BlobContext::vault(Purpose::VaultKey, vault_id),
@@ -228,16 +320,42 @@ fn unwrap_vault_key(kek: &Key256, vault_id: Uuid, wrapped: &[u8]) -> Result<Key2
     Ok(Key256::from_bytes(bytes))
 }
 
-/// Derive keys and build the header for a new vault. Slow (Argon2id).
+/// Derive keys and build the header for a new password-only vault (key
+/// scheme 1). Slow (Argon2id). New vaults in the app use
+/// [`prepare_new_vault_with_secret_key`].
 pub fn prepare_new_vault(
     password: &SecretString,
     kdf: KdfParams,
     now_ms: i64,
 ) -> Result<PreparedVault> {
+    prepare(password, None, kdf, now_ms)
+}
+
+/// Derive keys and build the header for a new vault protected by the master
+/// password and a Secret Key (key scheme 2). Slow (Argon2id).
+pub fn prepare_new_vault_with_secret_key(
+    password: &SecretString,
+    secret_key: &SecretKey,
+    kdf: KdfParams,
+    now_ms: i64,
+) -> Result<PreparedVault> {
+    prepare(password, Some(secret_key), kdf, now_ms)
+}
+
+fn prepare(
+    password: &SecretString,
+    secret_key: Option<&SecretKey>,
+    kdf: KdfParams,
+    now_ms: i64,
+) -> Result<PreparedVault> {
     check_new_master_password(password)?;
     let vault_id = Uuid::new_v4();
-    let master = derive_master_key(password, &kdf)?;
-    let kek = derive_kek(&master, &vault_id)?;
+    let key_scheme = if secret_key.is_some() {
+        KeyScheme::PasswordAndSecretKey
+    } else {
+        KeyScheme::PasswordOnly
+    };
+    let kek = derive_kek_for(key_scheme, password, &kdf, &vault_id, secret_key)?;
     let vault_key = Key256::random()?;
     let wrapped_vault_key = wrap_vault_key(&kek, vault_id, &vault_key)?;
     Ok(PreparedVault {
@@ -247,17 +365,23 @@ pub fn prepare_new_vault(
             kdf,
             wrapped_vault_key,
             created_at: now_ms,
+            key_scheme,
+            revision: 0,
         },
         vault_key,
     })
 }
 
-fn seal_json<T: Serialize>(key: &Key256, ctx: &BlobContext, value: &T) -> Result<Vec<u8>> {
+pub(crate) fn seal_json<T: Serialize>(
+    key: &Key256,
+    ctx: &BlobContext,
+    value: &T,
+) -> Result<Vec<u8>> {
     let plain = Zeroizing::new(serde_json::to_vec(value).map_err(|_| Error::Encryption)?);
     blob::seal(key, ctx, &plain)
 }
 
-fn open_json<T: serde::de::DeserializeOwned>(
+pub(crate) fn open_json<T: serde::de::DeserializeOwned>(
     key: &Key256,
     ctx: &BlobContext,
     data: &[u8],
@@ -267,7 +391,7 @@ fn open_json<T: serde::de::DeserializeOwned>(
 }
 
 pub struct VaultService {
-    store: Store,
+    pub(crate) store: Store,
     state: VaultState,
     session: Option<Session>,
     /// Incremented on every lock. Anything authorized against an older epoch
@@ -305,14 +429,29 @@ impl VaultService {
         self.epoch
     }
 
-    fn session(&self) -> Result<&Session> {
+    /// The key scheme of the vault on disk, if there is one.
+    pub fn key_scheme(&self) -> Result<Option<KeyScheme>> {
+        Ok(self.store.header()?.map(|h| h.key_scheme))
+    }
+
+    /// When the vault was created (Unix ms), if there is one.
+    pub fn created_at(&self) -> Result<Option<i64>> {
+        Ok(self.store.header()?.map(|h| h.created_at))
+    }
+
+    /// The vault's ID (not secret; it names the vault in the sync folder).
+    pub fn vault_id(&self) -> Result<Option<Uuid>> {
+        Ok(self.store.header()?.map(|h| h.vault_id))
+    }
+
+    pub(crate) fn session(&self) -> Result<&Session> {
         match (&self.state, &self.session) {
             (VaultState::Unlocked, Some(s)) => Ok(s),
             _ => Err(Error::Locked),
         }
     }
 
-    fn session_mut(&mut self) -> Result<&mut Session> {
+    pub(crate) fn session_mut(&mut self) -> Result<&mut Session> {
         match (&self.state, &mut self.session) {
             (VaultState::Unlocked, Some(s)) => Ok(s),
             _ => Err(Error::Locked),
@@ -365,6 +504,7 @@ impl VaultService {
         Ok(UnlockTicket {
             vault_id: header.vault_id,
             kdf: header.kdf,
+            key_scheme: header.key_scheme,
             epoch: self.epoch,
         })
     }
@@ -392,7 +532,10 @@ impl VaultService {
         let UnlockKey(kek) = key?;
         let header = self.store.header()?.ok_or(Error::NoVault)?;
         // The header must not have changed between begin and finish.
-        if header.vault_id != ticket.vault_id || header.kdf != ticket.kdf {
+        if header.vault_id != ticket.vault_id
+            || header.kdf != ticket.kdf
+            || header.key_scheme != ticket.key_scheme
+        {
             return Err(Error::UnlockFailed);
         }
         let vault_key = unwrap_vault_key(&kek, header.vault_id, &header.wrapped_vault_key)?;
@@ -479,11 +622,16 @@ impl VaultService {
         if current.vault_id != ticket.header.vault_id
             || current.kdf != ticket.header.kdf
             || current.wrapped_vault_key != ticket.header.wrapped_vault_key
+            || current.key_scheme != ticket.header.key_scheme
         {
             return Err(Error::Busy);
         }
-        self.store
-            .update_key_wrap(&rekeyed.kdf, &rekeyed.wrapped_vault_key)
+        self.store.update_key_wrap(
+            &rekeyed.kdf,
+            &rekeyed.wrapped_vault_key,
+            rekeyed.key_scheme,
+            current.revision.saturating_add(1),
+        )
     }
 
     /// Re-wrap the vault key under a new master password. Items are untouched
@@ -566,7 +714,7 @@ impl VaultService {
             .ok_or(Error::NotFound)
     }
 
-    fn load_details(&self, id: &Uuid) -> Result<ItemDetails> {
+    pub(crate) fn load_details(&self, id: &Uuid) -> Result<ItemDetails> {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
         let data = self.store.item_details(id)?.ok_or(Error::NotFound)?;
@@ -829,12 +977,14 @@ impl VaultService {
         self.persist(overview, &details)
     }
 
-    pub fn delete_item(&mut self, id: &Uuid) -> Result<()> {
+    /// Delete an item. A tombstone dated `now_ms` records the deletion so it
+    /// reaches other devices through sync.
+    pub fn delete_item(&mut self, id: &Uuid, now_ms: i64) -> Result<()> {
         if !self.session()?.overviews.contains_key(id) {
             return Err(Error::NotFound);
         }
         // Disk first: if the delete fails, the item must not vanish from view.
-        self.store.delete_item(id)?;
+        self.store.delete_item(id, now_ms)?;
         self.session_mut()?.overviews.remove(id);
         Ok(())
     }
