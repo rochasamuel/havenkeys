@@ -25,7 +25,7 @@ are accepted limitations, documented below and in `threat-model.md`.
 | 7 | Low | UI | Pointer movement over an unfocused window counted as activity | **Fixed** |
 | 8 | Low | Core | Master-password change does not rotate the vault key | Accepted, documented |
 | 9 | Info | Core | Rollback/replay of whole file or individual blobs is not detected | Accepted, documented |
-| 10 | Low | Tauri | Lock on OS screen-lock not implemented; suspend detection likely ineffective on Windows | Open |
+| 10 | Low | Tauri | Lock on OS screen-lock not implemented; suspend detection likely ineffective on Windows | **Fixed** in Phase 6 (Windows, Linux/logind); macOS open |
 | 11 | Low | All | Secrets can't be reliably wiped from WebView/IPC/serde buffers; no `mlock` | Accepted, documented |
 | 12 | Low | Tauri | Unlock attempts are not rate-limited beyond Argon2id cost | Accepted |
 | 13 | Info | Deps | 7 unmaintained/unsound advisories through Tauri's GTK stack | Accepted, tracked in `deny.toml` |
@@ -84,14 +84,17 @@ an older blob for the same item (for example an old password). Detecting this
 would need a monotonic counter stored outside the file (an OS keychain, for
 instance). Out of scope for the MVP; listed in `threat-model.md` §4.
 
-### 10. OS lock events (Low, open)
+### 10. OS lock events (Low, fixed in Phase 6 on Windows and Linux)
 The vault locks on idle timeout, on exit, and on suspend. Suspend is detected
 by comparing the wall clock with the monotonic clock. On Windows, `Instant`
 keeps counting during sleep, so this heuristic likely never fires there. The
 idle timeout still runs, unless it is set to "Never". Screen-lock events
 (logind `Lock`, `WTS_SESSION_LOCK`, macOS `com.apple.screenIsLocked`) are not
-handled on any platform. **Planned:** per-platform session-lock listeners in the
-Tauri shell.
+handled on any platform.
+
+**Phase 6:** the vault now locks when the session locks, polled every 5 s
+through `crates/havenkeys-oslock`. On Windows it reads the WTS session lock
+flag, and on Linux logind's `LockedHint`. macOS remains open.
 
 ### 11. Memory (Low, accepted)
 Keys and decrypted buffers in Rust are zeroized on drop. Copies remain that we
@@ -373,3 +376,29 @@ on Phase 5, check by hand in Chrome and Firefox:
    and the desktop list refreshes.
 5. On Chromium, a page that covers the menu (for example a translucent
    overlay with `pointer-events: none`) cannot get clicks through.
+
+---
+
+# Security Review: Hardening (Phase 6, in progress)
+
+> This software has not undergone an independent security audit.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| H1 | Low | Tauri | No lock on OS screen lock (#10) | **Fixed** on Windows (WTS) and Linux (logind `LockedHint`); macOS open |
+| H2 | Info | Tests | Only the protocol parser was fuzzed | **Fixed**: blobs, TOTP, URLs and domain matching (including generated look-alike hosts), item input, `.1pux` import, and the TS validators and classifier are fuzzed in every test run (`development.md`, Fuzzing) |
+| H3 | Info | Extension | Lock events reach the extension only while its native port is open (it closes after 60 s idle). A pending save prompt can outlive a lock until its 3-minute expiry. The desktop refuses the save while locked regardless | Accepted |
+| H4 | Info | Audit | Error-message and logging audit: errors reaching UIs are fixed strings; no print macros outside the two developer `examples/`; the only non-test panic is the startup `expect`; no `console` in any UI | No action needed |
+| H5 | Info | Tauri | CSP and capability audit: production CSP has no `unsafe-*`, `freezePrototype` is on, one capability with the command allowlist, and the dialog plugin is Rust-only (no renderer permissions) | No action needed; runtime check (#14) still pending |
+
+Found while fuzzing: nothing in the product code. The look-alike generator
+first flagged `evil.comlogin.microsoftonline.com` against a
+`login.microsoftonline.com` whole-site rule. That is a real subdomain of
+`microsoftonline.com`, so the match is correct under the documented rules,
+and the fault was in the generator. It is a reminder that whole-site rules
+(the default) cover every subdomain of the registrable domain, and that
+"This exact site" exists for sites where that is too broad.
+
+Still open for Phase 6: Windows pipe owner check (P10), desktop confirmation
+for browser-initiated password changes (F2 residual), macOS screen lock,
+export, and the manual runtime checks (#14, Phase 5 browser checklist).
