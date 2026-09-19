@@ -1,0 +1,81 @@
+# Development
+
+## Prerequisites
+
+* Rust ≥ 1.88 (`rustup`)
+* Node.js ≥ 20 and pnpm 10
+* Tauri system dependencies:
+  * **Debian/Ubuntu:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config`
+  * **macOS:** Xcode command-line tools
+  * **Windows:** Microsoft C++ Build Tools and WebView2 (preinstalled on Windows 11)
+
+The security core (`crates/havenkeys-core`) needs only Rust. The Cargo
+workspace's `default-members` is the core, so `cargo test` works without the
+WebKit libraries.
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Install JS deps | `pnpm install` |
+| Run desktop app (dev) | `pnpm dev` |
+| Build installers | `pnpm build` |
+| Core tests | `cargo test` |
+| Core lint | `cargo clippy -p havenkeys-core --all-targets -- -D warnings` |
+| Desktop crate lint | `cargo clippy -p havenkeys-desktop -- -D warnings` (needs WebKit libs) |
+| UI type check | `pnpm typecheck` |
+| UI tests | `pnpm -r test` |
+| KDF benchmark | `cargo run --release -p havenkeys-core --example kdf_bench` |
+| Rust advisories | `cargo audit` |
+| Rust policy (advisories, licences, sources) | `cargo deny check` |
+| JS advisories | `pnpm audit` |
+
+Install the audit tools with `cargo install cargo-audit cargo-deny --locked`.
+
+### Type-checking the Tauri crate without WebKit headers
+
+The `-sys` crates only query `pkg-config` during `cargo check`, so a stub that
+answers every query lets you type-check (not link) the desktop crate on a
+machine without the GTK/WebKit dev packages:
+
+```sh
+mkdir -p /tmp/fakepc && cat > /tmp/fakepc/pkg-config <<'EOF'
+#!/bin/sh
+for a in "$@"; do case "$a" in --modversion) echo 99.0; exit 0;; --version) echo 0.29.2; exit 0;; esac; done
+exit 0
+EOF
+chmod +x /tmp/fakepc/pkg-config
+PKG_CONFIG=/tmp/fakepc/pkg-config PATH=/tmp/fakepc:$PATH cargo clippy -p havenkeys-desktop -- -D warnings
+```
+
+## Where the vault lives
+
+| OS | Path |
+|---|---|
+| Linux | `~/.local/share/com.havenkeys.desktop/vault.sqlite3` |
+| macOS | `~/Library/Application Support/com.havenkeys.desktop/vault.sqlite3` |
+| Windows | `%APPDATA%\com.havenkeys.desktop\vault.sqlite3` |
+
+Deleting this file deletes the vault. There is no recovery without the master
+password.
+
+## Adding a Tauri command
+
+A command must be added in **three** places, or it will not be callable:
+
+1. `apps/desktop/src-tauri/src/commands.rs` (implementation)
+2. `apps/desktop/src-tauri/build.rs` (`COMMANDS`, which generates the permission)
+3. `apps/desktop/src-tauri/capabilities/main.json` (grants `allow-<command>`)
+
+Then register it in `generate_handler!` in `lib.rs` and add a typed wrapper in
+`apps/desktop/src/lib/api.ts`. Update the command table in
+`docs/security-model.md` §7.
+
+## Rules for contributors
+
+* No cryptography outside `crates/havenkeys-core/src/crypto/`.
+* No `println!`/logging in the core (a test enforces this).
+* No `console.*`, `innerHTML`, `dangerouslySetInnerHTML`, `eval`, or browser
+  storage in the UI.
+* Types holding secrets implement a redacting `Debug`.
+* Errors are fixed strings; never interpolate user input.

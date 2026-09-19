@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/havenkeys-core", "apps/desktop/src-tauri"]
+# The Tauri shell needs WebKitGTK system libraries; keep plain `cargo test`
+# working on machines without them.
+default-members = ["crates/havenkeys-core"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.88"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = true
+
+# Argon2 is unusably slow unoptimized; keep tests realistic.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3

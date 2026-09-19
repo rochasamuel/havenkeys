@@ -1,0 +1,32 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The only capability: the main window may call exactly these commands and listen for events. No plugins, no filesystem, no shell, no network.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-vault-status",
+    "allow-create-vault",
+    "allow-unlock-vault",
+    "allow-lock-vault",
+    "allow-change-master-password",
+    "allow-record-activity",
+    "allow-list-items",
+    "allow-get-item",
+    "allow-reveal-secret",
+    "allow-get-totp-code",
+    "allow-copy-secret",
+    "allow-create-item",
+    "allow-update-item",
+    "allow-delete-item",
+    "allow-generate-password",
+    "allow-copy-generated-password",
+    "allow-get-settings",
+    "allow-update-settings",
+    "allow-import-1pux",
+    "allow-delete-import-file"
+  ]
+}
