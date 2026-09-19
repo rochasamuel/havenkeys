@@ -120,8 +120,9 @@ output, URLs, window titles, notifications or browser storage.
 
 ### T7 — Shoulder surfing / unattended unlocked machine
 Passwords are masked by default; auto-lock timeout (keeps running while the
-window is hidden in the tray); lock on quit; lock on
-system suspend (detected by wall-clock vs monotonic clock divergence).
+window is hidden in the tray); lock on quit; lock when the OS session locks
+(Windows, Linux with logind); lock on system suspend (detected by
+wall-clock vs monotonic clock divergence).
 
 ## 4. Out of scope (not defended)
 

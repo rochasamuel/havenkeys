@@ -20,7 +20,7 @@ without the WebKit libraries.
 | Install JS deps | `pnpm install` |
 | Run desktop app (dev) | `pnpm dev` |
 | Build installers | `pnpm build` |
-| Rust tests (core, protocol, bridge, native host) | `cargo test` |
+| Rust tests (core, protocol, bridge, native host, OS lock) | `cargo test` |
 | Rust lint (same crates) | `pnpm lint:rust` |
 | Native host (release) | `pnpm build:host` |
 | Register native host | `scripts/install-native-host.sh` (Windows: `scripts\install-native-host.ps1`) |
@@ -32,6 +32,7 @@ without the WebKit libraries.
 | Rust advisories | `cargo audit` |
 | Rust policy (advisories, licences, sources) | `cargo deny check` |
 | JS advisories | `pnpm audit` |
+| Check the Windows-only code from Linux | `cargo clippy -p havenkeys-oslock --target x86_64-pc-windows-gnu -- -D warnings` |
 
 Install the audit tools with `cargo install cargo-audit cargo-deny --locked`.
 
@@ -144,3 +145,23 @@ unapproved.
   storage in the UI.
 * Types holding secrets implement a redacting `Debug`.
 * Errors are fixed strings; never interpolate user input.
+
+## Fuzzing
+
+The parsers that take untrusted input are fuzzed deterministically inside
+the normal test suites. The generators are seeded, so a failure reproduces
+exactly, and no nightly toolchain or `cargo-fuzz` is needed:
+
+| Target | Test |
+|---|---|
+| Native messages (requests, desktop replies, re-encoding) | `crates/havenkeys-protocol/tests/messages.rs` |
+| Encrypted blobs (no mutation of a sealed blob ever opens) | `crates/havenkeys-core/tests/fuzz.rs` |
+| TOTP input / `otpauth://` URIs | `crates/havenkeys-core/tests/fuzz.rs` |
+| Website rules, page URLs, domain matching, generated look-alike hosts | `crates/havenkeys-core/tests/fuzz.rs` |
+| Item JSON from the UI | `crates/havenkeys-core/tests/fuzz.rs` |
+| 1Password `.1pux` archives and their JSON | `crates/havenkeys-core/src/import/onepux.rs` |
+| Extension-side protocol validator | `packages/protocol/src/fuzz.test.ts` |
+| Extension message validators, URL stripping, field classification over random DOM | `apps/extension/src/fuzz.test.ts` |
+
+To run a target longer, raise its iteration count locally. Keep the
+committed counts fast enough for every test run.

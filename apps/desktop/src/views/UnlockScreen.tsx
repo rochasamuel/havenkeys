@@ -14,6 +14,7 @@ interface Props {
 const reasonText: Record<string, string> = {
   idle: "Locked after a period of inactivity.",
   suspend: "Locked because the computer went to sleep.",
+  screen_lock: "Locked because the screen was locked.",
   user: "Locked.",
   extension: "Locked from the browser extension.",
 };

@@ -97,9 +97,18 @@ pub fn run() {
             let handle = app.handle().clone();
             std::thread::Builder::new()
                 .name("auto-lock".into())
-                .spawn(move || loop {
-                    std::thread::sleep(AUTO_LOCK_TICK);
-                    handle.state::<AppState>().auto_lock_tick(&handle);
+                .spawn(move || {
+                    // Lock with the OS session (screen lock) where the
+                    // platform tells us; see havenkeys-oslock.
+                    let mut session = havenkeys_oslock::SessionWatcher::new();
+                    loop {
+                        std::thread::sleep(AUTO_LOCK_TICK);
+                        let state = handle.state::<AppState>();
+                        if session.poll() {
+                            state.lock(&handle, "screen_lock");
+                        }
+                        state.auto_lock_tick(&handle);
+                    }
                 })?;
             Ok(())
         })

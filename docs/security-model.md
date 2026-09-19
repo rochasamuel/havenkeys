@@ -87,10 +87,22 @@ extension later. With auto-lock set to "Never", a hidden window keeps the
 vault unlocked until you lock or quit. The tray shows only static text,
 never item data.
 
-OS screen-lock signals (logind / Windows WTS / macOS distributed
-notifications) are **not yet** wired up. On Windows the suspend heuristic is
-likely ineffective, because `Instant` keeps counting during sleep. See
-`security-review.md` #10.
+**Screen lock.** The vault also locks when the operating-system session
+locks (reason `screen_lock`). The auto-lock thread polls every 5 seconds
+through `crates/havenkeys-oslock`:
+
+* **Windows:** the session lock flag from `WTSQuerySessionInformationW`.
+  This is the only `unsafe` code in HavenKeys: one FFI call, in its own
+  crate.
+* **Linux:** logind's `LockedHint`, read with `loginctl`. GNOME, KDE and
+  other logind-aware lockers set it.
+* **macOS:** not implemented.
+
+It fires once per lock, so a stuck lock flag cannot keep relocking the vault.
+Where the state is unknown (no logind, as in WSL), nothing happens and the
+probe switches itself off. Windows usually locks the session on sleep, which
+also covers the suspend heuristic's blind spot there: `Instant` keeps
+counting during sleep on Windows. See `security-review.md` #10.
 
 Only real input while the window has focus, and commands the user triggers,
 count as activity. Timer-driven calls such as TOTP refresh do not, and neither

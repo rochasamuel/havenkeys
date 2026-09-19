@@ -377,6 +377,14 @@ fn fuzz_parse_request_never_panics() {
         r#"{"v":1,"id":1,"request":{"type":"status"}}"#.to_string(),
         r#"{"v":1,"id":3,"request":{"type":"find_matches","url":"https://github.com/login"}}"#.to_string(),
         format!(r#"{{"v":1,"id":4,"request":{{"type":"get_totp","itemId":"{ITEM}","url":"https://a.com/"}}}}"#),
+        r#"{"v":1,"id":5,"request":{"type":"find_matches","url":"https://a.com/","topUrl":"https://b.com/"}}"#.to_string(),
+        r#"{"v":1,"id":6,"request":{"type":"generate_password"}}"#.to_string(),
+        r#"{"v":1,"id":7,"request":{"type":"check_login","url":"https://a.com/","username":"u","password":"p"}}"#.to_string(),
+        format!(r#"{{"v":1,"id":8,"request":{{"type":"save_login","url":"https://a.com/","username":null,"password":"p","itemId":"{ITEM}"}}}}"#),
+        format!(r#"{{"v":1,"id":9,"result":{{"type":"check_login","action":"update","itemId":"{ITEM}"}}}}"#),
+        r#"{"v":1,"id":10,"result":{"type":"generate_password","password":"x"}}"#.to_string(),
+        r#"{"v":1,"id":11,"error":{"code":"denied","message":"x"}}"#.to_string(),
+        r#"{"v":1,"event":{"type":"locked"}}"#.to_string(),
     ]
     .into_iter()
     .map(String::into_bytes)
@@ -405,7 +413,15 @@ fn fuzz_parse_request_never_panics() {
         }
         if let Ok(env) = parse_request(&input) {
             assert_eq!(env.v, PROTOCOL_VERSION);
+            // The host re-encodes accepted requests; the desktop must accept
+            // exactly the same request back.
+            let again = serde_json::to_vec(&env).unwrap();
+            assert_eq!(parse_request(&again).unwrap(), env);
         }
-        let _ = Outgoing::parse(&input);
+        if let Some(msg) = Outgoing::parse(&input) {
+            // Whatever the host forwards must itself parse on re-encoding.
+            let bytes = msg.to_bytes().unwrap();
+            assert!(Outgoing::parse(&bytes).is_some());
+        }
     }
 }
