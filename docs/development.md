@@ -48,6 +48,40 @@ chmod +x /tmp/fakepc/pkg-config
 PKG_CONFIG=/tmp/fakepc/pkg-config PATH=/tmp/fakepc:$PATH cargo clippy -p havenkeys-desktop -- -D warnings
 ```
 
+## Running on Windows (native)
+
+Build in a normal Windows folder, not inside `\\wsl.localhost\...`: building
+over the WSL share is slow and breaks file watching.
+
+1. **Install the tools** (once):
+   * [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+     with the **Desktop development with C++** workload
+   * [Rust](https://rustup.rs) (`rustup-init.exe`, default MSVC toolchain)
+   * [Node.js LTS](https://nodejs.org), then in a new terminal: `npm install -g pnpm`
+   * [Git for Windows](https://git-scm.com/download/win)
+   * WebView2 is already part of Windows 11.
+2. **Get the code.** In PowerShell, clone straight from the WSL repository:
+   ```powershell
+   # Git refuses repos owned by another user (the WSL user) unless trusted.
+   # Trust only this one path, not every repository:
+   git config --global --add safe.directory '%(prefix)///wsl.localhost/Ubuntu/home/sams/havenkeys'
+   git clone \\wsl.localhost\Ubuntu\home\sams\havenkeys C:\dev\havenkeys
+   cd C:\dev\havenkeys
+   ```
+   Replace `Ubuntu` with your distro name (`wsl -l`) if it differs. To pull
+   new commits later: `git pull`.
+3. **Run it:**
+   ```powershell
+   pnpm install
+   pnpm dev
+   ```
+   The first build compiles all Rust dependencies and takes a few minutes.
+4. **Installer (optional):** `pnpm build` produces MSI and NSIS installers
+   under `target\release\bundle\`.
+
+The Windows app keeps its own vault in `%APPDATA%\com.havenkeys.desktop\`,
+separate from the WSL one. Import your `.1pux` again there.
+
 ## Where the vault lives
 
 | OS | Path |
