@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-record-activity"
+description = "Enables the record_activity command without any pre-configured scope."
+commands.allow = ["record_activity"]
+
+[[permission]]
+identifier = "deny-record-activity"
+description = "Denies the record_activity command without any pre-configured scope."
+commands.deny = ["record_activity"]

@@ -1,0 +1,28 @@
+[package]
+name = "havenkeys-desktop"
+version = "0.1.0"
+description = "HavenKeys desktop password manager"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "havenkeys_desktop_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+havenkeys-core = { path = "../../../crates/havenkeys-core" }
+# No Tauri plugins: no fs, shell, http, dialog, opener or clipboard plugin.
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.20", features = ["serde"] }
+# Clipboard is handled in Rust so copied secrets never transit the renderer.
+arboard = { version = "3.6", default-features = false }
+sha2 = "0.11"
+zeroize = "1.8"
+tauri-plugin-dialog = "2"

@@ -1,0 +1,783 @@
+//! Vault service: lock state machine, key hierarchy and item operations.
+//!
+//! Every function that touches item content requires an active [`Session`].
+//! Locking drops the session, which zeroizes the data key and the decrypted
+//! overview cache.
+
+use crate::crypto::blob::{self, BlobContext, Purpose};
+use crate::crypto::kdf::{derive_master_key, KdfParams};
+use crate::crypto::keys::{derive_data_key, derive_kek, Key256, KEY_LEN};
+use crate::error::{Error, Result};
+use crate::import::{ImportReport, ImportedItem};
+use crate::model::{
+    check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
+    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, SecretField, SecretUpdate,
+    Settings,
+};
+use crate::secret::SecretString;
+use crate::store::{HeaderRecord, Store};
+use crate::totp::{self, TotpCode};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
+use zeroize::Zeroizing;
+
+pub const FORMAT_VERSION: u32 = 1;
+pub const MIN_MASTER_PASSWORD_CHARS: usize = 10;
+pub const MAX_MASTER_PASSWORD_CHARS: usize = 1024;
+pub const MAX_SEARCH_QUERY_CHARS: usize = 256;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultState {
+    Locked,
+    Unlocking,
+    Unlocked,
+    Locking,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultStatus {
+    pub state: VaultState,
+    pub vault_exists: bool,
+    /// Items whose overview failed authentication at unlock (0 normally).
+    pub damaged_items: usize,
+}
+
+struct Session {
+    vault_id: Uuid,
+    data_key: Key256,
+    overviews: HashMap<Uuid, ItemOverview>,
+    settings: Settings,
+    damaged_items: usize,
+}
+
+/// Snapshot of what is needed to derive the KEK, taken under the vault lock
+/// so the expensive Argon2id step can run without holding it.
+pub struct UnlockTicket {
+    vault_id: Uuid,
+    kdf: KdfParams,
+    epoch: u64,
+}
+
+/// Output of [`UnlockTicket::derive`].
+pub struct UnlockKey(Key256);
+
+impl UnlockTicket {
+    pub fn derive(&self, password: &SecretString) -> Result<UnlockKey> {
+        if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
+            return Err(Error::UnlockFailed);
+        }
+        let master = derive_master_key(password, &self.kdf)?;
+        Ok(UnlockKey(derive_kek(&master, &self.vault_id)?))
+    }
+}
+
+/// Snapshot for a master-password change (see [`VaultService::begin_rekey`]).
+pub struct RekeyTicket {
+    header: HeaderRecord,
+    epoch: u64,
+}
+
+/// Output of [`RekeyTicket::derive`].
+pub struct Rekeyed {
+    kdf: KdfParams,
+    wrapped_vault_key: Vec<u8>,
+}
+
+impl RekeyTicket {
+    /// Verify `current`, then wrap the same vault key under `new`. Slow.
+    pub fn derive(
+        &self,
+        current: &SecretString,
+        new: &SecretString,
+        new_kdf: KdfParams,
+    ) -> Result<Rekeyed> {
+        check_new_master_password(new)?;
+        let h = &self.header;
+        let old_kek = derive_kek(&derive_master_key(current, &h.kdf)?, &h.vault_id)?;
+        let vault_key = unwrap_vault_key(&old_kek, h.vault_id, &h.wrapped_vault_key)?;
+        let new_kek = derive_kek(&derive_master_key(new, &new_kdf)?, &h.vault_id)?;
+        let wrapped_vault_key = wrap_vault_key(&new_kek, h.vault_id, &vault_key)?;
+        Ok(Rekeyed {
+            kdf: new_kdf,
+            wrapped_vault_key,
+        })
+    }
+}
+
+/// A fully prepared new vault (keys derived, header built). Produced without
+/// touching the service so the slow KDF runs outside any lock.
+pub struct PreparedVault {
+    header: HeaderRecord,
+    vault_key: Key256,
+}
+
+pub fn check_new_master_password(password: &SecretString) -> Result<()> {
+    let n = password.char_len();
+    if n < MIN_MASTER_PASSWORD_CHARS {
+        return Err(Error::InvalidInput(
+            "master password must be at least 10 characters",
+        ));
+    }
+    if n > MAX_MASTER_PASSWORD_CHARS {
+        return Err(Error::InvalidInput("master password is too long"));
+    }
+    Ok(())
+}
+
+fn wrap_vault_key(kek: &Key256, vault_id: Uuid, vault_key: &Key256) -> Result<Vec<u8>> {
+    blob::seal(
+        kek,
+        &BlobContext::vault(Purpose::VaultKey, vault_id),
+        vault_key.as_bytes(),
+    )
+}
+
+fn unwrap_vault_key(kek: &Key256, vault_id: Uuid, wrapped: &[u8]) -> Result<Key256> {
+    let plain = blob::open(
+        kek,
+        &BlobContext::vault(Purpose::VaultKey, vault_id),
+        wrapped,
+    )
+    .map_err(|_| Error::UnlockFailed)?;
+    let bytes: [u8; KEY_LEN] = plain.as_slice().try_into().map_err(|_| Error::Corrupted)?;
+    Ok(Key256::from_bytes(bytes))
+}
+
+/// Derive keys and build the header for a new vault. Slow (Argon2id).
+pub fn prepare_new_vault(
+    password: &SecretString,
+    kdf: KdfParams,
+    now_ms: i64,
+) -> Result<PreparedVault> {
+    check_new_master_password(password)?;
+    let vault_id = Uuid::new_v4();
+    let master = derive_master_key(password, &kdf)?;
+    let kek = derive_kek(&master, &vault_id)?;
+    let vault_key = Key256::random()?;
+    let wrapped_vault_key = wrap_vault_key(&kek, vault_id, &vault_key)?;
+    Ok(PreparedVault {
+        header: HeaderRecord {
+            format_version: FORMAT_VERSION,
+            vault_id,
+            kdf,
+            wrapped_vault_key,
+            created_at: now_ms,
+        },
+        vault_key,
+    })
+}
+
+fn seal_json<T: Serialize>(key: &Key256, ctx: &BlobContext, value: &T) -> Result<Vec<u8>> {
+    let plain = Zeroizing::new(serde_json::to_vec(value).map_err(|_| Error::Encryption)?);
+    blob::seal(key, ctx, &plain)
+}
+
+fn open_json<T: serde::de::DeserializeOwned>(
+    key: &Key256,
+    ctx: &BlobContext,
+    data: &[u8],
+) -> Result<T> {
+    let plain = blob::open(key, ctx, data)?;
+    serde_json::from_slice(&plain).map_err(|_| Error::Corrupted)
+}
+
+pub struct VaultService {
+    store: Store,
+    state: VaultState,
+    session: Option<Session>,
+    /// Incremented on every lock. Anything authorized against an older epoch
+    /// (an in-flight unlock, a future extension grant) is invalid.
+    epoch: u64,
+}
+
+impl VaultService {
+    pub fn new(store: Store) -> Self {
+        Self {
+            store,
+            state: VaultState::Locked,
+            session: None,
+            epoch: 0,
+        }
+    }
+
+    pub fn status(&self) -> Result<VaultStatus> {
+        Ok(VaultStatus {
+            state: self.state,
+            vault_exists: self.store.header()?.is_some(),
+            damaged_items: self.session.as_ref().map_or(0, |s| s.damaged_items),
+        })
+    }
+
+    pub fn state(&self) -> VaultState {
+        self.state
+    }
+
+    pub fn is_unlocked(&self) -> bool {
+        self.state == VaultState::Unlocked && self.session.is_some()
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    fn session(&self) -> Result<&Session> {
+        match (&self.state, &self.session) {
+            (VaultState::Unlocked, Some(s)) => Ok(s),
+            _ => Err(Error::Locked),
+        }
+    }
+
+    fn session_mut(&mut self) -> Result<&mut Session> {
+        match (&self.state, &mut self.session) {
+            (VaultState::Unlocked, Some(s)) => Ok(s),
+            _ => Err(Error::Locked),
+        }
+    }
+
+    // ------------------------------------------------------------ lifecycle
+
+    /// Persist a prepared vault and leave it unlocked.
+    pub fn create_vault(&mut self, prepared: PreparedVault) -> Result<()> {
+        if self.state != VaultState::Locked {
+            return Err(Error::Busy);
+        }
+        if self.store.header()?.is_some() {
+            return Err(Error::VaultExists);
+        }
+        let vault_id = prepared.header.vault_id;
+        let data_key = derive_data_key(&prepared.vault_key)?;
+        let settings = Settings::default();
+        let settings_blob = seal_json(
+            &data_key,
+            &BlobContext::vault(Purpose::Settings, vault_id),
+            &settings,
+        )?;
+        self.store.insert_header(&prepared.header, &settings_blob)?;
+        self.session = Some(Session {
+            vault_id,
+            data_key,
+            overviews: HashMap::new(),
+            settings,
+            damaged_items: 0,
+        });
+        self.state = VaultState::Unlocked;
+        Ok(())
+    }
+
+    /// LOCKED → UNLOCKING. Returns what the caller needs to run the KDF.
+    pub fn begin_unlock(&mut self) -> Result<UnlockTicket> {
+        match self.state {
+            VaultState::Locked => {}
+            VaultState::Unlocked => return Err(Error::InvalidInput("vault is already unlocked")),
+            VaultState::Unlocking | VaultState::Locking => return Err(Error::Busy),
+        }
+        let header = self.store.header()?.ok_or(Error::NoVault)?;
+        if header.format_version != FORMAT_VERSION {
+            return Err(Error::UnsupportedVersion);
+        }
+        header.kdf.validate()?;
+        self.state = VaultState::Unlocking;
+        Ok(UnlockTicket {
+            vault_id: header.vault_id,
+            kdf: header.kdf,
+            epoch: self.epoch,
+        })
+    }
+
+    /// UNLOCKING → UNLOCKED on success, → LOCKED on any failure.
+    pub fn finish_unlock(&mut self, ticket: UnlockTicket, key: Result<UnlockKey>) -> Result<()> {
+        if self.state != VaultState::Unlocking || ticket.epoch != self.epoch {
+            // A lock happened while the KDF was running; discard the result.
+            return Err(Error::Locked);
+        }
+        match self.complete_unlock(&ticket, key) {
+            Ok(session) => {
+                self.session = Some(session);
+                self.state = VaultState::Unlocked;
+                Ok(())
+            }
+            Err(e) => {
+                self.state = VaultState::Locked;
+                Err(e)
+            }
+        }
+    }
+
+    fn complete_unlock(&self, ticket: &UnlockTicket, key: Result<UnlockKey>) -> Result<Session> {
+        let UnlockKey(kek) = key?;
+        let header = self.store.header()?.ok_or(Error::NoVault)?;
+        // The header must not have changed between begin and finish.
+        if header.vault_id != ticket.vault_id || header.kdf != ticket.kdf {
+            return Err(Error::UnlockFailed);
+        }
+        let vault_key = unwrap_vault_key(&kek, header.vault_id, &header.wrapped_vault_key)?;
+        let data_key = derive_data_key(&vault_key)?;
+        let vault_id = header.vault_id;
+
+        let settings = match self.store.settings_blob()? {
+            Some(b) => open_json::<Settings>(
+                &data_key,
+                &BlobContext::vault(Purpose::Settings, vault_id),
+                &b,
+            )
+            .ok()
+            .filter(|s| s.validate().is_ok())
+            .unwrap_or_default(),
+            None => Settings::default(),
+        };
+
+        let mut overviews = HashMap::new();
+        let mut damaged_items = 0;
+        for row in self.store.item_overviews()? {
+            let parsed = row.and_then(|(id, data)| {
+                let ctx = BlobContext::item(Purpose::ItemOverview, vault_id, id);
+                let ov: ItemOverview = open_json(&data_key, &ctx, &data)?;
+                if ov.id != id {
+                    return Err(Error::Corrupted);
+                }
+                Ok(ov)
+            });
+            match parsed {
+                Ok(ov) => {
+                    overviews.insert(ov.id, ov);
+                }
+                Err(_) => damaged_items += 1,
+            }
+        }
+        Ok(Session {
+            vault_id,
+            data_key,
+            overviews,
+            settings,
+            damaged_items,
+        })
+    }
+
+    /// Convenience for tests and callers that do not need the split flow.
+    pub fn unlock(&mut self, password: &SecretString) -> Result<()> {
+        let ticket = self.begin_unlock()?;
+        let key = ticket.derive(password);
+        self.finish_unlock(ticket, key)
+    }
+
+    /// Lock (idempotent). Returns true if the vault was unlocked or unlocking.
+    pub fn lock(&mut self) -> bool {
+        let was_open = self.state != VaultState::Locked;
+        self.state = VaultState::Locking;
+        self.session = None; // drops keys + overviews → zeroized
+        self.epoch = self.epoch.wrapping_add(1);
+        self.state = VaultState::Locked;
+        was_open
+    }
+
+    /// Snapshot for a master-password change. The two Argon2id derivations
+    /// then run in [`RekeyTicket::derive`] without holding the vault lock, so
+    /// a lock request is never delayed by a password change.
+    pub fn begin_rekey(&self) -> Result<RekeyTicket> {
+        self.session()?;
+        let header = self.store.header()?.ok_or(Error::NoVault)?;
+        Ok(RekeyTicket {
+            header,
+            epoch: self.epoch,
+        })
+    }
+
+    /// Persist a re-wrapped vault key. Refused if the vault was locked in the
+    /// meantime or the header changed since the ticket was taken.
+    pub fn commit_rekey(&mut self, ticket: RekeyTicket, rekeyed: Result<Rekeyed>) -> Result<()> {
+        self.session()?;
+        if ticket.epoch != self.epoch {
+            return Err(Error::Locked);
+        }
+        let rekeyed = rekeyed?;
+        let current = self.store.header()?.ok_or(Error::NoVault)?;
+        if current.vault_id != ticket.header.vault_id
+            || current.kdf != ticket.header.kdf
+            || current.wrapped_vault_key != ticket.header.wrapped_vault_key
+        {
+            return Err(Error::Busy);
+        }
+        self.store
+            .update_key_wrap(&rekeyed.kdf, &rekeyed.wrapped_vault_key)
+    }
+
+    /// Re-wrap the vault key under a new master password. Items are untouched
+    /// (see docs/crypto.md for what this does and does not protect against).
+    pub fn change_master_password(
+        &mut self,
+        current: &SecretString,
+        new: &SecretString,
+        new_kdf: KdfParams,
+    ) -> Result<()> {
+        let ticket = self.begin_rekey()?;
+        let rekeyed = ticket.derive(current, new, new_kdf);
+        self.commit_rekey(ticket, rekeyed)
+    }
+
+    // ------------------------------------------------------------ settings
+
+    pub fn settings(&self) -> Result<Settings> {
+        Ok(self.session()?.settings)
+    }
+
+    pub fn update_settings(&mut self, settings: Settings) -> Result<()> {
+        settings.validate()?;
+        let session = self.session()?;
+        let blob = seal_json(
+            &session.data_key,
+            &BlobContext::vault(Purpose::Settings, session.vault_id),
+            &settings,
+        )?;
+        self.store.write_settings(&blob)?;
+        self.session_mut()?.settings = settings;
+        Ok(())
+    }
+
+    // ------------------------------------------------------------ reading
+
+    pub fn list_items(&self) -> Result<Vec<ItemOverview>> {
+        let mut items: Vec<ItemOverview> = self.session()?.overviews.values().cloned().collect();
+        items.sort_by_cached_key(|i| (i.title.to_lowercase(), i.id));
+        Ok(items)
+    }
+
+    /// Case-insensitive search over title, username and website hosts.
+    /// Secret fields and note bodies are never searched.
+    pub fn search(&self, query: &str) -> Result<Vec<ItemOverview>> {
+        let session = self.session()?;
+        if query.chars().count() > MAX_SEARCH_QUERY_CHARS {
+            return Err(Error::InvalidInput("search query too long"));
+        }
+        let q = query.trim().to_lowercase();
+        if q.is_empty() {
+            return self.list_items();
+        }
+        let mut items: Vec<ItemOverview> = session
+            .overviews
+            .values()
+            .filter(|i| {
+                i.title.to_lowercase().contains(&q)
+                    || i.username
+                        .as_deref()
+                        .is_some_and(|u| u.to_lowercase().contains(&q))
+                    || i.urls.iter().any(|r| {
+                        url::Url::parse(&r.url)
+                            .ok()
+                            .and_then(|u| u.host_str().map(|h| h.contains(&q)))
+                            .unwrap_or(false)
+                    })
+            })
+            .cloned()
+            .collect();
+        items.sort_by_cached_key(|i| (i.title.to_lowercase(), i.id));
+        Ok(items)
+    }
+
+    pub fn get_item(&self, id: &Uuid) -> Result<ItemOverview> {
+        self.session()?
+            .overviews
+            .get(id)
+            .cloned()
+            .ok_or(Error::NotFound)
+    }
+
+    fn load_details(&self, id: &Uuid) -> Result<ItemDetails> {
+        let session = self.session()?;
+        let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
+        let data = self.store.item_details(id)?.ok_or(Error::NotFound)?;
+        let ctx = BlobContext::item(Purpose::ItemDetails, session.vault_id, *id);
+        let details: ItemDetails =
+            open_json(&session.data_key, &ctx, &data).map_err(|e| match e {
+                Error::Corrupted => Error::Corrupted,
+                _ => Error::Decryption,
+            })?;
+        if details.item_type() != overview.item_type {
+            return Err(Error::Corrupted);
+        }
+        Ok(details)
+    }
+
+    /// Decrypt and return exactly one secret field.
+    pub fn reveal(&self, id: &Uuid, field: SecretField) -> Result<SecretString> {
+        let value = match (self.load_details(id)?, field) {
+            (ItemDetails::Login { password, .. }, SecretField::Password) => password,
+            (ItemDetails::Login { notes, .. }, SecretField::Notes) => notes,
+            (ItemDetails::SecureNote { content }, SecretField::Content) => Some(content),
+            _ => return Err(Error::InvalidInput("field does not exist on this item")),
+        };
+        value.ok_or(Error::NotFound)
+    }
+
+    /// Current TOTP code. The TOTP secret never leaves the core.
+    pub fn totp_code(&self, id: &Uuid, unix_seconds: u64) -> Result<TotpCode> {
+        match self.load_details(id)? {
+            ItemDetails::Login {
+                totp: Some(cfg), ..
+            } => totp::generate(&cfg, unix_seconds),
+            _ => Err(Error::NotFound),
+        }
+    }
+
+    // ------------------------------------------------------------ writing
+
+    pub fn create_item(&mut self, input: ItemInput, now_ms: i64) -> Result<ItemOverview> {
+        self.session()?;
+        let id = Uuid::new_v4();
+        let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
+        self.persist(overview, &details)
+    }
+
+    pub fn update_item(
+        &mut self,
+        id: &Uuid,
+        input: ItemInput,
+        now_ms: i64,
+    ) -> Result<ItemOverview> {
+        let existing = self.get_item(id)?;
+        if existing.item_type != input.item_type {
+            return Err(Error::InvalidInput("item type cannot change"));
+        }
+        let current = self.load_details(id)?;
+        let (overview, details) =
+            build_item(*id, input, Some(current), existing.created_at, now_ms)?;
+        self.persist(overview, &details)
+    }
+
+    pub fn delete_item(&mut self, id: &Uuid) -> Result<()> {
+        if !self.session()?.overviews.contains_key(id) {
+            return Err(Error::NotFound);
+        }
+        // Disk first: if the delete fails, the item must not vanish from view.
+        self.store.delete_item(id)?;
+        self.session_mut()?.overviews.remove(id);
+        Ok(())
+    }
+
+    /// Store imported items in one transaction.
+    ///
+    /// Each item goes through the same validation as UI input. Items that fail
+    /// validation are counted in `failed`, not fatal. Items already in the vault
+    /// before this import are skipped: logins with the same title, username and
+    /// websites, and secure notes with the same title and content. This makes
+    /// re-importing the same file harmless without dropping entries the export
+    /// itself repeats.
+    ///
+    /// On return, `logins`/`secure_notes` count what was actually stored
+    /// (converted items are included in `secure_notes`).
+    pub fn import_items(
+        &mut self,
+        items: Vec<ImportedItem>,
+        mut report: ImportReport,
+        now_ms: i64,
+    ) -> Result<ImportReport> {
+        // Only items already in the vault count as duplicates; repeated
+        // entries inside the export itself are imported as they are.
+        let existing = self.dedupe_keys()?;
+        let session = self.session()?;
+        let mut rows = Vec::new();
+        let mut added = Vec::new();
+        report.logins = 0;
+        report.secure_notes = 0;
+
+        for item in items {
+            let id = Uuid::new_v4();
+            let created = item.created_at.unwrap_or(now_ms);
+            let updated = item.updated_at.unwrap_or(created);
+            let Ok((overview, details)) = build_item(id, item.input, None, created, updated) else {
+                report.failed += 1;
+                continue;
+            };
+            if existing.contains(&dedupe_key(&overview, &details)) {
+                report.skipped_duplicates += 1;
+                continue;
+            }
+            let ov_blob = seal_json(
+                &session.data_key,
+                &BlobContext::item(Purpose::ItemOverview, session.vault_id, id),
+                &overview,
+            )?;
+            let det_blob = seal_json(
+                &session.data_key,
+                &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
+                &details,
+            )?;
+            match overview.item_type {
+                ItemType::Login => report.logins += 1,
+                ItemType::SecureNote => report.secure_notes += 1,
+            }
+            rows.push((id, ov_blob, det_blob));
+            added.push(overview);
+        }
+
+        self.store.insert_items(&rows)?;
+        report.imported = rows.len();
+        let session = self.session_mut()?;
+        for ov in added {
+            session.overviews.insert(ov.id, ov);
+        }
+        Ok(report)
+    }
+
+    fn dedupe_keys(&self) -> Result<HashSet<[u8; 32]>> {
+        let session = self.session()?;
+        let mut keys = HashSet::new();
+        for ov in session.overviews.values() {
+            // Secure notes need their body; a damaged one simply isn't a duplicate.
+            let details = match ov.item_type {
+                ItemType::Login => None,
+                ItemType::SecureNote => self.load_details(&ov.id).ok(),
+            };
+            keys.insert(dedupe_key_parts(ov, details.as_ref()));
+        }
+        Ok(keys)
+    }
+
+    fn persist(&mut self, overview: ItemOverview, details: &ItemDetails) -> Result<ItemOverview> {
+        let session = self.session()?;
+        let id = overview.id;
+        let ov_blob = seal_json(
+            &session.data_key,
+            &BlobContext::item(Purpose::ItemOverview, session.vault_id, id),
+            &overview,
+        )?;
+        let det_blob = seal_json(
+            &session.data_key,
+            &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
+            details,
+        )?;
+        self.store.upsert_item(&id, &ov_blob, &det_blob)?;
+        self.session_mut()?.overviews.insert(id, overview.clone());
+        Ok(overview)
+    }
+}
+
+fn dedupe_key(overview: &ItemOverview, details: &ItemDetails) -> [u8; 32] {
+    dedupe_key_parts(overview, Some(details))
+}
+
+/// Digest identifying "the same item" for import de-duplication. Hashed so the
+/// set never holds a second plaintext copy of note bodies.
+fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [u8; 32] {
+    let mut h = Sha256::new();
+    let field = |h: &mut Sha256, s: &str| {
+        h.update((s.len() as u64).to_le_bytes());
+        h.update(s.as_bytes());
+    };
+    match overview.item_type {
+        ItemType::Login => {
+            field(&mut h, "login");
+            field(&mut h, &overview.title);
+            field(&mut h, overview.username.as_deref().unwrap_or(""));
+            let mut urls: Vec<&str> = overview.urls.iter().map(|r| r.url.as_str()).collect();
+            urls.sort_unstable();
+            for u in urls {
+                field(&mut h, u);
+            }
+        }
+        ItemType::SecureNote => {
+            field(&mut h, "note");
+            field(&mut h, &overview.title);
+            if let Some(ItemDetails::SecureNote { content }) = details {
+                field(&mut h, content.expose());
+            }
+        }
+    }
+    h.finalize().into()
+}
+
+/// Validate input and merge with existing secrets.
+fn build_item(
+    id: Uuid,
+    input: ItemInput,
+    current: Option<ItemDetails>,
+    created_at: i64,
+    now_ms: i64,
+) -> Result<(ItemOverview, ItemDetails)> {
+    check_shape(&input)?;
+    let title = clean_title(&input.title)?;
+    let ItemInput {
+        item_type,
+        username,
+        urls,
+        password,
+        totp,
+        notes,
+        content,
+        ..
+    } = input;
+
+    let details = match item_type {
+        ItemType::Login => {
+            let (cur_pw, cur_totp, cur_notes) = match current {
+                Some(ItemDetails::Login {
+                    password,
+                    totp,
+                    notes,
+                }) => (password, totp, notes),
+                Some(_) => return Err(Error::Corrupted),
+                None => (None, None, None),
+            };
+            let password = password.apply(cur_pw);
+            if let Some(p) = &password {
+                check_password(p)?;
+            }
+            let notes = notes.apply(cur_notes);
+            if let Some(n) = &notes {
+                check_notes(n)?;
+            }
+            let totp = match totp {
+                SecretUpdate::Keep => cur_totp,
+                SecretUpdate::Clear => None,
+                SecretUpdate::Set(v) if v.expose().trim().is_empty() => None,
+                SecretUpdate::Set(v) => Some(totp::parse_totp_input(v.expose())?),
+            };
+            ItemDetails::Login {
+                password,
+                totp,
+                notes,
+            }
+        }
+        ItemType::SecureNote => {
+            let cur = match current {
+                Some(ItemDetails::SecureNote { content }) => Some(content),
+                Some(_) => return Err(Error::Corrupted),
+                None => None,
+            };
+            let content = content.apply(cur).unwrap_or_default();
+            check_note_content(&content)?;
+            ItemDetails::SecureNote { content }
+        }
+    };
+
+    let (has_password, has_totp, has_notes) = match &details {
+        ItemDetails::Login {
+            password,
+            totp,
+            notes,
+        } => (password.is_some(), totp.is_some(), notes.is_some()),
+        ItemDetails::SecureNote { .. } => (false, false, false),
+    };
+    let overview = ItemOverview {
+        id,
+        item_type,
+        title,
+        username: match item_type {
+            ItemType::Login => clean_username(username.as_deref())?,
+            ItemType::SecureNote => None,
+        },
+        urls: match item_type {
+            ItemType::Login => clean_urls(&urls)?,
+            ItemType::SecureNote => Vec::new(),
+        },
+        has_password,
+        has_totp,
+        has_notes,
+        created_at,
+        updated_at: now_ms,
+    };
+    Ok((overview, details))
+}

@@ -1,0 +1,176 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { api, ApiError } from "../lib/api";
+import type { Settings, Theme } from "../lib/types";
+import { applyTheme } from "../lib/theme";
+import { useToast } from "../components/Toast";
+import { ImportSection } from "./ImportSection";
+
+const autoLockChoices = [
+  { value: 5, label: "After 5 minutes" },
+  { value: 15, label: "After 15 minutes" },
+  { value: 30, label: "After 30 minutes" },
+  { value: 60, label: "After 1 hour" },
+  { value: 0, label: "Never" },
+];
+const clipboardChoices = [10, 20, 30, 60, 90, 120];
+
+function ChangePassword() {
+  const toast = useToast();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mismatch = confirm.length > 0 && confirm !== next;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy || mismatch || !current || !next) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.changeMasterPassword(current, next);
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      toast("Master password changed.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not change the master password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const input = (value: string, set: (v: string) => void, label: string) => (
+    <label className="control">
+      <span>{label}</span>
+      <input
+        type="password"
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        autoComplete="off"
+        spellCheck={false}
+        disabled={busy}
+      />
+    </label>
+  );
+
+  return (
+    <form className="settings-block" onSubmit={submit}>
+      <h3>Master password</h3>
+      <p className="muted">Your items are not re-encrypted; only the key that protects them changes.</p>
+      {input(current, setCurrent, "Current master password")}
+      {input(next, setNext, "New master password")}
+      {input(confirm, setConfirm, "Confirm new master password")}
+      {mismatch && <p className="form-error">The new passwords don’t match.</p>}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div>
+        <button className="btn btn-primary" type="submit" disabled={busy || mismatch || !current || !next || !confirm}>
+          {busy ? "Changing…" : "Change master password"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function SettingsView({ onImported }: { onImported: () => void }) {
+  const toast = useToast();
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  useEffect(() => {
+    api
+      .getSettings()
+      .then(setSettings)
+      .catch(() => toast("Could not load settings.", "error"));
+  }, [toast]);
+
+  async function update(patch: Partial<Settings>) {
+    if (!settings) return;
+    try {
+      const saved = await api.updateSettings({ ...settings, ...patch });
+      setSettings(saved);
+      applyTheme(saved.theme);
+      toast("Settings saved.");
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Could not save settings.", "error");
+    }
+  }
+
+  return (
+    <section className="tool" aria-labelledby="settings-title">
+      <h2 id="settings-title">Settings</h2>
+
+      {settings && (
+        <div className="settings-block">
+          <h3>Appearance</h3>
+          <div className="segmented" role="radiogroup" aria-label="Theme">
+            {(["dark", "light", "system"] as Theme[]).map((t) => (
+              <button
+                key={t}
+                role="radio"
+                aria-checked={settings.theme === t}
+                onClick={() => void update({ theme: t })}
+              >
+                {t === "dark" ? "Dark" : t === "light" ? "Light" : "Match system"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {settings && (
+        <div className="settings-block">
+          <h3>Security</h3>
+          <label className="control">
+            <span>Lock automatically</span>
+            <select
+              value={settings.autoLockMinutes}
+              onChange={(e) => void update({ autoLockMinutes: Number(e.target.value) })}
+            >
+              {autoLockChoices.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted">
+            The vault also locks when the computer sleeps and when you quit HavenKeys. Closing the window keeps
+            HavenKeys in the tray.
+          </p>
+          <label className="control">
+            <span>Clear copied items from the clipboard</span>
+            <select
+              value={settings.clipboardClearSeconds}
+              onChange={(e) => void update({ clipboardClearSeconds: Number(e.target.value) })}
+            >
+              {clipboardChoices.map((s) => (
+                <option key={s} value={s}>
+                  After {s} seconds
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
+      <ImportSection onImported={onImported} />
+
+      <ChangePassword />
+
+      <div className="settings-block">
+        <h3>About</h3>
+        <p className="muted">
+          HavenKeys 0.1.0. Your vault is stored only on this computer and encrypted with AES-256-GCM under a key
+          derived from your master password with Argon2id. This software has not undergone an independent security
+          audit.
+        </p>
+      </div>
+    </section>
+  );
+}

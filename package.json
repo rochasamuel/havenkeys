@@ -1,0 +1,13 @@
+{
+  "name": "havenkeys",
+  "private": true,
+  "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "dev": "pnpm --filter @havenkeys/desktop tauri dev",
+    "build": "pnpm --filter @havenkeys/desktop tauri build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && cargo test",
+    "lint:rust": "cargo clippy -p havenkeys-core --all-targets -- -D warnings",
+    "audit": "pnpm audit && cargo audit && cargo deny check"
+  }
+}
