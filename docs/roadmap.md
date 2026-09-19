@@ -28,12 +28,27 @@ screen-lock code has not run on Windows.
 * A full, whole-system security review before calling the MVP done
   (CLAUDE.md §55, §57).
 
-## 3. Missing MVP features
+## 3. Secret Key and sync (built, needs a real-world run)
+
+Done: Secret Key and Emergency Kit, and sync through a shared cloud folder
+with a new device joining with password + Secret Key (`sync.md`). To check:
+create a vault (or add a Secret Key), save the kit, choose a OneDrive folder,
+join from a second computer, then edit and delete on both sides.
+
+Next for sync:
+
+* **Mobile app:** reuse `havenkeys-core` through UniFFI, scan the Emergency
+  Kit QR, and keep the Secret Key in the platform keystore (`sync.md` §7).
+* Optional later: rotate the vault key (#8), use hybrid logical clocks
+  instead of wall clocks for conflicts (K3), and add per-device approval on
+  top of the Secret Key.
+
+## 4. Missing MVP features
 
 * **Export** with the plaintext warning and explicit confirmation
   (CLAUDE.md §38).
 
-## 4. Standalone extension mode (proposal, needs a decision)
+## 5. Standalone extension mode (proposal, needs a decision)
 
 **Idea:** the browser extension works without the desktop app. The user
 creates or unlocks a vault and enters the master password in the extension
@@ -71,10 +86,11 @@ decision, recorded in the threat model, and not an incremental feature.
   needs to be made explicitly.
 * **Argon2id in WASM** is slower than native. Parameters must be benchmarked
   in browsers, not assumed (CLAUDE.md §5).
-* **Relationship to the desktop vault:** a standalone vault would be a
-  separate vault. Keeping it in step with the desktop needs synchronization,
-  which is out of the MVP's scope. Options: standalone-only users, an
-  import/export bridge between the two, or real sync later.
+* **Relationship to the desktop vault:** the folder sync (`sync.md`) needs
+  direct access to a folder on disk, which browser extensions do not have.
+  A standalone extension would be either a separate vault, or it would need
+  another way to reach the same encrypted files: a user-picked directory
+  through the File System Access API (Chromium only), or a hosted relay.
 
 ### What gets weaker
 
@@ -105,5 +121,5 @@ decision, recorded in the threat model, and not an incremental feature.
 
 ## Later (out of MVP scope)
 
-Sync between devices, mobile, passkeys, sharing. See CLAUDE.md for the
+A hosted sync service, passkeys, sharing. See CLAUDE.md for the
 current scope.

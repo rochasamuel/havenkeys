@@ -402,3 +402,36 @@ and the fault was in the generator. It is a reminder that whole-site rules
 Still open for Phase 6: Windows pipe owner check (P10), desktop confirmation
 for browser-initiated password changes (F2 residual), macOS screen lock,
 export, and the manual runtime checks (#14, Phase 5 browser checklist).
+
+---
+
+# Security Review: Secret Key and folder sync
+
+> This software has not undergone an independent security audit.
+
+Scope: `crates/havenkeys-core/src/{crypto/secret_key.rs, crypto/keys.rs,
+vault.rs, store.rs, sync.rs}`, and `apps/desktop/src-tauri/src/{device.rs,
+account.rs, sync.rs}` with its UI. Design: `sync.md`, `crypto.md`.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| K1 | Info | Design | The Secret Key is stored in plain text in `device.json` on each device | Accepted, same model as 1Password: it protects copies away from your devices, not a device someone can already read. The mobile app should use the platform keystore |
+| K2 | Info | Design | Losing every device that holds the Secret Key, and the Emergency Kit, loses the vault | Accepted; the kit is shown at creation, confirming it was saved is required, and it can be shown again while unlocked |
+| K3 | Low | Sync | Conflicts are decided by device clocks (newest `updatedAt` wins) | Accepted, documented (`sync.md` §6) |
+| K4 | Low | Sync | Anyone with access to the folder can delete files and stop updates | Accepted (denial of service only), documented |
+| K5 | Info | Sync | The folder reveals the vault ID, KDF parameters, wrapped key, number of devices, snapshot sizes and sync times | Accepted, documented |
+| K6 | Info | Sync | Any unlocked device can change any item or the master password for all devices | Inherent: every device holds the vault key. Same-user malware is out of scope |
+| K7 | Low | Core | A header from the folder is plaintext and read before any key exists | Mitigated: a new device requires the attestation to verify under the key it derived; an unlocked device adopts only attested, newer, key-scheme-2 headers. Forged headers are replaced (tested) |
+| K8 | Info | Core | Deleted items leave tombstones (random ID and time) in plaintext in the local database | Accepted, listed in `security-model.md` §4 |
+| K9 | Info | Desktop | The sync worker reads and writes the folder while other code runs | By design: no lock is held during I/O, and the merge re-checks that the vault is still unlocked |
+
+Tests: `crates/havenkeys-core/tests/sync.rs` (joining needs both secrets;
+nothing in the folder is plaintext; edits, deletes and resurrection;
+concurrent edits; replayed snapshots; tampered, foreign and garbage files;
+forged header; password change spreading; key-scheme and lock checks),
+`crypto/secret_key.rs` (format, typos, redaction), and `store.rs`
+(schema 1 → 2 migration).
+
+Verification pending: none of this has run in the desktop app on a real
+cloud folder yet. Before relying on it, create a vault, save the kit, set a
+OneDrive folder, and join from a second computer (`roadmap.md` §1).

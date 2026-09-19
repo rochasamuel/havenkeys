@@ -20,7 +20,8 @@ This document describes *how* HavenKeys enforces the properties listed in
 
 | Property | Mechanism |
 |---|---|
-| Confidentiality at rest | AES-256-GCM under a random vault key, wrapped by an Argon2id-derived KEK |
+| Confidentiality at rest | AES-256-GCM under a random vault key, wrapped by a KEK derived from the master password (Argon2id) and the Secret Key (HKDF) |
+| Copies away from your devices | The sync folder and backups need the master password **and** the 128-bit Secret Key |
 | Integrity at rest (per blob) | GCM tag + AAD binding to vault ID / item ID / role |
 | No plaintext secrets in SQLite | Items table holds only `id` + two encrypted blobs |
 | Master password never persisted | Held in `Zeroizing<String>` only for the duration of `unlock`/`create` |
@@ -42,9 +43,17 @@ This document describes *how* HavenKeys enforces the properties listed in
 Stored unencrypted in SQLite:
 
 * `format_version`, `vault_id` (random UUID), `created_at` of the vault.
-* Argon2id parameters and salt (required to unlock).
+* Argon2id parameters and salt (required to unlock), the key scheme
+  (password only, or password + Secret Key) and the header revision.
 * Item IDs (random UUIDv4) and the **number** of items, and the approximate
   size of each encrypted blob.
+* Tombstones of deleted items: their random IDs and deletion times, so
+  deletions can reach other devices.
+
+Outside the vault database, `device.json` (same folder, mode 0600) holds the
+device ID, the sync folder path and the **Secret Key in plain text**
+(`sync.md` §6 explains why). The sync folder's plaintext is listed in
+`sync.md` §6.
 
 Everything else — item type, title, username, URLs, timestamps, passwords, TOTP
 configuration, notes, and settings — is encrypted.
@@ -240,7 +249,28 @@ events. It writes secrets only into the `value` of visible, enabled fields
 of the group the user chose, and never into attributes. Details and
 limitations are in `autofill.md`.
 
-## 13. Browser bridge
+## 13. Secret Key and sync
+
+See `sync.md` and `crypto.md` for the full design. In summary:
+
+* New vaults are protected by the master password **and** a 128-bit Secret
+  Key, mixed into the KEK with HKDF. Copies of the vault that are not on one
+  of your devices (the sync folder, backups) cannot be opened with the
+  password alone.
+* A new device joins with the master password and the Secret Key from the
+  Emergency Kit. No server is involved; knowing both is the proof.
+* The sync folder is untrusted storage. Every file is authenticated with
+  the vault's data key: snapshots are bound to the vault and the writing
+  device, items to their IDs, and the header by an attestation. Unauthentic
+  files are ignored, older versions lose merges, and a password-only header
+  is never adopted.
+* The sync worker never holds the vault lock while it reads or writes the
+  folder, so locking is never delayed.
+* The Emergency Kit (Secret Key and QR code) is shown only while unlocked,
+  on request. Right after a vault is created, continuing requires confirming
+  it was saved.
+
+## 14. Browser bridge
 
 See `native-messaging.md` for the full protocol. In summary:
 
@@ -264,6 +294,6 @@ See `native-messaging.md` for the full protocol. In summary:
 * Browser integration is opt-in (off by default) in Settings. The switch is
   stored in the encrypted settings blob and enforced in Rust.
 
-## 14. Known limitations
+## 15. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.

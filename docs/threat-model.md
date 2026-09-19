@@ -53,10 +53,29 @@ Stolen laptop backup, synced folder leak, malware exfiltrating files.
 * All item content (titles, usernames, URLs, passwords, TOTP secrets, notes,
   timestamps, item type) is encrypted with AES-256-GCM.
 * The vault key is random (256-bit, OS CSPRNG) and wrapped with a KEK derived
-  from the master password with Argon2id (memory-hard, salted).
-* The attacker's best strategy is offline guessing of the master password, at a
-  cost set by the Argon2id parameters. **A weak master password remains
-  guessable**; we enforce a minimum length but cannot guarantee strength.
+  from the master password with Argon2id (memory-hard, salted) and, for
+  vaults with a Secret Key, the 128-bit Secret Key (HKDF).
+* **Copies without the Secret Key** (the sync folder, a backup, a copied
+  `vault.sqlite3`): guessing the master password is not enough. The attacker
+  would also have to guess 128 random bits.
+* **A full copy of a device** (which includes `device.json` and so the Secret
+  Key), or a password-only vault: the attacker's best strategy is offline
+  guessing of the master password, at a cost set by the Argon2id parameters.
+  **A weak master password remains guessable**; we enforce a minimum length
+  but cannot guarantee strength.
+
+### T1b — The sync service, or someone in your cloud account
+They can read, change, delete, reorder and replay everything in the sync
+folder.
+
+* They cannot read it: every snapshot is encrypted under the data key, and
+  unlocking needs the master password and the Secret Key.
+* They cannot change it without detection: snapshots, the items in them and
+  the header attestation all authenticate. They cannot roll items back by
+  replaying old files (older versions lose merges), and they cannot swap a
+  header for a password-only one.
+* They **can** delete files, which stops updates between devices (denial of
+  service), and they see metadata (`sync.md` §6).
 
 ### T2 — Attacker who can modify the vault file
 * Every blob is authenticated (AEAD). Associated data binds each ciphertext to

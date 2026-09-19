@@ -3,10 +3,13 @@
 
 #![forbid(unsafe_code)]
 
+mod account;
 mod clipboard;
 mod commands;
+mod device;
 mod import;
 mod state;
+mod sync;
 mod tray;
 
 use havenkeys_bridge::Bridge;
@@ -68,6 +71,7 @@ pub fn run() {
         .setup(|app| {
             let path = vault_path(app)?;
             let store = Store::open(&path).map_err(|e| e.to_string())?;
+            let device = device::Device::load(path.parent().ok_or("no data directory")?);
             let vault = Arc::new(Mutex::new(VaultService::new(store)));
 
             // Browser integration. The bridge locks through AppState so an
@@ -81,13 +85,18 @@ pub fn run() {
                         state.lock(&lock_handle, "extension");
                     }
                 },
-                // A login saved from the browser: the item list must refresh.
-                // The payload is empty; the UI re-reads the list itself.
+                // A login saved from the browser: the item list must refresh
+                // (the payload is empty; the UI re-reads the list itself), and
+                // other devices should get it.
                 move || {
                     let _ = change_handle.emit(state::ITEMS_CHANGED_EVENT, ());
+                    if let Some(state) = change_handle.try_state::<AppState>() {
+                        state.sync.request();
+                    }
                 },
             );
-            app.manage(AppState::new(vault, bridge.clone()));
+            app.manage(AppState::new(vault, bridge.clone(), device));
+            sync::spawn(app.handle())?;
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
             let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));
@@ -134,6 +143,14 @@ pub fn run() {
             commands::get_item,
             commands::reveal_secret,
             commands::password_history,
+            account::device_status,
+            account::get_emergency_kit,
+            account::setup_secret_key,
+            account::choose_sync_folder,
+            account::sync_now,
+            account::stop_sync,
+            account::pick_join_folder,
+            account::join_synced_vault,
             commands::reveal_previous_password,
             commands::get_totp_code,
             commands::copy_secret,

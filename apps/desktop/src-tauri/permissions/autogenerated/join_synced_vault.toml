@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-join-synced-vault"
+description = "Enables the join_synced_vault command without any pre-configured scope."
+commands.allow = ["join_synced_vault"]
+
+[[permission]]
+identifier = "deny-join-synced-vault"
+description = "Denies the join_synced_vault command without any pre-configured scope."
+commands.deny = ["join_synced_vault"]

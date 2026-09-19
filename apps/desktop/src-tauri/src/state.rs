@@ -5,6 +5,8 @@
 //! vault lock; the bridge never takes the vault while holding its own locks).
 
 use crate::clipboard::ClipboardGuard;
+use crate::device::Device;
+use crate::sync::SyncState;
 use havenkeys_bridge::Bridge;
 use havenkeys_core::lock::LockManager;
 use havenkeys_core::vault::VaultService;
@@ -28,6 +30,12 @@ pub struct AppState {
     /// The export file the user picked for the last import, so the UI can
     /// offer to delete it without ever supplying a path itself.
     pub last_import: Mutex<Option<PathBuf>>,
+    /// This computer's ID, Secret Key and sync folder (`device.json`).
+    pub device: Mutex<Device>,
+    pub sync: SyncState,
+    /// The sync folder and vault picked for joining on this device, so the
+    /// renderer never supplies a path.
+    pub pending_join: Mutex<Option<(PathBuf, uuid::Uuid)>>,
     origin: Instant,
 }
 
@@ -78,13 +86,16 @@ struct LockedPayload {
 }
 
 impl AppState {
-    pub fn new(vault: Arc<Mutex<VaultService>>, bridge: Bridge) -> Self {
+    pub fn new(vault: Arc<Mutex<VaultService>>, bridge: Bridge, device: Device) -> Self {
         Self {
             vault,
             bridge,
             lock_manager: Mutex::new(LockManager::new(None)),
             clipboard: ClipboardGuard::default(),
             last_import: Mutex::new(None),
+            device: Mutex::new(device),
+            sync: SyncState::default(),
+            pending_join: Mutex::new(None),
             origin: Instant::now(),
         }
     }

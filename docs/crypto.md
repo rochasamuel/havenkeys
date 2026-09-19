@@ -19,13 +19,17 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
 ## Key hierarchy
 
 ```text
- master password (UTF-8, never stored)
-        │
-        │  Argon2id(salt = 16 random bytes, m, t, p)   ── params + salt stored in header
-        ▼
- master key (32 bytes, memory only)
-        │
-        │  HKDF-SHA-256(ikm = master key, salt = vault_id, info = "havenkeys/v1/kek")
+ master password (UTF-8, never stored)        Secret Key (128 random bits; on each
+        │                                      device and on the Emergency Kit only)
+        │  Argon2id(salt = 16 random bytes, m, t, p)          │
+        ▼          params + salt stored in header             │
+ master key (32 bytes, memory only)                           │
+        │                                                     │
+        │  HKDF-SHA-256(ikm  = master key ‖ Secret Key, ◄──────┘
+        │               salt = vault_id,
+        │               info = "havenkeys/v2/kek")         key scheme 2
+        │  (key scheme 1, older vaults: ikm = master key,
+        │   info = "havenkeys/v1/kek")
         ▼
  KEK — key encryption key (32 bytes, memory only)
         │
@@ -38,8 +42,10 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
  data key (32 bytes, memory only while unlocked)
         │
         ├── item overview blobs   (title, username, URLs, flags, timestamps)
-        ├── item details blobs    (password, TOTP config, notes, note content)
-        └── settings blob         (auto-lock, clipboard timeout)
+        ├── item details blobs    (password, TOTP config, notes, note content, password history)
+        ├── settings blob         (auto-lock, clipboard timeout, …)
+        ├── sync snapshots        (one per device, in the sync folder)
+        └── sync header attestation
 ```
 
 Why this shape:
@@ -49,27 +55,51 @@ Why this shape:
   password is encoded, and changing the master password only rewraps 32 bytes
   (items are not re-encrypted).
   *Limitation:* because the vault key does not change, someone holding an old
-  copy of the vault file **and** the old password can still read newer copies.
-  See `security-review.md` #8.
-* **HKDF domain separation** (`info` strings) ensures the KEK and the data key
-  can never collide with each other or with future keys.
-* The KEK derivation takes the vault ID as HKDF salt so the same password on
+  copy of the vault file **and** the old password (and Secret Key) can still
+  read newer copies. See `security-review.md` #8.
+* **HKDF domain separation** (`info` strings) ensures the KEKs of both
+  schemes and the data key can never collide with each other or with future
+  keys.
+* The KEK derivation takes the vault ID as HKDF salt, so the same password on
   two vaults yields unrelated KEKs even in the (astronomically unlikely) event
   of an Argon2 salt collision.
 
-### Future: device secret (not implemented)
+### Secret Key (key scheme 2)
 
-A later format version can mix a high-entropy device secret into the KEK
-derivation:
+Implemented as planned in earlier versions of this document, and in the
+style of 1Password's two-secret key derivation:
 
-```text
-KEK = HKDF-SHA-256(ikm = Argon2id(password) || device_secret,
-                   salt = vault_id, info = "havenkeys/v2/kek")
-```
-
-Because the header records `format_version` and the KDF descriptor, a v2 vault
-can be introduced without breaking v1 vaults, and a v1 vault can be migrated by
-rewrapping the vault key (items do not change).
+* **Generation:** 16 bytes from the OS CSPRNG when a vault is created (or
+  when an older vault is upgraded).
+* **Mixing:** the Argon2id master key and the Secret Key are concatenated as
+  HKDF input keying material, with the vault ID as salt and
+  `"havenkeys/v2/kek"` as info. HKDF is used as specified, as an extractor
+  and expander over the combined input. No new construction is involved.
+* **What it adds:** a copy of the vault that is not on one of your devices
+  (the sync folder, a backup of `vault.sqlite3`) cannot be attacked by
+  guessing the master password alone. The attacker would also need to guess
+  128 random bits. A weak master password is still weak on a device that
+  holds the Secret Key.
+* **Text form:** `H1-` then 26 Base32 (RFC 4648) characters of key and 2
+  check characters, grouped by 4:
+  `H1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. The check characters are 10 bits of
+  `SHA-256("havenkeys/secret-key/check" ‖ key)`. They catch typos before the
+  slow Argon2id step and are not a security feature. Parsing ignores case,
+  spaces and dashes, and maps 0→O, 1→I, 8→B.
+* **Storage:**
+  * on each device: `device.json`, outside the vault database (see
+    `sync.md` §6 for why it is plain text there);
+  * on paper or PDF: the Emergency Kit.
+  * It never goes into the vault database, the sync folder, logs, or the
+    browser extension.
+* **The header records the scheme** (`key_scheme` 1 or 2). Scheme 1 vaults
+  keep working, and *Add a Secret Key* rewraps their vault key under a scheme
+  2 KEK, with the same master password and a fresh Argon2id salt. Items are
+  not touched. A scheme 2 unlock without a Secret Key is refused before any
+  key derivation.
+* **Header revision:** every rewrap (password change, Secret Key upgrade)
+  increments `header_revision`, so devices sharing a sync folder can tell
+  which header is newest (`sync.md` §4).
 
 ## Argon2id parameters
 
@@ -143,6 +173,8 @@ AAD = "havenkeys" || 0x00 || blob_version || algorithm || purpose || 0x00 || con
 | `item-overview` | vault ID, item ID |
 | `item-details` | vault ID, item ID |
 | `settings` | vault ID |
+| `sync-snapshot` | vault ID, device ID (in the item-ID slot) |
+| `sync-header` | vault ID |
 
 Consequences: a blob copied into another item row, another role, or another
 vault fails authentication. Header bytes (version, algorithm) are authenticated

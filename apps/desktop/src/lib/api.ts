@@ -9,6 +9,9 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   CopyField,
   CopyResult,
+  DeviceStatus,
+  EmergencyKit,
+  SyncReport,
   GeneratedPassword,
   GeneratorOptions,
   ImportResult,
@@ -59,7 +62,9 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 export const api = {
   status: () => call<VaultStatus>("vault_status"),
   createVault: (password: string) => call<VaultStatus>("create_vault", { password }),
-  unlock: (password: string) => call<VaultStatus>("unlock_vault", { password }),
+  /** `secretKey` only when this device does not have it yet (from the Emergency Kit). */
+  unlock: (password: string, secretKey?: string) =>
+    call<VaultStatus>("unlock_vault", { password, secretKey: secretKey?.trim() ? secretKey : null }),
   lock: () => call<void>("lock_vault"),
   changeMasterPassword: (current: string, next: string) =>
     call<void>("change_master_password", { current, new: next }),
@@ -86,6 +91,18 @@ export const api = {
   import1pux: () => call<ImportResult | null>("import_1pux"),
   /** Deletes the file chosen in the last import (the UI never sends a path). */
   deleteImportFile: () => call<void>("delete_import_file"),
+
+  deviceStatus: () => call<DeviceStatus>("device_status"),
+  emergencyKit: () => call<EmergencyKit>("get_emergency_kit"),
+  setupSecretKey: (password: string) => call<void>("setup_secret_key", { password }),
+  /** Opens the native folder picker in Rust; resolves to the folder name or null. */
+  chooseSyncFolder: () => call<string | null>("choose_sync_folder"),
+  syncNow: () => call<SyncReport | null>("sync_now"),
+  stopSync: () => call<void>("stop_sync"),
+  /** New device: pick the sync folder that holds the vault (native picker). */
+  pickJoinFolder: () => call<{ folder: string } | null>("pick_join_folder"),
+  joinSyncedVault: (password: string, secretKey: string) =>
+    call<VaultStatus>("join_synced_vault", { password, secretKey }),
 
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),

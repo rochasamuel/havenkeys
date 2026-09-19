@@ -42,7 +42,7 @@ fn locked_vault_refuses_everything() {
         v.update_item(&id, login("a", "b", "c", "a.com"), NOW).err(),
         Some(Error::Locked)
     );
-    assert_eq!(v.delete_item(&id).err(), Some(Error::Locked));
+    assert_eq!(v.delete_item(&id, NOW).err(), Some(Error::Locked));
     assert_eq!(v.settings().err(), Some(Error::Locked));
     assert_eq!(
         v.update_settings(Settings::default()).err(),

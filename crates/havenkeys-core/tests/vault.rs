@@ -105,9 +105,9 @@ fn login_item_crud_and_secret_minimization() {
         Some(Error::NotFound)
     );
 
-    v.delete_item(&ov.id).unwrap();
+    v.delete_item(&ov.id, NOW).unwrap();
     assert_eq!(v.get_item(&ov.id).err(), Some(Error::NotFound));
-    assert_eq!(v.delete_item(&ov.id), Err(Error::NotFound));
+    assert_eq!(v.delete_item(&ov.id, NOW), Err(Error::NotFound));
 }
 
 #[test]
