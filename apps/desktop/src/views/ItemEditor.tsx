@@ -21,7 +21,7 @@ function toUpdate(edit: SecretEdit): SecretUpdate {
 }
 
 const matchLabels: Record<MatchType, string> = {
-  domain: "Site and subdomains",
+  domain: "Whole site, any subdomain",
   origin: "This exact site",
   exact: "This exact page",
 };

@@ -28,6 +28,8 @@ pub enum Error {
     NoVault,
     #[error("Item not found.")]
     NotFound,
+    #[error("This item is not saved for this website.")]
+    Denied,
     #[error("Invalid input: {0}.")]
     InvalidInput(&'static str),
     #[error("Vault storage error.")]
@@ -52,6 +54,7 @@ impl Error {
             Error::VaultExists => "vault_exists",
             Error::NoVault => "no_vault",
             Error::NotFound => "not_found",
+            Error::Denied => "denied",
             Error::InvalidInput(_) => "invalid_input",
             Error::Storage => "storage",
             Error::Kdf => "kdf",

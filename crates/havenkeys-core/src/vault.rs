@@ -14,6 +14,7 @@ use crate::model::{
     clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, SecretField, SecretUpdate,
     Settings,
 };
+use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::secret::SecretString;
 use crate::store::{HeaderRecord, Store};
 use crate::totp::{self, TotpCode};
@@ -72,6 +73,40 @@ impl UnlockTicket {
         }
         let master = derive_master_key(password, &self.kdf)?;
         Ok(UnlockKey(derive_kek(&master, &self.vault_id)?))
+    }
+}
+
+/// A login offered for a page. Deliberately contains no secrets.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Suggestion {
+    pub id: Uuid,
+    pub title: String,
+    pub username: Option<String>,
+    pub has_totp: bool,
+    pub strength: MatchStrength,
+}
+
+impl std::fmt::Debug for Suggestion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Suggestion")
+            .field("id", &self.id)
+            .field("strength", &self.strength)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Exactly what is needed to fill a login form, nothing more.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FillCredentials {
+    pub username: Option<String>,
+    pub password: Option<SecretString>,
+}
+
+impl std::fmt::Debug for FillCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FillCredentials(<redacted>)")
     }
 }
 
@@ -520,6 +555,66 @@ impl VaultService {
             } => totp::generate(&cfg, unix_seconds),
             _ => Err(Error::NotFound),
         }
+    }
+
+    // ------------------------------------------------------------ page-bound access
+    //
+    // Everything a browser extension may ask for goes through these. The page
+    // URL is re-checked against the item's own website rules on every call; the
+    // caller's claims about which item "belongs" to a page are never trusted.
+
+    /// Logins whose website rules match `page_url`, best match first.
+    /// Returns no secrets: only ID, title and username.
+    pub fn find_matches(&self, page_url: &str) -> Result<Vec<Suggestion>> {
+        let session = self.session()?;
+        let Some(page) = PageUrl::parse(page_url) else {
+            return Ok(Vec::new());
+        };
+        let mut out: Vec<Suggestion> = session
+            .overviews
+            .values()
+            .filter(|o| o.item_type == ItemType::Login)
+            .filter_map(|o| {
+                match_item(o, &page).map(|strength| Suggestion {
+                    id: o.id,
+                    title: o.title.clone(),
+                    username: o.username.clone(),
+                    has_totp: o.has_totp,
+                    strength,
+                })
+            })
+            .collect();
+        out.sort_by_cached_key(|s| (s.strength, s.title.to_lowercase(), s.id));
+        Ok(out)
+    }
+
+    /// The item, if and only if it is a login whose rules match the page.
+    fn authorize_for_page(&self, id: &Uuid, page_url: &str) -> Result<&ItemOverview> {
+        let session = self.session()?;
+        let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
+        let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
+        if overview.item_type != ItemType::Login || match_item(overview, &page).is_none() {
+            return Err(Error::Denied);
+        }
+        Ok(overview)
+    }
+
+    /// Username and password for filling `page_url`. Denied unless the item's
+    /// own website rules match the page.
+    pub fn fill_for_page(&self, id: &Uuid, page_url: &str) -> Result<FillCredentials> {
+        let username = self.authorize_for_page(id, page_url)?.username.clone();
+        let password = match self.load_details(id)? {
+            ItemDetails::Login { password, .. } => password,
+            ItemDetails::SecureNote { .. } => return Err(Error::Denied),
+        };
+        Ok(FillCredentials { username, password })
+    }
+
+    /// Current TOTP code for filling `page_url`. Same origin binding as
+    /// [`fill_for_page`](Self::fill_for_page); the TOTP secret never leaves.
+    pub fn totp_for_page(&self, id: &Uuid, page_url: &str, unix_seconds: u64) -> Result<TotpCode> {
+        self.authorize_for_page(id, page_url)?;
+        self.totp_code(id, unix_seconds)
     }
 
     // ------------------------------------------------------------ writing

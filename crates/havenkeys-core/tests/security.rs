@@ -340,3 +340,114 @@ fn debug_output_is_redacted() {
     let pw = v.reveal(&ov.id, SecretField::Password).unwrap();
     assert!(!format!("{pw:?}").contains("debug-pass"));
 }
+
+// ---------------------------------------------------------------- origin binding
+
+fn github_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
+    let mut v = new_vault();
+    let mut input = login("GitHub", "octo", "gh-secret", "github.com");
+    input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
+    let id = v.create_item(input, NOW).unwrap().id;
+    v.create_item(
+        login("Bank", "alice", "bank-secret", "mybank.com"),
+        NOW,
+    )
+    .unwrap();
+    (v, id)
+}
+
+/// A1: a page on evil.com asks for the github.com credential.
+#[test]
+fn a1_wrong_origin_is_denied() {
+    let (v, id) = github_vault();
+    for page in [
+        "https://evil.com/login",
+        "https://github.com.evil.com/login",
+        "https://github-login.example.com/",
+        "http://github.com/login", // downgrade
+        "javascript:alert(1)",
+        "",
+    ] {
+        assert_eq!(
+            v.fill_for_page(&id, page).err(),
+            Some(Error::Denied),
+            "{page}"
+        );
+        assert_eq!(
+            v.totp_for_page(&id, page, 59).err(),
+            Some(Error::Denied),
+            "{page}"
+        );
+        assert!(v.find_matches(page).unwrap().is_empty(), "{page}");
+    }
+}
+
+/// A2: arbitrary item IDs are only served for pages they match.
+#[test]
+fn a2_item_only_for_matching_origin() {
+    let (v, gh) = github_vault();
+    let creds = v.fill_for_page(&gh, "https://github.com/session").unwrap();
+    assert_eq!(creds.username.as_deref(), Some("octo"));
+    assert_eq!(creds.password.unwrap().expose(), "gh-secret");
+    assert!(v
+        .totp_for_page(&gh, "https://github.com/sessions/two-factor", 59)
+        .is_ok());
+
+    // The bank item exists but must not be served on github.com.
+    let bank = v.find_matches("https://mybank.com/").unwrap()[0].id;
+    assert_eq!(
+        v.fill_for_page(&bank, "https://github.com/").err(),
+        Some(Error::Denied)
+    );
+    // Unknown IDs.
+    assert_eq!(
+        v.fill_for_page(&Uuid::new_v4(), "https://github.com/")
+            .err(),
+        Some(Error::NotFound)
+    );
+}
+
+#[test]
+fn find_matches_returns_no_secrets_and_ranks() {
+    let (mut v, _) = github_vault();
+    v.create_item(
+        login("GitHub Gist", "octo2", "pw", "https://gist.github.com"),
+        NOW,
+    )
+    .unwrap();
+    let matches = v.find_matches("https://gist.github.com/new").unwrap();
+    let titles: Vec<&str> = matches.iter().map(|m| m.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["GitHub Gist", "GitHub"],
+        "exact host ranks above same site"
+    );
+    let json = serde_json::to_string(&matches).unwrap();
+    assert!(!json.contains("gh-secret") && !json.contains("JBSWY3DP"));
+}
+
+#[test]
+fn notes_and_locked_vault_are_never_served_to_pages() {
+    let (mut v, gh) = github_vault();
+    let note = v
+        .create_item(note("github.com", "secret note"), NOW)
+        .unwrap()
+        .id;
+    assert_eq!(
+        v.fill_for_page(&note, "https://github.com/").err(),
+        Some(Error::Denied)
+    );
+    v.lock();
+    assert_eq!(
+        v.find_matches("https://github.com/").err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        v.fill_for_page(&gh, "https://github.com/").err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        v.totp_for_page(&gh, "https://github.com/", 59).err(),
+        Some(Error::Locked)
+    );
+}

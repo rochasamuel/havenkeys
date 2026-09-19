@@ -13,7 +13,8 @@ security core. It works offline, needs no account, and runs no server.
 |---|---|
 | Security core (crypto, vault, lock, TOTP, generator) | Implemented, 82 Rust tests |
 | Desktop app (Tauri + React) | Implemented; builds and runs on Linux (WSLg) |
-| Browser extension, native messaging, autofill | Not started (next phases) |
+| Domain matching + origin binding for autofill | Implemented in the core ([docs/autofill.md](docs/autofill.md)) |
+| Browser extension, native messaging | Not started (next phases) |
 | Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
 | Export | Not implemented |
 

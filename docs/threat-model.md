@@ -118,8 +118,8 @@ system suspend (detected by wall-clock vs monotonic clock divergence).
 
 | # | Attack | Expected | Test location |
 |---|---|---|---|
-| A1 | Credential request for github.com while on evil.com | DENIED | extension phase (`origin` + native host tests) |
-| A2 | Extension requests arbitrary item ID | Only if item matches origin | extension phase |
+| A1 | Credential request for github.com while on evil.com | DENIED | `crates/havenkeys-core/tests/security.rs` (core); native host tests in Phase 4 |
+| A2 | Extension requests arbitrary item ID | Only if item matches origin | `crates/havenkeys-core/tests/security.rs` (core); native host tests in Phase 4 |
 | A3 | Vault locked, secret requested | DENIED | `crates/havenkeys-core/tests/security.rs` |
 | A4 | Ciphertext modified | Auth failure, no plaintext | `crates/havenkeys-core/tests/security.rs`, `blob.rs` |
 | A5 | Malformed native message | Rejected, no crash | extension phase |
