@@ -7,7 +7,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -29,6 +29,44 @@ CREATE TABLE settings (
 );
 ";
 
+/// Schema 1 → 2: key scheme and header revision in the header (Secret Key,
+/// sync), and tombstones so deletions reach other devices.
+const MIGRATE_1_TO_2: &str = "
+ALTER TABLE vault_header ADD COLUMN key_scheme INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE vault_header ADD COLUMN header_revision INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE tombstones (
+    id         TEXT PRIMARY KEY NOT NULL,
+    deleted_at INTEGER NOT NULL
+);
+";
+
+/// How the key-encryption key is derived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyScheme {
+    /// Argon2id(master password) only. Vaults created before the Secret Key.
+    PasswordOnly,
+    /// Argon2id(master password) combined with the device's Secret Key.
+    PasswordAndSecretKey,
+}
+
+impl KeyScheme {
+    fn to_db(self) -> i64 {
+        match self {
+            KeyScheme::PasswordOnly => 1,
+            KeyScheme::PasswordAndSecretKey => 2,
+        }
+    }
+
+    fn from_db(v: i64) -> Result<Self> {
+        match v {
+            1 => Ok(KeyScheme::PasswordOnly),
+            2 => Ok(KeyScheme::PasswordAndSecretKey),
+            _ => Err(Error::UnsupportedVersion),
+        }
+    }
+}
+
 /// Plaintext vault header.
 #[derive(Clone, Debug)]
 pub struct HeaderRecord {
@@ -37,7 +75,14 @@ pub struct HeaderRecord {
     pub kdf: KdfParams,
     pub wrapped_vault_key: Vec<u8>,
     pub created_at: i64,
+    pub key_scheme: KeyScheme,
+    /// Bumped on every re-wrap (master password change, Secret Key set-up),
+    /// so devices sharing a sync folder can tell which header is newest.
+    pub revision: u64,
 }
+
+/// One full `items` row, as stored (encrypted).
+pub type ItemRow = (Uuid, Vec<u8>, Vec<u8>);
 
 /// One `items` row: `(id, overview blob)`, or an error if the row is malformed.
 pub type OverviewRow = Result<(Uuid, Vec<u8>)>;
@@ -71,6 +116,13 @@ impl Store {
             0 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(SCHEMA)?;
+                tx.execute_batch(MIGRATE_1_TO_2)?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+                tx.commit()?;
+            }
+            1 => {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch(MIGRATE_1_TO_2)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -84,21 +136,32 @@ impl Store {
         let row = self
             .conn
             .query_row(
-                "SELECT format_version, vault_id, kdf, wrapped_vault_key, created_at
+                "SELECT format_version, vault_id, kdf, wrapped_vault_key, created_at,
+                        key_scheme, header_revision
                  FROM vault_header WHERE id = 1",
                 [],
                 |r| {
                     Ok((
-                        r.get::<_, i64>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, Vec<u8>>(3)?,
-                        r.get::<_, i64>(4)?,
+                        (
+                            r.get::<_, i64>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                        ),
+                        (
+                            r.get::<_, Vec<u8>>(3)?,
+                            r.get::<_, i64>(4)?,
+                            r.get::<_, i64>(5)?,
+                            r.get::<_, i64>(6)?,
+                        ),
                     ))
                 },
             )
             .optional()?;
-        let Some((format_version, vault_id, kdf, wrapped_vault_key, created_at)) = row else {
+        let Some((
+            (format_version, vault_id, kdf),
+            (wrapped_vault_key, created_at, key_scheme, revision),
+        )) = row
+        else {
             return Ok(None);
         };
         let format_version = u32::try_from(format_version).map_err(|_| Error::Corrupted)?;
@@ -110,6 +173,8 @@ impl Store {
             kdf,
             wrapped_vault_key,
             created_at,
+            key_scheme: KeyScheme::from_db(key_scheme)?,
+            revision: u64::try_from(revision).map_err(|_| Error::Corrupted)?,
         }))
     }
 
@@ -124,14 +189,17 @@ impl Store {
             return Err(Error::VaultExists);
         }
         tx.execute(
-            "INSERT INTO vault_header (id, format_version, vault_id, kdf, wrapped_vault_key, created_at)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO vault_header (id, format_version, vault_id, kdf, wrapped_vault_key,
+                                       created_at, key_scheme, header_revision)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 header.format_version,
                 header.vault_id.to_string(),
                 kdf,
                 header.wrapped_vault_key,
-                header.created_at
+                header.created_at,
+                header.key_scheme.to_db(),
+                i64::try_from(header.revision).map_err(|_| Error::Storage)?,
             ],
         )?;
         tx.execute(
@@ -142,12 +210,27 @@ impl Store {
         Ok(())
     }
 
-    /// Replace the KDF descriptor and wrapped vault key (master password change).
-    pub fn update_key_wrap(&mut self, kdf: &KdfParams, wrapped_vault_key: &[u8]) -> Result<()> {
+    /// Replace the KDF descriptor, wrapped vault key, key scheme and revision
+    /// (master password change, Secret Key set-up, or a newer header from
+    /// the sync folder).
+    pub fn update_key_wrap(
+        &mut self,
+        kdf: &KdfParams,
+        wrapped_vault_key: &[u8],
+        key_scheme: KeyScheme,
+        revision: u64,
+    ) -> Result<()> {
         let kdf = serde_json::to_string(kdf).map_err(|_| Error::Storage)?;
         let n = self.conn.execute(
-            "UPDATE vault_header SET kdf = ?1, wrapped_vault_key = ?2 WHERE id = 1",
-            params![kdf, wrapped_vault_key],
+            "UPDATE vault_header SET kdf = ?1, wrapped_vault_key = ?2, key_scheme = ?3,
+                                     header_revision = ?4
+             WHERE id = 1",
+            params![
+                kdf,
+                wrapped_vault_key,
+                key_scheme.to_db(),
+                i64::try_from(revision).map_err(|_| Error::Storage)?
+            ],
         )?;
         if n == 1 {
             Ok(())
@@ -208,11 +291,87 @@ impl Store {
         Ok(())
     }
 
-    pub fn delete_item(&self, id: &Uuid) -> Result<bool> {
-        Ok(self
+    /// Delete an item and record a tombstone, atomically.
+    pub fn delete_item(&mut self, id: &Uuid, deleted_at: i64) -> Result<bool> {
+        let tx = self.conn.transaction()?;
+        let n = tx.execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
+        tx.execute(
+            "INSERT INTO tombstones (id, deleted_at) VALUES (?1, ?2)
+             ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at)",
+            params![id.to_string(), deleted_at],
+        )?;
+        tx.commit()?;
+        Ok(n == 1)
+    }
+
+    /// Every item row, for a sync snapshot. Malformed IDs are skipped.
+    pub fn item_rows(&self) -> Result<Vec<ItemRow>> {
+        let mut stmt = self
             .conn
-            .execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?
-            == 1)
+            .prepare("SELECT id, overview, details FROM items")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Vec<u8>>(1)?,
+                r.get::<_, Vec<u8>>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, ov, det) = row?;
+            if let Ok(id) = Uuid::parse_str(&id) {
+                out.push((id, ov, det));
+            }
+        }
+        Ok(out)
+    }
+
+    /// `(id, deleted_at)` of every deleted item.
+    pub fn tombstones(&self) -> Result<Vec<(Uuid, i64)>> {
+        let mut stmt = self.conn.prepare("SELECT id, deleted_at FROM tombstones")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, at) = row?;
+            if let Ok(id) = Uuid::parse_str(&id) {
+                out.push((id, at));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Apply a sync merge in one transaction: upsert rows, delete items that
+    /// were deleted elsewhere, and set tombstones.
+    pub fn apply_merge(
+        &mut self,
+        upserts: &[ItemRow],
+        tombstones: &[(Uuid, i64)],
+        resurrected: &[Uuid],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        for (id, ov, det) in upserts {
+            tx.execute(
+                "INSERT INTO items (id, overview, details) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(id) DO UPDATE SET overview = excluded.overview, details = excluded.details",
+                params![id.to_string(), ov, det],
+            )?;
+        }
+        for id in resurrected {
+            tx.execute(
+                "DELETE FROM tombstones WHERE id = ?1",
+                params![id.to_string()],
+            )?;
+        }
+        for (id, at) in tombstones {
+            tx.execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
+            tx.execute(
+                "INSERT INTO tombstones (id, deleted_at) VALUES (?1, ?2)
+                 ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at)",
+                params![id.to_string(), at],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn settings_blob(&self) -> Result<Option<Vec<u8>>> {
@@ -323,15 +482,57 @@ mod tests {
 
     #[test]
     fn item_crud() {
-        let s = Store::open_in_memory().unwrap();
+        let mut s = Store::open_in_memory().unwrap();
         let id = Uuid::new_v4();
         s.upsert_item(&id, b"o1", b"d1").unwrap();
         s.upsert_item(&id, b"o2", b"d2").unwrap();
         assert_eq!(s.item_details(&id).unwrap().unwrap(), b"d2");
         let all = s.item_overviews().unwrap();
         assert_eq!(all.len(), 1);
-        assert!(s.delete_item(&id).unwrap());
-        assert!(!s.delete_item(&id).unwrap());
+        assert!(s.delete_item(&id, 5).unwrap());
+        assert!(!s.delete_item(&id, 3).unwrap());
         assert!(s.item_details(&id).unwrap().is_none());
+        // The tombstone keeps the latest deletion time.
+        assert_eq!(s.tombstones().unwrap(), vec![(id, 5)]);
+    }
+
+    /// A vault created before the Secret Key (schema 1) opens, migrates, and
+    /// reads as a password-only vault.
+    #[test]
+    fn migrates_schema_1() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v1.db");
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch(SCHEMA).unwrap();
+        c.pragma_update(None, "user_version", 1).unwrap();
+        let kdf = serde_json::to_string(&KdfParams::generate().unwrap()).unwrap();
+        c.execute(
+            "INSERT INTO vault_header (id, format_version, vault_id, kdf, wrapped_vault_key, created_at)
+             VALUES (1, 1, ?1, ?2, x'00', 7)",
+            params![Uuid::nil().to_string(), kdf],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO items (id, overview, details) VALUES (?1, x'01', x'02')",
+            params![Uuid::nil().to_string()],
+        )
+        .unwrap();
+        drop(c);
+
+        let s = Store::open(&path).unwrap();
+        let h = s.header().unwrap().unwrap();
+        assert_eq!(h.key_scheme, KeyScheme::PasswordOnly);
+        assert_eq!(h.revision, 0);
+        assert_eq!(h.created_at, 7);
+        assert_eq!(s.item_rows().unwrap().len(), 1);
+        assert!(s.tombstones().unwrap().is_empty());
+        drop(s);
+        // Opening again is a no-op.
+        assert!(Store::open(&path).is_ok());
+        let c = Connection::open(&path).unwrap();
+        let v: i64 = c
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, SCHEMA_VERSION);
     }
 }
