@@ -17,6 +17,8 @@
     "allow-list-items",
     "allow-get-item",
     "allow-reveal-secret",
+    "allow-password-history",
+    "allow-reveal-previous-password",
     "allow-get-totp-code",
     "allow-copy-secret",
     "allow-create-item",

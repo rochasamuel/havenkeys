@@ -5,7 +5,14 @@
 
 import type { Match } from "@havenkeys/protocol";
 
-export type PopupRequest = { type: "popup_state" } | { type: "popup_lock" } | { type: "popup_totp"; itemId: string };
+export type PopupRequest =
+  | { type: "popup_state" }
+  | { type: "popup_lock" }
+  | { type: "popup_totp"; itemId: string }
+  /** Fill this login into the active tab's login form. */
+  | { type: "popup_fill"; itemId: string }
+  /** Fill this login's current one-time code into the active tab. */
+  | { type: "popup_fill_totp"; itemId: string };
 
 export type PopupState =
   | { kind: "host_unavailable" }
@@ -35,8 +42,10 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
     case "popup_lock":
       return keys.length === 1 ? { type: o.type } : null;
     case "popup_totp":
+    case "popup_fill":
+    case "popup_fill_totp":
       return keys.length === 2 && typeof o.itemId === "string" && UUID.test(o.itemId)
-        ? { type: "popup_totp", itemId: o.itemId }
+        ? { type: o.type, itemId: o.itemId }
         : null;
     default:
       return null;

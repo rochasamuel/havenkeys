@@ -1,11 +1,24 @@
 // Answers popup requests using the native client. Kept free of `chrome.*`
 // so it can be tested with a fake client.
 
+import type { FillPayload } from "../messaging/inline";
 import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
 import { displayHost, pageUrlForRequest } from "../shared/url";
 
 type Client = Pick<NativeClient, "request">;
+
+/** The tab the popup was opened on (readable thanks to activeTab). */
+export interface ActiveTab {
+  id: number;
+  url: string | undefined;
+}
+
+/**
+ * Put a fill into the tab's top frame (injecting the content script if
+ * needed). Resolves to the number of fields filled.
+ */
+export type TabFiller = (tabId: number, pageUrl: string, payload: FillPayload) => Promise<number>;
 
 function stateForError(e: unknown): PopupState {
   if (!(e instanceof BridgeError)) return { kind: "error", message: "Something went wrong." };
@@ -30,7 +43,35 @@ function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
 }
 
-export function createPopupHandler(client: Client, activeTabUrl: () => Promise<string | undefined>) {
+export function createPopupHandler(
+  client: Client,
+  activeTab: () => Promise<ActiveTab | undefined>,
+  fillTab: TabFiller = async () => 0,
+) {
+  const activeTabUrl = async () => (await activeTab())?.url;
+
+  async function fillFromPopup(itemId: string, totp: boolean): Promise<PopupReply<null>> {
+    // Tab and URL are read here, never taken from the popup; the desktop
+    // checks the item is saved for the URL, and the content script checks
+    // the page is still on that origin before writing anything.
+    const tab = await activeTab();
+    const url = pageUrlForRequest(tab?.url);
+    if (!tab || !url) return { ok: false, message: "This page can't use saved logins." };
+    try {
+      let filled: number;
+      if (totp) {
+        const t = await client.request({ type: "get_totp", itemId, url });
+        filled = await fillTab(tab.id, url, { kind: "otp", code: t.code });
+      } else {
+        const c = await client.request({ type: "fill_item", itemId, url });
+        filled = await fillTab(tab.id, url, { kind: "login", username: c.username, password: c.password });
+      }
+      return filled > 0 ? { ok: true, value: null } : { ok: false, message: "No login form found on this page." };
+    } catch (e) {
+      return fail(e);
+    }
+  }
+
   async function state(): Promise<PopupState> {
     try {
       const status = await client.request({ type: "status" });
@@ -45,7 +86,7 @@ export function createPopupHandler(client: Client, activeTabUrl: () => Promise<s
     }
   }
 
-  async function handle(req: PopupRequest): Promise<PopupReply<PopupState | TotpView>> {
+  async function handle(req: PopupRequest): Promise<PopupReply<PopupState | TotpView | null>> {
     switch (req.type) {
       case "popup_state":
         return { ok: true, value: await state() };
@@ -68,6 +109,10 @@ export function createPopupHandler(client: Client, activeTabUrl: () => Promise<s
           return fail(e);
         }
       }
+      case "popup_fill":
+        return fillFromPopup(req.itemId, false);
+      case "popup_fill_totp":
+        return fillFromPopup(req.itemId, true);
     }
   }
 

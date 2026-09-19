@@ -3,14 +3,51 @@
   "name": "HavenKeys",
   "version": "0.1.0",
   "description": "Use logins from the HavenKeys desktop password manager.",
-  "permissions": ["nativeMessaging", "activeTab"],
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "action": {
     "default_title": "HavenKeys",
     "default_popup": "popup.html",
-    "default_icon": { "32": "icons/32.png", "64": "icons/64.png", "128": "icons/128.png" }
+    "default_icon": {
+      "32": "icons/32.png",
+      "64": "icons/64.png",
+      "128": "icons/128.png"
+    }
   },
-  "icons": { "32": "icons/32.png", "64": "icons/64.png", "128": "icons/128.png" },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "32": "icons/32.png",
+    "64": "icons/64.png",
+    "128": "icons/128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "menu.html",
+        "save.html",
+        "menu.js",
+        "save.js",
+        "inline.css",
+        "theme.css",
+        "icons/32.png"
+      ],
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ]
+    }
+  ],
   "content_security_policy": {
-    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
   }
 }

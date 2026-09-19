@@ -135,7 +135,11 @@ unapproved.
   enforces this for the core; clippy denies print macros in all four crates).
   The native host's stdout carries protocol frames only.
 * No `innerHTML`, `console.*`, `eval` or `chrome.storage` in the extension.
-  Build the DOM with `createElement`/`textContent`.
+  Build the DOM with `createElement`/`textContent`. Enforced by
+  `apps/extension/src/hygiene.test.ts`.
+* Extension code acts only on trusted user events (`isTrusted`), and takes
+  page URLs from the browser's sender and tab data, never from messages or
+  the DOM.
 * No `console.*`, `innerHTML`, `dangerouslySetInnerHTML`, `eval`, or browser
   storage in the UI.
 * Types holding secrets implement a redacting `Debug`.

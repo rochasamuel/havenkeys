@@ -1133,3 +1133,25 @@ input[type="range"] {
   flex-direction: column;
   gap: 2px;
 }
+
+/* Password history */
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.history-row .revealed {
+  overflow-wrap: anywhere;
+}
+.history-row .muted {
+  font-size: 12px;
+  margin-left: auto;
+}

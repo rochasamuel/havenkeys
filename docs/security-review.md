@@ -241,7 +241,135 @@ on the desktop.
 * The extension accepts messages only from its own popup page, has an empty
   `externally_connectable`, stores nothing, builds its DOM without
   `innerHTML`, and runs under a CSP with no `unsafe-*` sources. Permissions
-  are `nativeMessaging` and `activeTab` only.
+  are `nativeMessaging` and `activeTab` only. (Phase 5 extends both; see
+  below.)
 * Tested end to end with the real desktop binary and the real native host on
   Linux. Not yet tested inside a real browser (none is installed in this
   environment).
+
+---
+
+# Security Review: Autofill Phase (Phase 5)
+
+> This software has not undergone an independent security audit. This is a
+> self-review of the Phase 5 changes: field detection, in-page suggestions,
+> save-login, password generation from the extension, TOTP fill, and the new
+> bridge requests (`generate_password`, `check_login`, `save_login`, `topUrl`).
+
+Scope: `apps/extension/src/{autofill,content,menu,options,background}`,
+`crates/havenkeys-core` (`check_login`, `save_login`, frame binding, password
+history), `crates/havenkeys-protocol`, `crates/havenkeys-bridge`, and the
+desktop's history commands.
+
+## Summary
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| F1 | Medium | Extension (save-login) | A page could plant a password, forge a `submit`, and watch for a save prompt to learn whether it guessed the saved password (same-origin oracle, e.g. after XSS) | **Fixed**: only passwords the user typed (trusted `input`) or we generated, still unchanged at submit, are reported |
+| F2 | Medium | Bridge / core | A compromised extension could replace a login's password repeatedly and push the real one out of history, or overwrite without any record | **Fixed**: replaced passwords go to an encrypted history (5 entries); one browser-initiated change per item per 10 min. Residual: a patient attacker can still cycle history in about an hour |
+| F3 | Medium | Extension (menu) | Clickjacking: the page controls the menu's `<iframe>` element | **Mitigated**: inline `!important` styles, tamper observer, 400 ms arming delay, IntersectionObserver v2 visibility on Chromium. Weaker on Firefox (delay only). Accepted, documented |
+| F4 | Low | Extension (fill) | A frame could navigate between the user's pick and the fill, and receive another origin's credentials | **Fixed by design**: fills are addressed to the frame (and, on Chromium, its `documentId`), and the content script refuses unless its origin equals the matched one |
+| F5 | Low | Core / extension | A login iframe of site A embedded in site B was matched on the frame URL alone | **Fixed**: `topUrl` is sent for iframes, and the core requires the item to match both |
+| F6 | Low | Architecture | The extension can now write to the vault (`save_login`) | Accepted: writes are origin-bound, rate-limited, and never destroy a password (history) |
+| F7 | Low | Extension | A generated password could be lost if the submit was not detected | **Mitigated**: offered on page unload if still in the field. Residual for flows that neither submit nor unload |
+| F8 | Info | Extension | Pages can see that a menu frame appeared and its height (1–5 logins, or locked). On Chromium, the fixed extension ID lets any page detect the installation through `web_accessible_resources` | Accepted, documented |
+| F9 | Info | Extension (CSP) | `frame-ancestors 'none'` removed so web pages can frame the menu and save pages | Accepted: `web_accessible_resources` limits framing to those two pages |
+| F10 | Info | Extension | A pending save holds the submitted password in worker memory (JS strings cannot be wiped) | Accepted: at most 3 min, dropped on confirm, dismiss and lock |
+| F11 | Info | Core | "Exact page" rules compare paths, which a page can change within its own origin (`pushState`) | Accepted: same-origin only |
+| F12 | Info | Extension | Heuristics can misclassify fields (wrong menu, missed form) | Accepted: cannot cross origins; the security checks do not depend on classification |
+| F13 | Info | All | Not yet exercised in a real browser | Open: see "Verification pending" |
+
+## Details
+
+### F1. Save prompt as a password oracle (Medium, fixed)
+
+The first version captured any submission whose password field was not
+filled from the vault. A script on the page, such as an XSS on the real
+site, could set the field to a guess and dispatch `submit`. The desktop's
+`check_login` answered `unchanged` for a correct guess, and no prompt
+appeared. The prompt's presence is visible to the page, so it leaked one bit
+per guess at up to 30 guesses a minute.
+
+Now the content script records the source of each field's value together
+with the value itself: `user` on trusted `input` events, `generated` or
+`vault` on our fills. `readSubmission` reports a password only if its source
+is `user` or `generated` **and** the field still holds exactly that value. A
+value planted, or swapped after the user typed, has no matching record.
+Tests: `autofill.test.ts` ("ignores passwords a page script planted or
+swapped"), `content.test.ts` ("no save-prompt oracle").
+
+### F2. Destructive writes (Medium, fixed; residual accepted)
+
+`save_login` with an item ID replaces a password. Everything that can use
+the bridge could do this: a compromised extension, or same-user malware (P9).
+Now:
+
+* `build_item` moves every replaced or cleared password into the login's
+  `password_history`. That covers edits from the desktop too. The history
+  lives inside the encrypted details blob, is capped at 5 entries, and is
+  shown in the desktop app with a per-entry reveal. Old vaults read as empty
+  history (`serde(default)`).
+* The bridge allows one browser-initiated password change per item every 10
+  minutes (`RateLimiter::allow_item_update`), on top of the secret-request
+  bucket.
+* Only the password changes. The title, username, URLs, TOTP and notes are
+  kept.
+
+Residual: 5 changes spaced 10 minutes apart still flush the history. A
+desktop-side confirmation for browser-initiated updates would close this. It
+is deferred, and listed in `native-messaging.md` §8.
+
+### F3. Clickjacking (Medium, mitigated)
+
+The menu and save prompt are extension-origin iframes. The page cannot read
+them or forge clicks inside them, but it controls the `<iframe>` element.
+Mitigations are in `content/frames.ts` and `menu/common.ts`. On Chromium,
+IntersectionObserver v2 (`trackVisibility`) makes the menu refuse clicks
+while any part of it is covered, transformed or translucent. Firefox lacks
+v2, so only the 400 ms delay applies. In every case the item filled must
+match the page in Rust. A successful clickjack can only put this site's own
+login into this site's form.
+
+## Verified properties (this phase)
+
+* Page URLs sent to the desktop come from the browser's sender and tab data.
+  For iframes, the top page must be readable or the frame is ignored, and
+  the core requires a match on both (`a1_frame_*` tests).
+* Menus open only on trusted user events. Synthetic pointer, key and focus
+  events do nothing (`content.test.ts`).
+* Menu picks are single-use, same-tab, limited to items the menu offered,
+  and expire. Locking drops every session and pending save
+  (`inline-handler.test.ts`).
+* Fills reach one frame and only on the matched origin. Messages to the
+  content script are accepted only from the background worker, and with
+  exact shapes.
+* Only visible, enabled, non-read-only fields in the chosen group are
+  filled. Hidden honeypot fields are never touched. Secrets never appear in
+  attributes or markup (`autofill.test.ts` checks the serialized DOM).
+* Classification of a field on a page with 5,000 inputs examines at most 60,
+  and the page is never scanned up front (attack 7).
+* `check_login` returns no passwords. `find_matches` still carries no
+  secrets. The menu and save pages never receive a password or code.
+* Generated passwords come from the Rust generator (OS CSPRNG, rejection
+  sampling), never from JavaScript.
+* Extension sources contain no `innerHTML`, `console`, `eval`, browser
+  storage, or value/data attributes (`hygiene.test.ts`).
+* `pnpm audit` reports no known vulnerabilities after adding `jsdom` (test
+  only). `cargo deny` passes, and `cargo audit` shows only the previously
+  accepted GTK-stack warnings.
+
+## Verification pending
+
+No browser is available in the environment this was built in. Before relying
+on Phase 5, check by hand in Chrome and Firefox:
+
+1. The popup's **Fill** and **Code → fill** work on a real login page.
+2. The options page toggle grants and removes host access, and new tabs get
+   suggestions. On Firefox, check that `optional_host_permissions` and
+   `scripting.registerContentScripts` behave as on Chrome.
+3. The menu frame loads inside pages with strict CSPs (for example
+   github.com). Browsers exempt extension frames from page CSP, but confirm.
+4. Save and update prompts appear after a real login and a password change,
+   and the desktop list refreshes.
+5. On Chromium, a page that covers the menu (for example a translucent
+   overlay with `pointer-events: none`) cannot get clicks through.

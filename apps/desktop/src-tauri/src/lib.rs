@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::plugin::TauriPlugin;
-use tauri::{Manager, RunEvent, Runtime, Url, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
 
 const VAULT_FILE: &str = "vault.sqlite3";
 const AUTO_LOCK_TICK: Duration = Duration::from_secs(5);
@@ -73,11 +73,20 @@ pub fn run() {
             // Browser integration. The bridge locks through AppState so an
             // extension-initiated lock behaves exactly like any other.
             let lock_handle = app.handle().clone();
-            let bridge = Bridge::new(vault.clone(), move || {
-                if let Some(state) = lock_handle.try_state::<AppState>() {
-                    state.lock(&lock_handle, "extension");
-                }
-            });
+            let change_handle = app.handle().clone();
+            let bridge = Bridge::with_change_hook(
+                vault.clone(),
+                move || {
+                    if let Some(state) = lock_handle.try_state::<AppState>() {
+                        state.lock(&lock_handle, "extension");
+                    }
+                },
+                // A login saved from the browser: the item list must refresh.
+                // The payload is empty; the UI re-reads the list itself.
+                move || {
+                    let _ = change_handle.emit(state::ITEMS_CHANGED_EVENT, ());
+                },
+            );
             app.manage(AppState::new(vault, bridge.clone()));
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
@@ -115,6 +124,8 @@ pub fn run() {
             commands::list_items,
             commands::get_item,
             commands::reveal_secret,
+            commands::password_history,
+            commands::reveal_previous_password,
             commands::get_totp_code,
             commands::copy_secret,
             commands::create_item,

@@ -93,11 +93,17 @@ where
                 continue;
             }
         };
-        let Ok(canonical) = serde_json::to_vec(&env).map(Zeroizing::new) else {
+        // Requests can carry a password (save_login): serialize into a
+        // pre-sized buffer that is wiped on drop, without reallocating.
+        let mut canonical = Zeroizing::new(Vec::with_capacity(MAX_REQUEST_BYTES));
+        if serde_json::to_writer(&mut *canonical, &env).is_err() {
             continue;
-        };
+        }
 
-        if upstream.as_ref().is_some_and(|u| !u.alive.load(Ordering::SeqCst)) {
+        if upstream
+            .as_ref()
+            .is_some_and(|u| !u.alive.load(Ordering::SeqCst))
+        {
             upstream = None;
         }
         if upstream.is_none() {
@@ -108,7 +114,10 @@ where
             .is_some_and(|u| write_frame(&mut u.send, &canonical, MAX_REQUEST_BYTES).is_ok());
         if !sent {
             upstream = None;
-            if !emit(&out, Response::err(Some(env.id), ErrorCode::DesktopUnavailable).into()) {
+            if !emit(
+                &out,
+                Response::err(Some(env.id), ErrorCode::DesktopUnavailable).into(),
+            ) {
                 return;
             }
         }
@@ -117,7 +126,10 @@ where
 
 /// Split the connection and forward validated desktop messages to `out` on
 /// a background thread.
-fn start_downstream<W: Write + Send + 'static>(stream: Stream, out: &Output<W>) -> Option<Upstream> {
+fn start_downstream<W: Write + Send + 'static>(
+    stream: Stream,
+    out: &Output<W>,
+) -> Option<Upstream> {
     let (mut recv, send) = stream.split();
     let alive = Arc::new(AtomicBool::new(true));
     let (flag, out) = (alive.clone(), out.clone());

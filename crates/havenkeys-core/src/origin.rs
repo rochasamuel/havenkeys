@@ -55,6 +55,15 @@ impl PageUrl {
         }
         Some(Self { url })
     }
+
+    /// A title for a login saved from this page (the host without a leading
+    /// `www.`) and the page's origin, used as the new login's website.
+    pub fn title_and_origin(&self) -> Option<(String, String)> {
+        let host = host_key(&self.url)?;
+        let title = host.strip_prefix("www.").unwrap_or(&host).to_owned();
+        let origin = self.url.origin().ascii_serialization();
+        (origin != "null").then_some((title, origin))
+    }
 }
 
 /// Host with a single trailing dot removed (`example.com.` is the same DNS

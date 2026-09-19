@@ -3,7 +3,7 @@
 //! different protocol version, and over-long URLs.
 
 use crate::secret::WireSecret;
-use crate::{MAX_MATCHES, MAX_URL_BYTES, PROTOCOL_VERSION};
+use crate::{MAX_MATCHES, MAX_SECRET_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, PROTOCOL_VERSION};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
@@ -38,11 +38,49 @@ pub enum Request {
     /// Lock the vault. Answered while locked (no-op).
     Lock {},
     /// Logins saved for `url`. IDs, titles and usernames only.
-    FindMatches { url: String },
+    ///
+    /// `top_url` is set when `url` is an iframe: the tab's top-level page.
+    /// Items must then match both.
+    FindMatches {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
     /// Username and password of `item_id`, only if it is saved for `url`.
-    FillItem { item_id: Uuid, url: String },
+    FillItem {
+        item_id: Uuid,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
     /// Current TOTP code of `item_id`, only if it is saved for `url`.
-    GetTotp { item_id: Uuid, url: String },
+    GetTotp {
+        item_id: Uuid,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
+    /// A new random password from the desktop's generator (default policy).
+    GeneratePassword {},
+    /// Would saving this submitted login add a new item, update one, or do
+    /// nothing? The password is compared inside the core, never returned.
+    CheckLogin {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        username: Option<String>,
+        password: WireSecret,
+    },
+    /// Save a submitted login after the user confirmed it. With `item_id`,
+    /// replace that login's password (it must be saved for `url`).
+    SaveLogin {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        username: Option<String>,
+        password: WireSecret,
+        item_id: Option<Uuid>,
+    },
 }
 
 impl Request {
@@ -53,16 +91,45 @@ impl Request {
             Request::FindMatches { .. } => "find_matches",
             Request::FillItem { .. } => "fill_item",
             Request::GetTotp { .. } => "get_totp",
+            Request::GeneratePassword {} => "generate_password",
+            Request::CheckLogin { .. } => "check_login",
+            Request::SaveLogin { .. } => "save_login",
         }
     }
 
-    fn url(&self) -> Option<&str> {
+    fn urls(&self) -> [Option<&str>; 2] {
         match self {
-            Request::Status {} | Request::Lock {} => None,
-            Request::FindMatches { url }
-            | Request::FillItem { url, .. }
-            | Request::GetTotp { url, .. } => Some(url),
+            Request::Status {} | Request::Lock {} | Request::GeneratePassword {} => [None, None],
+            Request::FindMatches { url, top_url }
+            | Request::FillItem { url, top_url, .. }
+            | Request::GetTotp { url, top_url, .. }
+            | Request::CheckLogin { url, top_url, .. }
+            | Request::SaveLogin { url, top_url, .. } => [Some(url), top_url.as_deref()],
         }
+    }
+
+    fn field_sizes_ok(&self) -> bool {
+        let urls_ok = self
+            .urls()
+            .into_iter()
+            .flatten()
+            .all(|u| !u.is_empty() && u.len() <= MAX_URL_BYTES);
+        let login_ok = match self {
+            Request::CheckLogin {
+                username, password, ..
+            }
+            | Request::SaveLogin {
+                username, password, ..
+            } => {
+                !password.expose().is_empty()
+                    && password.expose().len() <= MAX_SECRET_BYTES
+                    && username
+                        .as_ref()
+                        .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
+            }
+            _ => true,
+        };
+        urls_ok && login_ok
     }
 }
 
@@ -118,10 +185,8 @@ pub fn parse_request(bytes: &[u8]) -> Result<RequestEnvelope, Rejection> {
     }
     let env: RequestEnvelope =
         serde_json::from_slice(bytes).map_err(|_| reject(ErrorCode::Malformed))?;
-    if let Some(url) = env.request.url() {
-        if url.is_empty() || url.len() > MAX_URL_BYTES {
-            return Err(reject(ErrorCode::InvalidInput));
-        }
+    if !env.request.field_sizes_ok() {
+        return Err(reject(ErrorCode::InvalidInput));
     }
     Ok(env)
 }
@@ -171,6 +236,9 @@ impl Response {
         }
         match &self.result {
             Some(ResultBody::FindMatches { matches }) => matches.len() <= MAX_MATCHES,
+            Some(ResultBody::CheckLogin { action, item_id }) => {
+                (*action == SaveAction::Update) == item_id.is_some()
+            }
             _ => true,
         }
     }
@@ -212,6 +280,26 @@ pub enum ResultBody {
         period: u32,
         seconds_remaining: u32,
     },
+    GeneratePassword {
+        password: WireSecret,
+    },
+    CheckLogin {
+        action: SaveAction,
+        /// The login `update` would change.
+        item_id: Option<Uuid>,
+    },
+    SaveLogin {
+        item_id: Uuid,
+    },
+}
+
+/// What saving a submitted login would do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SaveAction {
+    Add,
+    Update,
+    Unchanged,
 }
 
 // Usernames and titles are not secrets, but they are personal: Debug shows
@@ -224,6 +312,9 @@ impl fmt::Debug for ResultBody {
             ResultBody::FindMatches { .. } => "find_matches",
             ResultBody::FillItem { .. } => "fill_item",
             ResultBody::GetTotp { .. } => "get_totp",
+            ResultBody::GeneratePassword { .. } => "generate_password",
+            ResultBody::CheckLogin { .. } => "check_login",
+            ResultBody::SaveLogin { .. } => "save_login",
         };
         write!(f, "ResultBody({kind})")
     }

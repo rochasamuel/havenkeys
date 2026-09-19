@@ -8,15 +8,32 @@
 export const PROTOCOL_VERSION = 1;
 export const MAX_URL_BYTES = 4096;
 export const MAX_MATCHES = 50;
+/** Byte limits for check_login/save_login (see the Rust protocol crate). */
+export const MAX_SECRET_BYTES = 4 * 4096;
+export const MAX_USERNAME_BYTES = 4 * 512;
 
 // ------------------------------------------------------------------ requests
 
+/**
+ * `topUrl` is set when `url` is an iframe: the tab's top-level page. The
+ * desktop then only serves logins that match both.
+ */
 export type Request =
   | { type: "status" }
   | { type: "lock" }
-  | { type: "find_matches"; url: string }
-  | { type: "fill_item"; itemId: string; url: string }
-  | { type: "get_totp"; itemId: string; url: string };
+  | { type: "find_matches"; url: string; topUrl?: string }
+  | { type: "fill_item"; itemId: string; url: string; topUrl?: string }
+  | { type: "get_totp"; itemId: string; url: string; topUrl?: string }
+  | { type: "generate_password" }
+  | { type: "check_login"; url: string; topUrl?: string; username: string | null; password: string }
+  | {
+      type: "save_login";
+      url: string;
+      topUrl?: string;
+      username: string | null;
+      password: string;
+      itemId: string | null;
+    };
 
 export type RequestType = Request["type"];
 
@@ -30,6 +47,7 @@ export interface RequestEnvelope {
 
 export type LockState = "locked" | "unlocking" | "unlocked" | "locking";
 export type MatchStrength = "exact_url" | "same_host" | "same_site";
+export type SaveAction = "add" | "update" | "unchanged";
 
 /** A suggestion. Never contains a secret. */
 export interface Match {
@@ -45,7 +63,10 @@ export type Result =
   | { type: "lock" }
   | { type: "find_matches"; matches: Match[] }
   | { type: "fill_item"; username: string | null; password: string | null }
-  | { type: "get_totp"; code: string; period: number; secondsRemaining: number };
+  | { type: "get_totp"; code: string; period: number; secondsRemaining: number }
+  | { type: "generate_password"; password: string }
+  | { type: "check_login"; action: SaveAction; itemId: string | null }
+  | { type: "save_login"; itemId: string };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -114,8 +135,12 @@ const isBool = (v: unknown): v is boolean => typeof v === "boolean";
 const isU32 = (v: unknown): v is number => typeof v === "number" && isValidId(v);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** A lowercase hyphenated UUID, the only item ID form the desktop sends. */
+export const isUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+
 const LOCK_STATES: readonly LockState[] = ["locked", "unlocking", "unlocked", "locking"];
 const STRENGTHS: readonly MatchStrength[] = ["exact_url", "same_host", "same_site"];
+const SAVE_ACTIONS: readonly SaveAction[] = ["add", "update", "unchanged"];
 
 function parseMatch(v: unknown): Match | null {
   if (!isObj(v) || !hasExactKeys(v, ["id", "title", "username", "hasTotp", "strength"])) return null;
@@ -153,6 +178,21 @@ function parseResult(v: unknown): Result | null {
       if (!hasExactKeys(v, ["type", "code", "period", "secondsRemaining"])) return null;
       if (!isStr(v.code) || !/^[0-9]{6,8}$/.test(v.code) || !isU32(v.period) || !isU32(v.secondsRemaining)) return null;
       return { type: "get_totp", code: v.code, period: v.period, secondsRemaining: v.secondsRemaining };
+    case "generate_password":
+      if (!hasExactKeys(v, ["type", "password"]) || !isStr(v.password) || v.password.length === 0) return null;
+      return { type: "generate_password", password: v.password };
+    case "check_login": {
+      if (!hasExactKeys(v, ["type", "action", "itemId"])) return null;
+      const { action, itemId } = v;
+      if (!SAVE_ACTIONS.includes(action as SaveAction)) return null;
+      if (itemId !== null && !(isStr(itemId) && UUID.test(itemId))) return null;
+      // An update always names its item; nothing else does.
+      if ((action === "update") !== (itemId !== null)) return null;
+      return { type: "check_login", action: action as SaveAction, itemId };
+    }
+    case "save_login":
+      if (!hasExactKeys(v, ["type", "itemId"]) || !isStr(v.itemId) || !UUID.test(v.itemId)) return null;
+      return { type: "save_login", itemId: v.itemId };
     default:
       return null;
   }

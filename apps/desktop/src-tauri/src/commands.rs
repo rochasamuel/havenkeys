@@ -157,6 +157,23 @@ pub fn reveal_secret(
     Ok(state.vault()?.reveal(&id, field)?)
 }
 
+/// When each previous password of a login was replaced (Unix ms, newest first).
+#[tauri::command]
+pub fn password_history(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<i64>> {
+    state.touch();
+    Ok(state.vault()?.password_history(&id)?)
+}
+
+#[tauri::command]
+pub fn reveal_previous_password(
+    state: State<'_, AppState>,
+    id: Uuid,
+    index: usize,
+) -> CmdResult<SecretString> {
+    state.touch();
+    Ok(state.vault()?.reveal_previous_password(&id, index)?)
+}
+
 #[tauri::command]
 pub fn get_totp_code(state: State<'_, AppState>, id: Uuid) -> CmdResult<TotpCode> {
     // No `touch()`: the UI refreshes codes on a timer, which is not user

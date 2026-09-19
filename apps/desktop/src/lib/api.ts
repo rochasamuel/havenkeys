@@ -69,6 +69,10 @@ export const api = {
     call<ItemOverview[]>("list_items", { query: query?.trim() ? query : null }),
   getItem: (id: string) => call<ItemOverview>("get_item", { id }),
   reveal: (id: string, field: SecretField) => call<string>("reveal_secret", { id, field }),
+  /** When each previous password was replaced (Unix ms, newest first). */
+  passwordHistory: (id: string) => call<number[]>("password_history", { id }),
+  revealPreviousPassword: (id: string, index: number) =>
+    call<string>("reveal_previous_password", { id, index }),
   totp: (id: string) => call<TotpCode>("get_totp_code", { id }),
   copy: (id: string, field: CopyField) => call<CopyResult>("copy_secret", { id, field }),
   createItem: (input: ItemInput) => call<ItemOverview>("create_item", { input }),
@@ -88,4 +92,6 @@ export const api = {
 
   onLocked: (handler: (reason: string) => void): Promise<UnlistenFn> =>
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),
+  /** A login was saved from the browser extension. Carries no data. */
+  onItemsChanged: (handler: () => void): Promise<UnlistenFn> => listen("vault://items-changed", () => handler()),
 };

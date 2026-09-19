@@ -39,5 +39,12 @@ pub const MAX_RESPONSE_BYTES: usize = 256 * 1024;
 /// Page URLs longer than this are rejected.
 pub const MAX_URL_BYTES: usize = 4096;
 
+/// Largest password accepted in `check_login`/`save_login` (the core allows
+/// 4096 characters; this is the byte bound).
+pub const MAX_SECRET_BYTES: usize = 4 * 4096;
+
+/// Largest username accepted in `check_login`/`save_login`.
+pub const MAX_USERNAME_BYTES: usize = 4 * 512;
+
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;

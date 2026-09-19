@@ -20,6 +20,8 @@ pub const MAX_URL_LEN: usize = 2048;
 pub const MAX_PASSWORD_CHARS: usize = 4096;
 pub const MAX_NOTES_BYTES: usize = 64 * 1024;
 pub const MAX_NOTE_CONTENT_BYTES: usize = 1024 * 1024;
+/// Replaced passwords kept per login (newest first).
+pub const MAX_PASSWORD_HISTORY: usize = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -94,10 +96,30 @@ pub enum ItemDetails {
         totp: Option<TotpConfig>,
         #[serde(default)]
         notes: Option<SecretString>,
+        /// Passwords this login used before, newest first. Kept so that a
+        /// password changed from the browser (or by mistake) can be recovered.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        password_history: Vec<PreviousPassword>,
     },
     SecureNote {
         content: SecretString,
     },
+}
+
+/// A password that was replaced, and when (Unix milliseconds).
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviousPassword {
+    pub password: SecretString,
+    pub replaced_at: i64,
+}
+
+impl fmt::Debug for PreviousPassword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PreviousPassword")
+            .field("replaced_at", &self.replaced_at)
+            .finish_non_exhaustive()
+    }
 }
 
 impl fmt::Debug for ItemDetails {

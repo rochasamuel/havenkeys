@@ -35,6 +35,7 @@ type Frame = Zeroizing<Vec<u8>>;
 struct Inner {
     vault: Arc<Mutex<VaultService>>,
     on_lock: Box<dyn Fn() + Send + Sync>,
+    on_items_changed: Box<dyn Fn() + Send + Sync>,
     limiter: Mutex<RateLimiter>,
     connections: Mutex<Vec<(u64, SyncSender<Frame>)>>,
     next_conn: Mutex<u64>,
@@ -62,11 +63,25 @@ fn unix_seconds() -> u64 {
 impl Bridge {
     /// `on_lock` must lock the vault (and do whatever else the app does on
     /// lock). It is called without any bridge or vault mutex held.
-    pub fn new(vault: Arc<Mutex<VaultService>>, on_lock: impl Fn() + Send + Sync + 'static) -> Self {
+    pub fn new(
+        vault: Arc<Mutex<VaultService>>,
+        on_lock: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
+        Self::with_change_hook(vault, on_lock, || {})
+    }
+
+    /// Like [`new`](Self::new); `on_items_changed` runs (without any mutex
+    /// held) after the extension saved a login, so the UI can refresh.
+    pub fn with_change_hook(
+        vault: Arc<Mutex<VaultService>>,
+        on_lock: impl Fn() + Send + Sync + 'static,
+        on_items_changed: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 vault,
                 on_lock: Box::new(on_lock),
+                on_items_changed: Box::new(on_items_changed),
                 limiter: Mutex::new(RateLimiter::default()),
                 connections: Mutex::new(Vec::new()),
                 next_conn: Mutex::new(0),
@@ -94,16 +109,37 @@ impl Bridge {
                 (self.inner.on_lock)();
                 return Ok(ResultBody::Lock {});
             }
-            Request::FindMatches { .. } => Some(RequestClass::Lookup),
-            Request::FillItem { .. } | Request::GetTotp { .. } => Some(RequestClass::Secret),
+            Request::FindMatches { .. } | Request::GeneratePassword {} => {
+                Some(RequestClass::Lookup)
+            }
+            Request::FillItem { .. }
+            | Request::GetTotp { .. }
+            | Request::CheckLogin { .. }
+            | Request::SaveLogin { .. } => Some(RequestClass::Secret),
         };
         if let Some(class) = class {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
                 return Err(ErrorCode::RateLimited);
             }
         }
-        let vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
-        dispatch(&vault, req, unix_seconds())
+        // Password changes from the browser: one per item per interval.
+        // Checked before the core, so probing unknown IDs also spends it.
+        if let Request::SaveLogin {
+            item_id: Some(id), ..
+        } = req
+        {
+            if !guard(&self.inner.limiter).allow_item_update(*id, Instant::now()) {
+                return Err(ErrorCode::RateLimited);
+            }
+        }
+        let result = {
+            let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
+            dispatch(&mut vault, req, unix_seconds())
+        };
+        if matches!(req, Request::SaveLogin { .. }) && result.is_ok() {
+            (self.inner.on_items_changed)();
+        }
+        result
     }
 
     /// Push an event to every connected native host. Never blocks.
@@ -200,7 +236,9 @@ impl Bridge {
                 // A6: an oversized frame is answered and the connection
                 // closed. Its payload is never read.
                 Err(FrameError::TooLarge(_)) => {
-                    if let Some(b) = Outgoing::from(Response::err(None, ErrorCode::TooLarge)).to_bytes() {
+                    if let Some(b) =
+                        Outgoing::from(Response::err(None, ErrorCode::TooLarge)).to_bytes()
+                    {
                         let _ = tx.send(b);
                     }
                     return;
