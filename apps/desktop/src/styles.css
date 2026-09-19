@@ -1155,3 +1155,144 @@ input[type="range"] {
   font-size: 12px;
   margin-left: auto;
 }
+
+/* ------------------------------------------------------------ Secret Key & sync */
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kit-screen {
+  min-height: 100%;
+  padding: 28px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  overflow: auto;
+}
+.kit-intro {
+  max-width: 640px;
+}
+.kit-intro h1 {
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+.kit-intro p {
+  color: var(--muted);
+}
+.kit {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(680px, 100%);
+}
+.kit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The sheet is always black on white: it is meant to be printed. */
+.kit-sheet {
+  background: #fff;
+  color: #111;
+  border: 1px solid #d8ded9;
+  border-radius: var(--r-md);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
+}
+.kit-head h2 {
+  font-size: 18px;
+}
+.kit-head p,
+.kit-lede,
+.kit-foot {
+  color: #333;
+  font-size: 12.5px;
+}
+.kit-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: start;
+}
+.kit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kit-field > span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+}
+.kit-key {
+  font-family: var(--mono);
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.kit-small code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #444;
+}
+.kit-blank {
+  height: 26px;
+  border-bottom: 1px solid #999;
+}
+.kit-figure {
+  width: 168px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kit-qr {
+  width: 168px;
+  height: 168px;
+}
+.kit-figure figcaption {
+  font-size: 11px;
+  color: #444;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .kit-sheet,
+  .kit-sheet * {
+    visibility: visible;
+  }
+  .kit-sheet {
+    position: absolute;
+    inset: 0 0 auto 0;
+    border: 0;
+  }
+}

@@ -1,6 +1,7 @@
 //! 256-bit key material and HKDF key separation.
 
 use crate::crypto::fill_random;
+use crate::crypto::secret_key::{SecretKey, SECRET_KEY_LEN};
 use crate::error::{Error, Result};
 use hkdf::Hkdf;
 use sha2::Sha256;
@@ -11,6 +12,7 @@ use zeroize::Zeroizing;
 pub const KEY_LEN: usize = 32;
 
 const INFO_KEK: &[u8] = b"havenkeys/v1/kek";
+const INFO_KEK_V2: &[u8] = b"havenkeys/v2/kek";
 const INFO_DATA: &[u8] = b"havenkeys/v1/data";
 
 /// A 256-bit symmetric key, zeroized on drop.
@@ -50,6 +52,26 @@ fn hkdf_expand(ikm: &Key256, salt: Option<&[u8]>, info: &[u8]) -> Result<Key256>
 /// master key → key-encryption key, bound to this vault's ID.
 pub fn derive_kek(master_key: &Key256, vault_id: &Uuid) -> Result<Key256> {
     hkdf_expand(master_key, Some(vault_id.as_bytes()), INFO_KEK)
+}
+
+/// master key + Secret Key → key-encryption key (key scheme 2).
+///
+/// HKDF-SHA-256 with both secrets as input keying material, the vault ID as
+/// salt and a v2 label, exactly as planned in docs/crypto.md. Either secret
+/// alone gives nothing: the output depends on both.
+pub fn derive_kek_with_secret_key(
+    master_key: &Key256,
+    secret_key: &SecretKey,
+    vault_id: &Uuid,
+) -> Result<Key256> {
+    let mut ikm = Zeroizing::new([0u8; KEY_LEN + SECRET_KEY_LEN]);
+    ikm[..KEY_LEN].copy_from_slice(master_key.as_bytes());
+    ikm[KEY_LEN..].copy_from_slice(secret_key.as_bytes());
+    let hk = Hkdf::<Sha256>::new(Some(vault_id.as_bytes()), ikm.as_ref());
+    let mut okm = Zeroizing::new([0u8; KEY_LEN]);
+    hk.expand(INFO_KEK_V2, okm.as_mut())
+        .map_err(|_| Error::Kdf)?;
+    Ok(Key256(okm))
 }
 
 /// vault key → data key used for item and settings blobs.

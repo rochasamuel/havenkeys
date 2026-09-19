@@ -14,6 +14,8 @@ pub enum Error {
     Busy,
     #[error("Incorrect master password or damaged vault.")]
     UnlockFailed,
+    #[error("This vault needs your Secret Key.")]
+    SecretKeyRequired,
     #[error("Failed to decrypt vault item.")]
     Decryption,
     #[error("Failed to encrypt vault item.")]
@@ -47,6 +49,7 @@ impl Error {
             Error::Locked => "locked",
             Error::Busy => "busy",
             Error::UnlockFailed => "unlock_failed",
+            Error::SecretKeyRequired => "secret_key_required",
             Error::Decryption => "decryption",
             Error::Encryption => "encryption",
             Error::Corrupted => "corrupted",

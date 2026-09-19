@@ -101,3 +101,41 @@ export interface ImportResult {
   report: ImportReport;
   fileName: string;
 }
+
+export type KeyScheme = "password_only" | "password_and_secret_key";
+
+/** Counts only; never item data. */
+export interface SyncReport {
+  added: number;
+  updated: number;
+  deleted: number;
+  unreadableDevices: number;
+  skippedItems: number;
+  headerAdopted: boolean;
+  headerRejected: boolean;
+}
+
+export interface SyncStatus {
+  at: number;
+  ok: boolean;
+  report: SyncReport | null;
+  error: string | null;
+}
+
+/** Safe while locked: no secrets. */
+export interface DeviceStatus {
+  keyScheme: KeyScheme | null;
+  /** This device must be given the Secret Key to unlock. */
+  needsSecretKey: boolean;
+  /** Folder name only. */
+  syncFolder: string | null;
+  lastSync: SyncStatus | null;
+}
+
+export interface EmergencyKit {
+  secretKey: string;
+  vaultId: string;
+  createdAt: number;
+  qrSize: number;
+  qrModules: boolean[];
+}
