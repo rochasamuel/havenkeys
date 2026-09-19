@@ -584,6 +584,51 @@ mod tests {
         ]}]}]})
     }
 
+    /// Deterministic fuzz (CLAUDE.md §47): an export file is attacker-supplied
+    /// input. Mutated archives and mutated `export.data` JSON must never
+    /// panic the importer.
+    #[test]
+    fn fuzz_never_panics() {
+        let mut state: u64 = 0x1_9E37_79B9;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let archive = make_1pux(&sample(), 1);
+        let json = sample().to_string().into_bytes();
+        for i in 0..2_000 {
+            let (mut input, zipped) = if i % 2 == 0 {
+                (archive.clone(), true)
+            } else {
+                (json.clone(), false)
+            };
+            for _ in 0..=(next() % 6) {
+                let pos = (next() % input.len().max(1) as u64) as usize;
+                match next() % 3 {
+                    0 if pos < input.len() => input[pos] ^= 1 << (next() % 8),
+                    1 if pos < input.len() => {
+                        input.remove(pos);
+                    }
+                    _ => {
+                        const BYTES: &[u8] = b"{}[]\":,0-9";
+                        input.insert(pos.min(input.len()), BYTES[(next() % BYTES.len() as u64) as usize]);
+                    }
+                }
+            }
+            let bytes = if zipped {
+                input
+            } else {
+                match serde_json::from_slice::<Value>(&input) {
+                    Ok(v) => make_1pux(&v, 0),
+                    Err(_) => continue,
+                }
+            };
+            let _ = parse(&bytes);
+        }
+    }
+
     fn set_value(u: &SecretUpdate) -> Option<&str> {
         match u {
             SecretUpdate::Set(v) => Some(v.expose()),

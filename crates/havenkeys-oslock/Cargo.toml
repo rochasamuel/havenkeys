@@ -1,0 +1,11 @@
+[package]
+name = "havenkeys-oslock"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Detects when the operating-system session locks, so the vault can lock with it"
+publish = false
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_RemoteDesktop"] }

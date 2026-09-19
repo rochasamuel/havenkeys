@@ -25,7 +25,8 @@ This document describes *how* HavenKeys enforces the properties listed in
 | No plaintext secrets in SQLite | Items table holds only `id` + two encrypted blobs |
 | Master password never persisted | Held in `Zeroizing<String>` only for the duration of `unlock`/`create` |
 | Locked vault refuses secret access | Every secret-returning core function requires an active `Session`; locking drops it |
-| Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `copy_secret` / `get_totp_code` |
+| Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `reveal_previous_password` / `copy_secret` / `get_totp_code` |
+| Recoverable password changes | A replaced password is kept, encrypted, in the item's password history (5 entries) |
 
 ## 3. What is NOT protected
 
@@ -63,8 +64,10 @@ On lock the core:
 
 * drops the `Session`, zeroizing the data key and the decrypted overview
   cache (titles, usernames, URLs),
-* increments the **session epoch**, which invalidates any authorization issued
-  against the previous session (used by the extension channel),
+* increments the **session epoch**, which invalidates in-flight unlock and
+  re-key operations started against the previous session,
+* pushes a `locked` event to every connected browser extension (every later
+  extension request is refused with `locked` regardless),
 * clears the clipboard if it still contains a value we placed there,
 * emits `vault://locked` so the UI discards all item state.
 
@@ -73,7 +76,8 @@ Auto-lock triggers (see `crates/havenkeys-core/src/lock.rs`):
 * inactivity timeout: Never / 5 / 15 / 30 / 60 minutes (default 15),
 * system suspend/resume (wall clock advanced much further than the monotonic
   clock between two ticks),
-* explicit lock (button, Ctrl+L, tray menu) and quitting from the tray.
+* explicit lock (button, Ctrl+L, tray menu, the extension's *Lock* button)
+  and quitting from the tray.
 
 **Tray behaviour.** Closing the window hides HavenKeys to the system tray; it
 does **not** lock the vault. The vault then locks under the rules above, most
@@ -83,13 +87,26 @@ extension later. With auto-lock set to "Never", a hidden window keeps the
 vault unlocked until you lock or quit. The tray shows only static text,
 never item data.
 
-OS screen-lock signals (logind / Windows WTS / macOS distributed
-notifications) are **not yet** wired up. On Windows the suspend heuristic is
-likely ineffective, because `Instant` keeps counting during sleep. See
-`security-review.md` #10.
+**Screen lock.** The vault also locks when the operating-system session
+locks (reason `screen_lock`). The auto-lock thread polls every 5 seconds
+through `crates/havenkeys-oslock`:
+
+* **Windows:** the session lock flag from `WTSQuerySessionInformationW`.
+  This is the only `unsafe` code in HavenKeys: one FFI call, in its own
+  crate.
+* **Linux:** logind's `LockedHint`, read with `loginctl`. GNOME, KDE and
+  other logind-aware lockers set it.
+* **macOS:** not implemented.
+
+It fires once per lock, so a stuck lock flag cannot keep relocking the vault.
+Where the state is unknown (no logind, as in WSL), nothing happens and the
+probe switches itself off. Windows usually locks the session on sleep, which
+also covers the suspend heuristic's blind spot there: `Instant` keeps
+counting during sleep on Windows. See `security-review.md` #10.
 
 Only real input while the window has focus, and commands the user triggers,
-count as activity. Timer-driven calls such as TOTP refresh do not.
+count as activity. Timer-driven calls such as TOTP refresh do not, and neither
+do browser extension requests.
 
 ## 6. Desktop (Tauri) hardening
 
@@ -129,6 +146,11 @@ count as activity. Timer-driven calls such as TOTP refresh do not.
 
 All inputs are length-limited and validated in Rust; the UI's validation is
 convenience only.
+
+The browser extension does not use these commands. It reaches the core
+through the native-messaging bridge, which has its own much narrower request
+set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`), all
+origin-bound and rate-limited. See `native-messaging.md`.
 
 ## 8. Memory handling
 
@@ -181,19 +203,67 @@ Neither the core crate nor the Tauri shell logs anything. The lock reason
 variants rendered as fixed strings. A test fails the build if print/log
 macros appear in the core crate.
 
-## 12. Browser extension permissions (planned)
+## 12. Browser extension permissions
 
-Documented here once the extension ships (Phase 4–5). Target set:
+| Permission | Required? | Why |
+|---|---|---|
+| `nativeMessaging` | yes | Talk to the native messaging host, the extension's only route to the vault |
+| `activeTab` | yes | When the user clicks the toolbar button: read that tab's URL to look up its logins, and allow filling it. Only that tab, until it navigates |
+| `scripting` | yes | Inject the content script into that tab for a popup fill, and register the content script when in-page suggestions are on |
+| `https://*/*`, `http://*/*` | **optional**, off by default | In-page suggestions and save prompts need a content script in the pages the user visits. Requested only from the options page, when the user turns suggestions on. The browser can narrow the grant to chosen sites, and the registered content script follows the grant |
 
-| Permission | Why |
-|---|---|
-| `nativeMessaging` | talk to the desktop native host |
-| `activeTab` / `scripting` | inject the autofill content script into the focused tab after a user gesture where possible |
-| `storage` (session only) | non-secret UI preferences; never secrets |
+Why not ask for everything at install: most of the value, filling with origin
+binding, works with `activeTab`. Broad host access is what a malicious page
+or a compromised extension build would most want, so the user decides.
+Without it, the extension never runs in pages the user did not click it on.
 
-`<all_urls>` host permissions will be avoided unless on-focus suggestions
-prove impossible without them; any such decision will be justified here.
+Not requested: `<all_urls>` as a required permission, `tabs`, `storage`,
+`clipboardWrite`, `cookies`, `webRequest`, `webNavigation`, `notifications`.
+`externally_connectable` is empty, so web pages and other extensions cannot
+message the extension.
 
-## 13. Known limitations
+**web_accessible_resources:** `menu.html`, `save.html`, their scripts and
+styles, the theme and one icon, for `https://*/*` and `http://*/*`. These are
+the pages shown inside web pages. Nothing else can be loaded or framed by a
+website.
+
+**CSP (extension pages):**
+`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`.
+It has no `unsafe-eval` and no `unsafe-inline`. `frame-ancestors 'none'` was
+removed in Phase 5, because the menu and save pages must be framed by web
+pages. Framing by websites is limited to those pages by
+`web_accessible_resources`.
+
+**Content script:** it runs in the isolated world, keeps no state beyond the
+page, reads the DOM as untrusted input, and acts only on trusted user
+events. It writes secrets only into the `value` of visible, enabled fields
+of the group the user chose, and never into attributes. Details and
+limitations are in `autofill.md`.
+
+## 13. Browser bridge
+
+See `native-messaging.md` for the full protocol. In summary:
+
+* The extension, the native host and the socket are all **untrusted input**.
+  The bridge in the desktop process re-checks every request: protocol
+  version and exact shape, size limits, rate limits, unlocked vault,
+  integration switch, and core origin binding.
+* The master password and the vault key never cross the bridge. There is no
+  unlock request.
+* Secrets cross it only in answer to `fill_item` (username and password of
+  one item that matches the page), `get_totp` (the current code) and
+  `generate_password` (a fresh random password). Toward the desktop, only in
+  `check_login`/`save_login` (a password the user just submitted on the page).
+* The only write is `save_login`: add a login for the page, or replace the
+  password of a login matching the page. Replaced passwords go to the item's
+  password history (5 entries), and at most one change per item every 10
+  minutes is allowed from the browser.
+* For iframes, items must match both the frame and the top-level page.
+* The socket lives in a `0700` per-user directory that both sides verify.
+  Peer UIDs are checked on Unix.
+* Browser integration is opt-in (off by default) in Settings. The switch is
+  stored in the encrypted settings blob and enforced in Rust.
+
+## 14. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.

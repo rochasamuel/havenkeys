@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Save to HavenKeys</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="inline.css" />
+    <script src="save.js" defer></script>
+  </head>
+  <body>
+    <div class="card" role="dialog" aria-labelledby="question">
+      <header class="head">
+        <img class="logo" src="icons/32.png" alt="" width="16" height="16" />
+        <span class="brand">HavenKeys</span>
+        <span id="site" class="site"></span>
+      </header>
+      <div class="prompt">
+        <div>
+          <p id="question">Save this login?</p>
+          <p id="detail" class="detail"></p>
+        </div>
+        <div class="actions">
+          <button id="dismiss" class="btn" type="button">Not now</button>
+          <button id="confirm" class="btn primary" type="button" disabled>Save</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
