@@ -69,6 +69,7 @@ Read these before trusting it with anything:
 * [Autofill](docs/autofill.md): field detection, matching rules, in-page UI security
 * [Security review](docs/security-review.md): findings from reviewing this implementation
 * [Development](docs/development.md): building, testing, auditing
+* [Roadmap](docs/roadmap.md): what is left, including the proposed standalone extension mode
 
 ## Quick start
 
