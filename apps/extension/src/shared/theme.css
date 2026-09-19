@@ -1,0 +1,34 @@
+/* Same palette as the desktop app: ink-green steel, brass fittings. */
+:root {
+  --bg: #0f1614;
+  --raised: #172320;
+  --hover: #1b2925;
+  --line: #1f2c28;
+  --text: #e2eae6;
+  --text-strong: #f3f7f5;
+  --muted: #86968f;
+  --brass: #c9a45c;
+  --brass-hi: #e3c483;
+  --brass-soft: rgba(201, 164, 92, 0.14);
+  --danger: #e0775f;
+  --ok: #5fa785;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --raised: #f4f7f5;
+    --hover: #e9efec;
+    --line: #e2e8e5;
+    --text: #1e2b27;
+    --text-strong: #121a17;
+    --muted: #66756f;
+    --brass: #8f7236;
+    --brass-hi: #8f7236;
+    --brass-soft: rgba(201, 164, 92, 0.16);
+    --danger: #b4412f;
+    --ok: #3d6b58;
+    color-scheme: light;
+  }
+}

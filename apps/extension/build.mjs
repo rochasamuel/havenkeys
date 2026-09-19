@@ -25,6 +25,10 @@ for (const [browser, t] of Object.entries(targets)) {
     entryPoints: {
       background: join(root, "src/background/index.ts"),
       popup: join(root, "src/popup/popup.ts"),
+      content: join(root, "src/content/index.ts"),
+      menu: join(root, "src/menu/menu.ts"),
+      save: join(root, "src/menu/save.ts"),
+      options: join(root, "src/options/options.ts"),
     },
     outdir: out,
     bundle: true,
@@ -36,8 +40,18 @@ for (const [browser, t] of Object.entries(targets)) {
     logLevel: "warning",
   });
 
-  await cp(join(root, "src/popup/popup.html"), join(out, "popup.html"));
-  await cp(join(root, "src/popup/popup.css"), join(out, "popup.css"));
+  for (const file of [
+    "popup/popup.html",
+    "popup/popup.css",
+    "menu/menu.html",
+    "menu/save.html",
+    "menu/inline.css",
+    "options/options.html",
+    "options/options.css",
+    "shared/theme.css",
+  ]) {
+    await cp(join(root, "src", file), join(out, file.split("/").pop()));
+  }
   await cp(join(root, "icons"), join(out, "icons"), { recursive: true });
 
   const manifest = { ...base, ...(await read(`manifest/${browser}.json`)) };

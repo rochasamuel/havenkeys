@@ -33,7 +33,9 @@ describe("pageUrlForRequest", () => {
 });
 
 describe("parsePopupRequest", () => {
-  it("accepts the three popup requests", () => {
+  it("accepts the popup requests", () => {
+    expect(parsePopupRequest({ type: "popup_fill", itemId: ID })).toEqual({ type: "popup_fill", itemId: ID });
+    expect(parsePopupRequest({ type: "popup_fill_totp", itemId: ID })).toEqual({ type: "popup_fill_totp", itemId: ID });
     expect(parsePopupRequest({ type: "popup_state" })).toEqual({ type: "popup_state" });
     expect(parsePopupRequest({ type: "popup_lock" })).toEqual({ type: "popup_lock" });
     expect(parsePopupRequest({ type: "popup_totp", itemId: ID })).toEqual({ type: "popup_totp", itemId: ID });
@@ -46,6 +48,8 @@ describe("parsePopupRequest", () => {
       { type: "popup_totp", itemId: ID, url: "https://github.com" },
       { type: "popup_totp", itemId: "x" },
       { type: "fill_item", itemId: ID, url: "https://github.com" },
+      { type: "popup_fill", itemId: ID, url: "https://github.com" },
+      { type: "popup_fill", itemId: ID, tabId: 3 },
     ]) {
       expect(parsePopupRequest(m)).toBeNull();
     }
@@ -59,7 +63,7 @@ describe("popup handler", () => {
         ? { type: "status", state: "unlocked", vaultExists: true }
         : { type: "find_matches", matches: [] },
     );
-    const h = createPopupHandler(c, async () => "https://github.com/login?next=x#y");
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login?next=x#y" }));
     const r = await h.handle({ type: "popup_state" });
     expect(r).toEqual({ ok: true, value: { kind: "unlocked", site: "github.com", matches: [] } });
     expect(c.seen[1]).toEqual({ type: "find_matches", url: "https://github.com/login" });
@@ -67,14 +71,14 @@ describe("popup handler", () => {
 
   it("does not query matches while locked", async () => {
     const c = fakeClient(() => ({ type: "status", state: "locked", vaultExists: true }));
-    const h = createPopupHandler(c, async () => "https://github.com/");
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/" }));
     expect(await h.handle({ type: "popup_state" })).toEqual({ ok: true, value: { kind: "locked" } });
     expect(c.seen).toHaveLength(1);
   });
 
   it("uses the tab URL, not anything from the popup, for TOTP", async () => {
     const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9 }));
-    const h = createPopupHandler(c, async () => "https://github.com/");
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/" }));
     const r = await h.handle({ type: "popup_totp", itemId: ID });
     expect(r).toEqual({ ok: true, value: { code: "123456", secondsRemaining: 9 } });
     expect(c.seen[0]).toEqual({ type: "get_totp", itemId: ID, url: "https://github.com/" });
@@ -82,7 +86,7 @@ describe("popup handler", () => {
 
   it("refuses TOTP on non-web pages without contacting the host", async () => {
     const c = fakeClient(() => ({}));
-    const h = createPopupHandler(c, async () => "chrome://newtab/");
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "chrome://newtab/" }));
     expect((await h.handle({ type: "popup_totp", itemId: ID })).ok).toBe(false);
     expect(c.seen).toHaveLength(0);
   });
@@ -97,9 +101,33 @@ describe("popup handler", () => {
       const c = fakeClient(() => {
         throw new BridgeError(code, "x");
       });
-      const h = createPopupHandler(c, async () => "https://github.com/");
+      const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/" }));
       const r = await h.handle({ type: "popup_state" });
       expect(r.ok && r.value).toEqual({ kind });
     }
+  });
+
+  it("fills the active tab using the tab's own URL", async () => {
+    const c = fakeClient(() => ({ type: "fill_item", username: "octo", password: "pw" }));
+    const fills: unknown[] = [];
+    const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login?x=1" }), async (...a) => {
+      fills.push(a);
+      return 2;
+    });
+    expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
+    expect(c.seen[0]).toEqual({ type: "fill_item", itemId: ID, url: "https://github.com/login" });
+    expect(fills).toEqual([[7, "https://github.com/login", { kind: "login", username: "octo", password: "pw" }]]);
+  });
+
+  it("reports pages without a login form, and refuses non-web pages", async () => {
+    const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9 }));
+    const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/" }), async () => 0);
+    expect(await h.handle({ type: "popup_fill_totp", itemId: ID })).toEqual({
+      ok: false,
+      message: "No login form found on this page.",
+    });
+    const h2 = createPopupHandler(c, async () => ({ id: 7, url: "about:blank" }), async () => 1);
+    expect((await h2.handle({ type: "popup_fill", itemId: ID })).ok).toBe(false);
+    expect(c.seen).toHaveLength(1);
   });
 });

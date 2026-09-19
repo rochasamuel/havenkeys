@@ -25,7 +25,8 @@ havenkeys/
 │   ├── desktop/
 │   │   ├── src/               React + TypeScript UI (no crypto)
 │   │   └── src-tauri/         Thin Tauri shell: commands, clipboard, auto-lock ticker
-│   └── extension/             MV3 extension: background worker, popup, messaging
+│   └── extension/             MV3 extension: background worker, popup, content script,
+│                              autofill engine, in-page menu/save frames, options, messaging
 ├── packages/
 │   └── protocol/              TypeScript mirror of the wire protocol + validators
 ├── scripts/                   native host registration
@@ -118,7 +119,11 @@ command and a throttled UI activity ping reset the idle timer.
 ## Browser integration
 
 ```text
-popup ─► background worker ─stdio─► havenkeys-native-host ─socket─► havenkeys-bridge ─► VaultService
+popup ──────────────┐
+menu / save frames ─┼─► background worker ─stdio─► havenkeys-native-host ─socket─► havenkeys-bridge ─► VaultService
+content scripts ────┘         │
+       ▲                      │ fills (one frame, matched origin only)
+       └──────────────────────┘
 ```
 
 The browser launches `havenkeys-native-host`, which cannot open the vault.
@@ -127,9 +132,17 @@ relays it to the running desktop app over a user-private local socket. The
 bridge, running inside the desktop process, shares the `VaultService` mutex
 with the Tauri commands. It re-validates every request, applies rate limits
 and the integration switch, and calls the core's origin-bound functions
-(`find_matches`, `fill_for_page`, `totp_for_page`). Lock events are pushed
+(`find_matches`, `fill_for_page`, `totp_for_page`, `check_login`,
+`save_login`). Lock events are pushed
 back to connected hosts over per-connection bounded queues, so a stalled
 peer never delays locking. Details: `native-messaging.md`.
+
+In the browser, content scripts (opt-in, or injected into one tab on a popup
+fill) classify login fields when the user interacts with them. The
+background worker runs the suggestion and save-prompt sessions, and the menu
+and prompt are extension pages framed into the site. The autofill engine
+(`apps/extension/src/autofill/`) is pure DOM logic with no extension APIs,
+so it is tested in jsdom. Details: `autofill.md`.
 
 Lock ordering in the desktop process: `vault` → `lock_manager`; the bridge
 takes its own small mutexes (rate limiter, connection list) either before

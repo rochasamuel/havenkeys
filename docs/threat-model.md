@@ -38,9 +38,12 @@ adversaries it does **not** defend against.
 * **The browser extension and the native host** can only reach the core
   through the bridge (`native-messaging.md`). Every request is re-validated
   and origin-bound in Rust, and the master password and keys never cross it.
-* **Web pages** are hostile by default. For now they cannot reach the
-  extension at all: there are no content scripts, and `externally_connectable`
-  is empty.
+* **Web pages** are hostile by default. They cannot message the extension
+  (`externally_connectable` is empty, and page script has no extension
+  APIs). When in-page suggestions are on, a content script reads the page's
+  DOM as untrusted input. It acts only on trusted user events, and fills
+  only what the background sends after the user picked an item in an
+  extension-origin frame (`autofill.md`).
 
 ## 3. Adversaries we defend against
 
@@ -67,9 +70,23 @@ Stolen laptop backup, synced folder leak, malware exfiltrating files.
 ### T3 — Malicious web pages
 Page scripts may fabricate forms, hide inputs, use iframes, spoof URLs, or try
 to message the extension. Mitigations (detailed in `security-model.md` and
-`autofill.md`): origin binding enforced in Rust, conservative PSL-based domain
-matching, fill only after explicit user interaction, no secret data in the DOM
-beyond the filled input values.
+`autofill.md`):
+
+* Origin binding is enforced in Rust, with conservative PSL-based domain
+  matching.
+* Frames are served only if the item also matches the top page, so a
+  `github.com` login frame in `evil.com` gets nothing.
+* Page URLs come from the browser, never from the page.
+* Fills happen only after a trusted user click in an extension-origin menu
+  the page cannot read or script. Clicks are ignored until the menu has been
+  visible for 400 ms and, on Chromium, only while it is unobscured.
+* Fills go only to visible, enabled fields of the group the user clicked.
+  Hidden fields are never filled.
+* Fills go to one frame, only if that frame is still on the matched origin.
+* Synthetic events are ignored.
+* A save is offered only for passwords the user typed, so a page cannot use
+  save prompts as a password oracle.
+* No secret data goes into the DOM beyond the filled input values.
 
 ### T4 — Compromised or buggy extension or native host
 The Rust side re-validates every request: it must be a known request type,
@@ -137,6 +154,12 @@ system suspend (detected by wall-clock vs monotonic clock divergence).
 | A4 | Ciphertext modified | Auth failure, no plaintext | `crates/havenkeys-core/tests/security.rs`, `blob.rs` |
 | A5 | Malformed native message | Rejected, no crash | `crates/havenkeys-protocol/tests/messages.rs` (incl. fuzz), `crates/havenkeys-bridge/tests/bridge.rs`, `crates/havenkeys-native-host/tests/host.rs` |
 | A6 | Oversized native message | Rejected by size limit | `crates/havenkeys-protocol/src/frame.rs`, `crates/havenkeys-bridge/tests/bridge.rs`, `crates/havenkeys-native-host/tests/host.rs` |
-| A7 | Page creates thousands of inputs | No significant slowdown | Phase 5 (content script) |
+| A7 | Page creates thousands of inputs | No significant slowdown | `apps/extension/src/autofill/autofill.test.ts` (5,000 inputs, bounded group) |
 | A8 | Blob swapped between items / roles | Auth failure | `crates/havenkeys-core/tests/security.rs` |
 | A9 | Unknown vault format version | Refused safely | `crates/havenkeys-core/tests/security.rs` |
+| A10 | Login frame of github.com embedded in evil.com | DENIED (item must match top page too) | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs`, `inline-handler.test.ts` |
+| A11 | Page synthesizes clicks/keys/focus to open menus or trigger fills | Ignored (`isTrusted`) | `apps/extension/src/content/content.test.ts` |
+| A12 | Fill arrives after the frame navigated to another origin | Refused by the content script (origin check; Chromium also pins the document) | `content.test.ts` |
+| A13 | Menu frame or other tab tries to pick an item the menu did not offer | Refused | `inline-handler.test.ts` |
+| A14 | Page plants a password and forges a submit to probe the vault | No report, no prompt | `autofill.test.ts`, `content.test.ts` |
+| A15 | Extension overwrites another site's login, or floods password changes | DENIED / one change per item per 10 min; old passwords kept in history | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |

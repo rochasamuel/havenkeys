@@ -18,6 +18,11 @@ describe("parseIncoming", () => {
       { v: 1, event: { type: "locked" } },
       { v: 1, event: { type: "unlocked" } },
       { v: 1, event: { type: "disconnected" } },
+      { v: 1, id: 8, result: { type: "generate_password", password: "x" } },
+      { v: 1, id: 9, result: { type: "check_login", action: "add", itemId: null } },
+      { v: 1, id: 10, result: { type: "check_login", action: "unchanged", itemId: null } },
+      { v: 1, id: 11, result: { type: "check_login", action: "update", itemId: ID } },
+      { v: 1, id: 12, result: { type: "save_login", itemId: ID } },
     ];
     for (const m of ok) expect(parseIncoming(m), JSON.stringify(m)).not.toBeNull();
   });
@@ -63,5 +68,22 @@ describe("envelope", () => {
   });
   it("refuses ids the Rust side cannot represent", () => {
     for (const id of [-1, 1.5, 2 ** 32, NaN]) expect(() => envelope(id, { type: "status" })).toThrow();
+  });
+});
+
+describe("phase 5 results", () => {
+  it("rejects inconsistent or loose shapes", () => {
+    const bad: unknown[] = [
+      { v: 1, id: 1, result: { type: "generate_password", password: "" } },
+      { v: 1, id: 1, result: { type: "generate_password", password: 5 } },
+      { v: 1, id: 1, result: { type: "generate_password" } },
+      { v: 1, id: 1, result: { type: "check_login", action: "update", itemId: null } },
+      { v: 1, id: 1, result: { type: "check_login", action: "add", itemId: ID } },
+      { v: 1, id: 1, result: { type: "check_login", action: "delete", itemId: null } },
+      { v: 1, id: 1, result: { type: "check_login", action: "add" } },
+      { v: 1, id: 1, result: { type: "save_login", itemId: "nope" } },
+      { v: 1, id: 1, result: { type: "save_login", itemId: ID, extra: 1 } },
+    ];
+    for (const m of bad) expect(parseIncoming(m), JSON.stringify(m)).toBeNull();
   });
 });

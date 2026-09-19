@@ -16,6 +16,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 pub const LOCKED_EVENT: &str = "vault://locked";
+/// Items were added or changed from outside the UI (the browser extension).
+pub const ITEMS_CHANGED_EVENT: &str = "vault://items-changed";
 
 pub struct AppState {
     /// Shared with the browser bridge, which answers extension requests.

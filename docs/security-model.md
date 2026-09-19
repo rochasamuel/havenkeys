@@ -25,7 +25,8 @@ This document describes *how* HavenKeys enforces the properties listed in
 | No plaintext secrets in SQLite | Items table holds only `id` + two encrypted blobs |
 | Master password never persisted | Held in `Zeroizing<String>` only for the duration of `unlock`/`create` |
 | Locked vault refuses secret access | Every secret-returning core function requires an active `Session`; locking drops it |
-| Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `copy_secret` / `get_totp_code` |
+| Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `reveal_previous_password` / `copy_secret` / `get_totp_code` |
+| Recoverable password changes | A replaced password is kept, encrypted, in the item's password history (5 entries) |
 
 ## 3. What is NOT protected
 
@@ -192,23 +193,40 @@ macros appear in the core crate.
 
 ## 12. Browser extension permissions
 
-Current manifest (Phase 4):
+| Permission | Required? | Why |
+|---|---|---|
+| `nativeMessaging` | yes | Talk to the native messaging host, the extension's only route to the vault |
+| `activeTab` | yes | When the user clicks the toolbar button: read that tab's URL to look up its logins, and allow filling it. Only that tab, until it navigates |
+| `scripting` | yes | Inject the content script into that tab for a popup fill, and register the content script when in-page suggestions are on |
+| `https://*/*`, `http://*/*` | **optional**, off by default | In-page suggestions and save prompts need a content script in the pages the user visits. Requested only from the options page, when the user turns suggestions on. The browser can narrow the grant to chosen sites, and the registered content script follows the grant |
 
-| Permission | Why |
-|---|---|
-| `nativeMessaging` | Talk to the native messaging host, the extension's only route to the vault |
-| `activeTab` | Read the URL of the tab where the user clicked the toolbar button, and only that tab, to look up its logins |
+Why not ask for everything at install: most of the value, filling with origin
+binding, works with `activeTab`. Broad host access is what a malicious page
+or a compromised extension build would most want, so the user decides.
+Without it, the extension never runs in pages the user did not click it on.
 
-Not requested: host permissions, `<all_urls>`, `tabs`, `scripting`,
-`storage`, `clipboardWrite`, `cookies`, `webRequest`. There are no content
-scripts yet. `externally_connectable` is empty, so web pages and other
-extensions cannot message the extension. Extension pages run under
-`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
-with no `unsafe-eval` and no `unsafe-inline`.
+Not requested: `<all_urls>` as a required permission, `tabs`, `storage`,
+`clipboardWrite`, `cookies`, `webRequest`, `webNavigation`, `notifications`.
+`externally_connectable` is empty, so web pages and other extensions cannot
+message the extension.
 
-On-focus suggestions (Phase 5) need a content script on login pages. Its
-permission model will be decided and justified here: either host permissions
-or user-granted optional permissions, with `activeTab` as the fallback.
+**web_accessible_resources:** `menu.html`, `save.html`, their scripts and
+styles, the theme and one icon, for `https://*/*` and `http://*/*`. These are
+the pages shown inside web pages. Nothing else can be loaded or framed by a
+website.
+
+**CSP (extension pages):**
+`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`.
+It has no `unsafe-eval` and no `unsafe-inline`. `frame-ancestors 'none'` was
+removed in Phase 5, because the menu and save pages must be framed by web
+pages. Framing by websites is limited to those pages by
+`web_accessible_resources`.
+
+**Content script:** it runs in the isolated world, keeps no state beyond the
+page, reads the DOM as untrusted input, and acts only on trusted user
+events. It writes secrets only into the `value` of visible, enabled fields
+of the group the user chose, and never into attributes. Details and
+limitations are in `autofill.md`.
 
 ## 13. Browser bridge
 
@@ -221,7 +239,14 @@ See `native-messaging.md` for the full protocol. In summary:
 * The master password and the vault key never cross the bridge. There is no
   unlock request.
 * Secrets cross it only in answer to `fill_item` (username and password of
-  one item that matches the page) and `get_totp` (the current code).
+  one item that matches the page), `get_totp` (the current code) and
+  `generate_password` (a fresh random password). Toward the desktop, only in
+  `check_login`/`save_login` (a password the user just submitted on the page).
+* The only write is `save_login`: add a login for the page, or replace the
+  password of a login matching the page. Replaced passwords go to the item's
+  password history (5 entries), and at most one change per item every 10
+  minutes is allowed from the browser.
+* For iframes, items must match both the frame and the top-level page.
 * The socket lives in a `0700` per-user directory that both sides verify.
   Peer UIDs are checked on Unix.
 * Browser integration is opt-in (off by default) in Settings. The switch is

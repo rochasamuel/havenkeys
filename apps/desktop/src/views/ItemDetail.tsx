@@ -77,6 +77,68 @@ function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => void })
   );
 }
 
+/** One previous password, hidden until asked for. */
+function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index: number; replacedAt: number }) {
+  const toast = useToast();
+  const secret = useRevealedSecret(useCallback(() => api.revealPreviousPassword(itemId, index), [itemId, index]));
+  const toggle = () =>
+    secret.value === null
+      ? void secret.reveal().catch((e) => toast(e instanceof ApiError ? e.message : "Could not reveal.", "error"))
+      : secret.hide();
+  return (
+    <li className="history-row">
+      {secret.value === null ? (
+        <span className="mono masked" aria-label="Hidden password">
+          ••••••••••••
+        </span>
+      ) : (
+        <span className="mono selectable revealed">{secret.value}</span>
+      )}
+      <span className="muted">Replaced {formatDate(replacedAt)}</span>
+      <IconButton
+        icon={secret.value === null ? "eye" : "eyeOff"}
+        label={secret.value === null ? "Show previous password" : "Hide previous password"}
+        onClick={toggle}
+      />
+    </li>
+  );
+}
+
+/** Passwords this login used before. Loaded only when the user asks. */
+function PasswordHistory({ itemId }: { itemId: string }) {
+  const toast = useToast();
+  const [dates, setDates] = useState<number[] | null>(null);
+  const load = () =>
+    api.passwordHistory(itemId).then(setDates, (e) =>
+      toast(e instanceof ApiError ? e.message : "Could not load the history.", "error"),
+    );
+  if (dates === null) {
+    return (
+      <div className="field">
+        <button className="btn btn-small btn-ghost" onClick={() => void load()}>
+          Show password history
+        </button>
+      </div>
+    );
+  }
+  if (dates.length === 0) {
+    return (
+      <div className="field">
+        <span className="muted">No previous passwords.</span>
+      </div>
+    );
+  }
+  return (
+    <Field label="Previous passwords">
+      <ul className="history-list">
+        {dates.map((d, i) => (
+          <PreviousPassword key={`${i}-${d}`} itemId={itemId} index={i} replacedAt={d} />
+        ))}
+      </ul>
+    </Field>
+  );
+}
+
 export function ItemDetail({ item, onEdit, onDelete }: Props) {
   const toast = useToast();
   const copy = useCopy(item.id);
@@ -153,6 +215,8 @@ export function ItemDetail({ item, onEdit, onDelete }: Props) {
               )}
             </Field>
           )}
+
+          <PasswordHistory itemId={item.id} />
 
           {item.hasTotp && <TotpField item={item} onCopy={() => void copy("totp", "One-time code")} />}
 

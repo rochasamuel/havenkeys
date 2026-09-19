@@ -22,6 +22,7 @@ struct Fixture {
     vault: Arc<Mutex<VaultService>>,
     bridge: Bridge,
     locks: Arc<AtomicUsize>,
+    changes: Arc<AtomicUsize>,
     github: Uuid,
     bank: Uuid,
     note: Uuid,
@@ -37,7 +38,9 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
             match_type: MatchType::Domain,
         }],
         password: SecretUpdate::Set(SecretString::from(pw)),
-        totp: totp.map_or(SecretUpdate::Keep, |t| SecretUpdate::Set(SecretString::from(t))),
+        totp: totp.map_or(SecretUpdate::Keep, |t| {
+            SecretUpdate::Set(SecretString::from(t))
+        }),
         notes: SecretUpdate::Set(SecretString::from("login notes stay home")),
         content: SecretUpdate::Keep,
     }
@@ -55,13 +58,28 @@ fn fixture() -> Fixture {
     .unwrap();
     let github = v
         .create_item(
-            item("GitHub", "octo", "gh-password", "https://github.com", Some("JBSWY3DPEHPK3PXP")),
+            item(
+                "GitHub",
+                "octo",
+                "gh-password",
+                "https://github.com",
+                Some("JBSWY3DPEHPK3PXP"),
+            ),
             NOW,
         )
         .unwrap()
         .id;
     let bank = v
-        .create_item(item("Bank", "alice", "bank-password", "https://bank.example", None), NOW)
+        .create_item(
+            item(
+                "Bank",
+                "alice",
+                "bank-password",
+                "https://bank.example",
+                None,
+            ),
+            NOW,
+        )
         .unwrap()
         .id;
     let note = v
@@ -83,15 +101,23 @@ fn fixture() -> Fixture {
 
     let vault = Arc::new(Mutex::new(v));
     let locks = Arc::new(AtomicUsize::new(0));
-    let (v2, l2) = (vault.clone(), locks.clone());
-    let bridge = Bridge::new(vault.clone(), move || {
-        v2.lock().unwrap().lock();
-        l2.fetch_add(1, Ordering::SeqCst);
-    });
+    let changes = Arc::new(AtomicUsize::new(0));
+    let (v2, l2, c2) = (vault.clone(), locks.clone(), changes.clone());
+    let bridge = Bridge::with_change_hook(
+        vault.clone(),
+        move || {
+            v2.lock().unwrap().lock();
+            l2.fetch_add(1, Ordering::SeqCst);
+        },
+        move || {
+            c2.fetch_add(1, Ordering::SeqCst);
+        },
+    );
     Fixture {
         vault,
         bridge,
         locks,
+        changes,
         github,
         bank,
         note,
@@ -113,11 +139,17 @@ fn error_code(resp: &serde_json::Value) -> Option<&str> {
 }
 
 fn fill(f: &Fixture, id: Uuid, url: &str) -> serde_json::Value {
-    call(f, serde_json::json!({"type": "fill_item", "itemId": id, "url": url}))
+    call(
+        f,
+        serde_json::json!({"type": "fill_item", "itemId": id, "url": url}),
+    )
 }
 
 fn totp(f: &Fixture, id: Uuid, url: &str) -> serde_json::Value {
-    call(f, serde_json::json!({"type": "get_totp", "itemId": id, "url": url}))
+    call(
+        f,
+        serde_json::json!({"type": "get_totp", "itemId": id, "url": url}),
+    )
 }
 
 fn find(f: &Fixture, url: &str) -> serde_json::Value {
@@ -179,8 +211,16 @@ fn a1_wrong_origin_denied() {
     ] {
         // Fresh fixture per URL so the rate limiter does not mask the result.
         let f = fixture();
-        assert_eq!(error_code(&fill(&f, f.github, url)), Some("denied"), "{url}");
-        assert_eq!(error_code(&totp(&f, f.github, url)), Some("denied"), "{url}");
+        assert_eq!(
+            error_code(&fill(&f, f.github, url)),
+            Some("denied"),
+            "{url}"
+        );
+        assert_eq!(
+            error_code(&totp(&f, f.github, url)),
+            Some("denied"),
+            "{url}"
+        );
         let m = find(&f, url);
         assert_eq!(m["result"]["matches"], serde_json::json!([]), "{url}");
     }
@@ -191,14 +231,29 @@ fn a1_wrong_origin_denied() {
 fn a2_arbitrary_item_id_denied() {
     let f = fixture();
     // Another site's item.
-    assert_eq!(error_code(&fill(&f, f.bank, "https://github.com/")), Some("denied"));
+    assert_eq!(
+        error_code(&fill(&f, f.bank, "https://github.com/")),
+        Some("denied")
+    );
     // A secure note, from any page.
-    assert_eq!(error_code(&fill(&f, f.note, "https://github.com/")), Some("denied"));
+    assert_eq!(
+        error_code(&fill(&f, f.note, "https://github.com/")),
+        Some("denied")
+    );
     // IDs that do not exist look exactly like "not for this site".
-    assert_eq!(error_code(&fill(&f, Uuid::new_v4(), "https://github.com/")), Some("denied"));
-    assert_eq!(error_code(&totp(&f, Uuid::new_v4(), "https://github.com/")), Some("denied"));
+    assert_eq!(
+        error_code(&fill(&f, Uuid::new_v4(), "https://github.com/")),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&totp(&f, Uuid::new_v4(), "https://github.com/")),
+        Some("denied")
+    );
     // Item without TOTP: indistinguishable from the cases above.
-    assert_eq!(error_code(&totp(&f, f.bank, "https://bank.example/")), Some("denied"));
+    assert_eq!(
+        error_code(&totp(&f, f.bank, "https://bank.example/")),
+        Some("denied")
+    );
 }
 
 /// A3: a locked vault answers status and nothing else.
@@ -211,8 +266,14 @@ fn a3_locked_vault_refuses() {
         "locked"
     );
     assert_eq!(error_code(&find(&f, "https://github.com/")), Some("locked"));
-    assert_eq!(error_code(&fill(&f, f.github, "https://github.com/")), Some("locked"));
-    assert_eq!(error_code(&totp(&f, f.github, "https://github.com/")), Some("locked"));
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("locked")
+    );
+    assert_eq!(
+        error_code(&totp(&f, f.github, "https://github.com/")),
+        Some("locked")
+    );
 }
 
 #[test]
@@ -222,7 +283,10 @@ fn lock_request_locks_vault() {
     assert_eq!(r["result"]["type"], "lock");
     assert_eq!(f.locks.load(Ordering::SeqCst), 1);
     assert!(!f.vault.lock().unwrap().is_unlocked());
-    assert_eq!(error_code(&fill(&f, f.github, "https://github.com/")), Some("locked"));
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("locked")
+    );
 }
 
 #[test]
@@ -245,7 +309,10 @@ fn integration_switch_is_enforced() {
         })
         .unwrap();
     }
-    assert_eq!(error_code(&find(&f, "https://github.com/")), Some("integration_disabled"));
+    assert_eq!(
+        error_code(&find(&f, "https://github.com/")),
+        Some("integration_disabled")
+    );
     assert_eq!(
         error_code(&fill(&f, f.github, "https://github.com/")),
         Some("integration_disabled")
@@ -274,7 +341,180 @@ fn secret_requests_are_rate_limited() {
     for _ in 0..10 {
         fill(&f, Uuid::new_v4(), "https://github.com/");
     }
-    assert_eq!(error_code(&fill(&f, f.github, "https://github.com/")), Some("rate_limited"));
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+}
+
+/// A1 for frames: a login frame is only served if its top page matches too.
+#[test]
+fn a1_frame_needs_matching_top_page() {
+    let f = fixture();
+    let url = "https://github.com/login";
+    let find_in = |top: &str| {
+        call(
+            &f,
+            serde_json::json!({"type": "find_matches", "url": url, "topUrl": top}),
+        )
+    };
+    assert_eq!(
+        find_in("https://evil.com/")["result"]["matches"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        find_in("https://github.com/")["result"]["matches"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let r = call(
+        &f,
+        serde_json::json!({"type": "fill_item", "itemId": f.github, "url": url, "topUrl": "https://evil.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("denied"));
+    let r = call(
+        &f,
+        serde_json::json!({"type": "get_totp", "itemId": f.github, "url": url, "topUrl": "https://evil.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("denied"));
+}
+
+#[test]
+fn generate_password_uses_core_generator() {
+    let f = fixture();
+    let a = call(&f, serde_json::json!({"type": "generate_password"}));
+    let b = call(&f, serde_json::json!({"type": "generate_password"}));
+    let (a, b) = (
+        a["result"]["password"].as_str().unwrap(),
+        b["result"]["password"].as_str().unwrap(),
+    );
+    assert_eq!(a.chars().count(), 24);
+    assert_ne!(a, b);
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&call(&f, serde_json::json!({"type": "generate_password"}))),
+        Some("locked")
+    );
+}
+
+fn check(f: &Fixture, url: &str, user: Option<&str>, pw: &str) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({"type": "check_login", "url": url, "username": user, "password": pw}),
+    )
+}
+
+fn save(
+    f: &Fixture,
+    url: &str,
+    user: Option<&str>,
+    pw: &str,
+    id: Option<Uuid>,
+) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({"type": "save_login", "url": url, "username": user, "password": pw, "itemId": id}),
+    )
+}
+
+#[test]
+fn save_login_flow() {
+    let f = fixture();
+    let gh = "https://github.com/session";
+    let r = check(&f, gh, Some("octo"), "gh-password");
+    assert_eq!(
+        r["result"],
+        serde_json::json!({"type": "check_login", "action": "unchanged", "itemId": null})
+    );
+    let r = check(&f, gh, Some("octo"), "rotated");
+    assert_eq!(r["result"]["action"], "update");
+    assert_eq!(r["result"]["itemId"], f.github.to_string());
+    assert!(
+        !r.to_string().contains("gh-password"),
+        "check_login never returns passwords"
+    );
+
+    let r = save(&f, gh, Some("octo"), "rotated", Some(f.github));
+    assert_eq!(r["result"]["itemId"], f.github.to_string());
+    assert_eq!(fill(&f, f.github, gh)["result"]["password"], "rotated");
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+
+    let f = fixture();
+    let r = save(&f, "https://new.example/login", Some("me"), "pw", None);
+    let id: Uuid = r["result"]["itemId"].as_str().unwrap().parse().unwrap();
+    assert_eq!(
+        fill(&f, id, "https://new.example/")["result"]["username"],
+        "me"
+    );
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+}
+
+/// A2 for writes: the extension cannot overwrite another site's login.
+#[test]
+fn a2_save_login_cannot_touch_other_sites() {
+    let f = fixture();
+    for (url, id) in [
+        ("https://evil.com/", f.github),
+        ("https://github.com/", f.bank),
+        ("https://github.com/", f.note),
+        ("https://github.com/", Uuid::new_v4()),
+    ] {
+        assert_eq!(
+            error_code(&save(&f, url, None, "pwned", Some(id))),
+            Some("denied"),
+            "{url}"
+        );
+    }
+    assert_eq!(
+        fill(&f, f.bank, "https://bank.example/")["result"]["password"],
+        "bank-password"
+    );
+    assert_eq!(f.changes.load(Ordering::SeqCst), 0);
+
+    // Locked and integration-off vaults refuse writes too.
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&save(&f, "https://new.example/", None, "x", None)),
+        Some("locked")
+    );
+    assert_eq!(
+        error_code(&check(&f, "https://github.com/", None, "x")),
+        Some("locked")
+    );
+}
+
+/// A flood of password changes cannot push the real password out of the
+/// item's history: one browser-initiated change per item per interval.
+#[test]
+fn password_updates_are_limited_per_item() {
+    let f = fixture();
+    let url = "https://github.com/";
+    assert!(save(&f, url, None, "one", Some(f.github))["result"].is_object());
+    assert_eq!(
+        error_code(&save(&f, url, None, "two", Some(f.github))),
+        Some("rate_limited")
+    );
+    assert_eq!(fill(&f, f.github, url)["result"]["password"], "one");
+    // Adding new logins is not affected.
+    assert!(save(&f, "https://new.example/", None, "x", None)["result"].is_object());
+}
+
+#[test]
+fn save_requests_share_the_secret_rate_limit() {
+    let f = fixture();
+    for _ in 0..10 {
+        check(&f, "https://github.com/", Some("octo"), "guess");
+    }
+    assert_eq!(
+        error_code(&check(&f, "https://github.com/", Some("octo"), "guess")),
+        Some("rate_limited")
+    );
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
 }
 
 /// A5 at the handler: unknown commands and malformed messages get an error
@@ -310,7 +550,10 @@ mod socket {
         (dir, ep)
     }
 
-    fn roundtrip(stream: &mut interprocess::local_socket::Stream, bytes: &[u8]) -> serde_json::Value {
+    fn roundtrip(
+        stream: &mut interprocess::local_socket::Stream,
+        bytes: &[u8],
+    ) -> serde_json::Value {
         write_frame(stream, bytes, usize::MAX).unwrap();
         let resp = read_frame(stream, MAX_RESPONSE_BYTES).unwrap().unwrap();
         serde_json::from_slice(&resp).unwrap()
@@ -323,7 +566,10 @@ mod socket {
         let mut s = ep.connect().unwrap();
         let r = roundtrip(
             &mut s,
-            &request(5, serde_json::json!({"type":"fill_item","itemId":f.github,"url":"https://github.com/"})),
+            &request(
+                5,
+                serde_json::json!({"type":"fill_item","itemId":f.github,"url":"https://github.com/"}),
+            ),
         );
         assert_eq!(r["id"], 5);
         assert_eq!(r["result"]["password"], "gh-password");
@@ -381,13 +627,23 @@ mod socket {
         let mut open = Vec::new();
         for i in 0..havenkeys_bridge::MAX_CONNECTIONS {
             let mut s = ep.connect().unwrap();
-            roundtrip(&mut s, &request(i as u32, serde_json::json!({"type":"status"})));
+            roundtrip(
+                &mut s,
+                &request(i as u32, serde_json::json!({"type":"status"})),
+            );
             open.push(s);
         }
         let mut extra = ep.connect().unwrap();
         // The server closes the extra connection without answering.
-        let _ = write_frame(&mut extra, &request(99, serde_json::json!({"type":"status"})), usize::MAX);
-        assert!(!matches!(read_frame(&mut extra, MAX_RESPONSE_BYTES), Ok(Some(_))));
+        let _ = write_frame(
+            &mut extra,
+            &request(99, serde_json::json!({"type":"status"})),
+            usize::MAX,
+        );
+        assert!(!matches!(
+            read_frame(&mut extra, MAX_RESPONSE_BYTES),
+            Ok(Some(_))
+        ));
         drop(open);
         // Slots are released when clients disconnect.
         std::thread::sleep(Duration::from_millis(200));
@@ -405,7 +661,11 @@ mod socket {
         // A leftover socket file with nobody listening is replaced.
         let stale_dir = dir.path().join("stale");
         std::fs::create_dir(&stale_dir).unwrap();
-        std::fs::set_permissions(&stale_dir, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(
+            &stale_dir,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .unwrap();
         let stale = stale_dir.join("bridge.sock");
         drop(std::os::unix::net::UnixListener::bind(&stale).unwrap());
         assert!(stale.exists());

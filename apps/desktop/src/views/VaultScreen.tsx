@@ -49,6 +49,12 @@ export function VaultScreen({ damagedItems, onLock }: Props) {
     return () => window.clearTimeout(t);
   }, [refresh]);
 
+  // Logins saved from the browser extension.
+  useEffect(() => {
+    const unlisten = api.onItemsChanged(() => void refresh());
+    return () => void unlisten.then((f) => f());
+  }, [refresh]);
+
   useEffect(() => {
     if (damagedItems > 0) {
       toast(`${damagedItems} item(s) could not be decrypted and are hidden.`, "error");

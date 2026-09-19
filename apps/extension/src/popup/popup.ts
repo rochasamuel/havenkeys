@@ -11,6 +11,7 @@ import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messagin
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
 const lockBtn = document.getElementById("lock") as HTMLButtonElement;
+const optionsBtn = document.getElementById("options") as HTMLButtonElement;
 
 function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -47,8 +48,28 @@ function formatCode(code: string): string {
   return `${code.slice(0, mid)} ${code.slice(mid)}`;
 }
 
+function smallButton(text: string, title: string): HTMLButtonElement {
+  const b = h("button", { className: "btn small", text });
+  b.type = "button";
+  b.title = title;
+  return b;
+}
+
+/** Fill into the page; the popup closes on success. */
+async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: HTMLElement): Promise<void> {
+  btn.disabled = true;
+  const r = await send<null>(req);
+  btn.disabled = false;
+  if (r.ok) {
+    window.close();
+    return;
+  }
+  status.replaceChildren(h("span", { className: "error", text: r.message }));
+}
+
 function matchRow(m: Match): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
+  const status = h("div", { className: "user row-status" });
   const row = h(
     "li",
     { className: "item" },
@@ -58,28 +79,38 @@ function matchRow(m: Match): HTMLElement {
       { className: "who" },
       h("div", { className: "title", text: m.title }),
       h("div", { className: "user", text: m.username ?? "No username" }),
+      status,
     ),
   );
+  const actions = h("div", { className: "actions" });
+
+  const fill = smallButton("Fill", "Fill this login into the page");
+  fill.addEventListener("click", () => void fillFromPopup(fill, { type: "popup_fill", itemId: m.id }, status));
+  actions.append(fill);
+
   if (m.hasTotp) {
     const slot = h("span");
-    const btn = h("button", { className: "btn small", text: "Show code" });
-    btn.type = "button";
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
+    const show = smallButton("Code", "Show the one-time code");
+    show.addEventListener("click", async () => {
+      show.disabled = true;
       const r = await send<TotpView>({ type: "popup_totp", itemId: m.id });
+      show.disabled = false;
       if (!r.ok) {
-        slot.replaceChildren(h("span", { className: "error", text: "Unavailable" }));
-        slot.title = r.message;
+        status.replaceChildren(h("span", { className: "error", text: r.message }));
         return;
       }
-      slot.replaceChildren(h("span", { className: "code", text: formatCode(r.value.code) }));
+      const code = h("button", { className: "code", text: formatCode(r.value.code) });
+      code.type = "button";
+      code.title = "Fill this code into the page";
+      code.addEventListener("click", () => void fillFromPopup(code, { type: "popup_fill_totp", itemId: m.id }, status));
+      slot.replaceChildren(code);
       // Remove the code when it stops being valid.
-      setTimeout(() => slot.replaceChildren(btn), r.value.secondsRemaining * 1000);
-      btn.disabled = false;
+      setTimeout(() => slot.replaceChildren(show), r.value.secondsRemaining * 1000);
     });
-    slot.append(btn);
-    row.append(slot);
+    slot.append(show);
+    actions.append(slot);
   }
+  row.append(actions);
   return row;
 }
 
@@ -142,5 +173,7 @@ lockBtn.addEventListener("click", async () => {
   lockBtn.disabled = false;
   render(r.ok ? r.value : { kind: "error", message: r.message });
 });
+
+optionsBtn.addEventListener("click", () => void chrome.runtime.openOptionsPage());
 
 void refresh();
