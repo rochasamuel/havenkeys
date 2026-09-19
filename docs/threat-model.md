@@ -22,7 +22,7 @@ adversaries it does **not** defend against.
 ```text
  ┌──────────── trusted ─────────────┐   ┌────── partially trusted ──────┐   ┌──── untrusted ────┐
  │ Rust core (crypto, vault, lock,  │◄──┤ Desktop renderer (React UI)   │   │ Web pages         │
- │ authorization, origin matching)  │   │ Browser extension (future)    │◄──┤ Page JavaScript   │
+ │ authorization, origin matching)  │   │ Browser extension, native host│◄──┤ Page JavaScript   │
  └───────────────┬──────────────────┘   └───────────────────────────────┘   │ Page DOM, iframes │
                  │                                                           └───────────────────┘
           encrypted SQLite file (untrusted storage: may be copied/modified)
@@ -35,7 +35,12 @@ adversaries it does **not** defend against.
   so commands are narrow and secrets are returned only on explicit actions.
 * **The vault file** is treated as attacker-controlled input: it is parsed
   defensively and every blob is authenticated.
-* **Web pages** (relevant once the extension ships) are hostile by default.
+* **The browser extension and the native host** can only reach the core
+  through the bridge (`native-messaging.md`). Every request is re-validated
+  and origin-bound in Rust, and the master password and keys never cross it.
+* **Web pages** are hostile by default. For now they cannot reach the
+  extension at all: there are no content scripts, and `externally_connectable`
+  is empty.
 
 ## 3. Adversaries we defend against
 
@@ -59,17 +64,22 @@ Stolen laptop backup, synced folder leak, malware exfiltrating files.
 * **Not defended:** rollback (replacing the whole file, or a row, with an older
   valid version) and deletion of items. See Known limitations.
 
-### T3 — Malicious web pages (extension phase)
+### T3 — Malicious web pages
 Page scripts may fabricate forms, hide inputs, use iframes, spoof URLs, or try
 to message the extension. Mitigations (detailed in `security-model.md` and
 `autofill.md`): origin binding enforced in Rust, conservative PSL-based domain
 matching, fill only after explicit user interaction, no secret data in the DOM
 beyond the filled input values.
 
-### T4 — Compromised or buggy extension
-The Rust core re-validates every request (vault unlocked? item exists? item
-matches origin? operation allowed?). The extension never receives the vault key
-or master password, and `find_matches` returns no secrets.
+### T4 — Compromised or buggy extension or native host
+The Rust side re-validates every request: it must be a known request type,
+under the size and rate limits, with the vault unlocked, integration switched
+on, and the item's own rules matching the page. The extension never receives
+the vault key or the master password, `find_matches` returns no secrets, and
+an unknown item ID looks the same as "not saved for this site". A compromised
+extension can still obtain the password of any login **for a site whose URL
+it claims**, within the rate limit. The browser-reported tab URL is only as
+trustworthy as the extension that reports it.
 
 ### T5 — Compromised renderer / UI process
 * No cryptography in JavaScript; no keys in JavaScript.
@@ -100,7 +110,10 @@ system suspend (detected by wall-clock vs monotonic clock divergence).
 
 * **Malware running as the same OS user while the vault is unlocked.** It can
   read process memory, inject into the UI, log keystrokes, or read the
-  clipboard. No local password manager can fully defend against this.
+  clipboard. No local password manager can fully defend against this. It can
+  also connect to the bridge socket, or run the native host itself, and ask
+  for logins as the extension does (rate-limited). This is easier than
+  reading memory; see `native-messaging.md` §8.
 * **Kernel/root compromise, hardware attacks, cold-boot / DMA attacks.**
 * **Keyloggers capturing the master password.**
 * **Memory forensics after lock.** We zeroize key material and decrypted
@@ -118,12 +131,12 @@ system suspend (detected by wall-clock vs monotonic clock divergence).
 
 | # | Attack | Expected | Test location |
 |---|---|---|---|
-| A1 | Credential request for github.com while on evil.com | DENIED | `crates/havenkeys-core/tests/security.rs` (core); native host tests in Phase 4 |
-| A2 | Extension requests arbitrary item ID | Only if item matches origin | `crates/havenkeys-core/tests/security.rs` (core); native host tests in Phase 4 |
-| A3 | Vault locked, secret requested | DENIED | `crates/havenkeys-core/tests/security.rs` |
+| A1 | Credential request for github.com while on evil.com | DENIED | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |
+| A2 | Extension requests arbitrary item ID | Only if item matches origin; unknown IDs indistinguishable | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |
+| A3 | Vault locked, secret requested | DENIED | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |
 | A4 | Ciphertext modified | Auth failure, no plaintext | `crates/havenkeys-core/tests/security.rs`, `blob.rs` |
-| A5 | Malformed native message | Rejected, no crash | extension phase |
-| A6 | Oversized native message | Rejected by size limit | extension phase |
-| A7 | Page creates thousands of inputs | No significant slowdown | extension phase |
+| A5 | Malformed native message | Rejected, no crash | `crates/havenkeys-protocol/tests/messages.rs` (incl. fuzz), `crates/havenkeys-bridge/tests/bridge.rs`, `crates/havenkeys-native-host/tests/host.rs` |
+| A6 | Oversized native message | Rejected by size limit | `crates/havenkeys-protocol/src/frame.rs`, `crates/havenkeys-bridge/tests/bridge.rs`, `crates/havenkeys-native-host/tests/host.rs` |
+| A7 | Page creates thousands of inputs | No significant slowdown | Phase 5 (content script) |
 | A8 | Blob swapped between items / roles | Auth failure | `crates/havenkeys-core/tests/security.rs` |
 | A9 | Unknown vault format version | Refused safely | `crates/havenkeys-core/tests/security.rs` |

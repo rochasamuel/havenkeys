@@ -210,6 +210,10 @@ pub struct Settings {
     /// UI preference. `default` keeps settings saved before this field existed readable.
     #[serde(default)]
     pub theme: Theme,
+    /// Whether the browser extension may query this vault. Opt-in: off by
+    /// default, including for settings saved before this field existed.
+    #[serde(default)]
+    pub browser_integration: bool,
 }
 
 pub const AUTO_LOCK_CHOICES: [u32; 5] = [0, 5, 15, 30, 60];
@@ -220,6 +224,7 @@ impl Default for Settings {
             auto_lock_minutes: 15,
             clipboard_clear_seconds: 30,
             theme: Theme::Dark,
+            browser_integration: false,
         }
     }
 }
@@ -412,6 +417,7 @@ mod tests {
         let old: Settings =
             serde_json::from_str(r#"{"autoLockMinutes":5,"clipboardClearSeconds":30}"#).unwrap();
         assert_eq!(old.theme, Theme::Dark);
+        assert!(!old.browser_integration);
     }
 
     #[test]

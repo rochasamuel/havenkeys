@@ -77,6 +77,7 @@ export interface Settings {
   autoLockMinutes: number;
   clipboardClearSeconds: number;
   theme: Theme;
+  browserIntegration: boolean;
 }
 
 export interface CopyResult {

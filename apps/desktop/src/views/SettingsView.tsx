@@ -159,6 +159,25 @@ export function SettingsView({ onImported }: { onImported: () => void }) {
         </div>
       )}
 
+      {settings && (
+        <div className="settings-block">
+          <h3>Browser extension</h3>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={settings.browserIntegration}
+              onChange={(e) => void update({ browserIntegration: e.target.checked })}
+            />
+            <span>Allow the HavenKeys browser extension to suggest and fill logins</span>
+          </label>
+          <p className="muted">
+            The extension only receives a login when you choose it on a website that login is saved for, and only while
+            HavenKeys is unlocked. It never receives your master password. Off by default: while it is on, other programs
+            running under your account can make the same requests as the extension.
+          </p>
+        </div>
+      )}
+
       <ImportSection onImported={onImported} />
 
       <ChangePassword />

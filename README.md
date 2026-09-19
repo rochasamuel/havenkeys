@@ -11,10 +11,11 @@ security core. It works offline, needs no account, and runs no server.
 
 | Area | State |
 |---|---|
-| Security core (crypto, vault, lock, TOTP, generator) | Implemented, 82 Rust tests |
+| Security core (crypto, vault, lock, TOTP, generator) | Implemented and tested |
 | Desktop app (Tauri + React) | Implemented; builds and runs on Linux (WSLg) |
 | Domain matching + origin binding for autofill | Implemented in the core ([docs/autofill.md](docs/autofill.md)) |
-| Browser extension, native messaging | Not started (next phases) |
+| Native messaging (native host + desktop bridge) | Implemented ([docs/native-messaging.md](docs/native-messaging.md)) |
+| Browser extension (MV3, Chrome + Firefox) | Toolbar popup: lock state, logins for this site, TOTP codes, lock. In-page autofill is next (Phase 5) |
 | Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
 | Export | Not implemented |
 
@@ -31,6 +32,8 @@ What the desktop app does today:
 * Copy to clipboard from Rust with automatic clearing
 * Master password change (rewraps the vault key; items are untouched)
 * Import from 1Password (`.1pux`): Settings → Import from 1Password
+* Browser extension connection through native messaging (opt-in: Settings →
+  Browser extension)
 
 ## How it protects your data
 
@@ -50,6 +53,7 @@ Read these before trusting it with anything:
 * [Security model](docs/security-model.md): how it's enforced
 * [Cryptography](docs/crypto.md): key hierarchy, formats, parameters
 * [Architecture](docs/architecture.md)
+* [Native messaging](docs/native-messaging.md): browser ↔ desktop protocol and its checks
 * [Security review](docs/security-review.md): findings from reviewing this implementation
 * [Development](docs/development.md): building, testing, auditing
 
@@ -65,14 +69,32 @@ cargo test                 # security core tests
 pnpm dev                   # run the desktop app
 ```
 
+Browser extension:
+
+```sh
+pnpm build:host                      # native messaging host (release)
+scripts/install-native-host.sh       # register it with installed browsers
+pnpm build:extension                 # apps/extension/dist/{chrome,firefox}
+```
+
+Then load `apps/extension/dist/chrome` as an unpacked extension (or the
+Firefox build as a temporary add-on). See
+[docs/native-messaging.md](docs/native-messaging.md) §2.
+
 Details, including macOS/Windows, are in [docs/development.md](docs/development.md).
 
 ## Repository layout
 
 ```text
-crates/havenkeys-core/     Rust security core (all crypto, vault, lock, TOTP, generator)
-apps/desktop/src-tauri/    Tauri shell: command allowlist, clipboard, auto-lock timer
-apps/desktop/src/          React + TypeScript UI (no cryptography)
+crates/havenkeys-core/          Rust security core (all crypto, vault, lock, TOTP, generator, origin binding)
+crates/havenkeys-protocol/      Bridge wire protocol: typed messages, framing, socket endpoint
+crates/havenkeys-bridge/        Desktop side of the browser bridge: authorization, rate limits, socket server
+crates/havenkeys-native-host/   Native messaging host launched by the browser (relay only, no vault access)
+apps/desktop/src-tauri/         Tauri shell: command allowlist, clipboard, auto-lock timer
+apps/desktop/src/               React + TypeScript UI (no cryptography)
+apps/extension/                 MV3 browser extension (background worker, popup)
+packages/protocol/              TypeScript mirror of the wire protocol with strict validators
+scripts/                        Native host registration (Linux/macOS, Windows)
 docs/                      Threat model, security model, crypto, architecture, review
 ```
 

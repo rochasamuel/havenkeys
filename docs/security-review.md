@@ -147,3 +147,101 @@ that is not a secure wipe.
   reverse acquisition.
 * The capability grants exactly the 18 app commands plus event listen and
   unlisten. The production CSP has no `unsafe-*` sources.
+
+---
+
+# Security Review: Native Messaging Phase (Phase 4)
+
+**Date:** 2026-09-19
+**Scope:** `crates/havenkeys-protocol`, `crates/havenkeys-bridge`,
+`crates/havenkeys-native-host`, the bridge wiring in `apps/desktop/src-tauri`,
+`packages/protocol`, `apps/extension`, `scripts/install-native-host.*`
+**Method:** self-review, then an independent review by a second reviewer who
+was given the code but not the author's conclusions. Findings were checked
+against the code. Fixes are covered by tests where the code runs on this
+platform. Windows paths were checked by reading and cross-compiling only.
+
+> This is an internal review, not an independent security audit.
+
+## Summary
+
+No critical or high-severity issues were found. No path was found that
+returns a secret for an item on a page it is not saved for, while the vault
+is locked, or while integration is off. One medium issue (Windows pipe DACL)
+and three low issues were fixed.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| P1 | Medium | Bridge (Windows) | Default named-pipe DACL let other users open read handles, take all connection slots and watch lock/unlock events | **Fixed** (owner-only DACL); unverified on Windows |
+| P2 | Low | Protocol (Windows) | Pipe name from a filtered `USERNAME` could be identical for different users (non-ASCII names) | **Fixed** (hash of profile path) |
+| P3 | Low | Bridge | Idle or half-sent connections held slots forever (same-user DoS) | **Fixed** on Unix (10 min idle timeout); open on Windows |
+| P4 | Low | Protocol | `Debug` of fill results printed usernames | **Fixed** |
+| P5 | Info | Protocol / host | Secret copies from growing serialization buffers and from untagged deserialization | **Fixed** (pre-sized zeroizing buffer, keyed parsing); residual copies documented |
+| P6 | Info | Core settings | Browser integration defaulted to on, including for upgraded vaults | **Changed** to opt-in |
+| P7 | Info | Desktop | `unlocked` event could arrive after a concurrent `locked` | **Fixed** (sent under the vault lock) |
+| P8 | Info | Scripts | Control characters in the host path produced an invalid manifest | **Fixed** |
+| P9 | Medium | Architecture | Any same-user process can use the bridge like the extension | Accepted, documented (`native-messaging.md` §8) |
+| P10 | Low | Protocol (Windows) | Another user can squat the pipe name before HavenKeys starts | Open, documented |
+| P11 | Info | Extension | Unpacked-extension ID is pinned by a public key, which anyone can reuse | Accepted, documented |
+
+## Details
+
+### P1. Windows pipe readable by other users (Medium, fixed)
+**Attack scenario:** another user on the same machine opens eight read-only
+handles to the victim's pipe. The default named-pipe DACL grants Everyone
+read access, and the server accepted any connection, because the Windows
+peer check was a stub. Each connection held a slot forever, which disabled
+the victim's browser integration, and each one received the victim's
+lock/unlock events.
+**Mitigation:** the listener is created with the protected DACL
+`D:P(A;;GA;;;OW)` (owner only). **Remaining:** not tested on Windows. If
+HavenKeys runs elevated, the owner is the Administrators group, and a
+non-elevated host is refused. That fails closed.
+
+### P3. Connection slots (Low, fixed on Unix)
+Each connection now has a 10-minute receive timeout. That covers idle
+connections and frames stalled mid-transfer. The extension closes its port
+after 60 s idle, so real hosts never hit the timeout. Named pipes have no
+receive timeout in `interprocess`, so on Windows a same-user process can
+still hold every slot. That is denial of service by a process that is out of
+scope anyway.
+
+### P6. Opt-in integration (Info, changed)
+While browser integration is on, any process running as the user can make
+the extension's requests (P9). It is now off by default for new vaults and
+for vaults created before the setting existed. The user turns it on in
+Settings → Browser extension, which explains the trade-off.
+
+### P9. Same-user callers (Medium, accepted)
+A process running as the user can connect to the socket, or start the native
+host itself with the right argument. It can then enumerate matches for URLs
+it guesses, and fetch passwords for them at up to about 30 per minute after
+a burst of 10. This is inside the "malware as the same user" class that
+`threat-model.md` §4 excludes, but it is cheaper than reading process memory.
+Candidate mitigations for later: verify the peer executable's code signature,
+require a one-time pairing approval in the desktop UI, or confirm each fill
+on the desktop.
+
+## Verified properties (this phase)
+
+* Every page request re-checks, in Rust: exact protocol shape, size limits,
+  rate limits, unlocked vault, integration switch, and the item's own URL
+  rules against the page (`crates/havenkeys-bridge/tests/bridge.rs`).
+* Unknown item IDs, secure notes, other sites' logins and logins without
+  TOTP all return the same `denied`.
+* `find_matches` carries no password, TOTP secret or notes. `fill_item`
+  carries only the username and password. `get_totp` carries only the code.
+* Frames are rejected by their length header before any allocation, at both
+  hops. The host stays in sync after skipping an oversized frame.
+* 50 000 fuzzed and mutated inputs never panic the request parser.
+* The native host drops malformed desktop messages and replaces error text
+  with fixed strings (tested against a hostile fake desktop).
+* A stalled peer cannot block locking: events go out through `try_send` to
+  bounded per-connection queues, and `on_lock` runs with no bridge lock held.
+* The extension accepts messages only from its own popup page, has an empty
+  `externally_connectable`, stores nothing, builds its DOM without
+  `innerHTML`, and runs under a CSP with no `unsafe-*` sources. Permissions
+  are `nativeMessaging` and `activeTab` only.
+* Tested end to end with the real desktop binary and the real native host on
+  Linux. Not yet tested inside a real browser (none is installed in this
+  environment).

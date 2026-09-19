@@ -9,9 +9,9 @@
   * **macOS:** Xcode command-line tools
   * **Windows:** Microsoft C++ Build Tools and WebView2 (preinstalled on Windows 11)
 
-The security core (`crates/havenkeys-core`) needs only Rust. The Cargo
-workspace's `default-members` is the core, so `cargo test` works without the
-WebKit libraries.
+The security core, protocol, bridge and native host crates need only Rust.
+They are the Cargo workspace's `default-members`, so `cargo test` works
+without the WebKit libraries.
 
 ## Commands
 
@@ -20,11 +20,14 @@ WebKit libraries.
 | Install JS deps | `pnpm install` |
 | Run desktop app (dev) | `pnpm dev` |
 | Build installers | `pnpm build` |
-| Core tests | `cargo test` |
-| Core lint | `cargo clippy -p havenkeys-core --all-targets -- -D warnings` |
+| Rust tests (core, protocol, bridge, native host) | `cargo test` |
+| Rust lint (same crates) | `pnpm lint:rust` |
+| Native host (release) | `pnpm build:host` |
+| Register native host | `scripts/install-native-host.sh` (Windows: `scripts\install-native-host.ps1`) |
+| Extension build | `pnpm build:extension` → `apps/extension/dist/{chrome,firefox}` |
 | Desktop crate lint | `cargo clippy -p havenkeys-desktop -- -D warnings` (needs WebKit libs) |
-| UI type check | `pnpm typecheck` |
-| UI tests | `pnpm -r test` |
+| TS type check (desktop UI, extension, protocol) | `pnpm typecheck` |
+| TS tests | `pnpm -r test` |
 | KDF benchmark | `cargo run --release -p havenkeys-core --example kdf_bench` |
 | Rust advisories | `cargo audit` |
 | Rust policy (advisories, licences, sources) | `cargo deny check` |
@@ -105,10 +108,34 @@ Then register it in `generate_handler!` in `lib.rs` and add a typed wrapper in
 `apps/desktop/src/lib/api.ts`. Update the command table in
 `docs/security-model.md` §7.
 
+## Adding a bridge request
+
+The browser can reach the vault only through the bridge, so every new request
+widens the attack surface. Add one only with a threat-model entry, and then:
+
+1. `crates/havenkeys-protocol/src/message.rs`: request and result variants,
+   and their limits.
+2. `packages/protocol/src/index.ts`: the TypeScript types and validator, kept
+   exactly in sync.
+3. `crates/havenkeys-bridge/src/dispatch.rs`: map it to an origin-bound core
+   function. Choose its rate class in `server.rs`.
+4. Tests in `crates/havenkeys-bridge/tests/bridge.rs`: wrong origin, locked,
+   integration off, malformed input.
+5. The request table in `docs/native-messaging.md` §3.
+
+pnpm 10 runs no dependency install scripts unless they are approved. The
+warning about esbuild's install script is expected: esbuild works without it,
+because its platform binary comes from an optional dependency. Leave it
+unapproved.
+
 ## Rules for contributors
 
 * No cryptography outside `crates/havenkeys-core/src/crypto/`.
-* No `println!`/logging in the core (a test enforces this).
+* No `println!`/logging in the core, the bridge or the native host (a test
+  enforces this for the core; clippy denies print macros in all four crates).
+  The native host's stdout carries protocol frames only.
+* No `innerHTML`, `console.*`, `eval` or `chrome.storage` in the extension.
+  Build the DOM with `createElement`/`textContent`.
 * No `console.*`, `innerHTML`, `dangerouslySetInnerHTML`, `eval`, or browser
   storage in the UI.
 * Types holding secrets implement a redacting `Debug`.

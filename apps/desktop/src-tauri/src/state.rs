@@ -1,20 +1,26 @@
 //! Shared application state.
 //!
-//! Lock ordering (to avoid deadlocks): `vault` before `lock_manager`.
+//! Lock ordering (to avoid deadlocks): `vault` before `lock_manager`, and
+//! `vault` before the bridge's connection list (`notify` may run under the
+//! vault lock; the bridge never takes the vault while holding its own locks).
 
 use crate::clipboard::ClipboardGuard;
+use havenkeys_bridge::Bridge;
 use havenkeys_core::lock::LockManager;
 use havenkeys_core::vault::VaultService;
+use havenkeys_protocol::Event;
 use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 pub const LOCKED_EVENT: &str = "vault://locked";
 
 pub struct AppState {
-    vault: Mutex<VaultService>,
+    /// Shared with the browser bridge, which answers extension requests.
+    vault: Arc<Mutex<VaultService>>,
+    bridge: Bridge,
     lock_manager: Mutex<LockManager>,
     pub clipboard: ClipboardGuard,
     /// The export file the user picked for the last import, so the UI can
@@ -70,9 +76,10 @@ struct LockedPayload {
 }
 
 impl AppState {
-    pub fn new(vault: VaultService) -> Self {
+    pub fn new(vault: Arc<Mutex<VaultService>>, bridge: Bridge) -> Self {
         Self {
-            vault: Mutex::new(vault),
+            vault,
+            bridge,
             lock_manager: Mutex::new(LockManager::new(None)),
             clipboard: ClipboardGuard::default(),
             last_import: Mutex::new(None),
@@ -110,6 +117,11 @@ impl AppState {
         }
     }
 
+    /// Tell connected browser extensions the vault is open.
+    pub fn notify_unlocked(&self) {
+        self.bridge.notify(Event::Unlocked {});
+    }
+
     /// Start the auto-lock clock after a successful unlock/create.
     /// Caller must already hold (or have released) the vault lock; this only
     /// takes the lock-manager lock.
@@ -130,6 +142,7 @@ impl AppState {
         };
         self.clipboard.clear_if_owned(None);
         if was_open {
+            self.bridge.notify(Event::Locked {});
             let _ = app.emit(LOCKED_EVENT, LockedPayload { reason });
         }
     }

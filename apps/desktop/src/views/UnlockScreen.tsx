@@ -15,6 +15,7 @@ const reasonText: Record<string, string> = {
   idle: "Locked after a period of inactivity.",
   suspend: "Locked because the computer went to sleep.",
   user: "Locked.",
+  extension: "Locked from the browser extension.",
 };
 
 export function UnlockScreen({ mode, lockReason, onUnlocked }: Props) {
