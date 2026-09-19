@@ -164,7 +164,7 @@ export function ItemDetail({ item, onEdit, onDelete }: Props) {
                     <Icon name="globe" size={14} />
                     <span className="selectable">{u.url}</span>
                     <span className="muted url-match">
-                      {u.matchType === "domain" ? "matches subdomains" : u.matchType === "origin" ? "exact site" : "exact page"}
+                      {u.matchType === "domain" ? "whole site" : u.matchType === "origin" ? "exact site" : "exact page"}
                     </span>
                   </li>
                 ))}

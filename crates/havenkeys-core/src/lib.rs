@@ -12,6 +12,7 @@ pub mod generator;
 pub mod import;
 pub mod lock;
 pub mod model;
+pub mod origin;
 pub mod secret;
 pub mod store;
 pub mod totp;
