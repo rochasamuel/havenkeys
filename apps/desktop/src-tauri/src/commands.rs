@@ -51,6 +51,9 @@ pub async fn create_vault(app: AppHandle, password: SecretString) -> CmdResult<V
     // Arm before releasing the vault lock so the auto-lock thread can never
     // tick against the previous session's timestamps.
     state.arm_auto_lock(minutes);
+    // Still under the vault lock, so a concurrent lock's `locked` event can
+    // never be overtaken by this one. `notify` never blocks.
+    state.notify_unlocked();
     drop(v);
     Ok(status)
 }
@@ -80,6 +83,9 @@ pub async fn unlock_vault(app: AppHandle, password: SecretString) -> CmdResult<V
     // Arm before releasing the vault lock so the auto-lock thread can never
     // tick against the previous session's timestamps.
     state.arm_auto_lock(minutes);
+    // Still under the vault lock, so a concurrent lock's `locked` event can
+    // never be overtaken by this one. `notify` never blocks.
+    state.notify_unlocked();
     drop(v);
     Ok(status)
 }

@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "HavenKeys",
+  "version": "0.1.0",
+  "description": "Use logins from the HavenKeys desktop password manager.",
+  "permissions": ["nativeMessaging", "activeTab"],
+  "action": {
+    "default_title": "HavenKeys",
+    "default_popup": "popup.html",
+    "default_icon": { "32": "icons/32.png", "64": "icons/64.png", "128": "icons/128.png" }
+  },
+  "icons": { "32": "icons/32.png", "64": "icons/64.png", "128": "icons/128.png" },
+  "content_security_policy": {
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  }
+}

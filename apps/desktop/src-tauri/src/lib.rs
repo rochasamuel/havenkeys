@@ -9,10 +9,13 @@ mod import;
 mod state;
 mod tray;
 
+use havenkeys_bridge::Bridge;
 use havenkeys_core::store::Store;
 use havenkeys_core::vault::VaultService;
+use havenkeys_protocol::endpoint::Endpoint;
 use state::AppState;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::plugin::TauriPlugin;
 use tauri::{Manager, RunEvent, Runtime, Url, WindowEvent};
@@ -65,7 +68,20 @@ pub fn run() {
         .setup(|app| {
             let path = vault_path(app)?;
             let store = Store::open(&path).map_err(|e| e.to_string())?;
-            app.manage(AppState::new(VaultService::new(store)));
+            let vault = Arc::new(Mutex::new(VaultService::new(store)));
+
+            // Browser integration. The bridge locks through AppState so an
+            // extension-initiated lock behaves exactly like any other.
+            let lock_handle = app.handle().clone();
+            let bridge = Bridge::new(vault.clone(), move || {
+                if let Some(state) = lock_handle.try_state::<AppState>() {
+                    state.lock(&lock_handle, "extension");
+                }
+            });
+            app.manage(AppState::new(vault, bridge.clone()));
+            // Failure (another instance running, unsafe socket directory)
+            // disables browser integration but not the app.
+            let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));
 
             tray::install(app)?;
 

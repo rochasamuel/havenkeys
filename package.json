@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "pnpm --filter @havenkeys/desktop tauri dev",
     "build": "pnpm --filter @havenkeys/desktop tauri build",
+    "build:extension": "pnpm --filter @havenkeys/extension build",
+    "build:host": "cargo build --release -p havenkeys-native-host",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test && cargo test",
-    "lint:rust": "cargo clippy -p havenkeys-core --all-targets -- -D warnings",
+    "lint:rust": "cargo clippy -p havenkeys-core -p havenkeys-protocol -p havenkeys-bridge -p havenkeys-native-host --all-targets -- -D warnings",
     "audit": "pnpm audit && cargo audit && cargo deny check"
   }
 }

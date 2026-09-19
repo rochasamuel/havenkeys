@@ -2,8 +2,9 @@
 
 > Status: the **domain matching and origin binding** described here are
 > implemented and tested in the Rust core (`crates/havenkeys-core/src/origin.rs`,
-> `VaultService::{find_matches, fill_for_page, totp_for_page}`). The browser
-> extension (field detection, suggestion UI, filling) is not built yet.
+> `VaultService::{find_matches, fill_for_page, totp_for_page}`) and exposed to
+> the extension through the native-messaging bridge (`native-messaging.md`).
+> In-page autofill (field detection, suggestion UI, filling) is not built yet.
 
 ## Domain matching rules
 
@@ -78,10 +79,11 @@ served to pages. Regression tests A1 and A2 in
 from evil.com, look-alike hosts and downgrades, and requesting another site's
 item ID.
 
-The native-messaging layer (Phase 4) will pass the page URL as reported by the
-browser (the tab or frame URL from the extension background worker, never
-from page script) to these functions, and add rate limiting and explicit user
-confirmation as described in CLAUDE.md §25.
+The native-messaging bridge passes these functions the page URL as reported
+by the browser: the tab or frame URL from the extension background worker,
+never anything from page script. The extension removes credentials, query and
+fragment first. The bridge adds rate limiting and the integration switch. See
+`native-messaging.md` §5.
 
 ## Not yet implemented
 
