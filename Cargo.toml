@@ -1,9 +1,22 @@
 [workspace]
 resolver = "2"
-members = ["crates/havenkeys-core", "apps/desktop/src-tauri"]
+members = [
+  "crates/havenkeys-core",
+  "crates/havenkeys-protocol",
+  "crates/havenkeys-bridge",
+  "crates/havenkeys-native-host",
+  "crates/havenkeys-oslock",
+  "apps/desktop/src-tauri",
+]
 # The Tauri shell needs WebKitGTK system libraries; keep plain `cargo test`
 # working on machines without them.
-default-members = ["crates/havenkeys-core"]
+default-members = [
+  "crates/havenkeys-core",
+  "crates/havenkeys-protocol",
+  "crates/havenkeys-bridge",
+  "crates/havenkeys-native-host",
+  "crates/havenkeys-oslock",
+]
 
 [workspace.package]
 edition = "2021"

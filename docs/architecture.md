@@ -5,6 +5,9 @@
 ```text
 havenkeys/
 ├── crates/
+│   ├── havenkeys-protocol/    bridge wire types, framing, socket endpoint (no core dependency)
+│   ├── havenkeys-bridge/      desktop side of the browser bridge (authorization, rate limits, server)
+│   ├── havenkeys-native-host/ binary launched by the browser; relays stdio ↔ socket
 │   └── havenkeys-core/        Rust security core (no UI, no Tauri dependency)
 │       └── src/
 │           ├── crypto/        kdf.rs, keys.rs, blob.rs — composition of audited primitives
@@ -15,22 +18,25 @@ havenkeys/
 │           ├── lock.rs        LockManager: auto-lock policy (pure, clock-injected)
 │           ├── generator.rs   CSPRNG password generator
 │           ├── totp.rs        RFC 6238 + otpauth:// parsing
+│           ├── origin.rs      URL parsing and domain matching (PSL-based)
 │           ├── import/        1Password .1pux importer (hostile-input parsing)
 │           └── error.rs       secret-free error type
 ├── apps/
 │   ├── desktop/
 │   │   ├── src/               React + TypeScript UI (no crypto)
 │   │   └── src-tauri/         Thin Tauri shell: commands, clipboard, auto-lock ticker
-│   └── extension/             (Phase 4–5) MV3 extension
+│   └── extension/             MV3 extension: background worker, popup, content script,
+│                              autofill engine, in-page menu/save frames, options, messaging
 ├── packages/
-│   └── protocol/              (Phase 4) shared native-messaging message types
+│   └── protocol/              TypeScript mirror of the wire protocol + validators
+├── scripts/                   native host registration
 └── docs/
 ```
 
 The core crate is deliberately independent of Tauri so that:
 
 * it can be audited and tested in isolation (`cargo test -p havenkeys-core`),
-* the future native-messaging host can link the same code,
+* the bridge can link the same code without Tauri,
 * UI changes cannot accidentally change security behaviour.
 
 ## Data flow: unlock
@@ -110,10 +116,35 @@ Tauri shell ticks it every 5 seconds from a background thread and locks the
 vault when it returns a reason (idle timeout or suspend detected). Every
 command and a throttled UI activity ping reset the idle timer.
 
-## Future: native messaging (Phase 4)
+## Browser integration
 
-A separate `havenkeys-native-host` binary will be launched by the browser. It
-will not open the vault itself; it will relay length-prefixed, size-limited,
-schema-validated messages to the running desktop app over a local socket
-owned by the user, and the desktop core will perform all authorization and
-origin binding. See `native-messaging.md` (to be written in Phase 4).
+```text
+popup ──────────────┐
+menu / save frames ─┼─► background worker ─stdio─► havenkeys-native-host ─socket─► havenkeys-bridge ─► VaultService
+content scripts ────┘         │
+       ▲                      │ fills (one frame, matched origin only)
+       └──────────────────────┘
+```
+
+The browser launches `havenkeys-native-host`, which cannot open the vault.
+It validates each length-prefixed JSON frame against the typed protocol and
+relays it to the running desktop app over a user-private local socket. The
+bridge, running inside the desktop process, shares the `VaultService` mutex
+with the Tauri commands. It re-validates every request, applies rate limits
+and the integration switch, and calls the core's origin-bound functions
+(`find_matches`, `fill_for_page`, `totp_for_page`, `check_login`,
+`save_login`). Lock events are pushed
+back to connected hosts over per-connection bounded queues, so a stalled
+peer never delays locking. Details: `native-messaging.md`.
+
+In the browser, content scripts (opt-in, or injected into one tab on a popup
+fill) classify login fields when the user interacts with them. The
+background worker runs the suggestion and save-prompt sessions, and the menu
+and prompt are extension pages framed into the site. The autofill engine
+(`apps/extension/src/autofill/`) is pure DOM logic with no extension APIs,
+so it is tested in jsdom. Details: `autofill.md`.
+
+Lock ordering in the desktop process: `vault` → `lock_manager`; the bridge
+takes its own small mutexes (rate limiter, connection list) either before
+the vault or with nothing else held, and calls the lock hook with nothing
+held.

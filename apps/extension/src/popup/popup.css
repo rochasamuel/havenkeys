@@ -1,0 +1,198 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 320px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.name {
+  font-weight: 600;
+  color: var(--text-strong);
+  flex: 1;
+}
+
+.pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.pill.unlocked {
+  color: var(--ok);
+  border-color: currentColor;
+}
+
+.pill.locked {
+  color: var(--brass-hi);
+  border-color: currentColor;
+}
+
+main {
+  padding: 8px 0;
+  min-height: 72px;
+}
+
+.site {
+  padding: 2px 12px 6px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice {
+  padding: 12px;
+}
+
+.notice strong {
+  display: block;
+  color: var(--text-strong);
+  margin-bottom: 2px;
+}
+
+.notice p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.item + .item {
+  border-top: 1px solid var(--line);
+}
+
+.avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: var(--brass-soft);
+  color: var(--brass-hi);
+  font-weight: 600;
+}
+
+.who {
+  flex: 1;
+  min-width: 0;
+}
+
+.title,
+.user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--text-strong);
+}
+
+.user {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.code {
+  font: 600 15px/1 ui-monospace, "JetBrains Mono", monospace;
+  letter-spacing: 0.06em;
+  color: var(--brass-hi);
+}
+
+.foot {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.foot:has(.btn[hidden]) {
+  display: none;
+}
+
+.btn {
+  font: inherit;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--hover);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+.btn.small {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.foot .btn {
+  width: 100%;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.code {
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button.code:hover {
+  background: var(--hover);
+}
+
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.row-status:empty {
+  display: none;
+}

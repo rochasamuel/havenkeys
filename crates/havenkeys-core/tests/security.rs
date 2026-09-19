@@ -5,7 +5,7 @@ mod common;
 use common::*;
 use havenkeys_core::model::{SecretField, Settings};
 use havenkeys_core::store::Store;
-use havenkeys_core::vault::VaultState;
+use havenkeys_core::vault::{SaveAction, VaultState};
 use havenkeys_core::Error;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
@@ -348,11 +348,8 @@ fn github_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
     let mut input = login("GitHub", "octo", "gh-secret", "github.com");
     input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
     let id = v.create_item(input, NOW).unwrap().id;
-    v.create_item(
-        login("Bank", "alice", "bank-secret", "mybank.com"),
-        NOW,
-    )
-    .unwrap();
+    v.create_item(login("Bank", "alice", "bank-secret", "mybank.com"), NOW)
+        .unwrap();
     (v, id)
 }
 
@@ -369,16 +366,16 @@ fn a1_wrong_origin_is_denied() {
         "",
     ] {
         assert_eq!(
-            v.fill_for_page(&id, page).err(),
+            v.fill_for_page(&id, page, None).err(),
             Some(Error::Denied),
             "{page}"
         );
         assert_eq!(
-            v.totp_for_page(&id, page, 59).err(),
+            v.totp_for_page(&id, page, None, 59).err(),
             Some(Error::Denied),
             "{page}"
         );
-        assert!(v.find_matches(page).unwrap().is_empty(), "{page}");
+        assert!(v.find_matches(page, None).unwrap().is_empty(), "{page}");
     }
 }
 
@@ -386,22 +383,24 @@ fn a1_wrong_origin_is_denied() {
 #[test]
 fn a2_item_only_for_matching_origin() {
     let (v, gh) = github_vault();
-    let creds = v.fill_for_page(&gh, "https://github.com/session").unwrap();
+    let creds = v
+        .fill_for_page(&gh, "https://github.com/session", None)
+        .unwrap();
     assert_eq!(creds.username.as_deref(), Some("octo"));
     assert_eq!(creds.password.unwrap().expose(), "gh-secret");
     assert!(v
-        .totp_for_page(&gh, "https://github.com/sessions/two-factor", 59)
+        .totp_for_page(&gh, "https://github.com/sessions/two-factor", None, 59)
         .is_ok());
 
     // The bank item exists but must not be served on github.com.
-    let bank = v.find_matches("https://mybank.com/").unwrap()[0].id;
+    let bank = v.find_matches("https://mybank.com/", None).unwrap()[0].id;
     assert_eq!(
-        v.fill_for_page(&bank, "https://github.com/").err(),
+        v.fill_for_page(&bank, "https://github.com/", None).err(),
         Some(Error::Denied)
     );
     // Unknown IDs.
     assert_eq!(
-        v.fill_for_page(&Uuid::new_v4(), "https://github.com/")
+        v.fill_for_page(&Uuid::new_v4(), "https://github.com/", None)
             .err(),
         Some(Error::NotFound)
     );
@@ -415,7 +414,7 @@ fn find_matches_returns_no_secrets_and_ranks() {
         NOW,
     )
     .unwrap();
-    let matches = v.find_matches("https://gist.github.com/new").unwrap();
+    let matches = v.find_matches("https://gist.github.com/new", None).unwrap();
     let titles: Vec<&str> = matches.iter().map(|m| m.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -434,20 +433,247 @@ fn notes_and_locked_vault_are_never_served_to_pages() {
         .unwrap()
         .id;
     assert_eq!(
-        v.fill_for_page(&note, "https://github.com/").err(),
+        v.fill_for_page(&note, "https://github.com/", None).err(),
         Some(Error::Denied)
     );
     v.lock();
     assert_eq!(
-        v.find_matches("https://github.com/").err(),
+        v.find_matches("https://github.com/", None).err(),
         Some(Error::Locked)
     );
     assert_eq!(
-        v.fill_for_page(&gh, "https://github.com/").err(),
+        v.fill_for_page(&gh, "https://github.com/", None).err(),
         Some(Error::Locked)
     );
     assert_eq!(
-        v.totp_for_page(&gh, "https://github.com/", 59).err(),
+        v.totp_for_page(&gh, "https://github.com/", None, 59).err(),
+        Some(Error::Locked)
+    );
+}
+
+// ---------------------------------------------------------------- frames
+
+/// A1 (frames): a github.com login iframe embedded in evil.com gets nothing,
+/// even though the frame itself is github.com.
+#[test]
+fn a1_frame_on_foreign_top_page_is_denied() {
+    let (v, gh) = github_vault();
+    let frame = "https://github.com/login";
+    for top in [
+        "https://evil.com/",
+        "https://github.com.evil.com/",
+        "http://github.com/", // downgrade of the embedding page
+        "not a url",
+    ] {
+        assert!(
+            v.find_matches(frame, Some(top)).unwrap().is_empty(),
+            "{top}"
+        );
+        assert_eq!(
+            v.fill_for_page(&gh, frame, Some(top)).err(),
+            Some(Error::Denied),
+            "{top}"
+        );
+        assert_eq!(
+            v.totp_for_page(&gh, frame, Some(top), 59).err(),
+            Some(Error::Denied),
+            "{top}"
+        );
+    }
+    // Same-site embedding is fine for a whole-site rule.
+    assert_eq!(
+        v.find_matches("https://login.github.com/", Some("https://github.com/"))
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(v
+        .fill_for_page(
+            &gh,
+            "https://github.com/login",
+            Some("https://gist.github.com/")
+        )
+        .is_ok());
+    // An evil.com frame inside github.com is still evil.com.
+    assert!(v
+        .find_matches("https://evil.com/", Some("https://github.com/"))
+        .unwrap()
+        .is_empty());
+}
+
+// ---------------------------------------------------------------- save login
+
+#[test]
+fn check_login_classifies_submissions() {
+    let (v, gh) = github_vault();
+    let page = "https://github.com/session";
+    let check =
+        |user: Option<&str>, pw: &str| v.check_login(page, None, user, &secret(pw)).unwrap();
+    assert_eq!(check(Some("octo"), "gh-secret"), SaveAction::Unchanged);
+    assert_eq!(check(Some("  OCTO "), "gh-secret"), SaveAction::Unchanged);
+    assert_eq!(check(Some("octo"), "new-secret"), SaveAction::Update(gh));
+    assert_eq!(check(Some("someone-else"), "gh-secret"), SaveAction::Add);
+    // Password-only step: unchanged if it is any saved password for the page.
+    assert_eq!(check(None, "gh-secret"), SaveAction::Unchanged);
+    assert_eq!(check(None, "other"), SaveAction::Add);
+    // Another site's logins are never considered.
+    assert_eq!(
+        v.check_login(
+            "https://evil.com/",
+            None,
+            Some("octo"),
+            &secret("gh-secret")
+        )
+        .unwrap(),
+        SaveAction::Add
+    );
+    assert!(v
+        .check_login(page, None, Some("octo"), &secret(""))
+        .is_err());
+}
+
+#[test]
+fn save_login_adds_for_the_page_site_only() {
+    let (mut v, _) = github_vault();
+    let id = v
+        .save_login(
+            "https://www.example.com/signin?next=/x",
+            None,
+            Some("me@example.com"),
+            secret("s3cret-pw"),
+            None,
+            NOW,
+        )
+        .unwrap();
+    let item = v.get_item(&id).unwrap();
+    assert_eq!(item.title, "example.com");
+    assert_eq!(item.username.as_deref(), Some("me@example.com"));
+    assert_eq!(item.urls[0].url, "https://www.example.com/");
+    // Offered on the site, not elsewhere.
+    assert!(v
+        .find_matches("https://login.example.com/", None)
+        .unwrap()
+        .iter()
+        .any(|m| m.id == id));
+    assert!(v
+        .find_matches("https://example.com.evil.com/", None)
+        .unwrap()
+        .is_empty());
+    // Pages that cannot hold a login are refused.
+    assert_eq!(
+        v.save_login("file:///etc/passwd", None, None, secret("x"), None, NOW)
+            .err(),
+        Some(Error::Denied)
+    );
+}
+
+/// A2 (writes): an update is only accepted for a login saved for the page.
+#[test]
+fn save_login_update_is_origin_bound_and_keeps_history() {
+    let (mut v, gh) = github_vault();
+    let bank = v.find_matches("https://mybank.com/", None).unwrap()[0].id;
+    assert_eq!(
+        v.save_login(
+            "https://github.com/",
+            None,
+            None,
+            secret("x"),
+            Some(&bank),
+            NOW
+        )
+        .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.save_login("https://evil.com/", None, None, secret("x"), Some(&gh), NOW)
+            .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.reveal(&bank, SecretField::Password).unwrap().expose(),
+        "bank-secret"
+    );
+
+    v.save_login(
+        "https://github.com/",
+        None,
+        Some("ignored"),
+        secret("new-gh"),
+        Some(&gh),
+        NOW + 1,
+    )
+    .unwrap();
+    let item = v.get_item(&gh).unwrap();
+    assert_eq!(
+        item.username.as_deref(),
+        Some("octo"),
+        "update changes the password only"
+    );
+    assert!(item.has_totp);
+    assert_eq!(
+        v.reveal(&gh, SecretField::Password).unwrap().expose(),
+        "new-gh"
+    );
+    assert_eq!(v.password_history(&gh).unwrap(), vec![NOW + 1]);
+    assert_eq!(
+        v.reveal_previous_password(&gh, 0).unwrap().expose(),
+        "gh-secret"
+    );
+    assert_eq!(
+        v.reveal_previous_password(&gh, 1).err(),
+        Some(Error::NotFound)
+    );
+}
+
+#[test]
+fn password_history_is_bounded_and_skips_unchanged() {
+    let (mut v, gh) = github_vault();
+    for i in 0..8 {
+        v.save_login(
+            "https://github.com/",
+            None,
+            None,
+            secret(&format!("pw-{i}")),
+            Some(&gh),
+            NOW + i,
+        )
+        .unwrap();
+    }
+    // Saving the same password again adds nothing.
+    v.save_login(
+        "https://github.com/",
+        None,
+        None,
+        secret("pw-7"),
+        Some(&gh),
+        NOW + 100,
+    )
+    .unwrap();
+    let history = v.password_history(&gh).unwrap();
+    assert_eq!(history.len(), havenkeys_core::model::MAX_PASSWORD_HISTORY);
+    assert_eq!(history[0], NOW + 7);
+    assert_eq!(v.reveal_previous_password(&gh, 0).unwrap().expose(), "pw-6");
+}
+
+#[test]
+fn save_login_refused_while_locked() {
+    let (mut v, gh) = github_vault();
+    v.lock();
+    assert_eq!(
+        v.save_login(
+            "https://github.com/",
+            None,
+            None,
+            secret("x"),
+            Some(&gh),
+            NOW
+        )
+        .err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        v.check_login("https://github.com/", None, None, &secret("x"))
+            .err(),
         Some(Error::Locked)
     );
 }

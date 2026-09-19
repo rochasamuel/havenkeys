@@ -51,6 +51,9 @@ pub async fn create_vault(app: AppHandle, password: SecretString) -> CmdResult<V
     // Arm before releasing the vault lock so the auto-lock thread can never
     // tick against the previous session's timestamps.
     state.arm_auto_lock(minutes);
+    // Still under the vault lock, so a concurrent lock's `locked` event can
+    // never be overtaken by this one. `notify` never blocks.
+    state.notify_unlocked();
     drop(v);
     Ok(status)
 }
@@ -80,6 +83,9 @@ pub async fn unlock_vault(app: AppHandle, password: SecretString) -> CmdResult<V
     // Arm before releasing the vault lock so the auto-lock thread can never
     // tick against the previous session's timestamps.
     state.arm_auto_lock(minutes);
+    // Still under the vault lock, so a concurrent lock's `locked` event can
+    // never be overtaken by this one. `notify` never blocks.
+    state.notify_unlocked();
     drop(v);
     Ok(status)
 }
@@ -149,6 +155,23 @@ pub fn reveal_secret(
 ) -> CmdResult<SecretString> {
     state.touch();
     Ok(state.vault()?.reveal(&id, field)?)
+}
+
+/// When each previous password of a login was replaced (Unix ms, newest first).
+#[tauri::command]
+pub fn password_history(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<i64>> {
+    state.touch();
+    Ok(state.vault()?.password_history(&id)?)
+}
+
+#[tauri::command]
+pub fn reveal_previous_password(
+    state: State<'_, AppState>,
+    id: Uuid,
+    index: usize,
+) -> CmdResult<SecretString> {
+    state.touch();
+    Ok(state.vault()?.reveal_previous_password(&id, index)?)
 }
 
 #[tauri::command]

@@ -11,6 +11,8 @@ const COMMANDS: &[&str] = &[
     "list_items",
     "get_item",
     "reveal_secret",
+    "password_history",
+    "reveal_previous_password",
     "get_totp_code",
     "copy_secret",
     "create_item",

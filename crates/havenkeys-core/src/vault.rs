@@ -11,8 +11,8 @@ use crate::error::{Error, Result};
 use crate::import::{ImportReport, ImportedItem};
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
-    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, SecretField, SecretUpdate,
-    Settings,
+    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
+    SecretField, SecretUpdate, Settings, UrlRule, MAX_PASSWORD_HISTORY,
 };
 use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::secret::SecretString;
@@ -93,6 +93,52 @@ impl std::fmt::Debug for Suggestion {
             .field("id", &self.id)
             .field("strength", &self.strength)
             .finish_non_exhaustive()
+    }
+}
+
+/// Result of [`VaultService::check_login`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SaveAction {
+    Add,
+    Update(Uuid),
+    Unchanged,
+}
+
+fn normalize_username(u: Option<&str>) -> Option<String> {
+    u.map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(str::to_lowercase)
+}
+
+/// The page a browser request is for: the frame holding the fields and, for
+/// an iframe, the tab's top-level page.
+struct PageContext {
+    frame: PageUrl,
+    top: Option<PageUrl>,
+}
+
+impl PageContext {
+    fn parse(page_url: &str, top_url: Option<&str>) -> Option<Self> {
+        let frame = PageUrl::parse(page_url)?;
+        // An unparseable top URL denies everything rather than being ignored.
+        let top = match top_url {
+            Some(t) => Some(PageUrl::parse(t)?),
+            None => None,
+        };
+        Some(Self { frame, top })
+    }
+
+    /// How well `item` matches the frame, if it also matches the top page.
+    fn matches(&self, item: &ItemOverview) -> Option<MatchStrength> {
+        let strength = match_item(item, &self.frame)?;
+        if let Some(top) = &self.top {
+            match_item(item, top)?;
+        }
+        Some(strength)
+    }
+
+    fn site_title_and_origin(&self) -> Option<(String, String)> {
+        self.frame.title_and_origin()
     }
 }
 
@@ -563,11 +609,16 @@ impl VaultService {
     // URL is re-checked against the item's own website rules on every call; the
     // caller's claims about which item "belongs" to a page are never trusted.
 
-    /// Logins whose website rules match `page_url`, best match first.
+    /// Logins whose website rules match the page, best match first.
     /// Returns no secrets: only ID, title and username.
-    pub fn find_matches(&self, page_url: &str) -> Result<Vec<Suggestion>> {
+    ///
+    /// `top_url` is the tab's top-level page when the fields are in an
+    /// iframe (`None` for the top frame). A login is offered in a frame only
+    /// if its rules match the frame *and* the page embedding it, so a
+    /// `github.com` frame embedded in `evil.com` gets nothing.
+    pub fn find_matches(&self, page_url: &str, top_url: Option<&str>) -> Result<Vec<Suggestion>> {
         let session = self.session()?;
-        let Some(page) = PageUrl::parse(page_url) else {
+        let Some(page) = PageContext::parse(page_url, top_url) else {
             return Ok(Vec::new());
         };
         let mut out: Vec<Suggestion> = session
@@ -575,7 +626,7 @@ impl VaultService {
             .values()
             .filter(|o| o.item_type == ItemType::Login)
             .filter_map(|o| {
-                match_item(o, &page).map(|strength| Suggestion {
+                page.matches(o).map(|strength| Suggestion {
                     id: o.id,
                     title: o.title.clone(),
                     username: o.username.clone(),
@@ -588,21 +639,35 @@ impl VaultService {
         Ok(out)
     }
 
-    /// The item, if and only if it is a login whose rules match the page.
-    fn authorize_for_page(&self, id: &Uuid, page_url: &str) -> Result<&ItemOverview> {
+    /// The item, if and only if it is a login whose rules match the page
+    /// (and the embedding page, for frames).
+    fn authorize_for_page(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<&ItemOverview> {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
-        let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
-        if overview.item_type != ItemType::Login || match_item(overview, &page).is_none() {
+        let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+        if overview.item_type != ItemType::Login || page.matches(overview).is_none() {
             return Err(Error::Denied);
         }
         Ok(overview)
     }
 
-    /// Username and password for filling `page_url`. Denied unless the item's
-    /// own website rules match the page.
-    pub fn fill_for_page(&self, id: &Uuid, page_url: &str) -> Result<FillCredentials> {
-        let username = self.authorize_for_page(id, page_url)?.username.clone();
+    /// Username and password for filling the page. Denied unless the item's
+    /// own website rules match it.
+    pub fn fill_for_page(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<FillCredentials> {
+        let username = self
+            .authorize_for_page(id, page_url, top_url)?
+            .username
+            .clone();
         let password = match self.load_details(id)? {
             ItemDetails::Login { password, .. } => password,
             ItemDetails::SecureNote { .. } => return Err(Error::Denied),
@@ -610,11 +675,133 @@ impl VaultService {
         Ok(FillCredentials { username, password })
     }
 
-    /// Current TOTP code for filling `page_url`. Same origin binding as
+    /// Current TOTP code for filling the page. Same origin binding as
     /// [`fill_for_page`](Self::fill_for_page); the TOTP secret never leaves.
-    pub fn totp_for_page(&self, id: &Uuid, page_url: &str, unix_seconds: u64) -> Result<TotpCode> {
-        self.authorize_for_page(id, page_url)?;
+    pub fn totp_for_page(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+        unix_seconds: u64,
+    ) -> Result<TotpCode> {
+        self.authorize_for_page(id, page_url, top_url)?;
         self.totp_code(id, unix_seconds)
+    }
+
+    /// What saving a login the user just submitted on the page would do.
+    ///
+    /// * `Unchanged`: a login for this page already has this username and
+    ///   password. Nothing to offer.
+    /// * `Update(id)`: a login for this page has this username with a
+    ///   different password.
+    /// * `Add`: no login for this page has this username.
+    ///
+    /// Usernames compare case-insensitively after trimming. Passwords are
+    /// compared inside the core and never returned.
+    pub fn check_login(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        username: Option<&str>,
+        password: &SecretString,
+    ) -> Result<SaveAction> {
+        if password.is_empty() {
+            return Err(Error::InvalidInput("password is required"));
+        }
+        let wanted = normalize_username(username);
+        let candidates = self.find_matches(page_url, top_url)?;
+        let mut update = None;
+        for c in &candidates {
+            let same_user = normalize_username(c.username.as_deref()) == wanted;
+            // A password-only form (no username captured) is "unchanged" if
+            // it matches any login for the page.
+            if !same_user && wanted.is_some() {
+                continue;
+            }
+            match self.load_details(&c.id) {
+                Ok(ItemDetails::Login {
+                    password: Some(saved),
+                    ..
+                }) if secrets_equal(&saved, password) => return Ok(SaveAction::Unchanged),
+                _ => {}
+            }
+            if same_user && update.is_none() {
+                update = Some(c.id);
+            }
+        }
+        Ok(update.map_or(SaveAction::Add, SaveAction::Update))
+    }
+
+    /// Save a login the user submitted on the page, after they confirmed it.
+    ///
+    /// With `update`, only the password of that login changes (the old one
+    /// moves to its password history), and only if the login matches the
+    /// page. Without, a new login is created for the page's site. Returns
+    /// the item ID.
+    pub fn save_login(
+        &mut self,
+        page_url: &str,
+        top_url: Option<&str>,
+        username: Option<&str>,
+        password: SecretString,
+        update: Option<&Uuid>,
+        now_ms: i64,
+    ) -> Result<Uuid> {
+        if password.is_empty() {
+            return Err(Error::InvalidInput("password is required"));
+        }
+        if let Some(id) = update {
+            let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+            let input = ItemInput {
+                item_type: ItemType::Login,
+                title: existing.title.clone(),
+                username: existing.username.clone(),
+                urls: existing.urls.clone(),
+                password: SecretUpdate::Set(password),
+                totp: SecretUpdate::Keep,
+                notes: SecretUpdate::Keep,
+                content: SecretUpdate::Keep,
+            };
+            return self.update_item(id, input, now_ms).map(|o| o.id);
+        }
+        // Saved for the frame the form was in, as a whole-site rule.
+        let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+        let (title, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title,
+            username: username.map(str::to_owned),
+            urls: vec![UrlRule {
+                url: origin,
+                match_type: MatchType::Domain,
+            }],
+            password: SecretUpdate::Set(password),
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+        };
+        self.create_item(input, now_ms).map(|o| o.id)
+    }
+
+    /// When each previous password of a login was replaced, newest first.
+    pub fn password_history(&self, id: &Uuid) -> Result<Vec<i64>> {
+        match self.load_details(id)? {
+            ItemDetails::Login {
+                password_history, ..
+            } => Ok(password_history.iter().map(|p| p.replaced_at).collect()),
+            ItemDetails::SecureNote { .. } => Ok(Vec::new()),
+        }
+    }
+
+    /// Decrypt one previous password (index into [`password_history`](Self::password_history)).
+    pub fn reveal_previous_password(&self, id: &Uuid, index: usize) -> Result<SecretString> {
+        match self.load_details(id)? {
+            ItemDetails::Login {
+                mut password_history,
+                ..
+            } if index < password_history.len() => Ok(password_history.swap_remove(index).password),
+            _ => Err(Error::NotFound),
+        }
     }
 
     // ------------------------------------------------------------ writing
@@ -784,6 +971,17 @@ fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [
     h.finalize().into()
 }
 
+/// Compare two secrets without an early exit on the first differing byte.
+/// Both sides are hashed first so the comparison always covers 32 bytes.
+fn secrets_equal(a: &SecretString, b: &SecretString) -> bool {
+    let da: [u8; 32] = Sha256::digest(a.expose().as_bytes()).into();
+    let db: [u8; 32] = Sha256::digest(b.expose().as_bytes()).into();
+    da.iter()
+        .zip(db.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+
 /// Validate input and merge with existing secrets.
 fn build_item(
     id: Uuid,
@@ -807,18 +1005,33 @@ fn build_item(
 
     let details = match item_type {
         ItemType::Login => {
-            let (cur_pw, cur_totp, cur_notes) = match current {
+            let (cur_pw, cur_totp, cur_notes, mut history) = match current {
                 Some(ItemDetails::Login {
                     password,
                     totp,
                     notes,
-                }) => (password, totp, notes),
+                    password_history,
+                }) => (password, totp, notes, password_history),
                 Some(_) => return Err(Error::Corrupted),
-                None => (None, None, None),
+                None => (None, None, None, Vec::new()),
             };
+            let previous = cur_pw.clone();
             let password = password.apply(cur_pw);
             if let Some(p) = &password {
                 check_password(p)?;
+            }
+            // A replaced or cleared password goes to the history.
+            if let Some(old) = previous {
+                if !password.as_ref().is_some_and(|p| secrets_equal(p, &old)) {
+                    history.insert(
+                        0,
+                        PreviousPassword {
+                            password: old,
+                            replaced_at: now_ms,
+                        },
+                    );
+                    history.truncate(MAX_PASSWORD_HISTORY);
+                }
             }
             let notes = notes.apply(cur_notes);
             if let Some(n) = &notes {
@@ -834,6 +1047,7 @@ fn build_item(
                 password,
                 totp,
                 notes,
+                password_history: history,
             }
         }
         ItemType::SecureNote => {
@@ -853,6 +1067,7 @@ fn build_item(
             password,
             totp,
             notes,
+            ..
         } => (password.is_some(), totp.is_some(), notes.is_some()),
         ItemDetails::SecureNote { .. } => (false, false, false),
     };
