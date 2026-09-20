@@ -262,3 +262,54 @@ impl TestServer {
         self.delete(path).bearer_auth(&sess.token)
     }
 }
+
+/// One item change as the write route takes it.
+pub fn change(item_id: Uuid, base: Option<i64>, overview: &[u8], details: &[u8]) -> Value {
+    json!({
+        "itemId": item_id,
+        "baseRevision": base,
+        "overview": data_encoding::BASE64.encode(overview),
+        "details": data_encoding::BASE64.encode(details),
+    })
+}
+
+pub fn deletion(item_id: Uuid, base: Option<i64>) -> Value {
+    json!({ "itemId": item_id, "baseRevision": base, "deleted": true })
+}
+
+/// Send a batch and return (status, body).
+pub async fn write(server: &TestServer, sess: &Sess, changes: Vec<Value>) -> (u16, Value) {
+    let res = server
+        .post_as("/v1/items", sess)
+        .json(&json!({ "changes": changes }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    let text = res.text().await.unwrap();
+    let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
+    (status, body)
+}
+
+/// Create one item and return its id and the revision the server gave it.
+pub async fn create_item(
+    server: &TestServer,
+    sess: &Sess,
+    overview: &[u8],
+    details: &[u8],
+) -> (Uuid, i64) {
+    let id = Uuid::new_v4();
+    let (status, body) = write(server, sess, vec![change(id, None, overview, details)]).await;
+    assert_eq!(status, 200, "write failed: {body}");
+    (id, body["applied"][0]["revision"].as_i64().unwrap())
+}
+
+pub async fn pull(server: &TestServer, sess: &Sess, since: i64) -> Value {
+    let res = server
+        .get_as(&format!("/v1/sync?since={since}"), sess)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    res.json().await.unwrap()
+}
