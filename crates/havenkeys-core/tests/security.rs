@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use havenkeys_core::model::{SecretField, Settings};
+use havenkeys_core::model::{ItemInput, ItemType, SecretField, SecretUpdate, Settings};
 use havenkeys_core::vault::{SaveAction, VaultState};
 use havenkeys_core::Error;
 use rusqlite::{params, Connection};
@@ -586,8 +586,11 @@ fn check_login_classifies_submissions() {
 #[test]
 fn save_login_adds_for_the_page_site_only() {
     let (mut v, _) = github_vault();
-    let id = v
-        .save_login(
+    // A save is a write, and writes need a server session (spec 2026-09-20
+    // §8.4); nothing is created without one, even though the page is a
+    // perfectly valid site for a new login.
+    assert_eq!(
+        v.save_login(
             "https://www.example.com/signin?next=/x",
             None,
             Some("me@example.com"),
@@ -595,22 +598,18 @@ fn save_login_adds_for_the_page_site_only() {
             None,
             NOW,
         )
-        .unwrap();
-    let item = v.get_item(&id).unwrap();
-    assert_eq!(item.title, "example.com");
-    assert_eq!(item.username.as_deref(), Some("me@example.com"));
-    assert_eq!(item.urls[0].url, "https://www.example.com/");
-    // Offered on the site, not elsewhere.
+        .err(),
+        Some(Error::Offline)
+    );
+    assert!(v
+        .find_matches("https://www.example.com/", None)
+        .unwrap()
+        .is_empty());
     assert!(v
         .find_matches("https://login.example.com/", None)
         .unwrap()
-        .iter()
-        .any(|m| m.id == id));
-    assert!(v
-        .find_matches("https://example.com.evil.com/", None)
-        .unwrap()
         .is_empty());
-    // Pages that cannot hold a login are refused.
+    // Pages that cannot hold a login are refused before that check ever runs.
     assert_eq!(
         v.save_login("file:///etc/passwd", None, None, secret("x"), None, NOW)
             .err(),
@@ -645,61 +644,59 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
         "bank-secret"
     );
 
-    v.save_login(
-        "https://github.com/",
-        None,
-        Some("ignored"),
-        secret("new-gh"),
-        Some(&gh),
-        NOW + 1,
-    )
-    .unwrap();
-    let item = v.get_item(&gh).unwrap();
+    // Origin-bound and matching the right item — the save itself still
+    // needs a server session, so it is `Offline`, not silently accepted,
+    // and the item is untouched.
     assert_eq!(
-        item.username.as_deref(),
-        Some("octo"),
-        "update changes the password only"
-    );
-    assert!(item.has_totp);
-    assert_eq!(
-        v.reveal(&gh, SecretField::Password).unwrap().expose(),
-        "new-gh"
-    );
-    assert_eq!(v.password_history(&gh).unwrap(), vec![NOW + 1]);
-    assert_eq!(
-        v.reveal_previous_password(&gh, 0).unwrap().expose(),
-        "gh-secret"
-    );
-    assert_eq!(
-        v.reveal_previous_password(&gh, 1).err(),
-        Some(Error::NotFound)
-    );
-}
-
-#[test]
-fn password_history_is_bounded_and_skips_unchanged() {
-    let (mut v, gh) = github_vault();
-    for i in 0..8 {
         v.save_login(
             "https://github.com/",
             None,
-            None,
-            secret(&format!("pw-{i}")),
+            Some("ignored"),
+            secret("new-gh"),
             Some(&gh),
-            NOW + i,
+            NOW + 1,
         )
-        .unwrap();
+        .err(),
+        Some(Error::Offline)
+    );
+    let item = v.get_item(&gh).unwrap();
+    assert_eq!(item.username.as_deref(), Some("octo"));
+    assert!(item.has_totp);
+    assert_eq!(
+        v.reveal(&gh, SecretField::Password).unwrap().expose(),
+        "gh-secret"
+    );
+    assert!(v.password_history(&gh).unwrap().is_empty());
+}
+
+/// Password-history bounding and skip-if-unchanged is a `stage_update`/
+/// `commit_write` behavior (see `build_item`), not a `save_login` one;
+/// `save_login` always refuses (see `save_login_*` tests above), so this
+/// drives the write path it would otherwise have used.
+#[test]
+fn password_history_is_bounded_and_skips_unchanged() {
+    let (mut v, gh) = github_vault();
+    let existing = v.get_item(&gh).unwrap();
+    let update_password = |v: &mut havenkeys_core::vault::VaultService, pw: &str, now: i64| {
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title: existing.title.clone(),
+            username: existing.username.clone(),
+            urls: existing.urls.clone(),
+            password: SecretUpdate::Set(secret(pw)),
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+        };
+        let staged = v.stage_update(&gh, input, now).unwrap();
+        v.commit_write(staged, now).unwrap();
+    };
+    for i in 0..8 {
+        update_password(&mut v, &format!("pw-{i}"), NOW + i);
     }
     // Saving the same password again adds nothing.
-    v.save_login(
-        "https://github.com/",
-        None,
-        None,
-        secret("pw-7"),
-        Some(&gh),
-        NOW + 100,
-    )
-    .unwrap();
+    update_password(&mut v, "pw-7", NOW + 100);
+
     let history = v.password_history(&gh).unwrap();
     assert_eq!(history.len(), havenkeys_core::model::MAX_PASSWORD_HISTORY);
     assert_eq!(history[0], NOW + 7);
@@ -727,4 +724,49 @@ fn save_login_refused_while_locked() {
             .err(),
         Some(Error::Locked)
     );
+}
+
+/// A save always refuses without a server session (spec 2026-09-20 §8.4),
+/// whether it would have created a new item or updated an existing one, and
+/// touches neither the store nor the overview cache.
+#[test]
+fn save_login_never_writes_without_a_server_session() {
+    let (mut v, gh) = github_vault();
+    let before = v.list_items().unwrap().len();
+
+    assert_eq!(
+        v.save_login(
+            "https://github.com/",
+            None,
+            Some("someone-new"),
+            secret("brand-new-pw"),
+            None,
+            NOW,
+        )
+        .err(),
+        Some(Error::Offline)
+    );
+    assert_eq!(
+        v.save_login(
+            "https://github.com/",
+            None,
+            None,
+            secret("also-new"),
+            Some(&gh),
+            NOW,
+        )
+        .err(),
+        Some(Error::Offline)
+    );
+
+    // Nothing was created...
+    assert_eq!(v.list_items().unwrap().len(), before);
+    // ...and the existing item is untouched.
+    let item = v.get_item(&gh).unwrap();
+    assert_eq!(item.username.as_deref(), Some("octo"));
+    assert_eq!(
+        v.reveal(&gh, SecretField::Password).unwrap().expose(),
+        "gh-secret"
+    );
+    assert!(v.password_history(&gh).unwrap().is_empty());
 }
