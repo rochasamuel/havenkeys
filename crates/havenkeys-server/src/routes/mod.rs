@@ -1,11 +1,12 @@
 //! Router assembly and the state every handler shares.
 
 use crate::limits::MAX_BODY_BYTES;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use deadpool_postgres::Pool;
 use tower_http::limit::RequestBodyLimitLayer;
 
+pub mod accounts;
 pub mod health;
 
 #[derive(Clone)]
@@ -22,6 +23,7 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health::health))
+        .route("/v1/accounts/activate", post(accounts::activate))
         // Checked before the body is read, so an oversized request never
         // reaches serde and never allocates.
         .layer(RequestBodyLimitLayer::new(MAX_BODY_BYTES))
