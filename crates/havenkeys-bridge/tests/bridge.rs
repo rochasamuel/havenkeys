@@ -461,19 +461,18 @@ fn save_login_flow() {
         "check_login never returns passwords"
     );
 
+    // check_login is a read and keeps working; the save itself is a write
+    // and needs a server session (spec 2026-09-20 §8.4), so it is refused
+    // and nothing changes.
     let r = save(&f, gh, Some("octo"), "rotated", Some(f.github));
-    assert_eq!(r["result"]["itemId"], f.github.to_string());
-    assert_eq!(fill(&f, f.github, gh)["result"]["password"], "rotated");
-    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+    assert!(r["result"].is_null());
+    assert_eq!(fill(&f, f.github, gh)["result"]["password"], "gh-password");
+    assert_eq!(f.changes.load(Ordering::SeqCst), 0);
 
     let f = fixture();
     let r = save(&f, "https://new.example/login", Some("me"), "pw", None);
-    let id: Uuid = r["result"]["itemId"].as_str().unwrap().parse().unwrap();
-    assert_eq!(
-        fill(&f, id, "https://new.example/")["result"]["username"],
-        "me"
-    );
-    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+    assert!(r["result"].is_null());
+    assert_eq!(f.changes.load(Ordering::SeqCst), 0);
 }
 
 /// A2 for writes: the extension cannot overwrite another site's login.
@@ -511,19 +510,21 @@ fn a2_save_login_cannot_touch_other_sites() {
 }
 
 /// A flood of password changes cannot push the real password out of the
-/// item's history: one browser-initiated change per item per interval.
+/// item's history: one browser-initiated change per item per interval. The
+/// limiter runs before the core, so it still engages even though every save
+/// is refused for lack of a server session (spec 2026-09-20 §8.4).
 #[test]
 fn password_updates_are_limited_per_item() {
     let f = fixture();
     let url = "https://github.com/";
-    assert!(save(&f, url, None, "one", Some(f.github))["result"].is_object());
+    assert!(save(&f, url, None, "one", Some(f.github))["result"].is_null());
     assert_eq!(
         error_code(&save(&f, url, None, "two", Some(f.github))),
         Some("rate_limited")
     );
-    assert_eq!(fill(&f, f.github, url)["result"]["password"], "one");
-    // Adding new logins is not affected.
-    assert!(save(&f, "https://new.example/", None, "x", None)["result"].is_object());
+    assert_eq!(fill(&f, f.github, url)["result"]["password"], "gh-password");
+    // Adding new logins is not affected by the per-item limit.
+    assert!(save(&f, "https://new.example/", None, "x", None)["result"].is_null());
 }
 
 #[test]

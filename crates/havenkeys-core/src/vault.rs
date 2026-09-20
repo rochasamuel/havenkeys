@@ -14,8 +14,8 @@ use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
-    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
-    SecretField, SecretUpdate, Settings, UrlRule, MAX_PASSWORD_HISTORY,
+    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, PreviousPassword, SecretField,
+    SecretUpdate, Settings, MAX_PASSWORD_HISTORY,
 };
 use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::secret::SecretString;
@@ -927,68 +927,38 @@ impl VaultService {
         Ok(update.map_or(SaveAction::Add, SaveAction::Update))
     }
 
-    /// Save a login the user submitted on the page, after they confirmed it.
+    /// What saving a login the user just submitted on the page would do —
+    /// without doing it.
     ///
-    /// With `update`, only the password of that login changes (the old one
-    /// moves to its password history), and only if the login matches the
-    /// page. Without, a new login is created for the page's site. Returns
-    /// the item ID.
+    /// Saving is a write, and writes need a server to accept them (spec
+    /// 2026-09-20 §8.4). This always refuses with `Error::Offline`, and
+    /// touches neither the store nor the overview cache: a device with no
+    /// sync client must not fabricate a server revision for a row the
+    /// server never numbered. Origin binding is still checked first, so a
+    /// save for the wrong site or for an item that does not match the page
+    /// is `Denied`, exactly as before; only a save that would otherwise have
+    /// succeeded is `Offline`.
     pub fn save_login(
         &mut self,
         page_url: &str,
         top_url: Option<&str>,
-        username: Option<&str>,
+        _username: Option<&str>,
         password: SecretString,
         update: Option<&Uuid>,
-        now_ms: i64,
+        _now_ms: i64,
     ) -> Result<Uuid> {
         if password.is_empty() {
             return Err(Error::InvalidInput("password is required"));
         }
+        self.session()?;
         if let Some(id) = update {
-            let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
-            let input = ItemInput {
-                item_type: ItemType::Login,
-                title: existing.title.clone(),
-                username: existing.username.clone(),
-                urls: existing.urls.clone(),
-                password: SecretUpdate::Set(password),
-                totp: SecretUpdate::Keep,
-                notes: SecretUpdate::Keep,
-                content: SecretUpdate::Keep,
-            };
-            let staged = self.stage_update(id, input, now_ms)?;
-            // save_login is the local autofill-save flow; it predates the
-            // sync client this write path is built for (spec 2026-09-20
-            // §8.4) and is not yet wired to it, so it commits with a
-            // placeholder revision, exactly as it wrote a placeholder
-            // revision before this change.
-            return Ok(self
-                .commit_write(staged, 0)?
-                .ok_or(Error::InvalidInput("malformed staged write"))?
-                .id);
+            self.authorize_for_page(id, page_url, top_url)?;
+        } else {
+            // Saved for the frame the form was in, as a whole-site rule.
+            let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+            page.site_title_and_origin().ok_or(Error::Denied)?;
         }
-        // Saved for the frame the form was in, as a whole-site rule.
-        let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-        let (title, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
-        let input = ItemInput {
-            item_type: ItemType::Login,
-            title,
-            username: username.map(str::to_owned),
-            urls: vec![UrlRule {
-                url: origin,
-                match_type: MatchType::Domain,
-            }],
-            password: SecretUpdate::Set(password),
-            totp: SecretUpdate::Keep,
-            notes: SecretUpdate::Keep,
-            content: SecretUpdate::Keep,
-        };
-        let staged = self.stage_create(input, now_ms)?;
-        Ok(self
-            .commit_write(staged, 0)?
-            .ok_or(Error::InvalidInput("malformed staged write"))?
-            .id)
+        Err(Error::Offline)
     }
 
     /// When each previous password of a login was replaced, newest first.
