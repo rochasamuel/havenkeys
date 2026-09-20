@@ -397,7 +397,24 @@ impl VaultService {
             (vault_id, candidates, tombs)
         };
 
-        // Decide per item.
+        self.decide_merge(candidates, remote_tombs, &mut report)?;
+
+        let snapshot = self.encode_snapshot(vault_id, device_id, now_ms)?;
+        Ok(SyncOutput {
+            header: header_out,
+            snapshot,
+            report,
+        })
+    }
+
+    /// Apply the merge rules (docs/sync.md §5) to one set of remote
+    /// candidates and tombstones. The only place these rules exist.
+    fn decide_merge(
+        &mut self,
+        candidates: HashMap<Uuid, Candidate>,
+        remote_tombs: HashMap<Uuid, i64>,
+        report: &mut SyncReport,
+    ) -> Result<()> {
         let local_tombs: HashMap<Uuid, i64> = self.store.tombstones()?.into_iter().collect();
         let mut upserts: Vec<ItemRow> = Vec::new();
         let mut new_overviews: Vec<ItemOverview> = Vec::new();
@@ -451,12 +468,7 @@ impl VaultService {
             }
         }
 
-        let snapshot = self.encode_snapshot(vault_id, device_id, now_ms)?;
-        Ok(SyncOutput {
-            header: header_out,
-            snapshot,
-            report,
-        })
+        Ok(())
     }
 
     /// Decide about `header.json`. Returns the bytes to write, if any.
@@ -523,25 +535,38 @@ impl VaultService {
 
     /// Authenticate one remote item (overview and details) and return its row.
     fn check_item(&self, vault_id: Uuid, item: &SnapshotItem) -> Option<(ItemRow, ItemOverview)> {
-        let data_key = &self.session().ok()?.data_key;
         let ov_blob = BASE64.decode(item.overview.as_bytes()).ok()?;
         let det_blob = BASE64.decode(item.details.as_bytes()).ok()?;
+        self.check_item_bytes(vault_id, item.id, ov_blob, det_blob)
+    }
+
+    /// Authenticate one remote item version. Returns `None` unless both blobs
+    /// open under this vault's data key, the overview's ID matches the row's,
+    /// and the details type matches the overview type.
+    fn check_item_bytes(
+        &self,
+        vault_id: Uuid,
+        id: Uuid,
+        ov_blob: Vec<u8>,
+        det_blob: Vec<u8>,
+    ) -> Option<(ItemRow, ItemOverview)> {
+        let data_key = &self.session().ok()?.data_key;
         let ov: ItemOverview = open_json(
             data_key,
-            &BlobContext::item(Purpose::ItemOverview, vault_id, item.id),
+            &BlobContext::item(Purpose::ItemOverview, vault_id, id),
             &ov_blob,
         )
         .ok()?;
         let details: ItemDetails = open_json(
             data_key,
-            &BlobContext::item(Purpose::ItemDetails, vault_id, item.id),
+            &BlobContext::item(Purpose::ItemDetails, vault_id, id),
             &det_blob,
         )
         .ok()?;
-        if ov.id != item.id || details.item_type() != ov.item_type {
+        if ov.id != id || details.item_type() != ov.item_type {
             return None;
         }
-        Some(((item.id, ov_blob, det_blob), ov))
+        Some(((id, ov_blob, det_blob), ov))
     }
 
     fn encode_snapshot(&self, vault_id: Uuid, device_id: Uuid, now_ms: i64) -> Result<Vec<u8>> {
