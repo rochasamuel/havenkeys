@@ -3,13 +3,14 @@
 mod common;
 
 use common::*;
+use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::model::{SecretField, SecretUpdate, Settings};
-use havenkeys_core::vault::{prepare_new_vault, VaultService, VaultState};
+use havenkeys_core::vault::{prepare_new_account_vault, VaultService, VaultState};
 use havenkeys_core::Error;
 
 #[test]
 fn create_lock_unlock_cycle() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     let st = v.status().unwrap();
     assert_eq!(st.state, VaultState::Unlocked);
     assert!(st.vault_exists);
@@ -19,12 +20,13 @@ fn create_lock_unlock_cycle() {
     assert!(!v.lock(), "lock is idempotent");
 
     assert_eq!(
-        v.unlock(&secret("wrong password!")),
+        v.unlock_for_account(&secret("wrong password!"), &sk, &account()),
         Err(Error::UnlockFailed)
     );
     assert_eq!(v.state(), VaultState::Locked);
 
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert!(v.is_unlocked());
 }
 
@@ -32,35 +34,48 @@ fn create_lock_unlock_cycle() {
 fn cannot_create_twice_or_unlock_without_vault() {
     let mut empty = VaultService::new(havenkeys_core::store::Store::open_in_memory().unwrap());
     assert!(!empty.status().unwrap().vault_exists);
-    assert_eq!(empty.unlock(&secret(PASSWORD)).err(), Some(Error::NoVault));
+    assert_eq!(
+        empty
+            .unlock_for_account(
+                &secret(PASSWORD),
+                &SecretKey::generate().unwrap(),
+                &account()
+            )
+            .err(),
+        Some(Error::NoVault)
+    );
     assert_eq!(empty.state(), VaultState::Locked);
 
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     v.lock();
-    let again = prepare_new_vault(&secret(PASSWORD), fast_kdf(), NOW).unwrap();
-    assert_eq!(v.create_vault(again), Err(Error::VaultExists));
+    let again = prepare_new_account_vault(&secret(PASSWORD), &account(), fast_kdf(), NOW).unwrap();
+    assert_eq!(
+        v.create_account_vault(again.prepared, &account_record()),
+        Err(Error::VaultExists)
+    );
 }
 
 #[test]
 fn weak_master_password_rejected() {
-    assert!(prepare_new_vault(&secret("short"), fast_kdf(), NOW).is_err());
+    assert!(prepare_new_account_vault(&secret("short"), &account(), fast_kdf(), NOW).is_err());
 }
 
 #[test]
 fn vault_persists_across_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("vault.sqlite3");
-    let id = {
-        let mut v = VaultService::new(havenkeys_core::store::Store::open(&path).unwrap());
-        v.create_vault(prepare_new_vault(&secret(PASSWORD), fast_kdf(), NOW).unwrap())
-            .unwrap();
-        v.create_item(login("GitHub", "octo", "gh-secret-pw", "github.com"), NOW)
+    let (id, sk) = {
+        let (mut v, sk) = activated_vault_at(&path);
+        let id = v
+            .create_item(login("GitHub", "octo", "gh-secret-pw", "github.com"), NOW)
             .unwrap()
-            .id
+            .id;
+        (id, sk)
     };
     let mut v = open_file(&path);
     assert_eq!(v.state(), VaultState::Locked);
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert_eq!(v.get_item(&id).unwrap().title, "GitHub");
     assert_eq!(
         v.reveal(&id, SecretField::Password).unwrap().expose(),
@@ -70,7 +85,7 @@ fn vault_persists_across_reopen() {
 
 #[test]
 fn login_item_crud_and_secret_minimization() {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let ov = v
         .create_item(
             login("GitHub", "octo@example.com", "pw-1", "github.com"),
@@ -112,7 +127,7 @@ fn login_item_crud_and_secret_minimization() {
 
 #[test]
 fn totp_codes_without_exposing_secret() {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let mut input = login("AWS", "root", "pw", "aws.amazon.com");
     // RFC 6238 SHA-1 secret "12345678901234567890".
     input.totp = SecretUpdate::Set(secret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"));
@@ -135,7 +150,7 @@ fn totp_codes_without_exposing_secret() {
 
 #[test]
 fn secure_notes() {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let ov = v
         .create_item(note("Recovery codes", "abcd-efgh\nijkl-mnop"), NOW)
         .unwrap();
@@ -159,7 +174,7 @@ fn secure_notes() {
 
 #[test]
 fn search_uses_overviews_only() {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     v.create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
         .unwrap();
     v.create_item(login("Bank", "alice@mail.com", "pw", "mybank.example"), NOW)
@@ -185,24 +200,34 @@ fn search_uses_overviews_only() {
 
 #[test]
 fn change_master_password() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     let id = v
         .create_item(login("A", "a", "pw-a", "a.com"), NOW)
         .unwrap()
         .id;
     assert_eq!(
-        v.change_master_password(
+        v.change_master_password_for_account(
             &secret("not the password"),
             &secret("brand new password"),
-            fast_kdf()
+            fast_kdf(),
+            &sk,
         ),
         Err(Error::UnlockFailed)
     );
-    v.change_master_password(&secret(PASSWORD), &secret("brand new password"), fast_kdf())
-        .unwrap();
+    v.change_master_password_for_account(
+        &secret(PASSWORD),
+        &secret("brand new password"),
+        fast_kdf(),
+        &sk,
+    )
+    .unwrap();
     v.lock();
-    assert_eq!(v.unlock(&secret(PASSWORD)), Err(Error::UnlockFailed));
-    v.unlock(&secret("brand new password")).unwrap();
+    assert_eq!(
+        v.unlock_for_account(&secret(PASSWORD), &sk, &account()),
+        Err(Error::UnlockFailed)
+    );
+    v.unlock_for_account(&secret("brand new password"), &sk, &account())
+        .unwrap();
     assert_eq!(
         v.reveal(&id, SecretField::Password).unwrap().expose(),
         "pw-a"
@@ -213,8 +238,8 @@ fn change_master_password() {
 fn settings_are_encrypted_and_persisted() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("v.db");
-    {
-        let mut v = new_vault_in(havenkeys_core::store::Store::open(&path).unwrap());
+    let sk = {
+        let (mut v, sk) = activated_vault_at(&path);
         assert_eq!(v.settings().unwrap(), Settings::default());
         v.update_settings(Settings {
             auto_lock_minutes: 5,
@@ -229,9 +254,11 @@ fn settings_are_encrypted_and_persisted() {
                 ..Default::default()
             })
             .is_err());
-    }
+        sk
+    };
     let mut v = open_file(&path);
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert_eq!(v.settings().unwrap().auto_lock_minutes, 5);
     v.update_settings(Settings {
         theme: havenkeys_core::model::Theme::Light,
@@ -246,12 +273,12 @@ fn settings_are_encrypted_and_persisted() {
 
 #[test]
 fn lock_during_unlock_discards_result() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     v.lock();
     let ticket = v.begin_unlock().unwrap();
     assert_eq!(v.state(), VaultState::Unlocking);
     assert_eq!(v.begin_unlock().err(), Some(Error::Busy));
-    let key = ticket.derive(&secret(PASSWORD));
+    let key = ticket.derive_for_account(&secret(PASSWORD), &sk, &account());
     v.lock(); // e.g. app exit while Argon2 was running
     assert_eq!(v.finish_unlock(ticket, key), Err(Error::Locked));
     assert_eq!(v.state(), VaultState::Locked);
@@ -260,7 +287,7 @@ fn lock_during_unlock_discards_result() {
 
 #[test]
 fn epoch_advances_on_lock() {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let e = v.epoch();
     v.lock();
     assert!(v.epoch() > e);
@@ -268,30 +295,46 @@ fn epoch_advances_on_lock() {
 
 #[test]
 fn rekey_is_discarded_if_vault_locked_meanwhile() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     let ticket = v.begin_rekey().unwrap();
-    let rekeyed = ticket.derive(&secret(PASSWORD), &secret("brand new password"), fast_kdf());
+    let rekeyed = ticket.derive_for_account(
+        &secret(PASSWORD),
+        &secret("brand new password"),
+        fast_kdf(),
+        &sk,
+        &account(),
+    );
     v.lock();
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert_eq!(v.commit_rekey(ticket, rekeyed), Err(Error::Locked));
     v.lock();
-    v.unlock(&secret(PASSWORD)).unwrap(); // old password still valid
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap(); // old password still valid
 }
 
 #[test]
 fn rekey_refused_if_header_changed_meanwhile() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     let t1 = v.begin_rekey().unwrap();
-    let r1 = t1.derive(&secret(PASSWORD), &secret("first new password"), fast_kdf());
-    v.change_master_password(
+    let r1 = t1.derive_for_account(
+        &secret(PASSWORD),
+        &secret("first new password"),
+        fast_kdf(),
+        &sk,
+        &account(),
+    );
+    v.change_master_password_for_account(
         &secret(PASSWORD),
         &secret("second new password"),
         fast_kdf(),
+        &sk,
     )
     .unwrap();
     assert_eq!(v.commit_rekey(t1, r1), Err(Error::Busy));
     v.lock();
-    v.unlock(&secret("second new password")).unwrap();
+    v.unlock_for_account(&secret("second new password"), &sk, &account())
+        .unwrap();
 }
 
 #[test]
@@ -302,6 +345,19 @@ fn key_scheme_serde_form_is_frozen() {
         serde_json::to_string(&KeyScheme::AccountBound).unwrap(),
         "\"account_bound\""
     );
+}
+
+#[test]
+fn the_header_refuses_any_scheme_but_account_bound() {
+    use havenkeys_core::store::KeyScheme;
+    // Serde form is part of the sync header on the wire; freeze it.
+    assert_eq!(
+        serde_json::to_string(&KeyScheme::AccountBound).unwrap(),
+        "\"account_bound\""
+    );
+    // A database written by an older build carries key_scheme 1 or 2.
+    assert!(serde_json::from_str::<KeyScheme>("\"password_only\"").is_err());
+    assert!(serde_json::from_str::<KeyScheme>("\"password_and_secret_key\"").is_err());
 }
 
 #[test]
@@ -493,7 +549,5 @@ fn every_scheme_says_whether_it_needs_the_secret_key() {
     use havenkeys_core::store::KeyScheme;
     // The desktop asks this instead of matching on the scheme name, so a
     // scheme added later cannot silently stop asking for the Secret Key.
-    assert!(!KeyScheme::PasswordOnly.uses_secret_key());
-    assert!(KeyScheme::PasswordAndSecretKey.uses_secret_key());
     assert!(KeyScheme::AccountBound.uses_secret_key());
 }

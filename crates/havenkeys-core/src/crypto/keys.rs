@@ -8,13 +8,10 @@ use data_encoding::BASE64;
 use hkdf::Hkdf;
 use sha2::Sha256;
 use std::fmt;
-use uuid::Uuid;
 use zeroize::Zeroizing;
 
 pub const KEY_LEN: usize = 32;
 
-const INFO_KEK: &[u8] = b"havenkeys/v1/kek";
-const INFO_KEK_V2: &[u8] = b"havenkeys/v2/kek";
 const INFO_DATA: &[u8] = b"havenkeys/v1/data";
 const INFO_KEK_V3: &[u8] = b"havenkeys/v3/kek";
 const INFO_AUTH_V3: &[u8] = b"havenkeys/v3/auth";
@@ -50,31 +47,6 @@ fn hkdf_expand(ikm: &Key256, salt: Option<&[u8]>, info: &[u8]) -> Result<Key256>
     let hk = Hkdf::<Sha256>::new(salt, ikm.as_bytes());
     let mut okm = Zeroizing::new([0u8; KEY_LEN]);
     hk.expand(info, okm.as_mut()).map_err(|_| Error::Kdf)?;
-    Ok(Key256(okm))
-}
-
-/// master key → key-encryption key, bound to this vault's ID.
-pub fn derive_kek(master_key: &Key256, vault_id: &Uuid) -> Result<Key256> {
-    hkdf_expand(master_key, Some(vault_id.as_bytes()), INFO_KEK)
-}
-
-/// master key + Secret Key → key-encryption key (key scheme 2).
-///
-/// HKDF-SHA-256 with both secrets as input keying material, the vault ID as
-/// salt and a v2 label, exactly as planned in docs/crypto.md. Either secret
-/// alone gives nothing: the output depends on both.
-pub fn derive_kek_with_secret_key(
-    master_key: &Key256,
-    secret_key: &SecretKey,
-    vault_id: &Uuid,
-) -> Result<Key256> {
-    let mut ikm = Zeroizing::new([0u8; KEY_LEN + SECRET_KEY_LEN]);
-    ikm[..KEY_LEN].copy_from_slice(master_key.as_bytes());
-    ikm[KEY_LEN..].copy_from_slice(secret_key.as_bytes());
-    let hk = Hkdf::<Sha256>::new(Some(vault_id.as_bytes()), ikm.as_ref());
-    let mut okm = Zeroizing::new([0u8; KEY_LEN]);
-    hk.expand(INFO_KEK_V2, okm.as_mut())
-        .map_err(|_| Error::Kdf)?;
     Ok(Key256(okm))
 }
 
@@ -169,29 +141,13 @@ pub fn derive_data_key(vault_key: &Key256) -> Result<Key256> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[test]
     fn random_keys_differ() {
         let a = Key256::random().unwrap();
         let b = Key256::random().unwrap();
         assert_ne!(a.as_bytes(), b.as_bytes());
-    }
-
-    #[test]
-    fn kek_is_bound_to_vault_id() {
-        let mk = Key256::from_bytes([7u8; 32]);
-        let a = derive_kek(&mk, &Uuid::from_u128(1)).unwrap();
-        let b = derive_kek(&mk, &Uuid::from_u128(2)).unwrap();
-        assert_ne!(a.as_bytes(), b.as_bytes());
-    }
-
-    #[test]
-    fn derivations_are_domain_separated() {
-        let k = Key256::from_bytes([9u8; 32]);
-        let kek = derive_kek(&k, &Uuid::nil()).unwrap();
-        let data = derive_data_key(&k).unwrap();
-        assert_ne!(kek.as_bytes(), data.as_bytes());
-        assert_ne!(data.as_bytes(), k.as_bytes());
     }
 
     #[test]
@@ -278,17 +234,6 @@ mod tests {
             base.as_bytes(),
             derive_kek_v3(&mk_a, &sk_b, &account).unwrap().as_bytes()
         );
-    }
-
-    #[test]
-    fn v3_differs_from_the_v2_scheme() {
-        // Same secrets, different scheme: the labels must keep the outputs apart.
-        let mk = Key256::from_bytes([0x11; 32]);
-        let sk = SecretKey::from_bytes([0x22; SECRET_KEY_LEN]);
-        let account = test_account();
-        let v2 = derive_kek_with_secret_key(&mk, &sk, &account.id).unwrap();
-        let v3 = derive_kek_v3(&mk, &sk, &account).unwrap();
-        assert_ne!(v2.as_bytes(), v3.as_bytes());
     }
 
     #[test]

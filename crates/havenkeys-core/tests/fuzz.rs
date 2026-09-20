@@ -274,7 +274,7 @@ fn fuzz_item_input() {
         r#"{"itemType":"secure_note","title":"Note","content":{"op":"set","value":"body"}}"#,
         r#"{"itemType":"login","title":"x","urls":[{"url":"http://[::1]:8080/p","matchType":"exact"}],"notes":{"op":"clear"}}"#,
     ];
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let mut stored = 0;
     for i in 0..3_000 {
         let seed = *rng.pick(&seeds);

@@ -59,14 +59,13 @@ CREATE TABLE account (
 );
 ";
 
-/// How the key-encryption key is derived.
+/// How the key-encryption key is derived. One scheme: the master password,
+/// the device's Secret Key and the account (docs/crypto.md). Kept as an enum,
+/// rather than a unit struct, so the header's serde form stays forward-
+/// compatible if a new scheme is ever added.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyScheme {
-    /// Argon2id(master password) only. Vaults created before the Secret Key.
-    PasswordOnly,
-    /// Argon2id(master password) combined with the device's Secret Key.
-    PasswordAndSecretKey,
     /// Argon2id(master password) combined with the device's Secret Key,
     /// bound to the account (email + account ID). Vaults that sync to a
     /// server.
@@ -74,28 +73,20 @@ pub enum KeyScheme {
 }
 
 impl KeyScheme {
-    /// Does unlocking a vault under this scheme need the device's Secret
-    /// Key? Callers ask this instead of matching on the variant, so a
-    /// scheme added later does not silently stop asking for it.
+    /// Kept as a method so call sites do not match on the variant; every
+    /// scheme this build understands needs the Secret Key.
     pub fn uses_secret_key(self) -> bool {
-        matches!(
-            self,
-            KeyScheme::PasswordAndSecretKey | KeyScheme::AccountBound
-        )
+        true
     }
 
     fn to_db(self) -> i64 {
         match self {
-            KeyScheme::PasswordOnly => 1,
-            KeyScheme::PasswordAndSecretKey => 2,
             KeyScheme::AccountBound => 3,
         }
     }
 
     fn from_db(v: i64) -> Result<Self> {
         match v {
-            1 => Ok(KeyScheme::PasswordOnly),
-            2 => Ok(KeyScheme::PasswordAndSecretKey),
             3 => Ok(KeyScheme::AccountBound),
             _ => Err(Error::UnsupportedVersion),
         }
@@ -723,8 +714,12 @@ mod tests {
         assert_eq!(s.tombstones().unwrap(), vec![(id, 5)]);
     }
 
-    /// A vault created before the Secret Key (schema 1) opens, migrates, and
-    /// reads as a password-only vault.
+    /// A vault created before the Secret Key (schema 1, key scheme 1) still
+    /// migrates structurally — the schema upgrade does not depend on the key
+    /// scheme — but key schemes 1 and 2 have left the product (spec §4), so
+    /// its header is now unreadable: the caller must not silently treat it as
+    /// some other scheme, and there is no automatic re-encryption path in
+    /// this build.
     #[test]
     fn migrates_schema_1() {
         let dir = tempfile::tempdir().unwrap();
@@ -747,10 +742,7 @@ mod tests {
         drop(c);
 
         let s = Store::open(&path).unwrap();
-        let h = s.header().unwrap().unwrap();
-        assert_eq!(h.key_scheme, KeyScheme::PasswordOnly);
-        assert_eq!(h.revision, 0);
-        assert_eq!(h.created_at, 7);
+        assert_eq!(s.header().err(), Some(Error::UnsupportedVersion));
         assert_eq!(s.item_rows().unwrap().len(), 1);
         assert!(s.tombstones().unwrap().is_empty());
         drop(s);
