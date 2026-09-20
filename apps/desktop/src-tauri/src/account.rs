@@ -1,21 +1,12 @@
 //! Secret Key and Emergency Kit.
 
 use crate::state::{AppState, CmdError, CmdResult};
-use havenkeys_core::crypto::kdf::KdfParams;
-use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::store::KeyScheme;
 use havenkeys_core::SecretString;
 use qrcode::{EcLevel, QrCode};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::State;
 use uuid::Uuid;
-
-fn device_error() -> CmdError {
-    CmdError {
-        code: "device",
-        message: "Could not save this device's settings.".into(),
-    }
-}
 
 // ------------------------------------------------------------------ status
 
@@ -94,34 +85,4 @@ pub fn get_emergency_kit(state: State<'_, AppState>) -> CmdResult<EmergencyKit> 
         qr_size: code.width(),
         qr_modules,
     })
-}
-
-/// Protect an existing password-only vault with a Secret Key (key scheme
-/// 1 → 2). Needs the master password. The new key is saved on this device;
-/// the UI then shows the Emergency Kit.
-#[tauri::command]
-pub async fn setup_secret_key(app: AppHandle, password: SecretString) -> CmdResult<()> {
-    let state = app.state::<AppState>();
-    state.touch();
-    let secret_key = SecretKey::generate()?;
-    let kdf = KdfParams::generate()?;
-    let ticket = state.vault()?.begin_rekey()?;
-    let key_text = secret_key.to_text();
-    let (ticket, rekeyed) = tauri::async_runtime::spawn_blocking(move || {
-        let r = ticket.derive_secret_key_upgrade(&password, &secret_key, kdf);
-        (ticket, r)
-    })
-    .await
-    .map_err(|_| CmdError::internal())?;
-    // Save the key on this device before committing, so a crash in between
-    // can never leave a vault whose Secret Key exists nowhere.
-    let parsed = SecretKey::parse(key_text.expose())?;
-    state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
-        .set_secret_key(&parsed)
-        .map_err(|_| device_error())?;
-    state.vault()?.commit_rekey(ticket, rekeyed)?;
-    Ok(())
 }
