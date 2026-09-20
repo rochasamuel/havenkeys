@@ -313,17 +313,17 @@ impl VaultService {
         if !verify_header(&self.session()?.data_key, &file) {
             return Ok(false);
         }
+        let record = body_to_record(&file.body)?;
         let floor = self
             .store
             .account()?
             .map(|a| a.max_header_rev)
             .unwrap_or(0)
             .max(local.revision as i64);
-        let remote_rev = body_to_record(&file.body)?.revision as i64;
+        let remote_rev = record.revision as i64;
         if remote_rev <= floor {
             return Ok(false);
         }
-        let record = body_to_record(&file.body)?;
         self.store
             .update_key_wrap(&record.kdf, &record.wrapped_vault_key, record.key_scheme, record.revision)?;
         self.store.raise_max_header_rev(remote_rev)?;
