@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { TOKENS_CSS_PATH, generateTokensCss } from "./generate.ts";
+import { AUTO_CSS_PATH, TOKENS_CSS_PATH, generateAutoCss, generateTokensCss } from "./generate.ts";
 import { THEME_ORDER, themes, type ThemeName } from "./tokens.ts";
 
 const BASE_CSS_PATH = fileURLToPath(new URL("./base.css", import.meta.url));
@@ -80,5 +80,24 @@ describe("tokens.css", () => {
 
     expect(used.size).toBeGreaterThan(0);
     expect([...used].filter((name) => !declared.has(name))).toEqual([]);
+  });
+});
+
+describe("tokens-auto.css", () => {
+  it("matches what generate.ts produces", () => {
+    const checkedIn = readFileSync(AUTO_CSS_PATH, "utf8");
+    expect(generateAutoCss()).toBe(checkedIn);
+  });
+
+  it("needs no theme attribute, because the extension has none to set", () => {
+    const css = generateAutoCss();
+    expect(css).not.toContain("data-theme");
+    expect(css).toContain("@media (prefers-color-scheme: light)");
+  });
+
+  it("declares the same custom properties as tokens.css", () => {
+    const names = (css: string) =>
+      new Set(Array.from(css.matchAll(/^\s*(--[a-z0-9-]+):/gm), (m) => m[1]));
+    expect(names(generateAutoCss())).toEqual(names(generateTokensCss()));
   });
 });

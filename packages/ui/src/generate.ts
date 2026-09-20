@@ -90,12 +90,50 @@ export function generateTokensCss(): string {
   return `${parts.join("\n")}\n`;
 }
 
+/**
+ * The same tokens for a surface that has no theme switch.
+ *
+ * The extension's in-page frames and popup cannot carry `data-theme`: nothing
+ * there reads the vault's settings, and a frame injected into a page must
+ * decide for itself. They follow the OS instead, which is the one case
+ * `tokens.css` does not cover — so it is emitted separately rather than
+ * making every consumer of `tokens.css` carry a media query it does not want.
+ */
+export function generateAutoCss(): string {
+  const parts: string[] = [
+    `/* Generated file — do not edit by hand.
+   Written by packages/ui/src/generate.ts from packages/ui/src/tokens.ts.
+
+   The same tokens as tokens.css, for surfaces with no theme switch: dark by
+   default, light when the OS asks for it. The extension loads this. */`,
+    "",
+    themeBlock(":root", themes.dark, ""),
+    "",
+    "@media (prefers-color-scheme: light) {",
+    themeBlock(":root", themes.systemLight, "  "),
+    "}",
+    "",
+  ];
+
+  parts.push("/* Scales. None of these change with the theme. */", ":root {");
+  SCALE_GROUPS.forEach(([label, record], index) => {
+    if (index > 0) parts.push("");
+    parts.push(`  /* ${label} */`, ...declarations(record, "  "));
+  });
+  parts.push("}");
+
+  return `${parts.join("\n")}\n`;
+}
+
 export const TOKENS_CSS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "tokens.css");
+export const AUTO_CSS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "tokens-auto.css");
 
 // Only write when run as a script; importing this module must have no effect,
 // or the test that compares against the checked-in file would rewrite it first.
 const entry = process.argv[1];
 if (entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url)) {
   writeFileSync(TOKENS_CSS_PATH, generateTokensCss(), "utf8");
+  writeFileSync(AUTO_CSS_PATH, generateAutoCss(), "utf8");
   process.stdout.write(`wrote ${TOKENS_CSS_PATH}\n`);
+  process.stdout.write(`wrote ${AUTO_CSS_PATH}\n`);
 }
