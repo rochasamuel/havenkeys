@@ -1,5 +1,13 @@
 # Design: accounts and server sync
 
+> **Superseded on 2026-09-20** by
+> `2026-09-20-server-authoritative-vault-design.md`, which makes the server
+> the source of truth and the local SQLite a read-only replica. The sections
+> that survive are cited from there: the server schema, API shape, enforced
+> rules, write path, logging, CORS, the account lifecycle and key scheme 3.
+> What this document decides about offline authority, folder sync, local
+> vaults and the delta merge no longer holds.
+
 Status: approved design, not yet implemented.
 Date: 2026-09-19.
 
