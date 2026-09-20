@@ -10,6 +10,7 @@
 //! * All validation happens in the core; nothing here trusts the renderer.
 
 use crate::state::{AppState, CmdError, CmdResult};
+use crate::sync;
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
@@ -71,8 +72,10 @@ pub async fn unlock_vault(
     let key_text = typed.as_ref().map(|k| k.to_text());
     let ticket = state.vault()?.begin_unlock()?;
     let joined = tauri::async_runtime::spawn_blocking(move || {
+        // One Argon2id run yields both the KEK and the auth key: the first
+        // opens the vault, the second opens the server session.
         let derived = match typed.as_ref().or(stored.as_ref()) {
-            Some(sk) => ticket.derive_for_account(&password, sk, &account),
+            Some(sk) => ticket.derive_session_for_account(&password, sk, &account),
             None => Err(havenkeys_core::Error::SecretKeyRequired),
         };
         (ticket, derived)
@@ -87,8 +90,12 @@ pub async fn unlock_vault(
         }
     };
 
+    let (key, auth_key) = match derived {
+        Ok((key, auth_key)) => (Ok(key), Some(auth_key)),
+        Err(e) => (Err(e), None),
+    };
     let mut v = state.vault()?;
-    v.finish_unlock(ticket, derived)?;
+    v.finish_unlock(ticket, key)?;
     let minutes = v.settings()?.auto_lock_minutes;
     let status = v.status()?;
     // Arm before releasing the vault lock so the auto-lock thread can never
@@ -106,7 +113,23 @@ pub async fn unlock_vault(
             }
         }
     }
+    // Open the server session in the background. The vault is already
+    // usable: a device that cannot reach its server is offline and
+    // read-only, not locked.
+    if let Some(auth_key) = auth_key {
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = sync::connect(&handle, auth_key).await;
+        });
+    }
     Ok(status)
+}
+
+/// Pull now, instead of waiting for the periodic sync.
+#[tauri::command]
+pub async fn sync_now(app: AppHandle) -> CmdResult<havenkeys_core::sync::SyncReport> {
+    app.state::<AppState>().touch();
+    sync::sync_now(&app).await
 }
 
 #[tauri::command]
@@ -147,9 +170,17 @@ pub async fn change_master_password(
     })
     .await
     .map_err(|_| CmdError::internal())?;
-    let mut v = state.vault()?;
-    v.commit_rekey(ticket, rekeyed)?;
-    drop(v);
+    {
+        // Scoped so the vault lock is released before the request below: a
+        // guard held across an await would also block locking the vault.
+        let mut v = state.vault()?;
+        v.commit_rekey(ticket, rekeyed)?;
+    }
+    // The new wrap is local until the server has it. `sync_now` sees the
+    // local header revision ahead of the server's and publishes it; if that
+    // fails, the next sync tries again, so the two cannot drift apart
+    // silently.
+    sync::sync_now(&app).await?;
     Ok(())
 }
 
@@ -258,43 +289,49 @@ pub fn copy_secret(
     })
 }
 
+/// Create an item: seal it under the vault lock, let the server assign its
+/// revision, then record it locally. Nothing is stored until the server has
+/// accepted it, so the replica is never ahead of the authority.
 #[tauri::command]
-pub fn create_item(state: State<'_, AppState>, input: ItemInput) -> CmdResult<ItemOverview> {
-    state.touch();
-    state.require_online()?;
-    let _staged = state.vault()?.stage_create(input, AppState::now_ms())?;
-    // The sync client sends `_staged` and returns the server's revision,
-    // which commit_write records. Until it exists, require_online above has
-    // already returned.
-    Err(havenkeys_core::Error::Offline.into())
+pub async fn create_item(app: AppHandle, input: ItemInput) -> CmdResult<ItemOverview> {
+    let staged = {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_online()?;
+        let staged = state.vault()?.stage_create(input, AppState::now_ms())?;
+        staged
+    };
+    sync::push(&app, staged)
+        .await?
+        .ok_or_else(CmdError::internal)
 }
 
 #[tauri::command]
-pub fn update_item(
-    state: State<'_, AppState>,
-    id: Uuid,
-    input: ItemInput,
-) -> CmdResult<ItemOverview> {
-    state.touch();
-    state.require_online()?;
-    let _staged = state
-        .vault()?
-        .stage_update(&id, input, AppState::now_ms())?;
-    // The sync client sends `_staged` and returns the server's revision,
-    // which commit_write records. Until it exists, require_online above has
-    // already returned.
-    Err(havenkeys_core::Error::Offline.into())
+pub async fn update_item(app: AppHandle, id: Uuid, input: ItemInput) -> CmdResult<ItemOverview> {
+    let staged = {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_online()?;
+        let staged = state
+            .vault()?
+            .stage_update(&id, input, AppState::now_ms())?;
+        staged
+    };
+    sync::push(&app, staged)
+        .await?
+        .ok_or_else(CmdError::internal)
 }
 
 #[tauri::command]
-pub fn delete_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<()> {
-    state.touch();
-    state.require_online()?;
-    let _staged = state.vault()?.stage_delete(&id)?;
-    // The sync client sends `_staged` and returns the server's revision,
-    // which commit_write records. Until it exists, require_online above has
-    // already returned.
-    Err(havenkeys_core::Error::Offline.into())
+pub async fn delete_item(app: AppHandle, id: Uuid) -> CmdResult<()> {
+    let staged = {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_online()?;
+        let staged = state.vault()?.stage_delete(&id)?;
+        staged
+    };
+    sync::push(&app, staged).await.map(|_| ())
 }
 
 // ------------------------------------------------------------------ generator

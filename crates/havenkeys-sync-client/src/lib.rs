@@ -16,11 +16,13 @@
 
 pub mod client;
 pub mod error;
+pub mod invite;
 pub mod session;
 pub mod transport;
 pub mod wire;
 
 pub use client::{Activated, Activation, AuthParams, Device, Pulled, SyncClient, WriteAck};
 pub use error::{Conflict, Result, SyncError};
+pub use invite::Invite;
 pub use session::Session;
 pub use transport::{HttpRequest, HttpResponse, HttpTransport, Method, Transport};

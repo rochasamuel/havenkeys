@@ -118,6 +118,16 @@ fn encode_header(data_key: &crate::crypto::keys::Key256, h: &HeaderRecord) -> Re
     .map_err(|_| Error::Encryption)
 }
 
+/// The header for a vault that does not exist locally yet.
+///
+/// Activation has to hand the server a header *before* anything is written to
+/// disk: if the server refuses, the device must be left with no vault at all,
+/// rather than a local vault bound to an account no server knows about.
+pub fn encode_header_for(prepared: &PreparedVault) -> Result<Vec<u8>> {
+    let data_key = derive_data_key(&prepared.vault_key)?;
+    encode_header(&data_key, &prepared.header)
+}
+
 /// Parse `header.json` without verifying it (a new device has no keys yet).
 fn parse_header(bytes: &[u8]) -> Result<HeaderFile> {
     if bytes.len() > 64 * 1024 {
