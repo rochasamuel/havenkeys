@@ -243,6 +243,11 @@ impl std::fmt::Debug for FillCredentials {
 pub struct RekeyTicket {
     header: HeaderRecord,
     epoch: u64,
+    /// The account this vault is linked to, read from the local store when
+    /// the ticket was taken. Key scheme 3 derives its KEK from it, so it is
+    /// never supplied by the caller: a renderer or extension cannot rekey a
+    /// vault under an identity of its choosing.
+    account: Option<AccountRef>,
 }
 
 /// Output of [`RekeyTicket::derive`].
@@ -269,7 +274,11 @@ impl RekeyTicket {
     }
 
     /// Master password change for any vault; the Secret Key (required for
-    /// scheme 2) stays the same. Slow.
+    /// schemes 2 and 3) stays the same. Slow.
+    ///
+    /// Key scheme 3 is routed to [`RekeyTicket::derive_for_account`] with the
+    /// account this ticket carries, so the one call site the desktop has
+    /// covers every scheme.
     pub fn derive_with_secret_key(
         &self,
         current: &SecretString,
@@ -278,6 +287,13 @@ impl RekeyTicket {
         secret_key: Option<&SecretKey>,
     ) -> Result<Rekeyed> {
         check_new_master_password(new)?;
+        if self.header.key_scheme == KeyScheme::AccountBound {
+            let secret_key = secret_key.ok_or(Error::SecretKeyRequired)?;
+            let account = self.account.as_ref().ok_or(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ))?;
+            return self.derive_for_account(current, new, new_kdf, secret_key, account);
+        }
         let scheme = self.header.key_scheme;
         let vault_key = self.unwrap(current, secret_key)?;
         let h = &self.header;
@@ -775,9 +791,11 @@ impl VaultService {
     pub fn begin_rekey(&self) -> Result<RekeyTicket> {
         self.session()?;
         let header = self.store.header()?.ok_or(Error::NoVault)?;
+        let account = self.store.account()?.map(|a| a.to_ref()).transpose()?;
         Ok(RekeyTicket {
             header,
             epoch: self.epoch,
+            account,
         })
     }
 

@@ -1,6 +1,7 @@
 //! SQLite persistence. Stores only the plaintext header needed to unlock and
 //! opaque encrypted blobs. Knows nothing about keys.
 
+use crate::account::{AccountRef, NormalizedEmail};
 use crate::crypto::kdf::KdfParams;
 use crate::error::{Error, Result};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
@@ -118,6 +119,18 @@ pub struct AccountRecord {
     /// rollback guard from the design doc §8.4.
     pub max_header_rev: i64,
     pub last_synced_at: Option<i64>,
+}
+
+impl AccountRecord {
+    /// The identity key derivation binds to. The stored email is normalized
+    /// here rather than on write, so a row written by an older build still
+    /// derives the same key.
+    pub fn to_ref(&self) -> Result<AccountRef> {
+        Ok(AccountRef::new(
+            self.account_id,
+            NormalizedEmail::parse(&self.email)?,
+        ))
+    }
 }
 
 /// One full `items` row, as stored (encrypted).
