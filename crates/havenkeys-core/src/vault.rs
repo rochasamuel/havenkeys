@@ -159,19 +159,6 @@ pub(crate) fn derive_kek_for(
     }
 }
 
-/// Test shim for the integration tests, which live outside the crate.
-#[doc(hidden)]
-pub fn derive_kek_for_test(
-    scheme: KeyScheme,
-    password: &SecretString,
-    kdf: &KdfParams,
-    vault_id: &Uuid,
-    secret_key: Option<&SecretKey>,
-    account: Option<&AccountRef>,
-) -> Result<()> {
-    derive_kek_for(scheme, password, kdf, vault_id, secret_key, account).map(|_| ())
-}
-
 /// A login offered for a page. Deliberately contains no secrets.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1430,4 +1417,46 @@ fn build_item(
         updated_at: now_ms,
     };
     Ok((overview, details))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::account::NormalizedEmail;
+    use crate::crypto::kdf::test_params;
+
+    const PASSWORD: &str = "correct horse battery staple";
+
+    #[test]
+    fn account_bound_scheme_refuses_derivation_without_an_account() {
+        let sk = SecretKey::generate().unwrap();
+        let err = derive_kek_for(
+            KeyScheme::AccountBound,
+            &SecretString::from(PASSWORD),
+            &test_params(),
+            &Uuid::nil(),
+            Some(&sk),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "invalid_input");
+    }
+
+    #[test]
+    fn account_bound_scheme_refuses_derivation_without_a_secret_key() {
+        let account = AccountRef::new(
+            Uuid::from_u128(7),
+            NormalizedEmail::parse("user@example.com").unwrap(),
+        );
+        let err = derive_kek_for(
+            KeyScheme::AccountBound,
+            &SecretString::from(PASSWORD),
+            &test_params(),
+            &Uuid::nil(),
+            None,
+            Some(&account),
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "secret_key_required");
+    }
 }

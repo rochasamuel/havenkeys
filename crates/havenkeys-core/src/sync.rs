@@ -53,6 +53,22 @@ pub const MAX_DEVICES: usize = 32;
 /// Largest file read from the folder (a snapshot is one blob).
 pub const MAX_FILE_BYTES: usize = blob::MAX_BLOB_LEN;
 
+/// Generous clock-skew allowance for a remote deletion's `deleted_at`
+/// (`RemoteChange`) against this device's `now_ms` in
+/// [`VaultService::apply_remote_changes`].
+///
+/// `deleted_at` is plaintext the server supplies and is not authenticated
+/// (see docs/crypto.md, "Key scheme 3 (account)"), so this is a partial
+/// mitigation, not a fix: it only rejects the worst forgeries, such as
+/// `deleted_at = i64::MAX`, which would otherwise poison that item ID
+/// forever (the resurrection arm of `decide_merge` could never be satisfied
+/// again). A hostile server sending a plausible `deleted_at` — even
+/// `now_ms` itself — still deletes the item; that requires authenticated
+/// tombstones, which do not exist yet. 24 hours is generous on purpose:
+/// legitimate clock skew between two real devices is not zero, and the
+/// merge already decides outcomes on wall clocks.
+const MAX_FUTURE_DELETION_SKEW_MS: i64 = 24 * 60 * 60 * 1000;
+
 // ------------------------------------------------------------------ formats
 
 /// Fields of `header.json` covered by the attestation.
@@ -327,6 +343,11 @@ impl VaultService {
     /// the previous password work again.
     pub fn adopt_account_header(&mut self, remote: &[u8]) -> Result<bool> {
         let local = self.store.header()?.ok_or(Error::NoVault)?;
+        if local.key_scheme != KeyScheme::AccountBound {
+            return Err(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ));
+        }
         let file = parse_header(remote)?;
         if file.body.vault_id != local.vault_id {
             return Err(Error::InvalidInput("that header is for a different vault"));
@@ -428,6 +449,14 @@ impl VaultService {
         for change in changes {
             match (change.deleted_at, change.overview, change.details) {
                 (Some(at), _, _) => {
+                    // Partial mitigation only (see MAX_FUTURE_DELETION_SKEW_MS):
+                    // reject deletions implausibly far in the future rather
+                    // than let a forged `deleted_at` poison this item ID
+                    // permanently.
+                    if at > now_ms.saturating_add(MAX_FUTURE_DELETION_SKEW_MS) {
+                        report.skipped_items += 1;
+                        continue;
+                    }
                     let e = remote_tombs.entry(change.item_id).or_insert(at);
                     *e = (*e).max(at);
                 }
