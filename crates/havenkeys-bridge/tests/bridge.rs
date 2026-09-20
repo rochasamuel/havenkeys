@@ -76,7 +76,7 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
     }
 }
 
-fn fixture() -> Fixture {
+fn build_fixture(writer: Option<()>) -> Fixture {
     let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
     let mut v = new_account_vault(kdf);
     v.update_settings(Settings {
@@ -131,16 +131,31 @@ fn fixture() -> Fixture {
     let locks = Arc::new(AtomicUsize::new(0));
     let changes = Arc::new(AtomicUsize::new(0));
     let (v2, l2, c2) = (vault.clone(), locks.clone(), changes.clone());
-    let bridge = Bridge::with_change_hook(
-        vault.clone(),
-        move || {
-            v2.lock().unwrap().lock();
-            l2.fetch_add(1, Ordering::SeqCst);
-        },
-        move || {
-            c2.fetch_add(1, Ordering::SeqCst);
-        },
-    );
+    let on_lock = move || {
+        v2.lock().unwrap().lock();
+        l2.fetch_add(1, Ordering::SeqCst);
+    };
+    let on_change = move || {
+        c2.fetch_add(1, Ordering::SeqCst);
+    };
+    let bridge = match writer {
+        // No writer: writes have nowhere to go, which is what an offline
+        // device is.
+        None => Bridge::with_change_hook(vault.clone(), on_lock, on_change),
+        // A server that accepts everything, handing out revisions in order.
+        Some(()) => {
+            let v3 = vault.clone();
+            let next = AtomicUsize::new(100);
+            Bridge::with_writer(vault.clone(), on_lock, on_change, move |staged| {
+                let revision = next.fetch_add(1, Ordering::SeqCst) as i64;
+                v3.lock()
+                    .map_err(|_| ErrorCode::Internal)?
+                    .commit_write(staged, revision)
+                    .map(|_| ())
+                    .map_err(|_| ErrorCode::Internal)
+            })
+        }
+    };
     Fixture {
         vault,
         bridge,
@@ -150,6 +165,16 @@ fn fixture() -> Fixture {
         bank,
         note,
     }
+}
+
+/// A device with no server session: staged writes have nowhere to go.
+fn fixture() -> Fixture {
+    build_fixture(None)
+}
+
+/// A device whose server accepts every write.
+fn online_fixture() -> Fixture {
+    build_fixture(Some(()))
 }
 
 fn request(id: u32, req: serde_json::Value) -> Vec<u8> {
@@ -461,21 +486,51 @@ fn save_login_flow() {
         "check_login never returns passwords"
     );
 
-    // check_login is a read and keeps working; the save itself is a write
-    // and needs a server session (spec 2026-09-20 §8.4), so it is refused
-    // and nothing changes. The extension must be told this is "offline",
-    // not a generic internal error, so it shows an accurate message.
+    // Without a server session the save has nowhere to go, and the
+    // extension is told "offline" rather than a generic internal error, so
+    // it can say something accurate.
     let r = save(&f, gh, Some("octo"), "rotated", Some(f.github));
     assert!(r["result"].is_null());
     assert_eq!(error_code(&r), Some("offline"));
     assert_eq!(fill(&f, f.github, gh)["result"]["password"], "gh-password");
     assert_eq!(f.changes.load(Ordering::SeqCst), 0);
+}
 
-    let f = fixture();
+/// The whole path, with a server that accepts: the browser's save reaches
+/// the vault, and only the password changes.
+#[test]
+fn save_login_stores_the_password_when_the_server_accepts() {
+    let f = online_fixture();
+    let gh = "https://github.com/session";
+
+    let r = save(&f, gh, Some("octo"), "rotated", Some(f.github));
+    assert_eq!(r["result"]["type"], "save_login");
+    assert_eq!(r["result"]["itemId"], f.github.to_string());
+    assert_eq!(fill(&f, f.github, gh)["result"]["password"], "rotated");
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+    // The old password is recoverable, as it is for a change made in the app.
+    assert_eq!(
+        f.vault
+            .lock()
+            .unwrap()
+            .password_history(&f.github)
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // A new site is saved for that site only.
     let r = save(&f, "https://new.example/login", Some("me"), "pw", None);
-    assert!(r["result"].is_null());
-    assert_eq!(error_code(&r), Some("offline"));
-    assert_eq!(f.changes.load(Ordering::SeqCst), 0);
+    let new_id: Uuid = r["result"]["itemId"].as_str().unwrap().parse().unwrap();
+    assert_eq!(f.changes.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        fill(&f, new_id, "https://new.example/")["result"]["password"],
+        "pw"
+    );
+    assert_eq!(
+        error_code(&fill(&f, new_id, "https://github.com/")),
+        Some("denied")
+    );
 }
 
 /// A2 for writes: the extension cannot overwrite another site's login.

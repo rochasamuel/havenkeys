@@ -586,11 +586,10 @@ fn check_login_classifies_submissions() {
 #[test]
 fn save_login_adds_for_the_page_site_only() {
     let (mut v, _) = github_vault();
-    // A save is a write, and writes need a server session (spec 2026-09-20
-    // §8.4); nothing is created without one, even though the page is a
-    // perfectly valid site for a new login.
-    assert_eq!(
-        v.save_login(
+    // A save is an ordinary staged write: sealed here, stored only once the
+    // server has accepted it (spec 2026-09-20 §8.4).
+    let staged = v
+        .stage_save_login(
             "https://www.example.com/signin?next=/x",
             None,
             Some("me@example.com"),
@@ -598,20 +597,34 @@ fn save_login_adds_for_the_page_site_only() {
             None,
             NOW,
         )
-        .err(),
-        Some(Error::Offline)
+        .unwrap();
+    assert!(
+        v.find_matches("https://www.example.com/", None)
+            .unwrap()
+            .is_empty(),
+        "nothing is stored before the server accepts it"
+    );
+
+    v.commit_write(staged.write, 7).unwrap();
+    let matches = v.find_matches("https://www.example.com/", None).unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].username.as_deref(), Some("me@example.com"));
+    // Saved as a whole-site rule for the page's own site, so a subdomain
+    // matches and an unrelated site does not.
+    assert_eq!(
+        v.find_matches("https://login.example.com/", None)
+            .unwrap()
+            .len(),
+        1
     );
     assert!(v
-        .find_matches("https://www.example.com/", None)
+        .find_matches("https://example.org/", None)
         .unwrap()
         .is_empty());
-    assert!(v
-        .find_matches("https://login.example.com/", None)
-        .unwrap()
-        .is_empty());
-    // Pages that cannot hold a login are refused before that check ever runs.
+
+    // Pages that cannot hold a login are refused before anything is sealed.
     assert_eq!(
-        v.save_login("file:///etc/passwd", None, None, secret("x"), None, NOW)
+        v.stage_save_login("file:///etc/passwd", None, None, secret("x"), None, NOW)
             .err(),
         Some(Error::Denied)
     );
@@ -623,7 +636,7 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
     let (mut v, gh) = github_vault();
     let bank = v.find_matches("https://mybank.com/", None).unwrap()[0].id;
     assert_eq!(
-        v.save_login(
+        v.stage_save_login(
             "https://github.com/",
             None,
             None,
@@ -635,7 +648,7 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
         Some(Error::Denied)
     );
     assert_eq!(
-        v.save_login("https://evil.com/", None, None, secret("x"), Some(&gh), NOW)
+        v.stage_save_login("https://evil.com/", None, None, secret("x"), Some(&gh), NOW)
             .err(),
         Some(Error::Denied)
     );
@@ -644,11 +657,10 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
         "bank-secret"
     );
 
-    // Origin-bound and matching the right item — the save itself still
-    // needs a server session, so it is `Offline`, not silently accepted,
-    // and the item is untouched.
-    assert_eq!(
-        v.save_login(
+    // Origin-bound and naming the right item: sealed, and the stored item is
+    // untouched until the server accepts the write.
+    let staged = v
+        .stage_save_login(
             "https://github.com/",
             None,
             Some("ignored"),
@@ -656,17 +668,24 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
             Some(&gh),
             NOW + 1,
         )
-        .err(),
-        Some(Error::Offline)
-    );
-    let item = v.get_item(&gh).unwrap();
-    assert_eq!(item.username.as_deref(), Some("octo"));
-    assert!(item.has_totp);
+        .unwrap();
+    assert_eq!(staged.item_id, gh);
     assert_eq!(
         v.reveal(&gh, SecretField::Password).unwrap().expose(),
         "gh-secret"
     );
-    assert!(v.password_history(&gh).unwrap().is_empty());
+
+    v.commit_write(staged.write, 9).unwrap();
+    let item = v.get_item(&gh).unwrap();
+    // The browser cannot rename the login or change its username; only the
+    // password is replaced.
+    assert_eq!(item.username.as_deref(), Some("octo"));
+    assert!(item.has_totp);
+    assert_eq!(
+        v.reveal(&gh, SecretField::Password).unwrap().expose(),
+        "new-gh"
+    );
+    assert_eq!(v.password_history(&gh).unwrap().len(), 1);
 }
 
 /// Password-history bounding and skip-if-unchanged is a `stage_update`/
@@ -708,7 +727,7 @@ fn save_login_refused_while_locked() {
     let (mut v, gh) = github_vault();
     v.lock();
     assert_eq!(
-        v.save_login(
+        v.stage_save_login(
             "https://github.com/",
             None,
             None,
@@ -726,16 +745,16 @@ fn save_login_refused_while_locked() {
     );
 }
 
-/// A save always refuses without a server session (spec 2026-09-20 §8.4),
-/// whether it would have created a new item or updated an existing one, and
-/// touches neither the store nor the overview cache.
+/// A staged save writes nothing: the server has to accept it first
+/// (spec 2026-09-20 §8.4). Neither the store nor the overview cache moves
+/// until `commit_write` runs.
 #[test]
-fn save_login_never_writes_without_a_server_session() {
+fn a_staged_save_touches_nothing_until_it_is_committed() {
     let (mut v, gh) = github_vault();
     let before = v.list_items().unwrap().len();
 
-    assert_eq!(
-        v.save_login(
+    let created = v
+        .stage_save_login(
             "https://github.com/",
             None,
             Some("someone-new"),
@@ -743,11 +762,9 @@ fn save_login_never_writes_without_a_server_session() {
             None,
             NOW,
         )
-        .err(),
-        Some(Error::Offline)
-    );
-    assert_eq!(
-        v.save_login(
+        .unwrap();
+    let updated = v
+        .stage_save_login(
             "https://github.com/",
             None,
             None,
@@ -755,9 +772,8 @@ fn save_login_never_writes_without_a_server_session() {
             Some(&gh),
             NOW,
         )
-        .err(),
-        Some(Error::Offline)
-    );
+        .unwrap();
+    assert_eq!(updated.item_id, gh);
 
     // Nothing was created...
     assert_eq!(v.list_items().unwrap().len(), before);
@@ -769,4 +785,10 @@ fn save_login_never_writes_without_a_server_session() {
         "gh-secret"
     );
     assert!(v.password_history(&gh).unwrap().is_empty());
+
+    // A lock between staging and committing discards both: the blobs were
+    // sealed under a session that no longer exists.
+    v.lock();
+    assert_eq!(v.commit_write(created.write, 1).err(), Some(Error::Locked));
+    assert_eq!(v.commit_write(updated.write, 2).err(), Some(Error::Locked));
 }

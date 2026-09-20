@@ -1,6 +1,7 @@
 # Threat Model
 
-HavenKeys is a local-first personal password manager. This document lists the
+HavenKeys is a personal password manager whose vault lives on a server the
+user runs, encrypted with keys that server never sees. This document lists the
 assets it protects, the adversaries it considers, and — equally important — the
 adversaries it does **not** defend against.
 
@@ -16,6 +17,9 @@ adversaries it does **not** defend against.
 | Passwords, TOTP secrets, notes | Critical | Encrypted at rest. Decrypted on demand in Rust core. |
 | Usernames, titles, URLs | High (reveals which services a user has) | Encrypted at rest. Decrypted into memory on unlock (for list/search). |
 | Item count, vault creation time, KDF parameters | Low | Plaintext in SQLite (needed to unlock). |
+| Auth key | Critical if reused elsewhere, but it unwraps nothing | Derived at unlock from the master password and the Secret Key; sent to the server over TLS, stored there only as an Argon2id hash. |
+| Session token | High while valid (24 h) | Server memory and the desktop's memory only. Never on disk; dropped when the vault locks. |
+| Account email, device names, item count, change times | Low, but visible to the server | Plaintext in the server's Postgres. |
 
 ## 2. Trust boundaries
 
@@ -25,7 +29,15 @@ adversaries it does **not** defend against.
  │ authorization, origin matching)  │   │ Browser extension, native host│◄──┤ Page JavaScript   │
  └───────────────┬──────────────────┘   └───────────────────────────────┘   │ Page DOM, iframes │
                  │                                                           └───────────────────┘
-          encrypted SQLite file (untrusted storage: may be copied/modified)
+          encrypted SQLite replica (untrusted storage: may be copied/modified)
+                 │
+                 │ HTTPS, session token, ciphertext only
+                 ▼
+ ┌──────────────────────────────────────────────────────────────────────────┐
+ │ havenkeys-server + Postgres — untrusted for confidentiality and integrity │
+ │ of item content, TRUSTED for availability and for existence: it decides   │
+ │ what the vault contains, and a deletion it serves is applied.             │
+ └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 * **Rust core** is the only component that holds keys and enforces policy.
@@ -38,6 +50,16 @@ adversaries it does **not** defend against.
 * **The browser extension and the native host** can only reach the core
   through the bridge (`native-messaging.md`). Every request is re-validated
   and origin-bound in Rust, and the master password and keys never cross it.
+* **The server** holds ciphertext and metadata. It is untrusted for reading
+  (it has no key) and for integrity of item content (every blob and the
+  header authenticate under keys it never sees), but it *is* the authority on
+  which items exist: see T1c. It identifies every request from its session
+  token, never from anything the client's body claims.
+* **The sync client** (`havenkeys-sync-client`) treats every answer as
+  hostile: responses are bounded while being read, KDF parameters below the
+  core's floor are refused before any derivation, and redirects are not
+  followed, so a bearer token cannot be sent to a host the user did not
+  choose.
 * **Web pages** are hostile by default. They cannot message the extension
   (`externally_connectable` is empty, and page script has no extension
   APIs). When in-page suggestions are on, a content script reads the page's
@@ -55,8 +77,8 @@ Stolen laptop backup, synced folder leak, malware exfiltrating files.
 * The vault key is random (256-bit, OS CSPRNG) and wrapped with a KEK derived
   from the master password with Argon2id (memory-hard, salted) and, for
   vaults with a Secret Key, the 128-bit Secret Key (HKDF).
-* **Copies without the Secret Key** (the sync folder, a backup, a copied
-  `vault.sqlite3`): guessing the master password is not enough. The attacker
+* **Copies without the Secret Key** (the server's database, a backup, a
+  copied `vault.sqlite3`): guessing the master password is not enough. The attacker
   would also have to guess 128 random bits.
 * **A full copy of a device** (which includes `device.json` and so the Secret
   Key), or a password-only vault: the attacker's best strategy is offline
@@ -64,18 +86,45 @@ Stolen laptop backup, synced folder leak, malware exfiltrating files.
   **A weak master password remains guessable**; we enforce a minimum length
   but cannot guarantee strength.
 
-### T1b — The sync service, or someone in your cloud account
-They can read, change, delete, reorder and replay everything in the sync
-folder.
+### T1b — The server operator, or someone who has taken the server
+They can read, change, delete, reorder and replay everything the server
+stores, and they see every request.
 
-* They cannot read it: every snapshot is encrypted under the data key, and
-  unlocking needs the master password and the Secret Key.
-* They cannot change it without detection: snapshots, the items in them and
-  the header attestation all authenticate. They cannot roll items back by
-  replaying old files (older versions lose merges), and they cannot swap a
-  header for a password-only one.
-* They **can** delete files, which stops updates between devices (denial of
-  service), and they see metadata (`sync.md` §6).
+* They **cannot read** item content. Overviews and details are AES-256-GCM
+  blobs sealed under keys derived from the master password and the Secret
+  Key, neither of which reaches the server. The vault header is stored as
+  bytes and never parsed there.
+* They **cannot forge** item content or a header: both authenticate. A blob
+  that does not open under the vault's data key is skipped and counted
+  (`SyncReport::skipped_items`), leaving the previous row alone — a hostile
+  server can fail to update a replica, not corrupt it. A header must carry an
+  attestation only a vault-key holder could write, and its revision may not go
+  below the highest one the device has seen (`max_header_rev`), so an old
+  header cannot be replayed to make a retired master password work again.
+* They **cannot impersonate a device**: the auth key is stored only as an
+  Argon2id hash, and `auth/params` answers identically for addresses that have
+  no account, so the server is not an account-enumeration oracle either.
+* They **can delete or withhold** data — see T1c — and they see metadata: the
+  account's email, how many items exist, how large each is, when each changed,
+  how many devices there are and what they are called, and each device's IP
+  and rough activity. That metadata is the price of this design and is not
+  encrypted.
+
+### T1c — A server that destroys data (inherent, not a flaw)
+The server is the single writer. A deletion it serves is indistinguishable
+from one the user made, because there is nothing else for a device to compare
+it against: the local SQLite is a replica that follows the server, not an
+independent copy.
+
+* A compromised or failing server can therefore **empty a vault**, and every
+  device will apply it.
+* The mitigations are operational, not cryptographic: **tested backups**
+  (`docs/deployment.md` §5 — a restore drill is a prerequisite of storing a
+  real vault) and the user noticing. `SyncReport` carries the deletion count
+  so the UI can say how much disappeared.
+* Availability is a correctness concern here, not a convenience: a server
+  that is down means no login can be saved, no password rotated, no item
+  deleted. Reads keep working offline.
 
 ### T2 — Attacker who can modify the vault file
 * Every blob is authenticated (AEAD). Associated data binds each ciphertext to

@@ -65,6 +65,21 @@ impl From<SyncError> for CmdError {
     }
 }
 
+/// What the browser extension is told when a save fails. The extension gets
+/// a code and a fixed message, never the server's words.
+pub fn bridge_error(err: CmdError) -> havenkeys_protocol::ErrorCode {
+    use havenkeys_protocol::ErrorCode;
+    match err.code {
+        "offline" | "signed_out" => ErrorCode::Offline,
+        "locked" => ErrorCode::Locked,
+        "denied" => ErrorCode::Denied,
+        "not_found" | "item_changed_elsewhere" => ErrorCode::NotFound,
+        "invalid_input" => ErrorCode::InvalidInput,
+        "rate_limited" => ErrorCode::RateLimited,
+        _ => ErrorCode::Internal,
+    }
+}
+
 /// Map a failure, and drop the session when the server says it is gone, so
 /// the app falls back to read-only instead of retrying with a dead token.
 fn failed(app: &AppHandle, err: SyncError) -> CmdError {

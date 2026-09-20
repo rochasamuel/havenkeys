@@ -15,8 +15,8 @@ use crate::error::{Error, Result};
 use crate::import::{ImportReport, ImportedItem};
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
-    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, PreviousPassword, SecretField,
-    SecretUpdate, Settings, MAX_PASSWORD_HISTORY,
+    clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
+    SecretField, SecretUpdate, Settings, UrlRule, MAX_PASSWORD_HISTORY,
 };
 use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::secret::SecretString;
@@ -400,6 +400,21 @@ impl std::fmt::Debug for StagedWrite {
         f.debug_struct("StagedWrite")
             .field("item_id", &self.item_id)
             .field("base_revision", &self.base_revision)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A login from the browser, sealed and ready to send. `item_id` is what the
+/// extension is told, whether the login was created or updated.
+pub struct StagedSave {
+    pub write: StagedWrite,
+    pub item_id: Uuid,
+}
+
+impl std::fmt::Debug for StagedSave {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StagedSave")
+            .field("item_id", &self.item_id)
             .finish_non_exhaustive()
     }
 }
@@ -977,30 +992,66 @@ impl VaultService {
     /// save for the wrong site or for an item that does not match the page
     /// is `Denied`, exactly as before; only a save that would otherwise have
     /// succeeded is `Offline`.
-    pub fn save_login(
-        &mut self,
+    /// Seal the login a browser form just submitted, ready to send.
+    ///
+    /// Same authorization as any other write from the extension: an update
+    /// must name an item that is actually saved for the page it came from,
+    /// and a new login is stored for the frame's own site, never the top
+    /// page's. Nothing is written here; the caller sends the staged write and
+    /// records it with `commit_write`.
+    pub fn stage_save_login(
+        &self,
         page_url: &str,
         top_url: Option<&str>,
-        _username: Option<&str>,
+        username: Option<&str>,
         password: SecretString,
         update: Option<&Uuid>,
-        _now_ms: i64,
-    ) -> Result<Uuid> {
+        now_ms: i64,
+    ) -> Result<StagedSave> {
         if password.is_empty() {
             return Err(Error::InvalidInput("password is required"));
         }
         self.session()?;
         if let Some(id) = update {
-            self.authorize_for_page(id, page_url, top_url)?;
-        } else {
-            // Saved for the frame the form was in, as a whole-site rule.
-            let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-            page.site_title_and_origin().ok_or(Error::Denied)?;
+            let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+            let input = ItemInput {
+                item_type: ItemType::Login,
+                title: existing.title.clone(),
+                username: existing.username.clone(),
+                urls: existing.urls.clone(),
+                password: SecretUpdate::Set(password),
+                totp: SecretUpdate::Keep,
+                notes: SecretUpdate::Keep,
+                content: SecretUpdate::Keep,
+            };
+            return Ok(StagedSave {
+                item_id: *id,
+                write: self.stage_update(id, input, now_ms)?,
+            });
         }
-        Err(Error::Offline)
+        // Saved for the frame the form was in, as a whole-site rule.
+        let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+        let (title, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title,
+            username: username.map(str::to_owned),
+            urls: vec![UrlRule {
+                url: origin,
+                match_type: MatchType::Domain,
+            }],
+            password: SecretUpdate::Set(password),
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+        };
+        let write = self.stage_create(input, now_ms)?;
+        Ok(StagedSave {
+            item_id: write.item_id,
+            write,
+        })
     }
 
-    /// When each previous password of a login was replaced, newest first.
     pub fn password_history(&self, id: &Uuid) -> Result<Vec<i64>> {
         match self.load_details(id)? {
             ItemDetails::Login {

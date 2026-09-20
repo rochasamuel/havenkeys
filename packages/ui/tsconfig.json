@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    // The generator reads and writes files; nothing else in this package
+    // touches a node API, and nothing shipped to a browser imports it.
+    "types": ["node"],
+    // The generator is run by node directly (`node src/generate.ts`), and
+    // node only resolves imports that carry their extension. The other
+    // packages are always bundled, so they do not need this.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
