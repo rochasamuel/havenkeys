@@ -63,6 +63,17 @@ Why this shape:
 * The KEK derivation takes the vault ID as HKDF salt, so the same password on
   two vaults yields unrelated KEKs even in the (astronomically unlikely) event
   of an Argon2 salt collision.
+* **Key scheme 3 binds the KEK to an account.** The same Argon2id master key
+  and the Secret Key are concatenated exactly as in scheme 2 (`ikm = master
+  key ‖ Secret Key`), but the HKDF salt becomes the account ID's 16 raw bytes
+  followed by the normalized email's UTF-8 bytes, and the info label is
+  `"havenkeys/v3/kek"`. A second HKDF expansion over that *same* input keying
+  material and that *same* salt, with info label `"havenkeys/v3/auth"`,
+  yields an auth key sent to the sync server at login. One Argon2id run —
+  the expensive step — therefore produces both the KEK and the auth key; the
+  auth key authenticates the device to the server and **unwraps nothing**.
+  HKDF's info-string separation means it cannot be walked back to the KEK,
+  the master key or the Secret Key. See "Key scheme 3 (account)" below.
 
 ### Secret Key (key scheme 2)
 
@@ -100,6 +111,51 @@ style of 1Password's two-secret key derivation:
 * **Header revision:** every rewrap (password change, Secret Key upgrade)
   increments `header_revision`, so devices sharing a sync folder can tell
   which header is newest (`sync.md` §4).
+
+### Key scheme 3 (account)
+
+Links a vault to a `havenkeys-server` account, so that device can pull and
+push a delta sync feed against a server cursor. The account is not the
+Secret Key: linking does not remove or replace it, it adds a third input to
+the KEK derivation.
+
+* **`key_scheme` values.** The header field now takes `1` (password only),
+  `2` (password + Secret Key) or `3` (password + Secret Key + account).
+  There is no scheme that combines an account with `1`: scheme 3 always
+  requires the Secret Key, because it is derived exactly like scheme 2 with
+  the account mixed in (see "Key hierarchy" above).
+* **A new account vault** (`prepare_new_account_vault`) generates a fresh
+  Secret Key and derives straight into scheme 3, so first-time account
+  creation never passes through scheme 2.
+* **Refused before derivation.** `derive_kek_for` matches on
+  `(KeyScheme::AccountBound, Some(secret_key), None)` — a scheme 3 header
+  with a Secret Key but no `AccountRef` — and returns
+  `Error::InvalidInput` immediately, before `derive_master_key` runs. A
+  caller that forgets to pass the account (or a vault opened outside its
+  account context) is refused without paying for an Argon2id derivation.
+* **The 2 → 3 upgrade** (`RekeyTicket::derive_account_upgrade`) requires the
+  vault to currently be at scheme 2, unwraps the vault key with the current
+  password and Secret Key, and re-wraps that *same* vault key under a new
+  scheme 3 KEK with a fresh Argon2id salt. The Secret Key does not change,
+  and items are never touched or re-encrypted — only the header's key wrap,
+  KDF parameters and `key_scheme` change (and `header_revision` advances, as
+  for any rewrap).
+* **Email normalization.** The salt above depends on the account's email, so
+  every client must reduce it to the same bytes. `NormalizedEmail::parse`
+  applies exactly three steps, in this order: trim leading/trailing
+  whitespace, Unicode-normalize to NFC, then lowercase. What the derivation
+  depends on is that every client applies these same steps in the same
+  order and gets the same bytes back — not that the result is itself
+  strictly NFC-normalized. It usually is, but lowercasing after NFC can
+  still introduce a decomposition for a handful of codepoints (`U+0130`
+  LATIN CAPITAL LETTER I WITH DOT ABOVE is one); a future non-Rust client
+  must reproduce trim → NFC → lowercase, in that order and nothing more, to
+  derive the same key.
+* **Auth key.** Sent to the server at login as proof of possession of the
+  master password and the Secret Key (`derive_auth_key` /
+  `derive_auth_key_from_master`). Its `Debug` implementation prints
+  `AuthKey(<redacted>)`; see "Key hierarchy" above for what it does and does
+  not do.
 
 ## Argon2id parameters
 

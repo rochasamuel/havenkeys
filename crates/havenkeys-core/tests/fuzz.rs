@@ -290,3 +290,43 @@ fn fuzz_item_input() {
     assert!(stored > 0, "the fuzzer should also produce valid items");
     assert_eq!(v.list_items().unwrap().len(), stored);
 }
+
+// ------------------------------------------------------------ server input
+
+/// Random bytes in the overview and details slots must never panic, never
+/// produce an item, and must be counted as skipped. Everything a sync
+/// server sends is untrusted input reaching `check_item_bytes`, which
+/// decrypts under this vault's data key.
+#[test]
+fn fuzz_remote_changes() {
+    let (mut vault, _sk) = activated_with_account();
+    let mut rng = Rng::new(0x5EED_5EED);
+    for _ in 0..2000 {
+        let change = havenkeys_core::sync::RemoteChange {
+            item_id: Uuid::from_u128(u128::from(rng.next())),
+            overview: Some(rng.bytes(512)),
+            details: Some(rng.bytes(512)),
+            deleted_at: None,
+        };
+        let report = vault.apply_remote_changes(1, vec![change], NOW).unwrap();
+        assert_eq!(report.added, 0);
+        assert_eq!(report.updated, 0);
+        assert_eq!(report.skipped_items, 1);
+    }
+    assert_eq!(vault.list_items().unwrap().len(), 0);
+}
+
+/// Random bytes as a server header must be rejected, never adopted.
+#[test]
+fn fuzz_account_headers() {
+    let (mut vault, _sk) = activated_with_account();
+    let mut rng = Rng::new(0x1234_5678);
+    for _ in 0..2000 {
+        let bytes = rng.bytes(1024);
+        // Either an error or a refusal; never an adoption, never a panic.
+        assert!(matches!(
+            vault.adopt_account_header(&bytes),
+            Err(_) | Ok(false)
+        ));
+    }
+}
