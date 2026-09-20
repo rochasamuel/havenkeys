@@ -13,39 +13,36 @@ and which do not.
 
 ## 1. Status
 
-What exists in `havenkeys-core` today:
+In code today, and tested:
 
-* the account-bound key scheme (`docs/crypto.md`, "Key scheme 3");
-* the schema 4 local store (`account`, `items`, `settings` — no
-  `tombstones` table, no `dirty` columns);
-* `VaultService::stage_create` / `stage_update` / `stage_delete` and
+* **`havenkeys-core`** — the account-bound key scheme (`docs/crypto.md`,
+  "Key scheme 3"); the schema 4 local store (`account`, `items`, `settings`
+  — no `tombstones` table, no `dirty` columns); `stage_create` /
+  `stage_update` / `stage_delete` / `stage_save_login` / `stage_import` and
   `commit_write`, which seal an item's blobs and record the revision a
-  server assigns them;
-* `apply_remote_changes`, which applies a pull from the server as an upsert
-  or a deletion per item, in cursor order — not a merge;
-* `encode_account_header` / `adopt_account_header`, which publish and adopt
-  the attested header a device uses to prove its identity to a new device.
+  server assigns them; `apply_remote_changes`, which applies a pull as an
+  upsert or a deletion per item, in cursor order, not a merge; and
+  `encode_account_header` / `adopt_account_header` / `prepare_sign_in`.
+* **`havenkeys-server`** — activation from a single-use invite, sessions,
+  the vault header, paged pull, optimistic per-item writes, devices and the
+  admin CLI, tested against a real Postgres (`scripts/test-server.sh`):
+  account isolation on every authenticated route, uniform answers from
+  `auth/params`, rate limiting, size and shape limits, and a guard that no
+  secret reaches a log line. See `docs/deployment.md`.
+* **`havenkeys-sync-client`** — the HTTP client, with a hostile-server suite
+  and a round trip that runs real core crypto against the real server and a
+  real Postgres.
+* **The desktop** — activation, second-device sign-in, the Emergency Kit,
+  Account settings (devices, revoke, sign out), the online/offline
+  distinction with a read-only gate on every mutating command, and a pull
+  every 60 seconds while unlocked and online.
+* **The browser extension** — unchanged trust boundary; its save-login
+  writes through the same staged path.
 
-`havenkeys-server` also exists now, with its own test suite against a real
-Postgres, and is documented in `docs/deployment.md`. It has not been deployed
-anywhere, and no client talks to it yet.
-
-What does not exist yet: `havenkeys-sync-client` (no HTTP client sends a
-staged write or pulls a change), and the desktop screens for activation,
-second-device sign-in and account settings. Concretely, this means:
-
-* every vault-mutating desktop command (`create_item`, `update_item`,
-  `delete_item`, `change_master_password`, import) refuses with
-  `Error::Offline`, because there is nothing to send a staged write to;
-* the connectivity state described in §4 below is always `Offline`, because
-  nothing can ever obtain a server session yet;
-* `create_account_vault` (the only way to create a vault) is exercised only
-  by tests — there is no invite, no activation screen, and no sign-in screen
-  reachable from the desktop UI.
-
-Reading — list, search, reveal a secret, generate a TOTP code, autofill — is
-unaffected by any of this and works exactly as before, from the local
-replica, whether or not a server is reachable.
+**Not done, and blocking before a real vault is stored:** the server has not
+been deployed anywhere, and the backup restore drill in `docs/deployment.md`
+§5 has not been run. The local replica follows the server, deletions
+included, so an untested backup means the vault has none.
 
 ## 2. Model
 
@@ -129,7 +126,7 @@ The extension inherits this — fill, TOTP and password generation work
 offline; a save-login prompt should not be shown while offline, because
 accepting it would only fail.
 
-## 5. Writing (once a sync client exists)
+## 5. Writing
 
 Writes follow the same ticket idiom as unlock and rekey: prepare under the
 vault lock, do the part that can fail or block outside it, commit.
@@ -152,18 +149,19 @@ VaultService::commit_write(staged, revision)  →  persists the row locally
 * `commit_write` re-checks the lock epoch, exactly as `commit_rekey` does,
   so a lock that happens mid-request discards the result instead of writing
   a row sealed under a session that no longer exists.
-* A conflicting write on another device surfaces as `Error::ItemChangedElsewhere`
-  once a sync client exists to detect the server's 409; the desktop is meant
-  to pull, tell the user the item changed elsewhere, and show the current
-  value rather than silently overwrite or silently drop the edit.
-* Import is the same path, in batches of at most 500 items.
+* A conflicting write on another device comes back as the server's 409,
+  which the sync client turns into `SyncError::Conflict` naming the items and
+  the desktop reports as `Error::ItemChangedElsewhere`. Nothing was written,
+  so the user's edit is neither silently applied nor silently lost.
+* Import is the same path, in batches of at most 500 items, each atomic on
+  the server.
+* A save from the browser extension is the same path too
+  (`stage_save_login`), with the same origin binding it always had.
 
-Today, every desktop command that would call `stage_*` checks
-`require_online` first and returns `Error::Offline` before it does — see §1
-and §4. `stage_*`/`commit_write` themselves are exercised only by
-`havenkeys-core`'s own tests.
+Every mutating desktop command checks `require_online` before it stages, so
+an offline device refuses in the UI rather than failing at the network.
 
-## 6. Syncing (once a sync client exists)
+## 6. Syncing
 
 ```text
 unlock (online):   derive keys → unwrap local header → login
@@ -181,14 +179,14 @@ this vault's data key or that carries another item's ID is counted in
 `SyncReport.skipped_items` and leaves the existing row alone — a hostile or
 malfunctioning server can fail to update the replica, but cannot corrupt it
 into serving forged plaintext. `apply_remote_changes` itself imposes no size
-limit on `overview`/`details` — the only bound either blob passes through is
-`crypto::blob`'s blanket 8 MiB cap on any sealed blob (`MAX_BLOB_LEN`), which
-exists to bound decrypting arbitrary bytes under any purpose, not as a
-judgement about a reasonable item size. The applier never re-applies the
-field-level limits a local write goes through (`MAX_NOTE_CONTENT_BYTES`,
-`MAX_PASSWORD_CHARS`, …) to what the server sends. A meaningful size policy
-for pulled items, if wanted, is the sync client's job (design §13 step 3),
-not the applier's, and it has not been built. The cursor advances
+limit on `overview`/`details` — the bounds are applied before that, in
+`havenkeys-sync-client`: a page larger than 500 changes is refused, a blob
+over 8 MiB is refused while still base64 (so an oversized one costs a
+comparison, not an allocation), and the whole response is capped at 17 MiB
+as it is read. What neither layer does is re-apply the *field-level* limits a
+local write goes through (`MAX_NOTE_CONTENT_BYTES`, `MAX_PASSWORD_CHARS`, …)
+to what the server sends; an item that is within the blob cap but larger than
+the UI would ever produce is stored as served. The cursor advances
 unconditionally once the batch is applied,
 including past skipped items; there is no local merge state (`dirty` flags,
 tombstone rows) left to reconcile, because the server is the only writer.
@@ -221,8 +219,9 @@ to undo a master-password change.
   device that pulls afterward, including local edits never yet pushed — the
   server is the authority, not a peer being merged with. This is inherent to
   a server-authoritative design, not a bug to fix with more cryptography;
-  the mitigation is tested server backups (a prerequisite of shipping, not
-  built yet) and the user noticing.
+  the mitigation is tested server backups (`docs/deployment.md` §5 — a
+  prerequisite of storing a real vault, and the drill has not been run yet)
+  and the user noticing.
 * **Availability is now a correctness concern.** A server that is down means
   no login can be saved, no password rotated, no item deleted — not merely
   "changes stop propagating," as under the old folder model.
@@ -239,10 +238,11 @@ to undo a master-password change.
   next pull starts at `since=cursor`, which is already past it. This is
   worse than failing to update — it is failing to update with no visible
   error, forever, on that device. `SyncReport.skipped_items` is the only
-  signal that it happened. There is no resync-from-zero path today; the sync
-  client (design §13 step 3) needs one — an explicit reset-cursor-to-zero
-  operation a user or operator can invoke when a device's replica is
-  suspected to be missing an item it should have.
+  automatic signal that it happened. The way out is manual: Settings →
+  Account → **Re-download everything** (`resync_vault`) sets the cursor back
+  to zero and pulls the whole vault again, tombstones included. Nothing
+  notices the staleness *for* the user, which is the part that remains
+  unsatisfying.
 * **Metadata visible to the server:** the vault ID, the account's email, the
   KDF parameters and salt, the wrapped vault key, item revisions, and the
   number and rough size of items. It cannot read any of it, but it can see

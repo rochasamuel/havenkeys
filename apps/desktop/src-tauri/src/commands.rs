@@ -132,6 +132,22 @@ pub async fn sync_now(app: AppHandle) -> CmdResult<havenkeys_core::sync::SyncRep
     sync::sync_now(&app).await
 }
 
+/// Download the whole vault again.
+///
+/// For the one case a normal sync cannot fix: an item the server once served
+/// in a form this device could not open stays stale forever, because the
+/// cursor moved past it. Resetting the cursor re-reads everything.
+#[tauri::command]
+pub async fn resync_vault(app: AppHandle) -> CmdResult<havenkeys_core::sync::SyncReport> {
+    {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_online()?;
+        state.vault()?.reset_sync_cursor(AppState::now_ms())?;
+    }
+    sync::sync_now(&app).await
+}
+
 #[tauri::command]
 pub fn lock_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     state.lock(&app, "user");

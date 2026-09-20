@@ -130,6 +130,22 @@ export function AccountSection({ online }: { online: boolean }) {
     }
   }
 
+  async function resync() {
+    setSyncing(true);
+    try {
+      const report = await api.resync();
+      toast(`Re-downloaded the vault: ${report.added + report.updated} item(s).`);
+      if (report.skippedItems > 0) {
+        toast(`${report.skippedItems} item(s) still could not be read.`, "error");
+      }
+      refresh();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Could not re-download the vault.", "error");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function signOut() {
     try {
       await api.signOut();
@@ -172,6 +188,9 @@ export function AccountSection({ online }: { online: boolean }) {
       <div className="row-actions">
         <button className="btn" type="button" onClick={sync} disabled={!online || syncing}>
           {syncing ? "Syncing…" : "Sync now"}
+        </button>
+        <button className="btn btn-quiet" type="button" onClick={resync} disabled={!online || syncing}>
+          Re-download everything
         </button>
         <button className="btn btn-quiet" type="button" onClick={signOut}>
           Sign out and lock

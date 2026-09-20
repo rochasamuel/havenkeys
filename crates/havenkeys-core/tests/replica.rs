@@ -373,3 +373,27 @@ fn a_change_with_only_half_its_blobs_is_counted_not_dropped() {
     assert_eq!(report.added, 0);
     assert!(vault.list_items().unwrap().is_empty());
 }
+
+/// The cursor advances past a skipped item, so there has to be a way back.
+#[test]
+fn resetting_the_cursor_asks_for_the_whole_vault_again() {
+    let (mut vault, _sk) = activated_vault();
+    let report = vault
+        .apply_remote_changes(
+            42,
+            vec![RemoteChange {
+                item_id: uuid::Uuid::from_u128(1),
+                revision: 42,
+                overview: Some(vec![0u8; 64]),
+                details: Some(vec![0u8; 64]),
+                deleted: false,
+            }],
+            NOW,
+        )
+        .unwrap();
+    assert_eq!(report.skipped_items, 1);
+    assert_eq!(vault.account().unwrap().unwrap().server_cursor, 42);
+
+    vault.reset_sync_cursor(NOW).unwrap();
+    assert_eq!(vault.account().unwrap().unwrap().server_cursor, 0);
+}

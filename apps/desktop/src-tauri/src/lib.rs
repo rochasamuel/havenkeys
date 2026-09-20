@@ -166,6 +166,7 @@ pub fn run() {
             account::revoke_device,
             account::get_emergency_kit,
             commands::sync_now,
+            commands::resync_vault,
             commands::reveal_previous_password,
             commands::get_totp_code,
             commands::copy_secret,
