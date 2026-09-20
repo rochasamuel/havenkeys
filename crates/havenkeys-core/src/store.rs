@@ -7,7 +7,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -37,6 +37,24 @@ ALTER TABLE vault_header ADD COLUMN header_revision INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE tombstones (
     id         TEXT PRIMARY KEY NOT NULL,
     deleted_at INTEGER NOT NULL
+);
+";
+
+/// Schema 2 → 3: server sync. `dirty` marks rows changed locally since the
+/// last confirmed push (existing rows start dirty, so a vault joining an
+/// account uploads itself once), and `account` holds the identity, the
+/// server cursor and the header-rollback guard.
+const MIGRATE_2_TO_3: &str = "
+ALTER TABLE items ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE tombstones ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+CREATE TABLE account (
+    id             INTEGER PRIMARY KEY CHECK (id = 1),
+    account_id     TEXT    NOT NULL,
+    email          TEXT    NOT NULL,
+    server_url     TEXT    NOT NULL,
+    server_cursor  INTEGER NOT NULL DEFAULT 0,
+    max_header_rev INTEGER NOT NULL DEFAULT 0,
+    last_synced_at INTEGER
 );
 ";
 
@@ -87,6 +105,21 @@ pub struct HeaderRecord {
     pub revision: u64,
 }
 
+/// The account this vault belongs to, and where its sync stands.
+#[derive(Clone, Debug)]
+pub struct AccountRecord {
+    pub account_id: Uuid,
+    /// As the user typed it, for display. Normalize on use, never on store.
+    pub email: String,
+    pub server_url: String,
+    /// Highest server revision this device has pulled.
+    pub server_cursor: i64,
+    /// Highest `header_revision` ever accepted. Never goes down: that is the
+    /// rollback guard from the design doc §8.4.
+    pub max_header_rev: i64,
+    pub last_synced_at: Option<i64>,
+}
+
 /// One full `items` row, as stored (encrypted).
 pub type ItemRow = (Uuid, Vec<u8>, Vec<u8>);
 
@@ -123,12 +156,20 @@ impl Store {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(SCHEMA)?;
                 tx.execute_batch(MIGRATE_1_TO_2)?;
+                tx.execute_batch(MIGRATE_2_TO_3)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
             1 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(MIGRATE_1_TO_2)?;
+                tx.execute_batch(MIGRATE_2_TO_3)?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+                tx.commit()?;
+            }
+            2 => {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch(MIGRATE_2_TO_3)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -276,8 +317,10 @@ impl Store {
 
     pub fn upsert_item(&self, id: &Uuid, overview: &[u8], details: &[u8]) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO items (id, overview, details) VALUES (?1, ?2, ?3)
-             ON CONFLICT(id) DO UPDATE SET overview = excluded.overview, details = excluded.details",
+            "INSERT INTO items (id, overview, details, dirty) VALUES (?1, ?2, ?3, 1)
+             ON CONFLICT(id) DO UPDATE SET overview = excluded.overview,
+                                           details = excluded.details,
+                                           dirty = 1",
             params![id.to_string(), overview, details],
         )?;
         Ok(())
@@ -287,8 +330,9 @@ impl Store {
     pub fn insert_items(&mut self, rows: &[(Uuid, Vec<u8>, Vec<u8>)]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
-            let mut stmt =
-                tx.prepare("INSERT INTO items (id, overview, details) VALUES (?1, ?2, ?3)")?;
+            let mut stmt = tx.prepare(
+                "INSERT INTO items (id, overview, details, dirty) VALUES (?1, ?2, ?3, 1)",
+            )?;
             for (id, overview, details) in rows {
                 stmt.execute(params![id.to_string(), overview, details])?;
             }
@@ -302,8 +346,9 @@ impl Store {
         let tx = self.conn.transaction()?;
         let n = tx.execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
         tx.execute(
-            "INSERT INTO tombstones (id, deleted_at) VALUES (?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at)",
+            "INSERT INTO tombstones (id, deleted_at, dirty) VALUES (?1, ?2, 1)
+             ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at),
+                                           dirty = 1",
             params![id.to_string(), deleted_at],
         )?;
         tx.commit()?;
@@ -346,6 +391,130 @@ impl Store {
         Ok(out)
     }
 
+    pub fn account(&self) -> Result<Option<AccountRecord>> {
+        self.conn
+            .query_row(
+                "SELECT account_id, email, server_url, server_cursor, max_header_rev, last_synced_at
+                 FROM account WHERE id = 1",
+                [],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, i64>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, Option<i64>>(5)?,
+                    ))
+                },
+            )
+            .optional()?
+            .map(|(id, email, server_url, server_cursor, max_header_rev, last_synced_at)| {
+                Ok(AccountRecord {
+                    account_id: Uuid::parse_str(&id).map_err(|_| Error::Corrupted)?,
+                    email,
+                    server_url,
+                    server_cursor,
+                    max_header_rev,
+                    last_synced_at,
+                })
+            })
+            .transpose()
+    }
+
+    pub fn set_account(&mut self, rec: &AccountRecord) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO account
+               (id, account_id, email, server_url, server_cursor, max_header_rev, last_synced_at)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+               account_id = excluded.account_id,
+               email = excluded.email,
+               server_url = excluded.server_url",
+            params![
+                rec.account_id.to_string(),
+                rec.email,
+                rec.server_url,
+                rec.server_cursor,
+                rec.max_header_rev,
+                rec.last_synced_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_cursor(&mut self, cursor: i64, synced_at: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE account SET server_cursor = ?1, last_synced_at = ?2 WHERE id = 1",
+            params![cursor, synced_at],
+        )?;
+        Ok(())
+    }
+
+    /// Raise the rollback guard. An older header never lowers it.
+    pub fn raise_max_header_rev(&mut self, rev: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE account SET max_header_rev = max(max_header_rev, ?1) WHERE id = 1",
+            params![rev],
+        )?;
+        Ok(())
+    }
+
+    /// Items changed locally since the last confirmed push.
+    pub fn dirty_rows(&self) -> Result<Vec<ItemRow>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, overview, details FROM items WHERE dirty = 1")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Vec<u8>>(1)?,
+                r.get::<_, Vec<u8>>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, ov, det) = row?;
+            if let Ok(id) = Uuid::parse_str(&id) {
+                out.push((id, ov, det));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Deletions not yet pushed.
+    pub fn dirty_tombstones(&self) -> Result<Vec<(Uuid, i64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, deleted_at FROM tombstones WHERE dirty = 1")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, at) = row?;
+            if let Ok(id) = Uuid::parse_str(&id) {
+                out.push((id, at));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Mark pushed rows as clean, in one transaction.
+    pub fn clear_dirty(&mut self, ids: &[Uuid]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        for id in ids {
+            tx.execute(
+                "UPDATE items SET dirty = 0 WHERE id = ?1",
+                params![id.to_string()],
+            )?;
+            tx.execute(
+                "UPDATE tombstones SET dirty = 0 WHERE id = ?1",
+                params![id.to_string()],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Apply a sync merge in one transaction: upsert rows, delete items that
     /// were deleted elsewhere, and set tombstones.
     pub fn apply_merge(
@@ -357,8 +526,10 @@ impl Store {
         let tx = self.conn.transaction()?;
         for (id, ov, det) in upserts {
             tx.execute(
-                "INSERT INTO items (id, overview, details) VALUES (?1, ?2, ?3)
-                 ON CONFLICT(id) DO UPDATE SET overview = excluded.overview, details = excluded.details",
+                "INSERT INTO items (id, overview, details, dirty) VALUES (?1, ?2, ?3, 0)
+                 ON CONFLICT(id) DO UPDATE SET overview = excluded.overview,
+                                               details = excluded.details,
+                                               dirty = 0",
                 params![id.to_string(), ov, det],
             )?;
         }
@@ -371,8 +542,9 @@ impl Store {
         for (id, at) in tombstones {
             tx.execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
             tx.execute(
-                "INSERT INTO tombstones (id, deleted_at) VALUES (?1, ?2)
-                 ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at)",
+                "INSERT INTO tombstones (id, deleted_at, dirty) VALUES (?1, ?2, 0)
+                 ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at),
+                                               dirty = 0",
                 params![id.to_string(), at],
             )?;
         }

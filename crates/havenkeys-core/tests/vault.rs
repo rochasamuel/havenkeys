@@ -342,3 +342,117 @@ fn key_scheme_serde_form_is_frozen() {
         "\"account_bound\""
     );
 }
+
+#[test]
+fn account_record_round_trips() {
+    use havenkeys_core::store::{AccountRecord, Store};
+
+    let mut store = Store::open_in_memory().unwrap();
+    assert!(store.account().unwrap().is_none());
+
+    let rec = AccountRecord {
+        account_id: uuid::Uuid::from_u128(42),
+        email: "User@Example.com".into(),
+        server_url: "https://vault.example.com".into(),
+        server_cursor: 0,
+        max_header_rev: 0,
+        last_synced_at: None,
+    };
+    store.set_account(&rec).unwrap();
+
+    let back = store.account().unwrap().unwrap();
+    assert_eq!(back.account_id, rec.account_id);
+    assert_eq!(back.email, "User@Example.com");
+    assert_eq!(back.server_url, rec.server_url);
+    assert_eq!(back.server_cursor, 0);
+}
+
+#[test]
+fn cursor_and_header_guard_move_only_forward() {
+    use havenkeys_core::store::{AccountRecord, Store};
+
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .set_account(&AccountRecord {
+            account_id: uuid::Uuid::from_u128(1),
+            email: "a@b.com".into(),
+            server_url: "https://x".into(),
+            server_cursor: 0,
+            max_header_rev: 0,
+            last_synced_at: None,
+        })
+        .unwrap();
+
+    store.set_cursor(7, NOW).unwrap();
+    assert_eq!(store.account().unwrap().unwrap().server_cursor, 7);
+
+    store.raise_max_header_rev(5).unwrap();
+    store.raise_max_header_rev(3).unwrap(); // an older header must not lower it
+    assert_eq!(store.account().unwrap().unwrap().max_header_rev, 5);
+}
+
+#[test]
+fn local_edits_are_dirty_and_clear_on_confirmation() {
+    use havenkeys_core::store::Store;
+
+    let mut store = Store::open_in_memory().unwrap();
+    let id = uuid::Uuid::from_u128(9);
+    store.upsert_item(&id, b"overview", b"details").unwrap();
+    assert_eq!(store.dirty_rows().unwrap().len(), 1);
+
+    store.clear_dirty(&[id]).unwrap();
+    assert!(store.dirty_rows().unwrap().is_empty());
+
+    // Editing it again marks it dirty again.
+    store.upsert_item(&id, b"overview2", b"details2").unwrap();
+    assert_eq!(store.dirty_rows().unwrap().len(), 1);
+}
+
+#[test]
+fn deletions_are_dirty_until_confirmed() {
+    use havenkeys_core::store::Store;
+
+    let mut store = Store::open_in_memory().unwrap();
+    let id = uuid::Uuid::from_u128(11);
+    store.upsert_item(&id, b"overview", b"details").unwrap();
+    store.clear_dirty(&[id]).unwrap();
+
+    store.delete_item(&id, NOW).unwrap();
+    assert_eq!(store.dirty_tombstones().unwrap(), vec![(id, NOW)]);
+
+    store.clear_dirty(&[id]).unwrap();
+    assert!(store.dirty_tombstones().unwrap().is_empty());
+}
+
+#[test]
+fn upgrades_a_schema_2_database_in_place() {
+    use havenkeys_core::store::Store;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("vault.sqlite3");
+
+    // Build a schema-2 database by hand: the tables as they were, and the
+    // user_version that says so.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE vault_header (
+                 id INTEGER PRIMARY KEY CHECK (id = 1), format_version INTEGER NOT NULL,
+                 vault_id TEXT NOT NULL, kdf TEXT NOT NULL, wrapped_vault_key BLOB NOT NULL,
+                 created_at INTEGER NOT NULL, key_scheme INTEGER NOT NULL DEFAULT 1,
+                 header_revision INTEGER NOT NULL DEFAULT 0);
+             CREATE TABLE items (id TEXT PRIMARY KEY NOT NULL, overview BLOB NOT NULL, details BLOB NOT NULL);
+             CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK (id = 1), blob BLOB NOT NULL);
+             CREATE TABLE tombstones (id TEXT PRIMARY KEY NOT NULL, deleted_at INTEGER NOT NULL);
+             INSERT INTO items (id, overview, details)
+               VALUES ('11111111-1111-1111-1111-111111111111', x'00', x'01');
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    }
+
+    let store = Store::open(&path).unwrap();
+    // The pre-existing row must come back dirty, so it gets uploaded once.
+    assert_eq!(store.dirty_rows().unwrap().len(), 1);
+    assert!(store.account().unwrap().is_none());
+}
