@@ -79,12 +79,6 @@ impl UnlockTicket {
         true
     }
 
-    /// Does unlocking this vault need the account (email + account ID)? Same
-    /// reasoning as [`needs_secret_key`](Self::needs_secret_key).
-    pub fn needs_account(&self) -> bool {
-        true
-    }
-
     /// Key scheme 3 vaults. Slow (Argon2id).
     pub fn derive_for_account(
         &self,
@@ -437,7 +431,7 @@ impl VaultService {
         Ok(self.store.header()?.map(|h| h.created_at))
     }
 
-    /// The vault's ID (not secret; it names the vault in the sync folder).
+    /// The vault's ID (not secret; it names the vault to the account's server).
     pub fn vault_id(&self) -> Result<Option<Uuid>> {
         Ok(self.store.header()?.map(|h| h.vault_id))
     }
@@ -1084,6 +1078,13 @@ impl VaultService {
                 self.session_mut()?.overviews.remove(&staged.item_id);
                 Ok(None)
             }
+            // `overview`/`details` are `pub` (see `StagedWrite`) so a caller
+            // can mutate a value returned by `stage_create`/`stage_update`/
+            // `stage_delete` into a shape neither constructor produces
+            // before calling this. Not reachable through this crate's own
+            // constructors alone, but real as long as those fields are
+            // public — kept so such a value is refused, not silently
+            // misread as a create or a delete.
             _ => Err(Error::InvalidInput("malformed staged write")),
         }
     }

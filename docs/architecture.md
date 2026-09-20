@@ -82,9 +82,16 @@ of the diagram below already exists in code versus what is still a
                                       not built yet)
 ```
 
-Native Messaging to the browser extension is unaffected by any of this — it
-talks to the same `VaultService` the Tauri commands do, and so reads from,
-and is bound by the same connectivity gate as, the local replica.
+Native Messaging to the browser extension is unaffected by any of this for
+reads — it talks to the same `VaultService` the Tauri commands do. For
+writes it is not bound by the same gate: the bridge (`crates/havenkeys-bridge`)
+never calls `AppState::require_online()`. Save-login refuses because
+`VaultService::save_login` (`crates/havenkeys-core/src/vault.rs`) hardcodes
+`Err(Error::Offline)` itself, unconditionally, regardless of connectivity
+state. The result looks the same as the desktop's gate today, but the
+mechanism differs — once `Connectivity::Online` is reachable, `save_login`
+will keep refusing every request until core is changed to accept a
+server-assigned revision from a real sync client.
 
 ## Data flow: unlock
 

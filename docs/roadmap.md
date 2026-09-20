@@ -37,7 +37,7 @@ section for exactly what exists in code today). Order of work, from the
 design's §13:
 
 1. **Core — done.** Schema 4, the single account-bound key scheme,
-   `stage_write`/`commit_write`, and the pull applier
+   `stage_create`/`stage_update`/`stage_delete`/`commit_write`, and the pull applier
    (`apply_remote_changes`) are in `havenkeys-core`. The folder-sync code,
    key schemes 1 and 2, the `tombstones` table, the `dirty` columns and the
    unauthenticated `deleted_at` hazard are deleted, not just deprecated. The

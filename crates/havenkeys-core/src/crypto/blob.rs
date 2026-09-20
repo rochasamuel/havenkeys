@@ -38,9 +38,7 @@ pub enum Purpose {
     ItemOverview,
     ItemDetails,
     Settings,
-    /// A device's snapshot in the sync folder; bound to the device ID.
-    SyncSnapshot,
-    /// Proof that the sync folder's header was written by a vault-key holder.
+    /// Proof that an account's header was written by a vault-key holder.
     SyncHeader,
 }
 
@@ -51,16 +49,12 @@ impl Purpose {
             Purpose::ItemOverview => b"item-overview",
             Purpose::ItemDetails => b"item-details",
             Purpose::Settings => b"settings",
-            Purpose::SyncSnapshot => b"sync-snapshot",
             Purpose::SyncHeader => b"sync-header",
         }
     }
 
     fn needs_item_id(self) -> bool {
-        matches!(
-            self,
-            Purpose::ItemOverview | Purpose::ItemDetails | Purpose::SyncSnapshot
-        )
+        matches!(self, Purpose::ItemOverview | Purpose::ItemDetails)
     }
 }
 
