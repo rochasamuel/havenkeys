@@ -128,3 +128,77 @@ fn swap_database(url: &str, db: &str) -> String {
     let base = head.rsplit_once('/').map(|(h, _)| h).unwrap_or(head);
     format!("{base}/{db}{tail}")
 }
+
+// ------------------------------------------------------------ client helpers
+
+use havenkeys_server::admin::{self, AdminCommand};
+use serde_json::{json, Value};
+
+pub const AUTH_KEY_A: [u8; 32] = [9u8; 32];
+
+/// The KDF block a real client sends: the core's defaults with a fixed salt.
+pub fn kdf_block() -> Value {
+    json!({
+        "algorithm": "argon2id",
+        "memoryKib": 131072,
+        "iterations": 4,
+        "parallelism": 4,
+        "salt": data_encoding::BASE64.encode(&[3u8; 16]),
+    })
+}
+
+/// An account with an unused invite, as the admin CLI creates it.
+pub async fn new_invite(server: &TestServer, email: &str) -> String {
+    admin::run(
+        AdminCommand::NewAccount {
+            email: email.into(),
+            server_url: "https://vault.example.com".into(),
+        },
+        server.pool(),
+    )
+    .await
+    .unwrap()
+    .trim()
+    .to_string()
+}
+
+pub fn activate_body(email: &str, invite: &str, vault_id: Uuid, auth_key: &[u8; 32]) -> Value {
+    json!({
+        "email": email,
+        "invite": invite,
+        "kdf": kdf_block(),
+        "authKey": data_encoding::BASE64.encode(auth_key),
+        "vaultId": vault_id,
+        "header": data_encoding::BASE64.encode(b"header-bytes-v1"),
+        "keyScheme": 3,
+    })
+}
+
+/// An activated account: an invite spent, a vault created.
+pub struct Account {
+    pub email: String,
+    pub account_id: Uuid,
+    pub vault_id: Uuid,
+    pub auth_key: [u8; 32],
+}
+
+pub async fn activate(server: &TestServer, email: &str, auth_key: [u8; 32]) -> Account {
+    let invite = new_invite(server, email).await;
+    let vault_id = Uuid::new_v4();
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&activate_body(email, &invite, vault_id, &auth_key))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status();
+    let text = res.text().await.unwrap();
+    assert_eq!(status, 200, "activation failed: {text}");
+    let body: Value = serde_json::from_str(&text).unwrap();
+    Account {
+        email: email.into(),
+        account_id: body["accountId"].as_str().unwrap().parse().unwrap(),
+        vault_id,
+        auth_key,
+    }
+}
