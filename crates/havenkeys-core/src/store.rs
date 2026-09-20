@@ -48,6 +48,10 @@ pub enum KeyScheme {
     PasswordOnly,
     /// Argon2id(master password) combined with the device's Secret Key.
     PasswordAndSecretKey,
+    /// Argon2id(master password) combined with the device's Secret Key,
+    /// bound to the account (email + account ID). Vaults that sync to a
+    /// server.
+    AccountBound,
 }
 
 impl KeyScheme {
@@ -55,6 +59,7 @@ impl KeyScheme {
         match self {
             KeyScheme::PasswordOnly => 1,
             KeyScheme::PasswordAndSecretKey => 2,
+            KeyScheme::AccountBound => 3,
         }
     }
 
@@ -62,6 +67,7 @@ impl KeyScheme {
         match v {
             1 => Ok(KeyScheme::PasswordOnly),
             2 => Ok(KeyScheme::PasswordAndSecretKey),
+            3 => Ok(KeyScheme::AccountBound),
             _ => Err(Error::UnsupportedVersion),
         }
     }

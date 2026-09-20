@@ -4,10 +4,11 @@
 //! Locking drops the session, which zeroizes the data key and the decrypted
 //! overview cache.
 
+use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
 use crate::crypto::keys::{
-    derive_data_key, derive_kek, derive_kek_with_secret_key, Key256, KEY_LEN,
+    derive_data_key, derive_kek, derive_kek_v3, derive_kek_with_secret_key, Key256, KEY_LEN,
 };
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
@@ -73,7 +74,15 @@ pub struct UnlockKey(Key256);
 impl UnlockTicket {
     /// Does unlocking this vault need the Secret Key?
     pub fn needs_secret_key(&self) -> bool {
-        self.key_scheme == KeyScheme::PasswordAndSecretKey
+        matches!(
+            self.key_scheme,
+            KeyScheme::PasswordAndSecretKey | KeyScheme::AccountBound
+        )
+    }
+
+    /// Does unlocking this vault need the account (email + account ID)?
+    pub fn needs_account(&self) -> bool {
+        self.key_scheme == KeyScheme::AccountBound
     }
 
     /// Password-only vaults. Slow (Argon2id).
@@ -97,26 +106,71 @@ impl UnlockTicket {
             &self.kdf,
             &self.vault_id,
             secret_key,
+            None,
+        )?))
+    }
+
+    /// Key scheme 3 vaults. Slow (Argon2id).
+    pub fn derive_for_account(
+        &self,
+        password: &SecretString,
+        secret_key: &SecretKey,
+        account: &AccountRef,
+    ) -> Result<UnlockKey> {
+        if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
+            return Err(Error::UnlockFailed);
+        }
+        Ok(UnlockKey(derive_kek_for(
+            self.key_scheme,
+            password,
+            &self.kdf,
+            &self.vault_id,
+            Some(secret_key),
+            Some(account),
         )?))
     }
 }
 
-/// The KEK for a key scheme. Scheme 2 without a Secret Key is refused before
-/// any expensive work.
+/// The KEK for a key scheme. A scheme that needs the Secret Key or the
+/// account is refused before any expensive work.
 pub(crate) fn derive_kek_for(
     scheme: KeyScheme,
     password: &SecretString,
     kdf: &KdfParams,
     vault_id: &Uuid,
     secret_key: Option<&SecretKey>,
+    account: Option<&AccountRef>,
 ) -> Result<Key256> {
-    match (scheme, secret_key) {
-        (KeyScheme::PasswordOnly, _) => derive_kek(&derive_master_key(password, kdf)?, vault_id),
-        (KeyScheme::PasswordAndSecretKey, Some(sk)) => {
+    match (scheme, secret_key, account) {
+        (KeyScheme::PasswordOnly, _, _) => {
+            derive_kek(&derive_master_key(password, kdf)?, vault_id)
+        }
+        (KeyScheme::PasswordAndSecretKey, Some(sk), _) => {
             derive_kek_with_secret_key(&derive_master_key(password, kdf)?, sk, vault_id)
         }
-        (KeyScheme::PasswordAndSecretKey, None) => Err(Error::SecretKeyRequired),
+        (KeyScheme::AccountBound, Some(sk), Some(account)) => {
+            derive_kek_v3(&derive_master_key(password, kdf)?, sk, account)
+        }
+        (KeyScheme::AccountBound, Some(_), None) => Err(Error::InvalidInput(
+            "this vault belongs to an account; sign in instead",
+        )),
+        (KeyScheme::PasswordAndSecretKey | KeyScheme::AccountBound, None, _) => {
+            Err(Error::SecretKeyRequired)
+        }
     }
+}
+
+/// Test shim for the integration tests, which live outside the crate.
+#[doc(hidden)]
+pub fn derive_kek_for_test(
+    scheme: KeyScheme,
+    password: &SecretString,
+    kdf: &KdfParams,
+    vault_id: &Uuid,
+    secret_key: Option<&SecretKey>,
+    account: Option<&AccountRef>,
+) -> Result<()> {
+    derive_kek_for(scheme, password, kdf, vault_id, secret_key, account).map(|_| ())
 }
 
 /// A login offered for a page. Deliberately contains no secrets.
@@ -241,7 +295,7 @@ impl RekeyTicket {
         let scheme = self.header.key_scheme;
         let vault_key = self.unwrap(current, secret_key)?;
         let h = &self.header;
-        let new_kek = derive_kek_for(scheme, new, &new_kdf, &h.vault_id, secret_key)?;
+        let new_kek = derive_kek_for(scheme, new, &new_kdf, &h.vault_id, secret_key, None)?;
         Ok(Rekeyed {
             wrapped_vault_key: wrap_vault_key(&new_kek, h.vault_id, &vault_key)?,
             kdf: new_kdf,
@@ -276,7 +330,7 @@ impl RekeyTicket {
 
     fn unwrap(&self, password: &SecretString, secret_key: Option<&SecretKey>) -> Result<Key256> {
         let h = &self.header;
-        let kek = derive_kek_for(h.key_scheme, password, &h.kdf, &h.vault_id, secret_key)?;
+        let kek = derive_kek_for(h.key_scheme, password, &h.kdf, &h.vault_id, secret_key, None)?;
         unwrap_vault_key(&kek, h.vault_id, &h.wrapped_vault_key)
     }
 }
@@ -355,7 +409,7 @@ fn prepare(
     } else {
         KeyScheme::PasswordOnly
     };
-    let kek = derive_kek_for(key_scheme, password, &kdf, &vault_id, secret_key)?;
+    let kek = derive_kek_for(key_scheme, password, &kdf, &vault_id, secret_key, None)?;
     let vault_key = Key256::random()?;
     let wrapped_vault_key = wrap_vault_key(&kek, vault_id, &vault_key)?;
     Ok(PreparedVault {

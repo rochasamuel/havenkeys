@@ -237,6 +237,7 @@ pub fn prepare_join(
         &record.kdf,
         &record.vault_id,
         Some(secret_key),
+        None,
     )?;
     let vault_key = unwrap_vault_key(&kek, record.vault_id, &record.wrapped_vault_key)?;
     if !verify_header(&derive_data_key(&vault_key)?, &file) {
