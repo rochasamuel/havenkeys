@@ -482,3 +482,57 @@ async fn try_login(server: &support::TestServer, email: &str, key: [u8; 32]) -> 
         .status()
         .as_u16()
 }
+
+/// Activation is unauthenticated and hashes with Argon2id, so a stranger must
+/// not be able to ask for that work repeatedly.
+#[tokio::test]
+async fn repeated_bad_invites_are_rate_limited() {
+    let server = support::TestServer::start().await;
+    let invite = support::new_invite(&server, "user@example.com").await;
+    let parsed = havenkeys_server::invite::decode(&invite).unwrap();
+    let forged = havenkeys_server::invite::encode(&havenkeys_server::invite::Invite {
+        secret: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+        ..parsed.clone()
+    });
+
+    let mut statuses = Vec::new();
+    for _ in 0..7 {
+        let res = server
+            .post("/v1/accounts/activate")
+            .json(&support::activate_body(
+                "user@example.com",
+                &forged,
+                Uuid::new_v4(),
+                &[1u8; 32],
+            ))
+            .send()
+            .await
+            .unwrap();
+        statuses.push(res.status().as_u16());
+    }
+    assert!(
+        statuses.contains(&429),
+        "a run of bad invites must start being refused: {statuses:?}"
+    );
+
+    // The real invite still works once the block lapses.
+    server
+        .db()
+        .await
+        .execute("DELETE FROM login_attempts", &[])
+        .await
+        .unwrap();
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&support::activate_body(
+            "user@example.com",
+            &invite,
+            Uuid::new_v4(),
+            &[9u8; 32],
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    server.cleanup().await;
+}

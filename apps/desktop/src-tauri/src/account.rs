@@ -116,6 +116,18 @@ pub async fn activate_account(
     let vault_id = made.prepared.vault_id();
     let kdf = made.prepared.kdf().clone();
 
+    // Written before the server is asked, not after. If activation succeeds
+    // and anything below it fails — a full disk, a crash — the account
+    // exists, its invite is spent, and the only copy of the Secret Key would
+    // otherwise be gone with it, leaving the vault unopenable forever. A key
+    // stored for an activation that never completed is harmless.
+    {
+        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+        device
+            .set_secret_key(&made.secret_key)
+            .map_err(|_| CmdError::file())?;
+    }
+
     client
         .activate(Activation {
             email: account.email.as_str(),
@@ -141,12 +153,6 @@ pub async fn activate_account(
         vault.create_account_vault(made.prepared, &record)?;
         vault.settings()?.auto_lock_minutes
     };
-    {
-        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
-        device
-            .set_secret_key(&made.secret_key)
-            .map_err(|_| CmdError::file())?;
-    }
     state.arm_auto_lock(minutes);
     state.notify_unlocked();
     let status = state.vault()?.status()?;
@@ -203,7 +209,13 @@ pub async fn sign_in(
     let auth_key = auth_key?;
 
     let session = client
-        .login(account.email.as_str(), &auth_key, device_id, DEVICE_NAME)
+        .login(
+            account.email.as_str(),
+            &auth_key,
+            account.id,
+            device_id,
+            DEVICE_NAME,
+        )
         .await
         .map_err(|_| CmdError::sign_in_failed())?;
     let header = client

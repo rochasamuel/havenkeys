@@ -202,7 +202,7 @@ async fn activate(server: &Server, email: &str) -> Device {
     assert_eq!(activated.vault_id, vault_id);
 
     let session = client
-        .login(email, &auth_key, Uuid::new_v4(), "Desktop")
+        .login(email, &auth_key, account.id, Uuid::new_v4(), "Desktop")
         .await
         .unwrap();
     assert_eq!(session.vault_id, vault_id);
@@ -241,7 +241,13 @@ async fn an_item_written_on_one_device_opens_on_another() {
     )
     .unwrap();
     let second_session = client
-        .login("user@example.com", &auth_key, Uuid::new_v4(), "Laptop")
+        .login(
+            "user@example.com",
+            &auth_key,
+            first.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
         .await
         .unwrap();
 

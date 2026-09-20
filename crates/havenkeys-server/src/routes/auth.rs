@@ -265,7 +265,7 @@ fn clean_device_name(raw: &str) -> Result<String, ApiError> {
 /// believed only when the deployment says a proxy sets it; otherwise a client
 /// could send the header itself and spread its attempts over invented
 /// addresses.
-fn client_ip(state: &AppState, headers: &HeaderMap, peer: SocketAddr) -> String {
+pub(crate) fn client_ip(state: &AppState, headers: &HeaderMap, peer: SocketAddr) -> String {
     if state.trust_forwarded_for {
         if let Some(first) = headers
             .get("x-forwarded-for")
