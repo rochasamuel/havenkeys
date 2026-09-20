@@ -26,8 +26,8 @@
 //! * Replaying old files cannot roll items back: older versions lose the
 //!   merge. Deleting files only stops updates (see docs/sync.md, Limitations).
 //!
-//! File I/O is kept apart from the merge ([`folder`]) so the caller can read
-//! and write a slow cloud folder without holding the vault lock.
+//! File I/O is kept apart from the merge so the caller can read and write a
+//! slow cloud folder without holding the vault lock.
 
 use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
@@ -39,8 +39,7 @@ use crate::model::{ItemDetails, ItemOverview};
 use crate::secret::SecretString;
 use crate::store::{AccountRecord, HeaderRecord, ItemRow, KeyScheme};
 use crate::vault::{
-    derive_kek_for, open_json, seal_json, unwrap_vault_key, PreparedVault, VaultService,
-    FORMAT_VERSION,
+    open_json, seal_json, unwrap_vault_key, PreparedVault, VaultService, FORMAT_VERSION,
 };
 use data_encoding::BASE64;
 use serde::{Deserialize, Serialize};
@@ -146,14 +145,10 @@ pub struct SyncReport {
     pub added: usize,
     pub updated: usize,
     pub deleted: usize,
-    /// Snapshots that did not authenticate or parse.
-    pub unreadable_devices: usize,
     /// Items inside readable snapshots that did not authenticate.
     pub skipped_items: usize,
     /// A newer header (master password changed on another device) was taken.
     pub header_adopted: bool,
-    /// The folder's header did not authenticate and was replaced.
-    pub header_rejected: bool,
 }
 
 // ------------------------------------------------------------------ header
@@ -232,38 +227,6 @@ fn verify_header(data_key: &crate::crypto::keys::Key256, h: &HeaderFile) -> bool
 /// The vault ID a sync folder's `header.json` names (no verification).
 pub fn header_vault_id(bytes: &[u8]) -> Result<Uuid> {
     Ok(parse_header(bytes)?.body.vault_id)
-}
-
-/// Join a vault from a sync folder on a new device: derive the key from the
-/// master password and Secret Key, unwrap the vault key, and check the
-/// header's attestation. Slow (Argon2id). Pass the result to
-/// [`VaultService::create_vault`], then run [`VaultService::sync`].
-pub fn prepare_join(
-    header: &[u8],
-    password: &SecretString,
-    secret_key: &SecretKey,
-) -> Result<PreparedVault> {
-    let file = parse_header(header)?;
-    if file.body.key_scheme != KeyScheme::PasswordAndSecretKey {
-        return Err(Error::UnsupportedVersion);
-    }
-    let record = body_to_record(&file.body)?;
-    let kek = derive_kek_for(
-        record.key_scheme,
-        password,
-        &record.kdf,
-        &record.vault_id,
-        Some(secret_key),
-        None,
-    )?;
-    let vault_key = unwrap_vault_key(&kek, record.vault_id, &record.wrapped_vault_key)?;
-    if !verify_header(&derive_data_key(&vault_key)?, &file) {
-        return Err(Error::Corrupted);
-    }
-    Ok(PreparedVault {
-        header: record,
-        vault_key,
-    })
 }
 
 /// Sign in to an account vault on a new device: derive the KEK from the
@@ -536,7 +499,8 @@ struct Candidate {
 impl VaultService {
     /// Merge other devices' snapshots into this vault and produce this
     /// device's snapshot (and header, if the folder needs one). Requires an
-    /// unlocked key-scheme-2 vault. No file I/O; see [`folder`].
+    /// unlocked key-scheme-2 vault. No file I/O; the caller reads and writes
+    /// the sync folder.
     pub fn sync(&mut self, device_id: Uuid, input: SyncInput, now_ms: i64) -> Result<SyncOutput> {
         let mut report = SyncReport::default();
         let local = self.store.header()?.ok_or(Error::NoVault)?;
@@ -555,7 +519,6 @@ impl VaultService {
                     continue;
                 }
                 let Some(snap) = self.open_snapshot(vault_id, *dev, bytes) else {
-                    report.unreadable_devices += 1;
                     continue;
                 };
                 for item in snap.items {
@@ -679,15 +642,11 @@ impl VaultService {
                 ))
             }
             Ok(p) => p,
-            Err(_) => {
-                report.header_rejected = true;
-                return Ok(Some(ours));
-            }
+            Err(_) => return Ok(Some(ours)),
         };
         if !verify_header(data_key, &parsed)
             || parsed.body.key_scheme != KeyScheme::PasswordAndSecretKey
         {
-            report.header_rejected = true;
             return Ok(Some(ours));
         }
         let remote_record = body_to_record(&parsed.body)?;
@@ -787,112 +746,5 @@ impl VaultService {
             &snapshot_ctx(vault_id, device_id),
             &snap,
         )
-    }
-}
-
-// ------------------------------------------------------------------ folder I/O
-
-/// Reading and writing the sync folder. No keys, no vault lock needed.
-pub mod folder {
-    use super::{SyncInput, MAX_DEVICES, MAX_FILE_BYTES};
-    use std::fs;
-    use std::io::{self, Read, Write};
-    use std::path::{Path, PathBuf};
-    use uuid::Uuid;
-
-    const APP_DIR: &str = "HavenKeys";
-    const HEADER: &str = "header.json";
-    const DEVICES: &str = "devices";
-    const EXT: &str = "hks";
-
-    /// `<root>/HavenKeys/<vault id>`.
-    pub fn vault_dir(root: &Path, vault_id: Uuid) -> PathBuf {
-        root.join(APP_DIR).join(vault_id.to_string())
-    }
-
-    fn read_capped(path: &Path) -> io::Result<Vec<u8>> {
-        let f = fs::File::open(path)?;
-        let mut buf = Vec::new();
-        f.take(MAX_FILE_BYTES as u64 + 1).read_to_end(&mut buf)?;
-        if buf.len() > MAX_FILE_BYTES {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "file too large"));
-        }
-        Ok(buf)
-    }
-
-    /// Vaults present under a chosen folder (for joining from a new device).
-    pub fn list_vaults(root: &Path) -> Vec<Uuid> {
-        let Ok(entries) = fs::read_dir(root.join(APP_DIR)) else {
-            return Vec::new();
-        };
-        let mut out: Vec<Uuid> = entries
-            .flatten()
-            .filter_map(|e| Uuid::parse_str(&e.file_name().to_string_lossy()).ok())
-            .filter(|id| vault_dir(root, *id).join(HEADER).is_file())
-            .take(MAX_DEVICES)
-            .collect();
-        out.sort();
-        out
-    }
-
-    pub fn read_header(dir: &Path) -> io::Result<Vec<u8>> {
-        read_capped(&dir.join(HEADER))
-    }
-
-    /// Read the header and every other device's snapshot. Files that are
-    /// not `<uuid>.hks`, are too big, or cannot be read are skipped.
-    pub fn read(dir: &Path, me: Uuid) -> io::Result<SyncInput> {
-        let header = match read_capped(&dir.join(HEADER)) {
-            Ok(b) => Some(b),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => return Err(e),
-        };
-        let mut devices = Vec::new();
-        if let Ok(entries) = fs::read_dir(dir.join(DEVICES)) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some(EXT) {
-                    continue;
-                }
-                let Some(id) = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .and_then(|s| Uuid::parse_str(s).ok())
-                else {
-                    continue;
-                };
-                if id == me || devices.len() >= MAX_DEVICES {
-                    continue;
-                }
-                if let Ok(bytes) = read_capped(&path) {
-                    devices.push((id, bytes));
-                }
-            }
-        }
-        Ok(SyncInput { header, devices })
-    }
-
-    /// Write a file so readers never see it half-written: a temporary file
-    /// in the same folder, flushed, then renamed over the target.
-    fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-        let dir = path.parent().ok_or_else(|| io::Error::other("no parent"))?;
-        fs::create_dir_all(dir)?;
-        let tmp = dir.join(format!(
-            ".{}.tmp",
-            path.file_name().and_then(|n| n.to_str()).unwrap_or("file")
-        ));
-        {
-            let mut f = fs::File::create(&tmp)?;
-            f.write_all(bytes)?;
-            f.sync_all()?;
-        }
-        fs::rename(&tmp, path)
-    }
-
-    pub fn write(dir: &Path, me: Uuid, header: Option<&[u8]>, snapshot: &[u8]) -> io::Result<()> {
-        if let Some(h) = header {
-            write_atomic(&dir.join(HEADER), h)?;
-        }
-        write_atomic(&dir.join(DEVICES).join(format!("{me}.{EXT}")), snapshot)
     }
 }

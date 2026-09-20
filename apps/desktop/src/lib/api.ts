@@ -11,7 +11,6 @@ import type {
   CopyResult,
   DeviceStatus,
   EmergencyKit,
-  SyncReport,
   GeneratedPassword,
   GeneratorOptions,
   ImportResult,
@@ -95,14 +94,6 @@ export const api = {
   deviceStatus: () => call<DeviceStatus>("device_status"),
   emergencyKit: () => call<EmergencyKit>("get_emergency_kit"),
   setupSecretKey: (password: string) => call<void>("setup_secret_key", { password }),
-  /** Opens the native folder picker in Rust; resolves to the folder name or null. */
-  chooseSyncFolder: () => call<string | null>("choose_sync_folder"),
-  syncNow: () => call<SyncReport | null>("sync_now"),
-  stopSync: () => call<void>("stop_sync"),
-  /** New device: pick the sync folder that holds the vault (native picker). */
-  pickJoinFolder: () => call<{ folder: string } | null>("pick_join_folder"),
-  joinSyncedVault: (password: string, secretKey: string) =>
-    call<VaultStatus>("join_synced_vault", { password, secretKey }),
 
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),

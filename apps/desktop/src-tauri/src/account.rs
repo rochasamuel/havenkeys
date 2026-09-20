@@ -1,42 +1,14 @@
-//! Secret Key, Emergency Kit, sync folder, and joining a vault from another
-//! device. As with imports, the renderer never supplies a path: Rust opens
-//! the native folder picker and remembers the choice.
+//! Secret Key and Emergency Kit.
 
 use crate::state::{AppState, CmdError, CmdResult};
-use crate::sync;
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::store::KeyScheme;
-use havenkeys_core::sync::{folder, prepare_join, SyncReport};
-use havenkeys_core::vault::VaultStatus;
 use havenkeys_core::SecretString;
 use qrcode::{EcLevel, QrCode};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
-
-fn folder_name(p: &Path) -> String {
-    p.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| p.to_string_lossy().into_owned())
-}
-
-fn pick_folder(app: &AppHandle, title: &'static str) -> Option<PathBuf> {
-    app.dialog()
-        .file()
-        .set_title(title)
-        .blocking_pick_folder()
-        .and_then(|p| p.into_path().ok())
-}
-
-async fn pick_folder_async(app: &AppHandle, title: &'static str) -> CmdResult<Option<PathBuf>> {
-    let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || pick_folder(&handle, title))
-        .await
-        .map_err(|_| CmdError::internal())
-}
 
 fn device_error() -> CmdError {
     CmdError {
@@ -50,19 +22,10 @@ fn device_error() -> CmdError {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceStatus {
-    /// "password_only", "password_and_secret_key" or "account_bound"; null
-    /// without a vault.
+    /// "account_bound"; null without a vault.
     key_scheme: Option<KeyScheme>,
-    /// This vault is protected by a Secret Key. The UI asks Rust rather than
-    /// comparing scheme names, so a scheme added later cannot leave it
-    /// silently answering "no".
-    uses_secret_key: bool,
-    /// The vault needs a Secret Key and this device does not have it: the
-    /// unlock screen must ask for it.
+    /// The vault needs a Secret Key and this device does not have it.
     needs_secret_key: bool,
-    /// Folder name only (no full path).
-    sync_folder: Option<String>,
-    last_sync: Option<sync::SyncStatus>,
 }
 
 /// Safe to call while locked: reveals no secrets.
@@ -73,10 +36,7 @@ pub fn device_status(state: State<'_, AppState>) -> CmdResult<DeviceStatus> {
     let uses_secret_key = key_scheme.is_some_and(KeyScheme::uses_secret_key);
     Ok(DeviceStatus {
         key_scheme,
-        uses_secret_key,
         needs_secret_key: uses_secret_key && device.secret_key().is_none(),
-        sync_folder: device.sync_folder.as_deref().map(folder_name),
-        last_sync: state.sync.last.lock().ok().and_then(|l| l.clone()),
     })
 }
 
@@ -164,164 +124,4 @@ pub async fn setup_secret_key(app: AppHandle, password: SecretString) -> CmdResu
         .map_err(|_| device_error())?;
     state.vault()?.commit_rekey(ticket, rekeyed)?;
     Ok(())
-}
-
-// ------------------------------------------------------------------ sync folder
-
-/// Choose the folder to sync through (a folder OneDrive, Dropbox, Google
-/// Drive or Syncthing keeps in step). Returns the folder name, or null if the
-/// picker was cancelled.
-#[tauri::command]
-pub async fn choose_sync_folder(app: AppHandle) -> CmdResult<Option<String>> {
-    let state = app.state::<AppState>();
-    state.touch();
-    {
-        let v = state.vault()?;
-        if !v.is_unlocked() {
-            return Err(havenkeys_core::Error::Locked.into());
-        }
-        // Folder sync is key scheme 2 only. An account-bound vault syncs
-        // through its server instead, so this is a deliberate equality
-        // check, not a `uses_secret_key` one.
-        match v.key_scheme()? {
-            Some(KeyScheme::PasswordAndSecretKey) => {}
-            Some(KeyScheme::AccountBound) => {
-                return Err(havenkeys_core::Error::InvalidInput(
-                    "this vault syncs through its account, not a folder",
-                )
-                .into())
-            }
-            _ => {
-                return Err(havenkeys_core::Error::InvalidInput(
-                    "set up a Secret Key before syncing",
-                )
-                .into())
-            }
-        }
-    }
-    let Some(path) = pick_folder_async(&app, "Choose a folder to sync through").await? else {
-        return Ok(None);
-    };
-    let name = folder_name(&path);
-    state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
-        .set_sync_folder(Some(path))
-        .map_err(|_| device_error())?;
-    Ok(Some(name))
-}
-
-#[tauri::command]
-pub async fn sync_now(app: AppHandle) -> CmdResult<Option<SyncReport>> {
-    app.state::<AppState>().touch();
-    let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || sync::run(&handle))
-        .await
-        .map_err(|_| CmdError::internal())?
-}
-
-/// Stop syncing on this device. The folder's files are left alone.
-#[tauri::command]
-pub fn stop_sync(state: State<'_, AppState>) -> CmdResult<()> {
-    state.touch();
-    state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
-        .set_sync_folder(None)
-        .map_err(|_| device_error())
-}
-
-// ------------------------------------------------------------------ joining
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinFolder {
-    folder: String,
-}
-
-/// New device: pick the sync folder that holds the vault. Only possible
-/// while there is no vault on this computer.
-#[tauri::command]
-pub async fn pick_join_folder(app: AppHandle) -> CmdResult<Option<JoinFolder>> {
-    let state = app.state::<AppState>();
-    if state.vault()?.status()?.vault_exists {
-        return Err(havenkeys_core::Error::VaultExists.into());
-    }
-    let Some(root) = pick_folder_async(&app, "Choose your HavenKeys sync folder").await? else {
-        return Ok(None);
-    };
-    let vaults = folder::list_vaults(&root);
-    let [vault_id] = vaults.as_slice() else {
-        return Err(CmdError {
-            code: "no_synced_vault",
-            message: if vaults.is_empty() {
-                "No HavenKeys vault was found in that folder.".into()
-            } else {
-                "That folder holds more than one vault.".into()
-            },
-        });
-    };
-    let name = folder_name(&root);
-    *state
-        .pending_join
-        .lock()
-        .map_err(|_| CmdError::internal())? = Some((root, *vault_id));
-    Ok(Some(JoinFolder { folder: name }))
-}
-
-/// New device: unlock the synced vault with the master password and the
-/// Secret Key from the Emergency Kit, then copy it here and keep it in sync.
-#[tauri::command]
-pub async fn join_synced_vault(
-    app: AppHandle,
-    password: SecretString,
-    secret_key: SecretString,
-) -> CmdResult<VaultStatus> {
-    let state = app.state::<AppState>();
-    if state.vault()?.status()?.vault_exists {
-        return Err(havenkeys_core::Error::VaultExists.into());
-    }
-    let (root, vault_id) = state
-        .pending_join
-        .lock()
-        .map_err(|_| CmdError::internal())?
-        .clone()
-        .ok_or(havenkeys_core::Error::NotFound)?;
-    let secret_key = SecretKey::parse(secret_key.expose())?;
-    let key_text = secret_key.to_text();
-    let dir = folder::vault_dir(&root, vault_id);
-    let prepared = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
-        let header = folder::read_header(&dir).map_err(|_| sync::folder_error())?;
-        Ok(prepare_join(&header, &password, &secret_key)?)
-    })
-    .await
-    .map_err(|_| CmdError::internal())??;
-
-    {
-        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
-        device
-            .set_secret_key(&SecretKey::parse(key_text.expose())?)
-            .map_err(|_| device_error())?;
-        device
-            .set_sync_folder(Some(root))
-            .map_err(|_| device_error())?;
-    }
-    let status = {
-        let mut v = state.vault()?;
-        v.create_vault(prepared)?;
-        let minutes = v.settings()?.auto_lock_minutes;
-        state.arm_auto_lock(minutes);
-        state.notify_unlocked();
-        v.status()?
-    };
-    *state
-        .pending_join
-        .lock()
-        .map_err(|_| CmdError::internal())? = None;
-    // Pull the items now rather than in a minute.
-    let handle = app.clone();
-    let _ = tauri::async_runtime::spawn_blocking(move || sync::run(&handle)).await;
-    Ok(status)
 }

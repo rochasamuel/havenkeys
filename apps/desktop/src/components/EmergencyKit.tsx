@@ -72,10 +72,6 @@ export function EmergencyKit({ onDone }: Props) {
               <span>Master password</span>
               <div className="kit-blank" aria-label="Blank line to write your master password, if you choose" />
             </div>
-            <div className="kit-field">
-              <span>Sync folder</span>
-              <div className="kit-blank" />
-            </div>
             <div className="kit-field kit-small">
               <span>Vault ID</span>
               <code>{kit.vaultId}</code>
@@ -88,7 +84,7 @@ export function EmergencyKit({ onDone }: Props) {
         </div>
         <p className="kit-foot">
           HavenKeys cannot recover your master password or Secret Key. If you lose this kit, you can view it again on any
-          device where your vault is unlocked (Settings → Secret Key &amp; sync).
+          device where your vault is unlocked (Settings → Secret Key).
         </p>
       </article>
 

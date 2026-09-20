@@ -139,7 +139,6 @@ pub async fn unlock_vault(
             }
         }
     }
-    state.sync.request();
     Ok(status)
 }
 
@@ -177,8 +176,6 @@ pub async fn change_master_password(
     let mut v = state.vault()?;
     v.commit_rekey(ticket, rekeyed)?;
     drop(v);
-    // Other devices pick up the new header from the sync folder.
-    state.sync.request();
     Ok(())
 }
 
@@ -291,7 +288,6 @@ pub fn copy_secret(
 pub fn create_item(state: State<'_, AppState>, input: ItemInput) -> CmdResult<ItemOverview> {
     state.touch();
     let item = state.vault()?.create_item(input, AppState::now_ms())?;
-    state.sync.request();
     Ok(item)
 }
 
@@ -303,7 +299,6 @@ pub fn update_item(
 ) -> CmdResult<ItemOverview> {
     state.touch();
     let item = state.vault()?.update_item(&id, input, AppState::now_ms())?;
-    state.sync.request();
     Ok(item)
 }
 
@@ -311,7 +306,6 @@ pub fn update_item(
 pub fn delete_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<()> {
     state.touch();
     state.vault()?.delete_item(&id, AppState::now_ms())?;
-    state.sync.request();
     Ok(())
 }
 

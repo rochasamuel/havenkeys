@@ -1,14 +1,14 @@
 //! What this computer knows about itself, kept outside the vault database:
-//! a random device ID, the Secret Key, and the sync folder.
+//! a random device ID and the Secret Key.
 //!
 //! `device.json` lives next to `vault.sqlite3` in the app's data folder (mode
 //! 0600 on Unix). The Secret Key is stored here in plain text, as 1Password
 //! does on its devices: someone who can read this computer's files already
 //! has the vault file, and then only the master password protects it. What
-//! the Secret Key protects is every copy that is *not* on a trusted device:
-//! the sync folder, and backups of `vault.sqlite3`. Keeping it out of the
-//! vault database means a copied or backed-up vault file is useless without
-//! the Emergency Kit. See docs/crypto.md, "Secret Key".
+//! the Secret Key protects is every copy that is *not* on a trusted device,
+//! such as backups of `vault.sqlite3`. Keeping it out of the vault database
+//! means a copied or backed-up vault file is useless without the Emergency
+//! Kit. See docs/crypto.md, "Secret Key".
 
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::SecretString;
@@ -26,15 +26,12 @@ struct OnDisk {
     device_id: Uuid,
     #[serde(default)]
     secret_key: Option<String>,
-    #[serde(default)]
-    sync_folder: Option<PathBuf>,
 }
 
 pub struct Device {
     path: PathBuf,
     pub id: Uuid,
     secret_key: Option<SecretString>,
-    pub sync_folder: Option<PathBuf>,
 }
 
 impl Device {
@@ -56,13 +53,11 @@ impl Device {
                     .secret_key
                     .map(SecretString::new)
                     .filter(|s| SecretKey::parse(s.expose()).is_ok()),
-                sync_folder: d.sync_folder,
             },
             None => Device {
                 path,
                 id: Uuid::new_v4(),
                 secret_key: None,
-                sync_folder: None,
             },
         };
         let _ = device.save();
@@ -84,17 +79,11 @@ impl Device {
         self.save()
     }
 
-    pub fn set_sync_folder(&mut self, folder: Option<PathBuf>) -> std::io::Result<()> {
-        self.sync_folder = folder;
-        self.save()
-    }
-
     /// Write atomically with owner-only permissions.
     pub fn save(&mut self) -> std::io::Result<()> {
         let data = OnDisk {
             device_id: self.id,
             secret_key: self.secret_key.as_ref().map(|s| s.expose().to_owned()),
-            sync_folder: self.sync_folder.clone(),
         };
         let bytes =
             Zeroizing::new(serde_json::to_vec_pretty(&data).map_err(std::io::Error::other)?);
