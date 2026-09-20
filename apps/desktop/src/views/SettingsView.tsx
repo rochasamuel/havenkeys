@@ -4,7 +4,7 @@ import type { Settings, Theme } from "../lib/types";
 import { applyTheme } from "../lib/theme";
 import { useToast } from "../components/Toast";
 import { ImportSection } from "./ImportSection";
-import { SyncSection } from "./SyncSection";
+import { SecretKeySection } from "./SecretKeySection";
 
 const autoLockChoices = [
   { value: 5, label: "After 5 minutes" },
@@ -179,7 +179,7 @@ export function SettingsView({ onImported }: { onImported: () => void }) {
         </div>
       )}
 
-      <SyncSection />
+      <SecretKeySection />
 
       <ImportSection onImported={onImported} />
 

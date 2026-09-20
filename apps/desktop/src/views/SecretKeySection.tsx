@@ -4,13 +4,13 @@ import type { DeviceStatus } from "../lib/types";
 import { useToast } from "../components/Toast";
 import { EmergencyKit } from "../components/EmergencyKit";
 
-export function SyncSection() {
+export function SecretKeySection() {
   const toast = useToast();
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   const [showKit, setShowKit] = useState(false);
 
   const refresh = useCallback(() => {
-    api.deviceStatus().then(setDevice, () => toast("Could not read sync settings.", "error"));
+    api.deviceStatus().then(setDevice, () => toast("Could not read device status.", "error"));
   }, [toast]);
   useEffect(refresh, [refresh]);
 

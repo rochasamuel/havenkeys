@@ -173,14 +173,23 @@ unlock (offline):   derive keys → unwrap local header → read-only
 
 Applying a pull is **not a merge**. `apply_remote_changes` upserts
 `(overview, details, revision)` or deletes a row, per item, in cursor order.
-The only judgement it makes is structural: size limits, and a blob that does
-not open under this vault's data key or that carries another item's ID is
-counted in `SyncReport.skipped_items` and leaves the existing row alone — a
-hostile or malfunctioning server can fail to update the replica, but cannot
-corrupt it into serving forged plaintext. The cursor advances unconditionally
-once the batch is applied, including past skipped items; there is no local
-merge state (`dirty` flags, tombstone rows) left to reconcile, because the
-server is the only writer.
+The only judgement it makes is structural: a blob that does not open under
+this vault's data key or that carries another item's ID is counted in
+`SyncReport.skipped_items` and leaves the existing row alone — a hostile or
+malfunctioning server can fail to update the replica, but cannot corrupt it
+into serving forged plaintext. `apply_remote_changes` itself imposes no size
+limit on `overview`/`details` — the only bound either blob passes through is
+`crypto::blob`'s blanket 8 MiB cap on any sealed blob (`MAX_BLOB_LEN`), which
+exists to bound decrypting arbitrary bytes under any purpose, not as a
+judgement about a reasonable item size. The applier never re-applies the
+field-level limits a local write goes through (`MAX_NOTE_CONTENT_BYTES`,
+`MAX_PASSWORD_CHARS`, …) to what the server sends. A meaningful size policy
+for pulled items, if wanted, is the sync client's job (design §13 step 3),
+not the applier's, and it has not been built. The cursor advances
+unconditionally once the batch is applied,
+including past skipped items; there is no local merge state (`dirty` flags,
+tombstone rows) left to reconcile, because the server is the only writer.
+See §7 for what that unconditional advance costs a skipped item.
 
 The account header a device publishes (`encode_account_header`) and adopts
 from another device (`adopt_account_header`) works as before: a header is
@@ -220,6 +229,17 @@ to undo a master-password change.
   every copy that is not on one of your devices.
 * **The vault key is never rotated** (`security-review.md` #8). A master
   password change re-wraps the vault key; it does not replace it.
+* **A skipped item stays stale, permanently and silently.**
+  `apply_remote_changes` advances the stored cursor unconditionally, even
+  when `skipped_items > 0` for that batch. If the server ever serves one
+  corrupt or mislabeled blob for an item, that item is never retried: the
+  next pull starts at `since=cursor`, which is already past it. This is
+  worse than failing to update — it is failing to update with no visible
+  error, forever, on that device. `SyncReport.skipped_items` is the only
+  signal that it happened. There is no resync-from-zero path today; the sync
+  client (design §13 step 3) needs one — an explicit reset-cursor-to-zero
+  operation a user or operator can invoke when a device's replica is
+  suspected to be missing an item it should have.
 * **Metadata visible to the server:** the vault ID, the account's email, the
   KDF parameters and salt, the wrapped vault key, item revisions, and the
   number and rough size of items. It cannot read any of it, but it can see

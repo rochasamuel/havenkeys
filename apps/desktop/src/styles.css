@@ -1177,11 +1177,6 @@ input[type="range"] {
 
 /* ------------------------------------------------------------ Secret Key & sync */
 
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 .settings-inline {
   display: flex;
   flex-direction: column;

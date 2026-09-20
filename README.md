@@ -18,8 +18,8 @@ security core. It works offline, needs no account, and runs no server.
 | Browser extension (MV3, Chrome + Firefox) | Toolbar popup with Fill; opt-in in-page suggestions for logins, one-time codes and generated passwords; save/update prompts ([docs/autofill.md](docs/autofill.md)) |
 | Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
 | Export | Not implemented |
-| Secret Key + Emergency Kit | New vaults need the master password and a 128-bit Secret Key; older vaults can add one ([docs/sync.md](docs/sync.md)) |
-| Sync between your computers | Through a folder you already sync (OneDrive, Dropbox, Google Drive, Syncthing); no server ([docs/sync.md](docs/sync.md)) |
+| Secret Key + Emergency Kit | New vaults need the master password and a 128-bit Secret Key; older vaults can add one ([docs/server-sync.md](docs/server-sync.md)) |
+| Sync between your computers | Through a folder you already sync (OneDrive, Dropbox, Google Drive, Syncthing); no server ([docs/server-sync.md](docs/server-sync.md)) |
 
 What the desktop app does today:
 
@@ -67,7 +67,7 @@ Read these before trusting it with anything:
 * [Security model](docs/security-model.md): how it's enforced
 * [Cryptography](docs/crypto.md): key hierarchy, formats, parameters
 * [Architecture](docs/architecture.md)
-* [Sync and the Secret Key](docs/sync.md): the folder sync, its file formats (the mobile app's spec) and limits
+* [Sync and the Secret Key](docs/server-sync.md): the folder sync, its file formats (the mobile app's spec) and limits
 * [Native messaging](docs/native-messaging.md): browser ↔ desktop protocol and its checks
 * [Autofill](docs/autofill.md): field detection, matching rules, in-page UI security
 * [Security review](docs/security-review.md): findings from reviewing this implementation

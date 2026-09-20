@@ -86,7 +86,8 @@ pub struct HeaderRecord {
     pub created_at: i64,
     pub key_scheme: KeyScheme,
     /// Bumped on every re-wrap (master password change, Secret Key set-up),
-    /// so devices sharing a sync folder can tell which header is newest.
+    /// so devices sharing an account can tell, via the server, which header
+    /// is newest.
     pub revision: u64,
 }
 
@@ -241,8 +242,8 @@ impl Store {
     }
 
     /// Replace the KDF descriptor, wrapped vault key, key scheme and revision
-    /// (master password change, Secret Key set-up, or a newer header from
-    /// the sync folder).
+    /// (master password change, Secret Key set-up, or a newer header adopted
+    /// from the account's server).
     pub fn update_key_wrap(
         &mut self,
         kdf: &KdfParams,
