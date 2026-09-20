@@ -400,7 +400,9 @@ fn local_edits_are_dirty_and_clear_on_confirmation() {
     store.upsert_item(&id, b"overview", b"details").unwrap();
     assert_eq!(store.dirty_rows().unwrap().len(), 1);
 
-    store.clear_dirty(&[id]).unwrap();
+    store
+        .clear_dirty(&[(id, b"overview".to_vec(), b"details".to_vec())], &[])
+        .unwrap();
     assert!(store.dirty_rows().unwrap().is_empty());
 
     // Editing it again marks it dirty again.
@@ -415,12 +417,14 @@ fn deletions_are_dirty_until_confirmed() {
     let mut store = Store::open_in_memory().unwrap();
     let id = uuid::Uuid::from_u128(11);
     store.upsert_item(&id, b"overview", b"details").unwrap();
-    store.clear_dirty(&[id]).unwrap();
+    store
+        .clear_dirty(&[(id, b"overview".to_vec(), b"details".to_vec())], &[])
+        .unwrap();
 
     store.delete_item(&id, NOW).unwrap();
     assert_eq!(store.dirty_tombstones().unwrap(), vec![(id, NOW)]);
 
-    store.clear_dirty(&[id]).unwrap();
+    store.clear_dirty(&[], &[(id, NOW)]).unwrap();
     assert!(store.dirty_tombstones().unwrap().is_empty());
 }
 

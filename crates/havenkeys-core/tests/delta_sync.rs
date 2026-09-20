@@ -3,7 +3,8 @@
 
 mod common;
 
-use common::{activated_with_account, second_device, NOW};
+use common::{activated_with_account, new_vault, second_device, NOW};
+use havenkeys_core::Error;
 
 #[test]
 fn a_new_item_is_pending_until_the_push_is_confirmed() {
@@ -19,7 +20,7 @@ fn a_new_item_is_pending_until_the_push_is_confirmed() {
     assert!(pending.changes[0].deleted_at.is_none());
     assert!(pending.changes[0].overview.is_some());
 
-    vault.confirm_push(4, &[item.id], NOW).unwrap();
+    vault.confirm_push(4, &pending.changes, NOW).unwrap();
     assert!(vault.pending_push().unwrap().changes.is_empty());
     assert_eq!(vault.pending_push().unwrap().base_cursor, 4);
 }
@@ -30,7 +31,8 @@ fn a_deletion_is_pending_as_a_tombstone() {
     let item = vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
-    vault.confirm_push(1, &[item.id], NOW).unwrap();
+    let pending = vault.pending_push().unwrap();
+    vault.confirm_push(1, &pending.changes, NOW).unwrap();
 
     vault.delete_item(&item.id, NOW + 1000).unwrap();
     let pending = vault.pending_push().unwrap();
@@ -122,4 +124,79 @@ fn an_older_remote_version_loses_to_the_local_one() {
     let report = b.apply_remote_changes(2, old, NOW + 9000).unwrap();
     assert_eq!(report.updated, 0);
     assert_eq!(b.get_item(&item.id).unwrap().title, "GitHub renamed");
+}
+
+#[test]
+fn an_edit_during_the_push_round_trip_stays_pending() {
+    let (mut vault, _sk) = activated_with_account();
+    vault
+        .create_item(common::login("GitHub", "me", "old", "github.com"), NOW)
+        .unwrap();
+    let pending = vault.pending_push().unwrap();
+    let item_id = pending.changes[0].item_id;
+
+    // The user edits the item after pending_push read it but before the
+    // server's ack for that version arrives.
+    vault
+        .update_item(
+            &item_id,
+            common::login("GitHub", "me", "new", "github.com"),
+            NOW + 500,
+        )
+        .unwrap();
+
+    vault.confirm_push(4, &pending.changes, NOW + 1000).unwrap();
+
+    let still_pending = vault.pending_push().unwrap();
+    assert_eq!(still_pending.changes.len(), 1);
+    assert_eq!(still_pending.changes[0].item_id, item_id);
+}
+
+#[test]
+fn a_deletion_during_the_push_round_trip_stays_pending() {
+    let (mut vault, _sk) = activated_with_account();
+    let item = vault
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
+    let pending = vault.pending_push().unwrap();
+
+    // The user deletes the item after pending_push read the create, but
+    // before the server's ack for that create arrives.
+    vault.delete_item(&item.id, NOW + 500).unwrap();
+
+    vault.confirm_push(4, &pending.changes, NOW + 1000).unwrap();
+
+    let still_pending = vault.pending_push().unwrap();
+    assert_eq!(still_pending.changes.len(), 1);
+    assert_eq!(still_pending.changes[0].item_id, item.id);
+    assert_eq!(still_pending.changes[0].deleted_at, Some(NOW + 500));
+}
+
+#[test]
+fn sync_methods_require_a_linked_account() {
+    let mut vault = new_vault();
+    let want = Some(Error::InvalidInput(
+        "this vault is not linked to an account",
+    ));
+    assert_eq!(vault.pending_push().err(), want);
+    assert_eq!(vault.apply_remote_changes(1, vec![], NOW).err(), want);
+    assert_eq!(vault.confirm_push(1, &[], NOW).err(), want);
+}
+
+#[test]
+fn a_malformed_change_is_counted_not_dropped() {
+    let (mut a, sk) = activated_with_account();
+    let mut b = second_device(&a, &sk);
+
+    let item = a
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
+    let mut changes = a.pending_push().unwrap().changes;
+    // Neither a well-formed upsert (both blobs) nor a deletion.
+    changes[0].details = None;
+
+    let report = b.apply_remote_changes(9, changes, NOW).unwrap();
+    assert_eq!(report.added, 0);
+    assert_eq!(report.skipped_items, 1);
+    assert!(b.get_item(&item.id).is_err());
 }
