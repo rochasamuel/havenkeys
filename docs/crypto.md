@@ -157,6 +157,42 @@ the KEK derivation.
   `AuthKey(<redacted>)`; see "Key hierarchy" above for what it does and does
   not do.
 
+**Deletions in the delta sync feed are not authenticated.** `RemoteChange`,
+the unit the feed moves in, carries a `deleted_at` field that is plaintext
+the server supplies, sealed by nothing — unlike item content, which is
+AEAD-bound to the vault ID, item ID and role and so cannot be forged or
+moved between items. A hostile or compromised server can therefore delete
+any item on every device that pulls the change. Three specifics, all
+verified against `decide_merge` in `src/sync.rs`:
+
+* a forged tombstone for an item ID that never existed on the device is
+  still *persisted* as a local row (`apply_merge` inserts it unconditionally),
+  so a server can mint unbounded tombstone rows for IDs it invents;
+* a `deleted_at` far in the future poisons that item ID permanently, since
+  `decide_merge`'s resurrection arm (`(None, Some(&lt)) if ru > lt`) can then
+  never be satisfied again for it — `apply_remote_changes` mitigates only
+  this worst case (a `deleted_at` more than 24 hours past `now_ms` is
+  rejected and counted in `skipped_items`); it does **not** close the hole,
+  since a server sending `deleted_at = now_ms` still deletes the item;
+* it destroys locally-dirty work that was never pushed to the server:
+  `decide_merge` does not consult the `dirty` flag before deciding a
+  deletion wins.
+
+Authenticating deletions — a sealed tombstone format, a store migration and
+the matching server schema — is required before any server ships; see the
+design spec §9 and `docs/roadmap.md`.
+
+**Contract for a future `havenkeys-sync-client`:** `apply_remote_changes`
+advances the stored cursor unconditionally, even when some changes in the
+batch were skipped (a tampered blob, a blob for the wrong item, or the
+future-dated deletion above). A corrupted or tampered item therefore never
+reaches the device again unless the server later holds a *new* version of
+it — the cursor has already moved past it. This differs from the folder
+model, which re-read whole device snapshots each sync and so self-healed on
+the next run. `SyncReport.skipped_items` is what a client must watch: a
+nonzero count is the signal to re-pull from cursor 0 (or otherwise recover),
+because the delta stream will not resurface the skipped item on its own.
+
 ## Argon2id parameters
 
 Defaults are above RFC 9106 §4's "second recommended option" (64 MiB, t=3),
