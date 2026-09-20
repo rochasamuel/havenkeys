@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{fast_kdf, secret, NOW, PASSWORD};
+use common::{account, fast_kdf, secret, NOW, PASSWORD};
 use havenkeys_core::account::AccountRef;
 use havenkeys_core::store::{KeyScheme, Store};
 use havenkeys_core::sync::prepare_sign_in;
@@ -80,6 +80,108 @@ fn sign_in_refuses_a_folder_era_header() {
     v2.create_vault(made).unwrap();
     // A scheme 2 vault cannot produce an account header at all.
     assert!(v2.encode_account_header().is_err());
+}
+
+#[test]
+fn sign_in_fails_with_the_wrong_master_password() {
+    let (_first, secret_key, header) = activate();
+    // `.unwrap_err()` would require `PreparedVault: Debug`, which it
+    // intentionally does not implement (it carries the unwrapped vault key);
+    // `.err().unwrap()` gets the same value without that bound.
+    let err = havenkeys_core::sync::prepare_sign_in(
+        &header,
+        &secret("a completely different password"),
+        &secret_key,
+        &common::account(),
+    )
+    .err()
+    .unwrap();
+    // Same generic failure as a wrong Secret Key or a wrong account: the
+    // caller must not learn which input was wrong.
+    assert_eq!(err.code(), "unlock_failed");
+}
+
+#[test]
+fn a_secret_key_vault_upgrades_to_an_account_without_touching_items() {
+    use havenkeys_core::crypto::secret_key::SecretKey;
+    use havenkeys_core::vault::prepare_new_vault_with_secret_key;
+
+    let secret_key = SecretKey::generate().unwrap();
+    let made = prepare_new_vault_with_secret_key(&secret(PASSWORD), &secret_key, fast_kdf(), NOW).unwrap();
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    vault.create_vault(made).unwrap();
+    // create_vault leaves the vault unlocked; lock it first so begin_unlock
+    // (which rejects an already-unlocked vault) can be used below.
+    vault.lock();
+    // Scheme 2 has no one-shot unlock helper; use the ticket pattern that
+    // tests/sync.rs uses.
+    let ticket = vault.begin_unlock().unwrap();
+    let r = ticket.derive_with_secret_key(&secret(PASSWORD), Some(&secret_key));
+    vault.finish_unlock(ticket, r).unwrap();
+    let item = vault.create_item(common::login("GitHub", "me", "pw", "github.com"), NOW).unwrap();
+    let vault_id_before = vault.vault_id().unwrap();
+
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_account_upgrade(&secret(PASSWORD), &secret_key, &account(), fast_kdf())
+        .unwrap();
+    vault.commit_rekey(ticket, Ok(rekeyed)).unwrap();
+
+    // Same vault, same item, new scheme, higher header revision.
+    assert_eq!(vault.key_scheme().unwrap(), Some(KeyScheme::AccountBound));
+    assert_eq!(vault.vault_id().unwrap(), vault_id_before);
+
+    vault.lock();
+    vault.unlock_for_account(&secret(PASSWORD), &secret_key, &account()).unwrap();
+    assert_eq!(vault.get_item(&item.id).unwrap().title, "GitHub");
+
+    // The old scheme-2 unlock no longer works: without the account there is
+    // no KEK to derive.
+    vault.lock();
+    let ticket = vault.begin_unlock().unwrap();
+    let r = ticket.derive_with_secret_key(&secret(PASSWORD), Some(&secret_key));
+    assert!(vault.finish_unlock(ticket, r).is_err());
+}
+
+#[test]
+fn an_older_header_is_refused_after_a_password_change() {
+    let (mut vault, secret_key, old_header) = activate();
+
+    // Change the master password: the header revision goes up.
+    //
+    // `derive_with_secret_key` cannot rekey a key-scheme-3 (account-bound)
+    // vault: internally it derives the KEK through `RekeyTicket::unwrap`,
+    // which always passes `account: None`, so `derive_kek_for` refuses an
+    // `AccountBound` scheme before doing any work. Use the new
+    // `derive_for_account`, added in this task alongside the rollback
+    // guard, which derives the KEK with `derive_kek_v3` and the account
+    // directly.
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret("a much longer new password"),
+            fast_kdf(),
+            &secret_key,
+            &account(),
+        )
+        .unwrap();
+    vault.commit_rekey(ticket, Ok(rekeyed)).unwrap();
+    let new_header = vault.encode_account_header().unwrap();
+
+    // A hostile server replays the header from before the change.
+    assert!(!vault.adopt_account_header(&old_header).unwrap());
+    // And the current one is still accepted (idempotently).
+    assert!(!vault.adopt_account_header(&new_header).unwrap());
+}
+
+#[test]
+fn a_forged_header_is_refused() {
+    let (mut vault, _sk, header) = activate();
+    let mut forged = header.clone();
+    let n = forged.len();
+    forged[n - 5] ^= 0x01; // flip a bit inside the attestation
+    assert!(matches!(vault.adopt_account_header(&forged), Err(_) | Ok(false)));
 }
 
 #[test]
