@@ -84,3 +84,86 @@ fn staging_a_write_while_locked_is_refused() {
         .stage_create(login("GitHub", "me", "pw", "github.com"), NOW)
         .is_err());
 }
+
+// ------------------------------------------------------------------- import
+
+/// An import is a batch of ordinary staged writes: nothing is stored until
+/// the server has accepted each one.
+#[test]
+fn a_staged_import_seals_new_items_and_skips_ones_already_here() {
+    use havenkeys_core::import::{ImportReport, ImportedItem};
+
+    let (mut vault, _sk) = activated_vault();
+    let existing = vault
+        .stage_create(login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
+    vault.commit_write(existing, 1).unwrap();
+
+    let staged = vault
+        .stage_import(
+            vec![
+                // The same login as above: already here.
+                ImportedItem {
+                    input: login("GitHub", "me", "other-pw", "github.com"),
+                    created_at: None,
+                    updated_at: None,
+                },
+                ImportedItem {
+                    input: login("Fastmail", "me", "pw2", "fastmail.com"),
+                    created_at: Some(1_600_000_000_000),
+                    updated_at: Some(1_600_000_500_000),
+                },
+                ImportedItem {
+                    input: common::note("Recovery codes", "1234 5678"),
+                    created_at: None,
+                    updated_at: None,
+                },
+            ],
+            ImportReport::default(),
+            NOW,
+        )
+        .unwrap();
+
+    assert_eq!(staged.report.skipped_duplicates, 1);
+    assert_eq!(staged.report.logins, 1);
+    assert_eq!(staged.report.secure_notes, 1);
+    assert_eq!(staged.report.imported, 2);
+    assert_eq!(staged.writes.len(), 2);
+    // Still only the original item: an import that is never sent stores
+    // nothing.
+    assert_eq!(vault.list_items().unwrap().len(), 1);
+
+    let mut revision = 1;
+    for write in staged.writes {
+        revision += 1;
+        vault.commit_write(write, revision).unwrap();
+    }
+    let titles: Vec<String> = vault
+        .list_items()
+        .unwrap()
+        .iter()
+        .map(|i| i.title.clone())
+        .collect();
+    assert_eq!(titles.len(), 3);
+    assert!(titles.iter().any(|t| t == "Fastmail"));
+    assert!(titles.iter().any(|t| t == "Recovery codes"));
+
+    // The imported login keeps the timestamps the export carried.
+    let items = vault.list_items().unwrap();
+    let fastmail = items.iter().find(|i| i.title == "Fastmail").unwrap();
+    assert_eq!(fastmail.created_at, 1_600_000_000_000);
+    assert_eq!(fastmail.updated_at, 1_600_000_500_000);
+}
+
+/// A locked vault cannot seal anything, import included.
+#[test]
+fn a_staged_import_needs_an_unlocked_vault() {
+    use havenkeys_core::import::ImportReport;
+
+    let (mut vault, _sk) = activated_vault();
+    vault.lock();
+    let err = vault
+        .stage_import(vec![], ImportReport::default(), NOW)
+        .unwrap_err();
+    assert_eq!(err.code(), "locked");
+}

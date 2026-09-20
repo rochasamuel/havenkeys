@@ -12,6 +12,7 @@ use crate::crypto::keys::{
 };
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
+use crate::import::{ImportReport, ImportedItem};
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
     clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, PreviousPassword, SecretField,
@@ -23,7 +24,7 @@ use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -400,6 +401,22 @@ impl std::fmt::Debug for StagedWrite {
             .field("item_id", &self.item_id)
             .field("base_revision", &self.base_revision)
             .finish_non_exhaustive()
+    }
+}
+
+/// An import sealed and ready to send. Never logged: the writes hold
+/// ciphertext, and the counts are all that is safe to show.
+pub struct StagedImport {
+    pub writes: Vec<StagedWrite>,
+    pub report: ImportReport,
+}
+
+impl std::fmt::Debug for StagedImport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StagedImport")
+            .field("writes", &self.writes.len())
+            .field("report", &self.report)
+            .finish()
     }
 }
 
@@ -1077,6 +1094,66 @@ impl VaultService {
         })
     }
 
+    /// Seal every imported item, skipping the ones already in the vault.
+    ///
+    /// Nothing is written: the caller sends these to the server in batches
+    /// and records each accepted write with
+    /// [`commit_write`](Self::commit_write), exactly as a single edit does.
+    /// The report's counts describe what *will* be stored if every batch is
+    /// accepted; a batch the server refuses lowers them, which is why the
+    /// desktop reports what it committed rather than this figure.
+    pub fn stage_import(
+        &self,
+        items: Vec<ImportedItem>,
+        mut report: ImportReport,
+        now_ms: i64,
+    ) -> Result<StagedImport> {
+        // Only items already in the vault count as duplicates; repeated
+        // entries inside the export itself are imported as they are.
+        let existing = self.dedupe_keys()?;
+        let mut writes = Vec::new();
+        report.logins = 0;
+        report.secure_notes = 0;
+
+        for item in items {
+            let id = Uuid::new_v4();
+            let created = item.created_at.unwrap_or(now_ms);
+            let updated = item.updated_at.unwrap_or(created);
+            let Ok((overview, details)) = build_item(id, item.input, None, created, updated) else {
+                report.failed += 1;
+                continue;
+            };
+            if existing.contains(&dedupe_key(&overview, &details)) {
+                report.skipped_duplicates += 1;
+                continue;
+            }
+            let item_type = overview.item_type;
+            let staged = self.stage(overview, Some(&details), None)?;
+            match item_type {
+                ItemType::Login => report.logins += 1,
+                ItemType::SecureNote => report.secure_notes += 1,
+            }
+            writes.push(staged);
+        }
+        report.imported = writes.len();
+        Ok(StagedImport { writes, report })
+    }
+
+    /// What is already here, for import de-duplication.
+    fn dedupe_keys(&self) -> Result<HashSet<[u8; 32]>> {
+        let session = self.session()?;
+        let mut keys = HashSet::new();
+        for ov in session.overviews.values() {
+            // Secure notes need their body; a damaged one simply isn't a duplicate.
+            let details = match ov.item_type {
+                ItemType::Login => None,
+                ItemType::SecureNote => self.load_details(&ov.id).ok(),
+            };
+            keys.insert(dedupe_key_parts(ov, details.as_ref()));
+        }
+        Ok(keys)
+    }
+
     /// Record a write the server accepted at `revision`. Returns the stored
     /// overview, or `None` for a deletion.
     ///
@@ -1116,6 +1193,40 @@ impl VaultService {
             _ => Err(Error::InvalidInput("malformed staged write")),
         }
     }
+}
+
+fn dedupe_key(overview: &ItemOverview, details: &ItemDetails) -> [u8; 32] {
+    dedupe_key_parts(overview, Some(details))
+}
+
+/// Digest identifying "the same item" for import de-duplication. Hashed so the
+/// set never holds a second plaintext copy of note bodies.
+fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [u8; 32] {
+    let mut h = Sha256::new();
+    let field = |h: &mut Sha256, s: &str| {
+        h.update((s.len() as u64).to_le_bytes());
+        h.update(s.as_bytes());
+    };
+    match overview.item_type {
+        ItemType::Login => {
+            field(&mut h, "login");
+            field(&mut h, &overview.title);
+            field(&mut h, overview.username.as_deref().unwrap_or(""));
+            let mut urls: Vec<&str> = overview.urls.iter().map(|r| r.url.as_str()).collect();
+            urls.sort_unstable();
+            for u in urls {
+                field(&mut h, u);
+            }
+        }
+        ItemType::SecureNote => {
+            field(&mut h, "note");
+            field(&mut h, &overview.title);
+            if let Some(ItemDetails::SecureNote { content }) = details {
+                field(&mut h, content.expose());
+            }
+        }
+    }
+    h.finalize().into()
 }
 
 /// Compare two secrets without an early exit on the first differing byte.
