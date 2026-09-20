@@ -505,7 +505,9 @@ pub async fn unlock_vault(
         Some(t) if !t.is_empty() => Some(SecretKey::parse(t.expose())?),
         _ => None,
     };
-    let Some(key) = typed.clone().or(stored) else {
+    // `SecretKey` is deliberately not `Clone`, so both options move into the
+    // blocking closure and are borrowed there, as the current code does.
+    if typed.is_none() && stored.is_none() {
         let ticket = state.vault()?.begin_unlock()?;
         let r = state
             .vault()?
@@ -514,11 +516,14 @@ pub async fn unlock_vault(
             .err()
             .unwrap_or(havenkeys_core::Error::SecretKeyRequired)
             .into());
-    };
+    }
     let key_text = typed.as_ref().map(|k| k.to_text());
     let ticket = state.vault()?.begin_unlock()?;
     let joined = tauri::async_runtime::spawn_blocking(move || {
-        let derived = ticket.derive_for_account(&password, &key, &account);
+        let derived = match typed.as_ref().or(stored.as_ref()) {
+            Some(sk) => ticket.derive_for_account(&password, sk, &account),
+            None => Err(havenkeys_core::Error::SecretKeyRequired),
+        };
         (ticket, derived)
     })
     .await;
@@ -620,20 +625,28 @@ older build is refused.
 
 Append to `crates/havenkeys-core/tests/vault.rs`:
 
-```rust
-#[test]
-fn a_database_from_an_older_build_is_refused() {
-    use havenkeys_core::store::Store;
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("old.sqlite3");
-    {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.pragma_update(None, "user_version", 3i64).unwrap();
-    }
-    let err = Store::open(&path).err().unwrap();
-    assert_eq!(err.code(), "unsupported_version");
-}
+`rusqlite` is a normal dependency, not a dev-dependency, so an integration test
+cannot reach it. The older-database case therefore goes in `store.rs`'s existing
+`#[cfg(test)] mod tests` (around line 660), beside the other tests that need
+crate-internal access:
 
+```rust
+    #[test]
+    fn a_database_from_an_older_build_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.sqlite3");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.pragma_update(None, "user_version", 3i64).unwrap();
+        }
+        let err = Store::open(&path).err().unwrap();
+        assert_eq!(err.code(), "unsupported_version");
+    }
+```
+
+And the revision case goes in `tests/vault.rs`, which only needs the public API:
+
+```rust
 #[test]
 fn item_rows_carry_the_server_revision() {
     use havenkeys_core::store::Store;
@@ -652,15 +665,15 @@ fn item_rows_carry_the_server_revision() {
 }
 ```
 
-Add `tempfile` and `rusqlite` to `[dev-dependencies]` of
-`crates/havenkeys-core/Cargo.toml` if they are not already there (check
-first — `tempfile` is used by the existing persistence tests).
+`tempfile` is already in `[dev-dependencies]`. Add nothing to
+`Cargo.toml`: the split above is what avoids a duplicate `rusqlite` entry.
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `cargo test -p havenkeys-core --test vault a_database_from_an_older item_rows_carry`
-Expected: FAIL — `user_version` 3 is accepted today, and `upsert_item` takes
-three arguments.
+Run: `cargo test -p havenkeys-core a_database_from_an_older_build_is_refused`
+then `cargo test -p havenkeys-core --test vault item_rows_carry`
+Expected: both FAIL — `user_version` 3 is migrated rather than refused today,
+and `upsert_item` takes three arguments.
 
 - [ ] **Step 3: Write schema 4**
 
