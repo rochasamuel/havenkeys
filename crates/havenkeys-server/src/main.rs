@@ -85,9 +85,13 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
         }
     };
     tracing::info!(port = config.port, "havenkeys-server listening");
-    match axum::serve(listener, router(state))
-        .with_graceful_shutdown(shutdown())
-        .await
+    // `ConnectInfo` is how the login route keys its per-address rate limit.
+    match axum::serve(
+        listener,
+        router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown())
+    .await
     {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(_) => std::process::ExitCode::FAILURE,
