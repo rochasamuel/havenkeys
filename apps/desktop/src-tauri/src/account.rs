@@ -17,6 +17,9 @@ pub struct DeviceStatus {
     key_scheme: Option<KeyScheme>,
     /// The vault needs a Secret Key and this device does not have it.
     needs_secret_key: bool,
+    /// Whether this device currently has a server session (spec 2026-09-20
+    /// §8.6). Independent of the lock state.
+    online: bool,
 }
 
 /// Safe to call while locked: reveals no secrets.
@@ -28,6 +31,7 @@ pub fn device_status(state: State<'_, AppState>) -> CmdResult<DeviceStatus> {
     Ok(DeviceStatus {
         key_scheme,
         needs_secret_key: uses_secret_key && device.secret_key().is_none(),
+        online: state.is_online(),
     })
 }
 
@@ -66,7 +70,7 @@ pub fn get_emergency_kit(state: State<'_, AppState>) -> CmdResult<EmergencyKit> 
         .secret_key_text()
         .cloned()
         .ok_or(havenkeys_core::Error::NotFound)?;
-    // The mobile app scans this to set itself up (docs/sync.md, Emergency Kit).
+    // The mobile app scans this to set itself up (docs/server-sync.md, Emergency Kit).
     let payload = SecretString::new(format!(
         "havenkeys://kit/v1?vault={vault_id}&key={}",
         secret_key.expose()

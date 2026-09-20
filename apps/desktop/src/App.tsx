@@ -28,9 +28,9 @@ export function App() {
   const unlocked = status?.state === "unlocked";
   useActivityReporter(unlocked);
 
-  // Whether this device must be given the Secret Key (safe while locked).
+  // Device status (Secret Key requirement, online state) is safe to read at
+  // any time, locked or not, so the offline banner can show right away.
   useEffect(() => {
-    if (unlocked) return;
     api.deviceStatus().then(setDevice, () => setDevice(null));
   }, [unlocked, session]);
 
@@ -88,14 +88,22 @@ export function App() {
   }
 
   return (
-    <VaultScreen
-      key={session}
-      damagedItems={status.damagedItems}
-      onLock={() => {
-        setLockReason("user");
-        setSession((s) => s + 1);
-        setStatus({ ...status, state: "locked", damagedItems: 0 });
-      }}
-    />
+    <div className="app-shell">
+      {device?.online === false && (
+        <div className="banner banner-muted" role="status">
+          Offline — the vault is read-only until it reconnects.
+        </div>
+      )}
+      <VaultScreen
+        key={session}
+        damagedItems={status.damagedItems}
+        readOnly={!device?.online}
+        onLock={() => {
+          setLockReason("user");
+          setSession((s) => s + 1);
+          setStatus({ ...status, state: "locked", damagedItems: 0 });
+        }}
+      />
+    </div>
   );
 }

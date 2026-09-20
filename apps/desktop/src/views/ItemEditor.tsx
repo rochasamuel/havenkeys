@@ -6,6 +6,8 @@ import { Icon } from "../components/Icon";
 interface Props {
   itemType: ItemType;
   existing?: ItemOverview;
+  /** Offline: saving would fail, so the control is disabled up front. */
+  readOnly?: boolean;
   onCancel: () => void;
   onSaved: (item: ItemOverview) => void;
 }
@@ -26,7 +28,7 @@ const matchLabels: Record<MatchType, string> = {
   exact: "This exact page",
 };
 
-export function ItemEditor({ itemType, existing, onCancel, onSaved }: Props) {
+export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: Props) {
   const isNew = !existing;
   const [title, setTitle] = useState(existing?.title ?? "");
   const [username, setUsername] = useState(existing?.username ?? "");
@@ -87,7 +89,7 @@ export function ItemEditor({ itemType, existing, onCancel, onSaved }: Props) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (saving || loadingText) return;
+    if (saving || loadingText || readOnly) return;
     setSaving(true);
     setError(null);
 
@@ -310,11 +312,21 @@ export function ItemEditor({ itemType, existing, onCancel, onSaved }: Props) {
         </p>
       )}
 
+      {readOnly && (
+        <p className="form-error" role="status">
+          Offline — the vault is read-only until it reconnects.
+        </p>
+      )}
+
       <footer className="editor-foot">
         <button type="button" className="btn" onClick={onCancel} disabled={saving}>
           Cancel
         </button>
-        <button type="submit" className="btn btn-primary" disabled={saving || loadingText || !title.trim()}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={saving || loadingText || !title.trim() || readOnly}
+        >
           {saving ? "Saving…" : "Save"}
         </button>
       </footer>

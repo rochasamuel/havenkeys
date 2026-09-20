@@ -11,6 +11,8 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNew: (type: ItemType) => void;
+  /** Offline: creating an item would fail, so the control is disabled up front. */
+  newDisabled?: boolean;
 }
 
 const headings: Partial<Record<Section, string>> = {
@@ -19,7 +21,7 @@ const headings: Partial<Record<Section, string>> = {
   secure_note: "Secure notes",
 };
 
-export function ItemList({ items, query, section, selectedId, onSelect, onNew }: Props) {
+export function ItemList({ items, query, section, selectedId, onSelect, onNew, newDisabled }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -32,10 +34,11 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew }:
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
+            disabled={newDisabled}
           >
             <Icon name="plus" size={16} /> New
           </button>
-          {menuOpen && (
+          {menuOpen && !newDisabled && (
             <div className="menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
               <button
                 role="menuitem"

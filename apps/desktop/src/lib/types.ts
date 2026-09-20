@@ -109,6 +109,8 @@ export interface DeviceStatus {
   keyScheme: KeyScheme | null;
   /** This device must be given the Secret Key to unlock. */
   needsSecretKey: boolean;
+  /** Whether this device currently has a server session. Independent of the lock state. */
+  online: boolean;
 }
 
 export interface EmergencyKit {

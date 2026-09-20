@@ -123,6 +123,7 @@ pub async fn change_master_password(
 ) -> CmdResult<()> {
     let state = app.state::<AppState>();
     state.touch();
+    state.require_online()?;
     vault::check_new_master_password(&new)?;
     let kdf = KdfParams::generate()?;
     let account = state
@@ -258,30 +259,41 @@ pub fn copy_secret(
 }
 
 #[tauri::command]
-pub fn create_item(state: State<'_, AppState>, _input: ItemInput) -> CmdResult<ItemOverview> {
+pub fn create_item(state: State<'_, AppState>, input: ItemInput) -> CmdResult<ItemOverview> {
     state.touch();
-    // Writes need a server session (spec 2026-09-20 §8.4); Task 7 gates this
-    // on the connectivity state once there is one to be in.
+    state.require_online()?;
+    let _staged = state.vault()?.stage_create(input, AppState::now_ms())?;
+    // The sync client sends `_staged` and returns the server's revision,
+    // which commit_write records. Until it exists, require_online above has
+    // already returned.
     Err(havenkeys_core::Error::Offline.into())
 }
 
 #[tauri::command]
 pub fn update_item(
     state: State<'_, AppState>,
-    _id: Uuid,
-    _input: ItemInput,
+    id: Uuid,
+    input: ItemInput,
 ) -> CmdResult<ItemOverview> {
     state.touch();
-    // Writes need a server session (spec 2026-09-20 §8.4); Task 7 gates this
-    // on the connectivity state once there is one to be in.
+    state.require_online()?;
+    let _staged = state
+        .vault()?
+        .stage_update(&id, input, AppState::now_ms())?;
+    // The sync client sends `_staged` and returns the server's revision,
+    // which commit_write records. Until it exists, require_online above has
+    // already returned.
     Err(havenkeys_core::Error::Offline.into())
 }
 
 #[tauri::command]
-pub fn delete_item(state: State<'_, AppState>, _id: Uuid) -> CmdResult<()> {
+pub fn delete_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<()> {
     state.touch();
-    // Writes need a server session (spec 2026-09-20 §8.4); Task 7 gates this
-    // on the connectivity state once there is one to be in.
+    state.require_online()?;
+    let _staged = state.vault()?.stage_delete(&id)?;
+    // The sync client sends `_staged` and returns the server's revision,
+    // which commit_write records. Until it exists, require_online above has
+    // already returned.
     Err(havenkeys_core::Error::Offline.into())
 }
 

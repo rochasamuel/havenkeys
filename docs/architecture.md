@@ -20,6 +20,8 @@ havenkeys/
 │           ├── totp.rs        RFC 6238 + otpauth:// parsing
 │           ├── origin.rs      URL parsing and domain matching (PSL-based)
 │           ├── import/        1Password .1pux importer (hostile-input parsing)
+│           ├── account.rs     account identity: email normalization for key derivation
+│           ├── sync.rs        account header attestation + applying a server pull (no network)
 │           └── error.rs       secret-free error type
 ├── apps/
 │   ├── desktop/
@@ -39,13 +41,59 @@ The core crate is deliberately independent of Tauri so that:
 * the bridge can link the same code without Tauri,
 * UI changes cannot accidentally change security behaviour.
 
+## The server and the local replica
+
+HavenKeys is server-authoritative (`docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`):
+a `havenkeys-server` account is the single writer, and each device's SQLite
+database is a **read-only replica** of it, not an independent vault. See
+`docs/server-sync.md` for the full model, and its "Status" section for what
+of the diagram below already exists in code versus what is still a
+`havenkeys-sync-client` and a server away.
+
+```text
+┌────────────────────────── Desktop app ──────────────────────────┐
+│                                                                   │
+│  React / TypeScript UI                                           │
+│         │                                                        │
+│         ▼                                                        │
+│   Tauri commands ──── AppState::require_online() ──── Connectivity│
+│         │             (reads always allowed;                Online/│
+│         │              writes refused when offline)         Offline│
+│         ▼                                                        │
+│   Rust security core (havenkeys-core)                            │
+│         │                                                        │
+│    ┌────┴─────┐                                                  │
+│    │          │                                                  │
+│  Crypto     Vault ──stage_*/commit_write──┐                      │
+│    │          │                            │                     │
+│    └────┬─────┘                            │                     │
+│         ▼                                  │                     │
+│  Local SQLite replica                      │                     │
+│  (schema 4: account, items, settings)      │                     │
+│         ▲                                  │                     │
+│         │ apply_remote_changes             │                     │
+└─────────┼──────────────────────────────────┼─────────────────────┘
+          │                                  │
+          │        havenkeys-sync-client     │   (not built yet;
+          │        HTTPS, session token      ▼    see docs/server-sync.md §1)
+          └──────────────────────── havenkeys-server
+                                     (Postgres, the single
+                                      authoritative copy;
+                                      not built yet)
+```
+
+Native Messaging to the browser extension is unaffected by any of this — it
+talks to the same `VaultService` the Tauri commands do, and so reads from,
+and is bound by the same connectivity gate as, the local replica.
+
 ## Data flow: unlock
 
 ```text
 UI: unlock_vault(password)
   → Tauri command (spawn_blocking)
     → VaultService::begin_unlock()     state: LOCKED → UNLOCKING, returns header snapshot
-    → UnlockTicket::derive(password)   Argon2id + HKDF (outside the vault mutex)
+    → UnlockTicket::derive_for_account(password, secret_key, account)
+                                       Argon2id + HKDF (outside the vault mutex)
     → VaultService::finish_unlock()    unwrap vault key, decrypt overviews
                                        state: UNLOCKED (or back to LOCKED on failure)
   ← { state: "unlocked" }
@@ -68,7 +116,10 @@ UI (user clicks eye) → reveal_secret(id, "password")
 
 SQLite (bundled via `rusqlite`), one file per vault at the platform data
 directory (`$XDG_DATA_HOME/com.havenkeys.desktop/vault.sqlite3` on Linux),
-created with mode `0600` on Unix. Schema v1:
+created with mode `0600` on Unix. This is a read-only replica of the
+server's account, not an independently authoritative vault
+(`docs/server-sync.md`). Schema v4 (`Store::init` refuses to open anything
+older, with a message that the vault predates accounts):
 
 ```sql
 CREATE TABLE vault_header (
@@ -77,18 +128,34 @@ CREATE TABLE vault_header (
   vault_id          TEXT    NOT NULL,
   kdf               TEXT    NOT NULL,   -- JSON: algorithm, m, t, p, salt (base64)
   wrapped_vault_key BLOB    NOT NULL,   -- EncryptedBlob v1
-  created_at        INTEGER NOT NULL
+  created_at        INTEGER NOT NULL,
+  key_scheme        INTEGER NOT NULL,   -- always 3 (account-bound)
+  header_revision   INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE items (
   id       TEXT PRIMARY KEY,            -- UUIDv4
   overview BLOB NOT NULL,               -- EncryptedBlob: title, username, urls, flags, timestamps
-  details  BLOB NOT NULL                -- EncryptedBlob: password, totp, notes / note content
+  details  BLOB NOT NULL,               -- EncryptedBlob: password, totp, notes / note content
+  revision INTEGER NOT NULL             -- the server's revision for this row (optimistic concurrency)
+);
+CREATE TABLE account (
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  account_id     TEXT    NOT NULL,
+  email          TEXT    NOT NULL,      -- as typed; normalized on use, not on store
+  server_url     TEXT    NOT NULL,
+  server_cursor  INTEGER NOT NULL DEFAULT 0,   -- highest server revision pulled
+  max_header_rev INTEGER NOT NULL DEFAULT 0,   -- rollback floor; never goes down
+  last_synced_at INTEGER
 );
 CREATE TABLE settings (
   id   INTEGER PRIMARY KEY CHECK (id = 1),
-  blob BLOB NOT NULL                    -- EncryptedBlob: settings JSON
+  blob BLOB NOT NULL                    -- EncryptedBlob: settings JSON (device-local, unsynced)
 );
 ```
+
+There is no `tombstones` table and no `dirty` column: the server is the only
+writer, so there is nothing for the client to merge or to mark as locally
+ahead of what it last pushed.
 
 `PRAGMA secure_delete = ON` is set so deleted pages are overwritten.
 
