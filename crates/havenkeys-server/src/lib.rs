@@ -12,10 +12,12 @@
 //!
 //! See `docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`.
 
+pub mod admin;
 pub mod config;
 pub mod db;
 pub mod email;
 pub mod error;
+pub mod invite;
 pub mod limits;
 pub mod routes;
 
