@@ -37,7 +37,7 @@ use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
 use crate::model::{ItemDetails, ItemOverview};
 use crate::secret::SecretString;
-use crate::store::{HeaderRecord, ItemRow, KeyScheme};
+use crate::store::{AccountRecord, HeaderRecord, ItemRow, KeyScheme};
 use crate::vault::{
     derive_kek_for, open_json, seal_json, unwrap_vault_key, PreparedVault, VaultService,
     FORMAT_VERSION,
@@ -281,6 +281,28 @@ pub fn prepare_sign_in(
     ))
 }
 
+/// One item's state as it travels to or from the server. Blobs are the same
+/// per-item ciphertexts stored locally, copied without re-encryption, so the
+/// server never holds anything it could open.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteChange {
+    pub item_id: Uuid,
+    /// `None` for a deletion.
+    pub overview: Option<Vec<u8>>,
+    /// `None` for a deletion.
+    pub details: Option<Vec<u8>>,
+    /// `Some` for a deletion, unix milliseconds.
+    pub deleted_at: Option<i64>,
+}
+
+/// What this device still owes the server, and the cursor those changes were
+/// computed against.
+#[derive(Clone, Debug)]
+pub struct PendingPush {
+    pub base_cursor: i64,
+    pub changes: Vec<RemoteChange>,
+}
+
 impl VaultService {
     /// The header this device would publish to its account's server. Requires
     /// an unlocked key scheme 3 vault.
@@ -328,6 +350,105 @@ impl VaultService {
             .update_key_wrap(&record.kdf, &record.wrapped_vault_key, record.key_scheme, record.revision)?;
         self.store.raise_max_header_rev(remote_rev)?;
         Ok(true)
+    }
+
+    /// Store the account this vault belongs to.
+    pub fn store_account(&mut self, rec: &AccountRecord) -> Result<()> {
+        self.store.set_account(rec)
+    }
+
+    /// The account record, or an error when this vault is not linked to one.
+    fn require_account(&self) -> Result<AccountRecord> {
+        self.store
+            .account()?
+            .ok_or(Error::InvalidInput("this vault is not linked to an account"))
+    }
+
+    /// Local changes not yet accepted by the server.
+    pub fn pending_push(&self) -> Result<PendingPush> {
+        let base_cursor = self.require_account()?.server_cursor;
+        let mut changes: Vec<RemoteChange> = self
+            .store
+            .dirty_rows()?
+            .into_iter()
+            .map(|(item_id, overview, details)| RemoteChange {
+                item_id,
+                overview: Some(overview),
+                details: Some(details),
+                deleted_at: None,
+            })
+            .collect();
+        changes.extend(
+            self.store
+                .dirty_tombstones()?
+                .into_iter()
+                .map(|(item_id, deleted_at)| RemoteChange {
+                    item_id,
+                    overview: None,
+                    details: None,
+                    deleted_at: Some(deleted_at),
+                }),
+        );
+        Ok(PendingPush {
+            base_cursor,
+            changes,
+        })
+    }
+
+    /// Merge a delta from the server and advance the cursor.
+    ///
+    /// The server is untrusted: every non-deletion must authenticate under
+    /// this vault's data key and match its own item ID, or it is skipped and
+    /// counted. Which version wins is decided on decrypted content by the
+    /// same rules the folder path used (docs/sync.md §5) — the cursor only
+    /// says what to fetch.
+    pub fn apply_remote_changes(
+        &mut self,
+        cursor: i64,
+        changes: Vec<RemoteChange>,
+        now_ms: i64,
+    ) -> Result<SyncReport> {
+        self.require_account()?;
+        let mut report = SyncReport::default();
+        let vault_id = self.session()?.vault_id;
+        let mut candidates: HashMap<Uuid, Candidate> = HashMap::new();
+        let mut remote_tombs: HashMap<Uuid, i64> = HashMap::new();
+
+        for change in changes {
+            match (change.deleted_at, change.overview, change.details) {
+                (Some(at), _, _) => {
+                    let e = remote_tombs.entry(change.item_id).or_insert(at);
+                    *e = (*e).max(at);
+                }
+                (None, Some(ov), Some(det)) => {
+                    match self.check_item_bytes(vault_id, change.item_id, ov, det) {
+                        Some((row, overview)) => {
+                            candidates.insert(
+                                change.item_id,
+                                Candidate {
+                                    row,
+                                    overview,
+                                    device: Uuid::nil(),
+                                },
+                            );
+                        }
+                        None => report.skipped_items += 1,
+                    }
+                }
+                (None, _, _) => report.skipped_items += 1,
+            }
+        }
+
+        self.decide_merge(candidates, remote_tombs, &mut report)?;
+        self.store.set_cursor(cursor, now_ms)?;
+        Ok(report)
+    }
+
+    /// The server accepted these changes at `cursor`.
+    pub fn confirm_push(&mut self, cursor: i64, pushed: &[Uuid], now_ms: i64) -> Result<()> {
+        self.require_account()?;
+        self.store.clear_dirty(pushed)?;
+        self.store.set_cursor(cursor, now_ms)
     }
 }
 
