@@ -251,6 +251,27 @@ pub struct PreparedVault {
     pub(crate) vault_key: Key256,
 }
 
+impl PreparedVault {
+    /// The vault's identity. A caller needs it before the vault exists
+    /// locally: activation sends it to the server, which stores the vault
+    /// under it.
+    pub fn vault_id(&self) -> Uuid {
+        self.header.vault_id
+    }
+
+    /// The KDF parameters a second device will need in order to derive the
+    /// same keys. They are not secret — the server serves them to anyone who
+    /// asks for this account — but they must be recorded exactly.
+    pub fn kdf(&self) -> &KdfParams {
+        &self.header.kdf
+    }
+
+    /// The header revision this vault starts at.
+    pub fn header_revision(&self) -> u64 {
+        self.header.revision
+    }
+}
+
 pub fn check_new_master_password(password: &SecretString) -> Result<()> {
     let n = password.char_len();
     if n < MIN_MASTER_PASSWORD_CHARS {
