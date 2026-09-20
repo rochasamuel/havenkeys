@@ -16,10 +16,21 @@ cursor is monotonic and no reader sees half a batch. Writes are optimistic per
 item: a change carries the revision the client last saw, and a stale one
 refuses the **whole batch**.
 
-**Tech Stack:** Rust 2021 (MSRV 1.88), `axum` 0.8, `tokio`, `sqlx` 0.8
-(Postgres, `rustls`, **no macros** — runtime queries only, so the crate builds
-without a database), `argon2`, `sha2`, `hkdf`, `rand`, `uuid`, `serde`,
-`serde_json`, `data-encoding`, `zeroize`, `tracing`, `clap`.
+**Tech Stack:** Rust 2021 (MSRV 1.88), `axum` 0.8, `tokio`, `tokio-postgres`
++ `deadpool-postgres` + `tokio-postgres-rustls`, `argon2`, `sha2`, `hkdf`,
+`rand`, `subtle`, `uuid`, `serde`, `serde_json`, `data-encoding`, `zeroize`,
+`tracing`, `clap`.
+
+> **Changed during Task 1, deliberately:** the spec named `sqlx`. It cannot be
+> used here: `sqlx` carries an optional `sqlx-sqlite`, cargo resolves optional
+> dependencies, and its `libsqlite3-sys` collides with the one `rusqlite`
+> links for `havenkeys-core` — cargo refuses the workspace outright ("only one
+> package may specify the same links value"). The alternatives were a second
+> cargo workspace for the server or a different driver; `tokio-postgres` keeps
+> one workspace, one lockfile and one `cargo test`, at the cost of mapping
+> rows by hand (which this plan already did) and a 60-line migration runner in
+> `db.rs`. Every `sqlx::query` in the snippets below is a
+> `client.query/execute` with the same SQL and the same `$1` parameters.
 
 **Spec:** `docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`
 (§7 and §12), which cites `2026-09-19-server-accounts-sync-design.md` §5–§7,

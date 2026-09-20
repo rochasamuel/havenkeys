@@ -6,6 +6,7 @@ members = [
   "crates/havenkeys-bridge",
   "crates/havenkeys-native-host",
   "crates/havenkeys-oslock",
+  "crates/havenkeys-server",
   "apps/desktop/src-tauri",
 ]
 # The Tauri shell needs WebKitGTK system libraries; keep plain `cargo test`
@@ -16,6 +17,7 @@ default-members = [
   "crates/havenkeys-bridge",
   "crates/havenkeys-native-host",
   "crates/havenkeys-oslock",
+  "crates/havenkeys-server",
 ]
 
 [workspace.package]
