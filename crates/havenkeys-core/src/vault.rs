@@ -842,16 +842,26 @@ impl VaultService {
     /// Persist a re-wrapped vault key. Refused if the vault was locked in the
     /// meantime or the header changed since the ticket was taken.
     pub fn commit_rekey(&mut self, ticket: RekeyTicket, rekeyed: Result<Rekeyed>) -> Result<()> {
+        self.commit(ticket, rekeyed, None)
+    }
+
+    fn commit(
+        &mut self,
+        ticket: RekeyTicket,
+        rekeyed: Result<Rekeyed>,
+        account: Option<&AccountRecord>,
+    ) -> Result<()> {
         self.session()?;
         if ticket.epoch != self.epoch {
             return Err(Error::Locked);
         }
         let rekeyed = rekeyed?;
-        // Same invariant as `create_vault`: an account-bound vault never
-        // exists without its account record, whichever route produced it.
-        if rekeyed.key_scheme == KeyScheme::AccountBound && self.store.account()?.is_none() {
+        // An account record only ever accompanies the 2 → 3 upgrade. Any
+        // other rekey would be linking a vault to an account its KEK is not
+        // bound to.
+        if account.is_some() && rekeyed.key_scheme != KeyScheme::AccountBound {
             return Err(Error::InvalidInput(
-                "link this vault to an account with commit_account_upgrade",
+                "this rekey does not link the vault to an account",
             ));
         }
         let current = self.store.header()?.ok_or(Error::NoVault)?;
@@ -861,6 +871,20 @@ impl VaultService {
             || current.key_scheme != ticket.header.key_scheme
         {
             return Err(Error::Busy);
+        }
+        // Everything that could refuse this commit has run, so the store is
+        // touched only on the path that goes through with it. The account
+        // record lands before the key wrap: an interruption can leave a
+        // record without the wrap (the retry overwrites it), never an
+        // account-bound vault without its record.
+        if let Some(account) = account {
+            self.store.set_account(account)?;
+        }
+        // Same invariant as `create_vault`, whichever route produced it.
+        if rekeyed.key_scheme == KeyScheme::AccountBound && self.store.account()?.is_none() {
+            return Err(Error::InvalidInput(
+                "link this vault to an account with commit_account_upgrade",
+            ));
         }
         let new_revision = current.revision.saturating_add(1);
         self.store.update_key_wrap(
@@ -876,27 +900,17 @@ impl VaultService {
         Ok(())
     }
 
-    /// Commit a key scheme 2 → 3 upgrade ([`RekeyTicket::derive_account_upgrade`]),
-    /// storing the account in the same step. As in `create_account_vault`,
-    /// the record is written first: an interruption leaves a record without
-    /// the new wrap (the retry overwrites it), never an account-bound vault
-    /// without its record.
+    /// Commit a key scheme 2 → 3 upgrade
+    /// ([`RekeyTicket::derive_account_upgrade`]), storing the account in the
+    /// same step. A commit that is refused — a locked vault, a failed
+    /// derivation, a header that moved on — writes nothing at all.
     pub fn commit_account_upgrade(
         &mut self,
         ticket: RekeyTicket,
         rekeyed: Result<Rekeyed>,
         account: &AccountRecord,
     ) -> Result<()> {
-        self.session()?;
-        if ticket.epoch != self.epoch {
-            return Err(Error::Locked);
-        }
-        // Checked before the store is touched (but after the lock epoch, so
-        // a lock during the KDF still reports as a lock): a failed
-        // derivation must not leave a scheme 2 vault claiming an account.
-        let rekeyed = rekeyed?;
-        self.store.set_account(account)?;
-        self.commit_rekey(ticket, Ok(rekeyed))
+        self.commit(ticket, rekeyed, Some(account))
     }
 
     /// The account this vault belongs to, if any. Safe while locked.
