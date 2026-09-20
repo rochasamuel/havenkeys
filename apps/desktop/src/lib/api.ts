@@ -99,13 +99,17 @@ export const api = {
   /** First run: the invite string from the account's operator. */
   activate: (invite: string, password: string) =>
     call<VaultStatus>("activate_account", { invite: invite.trim(), password }),
-  /** A device that has no vault yet joins an existing account. */
+  /**
+   * A device that has no vault yet joins an existing account. An empty
+   * `secretKey` uses the one this computer already holds, if any — which is
+   * how a setup interrupted after the server accepted it is finished.
+   */
   signIn: (serverUrl: string, email: string, password: string, secretKey: string) =>
     call<VaultStatus>("sign_in", {
       serverUrl: serverUrl.trim(),
       email: email.trim(),
       password,
-      secretKey: secretKey.trim(),
+      secretKey: secretKey.trim() ? secretKey.trim() : null,
     }),
   /** Ends the server session and locks the vault. The vault stays on disk. */
   signOut: () => call<void>("sign_out"),

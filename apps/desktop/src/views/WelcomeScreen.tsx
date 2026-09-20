@@ -152,7 +152,9 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
 
   useEffect(() => first.current?.focus(), []);
 
-  const ready = server.trim() && email.trim() && password && secretKey.trim();
+  // The Secret Key can be left out when this computer already holds one:
+  // a setup interrupted after the account was created finishes here.
+  const ready = server.trim() && email.trim() && password;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -197,7 +199,7 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
         placeholder="H1-XXXXXX-XXXXXX-XXXXXX-XXXXXX"
         disabled={busy}
         mono
-        hint="The long code on your Emergency Kit. This computer remembers it after the first sign-in."
+        hint="The long code on your Emergency Kit. Leave it empty if this computer already has it."
       />
 
       {error && (

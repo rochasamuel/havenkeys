@@ -435,3 +435,222 @@ forged header; password change spreading; key-scheme and lock checks),
 Verification pending: none of this has run in the desktop app on a real
 cloud folder yet. Before relying on it, create a vault, save the kit, set a
 OneDrive folder, and join from a second computer (`roadmap.md` §1).
+
+---
+
+# Security Review: Server, Sync Client and the Account Desktop
+
+**Date:** 2026-09-20
+**Scope:** `crates/havenkeys-server`, `crates/havenkeys-sync-client`, the
+changes to `crates/havenkeys-core` (`stage_save_login`, `stage_import`,
+`reset_sync_cursor`, `derive_session_for_account`), `crates/havenkeys-bridge`
+(the writer hook), and `apps/desktop/src-tauri/src/{account,sync,import}.rs`
+with its UI. Design: `docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`.
+**Method:** self-review of the implementation against the design, plus the
+test suites written alongside it (`scripts/test-server.sh` runs the server
+and client suites against a real Postgres).
+
+> This is an internal review, not an independent security audit. The server
+> has not been deployed, and nothing here has been reviewed by anyone else.
+
+## Summary
+
+One medium issue was found and fixed (an unauthenticated route doing Argon2id
+work before it checked anything), along with two low ones. The largest risks
+in this change are not bugs but properties of the design: the server can
+destroy data, and availability now decides whether the vault can be changed
+at all.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| S1 | Medium | Server | `POST /v1/accounts/activate` hashed the auth key with Argon2id before validating the invite, so a stranger could buy ~20 ms of CPU per request | **Fixed** (invite checked first; per-address rate limit) |
+| S2 | Low | Desktop | Activation wrote the Secret Key *after* the server accepted it; a crash in between left an activated account whose only Secret Key was gone | **Fixed** (written first; sign-in can use the stored key) |
+| S3 | Low | Sync client | The session carried a nil account id, inviting later code to ask the server which account it is signed in to | **Fixed** (the caller's id is carried) |
+| S4 | Low | Server | A page could cut a revision in half, handing out a cursor past rows the client never received | **Fixed** before merge (caught by its own test) |
+| S5 | High (design) | Server | A hostile or failing server can delete a vault, and every device applies it | Accepted, inherent; mitigated by backups (`deployment.md` §5) and `resync_vault` |
+| S6 | Medium (design) | All | Availability is a correctness concern: a server that is down means nothing can be saved, rotated or deleted | Accepted, documented |
+| S7 | Low | Server | `auth/params` tells a persistent prober *when* an address stops being unknown (decoy params become real ones at activation) | Accepted |
+| S8 | Low | Server | Per-address rate limiting can be used to lock out a shared address; per-account limiting to lock out a known account | Accepted |
+| S9 | Low | Client | Pulled items are bounded by size but not re-checked against the UI's field limits | Accepted, documented (`server-sync.md` §6) |
+| S10 | Low | Server | Every authenticated request updates `devices.last_seen_at`, giving the server per-request activity | Accepted |
+| S11 | Info | Server | TLS is the deployment's responsibility; the server does not terminate it or set HSTS | Accepted, documented (`deployment.md` §1) |
+| S12 | Low | Desktop | A master-password change is local until the next successful sync publishes the header | Accepted, self-healing |
+| S13 | Info | Bridge | A save from the extension blocks one bridge thread for the round trip (no vault lock held) | Accepted |
+
+## Details
+
+### S1. Argon2id before authentication (Medium, fixed)
+**Attack scenario:** anyone who can reach the server posts activation
+requests with a made-up invite. Each one cost an Argon2id hash (19 MiB, t=2)
+before the server looked at whether the invite was real, so a handful of
+concurrent requests could keep the CPU busy and starve legitimate logins.
+
+**Fix:** the invite is checked first — a SHA-256 and one indexed row, in
+constant time — and only a plausible invite reaches the hash. The attempt is
+also rate limited per address, sharing the `login_attempts` machinery, so a
+run of bad invites is refused with 429. The authoritative check still happens
+again inside the transaction under `FOR UPDATE`, so two racing activations
+still resolve to one. Covered by
+`tests/auth.rs::repeated_bad_invites_are_rate_limited`.
+
+### S2. The Secret Key could be lost between server and disk (Low, fixed)
+**Attack scenario:** not an attack — a crash, a full disk, or a kill at the
+wrong moment. Activation created the account on the server, then wrote the
+vault, then saved the Secret Key. A failure between the first and the last
+left an account whose invite was spent, whose vault existed server-side, and
+whose Secret Key had never been written anywhere. The vault could never be
+opened again, by anyone, and the user had no way to know why.
+
+**Fix:** the Secret Key is written to `device.json` before the server is
+asked. A key stored for an activation that never completed is inert. Sign-in
+now accepts an empty Secret Key field and uses the stored one, so the
+interrupted setup is finished rather than abandoned.
+
+### S3. A session that did not know its own account (Low, fixed)
+`login` built a `Session` with `Uuid::nil()` as the account id, because the
+login response does not name the account. Nothing read it yet, but the
+obvious next step — filling it from the response — would let the server
+decide which account a device believes it is signed in to. The id the caller
+derived keys against is carried into the session instead, which is the only
+value that means anything cryptographically.
+
+### S4. Paging could skip a batch's tail (Low, fixed before merge)
+The cursor is a revision, and every row a batch touched shares one. A page
+that ended mid-revision returned a cursor of that revision, and the next pull
+asked for `revision > cursor` — skipping every row of that batch that had not
+fitted. Those items would never have been pulled again. The applier now only
+ever sees whole revisions: the server reads a page plus one batch's worth and
+cuts at the last complete revision, which always leaves progress because a
+batch is capped at 500 changes. Caught by
+`tests/sync.rs::a_page_never_cuts_a_batch_in_half`.
+
+### S5. The server can destroy the vault (High, accepted, inherent)
+The server is the single writer, so a deletion it serves is indistinguishable
+from one the user made — there is nothing left to compare it against, because
+each device's SQLite is a replica that follows the server rather than an
+independent copy. A compromised server can therefore empty every device.
+
+This cannot be fixed with cryptography inside this design: authenticating
+deletions would only prove that *a key holder* asked, which a server that has
+taken over a session can still arrange. It is mitigated operationally:
+
+* tested backups, which `docs/deployment.md` §5 states are a prerequisite of
+  storing a real vault, not a follow-up;
+* the pull report carries deletion counts, so the UI can say how much went;
+* `resync_vault` re-reads the whole vault when a replica is suspect.
+
+It is stated in `threat-model.md` T1c and in the README, because a user
+choosing this design should know they are trusting their server's backups
+with the existence of their passwords, if not their contents.
+
+### S6. Availability is now correctness (Medium, accepted)
+A server that is down is not "sync is behind" — it is "no login can be saved,
+no password rotated, no item deleted". Reads keep working from the replica,
+including autofill, which is what makes this tolerable. The UI says
+`Offline — the vault is read-only until it reconnects` rather than letting a
+click fail, and the extension's save prompt is refused with `offline` so the
+browser can say something accurate.
+
+### S7. `auth/params` leaks the activation moment (Low, accepted)
+For an address with no active account the endpoint answers with a decoy
+account id and salt derived from `SERVER_SECRET`, stable across calls, so a
+single probe cannot distinguish a real account from an invented one. A prober
+who asks repeatedly *over time* sees the answer change when an account
+activates. Fixing it would mean pre-computing decoys that later become real,
+which trades a small leak for a large amount of state. Accepted: the
+enumeration oracle is closed; the transition is visible.
+
+### S8. Rate limiting as a denial of service (Low, accepted)
+Counters are keyed per account and per address. Someone who knows an email
+can make five bad attempts and lock that account out for a minute, escalating
+to thirty; someone behind the same NAT as a victim can do the same by
+address. The alternative — no limit — is worse, because the auth key is
+verified with a deliberately modest Argon2id. Accepted, documented here.
+
+### S9. Pulled items are size-bounded, not field-checked (Low, accepted)
+The sync client refuses a page over 500 changes, a blob over 8 MiB (before
+decoding, so an oversized one costs a comparison), and a response over 17 MiB
+as it reads. It does not re-apply the per-field limits a locally created item
+passes (`MAX_NOTE_CONTENT_BYTES`, `MAX_PASSWORD_CHARS`, …). An item within
+the blob cap but larger than the UI would produce is stored as served. It
+still has to authenticate under the vault's data key, so this is only
+reachable by a device that legitimately wrote it.
+
+### S10. Per-request activity metadata (Low, accepted)
+The session lookup updates `devices.last_seen_at` on every authenticated
+request, so the server sees each device's activity pattern, not just that it
+exists. This is inherent to a server that authorizes requests; it is listed
+with the rest of the metadata in `threat-model.md` T1b.
+
+### S11. TLS is the deployment's job (Info, accepted)
+The server speaks HTTP and expects a platform in front of it to terminate
+TLS; it does not redirect, set HSTS, or refuse plain HTTP, because behind a
+private network it should not. The client compensates where it can: a base
+URL that is not HTTPS is refused unless it is localhost, and redirects are
+never followed, so a bearer token cannot be handed to another host.
+`docs/deployment.md` §1 states TLS as a requirement rather than an option.
+
+### S12. A password change is local until it is published (Low, accepted)
+`change_master_password` re-wraps the vault key locally and then publishes
+the header. If publishing fails, this device uses the new password while
+others still accept the old one, until the next sync notices the local header
+revision is ahead and publishes it. The rollback floor (`max_header_rev`)
+means the old header can never be re-adopted afterwards. Self-healing, but
+worth knowing: a password change is not "done" until a sync succeeds.
+
+### S13. A bridge thread waits for the network (Info, accepted)
+Saving a login from the browser blocks the bridge thread that is handling
+that request until the server answers or times out (30 s). The vault lock is
+not held, so locking, auto-lock and every other request are unaffected, and
+the bridge already serves each connection on its own thread.
+
+## Verified properties (this phase)
+
+Each of these has a test that fails if the property stops holding.
+
+* An authenticated account reaches nothing belonging to another one, on every
+  route that takes a session, including writing with another vault's item id
+  (`tests/isolation.rs`).
+* A wrong auth key, an unknown email and an account that was invited but
+  never activated produce byte-identical answers (`tests/auth.rs`).
+* `auth/params` answers the same shape for unknown addresses, stably across
+  calls, with a different decoy per address.
+* Five failed logins block the account; a success clears the counters.
+* A revoked device loses its session on its next request and cannot sign in
+  again (`tests/devices.rs`).
+* A stale `baseRevision` refuses the whole batch and names the conflicting
+  items; nothing from that batch is written (`tests/sync.rs`).
+* A batch is applied under one revision, and the pull cursor never skips a
+  batch's tail.
+* Oversized bodies, oversized blobs, oversized headers, unknown fields,
+  non-UUID ids and malformed JSON are all refused, and no error quotes the
+  request back (`tests/limits.rs`).
+* No token, auth key, invite, blob, header or email appears in any log line,
+  while the account id still does (`tests/no_logging.rs`).
+* A hostile server cannot make the client panic or allocate without bound:
+  malformed, truncated, oversized and self-contradictory answers all produce
+  a `SyncError` (`havenkeys-sync-client/tests/hostile.rs`).
+* KDF parameters below the core's floor are refused before any derivation,
+  and a key scheme below 3 in a served header is refused.
+* An item written on one device opens on a second that signed in with only
+  the master password and the Secret Key, against the real server and a real
+  Postgres (`tests/round_trip.rs`).
+* A staged write — from the UI, from an import, or from the browser
+  extension — touches neither the store nor the session cache until the
+  server has accepted it, and a lock in between discards it
+  (`havenkeys-core/tests/writes.rs`, `tests/security.rs`).
+* The extension still cannot write to a login that is not saved for the page
+  it is on (`havenkeys-bridge/tests/bridge.rs`).
+
+## Verification pending
+
+* **The deploy itself.** Nothing here has run outside a test container: no
+  TLS, no Railway health check, no real network. `docs/deployment.md` is the
+  checklist.
+* **The restore drill** (`deployment.md` §5). Until it has been run, the
+  vault has no backup, and S5 has no mitigation.
+* **Two devices in real use.** The round trip runs two `VaultService`
+  instances in one process; nobody has yet unlocked the app on two computers
+  and watched a change cross.
+* **Argon2id parameters on target hardware** for the server's verifier
+  (19 MiB, t=2, p=1) under concurrent load.
