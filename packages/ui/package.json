@@ -7,6 +7,7 @@
   "exports": {
     "./tokens": "./src/tokens.ts",
     "./tokens.css": "./src/tokens.css",
+    "./tokens-auto.css": "./src/tokens-auto.css",
     "./base.css": "./src/base.css"
   },
   "scripts": {

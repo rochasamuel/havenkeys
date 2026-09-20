@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import "@fontsource-variable/hanken-grotesk";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
+// Tokens first: styles.css and every component below read them as
+// custom properties, so they must be declared before anything uses them.
+import "@havenkeys/ui/tokens.css";
 import "./styles.css";
 import { App } from "./App";
 import { ToastProvider } from "./components/Toast";

@@ -1,0 +1,162 @@
+/* Generated file — do not edit by hand.
+   Written by packages/ui/src/generate.ts from packages/ui/src/tokens.ts.
+
+   The same tokens as tokens.css, for surfaces with no theme switch: dark by
+   default, light when the OS asks for it. The extension loads this. */
+
+:root {
+  --bg: #0f1614;
+  --bg-side: #0b110f;
+  --bg-list: #121b18;
+  --raised: #172320;
+  --hover: #1b2925;
+  --selected: #1f2f2a;
+  --line: #1f2c28;
+  --line-strong: #2c3d37;
+  --text: #e2eae6;
+  --text-strong: #f3f7f5;
+  --muted: #86968f;
+  --brass: #c9a45c;
+  --brass-hi: #e3c483;
+  --brass-soft: rgba(201, 164, 92, 0.14);
+  --brass-ink: #e3c483;
+  --primary-bg: #c9a45c;
+  --primary-fg: #121a17;
+  --primary-hover: #d8b56f;
+  --danger: #e0775f;
+  --ok: #5fa785;
+  --digit: #e3c483;
+  --symbol: #8fc4ad;
+  --avatar-bg: #1d2b27;
+  --avatar-fg: #e3c483;
+  --side-text: #c3cfc9;
+  --side-muted: #7f8f88;
+  --side-hover: #16211e;
+  --side-selected: #1d2b27;
+  --side-line: #1c2825;
+  --on-brass: #121a17;
+  --on-danger: #ffffff;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --bg-side: #16231f;
+    --bg-list: #f4f7f5;
+    --raised: #ffffff;
+    --hover: #e9efec;
+    --selected: #ffffff;
+    --line: #e2e8e5;
+    --line-strong: #cbd5d0;
+    --text: #1e2b27;
+    --text-strong: #121a17;
+    --muted: #66756f;
+    --brass: #c9a45c;
+    --brass-hi: #e3c483;
+    --brass-soft: rgba(201, 164, 92, 0.16);
+    --brass-ink: #8f7236;
+    --primary-bg: #16231f;
+    --primary-fg: #f1f5f3;
+    --primary-hover: #2b3f39;
+    --danger: #b4412f;
+    --ok: #3d6b58;
+    --digit: #8f7236;
+    --symbol: #3d6b58;
+    --avatar-bg: #16231f;
+    --avatar-fg: #e3c483;
+    --side-text: #c3cfc9;
+    --side-muted: #7f8f88;
+    --side-hover: #16211e;
+    --side-selected: #1d2b27;
+    --side-line: #1c2825;
+    --on-brass: #121a17;
+    --on-danger: #ffffff;
+    --shadow: 0 10px 28px rgba(22, 35, 31, 0.16);
+    color-scheme: light;
+  }
+}
+
+/* Scales. None of these change with the theme. */
+:root {
+  /* font stacks */
+  --font: "Hanken Grotesk Variable", "Hanken Grotesk", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-system: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* type sizes */
+  --text-2xs: 11px;
+  --text-xs: 11.5px;
+  --text-sm: 12px;
+  --text-md: 12.5px;
+  --text-base: 13.5px;
+  --text-lg: 14px;
+  --text-xl: 15px;
+  --text-2xl: 17px;
+  --text-3xl: 18px;
+  --text-4xl: 19px;
+  --text-5xl: 22px;
+
+  /* type weights */
+  --weight-body: 500;
+  --weight-control: 550;
+  --weight-label: 560;
+  --weight-emphasis: 600;
+  --weight-heading: 640;
+  --weight-title: 650;
+  --weight-brand: 660;
+
+  /* line heights */
+  --leading-tight: 1.2;
+  --leading-snug: 1.25;
+  --leading-base: 1.45;
+  --leading-relaxed: 1.5;
+  --leading-prose: 1.55;
+
+  /* letter spacing */
+  --tracking-tight: -0.01em;
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.04em;
+  --tracking-code: 0.05em;
+  --tracking-secret: 0.06em;
+  --tracking-caps: 0.08em;
+  --tracking-masked: 0.18em;
+
+  /* spacing */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-sm: 8px;
+  --space-md: 10px;
+  --space-lg: 12px;
+  --space-xl: 14px;
+  --space-2xl: 16px;
+  --space-3xl: 20px;
+  --space-4xl: 24px;
+  --space-5xl: 28px;
+
+  /* radii */
+  --r-xs: 2px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-full: 50%;
+
+  /* elevation */
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(201, 164, 92, 0.6);
+
+  /* motion */
+  --dur-snap: 240ms;
+  --dur-tick: 250ms;
+  --dur-seal: 420ms;
+  --dur-breath: 1.2s;
+  --ease-mechanical: cubic-bezier(0.3, 0.7, 0.2, 1);
+  --ease-breath: ease-in-out;
+  --ease-steady: linear;
+
+  /* layers */
+  --z-popover: 10;
+  --z-toast: 50;
+  --z-page-top: 2147483647;
+}

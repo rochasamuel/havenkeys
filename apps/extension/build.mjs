@@ -48,10 +48,17 @@ for (const [browser, t] of Object.entries(targets)) {
     "menu/inline.css",
     "options/options.html",
     "options/options.css",
-    "shared/theme.css",
   ]) {
     await cp(join(root, "src", file), join(out, file.split("/").pop()));
   }
+  // The palette comes from @havenkeys/ui, in its no-theme-switch flavour:
+  // a frame injected into a page cannot read the vault's theme setting, so
+  // it follows the OS. Copied rather than bundled because the HTML loads it
+  // as a plain stylesheet.
+  await cp(
+    join(root, "../../packages/ui/src/tokens-auto.css"),
+    join(out, "theme.css"),
+  );
   await cp(join(root, "icons"), join(out, "icons"), { recursive: true });
 
   const manifest = { ...base, ...(await read(`manifest/${browser}.json`)) };

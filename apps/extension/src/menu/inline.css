@@ -95,7 +95,7 @@ main {
   display: grid;
   place-items: center;
   background: var(--brass-soft);
-  color: var(--brass-hi);
+  color: var(--brass-ink);
   font-weight: 600;
 }
 
@@ -193,7 +193,7 @@ main {
 .btn.primary {
   background: var(--brass);
   border-color: var(--brass);
-  color: #121a17;
+  color: var(--on-brass);
 }
 
 .btn.primary:hover {
