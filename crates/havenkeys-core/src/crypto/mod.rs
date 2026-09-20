@@ -3,7 +3,7 @@
 //! * `kdf`  — Argon2id password → master key
 //! * `keys` — 256-bit key type and HKDF-based key separation
 //! * `blob` — versioned AES-256-GCM encrypted blob format
-//! * `secret_key` — the 128-bit Secret Key mixed into the KEK (key scheme 2)
+//! * `secret_key` — the 128-bit Secret Key mixed into the KEK (key schemes 2 and 3)
 
 pub mod blob;
 pub mod kdf;

@@ -58,6 +58,13 @@ impl SecretKey {
         &self.0
     }
 
+    /// Fixed bytes, for known-answer tests only. Real Secret Keys come from
+    /// [`SecretKey::generate`] or [`SecretKey::parse`].
+    #[cfg(test)]
+    pub(crate) fn from_bytes(bytes: [u8; SECRET_KEY_LEN]) -> Self {
+        Self(Zeroizing::new(bytes))
+    }
+
     /// `H1-XXXX-…`, for the Emergency Kit and the device's own storage.
     pub fn to_text(&self) -> SecretString {
         let mut body = Zeroizing::new(BASE32_NOPAD.encode(self.0.as_ref()));
