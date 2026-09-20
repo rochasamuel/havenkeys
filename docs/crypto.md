@@ -173,9 +173,11 @@ the KEK derivation.
   `create_account_vault` (activation and sign-in), and `commit_rekey`
   rejects a rewrap into scheme 3 with no record and points to
   `commit_account_upgrade` (the 2 → 3 upgrade). Both write the record
-  before the header, so an interruption can leave a record without a vault
-  — harmless, and overwritten by the retry — but never a vault without its
-  record. A failed derivation writes nothing.
+  before the header, so an interruption can leave a record without the
+  matching wrap — harmless, and overwritten by the retry — but never an
+  account-bound vault without its record. A commit that is refused (a
+  locked vault, a failed derivation, a header that moved on since the
+  ticket, a rekey that is not an upgrade) writes nothing at all.
 * **The account record is not re-pointable.** `Store::set_account` refuses a
   write whose `account_id` differs from the one already stored. Its
   `ON CONFLICT` clause deliberately preserves `server_cursor` and

@@ -449,3 +449,58 @@ fn a_failed_account_upgrade_leaves_no_account_record_behind() {
         .is_err());
     assert!(vault.account().unwrap().is_none());
 }
+
+#[test]
+fn an_upgrade_refused_for_a_changed_header_leaves_no_account_record() {
+    // Two upgrades race: the second ticket is stale by the time it commits.
+    // The loser must not leave the account record of an upgrade that never
+    // happened on what is still a scheme 2 vault.
+    let (mut vault, secret_key) = secret_key_vault();
+    let stale = vault.begin_rekey().unwrap();
+    let stale_rekeyed =
+        stale.derive_account_upgrade(&secret(PASSWORD), &secret_key, &account(), fast_kdf());
+
+    // Meanwhile the master password changes, moving the header on.
+    vault
+        .change_master_password(
+            &secret(PASSWORD),
+            &secret("a much longer new password"),
+            fast_kdf(),
+        )
+        .unwrap_err(); // scheme 2 needs the Secret Key; use the ticket route
+    let t = vault.begin_rekey().unwrap();
+    let r = t.derive_with_secret_key(
+        &secret(PASSWORD),
+        &secret("a much longer new password"),
+        fast_kdf(),
+        Some(&secret_key),
+    );
+    vault.commit_rekey(t, r).unwrap();
+
+    assert!(vault
+        .commit_account_upgrade(stale, stale_rekeyed, &account_record())
+        .is_err());
+    assert!(vault.account().unwrap().is_none());
+    assert_eq!(
+        vault.key_scheme().unwrap(),
+        Some(KeyScheme::PasswordAndSecretKey)
+    );
+}
+
+#[test]
+fn commit_account_upgrade_refuses_a_rekey_that_is_not_an_upgrade() {
+    // Misusing the upgrade commit for an ordinary password change would
+    // link a scheme 2 vault to an account it is not bound to.
+    let (mut vault, secret_key) = secret_key_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket.derive_with_secret_key(
+        &secret(PASSWORD),
+        &secret("a much longer new password"),
+        fast_kdf(),
+        Some(&secret_key),
+    );
+    assert!(vault
+        .commit_account_upgrade(ticket, rekeyed, &account_record())
+        .is_err());
+    assert!(vault.account().unwrap().is_none());
+}
