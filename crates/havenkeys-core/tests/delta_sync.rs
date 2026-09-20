@@ -3,8 +3,10 @@
 
 mod common;
 
-use common::{activated_vault, new_vault, second_device, NOW};
+use common::{activated_vault, second_device, NOW};
+use havenkeys_core::store::Store;
 use havenkeys_core::sync::RemoteChange;
+use havenkeys_core::vault::VaultService;
 use havenkeys_core::Error;
 
 #[test]
@@ -172,7 +174,10 @@ fn a_deletion_during_the_push_round_trip_stays_pending() {
 
 #[test]
 fn sync_methods_require_a_linked_account() {
-    let mut vault = new_vault();
+    // No vault at all is needed: `require_account` checks the account row
+    // before it checks anything else, so an empty store hits the same
+    // refusal a hand-edited, account-less vault would.
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
     let want = Some(Error::InvalidInput(
         "this vault is not linked to an account",
     ));

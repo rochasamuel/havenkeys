@@ -722,18 +722,36 @@ mod tests {
 
     #[test]
     fn imports_into_vault_and_reimport_is_harmless() {
+        use crate::account::{AccountRef, NormalizedEmail};
         use crate::model::SecretField;
-        use crate::store::Store;
-        use crate::vault::{prepare_new_vault, VaultService};
+        use crate::store::{AccountRecord, Store};
+        use crate::vault::{prepare_new_account_vault, VaultService};
+        use uuid::Uuid;
 
-        let mut v = VaultService::new(Store::open_in_memory().unwrap());
-        let prepared = prepare_new_vault(
+        let account = AccountRef::new(
+            Uuid::from_u128(1),
+            NormalizedEmail::parse("user@example.com").unwrap(),
+        );
+        let made = prepare_new_account_vault(
             &"correct horse battery".into(),
+            &account,
             crate::crypto::kdf::test_params(),
             0,
         )
         .unwrap();
-        v.create_vault(prepared).unwrap();
+        let mut v = VaultService::new(Store::open_in_memory().unwrap());
+        v.create_account_vault(
+            made.prepared,
+            &AccountRecord {
+                account_id: account.id,
+                email: "user@example.com".into(),
+                server_url: "https://vault.example.com".into(),
+                server_cursor: 0,
+                max_header_rev: 0,
+                last_synced_at: None,
+            },
+        )
+        .unwrap();
 
         let archive = make_1pux(&sample(), 0);
         let p = parse(&archive).unwrap();

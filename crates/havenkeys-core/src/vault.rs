@@ -8,8 +8,7 @@ use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
 use crate::crypto::keys::{
-    derive_auth_key_from_master, derive_data_key, derive_kek, derive_kek_v3,
-    derive_kek_with_secret_key, AuthKey, Key256, KEY_LEN,
+    derive_auth_key_from_master, derive_data_key, derive_kek_v3, AuthKey, Key256, KEY_LEN,
 };
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
@@ -69,46 +68,22 @@ pub struct UnlockTicket {
     epoch: u64,
 }
 
-/// Output of [`UnlockTicket::derive`].
+/// Output of [`UnlockTicket::derive_for_account`].
 pub struct UnlockKey(Key256);
 
 impl UnlockTicket {
-    /// Does unlocking this vault need the Secret Key?
+    /// Does unlocking this vault need the Secret Key? Every scheme this
+    /// build understands does; kept as a method (rather than matching on the
+    /// variant) because the desktop calls it and a scheme added later must
+    /// not silently stop asking.
     pub fn needs_secret_key(&self) -> bool {
-        matches!(
-            self.key_scheme,
-            KeyScheme::PasswordAndSecretKey | KeyScheme::AccountBound
-        )
+        true
     }
 
-    /// Does unlocking this vault need the account (email + account ID)?
+    /// Does unlocking this vault need the account (email + account ID)? Same
+    /// reasoning as [`needs_secret_key`](Self::needs_secret_key).
     pub fn needs_account(&self) -> bool {
-        self.key_scheme == KeyScheme::AccountBound
-    }
-
-    /// Password-only vaults. Slow (Argon2id).
-    pub fn derive(&self, password: &SecretString) -> Result<UnlockKey> {
-        self.derive_with_secret_key(password, None)
-    }
-
-    /// Any vault: the Secret Key is required for key scheme 2 and ignored
-    /// otherwise. Slow (Argon2id).
-    pub fn derive_with_secret_key(
-        &self,
-        password: &SecretString,
-        secret_key: Option<&SecretKey>,
-    ) -> Result<UnlockKey> {
-        if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
-            return Err(Error::UnlockFailed);
-        }
-        Ok(UnlockKey(derive_kek_for(
-            self.key_scheme,
-            password,
-            &self.kdf,
-            &self.vault_id,
-            secret_key,
-            None,
-        )?))
+        true
     }
 
     /// Key scheme 3 vaults. Slow (Argon2id).
@@ -122,41 +97,27 @@ impl UnlockTicket {
             return Err(Error::UnlockFailed);
         }
         Ok(UnlockKey(derive_kek_for(
-            self.key_scheme,
             password,
             &self.kdf,
-            &self.vault_id,
             Some(secret_key),
             Some(account),
         )?))
     }
 }
 
-/// The KEK for a key scheme. A scheme that needs the Secret Key or the
-/// account is refused before any expensive work.
+/// The KEK for this vault. One scheme; the Secret Key and the account are
+/// both required, and a missing one is refused before any expensive work.
 pub(crate) fn derive_kek_for(
-    scheme: KeyScheme,
     password: &SecretString,
     kdf: &KdfParams,
-    vault_id: &Uuid,
     secret_key: Option<&SecretKey>,
     account: Option<&AccountRef>,
 ) -> Result<Key256> {
-    match (scheme, secret_key, account) {
-        (KeyScheme::PasswordOnly, _, _) => derive_kek(&derive_master_key(password, kdf)?, vault_id),
-        (KeyScheme::PasswordAndSecretKey, Some(sk), _) => {
-            derive_kek_with_secret_key(&derive_master_key(password, kdf)?, sk, vault_id)
-        }
-        (KeyScheme::AccountBound, Some(sk), Some(account)) => {
-            derive_kek_v3(&derive_master_key(password, kdf)?, sk, account)
-        }
-        (KeyScheme::AccountBound, Some(_), None) => Err(Error::InvalidInput(
-            "this vault belongs to an account; sign in instead",
-        )),
-        (KeyScheme::PasswordAndSecretKey | KeyScheme::AccountBound, None, _) => {
-            Err(Error::SecretKeyRequired)
-        }
-    }
+    let secret_key = secret_key.ok_or(Error::SecretKeyRequired)?;
+    let account = account.ok_or(Error::InvalidInput(
+        "this vault belongs to an account; sign in instead",
+    ))?;
+    derive_kek_v3(&derive_master_key(password, kdf)?, secret_key, account)
 }
 
 /// A login offered for a page. Deliberately contains no secrets.
@@ -250,7 +211,7 @@ pub struct RekeyTicket {
     account: Option<AccountRef>,
 }
 
-/// Output of [`RekeyTicket::derive`].
+/// Output of [`RekeyTicket::derive_for_account`].
 pub struct Rekeyed {
     kdf: KdfParams,
     wrapped_vault_key: Vec<u8>,
@@ -258,110 +219,17 @@ pub struct Rekeyed {
 }
 
 impl RekeyTicket {
-    pub fn key_scheme(&self) -> KeyScheme {
-        self.header.key_scheme
-    }
-
-    /// Verify `current`, then wrap the same vault key under `new`, keeping
-    /// the key scheme. Password-only vaults. Slow.
-    pub fn derive(
-        &self,
-        current: &SecretString,
-        new: &SecretString,
-        new_kdf: KdfParams,
-    ) -> Result<Rekeyed> {
-        self.derive_with_secret_key(current, new, new_kdf, None)
-    }
-
-    /// Master password change for any vault; the Secret Key (required for
-    /// schemes 2 and 3) stays the same. Slow.
-    ///
-    /// Key scheme 3 is routed to [`RekeyTicket::derive_for_account`] with the
-    /// account this ticket carries, so the one call site the desktop has
-    /// covers every scheme.
-    pub fn derive_with_secret_key(
-        &self,
-        current: &SecretString,
-        new: &SecretString,
-        new_kdf: KdfParams,
-        secret_key: Option<&SecretKey>,
-    ) -> Result<Rekeyed> {
-        check_new_master_password(new)?;
-        if self.header.key_scheme == KeyScheme::AccountBound {
-            let secret_key = secret_key.ok_or(Error::SecretKeyRequired)?;
-            let account = self.account.as_ref().ok_or(Error::InvalidInput(
-                "this vault is not linked to an account",
-            ))?;
-            return self.derive_for_account(current, new, new_kdf, secret_key, account);
-        }
-        let scheme = self.header.key_scheme;
-        let vault_key = self.unwrap(current, secret_key)?;
-        let h = &self.header;
-        let new_kek = derive_kek_for(scheme, new, &new_kdf, &h.vault_id, secret_key, None)?;
-        Ok(Rekeyed {
-            wrapped_vault_key: wrap_vault_key(&new_kek, h.vault_id, &vault_key)?,
-            kdf: new_kdf,
-            key_scheme: scheme,
-        })
-    }
-
-    /// Add a Secret Key to a password-only vault (key scheme 1 → 2). The
-    /// master password stays the same; the vault key is re-wrapped. Slow.
-    pub fn derive_secret_key_upgrade(
-        &self,
-        password: &SecretString,
-        new_secret_key: &SecretKey,
-        new_kdf: KdfParams,
-    ) -> Result<Rekeyed> {
-        if self.header.key_scheme != KeyScheme::PasswordOnly {
-            return Err(Error::InvalidInput("this vault already has a Secret Key"));
-        }
-        let vault_key = self.unwrap(password, None)?;
-        let h = &self.header;
-        let kek = derive_kek_with_secret_key(
-            &derive_master_key(password, &new_kdf)?,
-            new_secret_key,
-            &h.vault_id,
-        )?;
-        Ok(Rekeyed {
-            wrapped_vault_key: wrap_vault_key(&kek, h.vault_id, &vault_key)?,
-            kdf: new_kdf,
-            key_scheme: KeyScheme::PasswordAndSecretKey,
-        })
-    }
-
-    /// Link a key scheme 2 vault to an account (scheme 2 → 3). The master
-    /// password and the Secret Key stay the same; only the vault key is
-    /// re-wrapped, so items are untouched. Slow (Argon2id).
-    pub fn derive_account_upgrade(
-        &self,
-        password: &SecretString,
-        secret_key: &SecretKey,
-        account: &AccountRef,
-        new_kdf: KdfParams,
-    ) -> Result<Rekeyed> {
-        if self.header.key_scheme != KeyScheme::PasswordAndSecretKey {
-            return Err(Error::InvalidInput(
-                "add a Secret Key before linking this vault to an account",
-            ));
-        }
-        let vault_key = self.unwrap(password, Some(secret_key))?;
-        let kek = derive_kek_v3(&derive_master_key(password, &new_kdf)?, secret_key, account)?;
-        Ok(Rekeyed {
-            wrapped_vault_key: wrap_vault_key(&kek, self.header.vault_id, &vault_key)?,
-            kdf: new_kdf,
-            key_scheme: KeyScheme::AccountBound,
-        })
+    /// The account this vault is linked to, if the ticket was taken while it
+    /// was. `None` means a hand-edited database whose header claims to be
+    /// account-bound but whose account row is missing; callers must refuse
+    /// rather than derive a KEK for an identity they invented.
+    pub fn account(&self) -> Option<&AccountRef> {
+        self.account.as_ref()
     }
 
     /// Master password change for an account-bound vault (key scheme 3).
     /// The Secret Key and the account stay the same; only the vault key is
     /// re-wrapped. Slow (Argon2id).
-    ///
-    /// `derive_with_secret_key` cannot do this: it derives the KEK through
-    /// `unwrap`, which always passes `account: None`, so scheme 3 is refused
-    /// before any expensive work runs. This method calls `derive_kek_v3`
-    /// directly with the caller's account instead.
     pub fn derive_for_account(
         &self,
         current: &SecretString,
@@ -371,11 +239,6 @@ impl RekeyTicket {
         account: &AccountRef,
     ) -> Result<Rekeyed> {
         check_new_master_password(new)?;
-        if self.header.key_scheme != KeyScheme::AccountBound {
-            return Err(Error::InvalidInput(
-                "this vault is not linked to an account",
-            ));
-        }
         let h = &self.header;
         let current_kek = derive_kek_v3(&derive_master_key(current, &h.kdf)?, secret_key, account)?;
         let vault_key = unwrap_vault_key(&current_kek, h.vault_id, &h.wrapped_vault_key)?;
@@ -385,19 +248,6 @@ impl RekeyTicket {
             kdf: new_kdf,
             key_scheme: KeyScheme::AccountBound,
         })
-    }
-
-    fn unwrap(&self, password: &SecretString, secret_key: Option<&SecretKey>) -> Result<Key256> {
-        let h = &self.header;
-        let kek = derive_kek_for(
-            h.key_scheme,
-            password,
-            &h.kdf,
-            &h.vault_id,
-            secret_key,
-            None,
-        )?;
-        unwrap_vault_key(&kek, h.vault_id, &h.wrapped_vault_key)
     }
 }
 
@@ -438,28 +288,6 @@ pub(crate) fn unwrap_vault_key(kek: &Key256, vault_id: Uuid, wrapped: &[u8]) -> 
     .map_err(|_| Error::UnlockFailed)?;
     let bytes: [u8; KEY_LEN] = plain.as_slice().try_into().map_err(|_| Error::Corrupted)?;
     Ok(Key256::from_bytes(bytes))
-}
-
-/// Derive keys and build the header for a new password-only vault (key
-/// scheme 1). Slow (Argon2id). New vaults in the app use
-/// [`prepare_new_vault_with_secret_key`].
-pub fn prepare_new_vault(
-    password: &SecretString,
-    kdf: KdfParams,
-    now_ms: i64,
-) -> Result<PreparedVault> {
-    prepare(password, None, kdf, now_ms)
-}
-
-/// Derive keys and build the header for a new vault protected by the master
-/// password and a Secret Key (key scheme 2). Slow (Argon2id).
-pub fn prepare_new_vault_with_secret_key(
-    password: &SecretString,
-    secret_key: &SecretKey,
-    kdf: KdfParams,
-    now_ms: i64,
-) -> Result<PreparedVault> {
-    prepare(password, Some(secret_key), kdf, now_ms)
 }
 
 /// A vault created for an account, with the two things the caller must not
@@ -515,36 +343,6 @@ pub fn derive_auth_key(
     account: &AccountRef,
 ) -> Result<AuthKey> {
     derive_auth_key_from_master(&derive_master_key(password, kdf)?, secret_key, account)
-}
-
-fn prepare(
-    password: &SecretString,
-    secret_key: Option<&SecretKey>,
-    kdf: KdfParams,
-    now_ms: i64,
-) -> Result<PreparedVault> {
-    check_new_master_password(password)?;
-    let vault_id = Uuid::new_v4();
-    let key_scheme = if secret_key.is_some() {
-        KeyScheme::PasswordAndSecretKey
-    } else {
-        KeyScheme::PasswordOnly
-    };
-    let kek = derive_kek_for(key_scheme, password, &kdf, &vault_id, secret_key, None)?;
-    let vault_key = Key256::random()?;
-    let wrapped_vault_key = wrap_vault_key(&kek, vault_id, &vault_key)?;
-    Ok(PreparedVault {
-        header: HeaderRecord {
-            format_version: FORMAT_VERSION,
-            vault_id,
-            kdf,
-            wrapped_vault_key,
-            created_at: now_ms,
-            key_scheme,
-            revision: 0,
-        },
-        vault_key,
-    })
 }
 
 pub(crate) fn seal_json<T: Serialize>(
@@ -635,27 +433,14 @@ impl VaultService {
 
     // ------------------------------------------------------------ lifecycle
 
-    /// Persist a prepared vault and leave it unlocked.
-    ///
-    /// Account-bound vaults are refused here: they must arrive with their
-    /// account record, through [`VaultService::create_account_vault`].
-    /// Otherwise a vault could exist whose rollback floor
-    /// (`adopt_account_header`) has nothing persisted behind it.
-    pub fn create_vault(&mut self, prepared: PreparedVault) -> Result<()> {
-        if prepared.header.key_scheme == KeyScheme::AccountBound {
-            return Err(Error::InvalidInput(
-                "this vault belongs to an account; create it with its account record",
-            ));
-        }
-        self.insert_vault(prepared)
-    }
-
     /// Activation, or sign-in on a second device: persist an account-bound
     /// vault together with the account it belongs to, and leave it unlocked.
     ///
     /// The account row is written first, so an interruption can leave a
     /// record without a vault (harmless, and overwritten by the retry) but
-    /// never a vault without its record.
+    /// never a vault without its record. Otherwise a vault could exist whose
+    /// rollback floor (`adopt_account_header`) has nothing persisted behind
+    /// it.
     pub fn create_account_vault(
         &mut self,
         prepared: PreparedVault,
@@ -673,16 +458,6 @@ impl VaultService {
             return Err(Error::VaultExists);
         }
         self.store.set_account(account)?;
-        self.insert_vault(prepared)
-    }
-
-    fn insert_vault(&mut self, prepared: PreparedVault) -> Result<()> {
-        if self.state != VaultState::Locked {
-            return Err(Error::Busy);
-        }
-        if self.store.header()?.is_some() {
-            return Err(Error::VaultExists);
-        }
         let vault_id = prepared.header.vault_id;
         let data_key = derive_data_key(&prepared.vault_key)?;
         let settings = Settings::default();
@@ -796,13 +571,6 @@ impl VaultService {
         })
     }
 
-    /// Convenience for tests and callers that do not need the split flow.
-    pub fn unlock(&mut self, password: &SecretString) -> Result<()> {
-        let ticket = self.begin_unlock()?;
-        let key = ticket.derive(password);
-        self.finish_unlock(ticket, key)
-    }
-
     /// Unlock a key scheme 3 vault. Slow (Argon2id).
     pub fn unlock_for_account(
         &mut self,
@@ -825,9 +593,9 @@ impl VaultService {
         was_open
     }
 
-    /// Snapshot for a master-password change. The two Argon2id derivations
-    /// then run in [`RekeyTicket::derive`] without holding the vault lock, so
-    /// a lock request is never delayed by a password change.
+    /// Snapshot for a master-password change. The Argon2id derivations then
+    /// run in [`RekeyTicket::derive_for_account`] without holding the vault
+    /// lock, so a lock request is never delayed by a password change.
     pub fn begin_rekey(&self) -> Result<RekeyTicket> {
         self.session()?;
         let header = self.store.header()?.ok_or(Error::NoVault)?;
@@ -840,30 +608,16 @@ impl VaultService {
     }
 
     /// Persist a re-wrapped vault key. Refused if the vault was locked in the
-    /// meantime or the header changed since the ticket was taken.
+    /// meantime, the header changed since the ticket was taken, or the
+    /// account row is missing (every vault is account-bound; a race against
+    /// sign-out, or a hand-edited database, must not persist a rewrap for an
+    /// identity nothing can reproduce).
     pub fn commit_rekey(&mut self, ticket: RekeyTicket, rekeyed: Result<Rekeyed>) -> Result<()> {
-        self.commit(ticket, rekeyed, None)
-    }
-
-    fn commit(
-        &mut self,
-        ticket: RekeyTicket,
-        rekeyed: Result<Rekeyed>,
-        account: Option<&AccountRecord>,
-    ) -> Result<()> {
         self.session()?;
         if ticket.epoch != self.epoch {
             return Err(Error::Locked);
         }
         let rekeyed = rekeyed?;
-        // An account record only ever accompanies the 2 → 3 upgrade. Any
-        // other rekey would be linking a vault to an account its KEK is not
-        // bound to.
-        if account.is_some() && rekeyed.key_scheme != KeyScheme::AccountBound {
-            return Err(Error::InvalidInput(
-                "this rekey does not link the vault to an account",
-            ));
-        }
         let current = self.store.header()?.ok_or(Error::NoVault)?;
         if current.vault_id != ticket.header.vault_id
             || current.kdf != ticket.header.kdf
@@ -872,18 +626,9 @@ impl VaultService {
         {
             return Err(Error::Busy);
         }
-        // Everything that could refuse this commit has run, so the store is
-        // touched only on the path that goes through with it. The account
-        // record lands before the key wrap: an interruption can leave a
-        // record without the wrap (the retry overwrites it), never an
-        // account-bound vault without its record.
-        if let Some(account) = account {
-            self.store.set_account(account)?;
-        }
-        // Same invariant as `create_vault`, whichever route produced it.
-        if rekeyed.key_scheme == KeyScheme::AccountBound && self.store.account()?.is_none() {
+        if self.store.account()?.is_none() {
             return Err(Error::InvalidInput(
-                "link this vault to an account with commit_account_upgrade",
+                "this vault is not linked to an account",
             ));
         }
         let new_revision = current.revision.saturating_add(1);
@@ -893,24 +638,11 @@ impl VaultService {
             rekeyed.key_scheme,
             new_revision,
         )?;
-        // A local password/scheme change raises the rollback floor too, so a
+        // A local password change raises the rollback floor too, so a
         // hostile server cannot later replay the header this device just
         // replaced.
         self.store.raise_max_header_rev(new_revision as i64)?;
         Ok(())
-    }
-
-    /// Commit a key scheme 2 → 3 upgrade
-    /// ([`RekeyTicket::derive_account_upgrade`]), storing the account in the
-    /// same step. A commit that is refused — a locked vault, a failed
-    /// derivation, a header that moved on — writes nothing at all.
-    pub fn commit_account_upgrade(
-        &mut self,
-        ticket: RekeyTicket,
-        rekeyed: Result<Rekeyed>,
-        account: &AccountRecord,
-    ) -> Result<()> {
-        self.commit(ticket, rekeyed, Some(account))
     }
 
     /// The account this vault belongs to, if any. Safe while locked.
@@ -918,16 +650,22 @@ impl VaultService {
         self.store.account()
     }
 
-    /// Re-wrap the vault key under a new master password. Items are untouched
-    /// (see docs/crypto.md for what this does and does not protect against).
-    pub fn change_master_password(
+    /// Re-wrap the vault key under a new master password. Items are
+    /// untouched (see docs/crypto.md for what this does and does not protect
+    /// against). The account comes from the local store, never from the
+    /// caller.
+    pub fn change_master_password_for_account(
         &mut self,
         current: &SecretString,
         new: &SecretString,
         new_kdf: KdfParams,
+        secret_key: &SecretKey,
     ) -> Result<()> {
         let ticket = self.begin_rekey()?;
-        let rekeyed = ticket.derive(current, new, new_kdf);
+        let account = ticket.account().cloned().ok_or(Error::InvalidInput(
+            "this vault is not linked to an account",
+        ))?;
+        let rekeyed = ticket.derive_for_account(current, new, new_kdf, secret_key, &account);
         self.commit_rekey(ticket, rekeyed)
     }
 
@@ -1535,35 +1273,46 @@ mod tests {
     const PASSWORD: &str = "correct horse battery staple";
 
     /// An account-bound vault whose account row is missing (a hand-edited
-    /// database; `create_account_vault` and `commit_account_upgrade` make it
-    /// unreachable otherwise) must refuse to rekey rather than re-wrap under
-    /// a key nothing can reproduce. The ticket is built here because no
-    /// public API can produce that state any more.
+    /// database; `create_account_vault` makes it unreachable otherwise) must
+    /// refuse to rekey rather than re-wrap under a key nothing can
+    /// reproduce. The header is inserted directly, bypassing
+    /// `create_account_vault`, because that is the only way left to reach
+    /// this state.
     #[test]
     fn rekey_is_refused_when_the_account_record_is_missing() {
         let account = AccountRef::new(
             Uuid::from_u128(7),
             NormalizedEmail::parse("user@example.com").unwrap(),
         );
-        let sk = SecretKey::generate().unwrap();
         let made =
             prepare_new_account_vault(&SecretString::from(PASSWORD), &account, test_params(), 0)
                 .unwrap();
-        let ticket = RekeyTicket {
-            header: made.prepared.header,
-            epoch: 0,
-            account: None,
-        };
+        let sk = made.secret_key;
 
-        let err = ticket
-            .derive_with_secret_key(
+        let mut store = Store::open_in_memory().unwrap();
+        let data_key = derive_data_key(&made.prepared.vault_key).unwrap();
+        let settings_blob = seal_json(
+            &data_key,
+            &BlobContext::vault(Purpose::Settings, made.prepared.header.vault_id),
+            &Settings::default(),
+        )
+        .unwrap();
+        store
+            .insert_header(&made.prepared.header, &settings_blob)
+            .unwrap();
+        let mut vault = VaultService::new(store);
+        vault
+            .unlock_for_account(&SecretString::from(PASSWORD), &sk, &account)
+            .unwrap();
+
+        let err = vault
+            .change_master_password_for_account(
                 &SecretString::from(PASSWORD),
                 &SecretString::from("a much longer new password"),
                 test_params(),
-                Some(&sk),
+                &sk,
             )
-            .err()
-            .unwrap();
+            .unwrap_err();
         assert_eq!(err.code(), "invalid_input");
         assert!(
             err.to_string().contains("not linked to an account"),
@@ -1572,13 +1321,11 @@ mod tests {
     }
 
     #[test]
-    fn account_bound_scheme_refuses_derivation_without_an_account() {
+    fn derivation_refuses_a_missing_account() {
         let sk = SecretKey::generate().unwrap();
         let err = derive_kek_for(
-            KeyScheme::AccountBound,
             &SecretString::from(PASSWORD),
             &test_params(),
-            &Uuid::nil(),
             Some(&sk),
             None,
         )
@@ -1587,16 +1334,14 @@ mod tests {
     }
 
     #[test]
-    fn account_bound_scheme_refuses_derivation_without_a_secret_key() {
+    fn derivation_refuses_a_missing_secret_key() {
         let account = AccountRef::new(
             Uuid::from_u128(7),
             NormalizedEmail::parse("user@example.com").unwrap(),
         );
         let err = derive_kek_for(
-            KeyScheme::AccountBound,
             &SecretString::from(PASSWORD),
             &test_params(),
-            &Uuid::nil(),
             None,
             Some(&account),
         )

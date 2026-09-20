@@ -4,7 +4,6 @@ mod common;
 
 use common::*;
 use havenkeys_core::model::{SecretField, Settings};
-use havenkeys_core::store::Store;
 use havenkeys_core::vault::{SaveAction, VaultState};
 use havenkeys_core::Error;
 use rusqlite::{params, Connection};
@@ -19,7 +18,7 @@ fn file_vault() -> (tempfile::TempDir, std::path::PathBuf) {
 /// A3: a locked vault refuses every item and secret operation.
 #[test]
 fn locked_vault_refuses_everything() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     let id = v
         .create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
         .unwrap()
@@ -49,8 +48,13 @@ fn locked_vault_refuses_everything() {
         Some(Error::Locked)
     );
     assert_eq!(
-        v.change_master_password(&secret(PASSWORD), &secret("another password"), fast_kdf())
-            .err(),
+        v.change_master_password_for_account(
+            &secret(PASSWORD),
+            &secret("another password"),
+            fast_kdf(),
+            &sk,
+        )
+        .err(),
         Some(Error::Locked)
     );
 }
@@ -60,7 +64,7 @@ fn locked_vault_refuses_everything() {
 fn nothing_sensitive_in_database_file() {
     let (_d, path) = file_vault();
     {
-        let mut v = new_vault_in(Store::open(&path).unwrap());
+        let (mut v, _sk) = activated_vault_at(&path);
         let mut input = login(
             "UniqueTitleXYZ",
             "unique.user@example.org",
@@ -98,11 +102,13 @@ fn nothing_sensitive_in_database_file() {
 #[test]
 fn tampered_details_blob_is_rejected() {
     let (_d, path) = file_vault();
-    let id = {
-        let mut v = new_vault_in(Store::open(&path).unwrap());
-        v.create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
+    let (id, sk) = {
+        let (mut v, sk) = activated_vault_at(&path);
+        let id = v
+            .create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
             .unwrap()
-            .id
+            .id;
+        (id, sk)
     };
     let c = Connection::open(&path).unwrap();
     let mut blob: Vec<u8> = c
@@ -122,7 +128,8 @@ fn tampered_details_blob_is_rejected() {
     drop(c);
 
     let mut v = open_file(&path);
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert_eq!(
         v.reveal(&id, SecretField::Password).err(),
         Some(Error::Decryption)
@@ -132,16 +139,17 @@ fn tampered_details_blob_is_rejected() {
 #[test]
 fn tampered_overview_marks_item_damaged_without_blocking_vault() {
     let (_d, path) = file_vault();
-    let (bad, good) = {
-        let mut v = new_vault_in(Store::open(&path).unwrap());
-        (
-            v.create_item(login("A", "a", "pw", "a.com"), NOW)
-                .unwrap()
-                .id,
-            v.create_item(login("B", "b", "pw", "b.com"), NOW)
-                .unwrap()
-                .id,
-        )
+    let (bad, good, sk) = {
+        let (mut v, sk) = activated_vault_at(&path);
+        let bad = v
+            .create_item(login("A", "a", "pw", "a.com"), NOW)
+            .unwrap()
+            .id;
+        let good = v
+            .create_item(login("B", "b", "pw", "b.com"), NOW)
+            .unwrap()
+            .id;
+        (bad, good, sk)
     };
     let c = Connection::open(&path).unwrap();
     c.execute(
@@ -151,7 +159,8 @@ fn tampered_overview_marks_item_damaged_without_blocking_vault() {
     .unwrap();
     drop(c);
     let mut v = open_file(&path);
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert_eq!(v.status().unwrap().damaged_items, 1);
     assert!(v.get_item(&good).is_ok());
     assert_eq!(v.get_item(&bad).err(), Some(Error::NotFound));
@@ -161,16 +170,17 @@ fn tampered_overview_marks_item_damaged_without_blocking_vault() {
 #[test]
 fn swapped_blobs_are_rejected() {
     let (_d, path) = file_vault();
-    let (a, b) = {
-        let mut v = new_vault_in(Store::open(&path).unwrap());
-        (
-            v.create_item(login("A", "a", "pw-a", "a.com"), NOW)
-                .unwrap()
-                .id,
-            v.create_item(login("B", "b", "pw-b", "b.com"), NOW)
-                .unwrap()
-                .id,
-        )
+    let (a, b, sk) = {
+        let (mut v, sk) = activated_vault_at(&path);
+        let a = v
+            .create_item(login("A", "a", "pw-a", "a.com"), NOW)
+            .unwrap()
+            .id;
+        let b = v
+            .create_item(login("B", "b", "pw-b", "b.com"), NOW)
+            .unwrap()
+            .id;
+        (a, b, sk)
     };
     let c = Connection::open(&path).unwrap();
     let details_b: Vec<u8> = c
@@ -194,7 +204,8 @@ fn swapped_blobs_are_rejected() {
     drop(c);
 
     let mut v = open_file(&path);
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert_eq!(
         v.reveal(&a, SecretField::Password).err(),
         Some(Error::Decryption)
@@ -207,20 +218,31 @@ fn swapped_blobs_are_rejected() {
 #[test]
 fn unsupported_format_version_refused() {
     let (_d, path) = file_vault();
-    drop(new_vault_in(Store::open(&path).unwrap()));
+    let sk = {
+        let (v, sk) = activated_vault_at(&path);
+        drop(v);
+        sk
+    };
     let c = Connection::open(&path).unwrap();
     c.execute("UPDATE vault_header SET format_version = 2", [])
         .unwrap();
     drop(c);
     let mut v = open_file(&path);
-    assert_eq!(v.unlock(&secret(PASSWORD)), Err(Error::UnsupportedVersion));
+    assert_eq!(
+        v.unlock_for_account(&secret(PASSWORD), &sk, &account()),
+        Err(Error::UnsupportedVersion)
+    );
     assert_eq!(v.state(), VaultState::Locked);
 }
 
 #[test]
 fn weakened_kdf_params_refused() {
     let (_d, path) = file_vault();
-    drop(new_vault_in(Store::open(&path).unwrap()));
+    let sk = {
+        let (v, sk) = activated_vault_at(&path);
+        drop(v);
+        sk
+    };
     let c = Connection::open(&path).unwrap();
     let kdf: String = c
         .query_row("SELECT kdf FROM vault_header", [], |r| r.get(0))
@@ -231,13 +253,20 @@ fn weakened_kdf_params_refused() {
         .unwrap();
     drop(c);
     let mut v = open_file(&path);
-    assert_eq!(v.unlock(&secret(PASSWORD)), Err(Error::Corrupted));
+    assert_eq!(
+        v.unlock_for_account(&secret(PASSWORD), &sk, &account()),
+        Err(Error::Corrupted)
+    );
 }
 
 #[test]
 fn garbage_header_fails_safely() {
     let (_d, path) = file_vault();
-    drop(new_vault_in(Store::open(&path).unwrap()));
+    let sk = {
+        let (v, sk) = activated_vault_at(&path);
+        drop(v);
+        sk
+    };
     let c = Connection::open(&path).unwrap();
     c.execute(
         "UPDATE vault_header SET kdf = '{not json', vault_id = 'nope'",
@@ -247,14 +276,20 @@ fn garbage_header_fails_safely() {
     drop(c);
     let mut v = open_file(&path);
     assert!(v.status().is_err());
-    assert!(v.unlock(&secret(PASSWORD)).is_err());
+    assert!(v
+        .unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .is_err());
     assert_eq!(v.state(), VaultState::Locked);
 }
 
 #[test]
 fn tampered_wrapped_key_fails_unlock() {
     let (_d, path) = file_vault();
-    drop(new_vault_in(Store::open(&path).unwrap()));
+    let sk = {
+        let (v, sk) = activated_vault_at(&path);
+        drop(v);
+        sk
+    };
     let c = Connection::open(&path).unwrap();
     let mut wrapped: Vec<u8> = c
         .query_row("SELECT wrapped_vault_key FROM vault_header", [], |r| {
@@ -269,12 +304,15 @@ fn tampered_wrapped_key_fails_unlock() {
     .unwrap();
     drop(c);
     let mut v = open_file(&path);
-    assert_eq!(v.unlock(&secret(PASSWORD)), Err(Error::UnlockFailed));
+    assert_eq!(
+        v.unlock_for_account(&secret(PASSWORD), &sk, &account()),
+        Err(Error::UnlockFailed)
+    );
 }
 
 #[test]
 fn unknown_item_ids_rejected() {
-    let v = new_vault();
+    let (v, _sk) = activated_vault();
     let random = Uuid::new_v4();
     assert_eq!(v.get_item(&random).err(), Some(Error::NotFound));
     assert_eq!(
@@ -289,7 +327,11 @@ fn unknown_item_ids_rejected() {
 #[test]
 fn injected_rows_are_not_trusted() {
     let (_d, path) = file_vault();
-    drop(new_vault_in(Store::open(&path).unwrap()));
+    let sk = {
+        let (v, sk) = activated_vault_at(&path);
+        drop(v);
+        sk
+    };
     let c = Connection::open(&path).unwrap();
     let id = Uuid::new_v4();
     c.execute(
@@ -304,7 +346,8 @@ fn injected_rows_are_not_trusted() {
     .unwrap();
     drop(c);
     let mut v = open_file(&path);
-    v.unlock(&secret(PASSWORD)).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     assert!(v.list_items().unwrap().is_empty());
     assert_eq!(v.status().unwrap().damaged_items, 2);
 }
@@ -312,13 +355,15 @@ fn injected_rows_are_not_trusted() {
 /// Error messages are fixed strings; none may echo user input.
 #[test]
 fn errors_never_echo_input() {
-    let mut v = new_vault();
+    let (mut v, sk) = activated_vault();
     let marker = "SENSITIVE-MARKER-123";
     let mut input = login(marker, marker, marker, &format!("javascript:{marker}"));
     let e1 = v.create_item(input, NOW).unwrap_err();
     input = login(&format!("{marker}\u{0}"), "u", "p", "a.com");
     let e2 = v.create_item(input, NOW).unwrap_err();
-    let e3 = v.unlock(&secret(marker)).unwrap_err();
+    let e3 = v
+        .unlock_for_account(&secret(marker), &sk, &account())
+        .unwrap_err();
     for e in [e1, e2, e3] {
         assert!(!e.to_string().contains(marker));
         assert!(!format!("{e:?}").contains(marker));
@@ -328,7 +373,7 @@ fn errors_never_echo_input() {
 /// Debug output of secret-bearing values never contains the secret.
 #[test]
 fn debug_output_is_redacted() {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let ov = v
         .create_item(
             login("DebugTitle", "debug-user", "debug-pass", "a.com"),
@@ -344,7 +389,7 @@ fn debug_output_is_redacted() {
 // ---------------------------------------------------------------- origin binding
 
 fn github_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
-    let mut v = new_vault();
+    let (mut v, _sk) = activated_vault();
     let mut input = login("GitHub", "octo", "gh-secret", "github.com");
     input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
     let id = v.create_item(input, NOW).unwrap().id;

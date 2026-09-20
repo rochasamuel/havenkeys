@@ -1,33 +1,23 @@
-//! Sync through a folder the user already syncs (OneDrive, Dropbox, Google
-//! Drive, Syncthing…). No server. Format: docs/sync.md.
+//! The account header (docs/crypto.md) and delta sync against a server
+//! cursor.
 //!
-//! ```text
-//! <chosen folder>/HavenKeys/<vault id>/
-//!     header.json              {"header": {...unlock header...}, "attestation": "..."}
-//!     devices/<device id>.hks  one encrypted snapshot per device
-//! ```
+//! * `encode_account_header`/`adopt_account_header`/`prepare_sign_in` handle
+//!   the plaintext-but-attested `header.json` a device publishes to and reads
+//!   from its account's server, so a new device can unlock without the
+//!   server ever holding key material. A device only adopts a header that a
+//!   vault-key holder wrote (the attestation) and that is newer (the
+//!   revision never goes backwards).
+//! * `pending_push`/`confirm_push`/`apply_remote_changes` are the local half
+//!   of delta sync: what this device still owes the server, and how a batch
+//!   of the server's changes is merged in. The merge itself
+//!   (`decide_merge`/`Candidate`) is shared with `apply_merge` in
+//!   `store.rs`; a later task owns the server-side transport and pull
+//!   applier around these.
 //!
-//! Each device writes only its own snapshot, so the sync service never sees
-//! two devices editing the same file. Each device reads everyone else's and
-//! merges item by item: the newest `updated_at` wins, and deletions travel
-//! as tombstones.
-//!
-//! Security:
-//! * The folder is untrusted storage. Every snapshot is AES-256-GCM sealed
-//!   under the vault's data key and bound to the vault and the writing
-//!   device. The items inside are the same per-item blobs as on disk, bound
-//!   to their own item IDs. Anything that does not authenticate is ignored.
-//! * `header.json` must be plaintext (a new device needs it to unlock), but
-//!   it carries an attestation sealed with the data key. A device only adopts
-//!   a header that a vault-key holder wrote and that is newer (higher
-//!   revision). It never adopts a password-only header.
-//! * Sync requires key scheme 2: the copy in the cloud cannot be unlocked
-//!   with the master password alone.
-//! * Replaying old files cannot roll items back: older versions lose the
-//!   merge. Deleting files only stops updates (see docs/sync.md, Limitations).
-//!
-//! File I/O is kept apart from the merge so the caller can read and write a
-//! slow cloud folder without holding the vault lock.
+//! Security: every blob here is the same per-item AES-256-GCM ciphertext
+//! stored locally, copied without re-encryption, bound to its own item ID.
+//! The server is untrusted storage; anything that does not authenticate
+//! under this vault's data key is skipped, not applied.
 
 use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
@@ -38,19 +28,13 @@ use crate::error::{Error, Result};
 use crate::model::{ItemDetails, ItemOverview};
 use crate::secret::SecretString;
 use crate::store::{AccountRecord, HeaderRecord, ItemRow, KeyScheme};
-use crate::vault::{
-    open_json, seal_json, unwrap_vault_key, PreparedVault, VaultService, FORMAT_VERSION,
-};
+use crate::vault::{open_json, unwrap_vault_key, PreparedVault, VaultService, FORMAT_VERSION};
 use data_encoding::BASE64;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 pub const SYNC_FORMAT: u32 = 1;
-/// Device snapshots read per sync. Personal use means a handful of devices.
-pub const MAX_DEVICES: usize = 32;
-/// Largest file read from the folder (a snapshot is one blob).
-pub const MAX_FILE_BYTES: usize = blob::MAX_BLOB_LEN;
 
 /// Generous clock-skew allowance for a remote deletion's `deleted_at`
 /// (`RemoteChange`) against this device's `now_ms` in
@@ -93,51 +77,6 @@ struct HeaderFile {
     attestation: String,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Snapshot {
-    format: u32,
-    device_id: Uuid,
-    written_at: i64,
-    items: Vec<SnapshotItem>,
-    tombstones: Vec<Tombstone>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SnapshotItem {
-    id: Uuid,
-    /// The item's overview blob, Base64 (still encrypted).
-    overview: String,
-    /// The item's details blob, Base64 (still encrypted).
-    details: String,
-}
-
-#[derive(Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Tombstone {
-    id: Uuid,
-    deleted_at: i64,
-}
-
-/// What the caller read from the folder.
-#[derive(Default)]
-pub struct SyncInput {
-    /// `header.json`, if present.
-    pub header: Option<Vec<u8>>,
-    /// Other devices' snapshots: `(device id from the file name, bytes)`.
-    pub devices: Vec<(Uuid, Vec<u8>)>,
-}
-
-/// What the caller must write back.
-pub struct SyncOutput {
-    /// A new `header.json`, when the folder's is missing, invalid or older.
-    pub header: Option<Vec<u8>>,
-    /// This device's snapshot.
-    pub snapshot: Vec<u8>,
-    pub report: SyncReport,
-}
-
 /// Counts only; never item data.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,7 +84,7 @@ pub struct SyncReport {
     pub added: usize,
     pub updated: usize,
     pub deleted: usize,
-    /// Items inside readable snapshots that did not authenticate.
+    /// Remote items that did not authenticate under this vault's data key.
     pub skipped_items: usize,
     /// A newer header (master password changed on another device) was taken.
     pub header_adopted: bool,
@@ -280,6 +219,12 @@ pub struct RemoteChange {
 pub struct PendingPush {
     pub base_cursor: i64,
     pub changes: Vec<RemoteChange>,
+}
+
+/// A remote item that authenticated, with the time that decides the merge.
+struct Candidate {
+    row: ItemRow,
+    overview: ItemOverview,
 }
 
 impl VaultService {
@@ -423,21 +368,14 @@ impl VaultService {
                         Some((row, overview)) => {
                             // A batch can carry more than one version of the
                             // same item (e.g. the server replays a range);
-                            // keep the newest by content, same as the
-                            // snapshot path below, not whichever came last.
+                            // keep the newest by content, not whichever came
+                            // last.
                             let better =
                                 candidates.get(&change.item_id).is_none_or(|c: &Candidate| {
                                     overview.updated_at > c.overview.updated_at
                                 });
                             if better {
-                                candidates.insert(
-                                    change.item_id,
-                                    Candidate {
-                                        row,
-                                        overview,
-                                        device: Uuid::nil(),
-                                    },
-                                );
+                                candidates.insert(change.item_id, Candidate { row, overview });
                             }
                         }
                         None => report.skipped_items += 1,
@@ -480,83 +418,6 @@ impl VaultService {
         }
         self.store.clear_dirty(&items, &tombstones)?;
         self.store.set_cursor(cursor, now_ms)
-    }
-}
-
-// ------------------------------------------------------------------ snapshots
-
-fn snapshot_ctx(vault_id: Uuid, device_id: Uuid) -> BlobContext {
-    BlobContext::item(Purpose::SyncSnapshot, vault_id, device_id)
-}
-
-/// A remote item that authenticated, with the time that decides the merge.
-struct Candidate {
-    row: ItemRow,
-    overview: ItemOverview,
-    device: Uuid,
-}
-
-impl VaultService {
-    /// Merge other devices' snapshots into this vault and produce this
-    /// device's snapshot (and header, if the folder needs one). Requires an
-    /// unlocked key-scheme-2 vault. No file I/O; the caller reads and writes
-    /// the sync folder.
-    pub fn sync(&mut self, device_id: Uuid, input: SyncInput, now_ms: i64) -> Result<SyncOutput> {
-        let mut report = SyncReport::default();
-        let local = self.store.header()?.ok_or(Error::NoVault)?;
-        if local.key_scheme != KeyScheme::PasswordAndSecretKey {
-            return Err(Error::InvalidInput("set up a Secret Key before syncing"));
-        }
-        let header_out = self.sync_header(&local, input.header.as_deref(), &mut report)?;
-
-        let (vault_id, candidates, remote_tombs) = {
-            let session = self.session()?;
-            let vault_id = session.vault_id;
-            let mut candidates: HashMap<Uuid, Candidate> = HashMap::new();
-            let mut tombs: HashMap<Uuid, i64> = HashMap::new();
-            for (dev, bytes) in input.devices.iter().take(MAX_DEVICES) {
-                if *dev == device_id {
-                    continue;
-                }
-                let Some(snap) = self.open_snapshot(vault_id, *dev, bytes) else {
-                    continue;
-                };
-                for item in snap.items {
-                    match self.check_item(vault_id, &item) {
-                        Some((row, overview)) => {
-                            let better = candidates.get(&item.id).is_none_or(|c| {
-                                (overview.updated_at, *dev) > (c.overview.updated_at, c.device)
-                            });
-                            if better {
-                                candidates.insert(
-                                    item.id,
-                                    Candidate {
-                                        row,
-                                        overview,
-                                        device: *dev,
-                                    },
-                                );
-                            }
-                        }
-                        None => report.skipped_items += 1,
-                    }
-                }
-                for t in snap.tombstones {
-                    let e = tombs.entry(t.id).or_insert(t.deleted_at);
-                    *e = (*e).max(t.deleted_at);
-                }
-            }
-            (vault_id, candidates, tombs)
-        };
-
-        self.decide_merge(candidates, remote_tombs, &mut report)?;
-
-        let snapshot = self.encode_snapshot(vault_id, device_id, now_ms)?;
-        Ok(SyncOutput {
-            header: header_out,
-            snapshot,
-            report,
-        })
     }
 
     /// Apply the merge rules (docs/sync.md §5) to one set of remote
@@ -623,71 +484,6 @@ impl VaultService {
         Ok(())
     }
 
-    /// Decide about `header.json`. Returns the bytes to write, if any.
-    fn sync_header(
-        &mut self,
-        local: &HeaderRecord,
-        remote: Option<&[u8]>,
-        report: &mut SyncReport,
-    ) -> Result<Option<Vec<u8>>> {
-        let data_key = &self.session()?.data_key;
-        let ours = encode_header(data_key, local)?;
-        let Some(bytes) = remote else {
-            return Ok(Some(ours));
-        };
-        let parsed = match parse_header(bytes) {
-            Ok(p) if p.body.vault_id != local.vault_id => {
-                return Err(Error::InvalidInput(
-                    "the sync folder holds a different vault",
-                ))
-            }
-            Ok(p) => p,
-            Err(_) => return Ok(Some(ours)),
-        };
-        if !verify_header(data_key, &parsed)
-            || parsed.body.key_scheme != KeyScheme::PasswordAndSecretKey
-        {
-            return Ok(Some(ours));
-        }
-        let remote_record = body_to_record(&parsed.body)?;
-        let newer = (remote_record.revision, &remote_record.wrapped_vault_key)
-            > (local.revision, &local.wrapped_vault_key);
-        if newer {
-            // The master password changed on another device. Take its
-            // header; this device's next unlock needs the new password.
-            self.store.update_key_wrap(
-                &remote_record.kdf,
-                &remote_record.wrapped_vault_key,
-                remote_record.key_scheme,
-                remote_record.revision,
-            )?;
-            report.header_adopted = true;
-            Ok(None)
-        } else if remote_record.revision == local.revision
-            && remote_record.wrapped_vault_key == local.wrapped_vault_key
-        {
-            Ok(None)
-        } else {
-            Ok(Some(ours))
-        }
-    }
-
-    fn open_snapshot(&self, vault_id: Uuid, device: Uuid, bytes: &[u8]) -> Option<Snapshot> {
-        if bytes.len() > MAX_FILE_BYTES {
-            return None;
-        }
-        let data_key = &self.session().ok()?.data_key;
-        let snap: Snapshot = open_json(data_key, &snapshot_ctx(vault_id, device), bytes).ok()?;
-        (snap.format == SYNC_FORMAT && snap.device_id == device).then_some(snap)
-    }
-
-    /// Authenticate one remote item (overview and details) and return its row.
-    fn check_item(&self, vault_id: Uuid, item: &SnapshotItem) -> Option<(ItemRow, ItemOverview)> {
-        let ov_blob = BASE64.decode(item.overview.as_bytes()).ok()?;
-        let det_blob = BASE64.decode(item.details.as_bytes()).ok()?;
-        self.check_item_bytes(vault_id, item.id, ov_blob, det_blob)
-    }
-
     /// Authenticate one remote item version. Returns `None` unless both blobs
     /// open under this vault's data key, the overview's ID matches the row's,
     /// and the details type matches the overview type.
@@ -715,36 +511,5 @@ impl VaultService {
             return None;
         }
         Some(((id, ov_blob, det_blob), ov))
-    }
-
-    fn encode_snapshot(&self, vault_id: Uuid, device_id: Uuid, now_ms: i64) -> Result<Vec<u8>> {
-        let items = self
-            .store
-            .item_rows()?
-            .into_iter()
-            .map(|(id, ov, det)| SnapshotItem {
-                id,
-                overview: BASE64.encode(&ov),
-                details: BASE64.encode(&det),
-            })
-            .collect();
-        let tombstones = self
-            .store
-            .tombstones()?
-            .into_iter()
-            .map(|(id, deleted_at)| Tombstone { id, deleted_at })
-            .collect();
-        let snap = Snapshot {
-            format: SYNC_FORMAT,
-            device_id,
-            written_at: now_ms,
-            items,
-            tombstones,
-        };
-        seal_json(
-            &self.session()?.data_key,
-            &snapshot_ctx(vault_id, device_id),
-            &snap,
-        )
     }
 }

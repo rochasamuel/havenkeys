@@ -5,7 +5,7 @@ use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
 use havenkeys_core::store::{AccountRecord, Store};
-use havenkeys_core::vault::{prepare_new_account_vault, prepare_new_vault, VaultService};
+use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
 use havenkeys_core::SecretString;
 use std::path::Path;
 use uuid::Uuid;
@@ -20,17 +20,6 @@ pub fn fast_kdf() -> KdfParams {
 
 pub fn secret(s: &str) -> SecretString {
     SecretString::from(s)
-}
-
-pub fn new_vault_in(store: Store) -> VaultService {
-    let mut v = VaultService::new(store);
-    v.create_vault(prepare_new_vault(&secret(PASSWORD), fast_kdf(), NOW).unwrap())
-        .unwrap();
-    v
-}
-
-pub fn new_vault() -> VaultService {
-    new_vault_in(Store::open_in_memory().unwrap())
 }
 
 pub fn open_file(path: &Path) -> VaultService {
@@ -86,6 +75,17 @@ pub fn activated_vault() -> (VaultService, SecretKey) {
     vault.lock();
     vault
         .unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    (vault, sk)
+}
+
+/// An activated account vault on disk, unlocked, with its Secret Key.
+pub fn activated_vault_at(path: &Path) -> (VaultService, SecretKey) {
+    let made = prepare_new_account_vault(&secret(PASSWORD), &account(), fast_kdf(), NOW).unwrap();
+    let sk = made.secret_key;
+    let mut vault = VaultService::new(Store::open(path).unwrap());
+    vault
+        .create_account_vault(made.prepared, &account_record())
         .unwrap();
     (vault, sk)
 }
