@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
+use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
-use havenkeys_core::store::Store;
-use havenkeys_core::vault::{prepare_new_vault, VaultService};
+use havenkeys_core::store::{AccountRecord, Store};
+use havenkeys_core::vault::{prepare_new_account_vault, prepare_new_vault, VaultService};
 use havenkeys_core::SecretString;
 use std::path::Path;
+use uuid::Uuid;
 
 pub const PASSWORD: &str = "correct horse battery staple";
 pub const NOW: i64 = 1_700_000_000_000;
@@ -48,6 +51,40 @@ pub fn login(title: &str, username: &str, password: &str, url: &str) -> ItemInpu
         notes: SecretUpdate::Keep,
         content: SecretUpdate::Keep,
     }
+}
+
+pub fn account() -> AccountRef {
+    AccountRef::new(
+        Uuid::from_u128(0x5eed),
+        NormalizedEmail::parse("user@example.com").unwrap(),
+    )
+}
+
+pub fn account_record() -> AccountRecord {
+    AccountRecord {
+        account_id: account().id,
+        email: "user@example.com".into(),
+        server_url: "https://vault.example.com".into(),
+        server_cursor: 0,
+        max_header_rev: 0,
+        last_synced_at: None,
+    }
+}
+
+/// An activated account vault, unlocked, with its Secret Key.
+pub fn activated_vault() -> (VaultService, SecretKey) {
+    let made = prepare_new_account_vault(&secret(PASSWORD), &account(), fast_kdf(), NOW).unwrap();
+    let sk = made.secret_key;
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    vault.create_vault(made.prepared).unwrap();
+    // create_vault leaves the vault unlocked; lock it first so the account-
+    // bound unlock path is genuinely exercised, matching sign-in on a real
+    // second device.
+    vault.lock();
+    vault
+        .unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    (vault, sk)
 }
 
 pub fn note(title: &str, content: &str) -> ItemInput {

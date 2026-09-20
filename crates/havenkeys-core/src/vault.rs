@@ -8,7 +8,8 @@ use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
 use crate::crypto::keys::{
-    derive_data_key, derive_kek, derive_kek_v3, derive_kek_with_secret_key, Key256, KEY_LEN,
+    derive_auth_key_from_master, derive_data_key, derive_kek, derive_kek_v3,
+    derive_kek_with_secret_key, AuthKey, Key256, KEY_LEN,
 };
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
@@ -396,6 +397,61 @@ pub fn prepare_new_vault_with_secret_key(
     prepare(password, Some(secret_key), kdf, now_ms)
 }
 
+/// A vault created for an account, with the two things the caller must not
+/// lose: the Secret Key (for the Emergency Kit) and the auth key (for the
+/// activation request).
+pub struct AccountVault {
+    pub prepared: PreparedVault,
+    pub secret_key: SecretKey,
+    pub auth_key: AuthKey,
+}
+
+/// Activation: derive keys and build the header for a new account vault
+/// (key scheme 3). One Argon2id run yields both the KEK and the auth key.
+/// Slow (Argon2id).
+pub fn prepare_new_account_vault(
+    password: &SecretString,
+    account: &AccountRef,
+    kdf: KdfParams,
+    now_ms: i64,
+) -> Result<AccountVault> {
+    check_new_master_password(password)?;
+    let secret_key = SecretKey::generate()?;
+    let master_key = derive_master_key(password, &kdf)?;
+    let kek = derive_kek_v3(&master_key, &secret_key, account)?;
+    let auth_key = derive_auth_key_from_master(&master_key, &secret_key, account)?;
+    let vault_id = Uuid::new_v4();
+    let vault_key = Key256::random()?;
+    let wrapped_vault_key = wrap_vault_key(&kek, vault_id, &vault_key)?;
+    Ok(AccountVault {
+        prepared: PreparedVault {
+            header: HeaderRecord {
+                format_version: FORMAT_VERSION,
+                vault_id,
+                kdf,
+                wrapped_vault_key,
+                created_at: now_ms,
+                key_scheme: KeyScheme::AccountBound,
+                revision: 0,
+            },
+            vault_key,
+        },
+        secret_key,
+        auth_key,
+    })
+}
+
+/// The auth key for a later login on a device that already holds the Secret
+/// Key. Slow (Argon2id).
+pub fn derive_auth_key(
+    password: &SecretString,
+    secret_key: &SecretKey,
+    kdf: &KdfParams,
+    account: &AccountRef,
+) -> Result<AuthKey> {
+    derive_auth_key_from_master(&derive_master_key(password, kdf)?, secret_key, account)
+}
+
 fn prepare(
     password: &SecretString,
     secret_key: Option<&SecretKey>,
@@ -639,6 +695,18 @@ impl VaultService {
     pub fn unlock(&mut self, password: &SecretString) -> Result<()> {
         let ticket = self.begin_unlock()?;
         let key = ticket.derive(password);
+        self.finish_unlock(ticket, key)
+    }
+
+    /// Unlock a key scheme 3 vault. Slow (Argon2id).
+    pub fn unlock_for_account(
+        &mut self,
+        password: &SecretString,
+        secret_key: &SecretKey,
+        account: &AccountRef,
+    ) -> Result<()> {
+        let ticket = self.begin_unlock()?;
+        let key = ticket.derive_for_account(password, secret_key, account);
         self.finish_unlock(ticket, key)
     }
 

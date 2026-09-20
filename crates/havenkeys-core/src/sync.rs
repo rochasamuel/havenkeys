@@ -29,9 +29,10 @@
 //! File I/O is kept apart from the merge ([`folder`]) so the caller can read
 //! and write a slow cloud folder without holding the vault lock.
 
+use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
-use crate::crypto::kdf::KdfParams;
-use crate::crypto::keys::derive_data_key;
+use crate::crypto::kdf::{derive_master_key, KdfParams};
+use crate::crypto::keys::{derive_auth_key_from_master, derive_data_key, derive_kek_v3, AuthKey};
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
 use crate::model::{ItemDetails, ItemOverview};
@@ -247,6 +248,49 @@ pub fn prepare_join(
         header: record,
         vault_key,
     })
+}
+
+/// Sign in to an account vault on a new device: derive the KEK from the
+/// master password, the Secret Key and the account, unwrap the vault key,
+/// and check the header's attestation. Refuses any key scheme below 3, so a
+/// server cannot downgrade a device. Slow (Argon2id).
+pub fn prepare_sign_in(
+    header: &[u8],
+    password: &SecretString,
+    secret_key: &SecretKey,
+    account: &AccountRef,
+) -> Result<(PreparedVault, AuthKey)> {
+    let file = parse_header(header)?;
+    if file.body.key_scheme != KeyScheme::AccountBound {
+        return Err(Error::UnsupportedVersion);
+    }
+    let record = body_to_record(&file.body)?;
+    let master_key = derive_master_key(password, &record.kdf)?;
+    let kek = derive_kek_v3(&master_key, secret_key, account)?;
+    let auth_key = derive_auth_key_from_master(&master_key, secret_key, account)?;
+    let vault_key = unwrap_vault_key(&kek, record.vault_id, &record.wrapped_vault_key)?;
+    if !verify_header(&derive_data_key(&vault_key)?, &file) {
+        return Err(Error::Corrupted);
+    }
+    Ok((
+        PreparedVault {
+            header: record,
+            vault_key,
+        },
+        auth_key,
+    ))
+}
+
+impl VaultService {
+    /// The header this device would publish to its account's server. Requires
+    /// an unlocked key scheme 3 vault.
+    pub fn encode_account_header(&self) -> Result<Vec<u8>> {
+        let local = self.store.header()?.ok_or(Error::NoVault)?;
+        if local.key_scheme != KeyScheme::AccountBound {
+            return Err(Error::InvalidInput("this vault is not linked to an account"));
+        }
+        encode_header(&self.session()?.data_key, &local)
+    }
 }
 
 // ------------------------------------------------------------------ snapshots
