@@ -299,7 +299,7 @@ fn fuzz_item_input() {
 /// decrypts under this vault's data key.
 #[test]
 fn fuzz_remote_changes() {
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let mut rng = Rng::new(0x5EED_5EED);
     for _ in 0..2000 {
         let change = havenkeys_core::sync::RemoteChange {
@@ -319,7 +319,7 @@ fn fuzz_remote_changes() {
 /// Random bytes as a server header must be rejected, never adopted.
 #[test]
 fn fuzz_account_headers() {
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let mut rng = Rng::new(0x1234_5678);
     for _ in 0..2000 {
         let bytes = rng.bytes(1024);

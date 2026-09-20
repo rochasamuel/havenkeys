@@ -21,7 +21,7 @@ use crate::model::{
 };
 use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::secret::SecretString;
-use crate::store::{HeaderRecord, KeyScheme, Store};
+use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -636,7 +636,47 @@ impl VaultService {
     // ------------------------------------------------------------ lifecycle
 
     /// Persist a prepared vault and leave it unlocked.
+    ///
+    /// Account-bound vaults are refused here: they must arrive with their
+    /// account record, through [`VaultService::create_account_vault`].
+    /// Otherwise a vault could exist whose rollback floor
+    /// (`adopt_account_header`) has nothing persisted behind it.
     pub fn create_vault(&mut self, prepared: PreparedVault) -> Result<()> {
+        if prepared.header.key_scheme == KeyScheme::AccountBound {
+            return Err(Error::InvalidInput(
+                "this vault belongs to an account; create it with its account record",
+            ));
+        }
+        self.insert_vault(prepared)
+    }
+
+    /// Activation, or sign-in on a second device: persist an account-bound
+    /// vault together with the account it belongs to, and leave it unlocked.
+    ///
+    /// The account row is written first, so an interruption can leave a
+    /// record without a vault (harmless, and overwritten by the retry) but
+    /// never a vault without its record.
+    pub fn create_account_vault(
+        &mut self,
+        prepared: PreparedVault,
+        account: &AccountRecord,
+    ) -> Result<()> {
+        if prepared.header.key_scheme != KeyScheme::AccountBound {
+            return Err(Error::InvalidInput(
+                "this vault does not belong to an account",
+            ));
+        }
+        if self.state != VaultState::Locked {
+            return Err(Error::Busy);
+        }
+        if self.store.header()?.is_some() {
+            return Err(Error::VaultExists);
+        }
+        self.store.set_account(account)?;
+        self.insert_vault(prepared)
+    }
+
+    fn insert_vault(&mut self, prepared: PreparedVault) -> Result<()> {
         if self.state != VaultState::Locked {
             return Err(Error::Busy);
         }
@@ -807,6 +847,13 @@ impl VaultService {
             return Err(Error::Locked);
         }
         let rekeyed = rekeyed?;
+        // Same invariant as `create_vault`: an account-bound vault never
+        // exists without its account record, whichever route produced it.
+        if rekeyed.key_scheme == KeyScheme::AccountBound && self.store.account()?.is_none() {
+            return Err(Error::InvalidInput(
+                "link this vault to an account with commit_account_upgrade",
+            ));
+        }
         let current = self.store.header()?.ok_or(Error::NoVault)?;
         if current.vault_id != ticket.header.vault_id
             || current.kdf != ticket.header.kdf
@@ -827,6 +874,34 @@ impl VaultService {
         // replaced.
         self.store.raise_max_header_rev(new_revision as i64)?;
         Ok(())
+    }
+
+    /// Commit a key scheme 2 → 3 upgrade ([`RekeyTicket::derive_account_upgrade`]),
+    /// storing the account in the same step. As in `create_account_vault`,
+    /// the record is written first: an interruption leaves a record without
+    /// the new wrap (the retry overwrites it), never an account-bound vault
+    /// without its record.
+    pub fn commit_account_upgrade(
+        &mut self,
+        ticket: RekeyTicket,
+        rekeyed: Result<Rekeyed>,
+        account: &AccountRecord,
+    ) -> Result<()> {
+        self.session()?;
+        if ticket.epoch != self.epoch {
+            return Err(Error::Locked);
+        }
+        // Checked before the store is touched (but after the lock epoch, so
+        // a lock during the KDF still reports as a lock): a failed
+        // derivation must not leave a scheme 2 vault claiming an account.
+        let rekeyed = rekeyed?;
+        self.store.set_account(account)?;
+        self.commit_rekey(ticket, Ok(rekeyed))
+    }
+
+    /// The account this vault belongs to, if any. Safe while locked.
+    pub fn account(&self) -> Result<Option<AccountRecord>> {
+        self.store.account()
     }
 
     /// Re-wrap the vault key under a new master password. Items are untouched
@@ -1444,6 +1519,43 @@ mod tests {
     use crate::crypto::kdf::test_params;
 
     const PASSWORD: &str = "correct horse battery staple";
+
+    /// An account-bound vault whose account row is missing (a hand-edited
+    /// database; `create_account_vault` and `commit_account_upgrade` make it
+    /// unreachable otherwise) must refuse to rekey rather than re-wrap under
+    /// a key nothing can reproduce. The ticket is built here because no
+    /// public API can produce that state any more.
+    #[test]
+    fn rekey_is_refused_when_the_account_record_is_missing() {
+        let account = AccountRef::new(
+            Uuid::from_u128(7),
+            NormalizedEmail::parse("user@example.com").unwrap(),
+        );
+        let sk = SecretKey::generate().unwrap();
+        let made =
+            prepare_new_account_vault(&SecretString::from(PASSWORD), &account, test_params(), 0)
+                .unwrap();
+        let ticket = RekeyTicket {
+            header: made.prepared.header,
+            epoch: 0,
+            account: None,
+        };
+
+        let err = ticket
+            .derive_with_secret_key(
+                &SecretString::from(PASSWORD),
+                &SecretString::from("a much longer new password"),
+                test_params(),
+                Some(&sk),
+            )
+            .err()
+            .unwrap();
+        assert_eq!(err.code(), "invalid_input");
+        assert!(
+            err.to_string().contains("not linked to an account"),
+            "unexpected message: {err}"
+        );
+    }
 
     #[test]
     fn account_bound_scheme_refuses_derivation_without_an_account() {

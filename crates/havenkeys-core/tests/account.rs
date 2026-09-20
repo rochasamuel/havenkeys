@@ -37,9 +37,11 @@ fn a_second_device_signs_in_with_password_secret_key_and_account() {
     let (prepared, _auth) =
         prepare_sign_in(&header, &secret(PASSWORD), &secret_key, &common::account()).unwrap();
     let mut second = VaultService::new(Store::open_in_memory().unwrap());
-    second.create_vault(prepared).unwrap();
-    // create_vault leaves the vault unlocked; lock it first so the sign-in
-    // unlock path itself is exercised, not just vault creation.
+    second
+        .create_account_vault(prepared, &account_record())
+        .unwrap();
+    // create_account_vault leaves the vault unlocked; lock it first so the
+    // sign-in unlock path itself is exercised, not just vault creation.
     second.lock();
     second
         .unlock_for_account(&secret(PASSWORD), &secret_key, &common::account())
@@ -135,7 +137,9 @@ fn a_secret_key_vault_upgrades_to_an_account_without_touching_items() {
     let rekeyed = ticket
         .derive_account_upgrade(&secret(PASSWORD), &secret_key, &account(), fast_kdf())
         .unwrap();
-    vault.commit_rekey(ticket, Ok(rekeyed)).unwrap();
+    vault
+        .commit_account_upgrade(ticket, Ok(rekeyed), &account_record())
+        .unwrap();
 
     // Same vault, same item, new scheme, higher header revision.
     assert_eq!(vault.key_scheme().unwrap(), Some(KeyScheme::AccountBound));
@@ -220,7 +224,7 @@ fn a_persisted_floor_refuses_a_header_newer_than_local_but_not_newer_than_the_fl
     let (prepared, _auth) =
         prepare_sign_in(&header0, &secret(PASSWORD), &secret_key, &account()).unwrap();
     let mut second = VaultService::new(store);
-    second.create_vault(prepared).unwrap();
+    second.create_account_vault(prepared, &floor_rec).unwrap();
     second.lock();
     second
         .unlock_for_account(&secret(PASSWORD), &secret_key, &account())
@@ -290,7 +294,9 @@ fn derive_auth_key_matches_the_activation_and_sign_in_paths() {
     );
 
     let mut vault = VaultService::new(Store::open_in_memory().unwrap());
-    vault.create_vault(made.prepared).unwrap();
+    vault
+        .create_account_vault(made.prepared, &account_record())
+        .unwrap();
     let header = vault.encode_account_header().unwrap();
     let (_, sign_in_auth) =
         prepare_sign_in(&header, &secret(PASSWORD), &made.secret_key, &account()).unwrap();
@@ -317,7 +323,7 @@ fn an_account_vault_changes_its_master_password_through_the_ordinary_route() {
     // `begin_rekey` + `derive_with_secret_key`. That route must work for a
     // key scheme 3 vault too: the account comes from the local store, not
     // from the caller.
-    let (mut vault, secret_key) = common::activated_with_account();
+    let (mut vault, secret_key) = common::activated_vault();
     vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
@@ -343,27 +349,103 @@ fn an_account_vault_changes_its_master_password_through_the_ordinary_route() {
 }
 
 #[test]
-fn changing_the_master_password_is_refused_when_the_account_record_is_missing() {
-    // An account-bound vault whose account row never got written cannot
-    // derive the KEK, and must say so instead of silently re-wrapping under
-    // a key nothing can reproduce.
-    let (mut vault, secret_key) = common::activated_vault();
-    let ticket = vault.begin_rekey().unwrap();
-    let err = ticket
-        .derive_with_secret_key(
-            &secret(PASSWORD),
-            &secret("a much longer new password"),
-            fast_kdf(),
-            Some(&secret_key),
-        )
+fn create_vault_refuses_an_account_bound_vault() {
+    // An account-bound vault must arrive with its account record, or the
+    // rollback floor in `adopt_account_header` is never populated. Make the
+    // route that cannot carry one refuse instead of accepting it.
+    let made = prepare_new_account_vault(&secret(PASSWORD), &account(), fast_kdf(), NOW).unwrap();
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    let err = vault.create_vault(made.prepared).err().unwrap();
+    assert_eq!(err.code(), "invalid_input");
+}
+
+#[test]
+fn create_account_vault_stores_the_account_record() {
+    let made = prepare_new_account_vault(&secret(PASSWORD), &account(), fast_kdf(), NOW).unwrap();
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    vault
+        .create_account_vault(made.prepared, &account_record())
+        .unwrap();
+
+    assert_eq!(vault.key_scheme().unwrap(), Some(KeyScheme::AccountBound));
+    assert!(vault.is_unlocked());
+    assert_eq!(vault.account().unwrap().unwrap().account_id, account().id);
+}
+
+#[test]
+fn create_account_vault_refuses_a_vault_that_is_not_account_bound() {
+    let made =
+        havenkeys_core::vault::prepare_new_vault(&secret(PASSWORD), fast_kdf(), NOW).unwrap();
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    let err = vault
+        .create_account_vault(made, &account_record())
         .err()
         .unwrap();
     assert_eq!(err.code(), "invalid_input");
-    // Specifically the missing-account message, not the blanket "sign in
-    // instead" refusal every scheme 3 vault used to get.
-    assert!(
-        err.to_string().contains("not linked to an account"),
-        "unexpected message: {err}"
+}
+
+/// A key scheme 2 vault, unlocked, with its Secret Key.
+fn secret_key_vault() -> (VaultService, havenkeys_core::crypto::secret_key::SecretKey) {
+    use havenkeys_core::crypto::secret_key::SecretKey;
+    use havenkeys_core::vault::prepare_new_vault_with_secret_key;
+
+    let secret_key = SecretKey::generate().unwrap();
+    let made =
+        prepare_new_vault_with_secret_key(&secret(PASSWORD), &secret_key, fast_kdf(), NOW).unwrap();
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    vault.create_vault(made).unwrap();
+    (vault, secret_key)
+}
+
+#[test]
+fn committing_an_account_upgrade_without_the_account_record_is_refused() {
+    // The upgrade is the second route to an account-bound vault. It must
+    // not be able to leave one behind without its account row either.
+    let (mut vault, secret_key) = secret_key_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_account_upgrade(&secret(PASSWORD), &secret_key, &account(), fast_kdf())
+        .unwrap();
+    let err = vault.commit_rekey(ticket, Ok(rekeyed)).unwrap_err();
+    assert_eq!(err.code(), "invalid_input");
+    // And the vault is untouched: still scheme 2.
+    assert_eq!(
+        vault.key_scheme().unwrap(),
+        Some(KeyScheme::PasswordAndSecretKey)
     );
-    assert!(vault.commit_rekey(ticket, Err(err)).is_err());
+}
+
+#[test]
+fn commit_account_upgrade_stores_the_account_record() {
+    let (mut vault, secret_key) = secret_key_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_account_upgrade(&secret(PASSWORD), &secret_key, &account(), fast_kdf())
+        .unwrap();
+    vault
+        .commit_account_upgrade(ticket, Ok(rekeyed), &account_record())
+        .unwrap();
+
+    assert_eq!(vault.key_scheme().unwrap(), Some(KeyScheme::AccountBound));
+    assert_eq!(vault.account().unwrap().unwrap().account_id, account().id);
+    // The local re-wrap raised the rollback floor, as commit_rekey does.
+    assert_eq!(vault.account().unwrap().unwrap().max_header_rev, 1);
+}
+
+#[test]
+fn a_failed_account_upgrade_leaves_no_account_record_behind() {
+    // Wrong current password: nothing was re-wrapped, so the vault must not
+    // come out of it claiming to belong to an account.
+    let (mut vault, secret_key) = secret_key_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket.derive_account_upgrade(
+        &secret("not the master password"),
+        &secret_key,
+        &account(),
+        fast_kdf(),
+    );
+    assert!(vault
+        .commit_account_upgrade(ticket, rekeyed, &account_record())
+        .is_err());
+    assert!(vault.account().unwrap().is_none());
 }

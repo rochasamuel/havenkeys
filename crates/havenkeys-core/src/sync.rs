@@ -379,11 +379,6 @@ impl VaultService {
         Ok(true)
     }
 
-    /// Store the account this vault belongs to.
-    pub fn store_account(&mut self, rec: &AccountRecord) -> Result<()> {
-        self.store.set_account(rec)
-    }
-
     /// The account record, or an error when this vault is not linked to one.
     fn require_account(&self) -> Result<AccountRecord> {
         self.store.account()?.ok_or(Error::InvalidInput(

@@ -71,26 +71,22 @@ pub fn account_record() -> AccountRecord {
     }
 }
 
-/// An activated account vault, unlocked, with its Secret Key.
+/// An activated account vault, unlocked, with its Secret Key and its
+/// account record (an account vault never exists without one).
 pub fn activated_vault() -> (VaultService, SecretKey) {
     let made = prepare_new_account_vault(&secret(PASSWORD), &account(), fast_kdf(), NOW).unwrap();
     let sk = made.secret_key;
     let mut vault = VaultService::new(Store::open_in_memory().unwrap());
-    vault.create_vault(made.prepared).unwrap();
-    // create_vault leaves the vault unlocked; lock it first so the account-
-    // bound unlock path is genuinely exercised, matching sign-in on a real
-    // second device.
+    vault
+        .create_account_vault(made.prepared, &account_record())
+        .unwrap();
+    // create_account_vault leaves the vault unlocked; lock it first so the
+    // account-bound unlock path is genuinely exercised, matching sign-in on
+    // a real second device.
     vault.lock();
     vault
         .unlock_for_account(&secret(PASSWORD), &sk, &account())
         .unwrap();
-    (vault, sk)
-}
-
-/// An activated vault that also holds its account record, ready to sync.
-pub fn activated_with_account() -> (VaultService, SecretKey) {
-    let (mut vault, sk) = activated_vault();
-    vault.store_account(&account_record()).unwrap();
     (vault, sk)
 }
 
@@ -101,13 +97,12 @@ pub fn second_device(first: &VaultService, sk: &SecretKey) -> VaultService {
     let (prepared, _auth) =
         havenkeys_core::sync::prepare_sign_in(&header, &secret(PASSWORD), sk, &account()).unwrap();
     let mut b = VaultService::new(Store::open_in_memory().unwrap());
-    b.create_vault(prepared).unwrap();
-    // create_vault leaves the vault unlocked; lock it so the account unlock
-    // path is the one actually exercised.
+    b.create_account_vault(prepared, &account_record()).unwrap();
+    // create_account_vault leaves the vault unlocked; lock it so the
+    // account unlock path is the one actually exercised.
     b.lock();
     b.unlock_for_account(&secret(PASSWORD), sk, &account())
         .unwrap();
-    b.store_account(&account_record()).unwrap();
     b
 }
 
