@@ -3,13 +3,13 @@
 
 mod common;
 
-use common::{activated_with_account, new_vault, second_device, NOW};
+use common::{activated_vault, new_vault, second_device, NOW};
 use havenkeys_core::sync::RemoteChange;
 use havenkeys_core::Error;
 
 #[test]
 fn a_new_item_is_pending_until_the_push_is_confirmed() {
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let item = vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
@@ -28,7 +28,7 @@ fn a_new_item_is_pending_until_the_push_is_confirmed() {
 
 #[test]
 fn a_deletion_is_pending_as_a_tombstone() {
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let item = vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
@@ -45,7 +45,7 @@ fn a_deletion_is_pending_as_a_tombstone() {
 #[test]
 fn a_remote_change_is_applied_and_advances_the_cursor() {
     // Two devices on one account: everything one pushes, the other applies.
-    let (mut a, sk) = activated_with_account();
+    let (mut a, sk) = activated_vault();
     let mut b = second_device(&a, &sk);
 
     let item = a
@@ -63,7 +63,7 @@ fn a_remote_change_is_applied_and_advances_the_cursor() {
 
 #[test]
 fn a_tampered_remote_item_is_skipped_not_applied() {
-    let (mut a, sk) = activated_with_account();
+    let (mut a, sk) = activated_vault();
     let mut b = second_device(&a, &sk);
 
     let item = a
@@ -84,7 +84,7 @@ fn a_tampered_remote_item_is_skipped_not_applied() {
 fn a_blob_from_another_item_is_rejected() {
     // The AAD binds each blob to its item ID, so a server that swaps two
     // items' blobs must not be able to write either one.
-    let (mut a, sk) = activated_with_account();
+    let (mut a, sk) = activated_vault();
     let mut b = second_device(&a, &sk);
 
     a.create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
@@ -103,7 +103,7 @@ fn a_blob_from_another_item_is_rejected() {
 
 #[test]
 fn an_older_remote_version_loses_to_the_local_one() {
-    let (mut a, sk) = activated_with_account();
+    let (mut a, sk) = activated_vault();
     let mut b = second_device(&a, &sk);
 
     let item = a
@@ -126,7 +126,7 @@ fn an_older_remote_version_loses_to_the_local_one() {
 
 #[test]
 fn an_edit_during_the_push_round_trip_stays_pending() {
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     vault
         .create_item(common::login("GitHub", "me", "old", "github.com"), NOW)
         .unwrap();
@@ -152,7 +152,7 @@ fn an_edit_during_the_push_round_trip_stays_pending() {
 
 #[test]
 fn a_deletion_during_the_push_round_trip_stays_pending() {
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let item = vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
@@ -183,7 +183,7 @@ fn sync_methods_require_a_linked_account() {
 
 #[test]
 fn a_malformed_change_is_counted_not_dropped() {
-    let (mut a, sk) = activated_with_account();
+    let (mut a, sk) = activated_vault();
     let mut b = second_device(&a, &sk);
 
     let item = a
@@ -205,7 +205,7 @@ fn a_deletion_far_in_the_future_is_skipped_and_counted() {
     // (docs/crypto.md, "Key scheme 3 (account)"). The worst forgery,
     // deleted_at = i64::MAX, would otherwise poison this item ID forever:
     // apply_remote_changes must reject it instead of tombstoning the item.
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let item = vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
@@ -225,7 +225,7 @@ fn a_deletion_far_in_the_future_is_skipped_and_counted() {
 #[test]
 fn a_deletion_at_now_still_applies() {
     // The mitigation above must not reject ordinary, plausible deletions.
-    let (mut vault, _sk) = activated_with_account();
+    let (mut vault, _sk) = activated_vault();
     let item = vault
         .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
