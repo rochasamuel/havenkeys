@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resync-vault"
+description = "Enables the resync_vault command without any pre-configured scope."
+commands.allow = ["resync_vault"]
+
+[[permission]]
+identifier = "deny-resync-vault"
+description = "Denies the resync_vault command without any pre-configured scope."
+commands.deny = ["resync_vault"]

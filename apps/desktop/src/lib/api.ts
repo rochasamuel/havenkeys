@@ -113,6 +113,8 @@ export const api = {
   listDevices: () => call<DeviceEntry[]>("list_devices"),
   revokeDevice: (id: string) => call<void>("revoke_device", { id }),
   syncNow: () => call<SyncReport>("sync_now"),
+  /** Re-download the whole vault. For a replica suspected to be stale. */
+  resync: () => call<SyncReport>("resync_vault"),
 
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),

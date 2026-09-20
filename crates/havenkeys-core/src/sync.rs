@@ -348,6 +348,20 @@ impl VaultService {
         Ok(report)
     }
 
+    /// Ask for the whole vault again on the next pull.
+    ///
+    /// The cursor advances even when a batch had items this device could not
+    /// open (`skipped_items`), because the server is the authority on what
+    /// happened and there is nothing to retry against. That leaves those
+    /// items stale on this device, silently, for good — so there has to be a
+    /// way to start over. Pulling from zero is safe: the server serves its
+    /// tombstones too, so deletions are re-applied along with everything
+    /// else.
+    pub fn reset_sync_cursor(&mut self, now_ms: i64) -> Result<()> {
+        self.require_account()?;
+        self.store.set_cursor(0, now_ms)
+    }
+
     /// Authenticate one remote item version. Returns `None` unless both blobs
     /// open under this vault's data key, the overview's ID matches the row's,
     /// and the details type matches the overview type.

@@ -8,7 +8,9 @@ havenkeys/
 │   ├── havenkeys-protocol/    bridge wire types, framing, socket endpoint (no core dependency)
 │   ├── havenkeys-bridge/      desktop side of the browser bridge (authorization, rate limits, server)
 │   ├── havenkeys-native-host/ binary launched by the browser; relays stdio ↔ socket
-│   └── havenkeys-core/        Rust security core (no UI, no Tauri dependency)
+│   ├── havenkeys-server/      the account server: blind relay, Postgres, admin CLI
+│   ├── havenkeys-sync-client/ HTTP against that server; treats every answer as hostile
+│   └── havenkeys-core/        Rust security core (no UI, no Tauri, no network)
 │       └── src/
 │           ├── crypto/        kdf.rs, keys.rs, blob.rs — composition of audited primitives
 │           ├── secret.rs      SecretString: zeroize-on-drop, redacted Debug
@@ -46,9 +48,8 @@ The core crate is deliberately independent of Tauri so that:
 HavenKeys is server-authoritative (`docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`):
 a `havenkeys-server` account is the single writer, and each device's SQLite
 database is a **read-only replica** of it, not an independent vault. See
-`docs/server-sync.md` for the full model, and its "Status" section for what
-of the diagram below already exists in code versus what is still a
-`havenkeys-sync-client` and a server away.
+`docs/server-sync.md` for the full model and `docs/deployment.md` for running
+the server.
 
 ```text
 ┌────────────────────────── Desktop app ──────────────────────────┐
@@ -74,24 +75,23 @@ of the diagram below already exists in code versus what is still a
 │         │ apply_remote_changes             │                     │
 └─────────┼──────────────────────────────────┼─────────────────────┘
           │                                  │
-          │        havenkeys-sync-client     │   (not built yet;
-          │        HTTPS, session token      ▼    see docs/server-sync.md §1)
+          │        havenkeys-sync-client     │
+          │        HTTPS, session token      ▼
           └──────────────────────── havenkeys-server
                                      (Postgres, the single
                                       authoritative copy;
-                                      not built yet)
+                                      ciphertext only)
 ```
 
 Native Messaging to the browser extension is unaffected by any of this for
-reads — it talks to the same `VaultService` the Tauri commands do. For
-writes it is not bound by the same gate: the bridge (`crates/havenkeys-bridge`)
-never calls `AppState::require_online()`. Save-login refuses because
-`VaultService::save_login` (`crates/havenkeys-core/src/vault.rs`) hardcodes
-`Err(Error::Offline)` itself, unconditionally, regardless of connectivity
-state. The result looks the same as the desktop's gate today, but the
-mechanism differs — once `Connectivity::Online` is reachable, `save_login`
-will keep refusing every request until core is changed to accept a
-server-assigned revision from a real sync client.
+reads — it talks to the same `VaultService` the Tauri commands do. Writes
+from the browser take the same route as writes from the UI, by a different
+door: `VaultService::stage_save_login` seals the login under the vault lock
+with the usual origin binding, `dispatch` hands the staged write back out,
+and the desktop's writer hook sends it and records the revision. The bridge
+crate itself knows nothing about the server, so a bridge built without that
+hook answers `offline` — which is exactly what a device with nowhere to send
+a write is.
 
 ## Data flow: unlock
 
