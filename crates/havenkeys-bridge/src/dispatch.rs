@@ -23,6 +23,7 @@ fn code(e: Error) -> ErrorCode {
         Error::InvalidInput(_) => ErrorCode::InvalidInput,
         Error::Decryption => ErrorCode::Decryption,
         Error::Corrupted => ErrorCode::Corrupted,
+        Error::Offline => ErrorCode::Offline,
         _ => ErrorCode::Internal,
     }
 }

@@ -86,6 +86,7 @@ export const ERROR_CODES = [
   "rate_limited",
   "integration_disabled",
   "desktop_unavailable",
+  "offline",
   "internal",
 ] as const;
 

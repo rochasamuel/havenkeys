@@ -378,6 +378,7 @@ pub enum ErrorCode {
     RateLimited,
     IntegrationDisabled,
     DesktopUnavailable,
+    Offline,
     Internal,
 }
 
@@ -400,6 +401,9 @@ impl ErrorCode {
                 "Browser integration is turned off in HavenKeys settings."
             }
             ErrorCode::DesktopUnavailable => "The HavenKeys app is not running.",
+            ErrorCode::Offline => {
+                "HavenKeys is offline. The vault is read-only until it reconnects."
+            }
             ErrorCode::Internal => "Internal error.",
         }
     }
