@@ -105,7 +105,8 @@ pub fn second_device(first: &VaultService, sk: &SecretKey) -> VaultService {
     // create_vault leaves the vault unlocked; lock it so the account unlock
     // path is the one actually exercised.
     b.lock();
-    b.unlock_for_account(&secret(PASSWORD), sk, &account()).unwrap();
+    b.unlock_for_account(&secret(PASSWORD), sk, &account())
+        .unwrap();
     b.store_account(&account_record()).unwrap();
     b
 }

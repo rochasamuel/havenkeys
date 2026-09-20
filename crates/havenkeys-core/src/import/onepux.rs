@@ -613,7 +613,10 @@ mod tests {
                     }
                     _ => {
                         const BYTES: &[u8] = b"{}[]\":,0-9";
-                        input.insert(pos.min(input.len()), BYTES[(next() % BYTES.len() as u64) as usize]);
+                        input.insert(
+                            pos.min(input.len()),
+                            BYTES[(next() % BYTES.len() as u64) as usize],
+                        );
                     }
                 }
             }

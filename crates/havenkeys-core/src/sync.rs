@@ -309,7 +309,9 @@ impl VaultService {
     pub fn encode_account_header(&self) -> Result<Vec<u8>> {
         let local = self.store.header()?.ok_or(Error::NoVault)?;
         if local.key_scheme != KeyScheme::AccountBound {
-            return Err(Error::InvalidInput("this vault is not linked to an account"));
+            return Err(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ));
         }
         encode_header(&self.session()?.data_key, &local)
     }
@@ -346,8 +348,12 @@ impl VaultService {
         if remote_rev <= floor {
             return Ok(false);
         }
-        self.store
-            .update_key_wrap(&record.kdf, &record.wrapped_vault_key, record.key_scheme, record.revision)?;
+        self.store.update_key_wrap(
+            &record.kdf,
+            &record.wrapped_vault_key,
+            record.key_scheme,
+            record.revision,
+        )?;
         self.store.raise_max_header_rev(remote_rev)?;
         Ok(true)
     }
@@ -359,9 +365,9 @@ impl VaultService {
 
     /// The account record, or an error when this vault is not linked to one.
     fn require_account(&self) -> Result<AccountRecord> {
-        self.store
-            .account()?
-            .ok_or(Error::InvalidInput("this vault is not linked to an account"))
+        self.store.account()?.ok_or(Error::InvalidInput(
+            "this vault is not linked to an account",
+        ))
     }
 
     /// Local changes not yet accepted by the server.

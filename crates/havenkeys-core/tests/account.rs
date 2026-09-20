@@ -10,7 +10,11 @@ use havenkeys_core::sync::prepare_sign_in;
 use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
 use uuid::Uuid;
 
-fn activate() -> (VaultService, havenkeys_core::crypto::secret_key::SecretKey, Vec<u8>) {
+fn activate() -> (
+    VaultService,
+    havenkeys_core::crypto::secret_key::SecretKey,
+    Vec<u8>,
+) {
     let (vault, sk) = common::activated_vault();
     let header = vault.encode_account_header().unwrap();
     (vault, sk, header)
@@ -26,7 +30,9 @@ fn activation_produces_an_account_bound_vault() {
 #[test]
 fn a_second_device_signs_in_with_password_secret_key_and_account() {
     let (mut first, secret_key, header) = activate();
-    first.create_item(common::login("GitHub", "me", "pw", "github.com"), NOW).unwrap();
+    first
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
 
     let (prepared, _auth) =
         prepare_sign_in(&header, &secret(PASSWORD), &secret_key, &common::account()).unwrap();
@@ -108,7 +114,8 @@ fn a_secret_key_vault_upgrades_to_an_account_without_touching_items() {
     use havenkeys_core::vault::prepare_new_vault_with_secret_key;
 
     let secret_key = SecretKey::generate().unwrap();
-    let made = prepare_new_vault_with_secret_key(&secret(PASSWORD), &secret_key, fast_kdf(), NOW).unwrap();
+    let made =
+        prepare_new_vault_with_secret_key(&secret(PASSWORD), &secret_key, fast_kdf(), NOW).unwrap();
     let mut vault = VaultService::new(Store::open_in_memory().unwrap());
     vault.create_vault(made).unwrap();
     // create_vault leaves the vault unlocked; lock it first so begin_unlock
@@ -119,7 +126,9 @@ fn a_secret_key_vault_upgrades_to_an_account_without_touching_items() {
     let ticket = vault.begin_unlock().unwrap();
     let r = ticket.derive_with_secret_key(&secret(PASSWORD), Some(&secret_key));
     vault.finish_unlock(ticket, r).unwrap();
-    let item = vault.create_item(common::login("GitHub", "me", "pw", "github.com"), NOW).unwrap();
+    let item = vault
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
     let vault_id_before = vault.vault_id().unwrap();
 
     let ticket = vault.begin_rekey().unwrap();
@@ -133,13 +142,18 @@ fn a_secret_key_vault_upgrades_to_an_account_without_touching_items() {
     assert_eq!(vault.vault_id().unwrap(), vault_id_before);
 
     vault.lock();
-    vault.unlock_for_account(&secret(PASSWORD), &secret_key, &account()).unwrap();
+    vault
+        .unlock_for_account(&secret(PASSWORD), &secret_key, &account())
+        .unwrap();
     assert_eq!(vault.get_item(&item.id).unwrap().title, "GitHub");
     // The overview title alone doesn't prove the item is untouched: the
     // password lives in the separate details blob, encrypted under the
     // same (unrotated) vault key. Reveal it too.
     assert_eq!(
-        vault.reveal(&item.id, SecretField::Password).unwrap().expose(),
+        vault
+            .reveal(&item.id, SecretField::Password)
+            .unwrap()
+            .expose(),
         "pw"
     );
 
@@ -238,7 +252,10 @@ fn a_forged_header_is_refused() {
     let mut forged = header.clone();
     let n = forged.len();
     forged[n - 5] ^= 0x01; // flip a bit inside the attestation
-    assert!(matches!(vault.adopt_account_header(&forged), Err(_) | Ok(false)));
+    assert!(matches!(
+        vault.adopt_account_header(&forged),
+        Err(_) | Ok(false)
+    ));
 }
 
 #[test]
