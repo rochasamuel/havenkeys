@@ -60,7 +60,6 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 export const api = {
   status: () => call<VaultStatus>("vault_status"),
-  createVault: (password: string) => call<VaultStatus>("create_vault", { password }),
   /** `secretKey` only when this device does not have it yet (from the Emergency Kit). */
   unlock: (password: string, secretKey?: string) =>
     call<VaultStatus>("unlock_vault", { password, secretKey: secretKey?.trim() ? secretKey : null }),
@@ -93,7 +92,6 @@ export const api = {
 
   deviceStatus: () => call<DeviceStatus>("device_status"),
   emergencyKit: () => call<EmergencyKit>("get_emergency_kit"),
-  setupSecretKey: (password: string) => call<void>("setup_secret_key", { password }),
 
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),

@@ -128,7 +128,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::vault_status,
-            commands::create_vault,
             commands::unlock_vault,
             commands::lock_vault,
             commands::change_master_password,
@@ -139,7 +138,6 @@ pub fn run() {
             commands::password_history,
             account::device_status,
             account::get_emergency_kit,
-            account::setup_secret_key,
             commands::reveal_previous_password,
             commands::get_totp_code,
             commands::copy_secret,

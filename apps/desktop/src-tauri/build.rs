@@ -3,7 +3,6 @@
 // capabilities/main.json are callable from the renderer.
 const COMMANDS: &[&str] = &[
     "vault_status",
-    "create_vault",
     "unlock_vault",
     "lock_vault",
     "change_master_password",
@@ -14,7 +13,6 @@ const COMMANDS: &[&str] = &[
     "password_history",
     "device_status",
     "get_emergency_kit",
-    "setup_secret_key",
     "reveal_previous_password",
     "get_totp_code",
     "copy_secret",

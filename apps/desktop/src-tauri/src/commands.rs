@@ -31,52 +31,10 @@ pub fn vault_status(state: State<'_, AppState>) -> CmdResult<VaultStatus> {
     Ok(state.vault()?.status()?)
 }
 
-/// Create a vault protected by the master password and a new Secret Key.
-/// The key is saved on this device; the UI then shows the Emergency Kit.
-#[tauri::command]
-pub async fn create_vault(app: AppHandle, password: SecretString) -> CmdResult<VaultStatus> {
-    let state = app.state::<AppState>();
-    if state.vault()?.status()?.vault_exists {
-        return Err(havenkeys_core::Error::VaultExists.into());
-    }
-    vault::check_new_master_password(&password)?;
-    let secret_key = SecretKey::generate()?;
-    // Saved before the vault exists, so the vault can never exist without it.
-    state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
-        .set_secret_key(&secret_key)
-        .map_err(|_| CmdError::internal())?;
-    // Argon2id runs off the async runtime and without holding the vault lock.
-    let prepared = tauri::async_runtime::spawn_blocking(move || {
-        vault::prepare_new_vault_with_secret_key(
-            &password,
-            &secret_key,
-            KdfParams::generate()?,
-            AppState::now_ms(),
-        )
-    })
-    .await
-    .map_err(|_| CmdError::internal())??;
-
-    let mut v = state.vault()?;
-    v.create_vault(prepared)?;
-    let minutes = v.settings()?.auto_lock_minutes;
-    let status = v.status()?;
-    // Arm before releasing the vault lock so the auto-lock thread can never
-    // tick against the previous session's timestamps.
-    state.arm_auto_lock(minutes);
-    // Still under the vault lock, so a concurrent lock's `locked` event can
-    // never be overtaken by this one. `notify` never blocks.
-    state.notify_unlocked();
-    drop(v);
-    Ok(status)
-}
-
-/// Unlock. Vaults with a Secret Key use `secret_key` when the user typed one
-/// from the Emergency Kit (it is then saved here once the unlock succeeds),
-/// and otherwise the one saved on this device.
+/// Unlock. Every vault is account-bound: the account comes from the local
+/// store (never from the renderer), and unlocking needs the Secret Key too —
+/// either typed from the Emergency Kit (it is then saved here once the
+/// unlock succeeds) or the one already saved on this device.
 #[tauri::command]
 pub async fn unlock_vault(
     app: AppHandle,
@@ -84,6 +42,11 @@ pub async fn unlock_vault(
     secret_key: Option<SecretString>,
 ) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
+    let account = state
+        .vault()?
+        .account()?
+        .ok_or(havenkeys_core::Error::NoVault)?
+        .to_ref()?;
     let stored = state
         .device
         .lock()
@@ -93,9 +56,10 @@ pub async fn unlock_vault(
         Some(t) if !t.is_empty() => Some(SecretKey::parse(t.expose())?),
         _ => None,
     };
-    let ticket = state.vault()?.begin_unlock()?;
-    if ticket.needs_secret_key() && stored.is_none() && typed.is_none() {
-        // Back to LOCKED without a lock event: nothing was ever open.
+    // `SecretKey` is deliberately not `Clone`, so both options move into the
+    // blocking closure and are borrowed there, as the current code does.
+    if typed.is_none() && stored.is_none() {
+        let ticket = state.vault()?.begin_unlock()?;
         let r = state
             .vault()?
             .finish_unlock(ticket, Err(havenkeys_core::Error::SecretKeyRequired));
@@ -105,13 +69,16 @@ pub async fn unlock_vault(
             .into());
     }
     let key_text = typed.as_ref().map(|k| k.to_text());
+    let ticket = state.vault()?.begin_unlock()?;
     let joined = tauri::async_runtime::spawn_blocking(move || {
-        let sk = typed.as_ref().or(stored.as_ref());
-        let key = ticket.derive_with_secret_key(&password, sk);
-        (ticket, key)
+        let derived = match typed.as_ref().or(stored.as_ref()) {
+            Some(sk) => ticket.derive_for_account(&password, sk, &account),
+            None => Err(havenkeys_core::Error::SecretKeyRequired),
+        };
+        (ticket, derived)
     })
     .await;
-    let (ticket, key) = match joined {
+    let (ticket, derived) = match joined {
         Ok(v) => v,
         Err(_) => {
             // The KDF task died; make sure we do not stay in UNLOCKING.
@@ -121,7 +88,7 @@ pub async fn unlock_vault(
     };
 
     let mut v = state.vault()?;
-    v.finish_unlock(ticket, key)?;
+    v.finish_unlock(ticket, derived)?;
     let minutes = v.settings()?.auto_lock_minutes;
     let status = v.status()?;
     // Arm before releasing the vault lock so the auto-lock thread can never
@@ -158,17 +125,23 @@ pub async fn change_master_password(
     state.touch();
     vault::check_new_master_password(&new)?;
     let kdf = KdfParams::generate()?;
+    let account = state
+        .vault()?
+        .account()?
+        .ok_or(havenkeys_core::Error::NoVault)?
+        .to_ref()?;
     let secret_key = state
         .device
         .lock()
         .map_err(|_| CmdError::internal())?
-        .secret_key();
+        .secret_key()
+        .ok_or(havenkeys_core::Error::SecretKeyRequired)?;
     let ticket = state.vault()?.begin_rekey()?;
     // Both Argon2id runs happen without the vault lock, so locking (button,
     // auto-lock, window close) is never delayed; the commit re-checks the
     // lock epoch and the header.
     let (ticket, rekeyed) = tauri::async_runtime::spawn_blocking(move || {
-        let rekeyed = ticket.derive_with_secret_key(&current, &new, kdf, secret_key.as_ref());
+        let rekeyed = ticket.derive_for_account(&current, &new, kdf, &secret_key, &account);
         (ticket, rekeyed)
     })
     .await

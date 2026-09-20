@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api";
 import type { DeviceStatus, VaultStatus } from "./lib/types";
-import { EmergencyKit } from "./components/EmergencyKit";
 import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
 import { UnlockScreen } from "./views/UnlockScreen";
@@ -15,14 +14,11 @@ export function App() {
   const [session, setSession] = useState(0);
   const [fatal, setFatal] = useState(false);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
-  // Right after creating a vault: show the Emergency Kit before the vault.
-  const [showKit, setShowKit] = useState(false);
 
   useEffect(() => {
     api.status().then(setStatus, () => setFatal(true));
     const unlisten = api.onLocked((reason) => {
       setLockReason(reason);
-      setShowKit(false);
       setSession((s) => s + 1);
       setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0 } : s));
     });
@@ -66,35 +62,28 @@ export function App() {
   }
   if (!status) return <main className="unlock" aria-busy="true" />;
 
+  if (!status.vaultExists) {
+    return (
+      <div className="empty-state">
+        <h1>No vault on this computer</h1>
+        <p>
+          HavenKeys vaults belong to an account. Activation with an invite is not available in this build yet.
+        </p>
+      </div>
+    );
+  }
+
   if (!unlocked) {
     return (
       <UnlockScreen
         key={session}
-        mode={status.vaultExists ? "unlock" : "create"}
         lockReason={lockReason}
         needsSecretKey={device?.needsSecretKey ?? false}
-        onUnlocked={(s, created) => {
+        onUnlocked={(s) => {
           setLockReason(null);
-          setShowKit(created);
           setStatus(s);
         }}
       />
-    );
-  }
-
-  if (showKit) {
-    return (
-      <main className="kit-screen">
-        <div className="kit-intro">
-          <h1>Save your Emergency Kit</h1>
-          <p>
-            Your vault is protected by your master password <em>and</em> a Secret Key created just now. This computer
-            remembers the Secret Key. You will need it to open your vault anywhere else, or on this computer if its
-            HavenKeys data is lost.
-          </p>
-        </div>
-        <EmergencyKit key={session} onDone={() => setShowKit(false)} />
-      </main>
     );
   }
 
