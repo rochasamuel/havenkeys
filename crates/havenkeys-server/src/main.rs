@@ -2,6 +2,7 @@
 //! same database.
 
 use clap::{Parser, Subcommand};
+use havenkeys_server::admin::{self, AdminCommand};
 use havenkeys_server::{db, router, AppState, Config};
 
 #[derive(Parser)]
@@ -15,6 +16,11 @@ struct Cli {
 enum Command {
     /// Run the HTTP server (the default when no command is given).
     Serve,
+    /// Provision and inspect accounts.
+    Admin {
+        #[command(subcommand)]
+        command: AdminCommand,
+    },
 }
 
 #[tokio::main]
@@ -50,6 +56,17 @@ async fn main() -> std::process::ExitCode {
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(config, pool).await,
+        Command::Admin { command } => match admin::run(command, &pool).await {
+            Ok(output) => {
+                // Printed, never logged: this line can carry an invite.
+                println!("{output}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(message) => {
+                eprintln!("{message}");
+                std::process::ExitCode::FAILURE
+            }
+        },
     }
 }
 
