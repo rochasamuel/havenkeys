@@ -2,8 +2,9 @@
 
 mod common;
 
-use common::{account, fast_kdf, secret, NOW, PASSWORD};
+use common::{account, account_record, fast_kdf, secret, NOW, PASSWORD};
 use havenkeys_core::account::AccountRef;
+use havenkeys_core::model::SecretField;
 use havenkeys_core::store::{KeyScheme, Store};
 use havenkeys_core::sync::prepare_sign_in;
 use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
@@ -134,6 +135,13 @@ fn a_secret_key_vault_upgrades_to_an_account_without_touching_items() {
     vault.lock();
     vault.unlock_for_account(&secret(PASSWORD), &secret_key, &account()).unwrap();
     assert_eq!(vault.get_item(&item.id).unwrap().title, "GitHub");
+    // The overview title alone doesn't prove the item is untouched: the
+    // password lives in the separate details blob, encrypted under the
+    // same (unrotated) vault key. Reveal it too.
+    assert_eq!(
+        vault.reveal(&item.id, SecretField::Password).unwrap().expose(),
+        "pw"
+    );
 
     // The old scheme-2 unlock no longer works: without the account there is
     // no KEK to derive.
@@ -173,6 +181,55 @@ fn an_older_header_is_refused_after_a_password_change() {
     assert!(!vault.adopt_account_header(&old_header).unwrap());
     // And the current one is still accepted (idempotently).
     assert!(!vault.adopt_account_header(&new_header).unwrap());
+}
+
+#[test]
+fn a_persisted_floor_refuses_a_header_newer_than_local_but_not_newer_than_the_floor() {
+    // `adopt_account_header`'s floor is
+    // `max(account.max_header_rev, local.revision)`. Nothing in production
+    // code calls `Store::set_account` yet (that wiring is a later, desktop-
+    // UI task), so this is the only place the persisted-`max_header_rev`
+    // half of that computation gets exercised. If it were dropped from the
+    // `max(...)` and the floor became `local.revision` alone, this test
+    // would fail: the header built below is newer than `second`'s local
+    // revision, so it would then be wrongly adopted.
+    let (mut first, secret_key, header0) = activate();
+
+    // A second device signs into the very same vault (so it shares the same
+    // vault key / data key as `first`), but its local store is seeded with
+    // an account record whose `max_header_rev` is far above any revision
+    // this test reaches.
+    let mut floor_rec = account_record();
+    floor_rec.max_header_rev = 999;
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_account(&floor_rec).unwrap();
+    let (prepared, _auth) =
+        prepare_sign_in(&header0, &secret(PASSWORD), &secret_key, &account()).unwrap();
+    let mut second = VaultService::new(store);
+    second.create_vault(prepared).unwrap();
+    second.lock();
+    second
+        .unlock_for_account(&secret(PASSWORD), &secret_key, &account())
+        .unwrap();
+
+    // Bump `first`'s revision by one, past what `second` has locally, but
+    // still nowhere near the seeded floor.
+    let ticket = first.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret("a much longer new password"),
+            fast_kdf(),
+            &secret_key,
+            &account(),
+        )
+        .unwrap();
+    first.commit_rekey(ticket, Ok(rekeyed)).unwrap();
+    let newer_header = first.encode_account_header().unwrap();
+
+    // Newer than `second`'s local header, but at or below the persisted
+    // floor: refused.
+    assert!(!second.adopt_account_header(&newer_header).unwrap());
 }
 
 #[test]
