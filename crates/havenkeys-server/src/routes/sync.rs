@@ -68,14 +68,13 @@ pub async fn pull(
     // idle client converges instead of asking for the same range forever.
     let cursor = match page.last() {
         Some(row) => row.get::<_, i64>(1),
-        None => {
-            db.query_one(
+        None => db
+            .query_one(
                 "SELECT revision FROM vaults WHERE id = $1",
                 &[&session.vault_id],
             )
             .await?
-            .get(0)
-        }
+            .get(0),
     };
 
     Ok(axum::Json(serde_json::json!({

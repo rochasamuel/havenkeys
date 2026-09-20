@@ -20,7 +20,9 @@ async fn the_header_is_served_back_byte_for_byte() {
         .await
         .unwrap();
     assert_eq!(
-        BASE64.decode(body["header"].as_str().unwrap().as_bytes()).unwrap(),
+        BASE64
+            .decode(body["header"].as_str().unwrap().as_bytes())
+            .unwrap(),
         b"header-bytes-v1".to_vec()
     );
     assert_eq!(body["headerRevision"], 0);
@@ -60,7 +62,11 @@ async fn a_header_write_must_be_exactly_one_revision_ahead() {
         .await
         .unwrap()
         .get(0);
-    assert_eq!(stored, b"second".to_vec(), "a refused write changed nothing");
+    assert_eq!(
+        stored,
+        b"second".to_vec(),
+        "a refused write changed nothing"
+    );
     server.cleanup().await;
 }
 
@@ -102,7 +108,12 @@ async fn a_pull_returns_live_items_and_deletions() {
 
     let (kept, _) = support::create_item(&server, &sess, b"ov-1", b"det-1").await;
     let (gone, gone_rev) = support::create_item(&server, &sess, b"ov-2", b"det-2").await;
-    let (status, _) = support::write(&server, &sess, vec![support::deletion(gone, Some(gone_rev))]).await;
+    let (status, _) = support::write(
+        &server,
+        &sess,
+        vec![support::deletion(gone, Some(gone_rev))],
+    )
+    .await;
     assert_eq!(status, 200);
 
     let body = support::pull(&server, &sess, 0).await;
@@ -113,7 +124,9 @@ async fn a_pull_returns_live_items_and_deletions() {
     let live = changes.iter().find(|c| c["itemId"] == json!(kept)).unwrap();
     assert_eq!(live["deleted"], false);
     assert_eq!(
-        BASE64.decode(live["overview"].as_str().unwrap().as_bytes()).unwrap(),
+        BASE64
+            .decode(live["overview"].as_str().unwrap().as_bytes())
+            .unwrap(),
         b"ov-1".to_vec()
     );
 
@@ -266,7 +279,8 @@ async fn deleting_a_deleted_item_is_a_conflict_not_a_second_tombstone() {
     let (_, sess) = support::signed_in(&server, "user@example.com").await;
     let (item, rev) = support::create_item(&server, &sess, b"ov", b"det").await;
 
-    let (status, body) = support::write(&server, &sess, vec![support::deletion(item, Some(rev))]).await;
+    let (status, body) =
+        support::write(&server, &sess, vec![support::deletion(item, Some(rev))]).await;
     assert_eq!(status, 200);
     let deleted_rev = body["applied"][0]["revision"].as_i64().unwrap();
 
@@ -426,7 +440,10 @@ async fn a_page_never_cuts_a_batch_in_half() {
             seen.insert(change["itemId"].as_str().unwrap().to_string());
         }
         let next = body["cursor"].as_i64().unwrap();
-        assert!(next > cursor || !body["hasMore"].as_bool().unwrap(), "no progress");
+        assert!(
+            next > cursor || !body["hasMore"].as_bool().unwrap(),
+            "no progress"
+        );
         cursor = next;
         if !body["hasMore"].as_bool().unwrap() {
             break;

@@ -18,6 +18,8 @@ fn main() -> ExitCode {
     let Ok(endpoint) = Endpoint::for_current_user() else {
         return ExitCode::from(3);
     };
-    run(std::io::stdin().lock(), std::io::stdout(), || endpoint.connect());
+    run(std::io::stdin().lock(), std::io::stdout(), || {
+        endpoint.connect()
+    });
     ExitCode::SUCCESS
 }

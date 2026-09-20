@@ -36,7 +36,10 @@ mod tests {
 
     #[test]
     fn trims_lowercases_and_composes() {
-        assert_eq!(normalize("  User@Example.COM ").unwrap(), "user@example.com");
+        assert_eq!(
+            normalize("  User@Example.COM ").unwrap(),
+            "user@example.com"
+        );
         assert_eq!(
             normalize("jose\u{0301}@example.com").unwrap(),
             normalize("jos\u{00e9}@example.com").unwrap()

@@ -77,7 +77,9 @@ impl Endpoint {
     }
 
     pub fn name(&self) -> io::Result<Name<'_>> {
-        self.path.as_path().to_fs_name::<interprocess::local_socket::GenericFilePath>()
+        self.path
+            .as_path()
+            .to_fs_name::<interprocess::local_socket::GenericFilePath>()
     }
 
     /// Listener options for serving on this endpoint. The socket's

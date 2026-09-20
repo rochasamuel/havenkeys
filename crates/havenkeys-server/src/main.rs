@@ -75,6 +75,7 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
         pool,
         server_secret: config.server_secret,
         trust_forwarded_for: config.trust_forwarded_for,
+        cors_origin: config.cors_origin.clone(),
     };
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = match tokio::net::TcpListener::bind(addr).await {

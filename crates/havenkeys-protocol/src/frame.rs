@@ -26,7 +26,10 @@ impl From<io::Error> for FrameError {
 ///
 /// The length is checked against `max` *before* anything is allocated, so a
 /// peer cannot make us reserve memory by announcing a huge frame.
-pub fn read_frame<R: Read>(r: &mut R, max: usize) -> Result<Option<Zeroizing<Vec<u8>>>, FrameError> {
+pub fn read_frame<R: Read>(
+    r: &mut R,
+    max: usize,
+) -> Result<Option<Zeroizing<Vec<u8>>>, FrameError> {
     let mut len_buf = [0u8; 4];
     let mut got = 0;
     while got < 4 {
@@ -61,7 +64,9 @@ pub fn discard<R: Read>(r: &mut R, len: u32) -> Result<(), FrameError> {
 /// Write one frame and flush. Refuses payloads over `max`.
 pub fn write_frame<W: Write>(w: &mut W, payload: &[u8], max: usize) -> Result<(), FrameError> {
     if payload.len() > max {
-        return Err(FrameError::TooLarge(u32::try_from(payload.len()).unwrap_or(u32::MAX)));
+        return Err(FrameError::TooLarge(
+            u32::try_from(payload.len()).unwrap_or(u32::MAX),
+        ));
     }
     let len = u32::try_from(payload.len()).map_err(|_| FrameError::TooLarge(u32::MAX))?;
     // One buffer, one write: a frame is never split across two writes that
@@ -88,28 +93,42 @@ mod tests {
     #[test]
     fn round_trip() {
         let mut c = Cursor::new(framed(b"{\"a\":1}"));
-        assert_eq!(read_frame(&mut c, 64).unwrap().unwrap().as_slice(), b"{\"a\":1}");
+        assert_eq!(
+            read_frame(&mut c, 64).unwrap().unwrap().as_slice(),
+            b"{\"a\":1}"
+        );
         assert!(read_frame(&mut c, 64).unwrap().is_none());
     }
 
     #[test]
     fn empty_stream_is_clean_eof() {
-        assert!(read_frame(&mut Cursor::new(Vec::new()), 64).unwrap().is_none());
+        assert!(read_frame(&mut Cursor::new(Vec::new()), 64)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn truncated_length_or_payload_is_an_error() {
-        assert!(matches!(read_frame(&mut Cursor::new(vec![5, 0]), 64), Err(FrameError::Io)));
+        assert!(matches!(
+            read_frame(&mut Cursor::new(vec![5, 0]), 64),
+            Err(FrameError::Io)
+        ));
         let mut short = framed(b"hello");
         short.truncate(6);
-        assert!(matches!(read_frame(&mut Cursor::new(short), 64), Err(FrameError::Io)));
+        assert!(matches!(
+            read_frame(&mut Cursor::new(short), 64),
+            Err(FrameError::Io)
+        ));
     }
 
     #[test]
     fn oversized_frame_rejected_before_allocation() {
         // Announces 4 GiB but carries nothing: must fail on the length alone.
         let mut c = Cursor::new(u32::MAX.to_ne_bytes().to_vec());
-        assert!(matches!(read_frame(&mut c, 1024), Err(FrameError::TooLarge(u32::MAX))));
+        assert!(matches!(
+            read_frame(&mut c, 1024),
+            Err(FrameError::TooLarge(u32::MAX))
+        ));
     }
 
     #[test]
@@ -127,7 +146,10 @@ mod tests {
     #[test]
     fn write_refuses_oversized_payload() {
         let mut out = Vec::new();
-        assert!(matches!(write_frame(&mut out, &[0; 11], 10), Err(FrameError::TooLarge(11))));
+        assert!(matches!(
+            write_frame(&mut out, &[0; 11], 10),
+            Err(FrameError::TooLarge(11))
+        ));
         assert!(out.is_empty());
     }
 }

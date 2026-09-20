@@ -50,8 +50,8 @@ fn account_record() -> AccountRecord {
 /// An activated, unlocked account-bound vault (every vault is account-bound
 /// now; see `havenkeys-core/tests/common/mod.rs::activated_vault`).
 fn new_account_vault(kdf: KdfParams) -> VaultService {
-    let made = prepare_new_account_vault(&SecretString::from(PASSWORD), &account(), kdf, NOW)
-        .unwrap();
+    let made =
+        prepare_new_account_vault(&SecretString::from(PASSWORD), &account(), kdf, NOW).unwrap();
     let mut v = VaultService::new(Store::open_in_memory().unwrap());
     v.create_account_vault(made.prepared, &account_record())
         .unwrap();
