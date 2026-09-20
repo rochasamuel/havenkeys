@@ -31,6 +31,10 @@ pub const DEVICE_NAME: &str = "Desktop";
 /// How often an unlocked, online device pulls.
 pub const PULL_INTERVAL_SECS: u64 = 60;
 
+/// The most changes the server takes in one request (design §7.3). An import
+/// is split into batches of this size; each one is atomic on the server.
+pub const MAX_BATCH: usize = 500;
+
 pub type Client = Arc<SyncClient<HttpTransport>>;
 
 impl From<SyncError> for CmdError {
@@ -212,6 +216,38 @@ pub async fn push(app: &AppHandle, staged: StagedWrite) -> CmdResult<Option<Item
     let state = app.state::<AppState>();
     let overview = state.vault()?.commit_write(staged, revision)?;
     Ok(overview)
+}
+
+/// Send many staged writes, in batches the server accepts, committing each
+/// batch before the next is sent.
+///
+/// Returns how many writes were recorded. A batch the server refuses stops
+/// the run, and the count reflects what actually landed: earlier batches are
+/// already on the server, so reporting them as failed would be a lie in the
+/// other direction.
+pub async fn push_batches(app: &AppHandle, staged: Vec<StagedWrite>) -> CmdResult<usize> {
+    let (session, client) = {
+        let state = app.state::<AppState>();
+        (state.session()?, client(&state)?)
+    };
+    let mut committed = 0usize;
+    let mut queue = staged;
+    while !queue.is_empty() {
+        let rest = queue.split_off(queue.len().min(MAX_BATCH));
+        let batch = std::mem::replace(&mut queue, rest);
+        let ack = client
+            .write(&session, &batch)
+            .await
+            .map_err(|e| failed(app, e))?;
+        let state = app.state::<AppState>();
+        for write in batch {
+            let revision = revision_for(&ack.applied, write.item_id)?;
+            let mut vault = state.vault()?;
+            vault.commit_write(write, revision)?;
+            committed += 1;
+        }
+    }
+    Ok(committed)
 }
 
 fn revision_for(applied: &[(Uuid, i64)], item_id: Uuid) -> CmdResult<i64> {
