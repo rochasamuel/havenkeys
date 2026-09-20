@@ -80,7 +80,6 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
     if let Ok(mut last) = state.last_import.lock() {
         *last = Some(path);
     }
-    state.sync.request();
     Ok(Some(ImportResult { report, file_name }))
 }
 

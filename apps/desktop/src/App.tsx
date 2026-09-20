@@ -73,7 +73,6 @@ export function App() {
         mode={status.vaultExists ? "unlock" : "create"}
         lockReason={lockReason}
         needsSecretKey={device?.needsSecretKey ?? false}
-        usesSecretKey={device?.usesSecretKey ?? false}
         onUnlocked={(s, created) => {
           setLockReason(null);
           setShowKit(created);
