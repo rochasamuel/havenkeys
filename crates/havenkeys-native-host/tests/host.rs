@@ -4,10 +4,12 @@
 #![cfg(unix)]
 
 use havenkeys_bridge::Bridge;
+use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
-use havenkeys_core::store::Store;
-use havenkeys_core::vault::{prepare_new_vault, VaultService};
+use havenkeys_core::store::{AccountRecord, Store};
+use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
 use havenkeys_core::SecretString;
+use uuid::Uuid;
 use havenkeys_native_host::{CHROME_EXTENSION_ORIGIN, FIREFOX_EXTENSION_ID};
 use havenkeys_protocol::endpoint::{Endpoint, ENDPOINT_OVERRIDE_ENV};
 use havenkeys_protocol::frame::{read_frame, write_frame};
@@ -77,9 +79,30 @@ fn private_dir() -> (tempfile::TempDir, PathBuf) {
 
 fn desktop(sock: &std::path::Path) -> Bridge {
     let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
+    let account = AccountRef::new(
+        Uuid::from_u128(0x5eed),
+        NormalizedEmail::parse("user@example.com").unwrap(),
+    );
+    let made = prepare_new_account_vault(
+        &SecretString::from("correct horse battery"),
+        &account,
+        kdf,
+        0,
+    )
+    .unwrap();
     let mut v = VaultService::new(Store::open_in_memory().unwrap());
-    v.create_vault(prepare_new_vault(&SecretString::from("correct horse battery"), kdf, 0).unwrap())
-        .unwrap();
+    v.create_account_vault(
+        made.prepared,
+        &AccountRecord {
+            account_id: account.id,
+            email: "user@example.com".into(),
+            server_url: "https://vault.example.com".into(),
+            server_cursor: 0,
+            max_header_rev: 0,
+            last_synced_at: None,
+        },
+    )
+    .unwrap();
     v.update_settings(havenkeys_core::model::Settings {
         browser_integration: true,
         ..Default::default()

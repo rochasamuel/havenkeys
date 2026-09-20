@@ -2,10 +2,11 @@
 //! through the real request parser and, where it matters, a real socket.
 
 use havenkeys_bridge::Bridge;
+use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, Settings, UrlRule};
-use havenkeys_core::store::Store;
-use havenkeys_core::vault::{prepare_new_vault, VaultService};
+use havenkeys_core::store::{AccountRecord, Store};
+use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
 use havenkeys_core::SecretString;
 use havenkeys_protocol::endpoint::Endpoint;
 use havenkeys_protocol::frame::{read_frame, write_frame};
@@ -28,6 +29,35 @@ struct Fixture {
     note: Uuid,
 }
 
+fn account() -> AccountRef {
+    AccountRef::new(
+        Uuid::from_u128(0x5eed),
+        NormalizedEmail::parse("user@example.com").unwrap(),
+    )
+}
+
+fn account_record() -> AccountRecord {
+    AccountRecord {
+        account_id: account().id,
+        email: "user@example.com".into(),
+        server_url: "https://vault.example.com".into(),
+        server_cursor: 0,
+        max_header_rev: 0,
+        last_synced_at: None,
+    }
+}
+
+/// An activated, unlocked account-bound vault (every vault is account-bound
+/// now; see `havenkeys-core/tests/common/mod.rs::activated_vault`).
+fn new_account_vault(kdf: KdfParams) -> VaultService {
+    let made = prepare_new_account_vault(&SecretString::from(PASSWORD), &account(), kdf, NOW)
+        .unwrap();
+    let mut v = VaultService::new(Store::open_in_memory().unwrap());
+    v.create_account_vault(made.prepared, &account_record())
+        .unwrap();
+    v
+}
+
 fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> ItemInput {
     ItemInput {
         item_type: ItemType::Login,
@@ -48,16 +78,14 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
 
 fn fixture() -> Fixture {
     let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
-    let mut v = VaultService::new(Store::open_in_memory().unwrap());
-    v.create_vault(prepare_new_vault(&SecretString::from(PASSWORD), kdf, NOW).unwrap())
-        .unwrap();
+    let mut v = new_account_vault(kdf);
     v.update_settings(Settings {
         browser_integration: true,
         ..Settings::default()
     })
     .unwrap();
-    let github = v
-        .create_item(
+    let staged = v
+        .stage_create(
             item(
                 "GitHub",
                 "octo",
@@ -67,10 +95,10 @@ fn fixture() -> Fixture {
             ),
             NOW,
         )
-        .unwrap()
-        .id;
-    let bank = v
-        .create_item(
+        .unwrap();
+    let github = v.commit_write(staged, 1).unwrap().unwrap().id;
+    let staged = v
+        .stage_create(
             item(
                 "Bank",
                 "alice",
@@ -80,10 +108,10 @@ fn fixture() -> Fixture {
             ),
             NOW,
         )
-        .unwrap()
-        .id;
-    let note = v
-        .create_item(
+        .unwrap();
+    let bank = v.commit_write(staged, 2).unwrap().unwrap().id;
+    let staged = v
+        .stage_create(
             ItemInput {
                 item_type: ItemType::SecureNote,
                 title: "Recovery codes".into(),
@@ -96,8 +124,8 @@ fn fixture() -> Fixture {
             },
             NOW,
         )
-        .unwrap()
-        .id;
+        .unwrap();
+    let note = v.commit_write(staged, 3).unwrap().unwrap().id;
 
     let vault = Arc::new(Mutex::new(v));
     let locks = Arc::new(AtomicUsize::new(0));
@@ -293,10 +321,7 @@ fn lock_request_locks_vault() {
 fn integration_switch_is_enforced() {
     // Off is the default for a new vault.
     let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
-    let mut fresh = VaultService::new(Store::open_in_memory().unwrap());
-    fresh
-        .create_vault(prepare_new_vault(&SecretString::from(PASSWORD), kdf, NOW).unwrap())
-        .unwrap();
+    let fresh = new_account_vault(kdf);
     assert!(!fresh.settings().unwrap().browser_integration);
 
     let f = fixture();

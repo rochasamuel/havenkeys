@@ -12,7 +12,6 @@ use crate::crypto::keys::{
 };
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
-use crate::import::{ImportReport, ImportedItem};
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
     clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
@@ -24,7 +23,7 @@ use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -361,6 +360,32 @@ pub(crate) fn open_json<T: serde::de::DeserializeOwned>(
 ) -> Result<T> {
     let plain = blob::open(key, ctx, data)?;
     serde_json::from_slice(&plain).map_err(|_| Error::Corrupted)
+}
+
+/// A write the server has not accepted yet. Holds sealed blobs; never logged.
+///
+/// Produced by [`VaultService::stage_create`], [`VaultService::stage_update`]
+/// or [`VaultService::stage_delete`] under the vault lock, sent to the server
+/// by a later crate, and recorded locally by
+/// [`VaultService::commit_write`] with the revision the server assigned.
+pub struct StagedWrite {
+    pub item_id: Uuid,
+    /// The revision this device last saw, or `None` for a new item.
+    pub base_revision: Option<i64>,
+    /// `None` for a deletion.
+    pub overview: Option<Vec<u8>>,
+    pub details: Option<Vec<u8>>,
+    epoch: u64,
+    plain: Option<ItemOverview>,
+}
+
+impl std::fmt::Debug for StagedWrite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StagedWrite")
+            .field("item_id", &self.item_id)
+            .field("base_revision", &self.base_revision)
+            .finish_non_exhaustive()
+    }
 }
 
 pub struct VaultService {
@@ -932,7 +957,16 @@ impl VaultService {
                 notes: SecretUpdate::Keep,
                 content: SecretUpdate::Keep,
             };
-            return self.update_item(id, input, now_ms).map(|o| o.id);
+            let staged = self.stage_update(id, input, now_ms)?;
+            // save_login is the local autofill-save flow; it predates the
+            // sync client this write path is built for (spec 2026-09-20
+            // §8.4) and is not yet wired to it, so it commits with a
+            // placeholder revision, exactly as it wrote a placeholder
+            // revision before this change.
+            return Ok(self
+                .commit_write(staged, 0)?
+                .ok_or(Error::InvalidInput("malformed staged write"))?
+                .id);
         }
         // Saved for the frame the form was in, as a whole-site rule.
         let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
@@ -950,7 +984,11 @@ impl VaultService {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
         };
-        self.create_item(input, now_ms).map(|o| o.id)
+        let staged = self.stage_create(input, now_ms)?;
+        Ok(self
+            .commit_write(staged, 0)?
+            .ok_or(Error::InvalidInput("malformed staged write"))?
+            .id)
     }
 
     /// When each previous password of a login was replaced, newest first.
@@ -976,19 +1014,18 @@ impl VaultService {
 
     // ------------------------------------------------------------ writing
 
-    pub fn create_item(&mut self, input: ItemInput, now_ms: i64) -> Result<ItemOverview> {
-        self.session()?;
+    /// Seal a new item's blobs under the vault lock. Nothing is written to
+    /// disk; the server must accept the write before [`commit_write`](Self::commit_write)
+    /// records it.
+    pub fn stage_create(&self, input: ItemInput, now_ms: i64) -> Result<StagedWrite> {
         let id = Uuid::new_v4();
         let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
-        self.persist(overview, &details)
+        self.stage(overview, Some(&details), None)
     }
 
-    pub fn update_item(
-        &mut self,
-        id: &Uuid,
-        input: ItemInput,
-        now_ms: i64,
-    ) -> Result<ItemOverview> {
+    /// Seal an updated item's blobs, carrying the revision this device last
+    /// saw for it so the server can detect a conflicting edit.
+    pub fn stage_update(&self, id: &Uuid, input: ItemInput, now_ms: i64) -> Result<StagedWrite> {
         let existing = self.get_item(id)?;
         if existing.item_type != input.item_type {
             return Err(Error::InvalidInput("item type cannot change"));
@@ -996,102 +1033,33 @@ impl VaultService {
         let current = self.load_details(id)?;
         let (overview, details) =
             build_item(*id, input, Some(current), existing.created_at, now_ms)?;
-        self.persist(overview, &details)
+        let base = self.store.item_revision(id)?;
+        self.stage(overview, Some(&details), base)
     }
 
-    /// Delete an item. The revision no longer matters locally: the server
-    /// holds the tombstone (Task 4, spec §8.2).
-    pub fn delete_item(&mut self, id: &Uuid, _now_ms: i64) -> Result<()> {
-        if !self.session()?.overviews.contains_key(id) {
+    /// Stage a deletion. Carries no blobs, only the revision this device
+    /// last saw, so the server can detect a conflicting edit.
+    pub fn stage_delete(&self, id: &Uuid) -> Result<StagedWrite> {
+        let session = self.session()?;
+        if !session.overviews.contains_key(id) {
             return Err(Error::NotFound);
         }
-        // Disk first: if the delete fails, the item must not vanish from view.
-        self.store.delete_item(id)?;
-        self.session_mut()?.overviews.remove(id);
-        Ok(())
+        Ok(StagedWrite {
+            item_id: *id,
+            base_revision: self.store.item_revision(id)?,
+            overview: None,
+            details: None,
+            epoch: self.epoch,
+            plain: None,
+        })
     }
 
-    /// Store imported items in one transaction.
-    ///
-    /// Each item goes through the same validation as UI input. Items that fail
-    /// validation are counted in `failed`, not fatal. Items already in the vault
-    /// before this import are skipped: logins with the same title, username and
-    /// websites, and secure notes with the same title and content. This makes
-    /// re-importing the same file harmless without dropping entries the export
-    /// itself repeats.
-    ///
-    /// On return, `logins`/`secure_notes` count what was actually stored
-    /// (converted items are included in `secure_notes`).
-    pub fn import_items(
-        &mut self,
-        items: Vec<ImportedItem>,
-        mut report: ImportReport,
-        now_ms: i64,
-    ) -> Result<ImportReport> {
-        // Only items already in the vault count as duplicates; repeated
-        // entries inside the export itself are imported as they are.
-        let existing = self.dedupe_keys()?;
-        let session = self.session()?;
-        let mut rows = Vec::new();
-        let mut added = Vec::new();
-        report.logins = 0;
-        report.secure_notes = 0;
-
-        for item in items {
-            let id = Uuid::new_v4();
-            let created = item.created_at.unwrap_or(now_ms);
-            let updated = item.updated_at.unwrap_or(created);
-            let Ok((overview, details)) = build_item(id, item.input, None, created, updated) else {
-                report.failed += 1;
-                continue;
-            };
-            if existing.contains(&dedupe_key(&overview, &details)) {
-                report.skipped_duplicates += 1;
-                continue;
-            }
-            let ov_blob = seal_json(
-                &session.data_key,
-                &BlobContext::item(Purpose::ItemOverview, session.vault_id, id),
-                &overview,
-            )?;
-            let det_blob = seal_json(
-                &session.data_key,
-                &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
-                &details,
-            )?;
-            match overview.item_type {
-                ItemType::Login => report.logins += 1,
-                ItemType::SecureNote => report.secure_notes += 1,
-            }
-            // revision set by Task 5 (staged writes record the server's revision)
-            rows.push((id, ov_blob, det_blob, 0));
-            added.push(overview);
-        }
-
-        self.store.upsert_items(&rows)?;
-        report.imported = rows.len();
-        let session = self.session_mut()?;
-        for ov in added {
-            session.overviews.insert(ov.id, ov);
-        }
-        Ok(report)
-    }
-
-    fn dedupe_keys(&self) -> Result<HashSet<[u8; 32]>> {
-        let session = self.session()?;
-        let mut keys = HashSet::new();
-        for ov in session.overviews.values() {
-            // Secure notes need their body; a damaged one simply isn't a duplicate.
-            let details = match ov.item_type {
-                ItemType::Login => None,
-                ItemType::SecureNote => self.load_details(&ov.id).ok(),
-            };
-            keys.insert(dedupe_key_parts(ov, details.as_ref()));
-        }
-        Ok(keys)
-    }
-
-    fn persist(&mut self, overview: ItemOverview, details: &ItemDetails) -> Result<ItemOverview> {
+    fn stage(
+        &self,
+        overview: ItemOverview,
+        details: Option<&ItemDetails>,
+        base_revision: Option<i64>,
+    ) -> Result<StagedWrite> {
         let session = self.session()?;
         let id = overview.id;
         let ov_blob = seal_json(
@@ -1099,50 +1067,56 @@ impl VaultService {
             &BlobContext::item(Purpose::ItemOverview, session.vault_id, id),
             &overview,
         )?;
-        let det_blob = seal_json(
-            &session.data_key,
-            &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
-            details,
-        )?;
-        // revision set by Task 5 (staged writes record the server's revision)
-        self.store.upsert_item(&id, &ov_blob, &det_blob, 0)?;
-        self.session_mut()?.overviews.insert(id, overview.clone());
-        Ok(overview)
+        let det_blob = match details {
+            Some(d) => Some(seal_json(
+                &session.data_key,
+                &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
+                d,
+            )?),
+            None => None,
+        };
+        Ok(StagedWrite {
+            item_id: id,
+            base_revision,
+            overview: Some(ov_blob),
+            details: det_blob,
+            epoch: self.epoch,
+            plain: Some(overview),
+        })
     }
-}
 
-fn dedupe_key(overview: &ItemOverview, details: &ItemDetails) -> [u8; 32] {
-    dedupe_key_parts(overview, Some(details))
-}
-
-/// Digest identifying "the same item" for import de-duplication. Hashed so the
-/// set never holds a second plaintext copy of note bodies.
-fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [u8; 32] {
-    let mut h = Sha256::new();
-    let field = |h: &mut Sha256, s: &str| {
-        h.update((s.len() as u64).to_le_bytes());
-        h.update(s.as_bytes());
-    };
-    match overview.item_type {
-        ItemType::Login => {
-            field(&mut h, "login");
-            field(&mut h, &overview.title);
-            field(&mut h, overview.username.as_deref().unwrap_or(""));
-            let mut urls: Vec<&str> = overview.urls.iter().map(|r| r.url.as_str()).collect();
-            urls.sort_unstable();
-            for u in urls {
-                field(&mut h, u);
-            }
+    /// Record a write the server accepted at `revision`. Returns the stored
+    /// overview, or `None` for a deletion.
+    ///
+    /// Refused if the vault locked since the write was staged: the blobs
+    /// were sealed under a session that no longer exists, and recording them
+    /// would put the replica ahead of what this device can read back.
+    pub fn commit_write(
+        &mut self,
+        staged: StagedWrite,
+        revision: i64,
+    ) -> Result<Option<ItemOverview>> {
+        self.session()?;
+        if staged.epoch != self.epoch {
+            return Err(Error::Locked);
         }
-        ItemType::SecureNote => {
-            field(&mut h, "note");
-            field(&mut h, &overview.title);
-            if let Some(ItemDetails::SecureNote { content }) = details {
-                field(&mut h, content.expose());
+        match (staged.overview, staged.details, staged.plain) {
+            (Some(ov), Some(det), Some(overview)) => {
+                self.store
+                    .upsert_item(&staged.item_id, &ov, &det, revision)?;
+                self.session_mut()?
+                    .overviews
+                    .insert(staged.item_id, overview.clone());
+                Ok(Some(overview))
             }
+            (None, None, None) => {
+                self.store.delete_item(&staged.item_id)?;
+                self.session_mut()?.overviews.remove(&staged.item_id);
+                Ok(None)
+            }
+            _ => Err(Error::InvalidInput("malformed staged write")),
         }
     }
-    h.finalize().into()
 }
 
 /// Compare two secrets without an early exit on the first differing byte.

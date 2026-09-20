@@ -282,9 +282,11 @@ fn fuzz_item_input() {
         let Ok(input) = serde_json::from_slice::<ItemInput>(&json) else {
             continue;
         };
-        if let Ok(item) = v.create_item(input, NOW + i) {
-            stored += 1;
-            assert_eq!(v.get_item(&item.id).unwrap().title, item.title);
+        if let Ok(staged) = v.stage_create(input, NOW + i) {
+            if let Ok(Some(item)) = v.commit_write(staged, i) {
+                stored += 1;
+                assert_eq!(v.get_item(&item.id).unwrap().title, item.title);
+            }
         }
     }
     assert!(stored > 0, "the fuzzer should also produce valid items");

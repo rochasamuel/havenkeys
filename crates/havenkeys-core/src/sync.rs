@@ -425,7 +425,8 @@ mod tests {
     #[test]
     fn a_remote_change_adds_updates_and_deletes_without_asking_who_is_newer() {
         let mut vault = activated_vault();
-        let item = vault.create_item(login("GitHub"), NOW).unwrap();
+        let staged = vault.stage_create(login("GitHub"), NOW).unwrap();
+        let item = vault.commit_write(staged, 1).unwrap().unwrap();
         let id = item.id;
         let overview = vault
             .store
@@ -439,7 +440,8 @@ mod tests {
 
         // Remove the local copy so the same blobs, replayed as a remote
         // change, exercise the "added" path rather than "updated".
-        vault.delete_item(&id, NOW).unwrap();
+        let staged = vault.stage_delete(&id).unwrap();
+        vault.commit_write(staged, 2).unwrap();
 
         let report = vault
             .apply_remote_changes(

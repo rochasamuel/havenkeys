@@ -1540,6 +1540,7 @@ dependencies = [
  "interprocess",
  "serde_json",
  "tempfile",
+ "uuid",
  "zeroize",
 ]
 

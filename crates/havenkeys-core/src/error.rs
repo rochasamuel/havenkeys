@@ -40,6 +40,10 @@ pub enum Error {
     Kdf,
     #[error("Secure random number generator unavailable.")]
     Rng,
+    #[error("HavenKeys is offline — the vault is read-only until it reconnects.")]
+    Offline,
+    #[error("This item changed on another device.")]
+    ItemChangedElsewhere,
 }
 
 impl Error {
@@ -62,6 +66,8 @@ impl Error {
             Error::Storage => "storage",
             Error::Kdf => "kdf",
             Error::Rng => "rng",
+            Error::Offline => "offline",
+            Error::ItemChangedElsewhere => "item_changed_elsewhere",
         }
     }
 }

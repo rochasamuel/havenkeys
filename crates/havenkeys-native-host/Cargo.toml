@@ -18,3 +18,4 @@ zeroize = "1.9"
 havenkeys-bridge = { path = "../havenkeys-bridge" }
 havenkeys-core = { path = "../havenkeys-core" }
 tempfile = "3"
+uuid = "1.20"
