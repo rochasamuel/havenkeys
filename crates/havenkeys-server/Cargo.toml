@@ -1,0 +1,46 @@
+[package]
+name = "havenkeys-server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = [
+  "http1",
+  "json",
+  "query",
+  "tokio",
+  "macros",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["limit", "trace", "cors"] }
+# Postgres through `tokio-postgres` rather than `sqlx`: `sqlx` carries an
+# optional `sqlx-sqlite`, cargo resolves optional dependencies, and its
+# `libsqlite3-sys` then collides with the one `rusqlite` links for
+# `havenkeys-core` ("only one package may specify the same links value").
+# One workspace and one `cargo test` are worth more than the facade.
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-chrono-0_4"] }
+deadpool-postgres = "0.14"
+tokio-postgres-rustls = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+webpki-roots = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+argon2 = "0.5"
+sha2 = "0.10"
+hkdf = "0.12"
+rand = "0.8"
+subtle = "2"
+data-encoding = "2"
+unicode-normalization = "0.1"
+zeroize = { version = "1", features = ["zeroize_derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
