@@ -87,6 +87,29 @@ pub fn activated_vault() -> (VaultService, SecretKey) {
     (vault, sk)
 }
 
+/// An activated vault that also holds its account record, ready to sync.
+pub fn activated_with_account() -> (VaultService, SecretKey) {
+    let (mut vault, sk) = activated_vault();
+    vault.store_account(&account_record()).unwrap();
+    (vault, sk)
+}
+
+/// A second device on the same account, signed in from the first one's
+/// header and ready to sync.
+pub fn second_device(first: &VaultService, sk: &SecretKey) -> VaultService {
+    let header = first.encode_account_header().unwrap();
+    let (prepared, _auth) =
+        havenkeys_core::sync::prepare_sign_in(&header, &secret(PASSWORD), sk, &account()).unwrap();
+    let mut b = VaultService::new(Store::open_in_memory().unwrap());
+    b.create_vault(prepared).unwrap();
+    // create_vault leaves the vault unlocked; lock it so the account unlock
+    // path is the one actually exercised.
+    b.lock();
+    b.unlock_for_account(&secret(PASSWORD), sk, &account()).unwrap();
+    b.store_account(&account_record()).unwrap();
+    b
+}
+
 pub fn note(title: &str, content: &str) -> ItemInput {
     ItemInput {
         item_type: ItemType::SecureNote,
