@@ -409,73 +409,20 @@ fn cursor_and_header_guard_move_only_forward() {
 }
 
 #[test]
-fn local_edits_are_dirty_and_clear_on_confirmation() {
+fn item_rows_carry_the_server_revision() {
     use havenkeys_core::store::Store;
-
     let mut store = Store::open_in_memory().unwrap();
     let id = uuid::Uuid::from_u128(9);
-    store.upsert_item(&id, b"overview", b"details").unwrap();
-    assert_eq!(store.dirty_rows().unwrap().len(), 1);
+    store.upsert_item(&id, b"ov", b"det", 7).unwrap();
+    assert_eq!(store.item_revision(&id).unwrap(), Some(7));
 
-    store
-        .clear_dirty(&[(id, b"overview".to_vec(), b"details".to_vec())], &[])
-        .unwrap();
-    assert!(store.dirty_rows().unwrap().is_empty());
+    store.upsert_item(&id, b"ov2", b"det2", 9).unwrap();
+    assert_eq!(store.item_revision(&id).unwrap(), Some(9));
 
-    // Editing it again marks it dirty again.
-    store.upsert_item(&id, b"overview2", b"details2").unwrap();
-    assert_eq!(store.dirty_rows().unwrap().len(), 1);
-}
-
-#[test]
-fn deletions_are_dirty_until_confirmed() {
-    use havenkeys_core::store::Store;
-
-    let mut store = Store::open_in_memory().unwrap();
-    let id = uuid::Uuid::from_u128(11);
-    store.upsert_item(&id, b"overview", b"details").unwrap();
-    store
-        .clear_dirty(&[(id, b"overview".to_vec(), b"details".to_vec())], &[])
-        .unwrap();
-
-    store.delete_item(&id, NOW).unwrap();
-    assert_eq!(store.dirty_tombstones().unwrap(), vec![(id, NOW)]);
-
-    store.clear_dirty(&[], &[(id, NOW)]).unwrap();
-    assert!(store.dirty_tombstones().unwrap().is_empty());
-}
-
-#[test]
-fn upgrades_a_schema_2_database_in_place() {
-    use havenkeys_core::store::Store;
-
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("vault.sqlite3");
-
-    // Build a schema-2 database by hand: the tables as they were, and the
-    // user_version that says so.
-    {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE vault_header (
-                 id INTEGER PRIMARY KEY CHECK (id = 1), format_version INTEGER NOT NULL,
-                 vault_id TEXT NOT NULL, kdf TEXT NOT NULL, wrapped_vault_key BLOB NOT NULL,
-                 created_at INTEGER NOT NULL, key_scheme INTEGER NOT NULL DEFAULT 1,
-                 header_revision INTEGER NOT NULL DEFAULT 0);
-             CREATE TABLE items (id TEXT PRIMARY KEY NOT NULL, overview BLOB NOT NULL, details BLOB NOT NULL);
-             CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK (id = 1), blob BLOB NOT NULL);
-             CREATE TABLE tombstones (id TEXT PRIMARY KEY NOT NULL, deleted_at INTEGER NOT NULL);
-             INSERT INTO items (id, overview, details)
-               VALUES ('11111111-1111-1111-1111-111111111111', x'00', x'01');
-             PRAGMA user_version = 2;",
-        )
-        .unwrap();
-    }
-
-    let store = Store::open(&path).unwrap();
-    // The pre-existing row must come back dirty, so it gets uploaded once.
-    assert_eq!(store.dirty_rows().unwrap().len(), 1);
-    assert!(store.account().unwrap().is_none());
+    assert!(store.delete_item(&id).unwrap());
+    assert_eq!(store.item_revision(&id).unwrap(), None);
+    // No tombstone survives the delete: the server holds those.
+    assert!(!store.delete_item(&id).unwrap());
 }
 
 #[test]

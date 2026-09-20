@@ -304,9 +304,10 @@ fn fuzz_remote_changes() {
     for _ in 0..2000 {
         let change = havenkeys_core::sync::RemoteChange {
             item_id: Uuid::from_u128(u128::from(rng.next())),
+            revision: 1,
             overview: Some(rng.bytes(512)),
             details: Some(rng.bytes(512)),
-            deleted_at: None,
+            deleted: false,
         };
         let report = vault.apply_remote_changes(1, vec![change], NOW).unwrap();
         assert_eq!(report.added, 0);

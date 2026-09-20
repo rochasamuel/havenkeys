@@ -335,12 +335,12 @@ fn injected_rows_are_not_trusted() {
     let c = Connection::open(&path).unwrap();
     let id = Uuid::new_v4();
     c.execute(
-        "INSERT INTO items (id, overview, details) VALUES (?1, ?2, ?2)",
+        "INSERT INTO items (id, overview, details, revision) VALUES (?1, ?2, ?2, 0)",
         params![id.to_string(), vec![1u8; 64]],
     )
     .unwrap();
     c.execute(
-        "INSERT INTO items (id, overview, details) VALUES ('not-a-uuid', X'00', X'00')",
+        "INSERT INTO items (id, overview, details, revision) VALUES ('not-a-uuid', X'00', X'00', 0)",
         [],
     )
     .unwrap();
