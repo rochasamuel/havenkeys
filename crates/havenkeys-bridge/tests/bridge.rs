@@ -463,15 +463,18 @@ fn save_login_flow() {
 
     // check_login is a read and keeps working; the save itself is a write
     // and needs a server session (spec 2026-09-20 §8.4), so it is refused
-    // and nothing changes.
+    // and nothing changes. The extension must be told this is "offline",
+    // not a generic internal error, so it shows an accurate message.
     let r = save(&f, gh, Some("octo"), "rotated", Some(f.github));
     assert!(r["result"].is_null());
+    assert_eq!(error_code(&r), Some("offline"));
     assert_eq!(fill(&f, f.github, gh)["result"]["password"], "gh-password");
     assert_eq!(f.changes.load(Ordering::SeqCst), 0);
 
     let f = fixture();
     let r = save(&f, "https://new.example/login", Some("me"), "pw", None);
     assert!(r["result"].is_null());
+    assert_eq!(error_code(&r), Some("offline"));
     assert_eq!(f.changes.load(Ordering::SeqCst), 0);
 }
 
