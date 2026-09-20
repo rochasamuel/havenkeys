@@ -999,14 +999,14 @@ impl VaultService {
         self.persist(overview, &details)
     }
 
-    /// Delete an item. A tombstone dated `now_ms` records the deletion so it
-    /// reaches other devices through sync.
-    pub fn delete_item(&mut self, id: &Uuid, now_ms: i64) -> Result<()> {
+    /// Delete an item. The revision no longer matters locally: the server
+    /// holds the tombstone (Task 4, spec §8.2).
+    pub fn delete_item(&mut self, id: &Uuid, _now_ms: i64) -> Result<()> {
         if !self.session()?.overviews.contains_key(id) {
             return Err(Error::NotFound);
         }
         // Disk first: if the delete fails, the item must not vanish from view.
-        self.store.delete_item(id, now_ms)?;
+        self.store.delete_item(id)?;
         self.session_mut()?.overviews.remove(id);
         Ok(())
     }
@@ -1063,11 +1063,12 @@ impl VaultService {
                 ItemType::Login => report.logins += 1,
                 ItemType::SecureNote => report.secure_notes += 1,
             }
-            rows.push((id, ov_blob, det_blob));
+            // revision set by Task 5 (staged writes record the server's revision)
+            rows.push((id, ov_blob, det_blob, 0));
             added.push(overview);
         }
 
-        self.store.insert_items(&rows)?;
+        self.store.upsert_items(&rows)?;
         report.imported = rows.len();
         let session = self.session_mut()?;
         for ov in added {
@@ -1103,7 +1104,8 @@ impl VaultService {
             &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
             details,
         )?;
-        self.store.upsert_item(&id, &ov_blob, &det_blob)?;
+        // revision set by Task 5 (staged writes record the server's revision)
+        self.store.upsert_item(&id, &ov_blob, &det_blob, 0)?;
         self.session_mut()?.overviews.insert(id, overview.clone());
         Ok(overview)
     }

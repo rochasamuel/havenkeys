@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -17,37 +17,16 @@ CREATE TABLE vault_header (
     vault_id          TEXT    NOT NULL,
     kdf               TEXT    NOT NULL,
     wrapped_vault_key BLOB    NOT NULL,
-    created_at        INTEGER NOT NULL
+    created_at        INTEGER NOT NULL,
+    key_scheme        INTEGER NOT NULL,
+    header_revision   INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE items (
     id       TEXT PRIMARY KEY NOT NULL,
     overview BLOB NOT NULL,
-    details  BLOB NOT NULL
+    details  BLOB NOT NULL,
+    revision INTEGER NOT NULL
 );
-CREATE TABLE settings (
-    id   INTEGER PRIMARY KEY CHECK (id = 1),
-    blob BLOB NOT NULL
-);
-";
-
-/// Schema 1 → 2: key scheme and header revision in the header (Secret Key,
-/// sync), and tombstones so deletions reach other devices.
-const MIGRATE_1_TO_2: &str = "
-ALTER TABLE vault_header ADD COLUMN key_scheme INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE vault_header ADD COLUMN header_revision INTEGER NOT NULL DEFAULT 0;
-CREATE TABLE tombstones (
-    id         TEXT PRIMARY KEY NOT NULL,
-    deleted_at INTEGER NOT NULL
-);
-";
-
-/// Schema 2 → 3: server sync. `dirty` marks rows changed locally since the
-/// last confirmed push (existing rows start dirty, so a vault joining an
-/// account uploads itself once), and `account` holds the identity, the
-/// server cursor and the header-rollback guard.
-const MIGRATE_2_TO_3: &str = "
-ALTER TABLE items ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE tombstones ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
 CREATE TABLE account (
     id             INTEGER PRIMARY KEY CHECK (id = 1),
     account_id     TEXT    NOT NULL,
@@ -56,6 +35,10 @@ CREATE TABLE account (
     server_cursor  INTEGER NOT NULL DEFAULT 0,
     max_header_rev INTEGER NOT NULL DEFAULT 0,
     last_synced_at INTEGER
+);
+CREATE TABLE settings (
+    id   INTEGER PRIMARY KEY CHECK (id = 1),
+    blob BLOB NOT NULL
 );
 ";
 
@@ -169,25 +152,11 @@ impl Store {
             0 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(SCHEMA)?;
-                tx.execute_batch(MIGRATE_1_TO_2)?;
-                tx.execute_batch(MIGRATE_2_TO_3)?;
-                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-                tx.commit()?;
-            }
-            1 => {
-                let tx = conn.unchecked_transaction()?;
-                tx.execute_batch(MIGRATE_1_TO_2)?;
-                tx.execute_batch(MIGRATE_2_TO_3)?;
-                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-                tx.commit()?;
-            }
-            2 => {
-                let tx = conn.unchecked_transaction()?;
-                tx.execute_batch(MIGRATE_2_TO_3)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
             SCHEMA_VERSION => {}
+            // Vaults from before accounts are not migrated (spec §8.2).
             _ => return Err(Error::UnsupportedVersion),
         }
         Ok(Self { conn })
@@ -329,80 +298,59 @@ impl Store {
             .optional()?)
     }
 
-    pub fn upsert_item(&self, id: &Uuid, overview: &[u8], details: &[u8]) -> Result<()> {
+    pub fn upsert_item(
+        &mut self,
+        id: &Uuid,
+        overview: &[u8],
+        details: &[u8],
+        revision: i64,
+    ) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO items (id, overview, details, dirty) VALUES (?1, ?2, ?3, 1)
+            "INSERT INTO items (id, overview, details, revision) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(id) DO UPDATE SET overview = excluded.overview,
-                                           details = excluded.details,
-                                           dirty = 1",
-            params![id.to_string(), overview, details],
+                                           details  = excluded.details,
+                                           revision = excluded.revision",
+            params![id.to_string(), overview, details, revision],
         )?;
         Ok(())
     }
 
-    /// Insert many items atomically: either all rows are written or none.
-    pub fn insert_items(&mut self, rows: &[(Uuid, Vec<u8>, Vec<u8>)]) -> Result<()> {
+    /// Apply many rows atomically: either all land or none.
+    pub fn upsert_items(&mut self, rows: &[(Uuid, Vec<u8>, Vec<u8>, i64)]) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO items (id, overview, details, dirty) VALUES (?1, ?2, ?3, 1)",
+                "INSERT INTO items (id, overview, details, revision) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO UPDATE SET overview = excluded.overview,
+                                               details  = excluded.details,
+                                               revision = excluded.revision",
             )?;
-            for (id, overview, details) in rows {
-                stmt.execute(params![id.to_string(), overview, details])?;
+            for (id, overview, details, revision) in rows {
+                stmt.execute(params![id.to_string(), overview, details, revision])?;
             }
         }
         tx.commit()?;
         Ok(())
     }
 
-    /// Delete an item and record a tombstone, atomically.
-    pub fn delete_item(&mut self, id: &Uuid, deleted_at: i64) -> Result<bool> {
-        let tx = self.conn.transaction()?;
-        let n = tx.execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
-        tx.execute(
-            "INSERT INTO tombstones (id, deleted_at, dirty) VALUES (?1, ?2, 1)
-             ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at),
-                                           dirty = 1",
-            params![id.to_string(), deleted_at],
-        )?;
-        tx.commit()?;
-        Ok(n == 1)
-    }
-
-    /// Every item row, for a sync snapshot. Malformed IDs are skipped.
-    pub fn item_rows(&self) -> Result<Vec<ItemRow>> {
-        let mut stmt = self
+    /// The server revision this device last stored for an item.
+    pub fn item_revision(&self, id: &Uuid) -> Result<Option<i64>> {
+        Ok(self
             .conn
-            .prepare("SELECT id, overview, details FROM items")?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, Vec<u8>>(1)?,
-                r.get::<_, Vec<u8>>(2)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (id, ov, det) = row?;
-            if let Ok(id) = Uuid::parse_str(&id) {
-                out.push((id, ov, det));
-            }
-        }
-        Ok(out)
+            .query_row(
+                "SELECT revision FROM items WHERE id = ?1",
+                params![id.to_string()],
+                |r| r.get(0),
+            )
+            .optional()?)
     }
 
-    /// `(id, deleted_at)` of every deleted item.
-    pub fn tombstones(&self) -> Result<Vec<(Uuid, i64)>> {
-        let mut stmt = self.conn.prepare("SELECT id, deleted_at FROM tombstones")?;
-        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (id, at) = row?;
-            if let Ok(id) = Uuid::parse_str(&id) {
-                out.push((id, at));
-            }
-        }
-        Ok(out)
+    /// Remove an item. The server holds the tombstone; this device does not.
+    pub fn delete_item(&mut self, id: &Uuid) -> Result<bool> {
+        let n = self
+            .conn
+            .execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
+        Ok(n == 1)
     }
 
     pub fn account(&self) -> Result<Option<AccountRecord>> {
@@ -488,107 +436,6 @@ impl Store {
             "UPDATE account SET max_header_rev = max(max_header_rev, ?1) WHERE id = 1",
             params![rev],
         )?;
-        Ok(())
-    }
-
-    /// Items changed locally since the last confirmed push.
-    pub fn dirty_rows(&self) -> Result<Vec<ItemRow>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, overview, details FROM items WHERE dirty = 1")?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, Vec<u8>>(1)?,
-                r.get::<_, Vec<u8>>(2)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (id, ov, det) = row?;
-            if let Ok(id) = Uuid::parse_str(&id) {
-                out.push((id, ov, det));
-            }
-        }
-        Ok(out)
-    }
-
-    /// Deletions not yet pushed.
-    pub fn dirty_tombstones(&self) -> Result<Vec<(Uuid, i64)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, deleted_at FROM tombstones WHERE dirty = 1")?;
-        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (id, at) = row?;
-            if let Ok(id) = Uuid::parse_str(&id) {
-                out.push((id, at));
-            }
-        }
-        Ok(out)
-    }
-
-    /// Mark pushed rows as clean, in one transaction — but only the exact
-    /// versions that were pushed. Matching on content as well as ID means a
-    /// row edited or deleted again after it was read for the push (and
-    /// before the server's ack arrived) keeps its dirty flag: the clear
-    /// simply misses it, and the newer version stays pending for the next
-    /// push. Clearing by ID alone would silently drop that newer version,
-    /// since a deletion reuses the same ID and would otherwise be cleared by
-    /// an ack meant for the row it replaced.
-    pub fn clear_dirty(&mut self, items: &[ItemRow], tombstones: &[(Uuid, i64)]) -> Result<()> {
-        let tx = self.conn.transaction()?;
-        for (id, overview, details) in items {
-            tx.execute(
-                "UPDATE items SET dirty = 0 WHERE id = ?1 AND overview = ?2 AND details = ?3",
-                params![id.to_string(), overview, details],
-            )?;
-        }
-        for (id, deleted_at) in tombstones {
-            tx.execute(
-                "UPDATE tombstones SET dirty = 0 WHERE id = ?1 AND deleted_at = ?2",
-                params![id.to_string(), deleted_at],
-            )?;
-        }
-        tx.commit()?;
-        Ok(())
-    }
-
-    /// Apply a sync merge in one transaction: upsert rows, delete items that
-    /// were deleted elsewhere, and set tombstones.
-    pub fn apply_merge(
-        &mut self,
-        upserts: &[ItemRow],
-        tombstones: &[(Uuid, i64)],
-        resurrected: &[Uuid],
-    ) -> Result<()> {
-        let tx = self.conn.transaction()?;
-        for (id, ov, det) in upserts {
-            tx.execute(
-                "INSERT INTO items (id, overview, details, dirty) VALUES (?1, ?2, ?3, 0)
-                 ON CONFLICT(id) DO UPDATE SET overview = excluded.overview,
-                                               details = excluded.details,
-                                               dirty = 0",
-                params![id.to_string(), ov, det],
-            )?;
-        }
-        for id in resurrected {
-            tx.execute(
-                "DELETE FROM tombstones WHERE id = ?1",
-                params![id.to_string()],
-            )?;
-        }
-        for (id, at) in tombstones {
-            tx.execute("DELETE FROM items WHERE id = ?1", params![id.to_string()])?;
-            tx.execute(
-                "INSERT INTO tombstones (id, deleted_at, dirty) VALUES (?1, ?2, 0)
-                 ON CONFLICT(id) DO UPDATE SET deleted_at = max(deleted_at, excluded.deleted_at),
-                                               dirty = 0",
-                params![id.to_string(), at],
-            )?;
-        }
-        tx.commit()?;
         Ok(())
     }
 
@@ -702,56 +549,28 @@ mod tests {
     fn item_crud() {
         let mut s = Store::open_in_memory().unwrap();
         let id = Uuid::new_v4();
-        s.upsert_item(&id, b"o1", b"d1").unwrap();
-        s.upsert_item(&id, b"o2", b"d2").unwrap();
+        s.upsert_item(&id, b"o1", b"d1", 1).unwrap();
+        s.upsert_item(&id, b"o2", b"d2", 2).unwrap();
         assert_eq!(s.item_details(&id).unwrap().unwrap(), b"d2");
+        assert_eq!(s.item_revision(&id).unwrap(), Some(2));
         let all = s.item_overviews().unwrap();
         assert_eq!(all.len(), 1);
-        assert!(s.delete_item(&id, 5).unwrap());
-        assert!(!s.delete_item(&id, 3).unwrap());
+        assert!(s.delete_item(&id).unwrap());
+        assert!(!s.delete_item(&id).unwrap());
         assert!(s.item_details(&id).unwrap().is_none());
-        // The tombstone keeps the latest deletion time.
-        assert_eq!(s.tombstones().unwrap(), vec![(id, 5)]);
+        // No tombstone survives the delete: the server holds those.
+        assert_eq!(s.item_revision(&id).unwrap(), None);
     }
 
-    /// A vault created before the Secret Key (schema 1, key scheme 1) still
-    /// migrates structurally — the schema upgrade does not depend on the key
-    /// scheme — but key schemes 1 and 2 have left the product (spec §4), so
-    /// its header is now unreadable: the caller must not silently treat it as
-    /// some other scheme, and there is no automatic re-encryption path in
-    /// this build.
     #[test]
-    fn migrates_schema_1() {
+    fn a_database_from_an_older_build_is_refused() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("v1.db");
-        let c = Connection::open(&path).unwrap();
-        c.execute_batch(SCHEMA).unwrap();
-        c.pragma_update(None, "user_version", 1).unwrap();
-        let kdf = serde_json::to_string(&KdfParams::generate().unwrap()).unwrap();
-        c.execute(
-            "INSERT INTO vault_header (id, format_version, vault_id, kdf, wrapped_vault_key, created_at)
-             VALUES (1, 1, ?1, ?2, x'00', 7)",
-            params![Uuid::nil().to_string(), kdf],
-        )
-        .unwrap();
-        c.execute(
-            "INSERT INTO items (id, overview, details) VALUES (?1, x'01', x'02')",
-            params![Uuid::nil().to_string()],
-        )
-        .unwrap();
-        drop(c);
-
-        let s = Store::open(&path).unwrap();
-        assert_eq!(s.header().err(), Some(Error::UnsupportedVersion));
-        assert_eq!(s.item_rows().unwrap().len(), 1);
-        assert!(s.tombstones().unwrap().is_empty());
-        drop(s);
-        // Opening again is a no-op.
-        assert!(Store::open(&path).is_ok());
-        let c = Connection::open(&path).unwrap();
-        let v: i64 = c
-            .pragma_query_value(None, "user_version", |r| r.get(0))
-            .unwrap();
-        assert_eq!(v, SCHEMA_VERSION);
+        let path = dir.path().join("old.sqlite3");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.pragma_update(None, "user_version", 3i64).unwrap();
+        }
+        let err = Store::open(&path).err().unwrap();
+        assert_eq!(err.code(), "unsupported_version");
     }
 }
