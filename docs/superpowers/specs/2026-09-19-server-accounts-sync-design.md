@@ -384,7 +384,12 @@ retried; the UI shows the last successful sync time.
   rejects it. The floors in `crypto.md` reject absurd parameters before any
   derivation work is spent. The attestation then authenticates the rest of
   the header body — vault id, key scheme, revision — which the unwrap alone
-  does not cover. Both checks must pass before a header is adopted.
+  does not cover. Both checks must pass before a header is adopted. This is
+  split across two functions: `adopt_account_header` (an already-unlocked
+  device considering a header the server served later) verifies the
+  attestation only — it holds no password and so cannot unwrap; it is
+  `prepare_sign_in`, run at login with the password in hand, that performs
+  both checks.
 * **Header rollback:** an old header is genuinely attested, so the server
   could serve one from before a master-password change and make the previous
   password work again. The client therefore records the highest
