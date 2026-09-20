@@ -178,14 +178,26 @@ pub async fn sign_in(
     server_url: String,
     email: String,
     password: SecretString,
-    secret_key: SecretString,
+    secret_key: Option<SecretString>,
 ) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
     if state.vault()?.key_scheme()?.is_some() {
         return Err(havenkeys_core::Error::VaultExists.into());
     }
     let email = NormalizedEmail::parse(&email)?;
-    let secret_key = SecretKey::parse(secret_key.expose())?;
+    // A key already on this computer is used when none is typed. That is
+    // what makes an activation interrupted after the server accepted it
+    // recoverable: the Secret Key was written here before the server was
+    // asked, so signing in finishes what activation started.
+    let secret_key = match secret_key {
+        Some(typed) if !typed.is_empty() => SecretKey::parse(typed.expose())?,
+        _ => state
+            .device
+            .lock()
+            .map_err(|_| CmdError::internal())?
+            .secret_key()
+            .ok_or(havenkeys_core::Error::SecretKeyRequired)?,
+    };
     let server_url = server_url.trim().trim_end_matches('/').to_string();
     let client = sync::client_for(&state, &server_url)?;
     let device_id = state.device_id()?;
