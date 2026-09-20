@@ -74,6 +74,16 @@ pub enum KeyScheme {
 }
 
 impl KeyScheme {
+    /// Does unlocking a vault under this scheme need the device's Secret
+    /// Key? Callers ask this instead of matching on the variant, so a
+    /// scheme added later does not silently stop asking for it.
+    pub fn uses_secret_key(self) -> bool {
+        matches!(
+            self,
+            KeyScheme::PasswordAndSecretKey | KeyScheme::AccountBound
+        )
+    }
+
     fn to_db(self) -> i64 {
         match self {
             KeyScheme::PasswordOnly => 1,

@@ -50,8 +50,13 @@ fn device_error() -> CmdError {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceStatus {
-    /// "password_only" or "password_and_secret_key"; null without a vault.
+    /// "password_only", "password_and_secret_key" or "account_bound"; null
+    /// without a vault.
     key_scheme: Option<KeyScheme>,
+    /// This vault is protected by a Secret Key. The UI asks Rust rather than
+    /// comparing scheme names, so a scheme added later cannot leave it
+    /// silently answering "no".
+    uses_secret_key: bool,
     /// The vault needs a Secret Key and this device does not have it: the
     /// unlock screen must ask for it.
     needs_secret_key: bool,
@@ -65,10 +70,11 @@ pub struct DeviceStatus {
 pub fn device_status(state: State<'_, AppState>) -> CmdResult<DeviceStatus> {
     let key_scheme = state.vault()?.key_scheme()?;
     let device = state.device.lock().map_err(|_| CmdError::internal())?;
+    let uses_secret_key = key_scheme.is_some_and(KeyScheme::uses_secret_key);
     Ok(DeviceStatus {
         key_scheme,
-        needs_secret_key: key_scheme == Some(KeyScheme::PasswordAndSecretKey)
-            && device.secret_key().is_none(),
+        uses_secret_key,
+        needs_secret_key: uses_secret_key && device.secret_key().is_none(),
         sync_folder: device.sync_folder.as_deref().map(folder_name),
         last_sync: state.sync.last.lock().ok().and_then(|l| l.clone()),
     })
@@ -174,10 +180,23 @@ pub async fn choose_sync_folder(app: AppHandle) -> CmdResult<Option<String>> {
         if !v.is_unlocked() {
             return Err(havenkeys_core::Error::Locked.into());
         }
-        if v.key_scheme()? != Some(KeyScheme::PasswordAndSecretKey) {
-            return Err(
-                havenkeys_core::Error::InvalidInput("set up a Secret Key before syncing").into(),
-            );
+        // Folder sync is key scheme 2 only. An account-bound vault syncs
+        // through its server instead, so this is a deliberate equality
+        // check, not a `uses_secret_key` one.
+        match v.key_scheme()? {
+            Some(KeyScheme::PasswordAndSecretKey) => {}
+            Some(KeyScheme::AccountBound) => {
+                return Err(havenkeys_core::Error::InvalidInput(
+                    "this vault syncs through its account, not a folder",
+                )
+                .into())
+            }
+            _ => {
+                return Err(havenkeys_core::Error::InvalidInput(
+                    "set up a Secret Key before syncing",
+                )
+                .into())
+            }
         }
     }
     let Some(path) = pick_folder_async(&app, "Choose a folder to sync through").await? else {
