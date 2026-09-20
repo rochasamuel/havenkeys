@@ -50,10 +50,7 @@ pub fn connect(url: &str) -> Result<Pool, DbError> {
     });
     cfg.pool = Some(deadpool_postgres::PoolConfig::new(10));
 
-    let wants_tls = !matches!(
-        pg.get_ssl_mode(),
-        tokio_postgres::config::SslMode::Disable
-    );
+    let wants_tls = !matches!(pg.get_ssl_mode(), tokio_postgres::config::SslMode::Disable);
     let pool = if wants_tls {
         let mut roots = rustls::RootCertStore::empty();
         roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());

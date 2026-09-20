@@ -205,6 +205,8 @@ mod tests {
 
     #[tokio::test]
     async fn the_dummy_verifier_never_accepts_a_real_key() {
-        assert!(!verify_auth_key(dummy_verifier().to_string(), Zeroizing::new(vec![9u8; 32])).await);
+        assert!(
+            !verify_auth_key(dummy_verifier().to_string(), Zeroizing::new(vec![9u8; 32])).await
+        );
     }
 }

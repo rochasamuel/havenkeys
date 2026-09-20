@@ -9,7 +9,6 @@ use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::store::{AccountRecord, Store};
 use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
 use havenkeys_core::SecretString;
-use uuid::Uuid;
 use havenkeys_native_host::{CHROME_EXTENSION_ORIGIN, FIREFOX_EXTENSION_ID};
 use havenkeys_protocol::endpoint::{Endpoint, ENDPOINT_OVERRIDE_ENV};
 use havenkeys_protocol::frame::{read_frame, write_frame};
@@ -18,6 +17,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 struct Host {
     child: Child,
@@ -51,7 +51,9 @@ impl Host {
     }
 
     fn recv(&mut self) -> serde_json::Value {
-        let f = read_frame(&mut self.stdout, 1 << 20).unwrap().expect("host closed stdout");
+        let f = read_frame(&mut self.stdout, 1 << 20)
+            .unwrap()
+            .expect("host closed stdout");
         serde_json::from_slice(&f).unwrap()
     }
 
@@ -125,7 +127,10 @@ fn relays_to_desktop() {
     let r = host.call(7, serde_json::json!({"type":"status"}));
     assert_eq!(r["id"], 7);
     assert_eq!(r["result"]["state"], "unlocked");
-    let r = host.call(8, serde_json::json!({"type":"find_matches","url":"https://github.com/"}));
+    let r = host.call(
+        8,
+        serde_json::json!({"type":"find_matches","url":"https://github.com/"}),
+    );
     assert_eq!(r["result"]["matches"], serde_json::json!([]));
     let r = host.call(9, serde_json::json!({"type":"lock"}));
     assert_eq!(r["result"]["type"], "lock");
@@ -138,7 +143,10 @@ fn firefox_caller_accepted() {
     let (_d, sock) = private_dir();
     let _desktop = desktop(&sock);
     let mut host = Host::spawn(&sock, &["/path/to/manifest.json", FIREFOX_EXTENSION_ID]);
-    assert_eq!(host.call(1, serde_json::json!({"type":"status"}))["result"]["state"], "unlocked");
+    assert_eq!(
+        host.call(1, serde_json::json!({"type":"status"}))["result"]["state"],
+        "unlocked"
+    );
 }
 
 #[test]
@@ -150,7 +158,10 @@ fn desktop_not_running() {
     assert_eq!(r["error"]["code"], "desktop_unavailable");
     // Starting the desktop later works without restarting the host.
     let _desktop = desktop(&sock);
-    assert_eq!(host.call(4, serde_json::json!({"type":"status"}))["result"]["state"], "unlocked");
+    assert_eq!(
+        host.call(4, serde_json::json!({"type":"status"}))["result"]["state"],
+        "unlocked"
+    );
 }
 
 #[test]
@@ -163,7 +174,11 @@ fn unknown_caller_refused() {
         vec!["/manifest.json", "evil@example.com"],
     ] {
         let mut host = Host::spawn(&sock, &args);
-        let _ = write_frame(host.stdin.as_mut().unwrap(), br#"{"v":1,"id":1,"request":{"type":"status"}}"#, usize::MAX);
+        let _ = write_frame(
+            host.stdin.as_mut().unwrap(),
+            br#"{"v":1,"id":1,"request":{"type":"status"}}"#,
+            usize::MAX,
+        );
         let status = host.child.wait().unwrap();
         assert_eq!(status.code(), Some(2));
         assert!(read_frame(&mut host.stdout, 1 << 20).unwrap().is_none());
@@ -183,7 +198,10 @@ fn a5_malformed_rejected_by_host() {
     assert_eq!(r["id"], 5);
     assert_eq!(r["error"]["code"], "malformed");
     assert!(!r.to_string().contains("hunter2"));
-    assert_eq!(host.call(6, serde_json::json!({"type":"status"}))["result"]["state"], "unlocked");
+    assert_eq!(
+        host.call(6, serde_json::json!({"type":"status"}))["result"]["state"],
+        "unlocked"
+    );
 }
 
 /// A6 through the host: an oversized frame is skipped without buffering it,
@@ -201,7 +219,10 @@ fn a6_oversized_frame_skipped() {
     });
     assert_eq!(host.recv()["error"]["code"], "too_large");
     host.stdin = Some(writer.join().unwrap());
-    assert_eq!(host.call(2, serde_json::json!({"type":"status"}))["result"]["state"], "unlocked");
+    assert_eq!(
+        host.call(2, serde_json::json!({"type":"status"}))["result"]["state"],
+        "unlocked"
+    );
 }
 
 #[test]

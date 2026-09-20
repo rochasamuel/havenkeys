@@ -61,7 +61,10 @@ mod tests {
     fn a_blob_round_trips() {
         let json = serde_json::to_string(&Blob(vec![1, 2, 3])).unwrap();
         assert_eq!(json, "\"AQID\"");
-        assert_eq!(serde_json::from_str::<Blob>(&json).unwrap().0, vec![1, 2, 3]);
+        assert_eq!(
+            serde_json::from_str::<Blob>(&json).unwrap().0,
+            vec![1, 2, 3]
+        );
     }
 
     #[test]

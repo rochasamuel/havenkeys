@@ -125,7 +125,10 @@ async fn activation_refuses_a_wrong_invite_an_expired_one_and_a_mismatched_email
     let status: String = server
         .db()
         .await
-        .query_one("SELECT status FROM accounts WHERE id = $1", &[&parsed.account])
+        .query_one(
+            "SELECT status FROM accounts WHERE id = $1",
+            &[&parsed.account],
+        )
         .await
         .unwrap()
         .get(0);
@@ -141,17 +144,15 @@ async fn activation_refuses_weak_kdf_parameters_a_wrong_scheme_and_a_short_auth_
         |b: &mut serde_json::Value| b["kdf"]["memoryKib"] = serde_json::json!(1024),
         |b: &mut serde_json::Value| b["kdf"]["iterations"] = serde_json::json!(1),
         |b: &mut serde_json::Value| b["kdf"]["algorithm"] = serde_json::json!("pbkdf2"),
-        |b: &mut serde_json::Value| {
-            b["kdf"]["salt"] = serde_json::json!(BASE64.encode(&[0u8; 8]))
-        },
+        |b: &mut serde_json::Value| b["kdf"]["salt"] = serde_json::json!(BASE64.encode(&[0u8; 8])),
         |b: &mut serde_json::Value| b["keyScheme"] = serde_json::json!(2),
         |b: &mut serde_json::Value| b["authKey"] = serde_json::json!(BASE64.encode(&[0u8; 16])),
         |b: &mut serde_json::Value| b["header"] = serde_json::json!(""),
     ] {
-        let invite = support::new_invite(&server, &format!("u{}@example.com", Uuid::new_v4())).await;
+        let invite =
+            support::new_invite(&server, &format!("u{}@example.com", Uuid::new_v4())).await;
         let parsed = havenkeys_server::invite::decode(&invite).unwrap();
-        let mut body =
-            support::activate_body(&parsed.email, &invite, Uuid::new_v4(), &[1u8; 32]);
+        let mut body = support::activate_body(&parsed.email, &invite, Uuid::new_v4(), &[1u8; 32]);
         mutate(&mut body);
         let res = server
             .post("/v1/accounts/activate")
@@ -197,7 +198,10 @@ async fn login_returns_a_session_and_the_vault_id() {
     assert_eq!(session.vault_id, account.vault_id);
 
     let db = server.db().await;
-    let rows = db.query("SELECT token_hash FROM sessions", &[]).await.unwrap();
+    let rows = db
+        .query("SELECT token_hash FROM sessions", &[])
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 1);
     let stored: Vec<u8> = rows[0].get(0);
     assert_eq!(
@@ -209,7 +213,10 @@ async fn login_returns_a_session_and_the_vault_id() {
     // The device was recorded under the account, with the label the client
     // chose and no hostname the server invented.
     let name: String = db
-        .query_one("SELECT name FROM devices WHERE id = $1", &[&session.device_id])
+        .query_one(
+            "SELECT name FROM devices WHERE id = $1",
+            &[&session.device_id],
+        )
         .await
         .unwrap()
         .get(0);
@@ -227,9 +234,9 @@ async fn a_wrong_key_an_unknown_email_and_an_inactive_account_answer_identically
 
     let mut answers = Vec::new();
     for (email, key) in [
-        ("user@example.com", [1u8; 32]),      // right account, wrong key
-        ("nobody@example.com", [9u8; 32]),    // no such account
-        ("invited@example.com", [9u8; 32]),   // invited, never activated
+        ("user@example.com", [1u8; 32]),    // right account, wrong key
+        ("nobody@example.com", [9u8; 32]),  // no such account
+        ("invited@example.com", [9u8; 32]), // invited, never activated
     ] {
         let res = server
             .post("/v1/auth/login")
@@ -323,7 +330,12 @@ async fn an_expired_missing_or_logged_out_token_is_refused() {
     let (_, session) = support::signed_in(&server, "user@example.com").await;
 
     assert_eq!(
-        server.post("/v1/auth/logout").send().await.unwrap().status(),
+        server
+            .post("/v1/auth/logout")
+            .send()
+            .await
+            .unwrap()
+            .status(),
         401,
         "no token at all"
     );
@@ -441,7 +453,6 @@ async fn a_device_name_that_is_empty_overlong_or_control_laden_is_refused() {
     }
     server.cleanup().await;
 }
-
 
 // ------------------------------------------------------------------ helpers
 

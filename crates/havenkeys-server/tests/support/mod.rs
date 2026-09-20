@@ -35,6 +35,7 @@ impl TestServer {
             pool: pool.clone(),
             server_secret: [7u8; 32],
             trust_forwarded_for: false,
+            cors_origin: None,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

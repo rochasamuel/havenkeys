@@ -94,7 +94,10 @@ pub async fn run(cmd: AdminCommand, pool: &Pool) -> Result<String, String> {
         AdminCommand::DeleteAccount { email } => {
             let email = crate::email::normalize(&email)?;
             let removed = client
-                .execute("DELETE FROM accounts WHERE email_normalized = $1", &[&email])
+                .execute(
+                    "DELETE FROM accounts WHERE email_normalized = $1",
+                    &[&email],
+                )
                 .await
                 .map_err(|_| "could not delete the account".to_string())?;
             if removed == 0 {

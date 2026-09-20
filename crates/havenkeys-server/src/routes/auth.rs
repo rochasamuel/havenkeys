@@ -69,7 +69,8 @@ pub async fn params(
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
     // An unparseable address gets a decoy too: "that is not an email" would
     // be one more bit than the endpoint should give away.
-    let email = crate::email::normalize(&req.email).unwrap_or_else(|_| req.email.trim().to_string());
+    let email =
+        crate::email::normalize(&req.email).unwrap_or_else(|_| req.email.trim().to_string());
     let db = state.pool.get().await?;
     let row = db
         .query_opt(
@@ -116,7 +117,8 @@ pub async fn login(
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
-    let email = crate::email::normalize(&req.email).unwrap_or_else(|_| req.email.trim().to_string());
+    let email =
+        crate::email::normalize(&req.email).unwrap_or_else(|_| req.email.trim().to_string());
     let auth_key = auth::decode_auth_key(&req.auth_key)?;
     let device_name = clean_device_name(&req.device_name)?;
     let db = state.pool.get().await?;
@@ -155,14 +157,20 @@ pub async fn login(
     }
 
     let vault_id: Uuid = db
-        .query_opt("SELECT id FROM vaults WHERE account_id = $1", &[&account_id])
+        .query_opt(
+            "SELECT id FROM vaults WHERE account_id = $1",
+            &[&account_id],
+        )
         .await?
         .ok_or(ApiError::Unauthorized)?
         .get(0);
 
     register_device(&db, account_id, req.device_id, &device_name).await?;
-    db.execute("DELETE FROM sessions WHERE device_id = $1", &[&req.device_id])
-        .await?;
+    db.execute(
+        "DELETE FROM sessions WHERE device_id = $1",
+        &[&req.device_id],
+    )
+    .await?;
     let (token, expires) = auth::issue_token(&db, account_id, req.device_id).await?;
 
     rate_limit::clear(&db, &account_key).await?;

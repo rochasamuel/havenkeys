@@ -47,7 +47,12 @@ async fn a_revoked_device_loses_its_session_and_cannot_log_back_in() {
     );
 
     assert_eq!(
-        server.get_as("/v1/devices", &laptop).send().await.unwrap().status(),
+        server
+            .get_as("/v1/devices", &laptop)
+            .send()
+            .await
+            .unwrap()
+            .status(),
         401,
         "revocation bites on the next request, not at expiry"
     );
@@ -63,7 +68,11 @@ async fn a_revoked_device_loses_its_session_and_cannot_log_back_in() {
         .send()
         .await
         .unwrap();
-    assert_eq!(res.status(), 401, "a revoked device id cannot sign in again");
+    assert_eq!(
+        res.status(),
+        401,
+        "a revoked device id cannot sign in again"
+    );
 
     // The desktop is unaffected, and the list no longer shows the laptop.
     let devices: Value = server
@@ -104,7 +113,12 @@ async fn a_device_that_is_not_yours_cannot_be_revoked() {
         404
     );
     assert_eq!(
-        server.get_as("/v1/devices", &theirs).send().await.unwrap().status(),
+        server
+            .get_as("/v1/devices", &theirs)
+            .send()
+            .await
+            .unwrap()
+            .status(),
         200,
         "their session is untouched"
     );
@@ -125,7 +139,12 @@ async fn revoking_your_own_device_ends_your_session() {
         204
     );
     assert_eq!(
-        server.get_as("/v1/devices", &sess).send().await.unwrap().status(),
+        server
+            .get_as("/v1/devices", &sess)
+            .send()
+            .await
+            .unwrap()
+            .status(),
         401
     );
     server.cleanup().await;

@@ -124,8 +124,7 @@ pub async fn activate(
     }
     let stored_hash = stored_hash.ok_or(BAD_INVITE)?;
     let offered = invite::hash(&parsed.secret);
-    if stored_hash.len() != offered.len()
-        || stored_hash.ct_eq(offered.as_slice()).unwrap_u8() != 1
+    if stored_hash.len() != offered.len() || stored_hash.ct_eq(offered.as_slice()).unwrap_u8() != 1
     {
         return Err(BAD_INVITE);
     }

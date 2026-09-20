@@ -115,9 +115,7 @@ pub async fn write(
     for change in &req.changes {
         match stored.get(&change.item_id) {
             Some((revision, already_deleted)) => {
-                if change.base_revision != Some(*revision)
-                    || (*already_deleted && change.deleted)
-                {
+                if change.base_revision != Some(*revision) || (*already_deleted && change.deleted) {
                     conflicts.push(serde_json::json!({
                         "itemId": change.item_id,
                         "revision": revision,
