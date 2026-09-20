@@ -43,50 +43,34 @@ Next for sync:
   instead of wall clocks for conflicts (K3), and add per-device approval on
   top of the Secret Key.
 
-### Server accounts and sync (key scheme 3, in progress) — carry-forwards
+### Server accounts and sync (key scheme 3, in progress)
 
 `havenkeys-core` has key scheme 3 and the delta sync merge/cursor logic
-(`docs/superpowers/specs/2026-09-19-server-accounts-sync-design.md`), but no
-server and no sync client yet (order of work, spec §13). These cross plan
-boundaries and would otherwise be lost between here and there:
+(`docs/superpowers/specs/2026-09-19-server-accounts-sync-design.md`), and the
+desktop admits scheme 3 in its device status and its change-password route.
+There is still no server and no sync client; that is the next step (order of
+work, spec §13 steps 2–4).
 
-* **Desktop "needs Secret Key" plumbing does not admit scheme 3 yet.**
-  `apps/desktop/src-tauri/src/account.rs` computes `needs_secret_key` as
-  `key_scheme == Some(KeyScheme::PasswordAndSecretKey)`, and
-  `apps/desktop/src/lib/types.ts` declares a **closed** union
-  `KeyScheme = "password_only" | "password_and_secret_key"` (consumed in
-  `App.tsx` and `views/SyncSection.tsx`) that has no variant for
-  `"account_bound"`. Once anything creates a scheme-3 vault, `device_status`
-  will serialize a `key_scheme` value the TypeScript type does not admit.
-  Unreachable today only because nothing in production code creates a
-  scheme-3 vault yet.
-* **`VaultService::change_master_password` has no scheme-3 route.** It (and
-  the desktop `change_master_password` command, `commands.rs`) goes through
-  `RekeyTicket::derive`/`derive_with_secret_key`, which derives the KEK with
-  `account: None` and is refused for `KeyScheme::AccountBound`. The method
-  that does work, `RekeyTicket::derive_for_account`, has no `VaultService` or
-  desktop-command caller. A scheme-3 user pressing "change master password"
-  hits a dead end on a security-critical operation. Needs a
-  `change_master_password_for_account` (or equivalent) route wired to the
-  desktop UI before scheme 3 ships there.
-* **`Store::set_account`'s `ON CONFLICT` clause is a latent trap for a
-  changed account.** It deliberately preserves `server_cursor` and
-  `max_header_rev` while updating `account_id`, `email` and `server_url` —
-  correct for re-signing into the *same* account, but if a future flow calls
-  it with a *different* `account_id` or `server_url` (e.g. re-pointing a
-  vault at a different account or server), the stale cursor makes the first
-  pull silently skip everything before it, and the stale `max_header_rev`
-  floor makes every future header from the new account fail the rollback
-  check in `adopt_account_header`/`prepare_sign_in`. Latent today because
-  `create_vault` refuses a store that already holds a header, so `set_account`
-  is never called against a store that already has one. Decide this in the
-  desktop/sync-client plan (reset the row vs. a distinct "re-point" path)
-  rather than discover it as a bug there.
-* **Nothing calls `Store::set_account` in production yet.** Both activation
-  and sign-in must call it (`VaultService::store_account`), or the durable
-  `max_header_rev` rollback floor described in `crypto.md` and exercised in
-  `tests/account.rs` is never populated outside tests, and header-rollback
-  protection reduces to the in-memory `local.revision` alone.
+Closed since the core work: the desktop's `KeyScheme` union and
+`needs_secret_key` check now go through `KeyScheme::uses_secret_key`;
+`change_master_password` routes scheme 3 through the account in the rekey
+ticket; `Store::set_account` refuses a different account instead of
+silently keeping a stale cursor and rollback floor; and an account-bound
+vault can no longer be created without its account record
+(`create_account_vault` / `commit_account_upgrade`). See `crypto.md`, "Key
+scheme 3 (account)".
+
+Still open, and required before a server ships:
+
+* **Authenticated deletions.** `RemoteChange.deleted_at` is unauthenticated
+  plaintext from the server, so a hostile server can delete any item on
+  every device that pulls, including locally-dirty work never pushed. The
+  24-hour future-skew check is a partial mitigation, not a fix. Needs a
+  sealed tombstone format, a store migration and the matching server
+  schema (`crypto.md`, spec §9).
+* **Re-pointing a vault** at a different account or server has no path; the
+  store refuses it. Decide in the sync-client plan whether one is needed
+  and what it resets.
 
 ## 4. Missing MVP features
 
