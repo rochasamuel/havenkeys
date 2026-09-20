@@ -9,11 +9,21 @@
 pub mod rate_limit;
 
 use crate::error::ApiError;
+use crate::limits::SESSION_TTL_HOURS;
+use crate::routes::AppState;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Params, Version};
-use data_encoding::BASE64;
+use axum::extract::FromRequestParts;
+use axum::http::header::AUTHORIZATION;
+use axum::http::request::Parts;
+use chrono::{DateTime, Duration, Utc};
+use data_encoding::{BASE64, BASE64URL_NOPAD};
+use deadpool_postgres::Object;
 use rand::rngs::OsRng;
+use rand::RngCore;
+use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 /// Modest on purpose: the input is 256 bits of HKDF output, not a password,
@@ -85,6 +95,91 @@ pub fn dummy_verifier() -> &'static str {
             .expect("hashing a fixed value cannot fail")
             .to_string()
     })
+}
+
+/// A bearer token's SHA-256, which is all the database ever holds: a dump of
+/// `sessions` cannot be replayed as a live session.
+pub fn token_hash(raw: &str) -> Vec<u8> {
+    Sha256::digest(raw.as_bytes()).to_vec()
+}
+
+/// Issue a session for a device. 32 opaque random bytes, valid for a day.
+pub async fn issue_token(
+    db: &Object,
+    account_id: Uuid,
+    device_id: Uuid,
+) -> Result<(Zeroizing<String>, DateTime<Utc>), ApiError> {
+    let mut raw = Zeroizing::new([0u8; 32]);
+    rand::thread_rng().fill_bytes(raw.as_mut());
+    let token = Zeroizing::new(BASE64URL_NOPAD.encode(raw.as_ref()));
+    let expires = Utc::now() + Duration::hours(SESSION_TTL_HOURS);
+    db.execute(
+        "INSERT INTO sessions (token_hash, account_id, device_id, created_at, expires_at)
+         VALUES ($1, $2, $3, now(), $4)",
+        &[&token_hash(&token), &account_id, &device_id, &expires],
+    )
+    .await?;
+    Ok((token, expires))
+}
+
+/// Identity for an authenticated request.
+///
+/// Built only from the bearer token. No handler reads an account id, a vault
+/// id or a device id from a request body — a body that carries one is an
+/// unknown field, and therefore a 400 (design §7.3).
+pub struct Session {
+    pub account_id: Uuid,
+    pub device_id: Uuid,
+    pub vault_id: Uuid,
+    pub token_hash: Vec<u8>,
+}
+
+impl FromRequestParts<AppState> for Session {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, ApiError> {
+        let raw = parts
+            .headers
+            .get(AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .ok_or(ApiError::Unauthorized)?;
+        if raw.is_empty() || raw.len() > 128 {
+            return Err(ApiError::Unauthorized);
+        }
+        let hash = token_hash(raw);
+        let db = state.pool.get().await?;
+        // One query is the whole authorization story: the token is live, the
+        // account is active, the device is not revoked, and this is the vault
+        // the request may touch.
+        let row = db
+            .query_opt(
+                "SELECT s.account_id, s.device_id, v.id
+                   FROM sessions s
+                   JOIN accounts a ON a.id = s.account_id
+                   JOIN devices  d ON d.id = s.device_id
+                   JOIN vaults   v ON v.account_id = s.account_id
+                  WHERE s.token_hash = $1
+                    AND s.expires_at > now()
+                    AND a.status = 'active'
+                    AND d.revoked_at IS NULL",
+                &[&hash],
+            )
+            .await?
+            .ok_or(ApiError::Unauthorized)?;
+        let device_id: Uuid = row.get(1);
+        db.execute(
+            "UPDATE devices SET last_seen_at = now() WHERE id = $1",
+            &[&device_id],
+        )
+        .await?;
+        Ok(Session {
+            account_id: row.get(0),
+            device_id,
+            vault_id: row.get(2),
+            token_hash: hash,
+        })
+    }
 }
 
 #[cfg(test)]

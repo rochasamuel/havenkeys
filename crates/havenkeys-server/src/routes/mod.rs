@@ -7,6 +7,7 @@ use deadpool_postgres::Pool;
 use tower_http::limit::RequestBodyLimitLayer;
 
 pub mod accounts;
+pub mod auth;
 pub mod health;
 
 #[derive(Clone)]
@@ -24,6 +25,9 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health::health))
         .route("/v1/accounts/activate", post(accounts::activate))
+        .route("/v1/auth/params", post(auth::params))
+        .route("/v1/auth/login", post(auth::login))
+        .route("/v1/auth/logout", post(auth::logout))
         // Checked before the body is read, so an oversized request never
         // reaches serde and never allocates.
         .layer(RequestBodyLimitLayer::new(MAX_BODY_BYTES))

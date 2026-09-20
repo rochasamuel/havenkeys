@@ -202,3 +202,63 @@ pub async fn activate(server: &TestServer, email: &str, auth_key: [u8; 32]) -> A
         auth_key,
     }
 }
+
+/// A live session on one device.
+pub struct Sess {
+    pub token: String,
+    pub device_id: Uuid,
+    pub account_id: Uuid,
+    pub vault_id: Uuid,
+}
+
+pub async fn login(server: &TestServer, account: &Account, device_name: &str) -> Sess {
+    let device_id = Uuid::new_v4();
+    let res = server
+        .post("/v1/auth/login")
+        .json(&json!({
+            "email": account.email,
+            "authKey": data_encoding::BASE64.encode(&account.auth_key),
+            "deviceId": device_id,
+            "deviceName": device_name,
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status();
+    let text = res.text().await.unwrap();
+    assert_eq!(status, 200, "login failed: {text}");
+    let body: Value = serde_json::from_str(&text).unwrap();
+    Sess {
+        token: body["token"].as_str().unwrap().to_string(),
+        device_id,
+        account_id: account.account_id,
+        vault_id: account.vault_id,
+    }
+}
+
+/// An activated account with one logged-in device.
+pub async fn signed_in(server: &TestServer, email: &str) -> (Account, Sess) {
+    let auth_key = {
+        let mut key = [0u8; 32];
+        key[..16].copy_from_slice(&Uuid::new_v4().into_bytes());
+        key
+    };
+    let account = activate(server, email, auth_key).await;
+    let session = login(server, &account, "Desktop").await;
+    (account, session)
+}
+
+impl TestServer {
+    pub fn get_as(&self, path: &str, sess: &Sess) -> reqwest::RequestBuilder {
+        self.get(path).bearer_auth(&sess.token)
+    }
+    pub fn post_as(&self, path: &str, sess: &Sess) -> reqwest::RequestBuilder {
+        self.post(path).bearer_auth(&sess.token)
+    }
+    pub fn put_as(&self, path: &str, sess: &Sess) -> reqwest::RequestBuilder {
+        self.put(path).bearer_auth(&sess.token)
+    }
+    pub fn delete_as(&self, path: &str, sess: &Sess) -> reqwest::RequestBuilder {
+        self.delete(path).bearer_auth(&sess.token)
+    }
+}
