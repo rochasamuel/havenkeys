@@ -6,17 +6,47 @@
 //! parameters (which are public by design: a second device needs them before
 //! it can derive anything) and an Argon2id hash of the auth key.
 
-use crate::auth;
+use crate::auth::{self, rate_limit};
 use crate::b64::Blob;
 use crate::error::ApiError;
 use crate::invite;
 use crate::json::Json;
 use crate::limits::MAX_HEADER_BYTES;
 use crate::routes::AppState;
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
+use axum::http::HeaderMap;
 use serde::Deserialize;
+use std::net::SocketAddr;
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
+
+/// A cheap look at the invite before any expensive work: does this account
+/// exist, is it still waiting to be activated, is the secret right and is it
+/// still in date? The authoritative check happens again under the row lock.
+async fn tx_invite_is_plausible(
+    db: &deadpool_postgres::Object,
+    invite: &crate::invite::Invite,
+    email: &str,
+) -> Result<bool, ApiError> {
+    let row = db
+        .query_opt(
+            "SELECT status, invite_hash, invite_expires_at
+               FROM accounts WHERE id = $1 AND email_normalized = $2",
+            &[&invite.account, &email],
+        )
+        .await?;
+    let Some(row) = row else { return Ok(false) };
+    let status: String = row.get(0);
+    let Some(stored): Option<Vec<u8>> = row.get(1) else {
+        return Ok(false);
+    };
+    let expires: Option<chrono::DateTime<chrono::Utc>> = row.get(2);
+    let offered = crate::invite::hash(&invite.secret);
+    Ok(status == "invited"
+        && stored.len() == offered.len()
+        && stored.ct_eq(offered.as_slice()).unwrap_u8() == 1
+        && expires.is_some_and(|t| t >= chrono::Utc::now()))
+}
 
 /// Accepted Argon2id cost, matching `havenkeys-core::crypto::kdf`. The client
 /// would refuse anything outside this range when it reads the header back, so
@@ -78,6 +108,8 @@ impl KdfDto {
 
 pub async fn activate(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<ActivateRequest>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
     // Every failure below answers the same way. A prober with a guessed
@@ -99,11 +131,30 @@ pub async fn activate(
     let salt = req.kdf.check()?;
     let auth_key = auth::decode_auth_key(&req.auth_key)?;
 
+    let mut db = state.pool.get().await?;
+
+    // This route is unauthenticated and hashes an auth key with Argon2id,
+    // which is exactly the kind of work a stranger should not be able to
+    // ask for at will. Two guards: the attempt is rate limited per address,
+    // and the invite is checked — a cheap SHA-256 and one indexed row —
+    // before any hashing happens.
+    let ip_key = format!(
+        "ip:{}",
+        crate::routes::auth::client_ip(&state, &headers, peer)
+    );
+    rate_limit::check(&db, &ip_key).await?;
+    let plausible = tx_invite_is_plausible(&db, &parsed, &email).await?;
+    if !plausible {
+        rate_limit::record_failure(&db, &ip_key).await?;
+        return Err(BAD_INVITE);
+    }
+
     // Hashed before the transaction opens: Argon2id takes tens of
     // milliseconds and nothing is gained by holding a row lock through it.
+    // The row is re-checked under the lock below, so a second activation
+    // racing this one still loses.
     let verifier = auth::hash_auth_key(auth_key).await?;
 
-    let mut db = state.pool.get().await?;
     let tx = db.transaction().await?;
     let row = tx
         .query_opt(
@@ -172,6 +223,7 @@ pub async fn activate(
     }
 
     tx.commit().await?;
+    let _ = rate_limit::clear(&db, &ip_key).await;
     tracing::info!(account_id = %parsed.account, "account activated");
     Ok(axum::Json(serde_json::json!({
         "accountId": parsed.account,

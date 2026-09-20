@@ -141,10 +141,16 @@ impl<T: Transport> SyncClient<T> {
         })
     }
 
+    /// `account_id` is the one the caller already derived keys against —
+    /// from the invite or from `auth_params`. It is carried into the session
+    /// rather than read from the answer, because the server saying "you are
+    /// account X" would be the server choosing which account a device
+    /// believes it is signed in to.
     pub async fn login(
         &self,
         email: &str,
         auth_key: &AuthKey,
+        account_id: Uuid,
         device_id: Uuid,
         device_name: &str,
     ) -> Result<Session> {
@@ -164,10 +170,7 @@ impl<T: Transport> SyncClient<T> {
         Ok(Session::new(
             dto.token,
             dto.expires_at,
-            // The account id is not in the login answer; the caller already
-            // knows it from `auth_params` or from the invite, and taking the
-            // server's word for it here would add nothing.
-            Uuid::nil(),
+            account_id,
             dto.vault_id,
         ))
     }

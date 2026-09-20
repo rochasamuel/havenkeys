@@ -121,7 +121,7 @@ pub fn client_for(state: &AppState, url: &str) -> CmdResult<Client> {
 /// Called right after an unlock and after activation. A failure here is not
 /// an unlock failure: the vault stays open and readable, offline.
 pub async fn connect(app: &AppHandle, auth_key: AuthKey) -> CmdResult<()> {
-    let (email, device_id, client) = {
+    let (email, account_id, device_id, client) = {
         let state = app.state::<AppState>();
         let account = state
             .vault()?
@@ -129,11 +129,11 @@ pub async fn connect(app: &AppHandle, auth_key: AuthKey) -> CmdResult<()> {
             .ok_or(havenkeys_core::Error::NoVault)?;
         let client = client_for(&state, &account.server_url)?;
         let device_id = state.device_id()?;
-        (account.email, device_id, client)
+        (account.email, account.account_id, device_id, client)
     };
 
     let session = client
-        .login(&email, &auth_key, device_id, DEVICE_NAME)
+        .login(&email, &auth_key, account_id, device_id, DEVICE_NAME)
         .await
         .map_err(|e| failed(app, e))?;
     drop(auth_key);
