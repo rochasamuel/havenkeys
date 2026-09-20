@@ -9,7 +9,8 @@
     "build:host": "cargo build --release -p havenkeys-native-host",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test && cargo test",
-    "lint:rust": "cargo clippy -p havenkeys-core -p havenkeys-protocol -p havenkeys-bridge -p havenkeys-native-host -p havenkeys-oslock --all-targets -- -D warnings",
+    "test:server": "scripts/test-server.sh",
+    "lint:rust": "cargo clippy -p havenkeys-core -p havenkeys-protocol -p havenkeys-bridge -p havenkeys-native-host -p havenkeys-oslock -p havenkeys-server -p havenkeys-sync-client --all-targets -- -D warnings",
     "audit": "pnpm audit && cargo audit && cargo deny check"
   }
 }

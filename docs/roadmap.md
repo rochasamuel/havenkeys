@@ -31,65 +31,48 @@ screen-lock code has not run on Windows.
 ## 3. Server-authoritative vault: what's left
 
 `docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md` is
-the current design and supersedes the folder-sync model this document used
-to describe here (`docs/server-sync.md` replaces `sync.md`; see its "Status"
-section for exactly what exists in code today). Order of work, from the
-design's §13:
+the design. Steps 1–5 of its §13 have landed; what remains is not code.
 
-1. **Core — done.** Schema 4, the single account-bound key scheme,
-   `stage_create`/`stage_update`/`stage_delete`/`commit_write`, and the pull applier
-   (`apply_remote_changes`) are in `havenkeys-core`. The folder-sync code,
-   key schemes 1 and 2, the `tombstones` table, the `dirty` columns and the
-   unauthenticated `deleted_at` hazard are deleted, not just deprecated. The
-   vault is unusable for writes until a server and a sync client exist,
-   which is expected at this step.
-2. **`havenkeys-server` — code done, not deployed.** The crate exists with
-   the schema, activation, sessions, the vault header, pull, optimistic
-   per-item writes, devices and the admin CLI, tested against a real
-   Postgres (`scripts/test-server.sh`): account isolation on every
-   authenticated route, uniform answers from `auth/params`, rate limiting,
-   size and shape limits, and a `no_logging` guard. `cargo audit` and
-   `cargo deny check` are clean.
+1. **Core — done.** Schema 4, the single account-bound key scheme, the
+   staged write path (`stage_create`/`stage_update`/`stage_delete`/
+   `stage_save_login`/`stage_import` → `commit_write`), the pull applier and
+   `reset_sync_cursor`.
+2. **`havenkeys-server` — code done, not deployed.** Activation, sessions,
+   the header, paged pull, optimistic writes, devices, the admin CLI, and
+   the suites in `scripts/test-server.sh` against a real Postgres.
+3. **`havenkeys-sync-client` — done.** The transport, the wire types, the
+   hostile-server suite, and a round trip against the real server with real
+   core crypto.
+4. **Desktop — done.** Activation from an invite, second-device sign-in, the
+   Emergency Kit v2, Account settings (devices, revoke, sign out, sync,
+   re-download), the offline banner and the read-only gate. The browser
+   extension's save-login writes through the same path.
+5. **Docs — done.** `CLAUDE.md` §1, `README.md`, `threat-model.md`,
+   `security-model.md`, `crypto.md`, `architecture.md`, `server-sync.md`,
+   `deployment.md` and this file, plus the review in `security-review.md`.
 
-   **Still owed, and blocking before any real vault is stored:** the deploy
-   itself (`docs/deployment.md` has the image, the Railway service
-   definition, the environment and the first-account steps), confirming the
-   health check and TLS on the deployed host, and the **restore drill** in
-   `docs/deployment.md` §5. The local replica is not a backup, so an
-   untested backup means the vault has none.
-3. **`havenkeys-sync-client` — next.** The HTTP client and the
-   hostile-server test suite: a header whose attestation does not verify, a
-   header below `max_header_rev`, a blob that fails to open, an oversized
-   blob or body, a pull that deletes everything.
-4. **Desktop — partially started.** This step (Task 7) added the
-   online/offline distinction, the read-only gate on every mutating
-   command, and the offline banner (`docs/server-sync.md` §4). Still
-   needed: activation from an invite, second-device sign-in, the Emergency
-   Kit v2 screen (account, email, server URL, not just the vault ID), and
-   Account settings (email, server, device list, revoke device, sign out).
-   There is no folder-picker UI left to remove — it went with the
-   folder-sync code.
-5. **Docs — in progress.** This step rewrote `crypto.md`, `server-sync.md`,
-   `architecture.md` and this file. Still owed, once the server and sign-in
-   actually ship (not before — a doc should not describe behaviour the code
-   doesn't have): `CLAUDE.md` §1 ("works completely without an internet
-   connection" → "reads work offline; changes require the server", "no
-   backend required" removed), `README.md`, `threat-model.md` and
-   `security-model.md` (the design's §10). Then a security review pass over
-   the whole change, written to `security-review.md`.
+**Blocking before anyone stores a real vault:**
+
+* **Deploy the server** and confirm the health check and TLS on the deployed
+  host (`docs/deployment.md` §3).
+* **Run the restore drill** (`docs/deployment.md` §5). The local replica
+  follows the server, deletions included, so an untested backup means the
+  vault has none. This is the mitigation for `security-review.md` S5, and
+  until it has run there is none.
+* **Use it on two real computers.** Nothing has yet crossed a real network:
+  the round trip runs both devices in one process.
 
 Carried forward, true today:
 
-* **A hostile or compromised server can destroy data, and that is now
-  inherent, not a flaw to fix.** The server is the authority; a deletion it
-  serves is indistinguishable from a real one by construction (design §9).
-  **Tested server backups are therefore a prerequisite of shipping**, not a
-  follow-up — the local replica is a cache of the server, not an
-  independent copy the way each device's SQLite was under the folder model.
+* **A hostile or compromised server can destroy data, and that is inherent,
+  not a flaw to fix** (design §9, `threat-model.md` T1c).
 * **Re-pointing a vault** at a different account or server has no path;
-  `Store::set_account` refuses it. Decide this in the sync-client plan.
+  `Store::set_account` refuses it.
 * The vault key is still never rotated (#8), and the Secret Key is still
   stored in plain text in `device.json` (`docs/server-sync.md` §7).
+* A pulled item that does not open is skipped and the cursor still advances;
+  the way back is Settings → Account → Re-download everything, which nothing
+  offers automatically (`security-review.md` S9, `server-sync.md` §7).
 
 ## 4. Missing MVP features
 
