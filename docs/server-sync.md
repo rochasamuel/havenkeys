@@ -26,10 +26,13 @@ What exists in `havenkeys-core` today:
 * `encode_account_header` / `adopt_account_header`, which publish and adopt
   the attested header a device uses to prove its identity to a new device.
 
-What does not exist yet: `havenkeys-server` (no server has been built),
-`havenkeys-sync-client` (no HTTP client sends a staged write or pulls a
-change), and the desktop screens for activation, second-device sign-in and
-account settings. Concretely, this means:
+`havenkeys-server` also exists now, with its own test suite against a real
+Postgres, and is documented in `docs/deployment.md`. It has not been deployed
+anywhere, and no client talks to it yet.
+
+What does not exist yet: `havenkeys-sync-client` (no HTTP client sends a
+staged write or pulls a change), and the desktop screens for activation,
+second-device sign-in and account settings. Concretely, this means:
 
 * every vault-mutating desktop command (`create_item`, `update_item`,
   `delete_item`, `change_master_password`, import) refuses with

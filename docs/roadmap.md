@@ -43,10 +43,21 @@ design's §13:
    unauthenticated `deleted_at` hazard are deleted, not just deprecated. The
    vault is unusable for writes until a server and a sync client exist,
    which is expected at this step.
-2. **`havenkeys-server` — not started.** Schema, auth, routes, admin CLI,
-   tests against Postgres. Deploy to Railway; confirm the health check, TLS,
-   and a **restored backup** (blocking — see below).
-3. **`havenkeys-sync-client` — not started.** The HTTP client and the
+2. **`havenkeys-server` — code done, not deployed.** The crate exists with
+   the schema, activation, sessions, the vault header, pull, optimistic
+   per-item writes, devices and the admin CLI, tested against a real
+   Postgres (`scripts/test-server.sh`): account isolation on every
+   authenticated route, uniform answers from `auth/params`, rate limiting,
+   size and shape limits, and a `no_logging` guard. `cargo audit` and
+   `cargo deny check` are clean.
+
+   **Still owed, and blocking before any real vault is stored:** the deploy
+   itself (`docs/deployment.md` has the image, the Railway service
+   definition, the environment and the first-account steps), confirming the
+   health check and TLS on the deployed host, and the **restore drill** in
+   `docs/deployment.md` §5. The local replica is not a backup, so an
+   untested backup means the vault has none.
+3. **`havenkeys-sync-client` — next.** The HTTP client and the
    hostile-server test suite: a header whose attestation does not verify, a
    header below `max_header_rev`, a blob that fails to open, an oversized
    blob or body, a pull that deletes everything.
