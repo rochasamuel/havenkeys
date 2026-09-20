@@ -20,6 +20,8 @@ type Pane =
 
 interface Props {
   damagedItems: number;
+  /** Offline: writes would fail, so the mutating controls are disabled up front. */
+  readOnly: boolean;
   onLock: () => void;
 }
 
@@ -29,7 +31,7 @@ const sections: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "secure_note", label: "Secure notes", icon: "note" },
 ];
 
-export function VaultScreen({ damagedItems, onLock }: Props) {
+export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
   const toast = useToast();
   const [section, setSection] = useState<Section>("all");
   const [query, setQuery] = useState("");
@@ -187,6 +189,7 @@ export function VaultScreen({ damagedItems, onLock }: Props) {
             selectedId={selectedId}
             onSelect={(id) => setPane({ kind: "view", id })}
             onNew={newItem}
+            newDisabled={readOnly}
           />
           <section className="detail" aria-label="Item details">
             {pane.kind === "empty" && (
@@ -194,13 +197,13 @@ export function VaultScreen({ damagedItems, onLock }: Props) {
                 <p>{items.length === 0 ? "Your vault is empty." : "Select an item to see its details."}</p>
                 {items.length === 0 && (
                   <div className="detail-empty-actions">
-                    <button className="btn btn-primary" onClick={() => newItem("login")}>
+                    <button className="btn btn-primary" onClick={() => newItem("login")} disabled={readOnly}>
                       <Icon name="key" size={16} /> Add a login
                     </button>
-                    <button className="btn" onClick={() => newItem("secure_note")}>
+                    <button className="btn" onClick={() => newItem("secure_note")} disabled={readOnly}>
                       <Icon name="note" size={16} /> Add a secure note
                     </button>
-                    <button className="btn" onClick={() => setSection("settings")}>
+                    <button className="btn" onClick={() => setSection("settings")} disabled={readOnly}>
                       Import from 1Password
                     </button>
                   </div>
@@ -211,6 +214,7 @@ export function VaultScreen({ damagedItems, onLock }: Props) {
               <ItemDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
+                readOnly={readOnly}
                 onEdit={() => setPane({ kind: "edit", id: selected.id })}
                 onDelete={() => void onDelete(selected)}
               />
@@ -220,6 +224,7 @@ export function VaultScreen({ damagedItems, onLock }: Props) {
                 key={"edit" + selected.id}
                 existing={selected}
                 itemType={selected.itemType}
+                readOnly={readOnly}
                 onCancel={() => setPane({ kind: "view", id: selected.id })}
                 onSaved={onSaved}
               />
@@ -228,6 +233,7 @@ export function VaultScreen({ damagedItems, onLock }: Props) {
               <ItemEditor
                 key={"new" + pane.itemType}
                 itemType={pane.itemType}
+                readOnly={readOnly}
                 onCancel={() => setPane({ kind: "empty" })}
                 onSaved={onSaved}
               />

@@ -28,49 +28,57 @@ screen-lock code has not run on Windows.
 * A full, whole-system security review before calling the MVP done
   (CLAUDE.md §55, §57).
 
-## 3. Secret Key and sync (built, needs a real-world run)
+## 3. Server-authoritative vault: what's left
 
-Done: Secret Key and Emergency Kit, and sync through a shared cloud folder
-with a new device joining with password + Secret Key (`sync.md`). To check:
-create a vault (or add a Secret Key), save the kit, choose a OneDrive folder,
-join from a second computer, then edit and delete on both sides.
+`docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md` is
+the current design and supersedes the folder-sync model this document used
+to describe here (`docs/server-sync.md` replaces `sync.md`; see its "Status"
+section for exactly what exists in code today). Order of work, from the
+design's §13:
 
-Next for sync:
+1. **Core — done.** Schema 4, the single account-bound key scheme,
+   `stage_write`/`commit_write`, and the pull applier
+   (`apply_remote_changes`) are in `havenkeys-core`. The folder-sync code,
+   key schemes 1 and 2, the `tombstones` table, the `dirty` columns and the
+   unauthenticated `deleted_at` hazard are deleted, not just deprecated. The
+   vault is unusable for writes until a server and a sync client exist,
+   which is expected at this step.
+2. **`havenkeys-server` — not started.** Schema, auth, routes, admin CLI,
+   tests against Postgres. Deploy to Railway; confirm the health check, TLS,
+   and a **restored backup** (blocking — see below).
+3. **`havenkeys-sync-client` — not started.** The HTTP client and the
+   hostile-server test suite: a header whose attestation does not verify, a
+   header below `max_header_rev`, a blob that fails to open, an oversized
+   blob or body, a pull that deletes everything.
+4. **Desktop — partially started.** This step (Task 7) added the
+   online/offline distinction, the read-only gate on every mutating
+   command, and the offline banner (`docs/server-sync.md` §4). Still
+   needed: activation from an invite, second-device sign-in, the Emergency
+   Kit v2 screen (account, email, server URL, not just the vault ID), and
+   Account settings (email, server, device list, revoke device, sign out).
+   There is no folder-picker UI left to remove — it went with the
+   folder-sync code.
+5. **Docs — in progress.** This step rewrote `crypto.md`, `server-sync.md`,
+   `architecture.md` and this file. Still owed, once the server and sign-in
+   actually ship (not before — a doc should not describe behaviour the code
+   doesn't have): `CLAUDE.md` §1 ("works completely without an internet
+   connection" → "reads work offline; changes require the server", "no
+   backend required" removed), `README.md`, `threat-model.md` and
+   `security-model.md` (the design's §10). Then a security review pass over
+   the whole change, written to `security-review.md`.
 
-* **Mobile app:** reuse `havenkeys-core` through UniFFI, scan the Emergency
-  Kit QR, and keep the Secret Key in the platform keystore (`sync.md` §7).
-* Optional later: rotate the vault key (#8), use hybrid logical clocks
-  instead of wall clocks for conflicts (K3), and add per-device approval on
-  top of the Secret Key.
+Carried forward, true today:
 
-### Server accounts and sync (key scheme 3, in progress)
-
-`havenkeys-core` has key scheme 3 and the delta sync merge/cursor logic
-(`docs/superpowers/specs/2026-09-19-server-accounts-sync-design.md`), and the
-desktop admits scheme 3 in its device status and its change-password route.
-There is still no server and no sync client; that is the next step (order of
-work, spec §13 steps 2–4).
-
-Closed since the core work: the desktop's `KeyScheme` union and
-`needs_secret_key` check now go through `KeyScheme::uses_secret_key`;
-`change_master_password` routes scheme 3 through the account in the rekey
-ticket; `Store::set_account` refuses a different account instead of
-silently keeping a stale cursor and rollback floor; and an account-bound
-vault can no longer be created without its account record
-(`create_account_vault` / `commit_account_upgrade`). See `crypto.md`, "Key
-scheme 3 (account)".
-
-Still open, and required before a server ships:
-
-* **Authenticated deletions.** `RemoteChange.deleted_at` is unauthenticated
-  plaintext from the server, so a hostile server can delete any item on
-  every device that pulls, including locally-dirty work never pushed. The
-  24-hour future-skew check is a partial mitigation, not a fix. Needs a
-  sealed tombstone format, a store migration and the matching server
-  schema (`crypto.md`, spec §9).
-* **Re-pointing a vault** at a different account or server has no path; the
-  store refuses it. Decide in the sync-client plan whether one is needed
-  and what it resets.
+* **A hostile or compromised server can destroy data, and that is now
+  inherent, not a flaw to fix.** The server is the authority; a deletion it
+  serves is indistinguishable from a real one by construction (design §9).
+  **Tested server backups are therefore a prerequisite of shipping**, not a
+  follow-up — the local replica is a cache of the server, not an
+  independent copy the way each device's SQLite was under the folder model.
+* **Re-pointing a vault** at a different account or server has no path;
+  `Store::set_account` refuses it. Decide this in the sync-client plan.
+* The vault key is still never rotated (#8), and the Secret Key is still
+  stored in plain text in `device.json` (`docs/server-sync.md` §7).
 
 ## 4. Missing MVP features
 
@@ -115,11 +123,11 @@ decision, recorded in the threat model, and not an incremental feature.
   needs to be made explicitly.
 * **Argon2id in WASM** is slower than native. Parameters must be benchmarked
   in browsers, not assumed (CLAUDE.md §5).
-* **Relationship to the desktop vault:** the folder sync (`sync.md`) needs
-  direct access to a folder on disk, which browser extensions do not have.
-  A standalone extension would be either a separate vault, or it would need
-  another way to reach the same encrypted files: a user-picked directory
-  through the File System Access API (Chromium only), or a hosted relay.
+* **Relationship to the desktop vault:** sync is now server-authoritative
+  (`docs/server-sync.md`), not a shared folder, so a standalone extension
+  would need its own `havenkeys-sync-client` session against the same
+  server account rather than file-system access — either a separate vault,
+  or its own login sharing the account's items through the server.
 
 ### What gets weaker
 

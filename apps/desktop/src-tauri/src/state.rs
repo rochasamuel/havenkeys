@@ -20,6 +20,20 @@ pub const LOCKED_EVENT: &str = "vault://locked";
 /// Items were added or changed from outside the UI (the browser extension).
 pub const ITEMS_CHANGED_EVENT: &str = "vault://items-changed";
 
+/// Whether this device has a server session. Independent of the lock state:
+/// a locked vault is never online, and an unlocked one may be offline
+/// (spec 2026-09-20 §8.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Connectivity {
+    Offline,
+    /// Never constructed yet: nothing obtains a server session until the
+    /// sync client exists (spec 2026-09-20 §13 step 3). Kept as a variant,
+    /// not deleted, so `is_online`/`require_online` do not need to change
+    /// shape when it starts being set.
+    #[allow(dead_code)]
+    Online,
+}
+
 pub struct AppState {
     /// Shared with the browser bridge, which answers extension requests.
     vault: Arc<Mutex<VaultService>>,
@@ -31,6 +45,10 @@ pub struct AppState {
     pub last_import: Mutex<Option<PathBuf>>,
     /// This computer's ID and Secret Key (`device.json`).
     pub device: Mutex<Device>,
+    /// Whether this device currently has a server session. There is no sync
+    /// client yet, so this never becomes `Online`; that is the real state of
+    /// a device with no server to talk to, not a placeholder.
+    connectivity: Mutex<Connectivity>,
     origin: Instant,
 }
 
@@ -89,12 +107,30 @@ impl AppState {
             clipboard: ClipboardGuard::default(),
             last_import: Mutex::new(None),
             device: Mutex::new(device),
+            connectivity: Mutex::new(Connectivity::Offline),
             origin: Instant::now(),
         }
     }
 
     pub fn vault(&self) -> CmdResult<MutexGuard<'_, VaultService>> {
         self.vault.lock().map_err(|_| CmdError::internal())
+    }
+
+    /// Does this device currently have a server session?
+    pub fn is_online(&self) -> bool {
+        matches!(
+            self.connectivity.lock().map(|c| *c),
+            Ok(Connectivity::Online)
+        )
+    }
+
+    /// Refuse a mutating command while offline, before it touches the vault.
+    pub fn require_online(&self) -> CmdResult<()> {
+        if self.is_online() {
+            Ok(())
+        } else {
+            Err(havenkeys_core::Error::Offline.into())
+        }
     }
 
     /// Monotonic time since start (does not advance during suspend on Linux/macOS).

@@ -8,6 +8,8 @@ import { useToast } from "../components/Toast";
 
 interface Props {
   item: ItemOverview;
+  /** Offline: editing or deleting would fail, so the controls are disabled up front. */
+  readOnly: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -139,7 +141,7 @@ function PasswordHistory({ itemId }: { itemId: string }) {
   );
 }
 
-export function ItemDetail({ item, onEdit, onDelete }: Props) {
+export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
   const toast = useToast();
   const copy = useCopy(item.id);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -175,7 +177,7 @@ export function ItemDetail({ item, onEdit, onDelete }: Props) {
           <p className="item-kind">{item.itemType === "login" ? "Login" : "Secure note"}</p>
         </div>
         <div className="item-head-actions">
-          <button className="btn btn-small" onClick={onEdit}>
+          <button className="btn btn-small" onClick={onEdit} disabled={readOnly}>
             <Icon name="edit" size={15} /> Edit
           </button>
         </div>
@@ -278,7 +280,11 @@ export function ItemDetail({ item, onEdit, onDelete }: Props) {
             </button>
           </div>
         ) : (
-          <button className="btn btn-small btn-quiet-danger" onClick={() => setConfirmDelete(true)}>
+          <button
+            className="btn btn-small btn-quiet-danger"
+            onClick={() => setConfirmDelete(true)}
+            disabled={readOnly}
+          >
             <Icon name="trash" size={15} /> Delete
           </button>
         )}
