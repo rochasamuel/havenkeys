@@ -329,6 +329,66 @@ impl RekeyTicket {
         })
     }
 
+    /// Link a key scheme 2 vault to an account (scheme 2 → 3). The master
+    /// password and the Secret Key stay the same; only the vault key is
+    /// re-wrapped, so items are untouched. Slow (Argon2id).
+    pub fn derive_account_upgrade(
+        &self,
+        password: &SecretString,
+        secret_key: &SecretKey,
+        account: &AccountRef,
+        new_kdf: KdfParams,
+    ) -> Result<Rekeyed> {
+        if self.header.key_scheme != KeyScheme::PasswordAndSecretKey {
+            return Err(Error::InvalidInput(
+                "add a Secret Key before linking this vault to an account",
+            ));
+        }
+        let vault_key = self.unwrap(password, Some(secret_key))?;
+        let kek = derive_kek_v3(
+            &derive_master_key(password, &new_kdf)?,
+            secret_key,
+            account,
+        )?;
+        Ok(Rekeyed {
+            wrapped_vault_key: wrap_vault_key(&kek, self.header.vault_id, &vault_key)?,
+            kdf: new_kdf,
+            key_scheme: KeyScheme::AccountBound,
+        })
+    }
+
+    /// Master password change for an account-bound vault (key scheme 3).
+    /// The Secret Key and the account stay the same; only the vault key is
+    /// re-wrapped. Slow (Argon2id).
+    ///
+    /// `derive_with_secret_key` cannot do this: it derives the KEK through
+    /// `unwrap`, which always passes `account: None`, so scheme 3 is refused
+    /// before any expensive work runs. This method calls `derive_kek_v3`
+    /// directly with the caller's account instead.
+    pub fn derive_for_account(
+        &self,
+        current: &SecretString,
+        new: &SecretString,
+        new_kdf: KdfParams,
+        secret_key: &SecretKey,
+        account: &AccountRef,
+    ) -> Result<Rekeyed> {
+        check_new_master_password(new)?;
+        if self.header.key_scheme != KeyScheme::AccountBound {
+            return Err(Error::InvalidInput("this vault is not linked to an account"));
+        }
+        let h = &self.header;
+        let current_kek =
+            derive_kek_v3(&derive_master_key(current, &h.kdf)?, secret_key, account)?;
+        let vault_key = unwrap_vault_key(&current_kek, h.vault_id, &h.wrapped_vault_key)?;
+        let new_kek = derive_kek_v3(&derive_master_key(new, &new_kdf)?, secret_key, account)?;
+        Ok(Rekeyed {
+            wrapped_vault_key: wrap_vault_key(&new_kek, h.vault_id, &vault_key)?,
+            kdf: new_kdf,
+            key_scheme: KeyScheme::AccountBound,
+        })
+    }
+
     fn unwrap(&self, password: &SecretString, secret_key: Option<&SecretKey>) -> Result<Key256> {
         let h = &self.header;
         let kek = derive_kek_for(h.key_scheme, password, &h.kdf, &h.vault_id, secret_key, None)?;
@@ -748,12 +808,18 @@ impl VaultService {
         {
             return Err(Error::Busy);
         }
+        let new_revision = current.revision.saturating_add(1);
         self.store.update_key_wrap(
             &rekeyed.kdf,
             &rekeyed.wrapped_vault_key,
             rekeyed.key_scheme,
-            current.revision.saturating_add(1),
-        )
+            new_revision,
+        )?;
+        // A local password/scheme change raises the rollback floor too, so a
+        // hostile server cannot later replay the header this device just
+        // replaced.
+        self.store.raise_max_header_rev(new_revision as i64)?;
+        Ok(())
     }
 
     /// Re-wrap the vault key under a new master password. Items are untouched

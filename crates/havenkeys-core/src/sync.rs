@@ -291,6 +291,44 @@ impl VaultService {
         }
         encode_header(&self.session()?.data_key, &local)
     }
+
+    /// Consider a header served by the account's server. Returns whether the
+    /// local header was replaced.
+    ///
+    /// The server is untrusted, so three things must hold before adoption:
+    /// the attestation must verify under this vault's data key (only a vault
+    /// key holder could have written it), the key scheme must not go
+    /// backwards, and the revision must not go backwards — a genuine old
+    /// header replayed after a master-password change would otherwise make
+    /// the previous password work again.
+    pub fn adopt_account_header(&mut self, remote: &[u8]) -> Result<bool> {
+        let local = self.store.header()?.ok_or(Error::NoVault)?;
+        let file = parse_header(remote)?;
+        if file.body.vault_id != local.vault_id {
+            return Err(Error::InvalidInput("that header is for a different vault"));
+        }
+        if file.body.key_scheme != KeyScheme::AccountBound {
+            return Ok(false);
+        }
+        if !verify_header(&self.session()?.data_key, &file) {
+            return Ok(false);
+        }
+        let floor = self
+            .store
+            .account()?
+            .map(|a| a.max_header_rev)
+            .unwrap_or(0)
+            .max(local.revision as i64);
+        let remote_rev = body_to_record(&file.body)?.revision as i64;
+        if remote_rev <= floor {
+            return Ok(false);
+        }
+        let record = body_to_record(&file.body)?;
+        self.store
+            .update_key_wrap(&record.kdf, &record.wrapped_vault_key, record.key_scheme, record.revision)?;
+        self.store.raise_max_header_rev(remote_rev)?;
+        Ok(true)
+    }
 }
 
 // ------------------------------------------------------------------ snapshots
