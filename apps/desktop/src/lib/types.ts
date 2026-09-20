@@ -116,7 +116,39 @@ export interface DeviceStatus {
 export interface EmergencyKit {
   secretKey: string;
   vaultId: string;
+  accountId: string;
+  email: string;
+  serverUrl: string;
   createdAt: number;
   qrSize: number;
   qrModules: boolean[];
+}
+
+/** The account this vault belongs to. No secrets; readable while locked. */
+export interface AccountStatus {
+  email: string;
+  serverUrl: string;
+  accountId: string;
+  online: boolean;
+  /** Unix ms of the last successful pull, or null if none yet. */
+  lastSyncedAt: number | null;
+}
+
+/** A device signed in to the account. Timestamps are RFC 3339 from the server. */
+export interface DeviceEntry {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  current: boolean;
+}
+
+/** Counts from a pull. Never item data. */
+export interface SyncReport {
+  added: number;
+  updated: number;
+  deleted: number;
+  /** Items the server served that did not open under this vault's key. */
+  skippedItems: number;
+  headerAdopted: boolean;
 }

@@ -60,7 +60,8 @@ export function EmergencyKit({ onDone }: Props) {
         </header>
         <p className="kit-lede">
           To open your vault on a new computer or phone you need <strong>both</strong> your master password and this Secret
-          Key. Print this page or save it somewhere safe and offline. Anyone who has both can open your vault.
+          Key, plus the email and server below. Print this page or save it somewhere safe and offline. Anyone who has
+          the Secret Key and your master password can open your vault.
         </p>
         <div className="kit-body">
           <div className="kit-fields">
@@ -73,18 +74,26 @@ export function EmergencyKit({ onDone }: Props) {
               <div className="kit-blank" aria-label="Blank line to write your master password, if you choose" />
             </div>
             <div className="kit-field kit-small">
-              <span>Vault ID</span>
-              <code>{kit.vaultId}</code>
+              <span>Email</span>
+              <code>{kit.email}</code>
+            </div>
+            <div className="kit-field kit-small">
+              <span>Server</span>
+              <code>{kit.serverUrl}</code>
+            </div>
+            <div className="kit-field kit-small">
+              <span>Account ID</span>
+              <code>{kit.accountId}</code>
             </div>
           </div>
           <figure className="kit-figure">
             <QrCode size={kit.qrSize} modules={kit.qrModules} />
-            <figcaption>Scan with the HavenKeys mobile app to enter your Secret Key.</figcaption>
+            <figcaption>Scan to set up another device: the account, the address, the server and the Secret Key.</figcaption>
           </figure>
         </div>
         <p className="kit-foot">
           HavenKeys cannot recover your master password or Secret Key. If you lose this kit, you can view it again on any
-          device where your vault is unlocked (Settings → Secret Key).
+          device where your vault is unlocked (Settings → Account).
         </p>
       </article>
 

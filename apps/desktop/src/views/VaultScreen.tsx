@@ -57,6 +57,14 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
     return () => void unlisten.then((f) => f());
   }, [refresh]);
 
+  // A pull can add, change or remove items behind the UI's back.
+  useEffect(() => {
+    const unlisten = api.onSynced((report) => {
+      if (report.added + report.updated + report.deleted > 0) void refresh();
+    });
+    return () => void unlisten.then((f) => f());
+  }, [refresh]);
+
   useEffect(() => {
     if (damagedItems > 0) {
       toast(`${damagedItems} item(s) could not be decrypted and are hidden.`, "error");
@@ -178,7 +186,7 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
       </aside>
 
       {section === "generator" && <GeneratorView />}
-      {section === "settings" && <SettingsView onImported={() => void refresh()} />}
+      {section === "settings" && <SettingsView onImported={() => void refresh()} online={!readOnly} />}
 
       {!isToolSection && (
         <>

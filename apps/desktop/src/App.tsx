@@ -3,8 +3,10 @@ import { api } from "./lib/api";
 import type { DeviceStatus, VaultStatus } from "./lib/types";
 import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
+import { EmergencyKit } from "./components/EmergencyKit";
 import { UnlockScreen } from "./views/UnlockScreen";
 import { VaultScreen } from "./views/VaultScreen";
+import { WelcomeScreen } from "./views/WelcomeScreen";
 
 export function App() {
   const [status, setStatus] = useState<VaultStatus | null>(null);
@@ -14,12 +16,16 @@ export function App() {
   const [session, setSession] = useState(0);
   const [fatal, setFatal] = useState(false);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
+  // Shown once, right after activation: the kit is the only copy of the
+  // Secret Key, so the vault waits behind an explicit confirmation.
+  const [showKit, setShowKit] = useState(false);
 
   useEffect(() => {
     api.status().then(setStatus, () => setFatal(true));
     const unlisten = api.onLocked((reason) => {
       setLockReason(reason);
       setSession((s) => s + 1);
+      setShowKit(false);
       setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0 } : s));
     });
     return () => void unlisten.then((f) => f());
@@ -34,10 +40,22 @@ export function App() {
     api.deviceStatus().then(setDevice, () => setDevice(null));
   }, [unlocked, session]);
 
+  // The session is opened in the background after an unlock, and can be lost
+  // at any time; the banner and the read-only state follow it live.
+  useEffect(() => {
+    const unlisten = api.onConnectivity((online) => {
+      setDevice((d) => (d ? { ...d, online } : d));
+    });
+    return () => void unlisten.then((f) => f());
+  }, []);
+
   // The theme lives in the encrypted settings; apply it once they're readable.
   useEffect(() => {
     if (!unlocked) return;
-    api.getSettings().then((s) => applyTheme(s.theme), () => undefined);
+    api.getSettings().then(
+      (s) => applyTheme(s.theme),
+      () => undefined,
+    );
   }, [unlocked]);
 
   // Ctrl/Cmd+L locks from anywhere.
@@ -64,12 +82,28 @@ export function App() {
 
   if (!status.vaultExists) {
     return (
-      <div className="empty-state">
-        <h1>No vault on this computer</h1>
-        <p>
-          HavenKeys vaults belong to an account. Activation with an invite is not available in this build yet.
-        </p>
-      </div>
+      <WelcomeScreen
+        onActivated={(s) => {
+          setStatus(s);
+          setShowKit(true);
+        }}
+        onSignedIn={setStatus}
+      />
+    );
+  }
+
+  if (showKit && unlocked) {
+    return (
+      <main className="kit-screen">
+        <header className="kit-screen-head">
+          <h1>Save your Emergency Kit</h1>
+          <p>
+            This is the only copy of your Secret Key. Without it — and your master password — nobody can open this
+            vault, including us.
+          </p>
+        </header>
+        <EmergencyKit onDone={() => setShowKit(false)} />
+      </main>
     );
   }
 

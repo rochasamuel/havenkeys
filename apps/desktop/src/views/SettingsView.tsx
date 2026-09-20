@@ -4,7 +4,7 @@ import type { Settings, Theme } from "../lib/types";
 import { applyTheme } from "../lib/theme";
 import { useToast } from "../components/Toast";
 import { ImportSection } from "./ImportSection";
-import { SecretKeySection } from "./SecretKeySection";
+import { AccountSection } from "./AccountSection";
 
 const autoLockChoices = [
   { value: 5, label: "After 5 minutes" },
@@ -79,7 +79,7 @@ function ChangePassword() {
   );
 }
 
-export function SettingsView({ onImported }: { onImported: () => void }) {
+export function SettingsView({ onImported, online }: { onImported: () => void; online: boolean }) {
   const toast = useToast();
   const [settings, setSettings] = useState<Settings | null>(null);
 
@@ -179,7 +179,7 @@ export function SettingsView({ onImported }: { onImported: () => void }) {
         </div>
       )}
 
-      <SecretKeySection />
+      <AccountSection online={online} />
 
       <ImportSection onImported={onImported} />
 
