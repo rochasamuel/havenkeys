@@ -19,6 +19,7 @@ havenkeys-core = { path = "../../../crates/havenkeys-core" }
 havenkeys-bridge = { path = "../../../crates/havenkeys-bridge" }
 havenkeys-oslock = { path = "../../../crates/havenkeys-oslock" }
 havenkeys-protocol = { path = "../../../crates/havenkeys-protocol" }
+havenkeys-sync-client = { path = "../../../crates/havenkeys-sync-client" }
 # No Tauri plugins: no fs, shell, http, dialog, opener or clipboard plugin.
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }

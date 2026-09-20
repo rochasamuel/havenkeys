@@ -9,6 +9,7 @@ mod commands;
 mod device;
 mod import;
 mod state;
+mod sync;
 mod tray;
 
 use havenkeys_bridge::Bridge;
@@ -24,6 +25,7 @@ use tauri::{Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
 
 const VAULT_FILE: &str = "vault.sqlite3";
 const AUTO_LOCK_TICK: Duration = Duration::from_secs(5);
+const PULL_INTERVAL: Duration = Duration::from_secs(sync::PULL_INTERVAL_SECS);
 
 /// Only the bundled app may be loaded in the webview. Everything else
 /// (remote sites, file://, javascript:, data:) is refused.
@@ -111,6 +113,14 @@ pub fn run() {
                             state.lock(&handle, "screen_lock");
                         }
                         state.auto_lock_tick(&handle);
+                        // Catch up with the server while unlocked. A locked
+                        // vault has no session, so this simply does not run.
+                        if state.is_online() && state.sync_due(PULL_INTERVAL) {
+                            let pull_handle = handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = sync::sync_now(&pull_handle).await;
+                            });
+                        }
                     }
                 })?;
             Ok(())
@@ -137,7 +147,14 @@ pub fn run() {
             commands::reveal_secret,
             commands::password_history,
             account::device_status,
+            account::account_status,
+            account::activate_account,
+            account::sign_in,
+            account::sign_out,
+            account::list_devices,
+            account::revoke_device,
             account::get_emergency_kit,
+            commands::sync_now,
             commands::reveal_previous_password,
             commands::get_totp_code,
             commands::copy_secret,

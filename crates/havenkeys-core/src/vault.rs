@@ -86,31 +86,31 @@ impl UnlockTicket {
         secret_key: &SecretKey,
         account: &AccountRef,
     ) -> Result<UnlockKey> {
+        self.derive_session_for_account(password, secret_key, account)
+            .map(|(key, _)| key)
+    }
+
+    /// The same derivation, also returning the auth key the device needs to
+    /// open a server session.
+    ///
+    /// One Argon2id run yields both: the KEK never leaves the device, and the
+    /// auth key exists to be sent to the server. Deriving them separately
+    /// would double the cost of every unlock for nothing (docs/crypto.md,
+    /// key scheme 3).
+    pub fn derive_session_for_account(
+        &self,
+        password: &SecretString,
+        secret_key: &SecretKey,
+        account: &AccountRef,
+    ) -> Result<(UnlockKey, AuthKey)> {
         if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
             return Err(Error::UnlockFailed);
         }
-        Ok(UnlockKey(derive_kek_for(
-            password,
-            &self.kdf,
-            Some(secret_key),
-            Some(account),
-        )?))
+        let master_key = derive_master_key(password, &self.kdf)?;
+        let kek = derive_kek_v3(&master_key, secret_key, account)?;
+        let auth_key = derive_auth_key_from_master(&master_key, secret_key, account)?;
+        Ok((UnlockKey(kek), auth_key))
     }
-}
-
-/// The KEK for this vault. One scheme; the Secret Key and the account are
-/// both required, and a missing one is refused before any expensive work.
-pub(crate) fn derive_kek_for(
-    password: &SecretString,
-    kdf: &KdfParams,
-    secret_key: Option<&SecretKey>,
-    account: Option<&AccountRef>,
-) -> Result<Key256> {
-    let secret_key = secret_key.ok_or(Error::SecretKeyRequired)?;
-    let account = account.ok_or(Error::InvalidInput(
-        "this vault belongs to an account; sign in instead",
-    ))?;
-    derive_kek_v3(&derive_master_key(password, kdf)?, secret_key, account)
 }
 
 /// A login offered for a page. Deliberately contains no secrets.
@@ -453,6 +453,13 @@ impl VaultService {
     }
 
     /// The vault's ID (not secret; it names the vault to the account's server).
+    /// The revision of the header stored locally. A device publishes
+    /// `revision + 1` when it changes the wrap, and adopts a higher one the
+    /// server serves (after checking its attestation).
+    pub fn header_revision(&self) -> Result<Option<u64>> {
+        Ok(self.store.header()?.map(|h| h.revision))
+    }
+
     pub fn vault_id(&self) -> Result<Option<Uuid>> {
         Ok(self.store.header()?.map(|h| h.vault_id))
     }
@@ -1288,32 +1295,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn derivation_refuses_a_missing_account() {
-        let sk = SecretKey::generate().unwrap();
-        let err = derive_kek_for(
-            &SecretString::from(PASSWORD),
-            &test_params(),
-            Some(&sk),
-            None,
-        )
-        .unwrap_err();
-        assert_eq!(err.code(), "invalid_input");
-    }
-
-    #[test]
-    fn derivation_refuses_a_missing_secret_key() {
-        let account = AccountRef::new(
-            Uuid::from_u128(7),
-            NormalizedEmail::parse("user@example.com").unwrap(),
-        );
-        let err = derive_kek_for(
-            &SecretString::from(PASSWORD),
-            &test_params(),
-            None,
-            Some(&account),
-        )
-        .unwrap_err();
-        assert_eq!(err.code(), "secret_key_required");
-    }
+    // `derivation_refuses_a_missing_account` and
+    // `derivation_refuses_a_missing_secret_key` were deleted with
+    // `derive_kek_for`: `UnlockTicket::derive_session_for_account` takes a
+    // `&SecretKey` and an `&AccountRef`, not options, so neither can be
+    // missing. The guarantee is now in the signature rather than in a test.
 }

@@ -6,10 +6,12 @@
 
 use crate::clipboard::ClipboardGuard;
 use crate::device::Device;
+use crate::sync::Client;
 use havenkeys_bridge::Bridge;
 use havenkeys_core::lock::LockManager;
 use havenkeys_core::vault::VaultService;
 use havenkeys_protocol::Event;
+use havenkeys_sync_client::Session;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -23,15 +25,12 @@ pub const ITEMS_CHANGED_EVENT: &str = "vault://items-changed";
 /// Whether this device has a server session. Independent of the lock state:
 /// a locked vault is never online, and an unlocked one may be offline
 /// (spec 2026-09-20 §8.6).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Connectivity {
     Offline,
-    /// Never constructed yet: nothing obtains a server session until the
-    /// sync client exists (spec 2026-09-20 §13 step 3). Kept as a variant,
-    /// not deleted, so `is_online`/`require_online` do not need to change
-    /// shape when it starts being set.
-    #[allow(dead_code)]
-    Online,
+    /// The token lives here and nowhere else — never on disk — and is
+    /// dropped (and zeroized) when the vault locks or the device goes
+    /// offline.
+    Online(Session),
 }
 
 pub struct AppState {
@@ -45,10 +44,16 @@ pub struct AppState {
     pub last_import: Mutex<Option<PathBuf>>,
     /// This computer's ID and Secret Key (`device.json`).
     pub device: Mutex<Device>,
-    /// Whether this device currently has a server session. There is no sync
-    /// client yet, so this never becomes `Online`; that is the real state of
-    /// a device with no server to talk to, not a placeholder.
+    /// Whether this device currently has a server session.
     connectivity: Mutex<Connectivity>,
+    /// The HTTP client for this vault's server, kept because building one
+    /// sets up a TLS stack. Keyed by URL so a re-pointed vault cannot keep
+    /// talking to the old server.
+    sync_client: Mutex<Option<(String, Client)>>,
+    /// When a pull was last attempted, so the periodic one keeps its spacing
+    /// whether or not the attempt worked. Real sync times live in the
+    /// account record.
+    last_sync_attempt: Mutex<Option<Duration>>,
     origin: Instant,
 }
 
@@ -83,6 +88,15 @@ impl CmdError {
         }
     }
 
+    /// One message for every way signing in can fail. The device never says
+    /// whether it was the address, the password or the Secret Key.
+    pub fn sign_in_failed() -> Self {
+        Self {
+            code: "sign_in_failed",
+            message: "Email, master password or Secret Key is incorrect.".into(),
+        }
+    }
+
     pub fn clipboard() -> Self {
         Self {
             code: "clipboard",
@@ -108,6 +122,8 @@ impl AppState {
             last_import: Mutex::new(None),
             device: Mutex::new(device),
             connectivity: Mutex::new(Connectivity::Offline),
+            sync_client: Mutex::new(None),
+            last_sync_attempt: Mutex::new(None),
             origin: Instant::now(),
         }
     }
@@ -119,9 +135,71 @@ impl AppState {
     /// Does this device currently have a server session?
     pub fn is_online(&self) -> bool {
         matches!(
-            self.connectivity.lock().map(|c| *c),
-            Ok(Connectivity::Online)
+            self.connectivity.lock().as_deref(),
+            Ok(Connectivity::Online(_))
         )
+    }
+
+    /// The session for an authenticated request, or `Offline`.
+    pub fn session(&self) -> CmdResult<Session> {
+        match self.connectivity.lock().as_deref() {
+            Ok(Connectivity::Online(session)) => Ok(session.clone()),
+            _ => Err(havenkeys_core::Error::Offline.into()),
+        }
+    }
+
+    pub fn set_online(&self, session: Session) {
+        if let Ok(mut c) = self.connectivity.lock() {
+            *c = Connectivity::Online(session);
+        }
+    }
+
+    /// Drop the session. Returns whether this changed anything, so the caller
+    /// only tells the UI when it did.
+    pub fn go_offline(&self) -> bool {
+        match self.connectivity.lock() {
+            Ok(mut c) => {
+                let was_online = matches!(*c, Connectivity::Online(_));
+                *c = Connectivity::Offline;
+                was_online
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub fn device_id(&self) -> CmdResult<uuid::Uuid> {
+        Ok(self.device.lock().map_err(|_| CmdError::internal())?.id)
+    }
+
+    /// The cached HTTP client for `url`, building one on first use.
+    pub fn sync_client(
+        &self,
+        url: &str,
+        build: impl FnOnce() -> CmdResult<Client>,
+    ) -> CmdResult<Client> {
+        let mut cached = self.sync_client.lock().map_err(|_| CmdError::internal())?;
+        if let Some((cached_url, client)) = cached.as_ref() {
+            if cached_url == url {
+                return Ok(client.clone());
+            }
+        }
+        let client = build()?;
+        *cached = Some((url.to_string(), client.clone()));
+        Ok(client)
+    }
+
+    pub fn mark_sync_attempt(&self) {
+        if let Ok(mut last) = self.last_sync_attempt.lock() {
+            *last = Some(self.mono());
+        }
+    }
+
+    /// Is a periodic pull due? Also true when none has been attempted yet.
+    pub fn sync_due(&self, interval: Duration) -> bool {
+        match self.last_sync_attempt.lock() {
+            Ok(last) => last.is_none_or(|at| self.mono().saturating_sub(at) >= interval),
+            Err(_) => false,
+        }
     }
 
     /// Refuse a mutating command while offline, before it touches the vault.
@@ -183,6 +261,12 @@ impl AppState {
             Err(poisoned) => poisoned.into_inner().lock(),
         };
         self.clipboard.clear_if_owned(None);
+        // Locked means no session: the token is dropped (and zeroized) here,
+        // so a locked vault cannot reach the server at all (design §6).
+        self.go_offline();
+        if let Ok(mut last) = self.last_sync_attempt.lock() {
+            *last = None;
+        }
         if was_open {
             self.bridge.notify(Event::Locked {});
             let _ = app.emit(LOCKED_EVENT, LockedPayload { reason });

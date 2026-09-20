@@ -1836,6 +1836,7 @@ dependencies = [
  "havenkeys-core",
  "havenkeys-oslock",
  "havenkeys-protocol",
+ "havenkeys-sync-client",
  "qrcode",
  "serde",
  "serde_json",
