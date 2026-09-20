@@ -28,6 +28,7 @@ use crate::store::{AccountRecord, HeaderRecord, ItemRow, KeyScheme};
 use crate::vault::{open_json, unwrap_vault_key, PreparedVault, VaultService, FORMAT_VERSION};
 use data_encoding::BASE64;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 pub const SYNC_FORMAT: u32 = 1;
@@ -141,11 +142,6 @@ fn verify_header(data_key: &crate::crypto::keys::Key256, h: &HeaderFile) -> bool
     blob::open(data_key, &header_ctx(h.body.vault_id), &att)
         .map(|plain| plain.as_slice() == expected.as_slice())
         .unwrap_or(false)
-}
-
-/// The vault ID a sync folder's `header.json` names (no verification).
-pub fn header_vault_id(bytes: &[u8]) -> Result<Uuid> {
-    Ok(parse_header(bytes)?.body.vault_id)
 }
 
 /// Sign in to an account vault on a new device: derive the KEK from the
@@ -268,6 +264,17 @@ impl VaultService {
     /// another item's id, is counted in `skipped_items` and leaves the
     /// existing row untouched — a hostile server can fail to update the
     /// replica, not corrupt it.
+    ///
+    /// A batch may mention the same item id more than once (edited, then
+    /// deleted, since the cursor this device last saw — or the other way
+    /// around). Only the *last* change for a given item, by its position in
+    /// `changes`, is applied; every earlier change for that same item is
+    /// superseded and dropped as if it had never been pulled. Applying them
+    /// independently (or in an order that does not match how the server
+    /// produced them) is exactly the bug this guards against: it can leave
+    /// the store and the session cache disagreeing about whether the item
+    /// exists. `added`/`updated`/`deleted` therefore count the batch's net
+    /// effect on each item, once, not once per change that touched it.
     pub fn apply_remote_changes(
         &mut self,
         cursor: i64,
@@ -281,7 +288,16 @@ impl VaultService {
         let mut overviews: Vec<ItemOverview> = Vec::new();
         let mut deletions: Vec<Uuid> = Vec::new();
 
-        for change in changes {
+        let mut last_index: HashMap<Uuid, usize> = HashMap::new();
+        for (index, change) in changes.iter().enumerate() {
+            last_index.insert(change.item_id, index);
+        }
+
+        for (index, change) in changes.into_iter().enumerate() {
+            if last_index.get(&change.item_id) != Some(&index) {
+                // A later change in this same batch supersedes this one.
+                continue;
+            }
             if change.deleted {
                 deletions.push(change.item_id);
                 continue;
@@ -304,15 +320,19 @@ impl VaultService {
             }
         }
 
+        // Every id above is the *last* change for that item, so an id
+        // appears in at most one of `rows` (via `overviews`) and
+        // `deletions` — never both. The two loops below can run in either
+        // order without one clobbering the other's result.
         self.store.upsert_items(&rows)?;
+        for overview in overviews {
+            self.session_mut()?.overviews.insert(overview.id, overview);
+        }
         for id in &deletions {
             if self.store.delete_item(id)? {
                 report.deleted += 1;
             }
             self.session_mut()?.overviews.remove(id);
-        }
-        for overview in overviews {
-            self.session_mut()?.overviews.insert(overview.id, overview);
         }
         self.store.set_cursor(cursor, now_ms)?;
         Ok(report)

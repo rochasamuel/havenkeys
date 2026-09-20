@@ -105,6 +105,150 @@ fn a_change_whose_blob_is_for_another_item_is_skipped() {
     assert!(vault.list_items().unwrap().is_empty());
 }
 
+// --------------------------------------------------- same item, twice, one batch
+//
+// A batch may legitimately mention the same item id more than once (edited
+// then deleted since the cursor the client last saw, or vice versa). The
+// applier must land on the same store row and session-cache entry no matter
+// which of the two changes came last — never store-deleted-but-cached, nor
+// cached-stale-but-store-gone. Only the *last* change for a given item (by
+// position in `changes`, i.e. cursor order) is applied; changes it
+// supersedes are dropped as if they had never been pulled, so `added` /
+// `updated` / `deleted` reflect the batch's net effect on this item, not one
+// count per change.
+
+/// `[upsert, delete]`: the item never existed on this device before the
+/// batch, so the net effect is nothing — added and immediately deleted.
+/// Both the store and the cache must end up with no trace of it, and none of
+/// `added`/`updated`/`deleted` should fire for an item that never actually
+/// landed.
+#[test]
+fn upsert_then_delete_for_a_new_item_in_one_batch_leaves_no_trace() {
+    let (mut vault, _sk) = activated_vault();
+    let c = change(&vault, "GitHub", 5);
+    let id = c.item_id;
+
+    let report = vault
+        .apply_remote_changes(
+            7,
+            vec![
+                c,
+                RemoteChange {
+                    item_id: id,
+                    revision: 7,
+                    overview: None,
+                    details: None,
+                    deleted: true,
+                },
+            ],
+            NOW,
+        )
+        .unwrap();
+
+    assert_eq!(report.added, 0);
+    assert_eq!(report.updated, 0);
+    assert_eq!(report.deleted, 0);
+    assert_eq!(report.skipped_items, 0);
+
+    // Cache: not listed, not gettable.
+    assert!(vault.list_items().unwrap().is_empty());
+    assert!(vault.get_item(&id).is_err());
+    // Store: `stage_delete` only checks the cache, so use `reveal`, which
+    // also requires the store's details row, to confirm nothing is left
+    // there either — and that the two never disagree.
+    assert!(vault.reveal(&id, SecretField::Password).is_err());
+}
+
+/// `[delete, upsert]`: the same two changes, in the opposite order. Bucketing
+/// changes by type before applying them (rather than by cursor order) would
+/// make this indistinguishable from the previous test's `[upsert, delete]` —
+/// that is exactly the bug. Here the item must end up present, in both the
+/// store and the cache.
+#[test]
+fn delete_then_upsert_for_a_new_item_in_one_batch_leaves_it_present() {
+    let (mut vault, _sk) = activated_vault();
+    let c = change(&vault, "GitHub", 5);
+    let id = c.item_id;
+
+    let report = vault
+        .apply_remote_changes(
+            7,
+            vec![
+                RemoteChange {
+                    item_id: id,
+                    revision: 7,
+                    overview: None,
+                    details: None,
+                    deleted: true,
+                },
+                c,
+            ],
+            NOW,
+        )
+        .unwrap();
+
+    assert_eq!(report.added, 1);
+    assert_eq!(report.updated, 0);
+    assert_eq!(report.deleted, 0);
+    assert_eq!(report.skipped_items, 0);
+
+    // Cache agrees with the store: both have it, with the same content.
+    assert_eq!(vault.list_items().unwrap().len(), 1);
+    assert_eq!(vault.get_item(&id).unwrap().title, "GitHub");
+    assert_eq!(
+        vault.reveal(&id, SecretField::Password).unwrap().expose(),
+        "pw"
+    );
+}
+
+/// The same scenario as the first test above, except the item already
+/// existed on this device (from an earlier pull) before the batch that edits
+/// then deletes it arrives — the case the design doc actually describes. The
+/// pre-existing row must be fully removed, and the deletion (not an add)
+/// is what should be counted.
+#[test]
+fn an_existing_item_edited_then_deleted_in_the_same_batch_is_fully_removed() {
+    let (mut vault, _sk) = activated_vault();
+    let c = change(&vault, "GitHub", 5);
+    let id = c.item_id;
+    vault.apply_remote_changes(5, vec![c.clone()], NOW).unwrap();
+    assert_eq!(vault.get_item(&id).unwrap().title, "GitHub");
+
+    let report = vault
+        .apply_remote_changes(
+            7,
+            vec![
+                RemoteChange {
+                    revision: 6,
+                    ..c.clone()
+                },
+                RemoteChange {
+                    item_id: id,
+                    revision: 7,
+                    overview: None,
+                    details: None,
+                    deleted: true,
+                },
+            ],
+            NOW,
+        )
+        .unwrap();
+
+    assert_eq!(report.added, 0);
+    assert_eq!(report.updated, 0);
+    assert_eq!(report.deleted, 1);
+    assert_eq!(report.skipped_items, 0);
+
+    assert!(vault.list_items().unwrap().is_empty());
+    assert!(vault.get_item(&id).is_err());
+    assert!(vault.reveal(&id, SecretField::Password).is_err());
+    // A follow-up `stage_*` sees a genuinely absent item, not a cache/store
+    // split: `stage_delete` checks only the cache, so if the cache were
+    // still (wrongly) holding this id, this would succeed instead of
+    // refusing with `NotFound`.
+    assert_eq!(vault.stage_delete(&id).unwrap_err().code(), "not_found");
+}
+
 // --------------------------------------------------------- security regressions
 //
 // These three exist because a hostile server is not merely "sends garbage" —
