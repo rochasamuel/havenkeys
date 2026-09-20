@@ -9,6 +9,9 @@ use tower_http::limit::RequestBodyLimitLayer;
 pub mod accounts;
 pub mod auth;
 pub mod health;
+pub mod items;
+pub mod sync;
+pub mod vault;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -28,6 +31,12 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/auth/params", post(auth::params))
         .route("/v1/auth/login", post(auth::login))
         .route("/v1/auth/logout", post(auth::logout))
+        .route(
+            "/v1/vault/header",
+            get(vault::get_header).put(vault::put_header),
+        )
+        .route("/v1/sync", get(sync::pull))
+        .route("/v1/items", post(items::write))
         // Checked before the body is read, so an oversized request never
         // reaches serde and never allocates.
         .layer(RequestBodyLimitLayer::new(MAX_BODY_BYTES))
