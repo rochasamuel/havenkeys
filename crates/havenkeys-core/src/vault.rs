@@ -143,9 +143,7 @@ pub(crate) fn derive_kek_for(
     account: Option<&AccountRef>,
 ) -> Result<Key256> {
     match (scheme, secret_key, account) {
-        (KeyScheme::PasswordOnly, _, _) => {
-            derive_kek(&derive_master_key(password, kdf)?, vault_id)
-        }
+        (KeyScheme::PasswordOnly, _, _) => derive_kek(&derive_master_key(password, kdf)?, vault_id),
         (KeyScheme::PasswordAndSecretKey, Some(sk), _) => {
             derive_kek_with_secret_key(&derive_master_key(password, kdf)?, sk, vault_id)
         }
@@ -345,11 +343,7 @@ impl RekeyTicket {
             ));
         }
         let vault_key = self.unwrap(password, Some(secret_key))?;
-        let kek = derive_kek_v3(
-            &derive_master_key(password, &new_kdf)?,
-            secret_key,
-            account,
-        )?;
+        let kek = derive_kek_v3(&derive_master_key(password, &new_kdf)?, secret_key, account)?;
         Ok(Rekeyed {
             wrapped_vault_key: wrap_vault_key(&kek, self.header.vault_id, &vault_key)?,
             kdf: new_kdf,
@@ -375,11 +369,12 @@ impl RekeyTicket {
     ) -> Result<Rekeyed> {
         check_new_master_password(new)?;
         if self.header.key_scheme != KeyScheme::AccountBound {
-            return Err(Error::InvalidInput("this vault is not linked to an account"));
+            return Err(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ));
         }
         let h = &self.header;
-        let current_kek =
-            derive_kek_v3(&derive_master_key(current, &h.kdf)?, secret_key, account)?;
+        let current_kek = derive_kek_v3(&derive_master_key(current, &h.kdf)?, secret_key, account)?;
         let vault_key = unwrap_vault_key(&current_kek, h.vault_id, &h.wrapped_vault_key)?;
         let new_kek = derive_kek_v3(&derive_master_key(new, &new_kdf)?, secret_key, account)?;
         Ok(Rekeyed {
@@ -391,7 +386,14 @@ impl RekeyTicket {
 
     fn unwrap(&self, password: &SecretString, secret_key: Option<&SecretKey>) -> Result<Key256> {
         let h = &self.header;
-        let kek = derive_kek_for(h.key_scheme, password, &h.kdf, &h.vault_id, secret_key, None)?;
+        let kek = derive_kek_for(
+            h.key_scheme,
+            password,
+            &h.kdf,
+            &h.vault_id,
+            secret_key,
+            None,
+        )?;
         unwrap_vault_key(&kek, h.vault_id, &h.wrapped_vault_key)
     }
 }

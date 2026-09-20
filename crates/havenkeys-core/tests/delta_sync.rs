@@ -106,10 +106,7 @@ fn an_older_remote_version_loses_to_the_local_one() {
     let mut b = second_device(&a, &sk);
 
     let item = a
-        .create_item(
-            common::login("GitHub", "me", "old", "github.com"),
-            NOW,
-        )
+        .create_item(common::login("GitHub", "me", "old", "github.com"), NOW)
         .unwrap();
     let old = a.pending_push().unwrap().changes;
     b.apply_remote_changes(1, old.clone(), NOW).unwrap();

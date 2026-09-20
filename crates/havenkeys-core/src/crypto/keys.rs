@@ -252,8 +252,14 @@ mod tests {
             Uuid::parse_str("00112233-4455-6677-8899-aabbccddeeff").unwrap(),
             NormalizedEmail::parse("other@example.com").unwrap(),
         );
-        assert_ne!(base.as_bytes(), derive_kek_v3(&mk, &sk, &other_id).unwrap().as_bytes());
-        assert_ne!(base.as_bytes(), derive_kek_v3(&mk, &sk, &other_email).unwrap().as_bytes());
+        assert_ne!(
+            base.as_bytes(),
+            derive_kek_v3(&mk, &sk, &other_id).unwrap().as_bytes()
+        );
+        assert_ne!(
+            base.as_bytes(),
+            derive_kek_v3(&mk, &sk, &other_email).unwrap().as_bytes()
+        );
     }
 
     #[test]
@@ -264,8 +270,14 @@ mod tests {
         let sk_a = SecretKey::from_bytes([0x22; SECRET_KEY_LEN]);
         let sk_b = SecretKey::from_bytes([0x23; SECRET_KEY_LEN]);
         let base = derive_kek_v3(&mk_a, &sk_a, &account).unwrap();
-        assert_ne!(base.as_bytes(), derive_kek_v3(&mk_b, &sk_a, &account).unwrap().as_bytes());
-        assert_ne!(base.as_bytes(), derive_kek_v3(&mk_a, &sk_b, &account).unwrap().as_bytes());
+        assert_ne!(
+            base.as_bytes(),
+            derive_kek_v3(&mk_b, &sk_a, &account).unwrap().as_bytes()
+        );
+        assert_ne!(
+            base.as_bytes(),
+            derive_kek_v3(&mk_a, &sk_b, &account).unwrap().as_bytes()
+        );
     }
 
     #[test]
