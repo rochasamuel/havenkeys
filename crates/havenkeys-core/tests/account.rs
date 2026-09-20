@@ -310,3 +310,60 @@ fn the_auth_key_is_not_the_kek() {
     assert!(!auth_b64.is_empty());
     assert_eq!(format!("{:?}", made.auth_key), "AuthKey(<redacted>)");
 }
+
+#[test]
+fn an_account_vault_changes_its_master_password_through_the_ordinary_route() {
+    // The desktop's "change master password" command goes through
+    // `begin_rekey` + `derive_with_secret_key`. That route must work for a
+    // key scheme 3 vault too: the account comes from the local store, not
+    // from the caller.
+    let (mut vault, secret_key) = common::activated_with_account();
+    vault
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
+    let new_password = secret("a much longer new password");
+
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket.derive_with_secret_key(
+        &secret(PASSWORD),
+        &new_password,
+        fast_kdf(),
+        Some(&secret_key),
+    );
+    vault.commit_rekey(ticket, rekeyed).unwrap();
+
+    vault.lock();
+    assert!(vault
+        .unlock_for_account(&secret(PASSWORD), &secret_key, &account())
+        .is_err());
+    vault
+        .unlock_for_account(&new_password, &secret_key, &account())
+        .unwrap();
+    assert_eq!(vault.list_items().unwrap().len(), 1);
+}
+
+#[test]
+fn changing_the_master_password_is_refused_when_the_account_record_is_missing() {
+    // An account-bound vault whose account row never got written cannot
+    // derive the KEK, and must say so instead of silently re-wrapping under
+    // a key nothing can reproduce.
+    let (mut vault, secret_key) = common::activated_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let err = ticket
+        .derive_with_secret_key(
+            &secret(PASSWORD),
+            &secret("a much longer new password"),
+            fast_kdf(),
+            Some(&secret_key),
+        )
+        .err()
+        .unwrap();
+    assert_eq!(err.code(), "invalid_input");
+    // Specifically the missing-account message, not the blanket "sign in
+    // instead" refusal every scheme 3 vault used to get.
+    assert!(
+        err.to_string().contains("not linked to an account"),
+        "unexpected message: {err}"
+    );
+    assert!(vault.commit_rekey(ticket, Err(err)).is_err());
+}
