@@ -498,17 +498,26 @@ impl Store {
         Ok(out)
     }
 
-    /// Mark pushed rows as clean, in one transaction.
-    pub fn clear_dirty(&mut self, ids: &[Uuid]) -> Result<()> {
+    /// Mark pushed rows as clean, in one transaction — but only the exact
+    /// versions that were pushed. Matching on content as well as ID means a
+    /// row edited or deleted again after it was read for the push (and
+    /// before the server's ack arrived) keeps its dirty flag: the clear
+    /// simply misses it, and the newer version stays pending for the next
+    /// push. Clearing by ID alone would silently drop that newer version,
+    /// since a deletion reuses the same ID and would otherwise be cleared by
+    /// an ack meant for the row it replaced.
+    pub fn clear_dirty(&mut self, items: &[ItemRow], tombstones: &[(Uuid, i64)]) -> Result<()> {
         let tx = self.conn.transaction()?;
-        for id in ids {
+        for (id, overview, details) in items {
             tx.execute(
-                "UPDATE items SET dirty = 0 WHERE id = ?1",
-                params![id.to_string()],
+                "UPDATE items SET dirty = 0 WHERE id = ?1 AND overview = ?2 AND details = ?3",
+                params![id.to_string(), overview, details],
             )?;
+        }
+        for (id, deleted_at) in tombstones {
             tx.execute(
-                "UPDATE tombstones SET dirty = 0 WHERE id = ?1",
-                params![id.to_string()],
+                "UPDATE tombstones SET dirty = 0 WHERE id = ?1 AND deleted_at = ?2",
+                params![id.to_string(), deleted_at],
             )?;
         }
         tx.commit()?;

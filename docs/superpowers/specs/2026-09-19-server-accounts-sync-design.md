@@ -461,9 +461,18 @@ will accept.
   but changes stop propagating while it is down.
 * **The Secret Key is still stored in plain text in `device.json`**, as
   before.
-* **Denial of service by whoever controls the server** — it can refuse or
-  delete. Each device keeps a full local copy, so that costs propagation,
-  not data.
+* **A hostile or compromised server can delete items on every device.**
+  Deletions in the delta format are not authenticated: `RemoteChange.deleted_at`
+  is a plaintext field the server supplies, with nothing sealing it to the
+  data key the way item content is, and unlike the folder model's
+  tombstones, which travelled inside a snapshot blob only a vault-key holder
+  could produce. A server that sends a `deleted_at` for any item ID, real or
+  invented, deletes that item everywhere the change is pulled. This is data
+  destruction, not the "refuses or delays propagation, each device keeps its
+  own copy" failure mode the folder model had. Authenticating deletions — a
+  sealed tombstone format, a store migration, and the matching server
+  schema — is required before this ships, and is tracked as a blocker on the
+  server plan, not on Task 8.
 
 ## 10. Deployment
 

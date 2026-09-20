@@ -365,6 +365,11 @@ impl VaultService {
     }
 
     /// Local changes not yet accepted by the server.
+    ///
+    /// This reads only opaque blobs already encrypted on disk and the plain
+    /// account/dirty bookkeeping, so — unlike most of `VaultService` — it
+    /// does not require the vault to be unlocked. `confirm_push` is the
+    /// same: no key material is needed to mark a push acknowledged.
     pub fn pending_push(&self) -> Result<PendingPush> {
         let base_cursor = self.require_account()?.server_cursor;
         let mut changes: Vec<RemoteChange> = self
@@ -423,14 +428,24 @@ impl VaultService {
                 (None, Some(ov), Some(det)) => {
                     match self.check_item_bytes(vault_id, change.item_id, ov, det) {
                         Some((row, overview)) => {
-                            candidates.insert(
-                                change.item_id,
-                                Candidate {
-                                    row,
-                                    overview,
-                                    device: Uuid::nil(),
-                                },
-                            );
+                            // A batch can carry more than one version of the
+                            // same item (e.g. the server replays a range);
+                            // keep the newest by content, same as the
+                            // snapshot path below, not whichever came last.
+                            let better =
+                                candidates.get(&change.item_id).is_none_or(|c: &Candidate| {
+                                    overview.updated_at > c.overview.updated_at
+                                });
+                            if better {
+                                candidates.insert(
+                                    change.item_id,
+                                    Candidate {
+                                        row,
+                                        overview,
+                                        device: Uuid::nil(),
+                                    },
+                                );
+                            }
                         }
                         None => report.skipped_items += 1,
                     }
@@ -444,10 +459,33 @@ impl VaultService {
         Ok(report)
     }
 
-    /// The server accepted these changes at `cursor`.
-    pub fn confirm_push(&mut self, cursor: i64, pushed: &[Uuid], now_ms: i64) -> Result<()> {
+    /// The server accepted exactly these changes at `cursor`.
+    ///
+    /// Takes the same `RemoteChange`s `pending_push` returned (the caller
+    /// already holds them) rather than bare IDs, so the dirty flag clears
+    /// only for the versions actually pushed. A row edited, or a tombstone
+    /// re-dated, after `pending_push` read it and before this call arrives
+    /// keeps its dirty flag and is reported by the next `pending_push`.
+    pub fn confirm_push(
+        &mut self,
+        cursor: i64,
+        pushed: &[RemoteChange],
+        now_ms: i64,
+    ) -> Result<()> {
         self.require_account()?;
-        self.store.clear_dirty(pushed)?;
+        let mut items: Vec<ItemRow> = Vec::new();
+        let mut tombstones: Vec<(Uuid, i64)> = Vec::new();
+        for change in pushed {
+            match (&change.overview, &change.details, change.deleted_at) {
+                (Some(ov), Some(det), None) => {
+                    items.push((change.item_id, ov.clone(), det.clone()))
+                }
+                (None, None, Some(at)) => tombstones.push((change.item_id, at)),
+                // Malformed shapes cannot match any dirty row; nothing to clear.
+                _ => {}
+            }
+        }
+        self.store.clear_dirty(&items, &tombstones)?;
         self.store.set_cursor(cursor, now_ms)
     }
 }
