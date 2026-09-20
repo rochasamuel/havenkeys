@@ -435,7 +435,24 @@ impl Store {
             .transpose()
     }
 
+    /// Link this vault to an account, or refresh the email and server
+    /// address of the account it already belongs to.
+    ///
+    /// Re-pointing a vault at a *different* account is refused. The clause
+    /// below deliberately keeps `server_cursor` and `max_header_rev` — right
+    /// for signing in again to the same account, ruinous for a different
+    /// one: the stale cursor would make the first pull skip everything
+    /// before it, and the stale floor would fail every header the new
+    /// account serves. A future "re-point" flow needs its own path that
+    /// resets both, not this one.
     pub fn set_account(&mut self, rec: &AccountRecord) -> Result<()> {
+        if let Some(current) = self.account()? {
+            if current.account_id != rec.account_id {
+                return Err(Error::InvalidInput(
+                    "this vault is linked to a different account",
+                ));
+            }
+        }
         self.conn.execute(
             "INSERT INTO account
                (id, account_id, email, server_url, server_cursor, max_header_rev, last_synced_at)

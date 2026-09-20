@@ -421,3 +421,69 @@ fn upgrades_a_schema_2_database_in_place() {
     assert_eq!(store.dirty_rows().unwrap().len(), 1);
     assert!(store.account().unwrap().is_none());
 }
+
+#[test]
+fn set_account_refuses_a_different_account_on_the_same_vault() {
+    use havenkeys_core::store::{AccountRecord, Store};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let rec = AccountRecord {
+        account_id: uuid::Uuid::from_u128(1),
+        email: "a@b.com".into(),
+        server_url: "https://vault.example.com".into(),
+        server_cursor: 0,
+        max_header_rev: 0,
+        last_synced_at: None,
+    };
+    store.set_account(&rec).unwrap();
+    store.set_cursor(7, NOW).unwrap();
+    store.raise_max_header_rev(5).unwrap();
+
+    // Re-pointing this vault at another account would leave the cursor and
+    // the rollback floor behind: the first pull would silently skip
+    // everything before cursor 7, and every header from the new account
+    // would fail the floor check. Refuse instead of accepting it silently.
+    let other = AccountRecord {
+        account_id: uuid::Uuid::from_u128(2),
+        ..rec.clone()
+    };
+    let err = store.set_account(&other).unwrap_err();
+    assert_eq!(err.code(), "invalid_input");
+    assert_eq!(store.account().unwrap().unwrap().account_id, rec.account_id);
+}
+
+#[test]
+fn set_account_updates_email_and_server_without_losing_sync_state() {
+    use havenkeys_core::store::{AccountRecord, Store};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let rec = AccountRecord {
+        account_id: uuid::Uuid::from_u128(1),
+        email: "a@b.com".into(),
+        server_url: "https://vault.example.com".into(),
+        server_cursor: 0,
+        max_header_rev: 0,
+        last_synced_at: None,
+    };
+    store.set_account(&rec).unwrap();
+    store.set_cursor(7, NOW).unwrap();
+    store.raise_max_header_rev(5).unwrap();
+
+    // Signing in again to the same account: the display email and the
+    // server address may have changed, the sync bookkeeping must not.
+    store
+        .set_account(&AccountRecord {
+            email: "A@B.com".into(),
+            server_url: "https://vault2.example.com".into(),
+            server_cursor: 0,
+            max_header_rev: 0,
+            ..rec.clone()
+        })
+        .unwrap();
+
+    let back = store.account().unwrap().unwrap();
+    assert_eq!(back.email, "A@B.com");
+    assert_eq!(back.server_url, "https://vault2.example.com");
+    assert_eq!(back.server_cursor, 7);
+    assert_eq!(back.max_header_rev, 5);
+}
