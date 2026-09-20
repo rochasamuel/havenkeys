@@ -102,7 +102,7 @@ export interface ImportResult {
   fileName: string;
 }
 
-export type KeyScheme = "password_only" | "password_and_secret_key";
+export type KeyScheme = "password_only" | "password_and_secret_key" | "account_bound";
 
 /** Counts only; never item data. */
 export interface SyncReport {
@@ -125,6 +125,12 @@ export interface SyncStatus {
 /** Safe while locked: no secrets. */
 export interface DeviceStatus {
   keyScheme: KeyScheme | null;
+  /**
+   * This vault is protected by a Secret Key. Rust decides this; the UI must
+   * not re-derive it by comparing `keyScheme`, or a scheme added later
+   * silently reads as "no Secret Key".
+   */
+  usesSecretKey: boolean;
   /** This device must be given the Secret Key to unlock. */
   needsSecretKey: boolean;
   /** Folder name only. */

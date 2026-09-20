@@ -101,7 +101,10 @@ export function SyncSection() {
   }
 
   if (!device) return null;
-  const hasKey = device.keyScheme === "password_and_secret_key";
+  const hasKey = device.usesSecretKey;
+  // Folder sync is key scheme 2 only; an account-bound vault syncs through
+  // its server instead (Rust refuses the folder picker for it).
+  const canSyncThroughFolder = device.keyScheme === "password_and_secret_key";
 
   return (
     <div className="settings-block">
@@ -127,7 +130,7 @@ export function SyncSection() {
         <EmergencyKit onDone={() => setKit("hidden")} />
       )}
 
-      {hasKey && (
+      {canSyncThroughFolder && (
         <>
           <p className="muted">
             Sync keeps your vault the same on your computers (and, later, the mobile app) through a folder that OneDrive,

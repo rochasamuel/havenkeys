@@ -487,3 +487,13 @@ fn set_account_updates_email_and_server_without_losing_sync_state() {
     assert_eq!(back.server_cursor, 7);
     assert_eq!(back.max_header_rev, 5);
 }
+
+#[test]
+fn every_scheme_says_whether_it_needs_the_secret_key() {
+    use havenkeys_core::store::KeyScheme;
+    // The desktop asks this instead of matching on the scheme name, so a
+    // scheme added later cannot silently stop asking for the Secret Key.
+    assert!(!KeyScheme::PasswordOnly.uses_secret_key());
+    assert!(KeyScheme::PasswordAndSecretKey.uses_secret_key());
+    assert!(KeyScheme::AccountBound.uses_secret_key());
+}
