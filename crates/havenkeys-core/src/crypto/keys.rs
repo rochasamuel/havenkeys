@@ -185,6 +185,24 @@ mod tests {
         );
     }
 
+    /// `derive_data_key` must not be a disguised identity function, and its
+    /// `INFO_DATA` label must not collide with the KEK's label: if it ever
+    /// did, `seal`/`open` would still round-trip and every other test would
+    /// still pass, while the vault key itself did the sealing instead of a
+    /// key separated from it. Restores the coverage
+    /// `derivations_are_domain_separated` had against the removed v1
+    /// `derive_kek`, now against the derivations that still exist:
+    /// `derive_kek_v3` in place of `derive_kek`, same `derive_data_key`.
+    #[test]
+    fn data_key_differs_from_the_vault_key_and_the_kek() {
+        let vault_key = Key256::from_bytes([9u8; 32]);
+        let sk = SecretKey::from_bytes([0x22; SECRET_KEY_LEN]);
+        let data = derive_data_key(&vault_key).unwrap();
+        let kek = derive_kek_v3(&vault_key, &sk, &test_account()).unwrap();
+        assert_ne!(data.as_bytes(), kek.as_bytes());
+        assert_ne!(data.as_bytes(), vault_key.as_bytes());
+    }
+
     #[test]
     fn kek_and_auth_key_are_domain_separated() {
         let mk = Key256::from_bytes([0x11; 32]);
