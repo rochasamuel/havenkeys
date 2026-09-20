@@ -4,6 +4,7 @@
 mod common;
 
 use common::{activated_with_account, new_vault, second_device, NOW};
+use havenkeys_core::sync::RemoteChange;
 use havenkeys_core::Error;
 
 #[test]
@@ -196,4 +197,47 @@ fn a_malformed_change_is_counted_not_dropped() {
     assert_eq!(report.added, 0);
     assert_eq!(report.skipped_items, 1);
     assert!(b.get_item(&item.id).is_err());
+}
+
+#[test]
+fn a_deletion_far_in_the_future_is_skipped_and_counted() {
+    // deleted_at is plaintext the server supplies and is not authenticated
+    // (docs/crypto.md, "Key scheme 3 (account)"). The worst forgery,
+    // deleted_at = i64::MAX, would otherwise poison this item ID forever:
+    // apply_remote_changes must reject it instead of tombstoning the item.
+    let (mut vault, _sk) = activated_with_account();
+    let item = vault
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
+
+    let change = RemoteChange {
+        item_id: item.id,
+        overview: None,
+        details: None,
+        deleted_at: Some(i64::MAX),
+    };
+    let report = vault.apply_remote_changes(9, vec![change], NOW).unwrap();
+    assert_eq!(report.skipped_items, 1);
+    assert_eq!(report.deleted, 0);
+    assert!(vault.get_item(&item.id).is_ok(), "item must survive");
+}
+
+#[test]
+fn a_deletion_at_now_still_applies() {
+    // The mitigation above must not reject ordinary, plausible deletions.
+    let (mut vault, _sk) = activated_with_account();
+    let item = vault
+        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
+
+    let change = RemoteChange {
+        item_id: item.id,
+        overview: None,
+        details: None,
+        deleted_at: Some(NOW),
+    };
+    let report = vault.apply_remote_changes(9, vec![change], NOW).unwrap();
+    assert_eq!(report.skipped_items, 0);
+    assert_eq!(report.deleted, 1);
+    assert!(vault.get_item(&item.id).is_err());
 }

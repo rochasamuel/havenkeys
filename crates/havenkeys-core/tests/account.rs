@@ -7,7 +7,7 @@ use havenkeys_core::account::AccountRef;
 use havenkeys_core::model::SecretField;
 use havenkeys_core::store::{KeyScheme, Store};
 use havenkeys_core::sync::prepare_sign_in;
-use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
+use havenkeys_core::vault::{derive_auth_key, prepare_new_account_vault, VaultService};
 use uuid::Uuid;
 
 fn activate() -> (
@@ -251,11 +251,53 @@ fn a_forged_header_is_refused() {
     let (mut vault, _sk, header) = activate();
     let mut forged = header.clone();
     let n = forged.len();
-    forged[n - 5] ^= 0x01; // flip a bit inside the attestation
-    assert!(matches!(
-        vault.adopt_account_header(&forged),
-        Err(_) | Ok(false)
-    ));
+    // Flips a bit inside otherwise-valid JSON, so the outcome is
+    // deterministically Ok(false) (attestation verification fails), not a
+    // parse error and not a locked vault. Pin that branch specifically,
+    // since this is the only direct test of header forgery.
+    forged[n - 5] ^= 0x01;
+    assert!(!vault.adopt_account_header(&forged).unwrap());
+}
+
+#[test]
+fn an_oversized_header_is_rejected_without_panicking() {
+    // parse_header's `bytes.len() > 64 * 1024` guard (spec §12: "oversized
+    // JSON responses -> rejected without panic") had no test at any level.
+    let (mut vault, _sk, _header) = activate();
+    let oversized = vec![0u8; 65_537];
+    assert_eq!(
+        vault.adopt_account_header(&oversized).unwrap_err().code(),
+        "corrupted"
+    );
+}
+
+#[test]
+fn derive_auth_key_matches_the_activation_and_sign_in_paths() {
+    // `derive_auth_key` is what a later login uses; it takes its KDF
+    // parameters from the caller. `prepare_new_account_vault` and
+    // `prepare_sign_in` also produce an AuthKey internally, but
+    // `prepare_sign_in` takes its KDF from the header instead. Nothing
+    // structurally prevents those paths from diverging, so pin them
+    // together: a mismatch here would make every real login fail with
+    // nothing else to catch it.
+    let kdf = fast_kdf();
+    let made = prepare_new_account_vault(&secret(PASSWORD), &account(), kdf.clone(), NOW).unwrap();
+
+    let direct = derive_auth_key(&secret(PASSWORD), &made.secret_key, &kdf, &account()).unwrap();
+    assert_eq!(
+        direct.to_base64().as_str(),
+        made.auth_key.to_base64().as_str()
+    );
+
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    vault.create_vault(made.prepared).unwrap();
+    let header = vault.encode_account_header().unwrap();
+    let (_, sign_in_auth) =
+        prepare_sign_in(&header, &secret(PASSWORD), &made.secret_key, &account()).unwrap();
+    assert_eq!(
+        sign_in_auth.to_base64().as_str(),
+        made.auth_key.to_base64().as_str()
+    );
 }
 
 #[test]

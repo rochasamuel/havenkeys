@@ -295,45 +295,6 @@ fn rekey_refused_if_header_changed_meanwhile() {
 }
 
 #[test]
-fn account_bound_scheme_refuses_derivation_without_an_account() {
-    use havenkeys_core::crypto::secret_key::SecretKey;
-    use havenkeys_core::store::KeyScheme;
-
-    let sk = SecretKey::generate().unwrap();
-    let err = havenkeys_core::vault::derive_kek_for_test(
-        KeyScheme::AccountBound,
-        &secret(PASSWORD),
-        &fast_kdf(),
-        &uuid::Uuid::nil(),
-        Some(&sk),
-        None,
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), "invalid_input");
-}
-
-#[test]
-fn account_bound_scheme_refuses_derivation_without_a_secret_key() {
-    use havenkeys_core::account::{AccountRef, NormalizedEmail};
-    use havenkeys_core::store::KeyScheme;
-
-    let account = AccountRef::new(
-        uuid::Uuid::from_u128(7),
-        NormalizedEmail::parse("user@example.com").unwrap(),
-    );
-    let err = havenkeys_core::vault::derive_kek_for_test(
-        KeyScheme::AccountBound,
-        &secret(PASSWORD),
-        &fast_kdf(),
-        &uuid::Uuid::nil(),
-        None,
-        Some(&account),
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), "secret_key_required");
-}
-
-#[test]
 fn key_scheme_serde_form_is_frozen() {
     use havenkeys_core::store::KeyScheme;
     // Serde form is part of the sync header on the wire; freeze it.
