@@ -29,9 +29,10 @@ fn activation_produces_an_account_bound_vault() {
 #[test]
 fn a_second_device_signs_in_with_password_secret_key_and_account() {
     let (mut first, secret_key, header) = activate();
-    first
-        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+    let staged = first
+        .stage_create(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
+    first.commit_write(staged, 1).unwrap();
 
     let (prepared, _auth) =
         prepare_sign_in(&header, &secret(PASSWORD), &secret_key, &common::account()).unwrap();
@@ -241,9 +242,10 @@ fn an_account_vault_changes_its_master_password_through_the_ordinary_route() {
     // `change_master_password_for_account`: the account comes from the
     // local store, not from the caller.
     let (mut vault, secret_key) = common::activated_vault();
-    vault
-        .create_item(common::login("GitHub", "me", "pw", "github.com"), NOW)
+    let staged = vault
+        .stage_create(common::login("GitHub", "me", "pw", "github.com"), NOW)
         .unwrap();
+    vault.commit_write(staged, 1).unwrap();
     let new_password = secret("a much longer new password");
 
     vault

@@ -720,75 +720,12 @@ mod tests {
         assert_eq!(parsed.items[2].input.title, "Bell");
     }
 
-    #[test]
-    fn imports_into_vault_and_reimport_is_harmless() {
-        use crate::account::{AccountRef, NormalizedEmail};
-        use crate::model::SecretField;
-        use crate::store::{AccountRecord, Store};
-        use crate::vault::{prepare_new_account_vault, VaultService};
-        use uuid::Uuid;
-
-        let account = AccountRef::new(
-            Uuid::from_u128(1),
-            NormalizedEmail::parse("user@example.com").unwrap(),
-        );
-        let made = prepare_new_account_vault(
-            &"correct horse battery".into(),
-            &account,
-            crate::crypto::kdf::test_params(),
-            0,
-        )
-        .unwrap();
-        let mut v = VaultService::new(Store::open_in_memory().unwrap());
-        v.create_account_vault(
-            made.prepared,
-            &AccountRecord {
-                account_id: account.id,
-                email: "user@example.com".into(),
-                server_url: "https://vault.example.com".into(),
-                server_cursor: 0,
-                max_header_rev: 0,
-                last_synced_at: None,
-            },
-        )
-        .unwrap();
-
-        let archive = make_1pux(&sample(), 0);
-        let p = parse(&archive).unwrap();
-        let r = v.import_items(p.items, p.report, 42).unwrap();
-        assert_eq!(r.imported, 4);
-        assert_eq!((r.logins, r.secure_notes), (2, 2));
-        assert_eq!(r.failed, 0);
-
-        let items = v.list_items().unwrap();
-        let gh = items.iter().find(|i| i.title == "GitHub").unwrap();
-        assert_eq!(gh.created_at, 1_600_000_000_000);
-        assert!(gh.has_totp && gh.has_password && gh.has_notes);
-        assert_eq!(
-            v.reveal(&gh.id, SecretField::Password).unwrap().expose(),
-            "gh-pass"
-        );
-        assert!(v.totp_code(&gh.id, 59).is_ok());
-
-        // Same file again: everything is a duplicate.
-        let p = parse(&archive).unwrap();
-        let r = v.import_items(p.items, p.report, 43).unwrap();
-        assert_eq!(r.imported, 0);
-        assert_eq!(r.skipped_duplicates, 4);
-        assert_eq!(v.list_items().unwrap().len(), 4);
-    }
-
-    #[test]
-    fn import_requires_unlocked_vault() {
-        use crate::store::Store;
-        use crate::vault::VaultService;
-        let mut v = VaultService::new(Store::open_in_memory().unwrap());
-        let p = parse(&make_1pux(&sample(), 0)).unwrap();
-        assert_eq!(
-            v.import_items(p.items, p.report, 0).err(),
-            Some(Error::Locked)
-        );
-    }
+    // Storing parsed items in a vault is exercised where the write path
+    // lives now (`VaultService::stage_create`/`commit_write`); import itself
+    // is rebuilt on top of staged writes once there is a server to send them
+    // to (spec 2026-09-20 §8.4, §13). Until then `import_1pux` refuses with
+    // `Error::Offline` (see `apps/desktop/src-tauri/src/import.rs`), so there
+    // is nothing left here to store `parse`'s output into.
 
     #[test]
     fn dates_format() {

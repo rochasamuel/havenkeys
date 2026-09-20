@@ -66,10 +66,10 @@ fn vault_persists_across_reopen() {
     let path = dir.path().join("vault.sqlite3");
     let (id, sk) = {
         let (mut v, sk) = activated_vault_at(&path);
-        let id = v
-            .create_item(login("GitHub", "octo", "gh-secret-pw", "github.com"), NOW)
-            .unwrap()
-            .id;
+        let staged = v
+            .stage_create(login("GitHub", "octo", "gh-secret-pw", "github.com"), NOW)
+            .unwrap();
+        let id = v.commit_write(staged, 1).unwrap().unwrap().id;
         (id, sk)
     };
     let mut v = open_file(&path);
@@ -86,12 +86,13 @@ fn vault_persists_across_reopen() {
 #[test]
 fn login_item_crud_and_secret_minimization() {
     let (mut v, _sk) = activated_vault();
-    let ov = v
-        .create_item(
+    let staged = v
+        .stage_create(
             login("GitHub", "octo@example.com", "pw-1", "github.com"),
             NOW,
         )
         .unwrap();
+    let ov = v.commit_write(staged, 1).unwrap().unwrap();
     assert_eq!(ov.urls[0].url, "https://github.com/");
     assert!(ov.has_password && !ov.has_totp && !ov.has_notes);
 
@@ -102,7 +103,8 @@ fn login_item_crud_and_secret_minimization() {
     // Update title only; password is kept without the UI ever seeing it.
     let mut edit = login("GitHub (work)", "octo@example.com", "", "github.com");
     edit.password = SecretUpdate::Keep;
-    let updated = v.update_item(&ov.id, edit, NOW + 1000).unwrap();
+    let staged = v.stage_update(&ov.id, edit, NOW + 1000).unwrap();
+    let updated = v.commit_write(staged, 2).unwrap().unwrap();
     assert_eq!(updated.title, "GitHub (work)");
     assert_eq!(updated.created_at, NOW);
     assert_eq!(updated.updated_at, NOW + 1000);
@@ -114,15 +116,17 @@ fn login_item_crud_and_secret_minimization() {
     // Clear the password.
     let mut edit = login("GitHub (work)", "octo@example.com", "", "github.com");
     edit.password = SecretUpdate::Clear;
-    assert!(!v.update_item(&ov.id, edit, NOW).unwrap().has_password);
+    let staged = v.stage_update(&ov.id, edit, NOW).unwrap();
+    assert!(!v.commit_write(staged, 3).unwrap().unwrap().has_password);
     assert_eq!(
         v.reveal(&ov.id, SecretField::Password).err(),
         Some(Error::NotFound)
     );
 
-    v.delete_item(&ov.id, NOW).unwrap();
+    let staged = v.stage_delete(&ov.id).unwrap();
+    v.commit_write(staged, 4).unwrap();
     assert_eq!(v.get_item(&ov.id).err(), Some(Error::NotFound));
-    assert_eq!(v.delete_item(&ov.id, NOW), Err(Error::NotFound));
+    assert_eq!(v.stage_delete(&ov.id).err(), Some(Error::NotFound));
 }
 
 #[test]
@@ -131,7 +135,8 @@ fn totp_codes_without_exposing_secret() {
     let mut input = login("AWS", "root", "pw", "aws.amazon.com");
     // RFC 6238 SHA-1 secret "12345678901234567890".
     input.totp = SecretUpdate::Set(secret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"));
-    let ov = v.create_item(input, NOW).unwrap();
+    let staged = v.stage_create(input, NOW).unwrap();
+    let ov = v.commit_write(staged, 1).unwrap().unwrap();
     assert!(ov.has_totp);
     let code = v.totp_code(&ov.id, 59).unwrap();
     assert_eq!(code.code.expose(), "287082");
@@ -140,20 +145,22 @@ fn totp_codes_without_exposing_secret() {
     // Invalid TOTP input rejected; error does not echo the input.
     let mut bad = login("x", "y", "z", "x.com");
     bad.totp = SecretUpdate::Set(secret("not-base32-SECRETVALUE!"));
-    let err = v.create_item(bad, NOW).unwrap_err();
+    let err = v.stage_create(bad, NOW).unwrap_err();
     assert!(!err.to_string().contains("SECRETVALUE"));
 
     // Item without TOTP.
-    let plain = v.create_item(login("b", "c", "d", "b.com"), NOW).unwrap();
+    let staged = v.stage_create(login("b", "c", "d", "b.com"), NOW).unwrap();
+    let plain = v.commit_write(staged, 2).unwrap().unwrap();
     assert_eq!(v.totp_code(&plain.id, 59).err(), Some(Error::NotFound));
 }
 
 #[test]
 fn secure_notes() {
     let (mut v, _sk) = activated_vault();
-    let ov = v
-        .create_item(note("Recovery codes", "abcd-efgh\nijkl-mnop"), NOW)
+    let staged = v
+        .stage_create(note("Recovery codes", "abcd-efgh\nijkl-mnop"), NOW)
         .unwrap();
+    let ov = v.commit_write(staged, 1).unwrap().unwrap();
     assert_eq!(
         v.reveal(&ov.id, SecretField::Content).unwrap().expose(),
         "abcd-efgh\nijkl-mnop"
@@ -162,25 +169,31 @@ fn secure_notes() {
     assert!(v.reveal(&ov.id, SecretField::Password).is_err());
     let mut bad = note("x", "y");
     bad.password = SecretUpdate::Set(secret("pw"));
-    assert!(v.create_item(bad, NOW).is_err());
+    assert!(v.stage_create(bad, NOW).is_err());
     let mut bad = login("x", "y", "z", "x.com");
     bad.content = SecretUpdate::Set(secret("c"));
-    assert!(v.create_item(bad, NOW).is_err());
+    assert!(v.stage_create(bad, NOW).is_err());
     // Type cannot change on update.
     assert!(v
-        .update_item(&ov.id, login("x", "y", "z", "x.com"), NOW)
+        .stage_update(&ov.id, login("x", "y", "z", "x.com"), NOW)
         .is_err());
 }
 
 #[test]
 fn search_uses_overviews_only() {
     let (mut v, _sk) = activated_vault();
-    v.create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
+    let s1 = v
+        .stage_create(login("GitHub", "octo", "pw", "github.com"), NOW)
         .unwrap();
-    v.create_item(login("Bank", "alice@mail.com", "pw", "mybank.example"), NOW)
+    v.commit_write(s1, 1).unwrap();
+    let s2 = v
+        .stage_create(login("Bank", "alice@mail.com", "pw", "mybank.example"), NOW)
         .unwrap();
-    v.create_item(note("Wifi", "password is githubwifi"), NOW)
+    v.commit_write(s2, 2).unwrap();
+    let s3 = v
+        .stage_create(note("Wifi", "password is githubwifi"), NOW)
         .unwrap();
+    v.commit_write(s3, 3).unwrap();
 
     let titles = |q: &str| -> Vec<String> {
         v.search(q)
@@ -201,10 +214,10 @@ fn search_uses_overviews_only() {
 #[test]
 fn change_master_password() {
     let (mut v, sk) = activated_vault();
-    let id = v
-        .create_item(login("A", "a", "pw-a", "a.com"), NOW)
-        .unwrap()
-        .id;
+    let staged = v
+        .stage_create(login("A", "a", "pw-a", "a.com"), NOW)
+        .unwrap();
+    let id = v.commit_write(staged, 1).unwrap().unwrap().id;
     assert_eq!(
         v.change_master_password_for_account(
             &secret("not the password"),

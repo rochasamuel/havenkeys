@@ -258,28 +258,31 @@ pub fn copy_secret(
 }
 
 #[tauri::command]
-pub fn create_item(state: State<'_, AppState>, input: ItemInput) -> CmdResult<ItemOverview> {
+pub fn create_item(state: State<'_, AppState>, _input: ItemInput) -> CmdResult<ItemOverview> {
     state.touch();
-    let item = state.vault()?.create_item(input, AppState::now_ms())?;
-    Ok(item)
+    // Writes need a server session (spec 2026-09-20 §8.4); Task 7 gates this
+    // on the connectivity state once there is one to be in.
+    Err(havenkeys_core::Error::Offline.into())
 }
 
 #[tauri::command]
 pub fn update_item(
     state: State<'_, AppState>,
-    id: Uuid,
-    input: ItemInput,
+    _id: Uuid,
+    _input: ItemInput,
 ) -> CmdResult<ItemOverview> {
     state.touch();
-    let item = state.vault()?.update_item(&id, input, AppState::now_ms())?;
-    Ok(item)
+    // Writes need a server session (spec 2026-09-20 §8.4); Task 7 gates this
+    // on the connectivity state once there is one to be in.
+    Err(havenkeys_core::Error::Offline.into())
 }
 
 #[tauri::command]
-pub fn delete_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<()> {
+pub fn delete_item(state: State<'_, AppState>, _id: Uuid) -> CmdResult<()> {
     state.touch();
-    state.vault()?.delete_item(&id, AppState::now_ms())?;
-    Ok(())
+    // Writes need a server session (spec 2026-09-20 §8.4); Task 7 gates this
+    // on the connectivity state once there is one to be in.
+    Err(havenkeys_core::Error::Offline.into())
 }
 
 // ------------------------------------------------------------------ generator

@@ -2,7 +2,9 @@
 //!
 //! Exports are plaintext and treated as hostile input: size-limited, parsed
 //! defensively, never logged. Parsed values go through the same validation as
-//! items typed into the UI (`VaultService::import_items`).
+//! items typed into the UI. Storing them needs the server exactly as a
+//! single write does (spec 2026-09-20 §8.4); until the sync client exists
+//! (§13), `import_1pux` refuses with `Error::Offline`.
 
 pub mod onepux;
 

@@ -19,10 +19,10 @@ fn file_vault() -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn locked_vault_refuses_everything() {
     let (mut v, sk) = activated_vault();
-    let id = v
-        .create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
-        .unwrap()
-        .id;
+    let staged = v
+        .stage_create(login("GitHub", "octo", "pw", "github.com"), NOW)
+        .unwrap();
+    let id = v.commit_write(staged, 1).unwrap().unwrap().id;
     v.lock();
 
     assert_eq!(v.list_items().err(), Some(Error::Locked));
@@ -34,14 +34,15 @@ fn locked_vault_refuses_everything() {
     );
     assert_eq!(v.totp_code(&id, 0).err(), Some(Error::Locked));
     assert_eq!(
-        v.create_item(login("a", "b", "c", "a.com"), NOW).err(),
+        v.stage_create(login("a", "b", "c", "a.com"), NOW).err(),
         Some(Error::Locked)
     );
     assert_eq!(
-        v.update_item(&id, login("a", "b", "c", "a.com"), NOW).err(),
+        v.stage_update(&id, login("a", "b", "c", "a.com"), NOW)
+            .err(),
         Some(Error::Locked)
     );
-    assert_eq!(v.delete_item(&id, NOW).err(), Some(Error::Locked));
+    assert_eq!(v.stage_delete(&id).err(), Some(Error::Locked));
     assert_eq!(v.settings().err(), Some(Error::Locked));
     assert_eq!(
         v.update_settings(Settings::default()).err(),
@@ -73,9 +74,12 @@ fn nothing_sensitive_in_database_file() {
         );
         input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
         input.notes = havenkeys_core::model::SecretUpdate::Set(secret("UniqueLoginNotesRRR"));
-        v.create_item(input, NOW).unwrap();
-        v.create_item(note("UniqueNoteTitleWWW", "UniqueNoteBodyVVV"), NOW)
+        let s1 = v.stage_create(input, NOW).unwrap();
+        v.commit_write(s1, 1).unwrap();
+        let s2 = v
+            .stage_create(note("UniqueNoteTitleWWW", "UniqueNoteBodyVVV"), NOW)
             .unwrap();
+        v.commit_write(s2, 2).unwrap();
     }
     let bytes = std::fs::read(&path).unwrap();
     for needle in [
@@ -104,10 +108,10 @@ fn tampered_details_blob_is_rejected() {
     let (_d, path) = file_vault();
     let (id, sk) = {
         let (mut v, sk) = activated_vault_at(&path);
-        let id = v
-            .create_item(login("GitHub", "octo", "pw", "github.com"), NOW)
-            .unwrap()
-            .id;
+        let staged = v
+            .stage_create(login("GitHub", "octo", "pw", "github.com"), NOW)
+            .unwrap();
+        let id = v.commit_write(staged, 1).unwrap().unwrap().id;
         (id, sk)
     };
     let c = Connection::open(&path).unwrap();
@@ -141,14 +145,10 @@ fn tampered_overview_marks_item_damaged_without_blocking_vault() {
     let (_d, path) = file_vault();
     let (bad, good, sk) = {
         let (mut v, sk) = activated_vault_at(&path);
-        let bad = v
-            .create_item(login("A", "a", "pw", "a.com"), NOW)
-            .unwrap()
-            .id;
-        let good = v
-            .create_item(login("B", "b", "pw", "b.com"), NOW)
-            .unwrap()
-            .id;
+        let s1 = v.stage_create(login("A", "a", "pw", "a.com"), NOW).unwrap();
+        let bad = v.commit_write(s1, 1).unwrap().unwrap().id;
+        let s2 = v.stage_create(login("B", "b", "pw", "b.com"), NOW).unwrap();
+        let good = v.commit_write(s2, 2).unwrap().unwrap().id;
         (bad, good, sk)
     };
     let c = Connection::open(&path).unwrap();
@@ -172,14 +172,14 @@ fn swapped_blobs_are_rejected() {
     let (_d, path) = file_vault();
     let (a, b, sk) = {
         let (mut v, sk) = activated_vault_at(&path);
-        let a = v
-            .create_item(login("A", "a", "pw-a", "a.com"), NOW)
-            .unwrap()
-            .id;
-        let b = v
-            .create_item(login("B", "b", "pw-b", "b.com"), NOW)
-            .unwrap()
-            .id;
+        let sa = v
+            .stage_create(login("A", "a", "pw-a", "a.com"), NOW)
+            .unwrap();
+        let a = v.commit_write(sa, 1).unwrap().unwrap().id;
+        let sb = v
+            .stage_create(login("B", "b", "pw-b", "b.com"), NOW)
+            .unwrap();
+        let b = v.commit_write(sb, 2).unwrap().unwrap().id;
         (a, b, sk)
     };
     let c = Connection::open(&path).unwrap();
@@ -358,9 +358,9 @@ fn errors_never_echo_input() {
     let (mut v, sk) = activated_vault();
     let marker = "SENSITIVE-MARKER-123";
     let mut input = login(marker, marker, marker, &format!("javascript:{marker}"));
-    let e1 = v.create_item(input, NOW).unwrap_err();
+    let e1 = v.stage_create(input, NOW).unwrap_err();
     input = login(&format!("{marker}\u{0}"), "u", "p", "a.com");
-    let e2 = v.create_item(input, NOW).unwrap_err();
+    let e2 = v.stage_create(input, NOW).unwrap_err();
     let e3 = v
         .unlock_for_account(&secret(marker), &sk, &account())
         .unwrap_err();
@@ -374,12 +374,13 @@ fn errors_never_echo_input() {
 #[test]
 fn debug_output_is_redacted() {
     let (mut v, _sk) = activated_vault();
-    let ov = v
-        .create_item(
+    let staged = v
+        .stage_create(
             login("DebugTitle", "debug-user", "debug-pass", "a.com"),
             NOW,
         )
         .unwrap();
+    let ov = v.commit_write(staged, 1).unwrap().unwrap();
     let dbg = format!("{ov:?}");
     assert!(!dbg.contains("DebugTitle") && !dbg.contains("debug-user"));
     let pw = v.reveal(&ov.id, SecretField::Password).unwrap();
@@ -392,9 +393,12 @@ fn github_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
     let (mut v, _sk) = activated_vault();
     let mut input = login("GitHub", "octo", "gh-secret", "github.com");
     input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
-    let id = v.create_item(input, NOW).unwrap().id;
-    v.create_item(login("Bank", "alice", "bank-secret", "mybank.com"), NOW)
+    let staged = v.stage_create(input, NOW).unwrap();
+    let id = v.commit_write(staged, 1).unwrap().unwrap().id;
+    let staged = v
+        .stage_create(login("Bank", "alice", "bank-secret", "mybank.com"), NOW)
         .unwrap();
+    v.commit_write(staged, 2).unwrap();
     (v, id)
 }
 
@@ -454,11 +458,13 @@ fn a2_item_only_for_matching_origin() {
 #[test]
 fn find_matches_returns_no_secrets_and_ranks() {
     let (mut v, _) = github_vault();
-    v.create_item(
-        login("GitHub Gist", "octo2", "pw", "https://gist.github.com"),
-        NOW,
-    )
-    .unwrap();
+    let staged = v
+        .stage_create(
+            login("GitHub Gist", "octo2", "pw", "https://gist.github.com"),
+            NOW,
+        )
+        .unwrap();
+    v.commit_write(staged, 3).unwrap();
     let matches = v.find_matches("https://gist.github.com/new", None).unwrap();
     let titles: Vec<&str> = matches.iter().map(|m| m.title.as_str()).collect();
     assert_eq!(
@@ -473,10 +479,10 @@ fn find_matches_returns_no_secrets_and_ranks() {
 #[test]
 fn notes_and_locked_vault_are_never_served_to_pages() {
     let (mut v, gh) = github_vault();
-    let note = v
-        .create_item(note("github.com", "secret note"), NOW)
-        .unwrap()
-        .id;
+    let staged = v
+        .stage_create(note("github.com", "secret note"), NOW)
+        .unwrap();
+    let note = v.commit_write(staged, 3).unwrap().unwrap().id;
     assert_eq!(
         v.fill_for_page(&note, "https://github.com/", None).err(),
         Some(Error::Denied)
