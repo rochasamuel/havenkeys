@@ -156,6 +156,34 @@ the KEK derivation.
   `derive_auth_key_from_master`). Its `Debug` implementation prints
   `AuthKey(<redacted>)`; see "Key hierarchy" above for what it does and does
   not do.
+* **Changing the master password** works through the same call the desktop
+  already makes for schemes 1 and 2. `VaultService::begin_rekey` reads the
+  account record from the local store into the `RekeyTicket`, and
+  `RekeyTicket::derive_with_secret_key` routes a scheme 3 header to
+  `derive_for_account` with it. The account therefore comes from the store,
+  never from the caller: the renderer cannot ask for a rewrap under an
+  identity of its choosing. As with any rewrap, only the header changes —
+  the vault key is unwrapped and re-wrapped, items are untouched, and
+  `header_revision` advances (which also raises the rollback floor below).
+* **An account-bound vault never exists without its account record.** The
+  record holds the durable `max_header_rev` rollback floor, so a vault
+  without one would silently fall back to the in-memory `revision` alone.
+  Both routes into scheme 3 write the record in the same step and refuse
+  otherwise: `create_vault` rejects an account-bound header and points to
+  `create_account_vault` (activation and sign-in), and `commit_rekey`
+  rejects a rewrap into scheme 3 with no record and points to
+  `commit_account_upgrade` (the 2 → 3 upgrade). Both write the record
+  before the header, so an interruption can leave a record without a vault
+  — harmless, and overwritten by the retry — but never a vault without its
+  record. A failed derivation writes nothing.
+* **The account record is not re-pointable.** `Store::set_account` refuses a
+  write whose `account_id` differs from the one already stored. Its
+  `ON CONFLICT` clause deliberately preserves `server_cursor` and
+  `max_header_rev`, which is right for signing in again to the same account
+  and ruinous for a different one: the stale cursor would make the first
+  pull skip everything before it, and the stale floor would fail every
+  header the new account serves. Re-pointing a vault at another account or
+  server needs its own path that resets both, and does not exist yet.
 
 **Deletions in the delta sync feed are not authenticated.** `RemoteChange`,
 the unit the feed moves in, carries a `deleted_at` field that is plaintext
