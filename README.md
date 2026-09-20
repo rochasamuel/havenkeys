@@ -1,7 +1,9 @@
 # HavenKeys
 
-A local-first personal password manager: a Tauri desktop app with a Rust
-security core. It works offline, needs no account, and runs no server.
+A personal password manager: a Tauri desktop app with a Rust security core,
+a browser extension, and a small server you run yourself. Your vault lives on
+your own server, encrypted with keys it never sees. Reads work offline;
+changes need the server.
 
 > **This software has not undergone an independent security audit and should
 > not be considered a replacement for professionally audited password managers
@@ -18,8 +20,9 @@ security core. It works offline, needs no account, and runs no server.
 | Browser extension (MV3, Chrome + Firefox) | Toolbar popup with Fill; opt-in in-page suggestions for logins, one-time codes and generated passwords; save/update prompts ([docs/autofill.md](docs/autofill.md)) |
 | Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
 | Export | Not implemented |
-| Secret Key + Emergency Kit | New vaults need the master password and a 128-bit Secret Key; older vaults can add one ([docs/server-sync.md](docs/server-sync.md)) |
-| Sync between your computers | Through a folder you already sync (OneDrive, Dropbox, Google Drive, Syncthing); no server ([docs/server-sync.md](docs/server-sync.md)) |
+| Secret Key + Emergency Kit | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
+| Account server (`havenkeys-server`) | Implemented and tested against Postgres; **not deployed anywhere yet** ([docs/deployment.md](docs/deployment.md)) |
+| Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
 
 What the desktop app does today:
 
@@ -49,6 +52,11 @@ What the browser extension does:
 * Logins are only ever offered on the sites they are saved for, and that is
   checked in Rust
 
+Setting up the first computer needs an invite from whoever runs the server
+(`havenkeys-server admin new-account`); see
+[docs/deployment.md](docs/deployment.md). A second computer needs the email,
+the master password and the Secret Key from your Emergency Kit.
+
 ## How it protects your data
 
 * Everything about an item is encrypted with AES-256-GCM, including its title,
@@ -60,6 +68,11 @@ What the browser extension does:
   swapped or replayed into another slot without detection.
 * The React UI never sees keys and does no cryptography. Secrets reach it
   only when you reveal one field. Copying happens in Rust.
+* The server stores ciphertext it has no key for, and identifies every
+  request from its session token rather than from anything the client claims.
+  It can still **destroy** data — it is the authority on what your vault
+  contains — which is why tested backups are a prerequisite, not a
+  nicety ([docs/deployment.md](docs/deployment.md) §5).
 
 Read these before trusting it with anything:
 
@@ -67,7 +80,8 @@ Read these before trusting it with anything:
 * [Security model](docs/security-model.md): how it's enforced
 * [Cryptography](docs/crypto.md): key hierarchy, formats, parameters
 * [Architecture](docs/architecture.md)
-* [Sync and the Secret Key](docs/server-sync.md): the folder sync, its file formats (the mobile app's spec) and limits
+* [Server sync and the Secret Key](docs/server-sync.md): the replica model, the account, and what the server can and cannot do
+* [Deployment](docs/deployment.md): running the server, and the backup restore drill that has to pass before you trust it
 * [Native messaging](docs/native-messaging.md): browser ↔ desktop protocol and its checks
 * [Autofill](docs/autofill.md): field detection, matching rules, in-page UI security
 * [Security review](docs/security-review.md): findings from reviewing this implementation
@@ -83,6 +97,7 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 
 pnpm install
 cargo test                 # security core tests
+scripts/test-server.sh     # server + sync client, against a disposable Postgres (needs Docker)
 pnpm dev                   # run the desktop app
 ```
 
@@ -107,10 +122,13 @@ crates/havenkeys-core/          Rust security core (all crypto, vault, lock, TOT
 crates/havenkeys-protocol/      Bridge wire protocol: typed messages, framing, socket endpoint
 crates/havenkeys-bridge/        Desktop side of the browser bridge: authorization, rate limits, socket server
 crates/havenkeys-native-host/   Native messaging host launched by the browser (relay only, no vault access)
+crates/havenkeys-server/        The account server: blind relay for encrypted items, Postgres, admin CLI
+crates/havenkeys-sync-client/   HTTP client for that server; treats every answer as hostile
 apps/desktop/src-tauri/         Tauri shell: command allowlist, clipboard, auto-lock timer
 apps/desktop/src/               React + TypeScript UI (no cryptography)
 apps/extension/                 MV3 browser extension (background worker, popup)
 packages/protocol/              TypeScript mirror of the wire protocol with strict validators
+packages/ui/                    Shared design tokens (desktop, extension, and a future mobile app)
 scripts/                        Native host registration (Linux/macOS, Windows)
 docs/                      Threat model, security model, crypto, architecture, review
 ```

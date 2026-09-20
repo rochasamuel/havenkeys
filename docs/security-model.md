@@ -21,7 +21,11 @@ This document describes *how* HavenKeys enforces the properties listed in
 | Property | Mechanism |
 |---|---|
 | Confidentiality at rest | AES-256-GCM under a random vault key, wrapped by a KEK derived from the master password (Argon2id) and the Secret Key (HKDF) |
-| Copies away from your devices | The sync folder and backups need the master password **and** the 128-bit Secret Key |
+| Copies away from your devices | The server's database and any backup need the master password **and** the 128-bit Secret Key |
+| The server cannot read the vault | It stores item blobs and the header as opaque bytes; no key it holds opens any of them |
+| The server cannot forge item content | Every blob authenticates under the vault's data key; one that does not open is skipped and counted, never applied |
+| The server cannot replay an old header | The attestation must verify, and the revision may not fall below the highest the device has seen (`max_header_rev`) |
+| Requests are bound to a session | The server derives the account and vault from the bearer token, never from the request body |
 | Integrity at rest (per blob) | GCM tag + AAD binding to vault ID / item ID / role |
 | No plaintext secrets in SQLite | Items table holds only `id` + two encrypted blobs |
 | Master password never persisted | Held in `Zeroizing<String>` only for the duration of `unlock`/`create` |
@@ -47,13 +51,20 @@ Stored unencrypted in SQLite:
   (password only, or password + Secret Key) and the header revision.
 * Item IDs (random UUIDv4) and the **number** of items, and the approximate
   size of each encrypted blob.
-* Tombstones of deleted items: their random IDs and deletion times, so
-  deletions can reach other devices.
+* Each item's server revision, which is a number, not a time.
+
+There are no tombstones on a device: a deletion the server serves removes the
+row, and the server keeps the tombstone (`server-sync.md` §3).
 
 Outside the vault database, `device.json` (same folder, mode 0600) holds the
-device ID, the sync folder path and the **Secret Key in plain text**
-(`sync.md` §6 explains why). The sync folder's plaintext is listed in
-`sync.md` §6.
+device ID and the **Secret Key in plain text** (`server-sync.md` §7 explains
+why).
+
+The server's own database holds, in plaintext: the account's email, its KDF
+parameters and salt, an Argon2id hash of the auth key, device names and
+timestamps, and per item its random UUID, its revision, the size of each
+encrypted blob and when it last changed. That metadata is the price of this
+design; it is listed in `server-sync.md` §6 and in `threat-model.md` T1b.
 
 Everything else — item type, title, username, URLs, timestamps, passwords, TOTP
 configuration, notes, and settings — is encrypted.
@@ -204,6 +215,10 @@ origin-bound and rate-limited. See `native-messaging.md`.
   deletion, **not a secure wipe**: on SSDs and journaling or copy-on-write
   filesystems the data may remain recoverable, and copies in backups or cloud
   sync folders are not affected.
+* **Sent through the server like any other write.** Imported items are sealed
+  locally and pushed in batches of at most 500, each atomic on the server.
+  What the vault ends up with is what the server accepted, and that is the
+  number the report shows.
 
 ## 11. Logging
 
@@ -249,26 +264,43 @@ events. It writes secrets only into the `value` of visible, enabled fields
 of the group the user chose, and never into attributes. Details and
 limitations are in `autofill.md`.
 
-## 13. Secret Key and sync
+## 13. Secret Key, the account, and the server
 
-See `sync.md` and `crypto.md` for the full design. In summary:
+See `server-sync.md` and `crypto.md` for the full design. In summary:
 
-* New vaults are protected by the master password **and** a 128-bit Secret
-  Key, mixed into the KEK with HKDF. Copies of the vault that are not on one
-  of your devices (the sync folder, backups) cannot be opened with the
-  password alone.
-* A new device joins with the master password and the Secret Key from the
-  Emergency Kit. No server is involved; knowing both is the proof.
-* The sync folder is untrusted storage. Every file is authenticated with
-  the vault's data key: snapshots are bound to the vault and the writing
-  device, items to their IDs, and the header by an attestation. Unauthentic
-  files are ignored, older versions lose merges, and a password-only header
-  is never adopted.
-* The sync worker never holds the vault lock while it reads or writes the
-  folder, so locking is never delayed.
-* The Emergency Kit (Secret Key and QR code) is shown only while unlocked,
-  on request. Right after a vault is created, continuing requires confirming
-  it was saved.
+* Every vault is protected by the master password **and** a 128-bit Secret
+  Key, mixed into the KEK with HKDF and bound to the account. Copies of the
+  vault that are not on one of your devices — the server's database, its
+  backups — cannot be opened with the password alone.
+* **Activation** is the only way a vault is created: an invite from the
+  server's operator, then a master password. Keys are derived and the header
+  built in memory, the server is asked to accept them, and only then is
+  anything written to disk, so a refused activation leaves no vault bound to
+  an account no server knows.
+* **A second device** needs the server address, the email, the master
+  password and the Secret Key. It proves all four by opening the header the
+  server serves; any one being wrong gives the same message.
+* **The auth key** is a separate HKDF branch from the same Argon2id run as
+  the KEK (`info = "havenkeys/v3/auth"`). It authenticates and unwraps
+  nothing, which is what makes handing it to the server safe. The server
+  stores only an Argon2id hash of it.
+* **The session token** is 32 random bytes, valid 24 hours, held in memory
+  only, and dropped when the vault locks — so a locked vault cannot reach the
+  server at all. The server stores only its SHA-256.
+* **The server is untrusted storage.** Item blobs and the header authenticate
+  under keys it never sees; one that does not is skipped and counted, not
+  applied. It is nevertheless the authority on which items exist, so it can
+  destroy data (`threat-model.md` T1c) and tested backups are a prerequisite
+  (`deployment.md` §5).
+* **Writes need the server**: nothing is recorded locally until it has
+  assigned a revision, so the replica is never ahead of the authority.
+  Offline, every mutating command refuses with `Error::Offline` and the UI
+  says so rather than letting a click fail.
+* The sync client never holds the vault lock across a request, so locking is
+  never delayed by a slow or hostile server.
+* The Emergency Kit (Secret Key, account, email, server and a QR code) is
+  shown only while unlocked, on request. Right after activation, continuing
+  requires confirming it was saved.
 
 ## 14. Browser bridge
 

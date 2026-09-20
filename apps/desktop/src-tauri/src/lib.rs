@@ -79,7 +79,8 @@ pub fn run() {
             // extension-initiated lock behaves exactly like any other.
             let lock_handle = app.handle().clone();
             let change_handle = app.handle().clone();
-            let bridge = Bridge::with_change_hook(
+            let save_handle = app.handle().clone();
+            let bridge = Bridge::with_writer(
                 vault.clone(),
                 move || {
                     if let Some(state) = lock_handle.try_state::<AppState>() {
@@ -90,6 +91,16 @@ pub fn run() {
                 // (the payload is empty; the UI re-reads the list itself).
                 move || {
                     let _ = change_handle.emit(state::ITEMS_CHANGED_EVENT, ());
+                },
+                // A save from the browser is an ordinary write: the server
+                // assigns the revision, and only then is it recorded here.
+                // The bridge thread waits for it, without the vault lock.
+                move |staged| {
+                    let handle = save_handle.clone();
+                    tauri::async_runtime::block_on(async move {
+                        sync::push(&handle, staged).await.map(|_| ())
+                    })
+                    .map_err(sync::bridge_error)
                 },
             );
             app.manage(AppState::new(vault, bridge.clone(), device));

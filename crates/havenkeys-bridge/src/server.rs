@@ -5,9 +5,9 @@
 //! channel. Events such as "locked" are queued with `try_send`, so a peer
 //! that stops reading can never block the code path that locks the vault.
 
-use crate::dispatch::dispatch;
+use crate::dispatch::{dispatch, Dispatched};
 use crate::ratelimit::{RateLimiter, RequestClass};
-use havenkeys_core::vault::VaultService;
+use havenkeys_core::vault::{StagedWrite, VaultService};
 use havenkeys_protocol::endpoint::Endpoint;
 use havenkeys_protocol::frame::{read_frame, write_frame, FrameError};
 use havenkeys_protocol::{
@@ -36,6 +36,9 @@ struct Inner {
     vault: Arc<Mutex<VaultService>>,
     on_lock: Box<dyn Fn() + Send + Sync>,
     on_items_changed: Box<dyn Fn() + Send + Sync>,
+    /// Sends a staged write to the account's server and records the result.
+    /// Called without the vault lock held.
+    save: Box<dyn Fn(StagedWrite) -> Result<(), ErrorCode> + Send + Sync>,
     limiter: Mutex<RateLimiter>,
     connections: Mutex<Vec<(u64, SyncSender<Frame>)>>,
     next_conn: Mutex<u64>,
@@ -72,16 +75,36 @@ impl Bridge {
 
     /// Like [`new`](Self::new); `on_items_changed` runs (without any mutex
     /// held) after the extension saved a login, so the UI can refresh.
+    ///
+    /// Without a `save` hook a login cannot be stored at all: writes go to
+    /// the account's server, which this crate knows nothing about. That is
+    /// what `Offline` means here, and it is the honest answer for a bridge
+    /// wired up without one.
     pub fn with_change_hook(
         vault: Arc<Mutex<VaultService>>,
         on_lock: impl Fn() + Send + Sync + 'static,
         on_items_changed: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
+        Self::with_writer(vault, on_lock, on_items_changed, |_| {
+            Err(ErrorCode::Offline)
+        })
+    }
+
+    /// The full wiring: `save` sends a staged write to the account's server
+    /// and records it locally, exactly as a write from the desktop UI does.
+    /// It is called without the vault lock held.
+    pub fn with_writer(
+        vault: Arc<Mutex<VaultService>>,
+        on_lock: impl Fn() + Send + Sync + 'static,
+        on_items_changed: impl Fn() + Send + Sync + 'static,
+        save: impl Fn(StagedWrite) -> Result<(), ErrorCode> + Send + Sync + 'static,
     ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 vault,
                 on_lock: Box::new(on_lock),
                 on_items_changed: Box::new(on_items_changed),
+                save: Box::new(save),
                 limiter: Mutex::new(RateLimiter::default()),
                 connections: Mutex::new(Vec::new()),
                 next_conn: Mutex::new(0),
@@ -132,9 +155,19 @@ impl Bridge {
                 return Err(ErrorCode::RateLimited);
             }
         }
-        let result = {
+        let dispatched = {
             let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
             dispatch(&mut vault, req, unix_seconds())
+        };
+        // The vault lock is released above, before the save below reaches the
+        // network: a slow or hostile server must never delay locking.
+        let result = match dispatched {
+            Ok(Dispatched::Done(body)) => Ok(body),
+            Ok(Dispatched::Save(staged)) => {
+                let item_id = staged.item_id;
+                (self.inner.save)(staged.write).map(|()| ResultBody::SaveLogin { item_id })
+            }
+            Err(e) => Err(e),
         };
         if matches!(req, Request::SaveLogin { .. }) && result.is_ok() {
             (self.inner.on_items_changed)();

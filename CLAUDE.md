@@ -49,9 +49,18 @@ The application should be:
 * Easy to audit
 * Modular enough to add synchronization/mobile later
 
-The desktop application should work completely without an internet connection.
+Reads work without an internet connection: each device keeps an encrypted
+read-only replica, so unlocking, searching, revealing, TOTP and autofill all
+work offline. Changes require the server, which is the single writer.
 
-There must be **no backend required for the MVP**.
+The backend is part of the product: a small server the user runs themselves
+(`havenkeys-server`), which stores ciphertext it cannot open. It is not a
+hosted service and there is no vendor account.
+
+> Amended on 2026-09-20 by
+> `docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`
+> §10. The original text ("works completely without an internet connection",
+> "no backend required") described the folder-sync design that spec replaced.
 
 Do not introduce:
 
@@ -1991,7 +2000,9 @@ Do not hide or ignore security problems simply because they are inconvenient to 
 
 # Final objective
 
-Build a small, elegant, secure, local-first password manager that provides an experience similar to:
+Build a small, elegant, secure password manager — local-first in the sense
+that keys and plaintext never leave the device, with a server the user owns
+holding only ciphertext — that provides an experience similar to:
 
 ```text
 1Password

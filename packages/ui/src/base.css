@@ -1,0 +1,241 @@
+/* Primitives built only on the tokens in tokens.css, which must be loaded
+   first. Deliberately small: a button, an input, a labelled field, a banner,
+   a card, a badge, and the one utility every screen ends up needing. No
+   layout system, no reset beyond what a primitive needs to look right in a
+   page it does not own.
+
+   Everything is prefixed `hk-` because the desktop already owns `.btn`,
+   `.card`, `.banner`, `.field` and `.control` in apps/desktop/src/styles.css.
+   The prefix means a page can load both without either surprising the other.
+
+   A few numbers are written out rather than taken from the spacing scale:
+   control heights (30/28/26px) and the padding tuned to them (0 11px, 5px
+   9px). Those are one control's proportions, not steps anything else should
+   line up with. They are the same numbers the desktop uses.
+
+   Nothing here animates, so there is no reduced-motion case to handle. */
+
+.hk-btn,
+.hk-input,
+.hk-card,
+.hk-banner,
+.hk-badge {
+  box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------- buttons */
+
+/* `.hk-btn` on its own is the secondary button: an outline, no fill. The
+   modifiers below turn it into the other three. */
+.hk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-control);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hk-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.hk-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.hk-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The one button that commits the screen's action. At most one per view. */
+.hk-btn-primary {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-fg);
+}
+
+.hk-btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+/* Present but not asking to be pressed: cancel, dismiss, a third option. */
+.hk-btn-quiet {
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.hk-btn-quiet:hover:not(:disabled) {
+  color: var(--text-strong);
+}
+
+/* Destroys something. Filled, so it cannot be clicked by muscle memory. */
+.hk-btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--on-danger);
+}
+
+.hk-btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Shorter, for a row of actions attached to a field rather than a screen. */
+.hk-btn-small {
+  height: 26px;
+  padding: 0 9px;
+  font-size: var(--text-md);
+}
+
+/* -------------------------------------------------------------- inputs */
+
+.hk-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+}
+
+.hk-input::placeholder {
+  color: var(--muted);
+}
+
+/* Brass on the border rather than a ring: an input is already a box, and a
+   ring around one reads as an error. */
+.hk-input:focus-visible {
+  outline: none;
+  border-color: var(--brass);
+}
+
+.hk-input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* A control with its label above it. */
+.hk-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.hk-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-label);
+  color: var(--muted);
+}
+
+/* Said under a field, usually why the value was rejected. */
+.hk-field-note {
+  font-size: var(--text-md);
+  color: var(--muted);
+}
+
+.hk-field-note-error {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------- banners */
+
+/* A line across the top of a pane saying something about the whole pane.
+   Not a toast: it stays until the condition does. */
+.hk-banner {
+  padding: 7px var(--space-2xl);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-md);
+  text-align: center;
+}
+
+/* Something the user should know. */
+.hk-banner-info {
+  background: var(--raised);
+  color: var(--muted);
+}
+
+/* Something the user should act on before it matters. */
+.hk-banner-warning {
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+  border-bottom-color: var(--brass);
+}
+
+/* Something is wrong now. */
+.hk-banner-danger {
+  background: var(--raised);
+  color: var(--danger);
+  border-bottom-color: var(--danger);
+}
+
+/* --------------------------------------------------------------- cards */
+
+/* The surface a group of fields sits on. */
+.hk-card {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+/* A card that floats over something else: a menu, or the in-page frame. */
+.hk-card-floating {
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+
+/* -------------------------------------------------------------- badges */
+
+/* A short fact attached to a title: a count, a state, how a URL matched.
+   A soft rectangle rather than a capsule; nothing else here is round. */
+.hk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding: var(--space-3xs) var(--space-xs);
+  border-radius: var(--r-sm);
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-label);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+
+/* When the badge is just a count and should not draw the eye. */
+.hk-badge-quiet {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------ utility */
+
+/* For text that a screen reader needs and the screen does not. Kept in the
+   layout (not `display: none`) so it is still announced. */
+.hk-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
