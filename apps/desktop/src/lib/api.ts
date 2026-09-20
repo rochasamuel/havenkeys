@@ -7,8 +7,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AccountStatus,
   CopyField,
   CopyResult,
+  DeviceEntry,
   DeviceStatus,
   EmergencyKit,
   GeneratedPassword,
@@ -18,6 +20,7 @@ import type {
   ItemOverview,
   SecretField,
   Settings,
+  SyncReport,
   TotpCode,
   VaultStatus,
 } from "./types";
@@ -93,6 +96,24 @@ export const api = {
   deviceStatus: () => call<DeviceStatus>("device_status"),
   emergencyKit: () => call<EmergencyKit>("get_emergency_kit"),
 
+  /** First run: the invite string from the account's operator. */
+  activate: (invite: string, password: string) =>
+    call<VaultStatus>("activate_account", { invite: invite.trim(), password }),
+  /** A device that has no vault yet joins an existing account. */
+  signIn: (serverUrl: string, email: string, password: string, secretKey: string) =>
+    call<VaultStatus>("sign_in", {
+      serverUrl: serverUrl.trim(),
+      email: email.trim(),
+      password,
+      secretKey: secretKey.trim(),
+    }),
+  /** Ends the server session and locks the vault. The vault stays on disk. */
+  signOut: () => call<void>("sign_out"),
+  accountStatus: () => call<AccountStatus | null>("account_status"),
+  listDevices: () => call<DeviceEntry[]>("list_devices"),
+  revokeDevice: (id: string) => call<void>("revoke_device", { id }),
+  syncNow: () => call<SyncReport>("sync_now"),
+
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),
 
@@ -100,4 +121,10 @@ export const api = {
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),
   /** A login was saved from the browser extension. Carries no data. */
   onItemsChanged: (handler: () => void): Promise<UnlistenFn> => listen("vault://items-changed", () => handler()),
+  /** The server session was opened or lost. */
+  onConnectivity: (handler: (online: boolean) => void): Promise<UnlistenFn> =>
+    listen<boolean>("vault://connectivity", (e) => handler(e.payload)),
+  /** A pull finished; carries counts only. */
+  onSynced: (handler: (report: SyncReport) => void): Promise<UnlistenFn> =>
+    listen<SyncReport>("vault://synced", (e) => handler(e.payload)),
 };

@@ -1310,3 +1310,313 @@ input[type="range"] {
     border: 0;
   }
 }
+
+/* ---------------------------------------------------------------- welcome
+   First run: activation with an invite, or signing in on a second computer.
+   One column, generous targets, and a width that still reads on a small
+   window — the same shape a phone will need. */
+
+.welcome {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.welcome-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 28px 28px 24px;
+}
+
+.welcome-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.welcome-head h1 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  color: var(--text-strong);
+}
+
+.welcome-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  max-width: 34ch;
+}
+
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-list);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.segmented-item {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.segmented-item:hover {
+  color: var(--text);
+}
+
+.segmented-item.is-active {
+  background: var(--raised);
+  color: var(--text-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.welcome-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.field-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.field-input:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+.field-input:disabled {
+  opacity: 0.6;
+}
+
+.field-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.01em;
+}
+
+.field-area {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.45;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.btn-lg {
+  padding: 11px 16px;
+  font-size: 14px;
+  justify-content: center;
+}
+
+.welcome-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ------------------------------------------------------- Emergency Kit screen */
+
+.kit-screen {
+  min-height: 100vh;
+  padding: 28px 20px 40px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.kit-screen-head {
+  max-width: 640px;
+  margin: 0 auto 20px;
+  text-align: center;
+}
+
+.kit-screen-head h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: var(--text-strong);
+}
+
+.kit-screen-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------- account panel */
+
+.kv {
+  margin: 0 0 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.kv > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.kv dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kv dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.kv .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-ok {
+  color: var(--ok);
+}
+
+.status-muted {
+  color: var(--muted);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.row-actions .muted {
+  font-size: 12px;
+  max-width: 44ch;
+}
+
+.device-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--raised);
+}
+
+.device-row + .device-row {
+  border-top: 1px solid var(--line);
+}
+
+.device-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.device-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.device-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.device-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.device-confirm .muted {
+  font-size: 12px;
+}
+
+.pill {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--brass-soft);
+  color: var(--brass-hi, var(--brass));
+  border: 1px solid var(--line-strong);
+}
