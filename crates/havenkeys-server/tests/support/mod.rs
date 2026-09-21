@@ -28,7 +28,7 @@ impl TestServer {
         run_on_admin(&admin_url, &format!(r#"CREATE DATABASE "{db_name}""#)).await;
 
         let url = swap_database(&admin_url, &db_name);
-        let pool = havenkeys_server::db::connect(&url).expect("pool");
+        let pool = havenkeys_server::db::connect(&url).await.expect("pool");
         havenkeys_server::db::migrate(&pool).await.expect("migrate");
 
         let state = AppState {

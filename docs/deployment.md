@@ -127,8 +127,22 @@ curl -sS --proto '=https' --tlsv1.2 https://<your-host>/v1/health >/dev/null && 
 ```
 
 The deploy logs should show `migration applied` once, then
-`havenkeys-server listening`. If the health check fails, the logs say which
-variable is missing — they never print its value.
+`havenkeys-server listening`.
+
+If it cannot reach the database it waits up to a minute, logging
+`waiting for the database` with a reason, and then exits with that reason.
+The reasons are the whole diagnosis, and none of them prints the URL:
+
+| Log line | What it means |
+|---|---|
+| `the database host name does not resolve yet` | The private network is not up, or `DATABASE_URL` names a service that does not exist. If it never resolves, check that the reference is `${{Postgres.DATABASE_URL}}` and that the Postgres service really is called `Postgres`. |
+| `nothing is listening at that address` | Right host, wrong port — or the database service is not running. |
+| `the database rejected these credentials` | The URL is stale: the database was recreated and the variable still holds the old password. Use the reference form, which follows it. |
+| `that database does not exist on the server` | The URL's path names a database that was never created. |
+| `the database is still starting up` | Normal for a few seconds after the Postgres service deploys; it retries. |
+
+A failure that waiting cannot fix — wrong credentials, missing database — is
+reported immediately rather than after the full minute.
 
 ### 3.7 The CLI, for the steps below
 

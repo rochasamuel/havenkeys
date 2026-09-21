@@ -6,8 +6,18 @@
 //! it should be readable in one sitting (CLAUDE.md "easy to audit").
 
 use deadpool_postgres::{Config as PoolConfig, ManagerConfig, Pool, RecyclingMethod, Runtime};
+use std::error::Error as _;
 use std::fmt;
+use std::time::{Duration, Instant};
 use tokio_postgres::NoTls;
+
+/// How long to keep trying the first connection before giving up.
+///
+/// A platform's private network is usually up before the container is, but
+/// not always: on Railway it exists only at runtime and its DNS can lag the
+/// first instruction the process runs. Crash-looping on that is both slower
+/// to recover and much harder to read than waiting.
+const CONNECT_DEADLINE: Duration = Duration::from_secs(60);
 
 /// Every migration, in the order they must run. Adding one means appending a
 /// line here; editing a shipped one is not allowed — write the next.
@@ -27,18 +37,77 @@ impl fmt::Display for DbError {
             // failure is ever printed, never the string or the driver's
             // message about it.
             Self::Config(_) => f.write_str("the database URL is not valid"),
-            Self::Connect(_) => f.write_str("could not connect to the database"),
+            Self::Connect(why) => write!(f, "could not connect to the database: {why}"),
             Self::Migrate(m) => write!(f, "could not apply migrations: {m}"),
         }
     }
 }
 
-/// Build a pool from a `postgres://` URL.
+/// Connect, waiting for the database to be reachable.
 ///
-/// TLS is used unless the URL asks for `sslmode=disable`, which is what a
-/// local container and a private-network deployment use. Certificates are
-/// verified against the webpki roots; there is no "accept anything" mode.
-pub fn connect(url: &str) -> Result<Pool, DbError> {
+/// Returns a pool that has proved it can hand out a connection, so a failure
+/// here is reported once, with a reason, instead of arriving later as a
+/// request that mysteriously 500s.
+pub async fn connect(url: &str) -> Result<Pool, DbError> {
+    let pool = build_pool(url)?;
+    let deadline = Instant::now() + CONNECT_DEADLINE;
+    let mut wait = Duration::from_millis(250);
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        let (failure, transient) = match pool.get().await {
+            Ok(_) => return Ok(pool),
+            Err(deadpool_postgres::PoolError::Backend(err)) => describe(&err),
+            Err(_) => ("the connection pool gave up", false),
+        };
+        // A wrong password will still be wrong in a minute. Only the failures
+        // a starting platform actually produces are worth waiting through.
+        if !transient || Instant::now() >= deadline {
+            return Err(DbError::Connect(failure.to_string()));
+        }
+        // Never the URL: it carries a password.
+        tracing::warn!(attempt, reason = failure, "waiting for the database");
+        tokio::time::sleep(wait).await;
+        wait = (wait * 2).min(Duration::from_secs(5));
+    }
+}
+
+/// What went wrong, in words an operator can act on, and whether waiting
+/// could fix it. The driver's own message can quote the host and the SQL, so
+/// only this fixed set is ever shown.
+fn describe(err: &tokio_postgres::Error) -> (&'static str, bool) {
+    if let Some(code) = err.code() {
+        return match code.code() {
+            "28P01" | "28000" => ("the database rejected these credentials", false),
+            "3D000" => ("that database does not exist on the server", false),
+            "53300" => ("the database is out of connection slots", true),
+            "57P03" => ("the database is still starting up", true),
+            _ => ("the database refused the connection", false),
+        };
+    }
+    let mut source = err.source();
+    while let Some(cause) = source {
+        if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+            let text = io.to_string();
+            // A name that does not resolve yet is the usual shape of a
+            // private network that has not finished coming up.
+            if text.contains("lookup address") || text.contains("resolve") {
+                return ("the database host name does not resolve yet", true);
+            }
+            return match io.kind() {
+                std::io::ErrorKind::ConnectionRefused => {
+                    ("nothing is listening at that address", true)
+                }
+                std::io::ErrorKind::TimedOut => ("the database did not answer in time", true),
+                _ => ("the database could not be reached", true),
+            };
+        }
+        source = cause.source();
+    }
+    ("the database could not be reached", true)
+}
+
+fn build_pool(url: &str) -> Result<Pool, DbError> {
     let pg: tokio_postgres::Config = url
         .parse()
         .map_err(|_| DbError::Config("unparseable".into()))?;
