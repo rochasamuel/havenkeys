@@ -85,6 +85,28 @@ fn describe(err: &tokio_postgres::Error) -> (&'static str, bool) {
             _ => ("the database refused the connection", false),
         };
     }
+    // A TLS failure is almost always a private-network database presenting a
+    // self-signed certificate, which this client will not accept silently.
+    // Saying so beats "could not be reached", which sends an operator looking
+    // at firewalls.
+    let chain = {
+        let mut text = err.to_string();
+        let mut next = err.source();
+        while let Some(cause) = next {
+            text.push_str(&cause.to_string());
+            next = cause.source();
+        }
+        text.to_lowercase()
+    };
+    if chain.contains("certificate") || chain.contains("tls") || chain.contains("handshake") {
+        return (
+            "the database's TLS certificate is not trusted; on a private network add \
+             ?sslmode=disable to DATABASE_URL, or use a database with a publicly \
+             trusted certificate",
+            false,
+        );
+    }
+
     let mut source = err.source();
     while let Some(cause) = source {
         if let Some(io) = cause.downcast_ref::<std::io::Error>() {
