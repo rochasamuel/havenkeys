@@ -54,11 +54,15 @@ pub struct AppState {
     /// whether or not the attempt worked. Real sync times live in the
     /// account record.
     last_sync_attempt: Mutex<Option<Duration>>,
+    /// Set when the vault file on this computer could not be opened. The app
+    /// still starts — it has to, or there is nowhere to show the reason —
+    /// and every command that touches the vault refuses with this.
+    storage_error: Option<CmdError>,
     origin: Instant,
 }
 
 /// Error returned to the renderer: a stable code and a fixed message.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CmdError {
     pub code: &'static str,
     pub message: String,
@@ -97,6 +101,22 @@ impl CmdError {
         }
     }
 
+    /// The vault file exists but this build cannot open it. Carries the
+    /// folder so the message can tell the user where their file is; a path
+    /// is not a secret, and without it the advice is unfollowable.
+    pub fn vault_unreadable(dir: &std::path::Path) -> Self {
+        Self {
+            code: "vault_unreadable",
+            message: format!(
+                "This vault was created by an older version of HavenKeys and cannot be \
+                 opened by this one. Your file is in {}. Move vault.sqlite3 and \
+                 device.json somewhere safe — do not delete them — and start HavenKeys \
+                 again to set this computer up with an invite.",
+                dir.display()
+            ),
+        }
+    }
+
     pub fn clipboard() -> Self {
         Self {
             code: "clipboard",
@@ -113,7 +133,15 @@ struct LockedPayload {
 }
 
 impl AppState {
-    pub fn new(vault: Arc<Mutex<VaultService>>, bridge: Bridge, device: Device) -> Self {
+    /// `storage_error` is set when the vault file could not be opened: the
+    /// app then runs on an empty in-memory store so the window can open and
+    /// say so, and every command refuses before touching it.
+    pub fn new(
+        vault: Arc<Mutex<VaultService>>,
+        bridge: Bridge,
+        device: Device,
+        storage_error: Option<CmdError>,
+    ) -> Self {
         Self {
             vault,
             bridge,
@@ -124,11 +152,17 @@ impl AppState {
             connectivity: Mutex::new(Connectivity::Offline),
             sync_client: Mutex::new(None),
             last_sync_attempt: Mutex::new(None),
+            storage_error,
             origin: Instant::now(),
         }
     }
 
     pub fn vault(&self) -> CmdResult<MutexGuard<'_, VaultService>> {
+        // Checked here rather than in each command: this is the one door
+        // every one of them goes through.
+        if let Some(err) = &self.storage_error {
+            return Err(err.clone());
+        }
         self.vault.lock().map_err(|_| CmdError::internal())
     }
 

@@ -71,8 +71,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let path = vault_path(app)?;
-            let store = Store::open(&path).map_err(|e| e.to_string())?;
-            let device = device::Device::load(path.parent().ok_or("no data directory")?);
+            let dir = path.parent().ok_or("no data directory")?.to_path_buf();
+            // A vault this build cannot open must not take the app down with
+            // it: a panic in the setup hook leaves the user with a stack
+            // trace in a terminal they may not even be looking at. The app
+            // opens on an empty in-memory store, every command refuses with
+            // the reason, and the window says what to do.
+            let (store, storage_error) = match Store::open(&path) {
+                Ok(store) => (store, None),
+                Err(_) => (
+                    Store::open_in_memory().map_err(|e| e.to_string())?,
+                    Some(state::CmdError::vault_unreadable(&dir)),
+                ),
+            };
+            let device = device::Device::load(&dir);
             let vault = Arc::new(Mutex::new(VaultService::new(store)));
 
             // Browser integration. The bridge locks through AppState so an
@@ -103,7 +115,7 @@ pub fn run() {
                     .map_err(sync::bridge_error)
                 },
             );
-            app.manage(AppState::new(vault, bridge.clone(), device));
+            app.manage(AppState::new(vault, bridge.clone(), device, storage_error));
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
             let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));

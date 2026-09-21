@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { api } from "./lib/api";
+import { api, ApiError } from "./lib/api";
 import type { DeviceStatus, VaultStatus } from "./lib/types";
 import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
 import { EmergencyKit } from "./components/EmergencyKit";
+import { Seal } from "./components/Seal";
 import { UnlockScreen } from "./views/UnlockScreen";
 import { VaultScreen } from "./views/VaultScreen";
 import { WelcomeScreen } from "./views/WelcomeScreen";
@@ -14,14 +15,23 @@ export function App() {
   // Bumped on every lock so the whole vault tree (and any secret held in
   // component state) is unmounted and discarded.
   const [session, setSession] = useState(0);
-  const [fatal, setFatal] = useState(false);
+  // Why the vault could not be opened at all, in the core's own words: an
+  // old vault file this build cannot read is the case that matters, and the
+  // message names the folder it is in.
+  const [fatal, setFatal] = useState<string | null>(null);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   // Shown once, right after activation: the kit is the only copy of the
   // Secret Key, so the vault waits behind an explicit confirmation.
   const [showKit, setShowKit] = useState(false);
 
   useEffect(() => {
-    api.status().then(setStatus, () => setFatal(true));
+    api.status().then(setStatus, (err) =>
+      setFatal(
+        err instanceof ApiError
+          ? err.message
+          : "HavenKeys could not reach its vault storage. Restart the app.",
+      ),
+    );
     const unlisten = api.onLocked((reason) => {
       setLockReason(reason);
       setSession((s) => s + 1);
@@ -73,8 +83,14 @@ export function App() {
 
   if (fatal) {
     return (
-      <main className="unlock">
-        <p className="unlock-error">HavenKeys could not reach its vault storage. Restart the app.</p>
+      <main className="welcome">
+        <div className="welcome-card">
+          <header className="welcome-head">
+            <Seal />
+            <h1>HavenKeys cannot open this vault</h1>
+          </header>
+          <p className="fatal-message">{fatal}</p>
+        </div>
       </main>
     );
   }
