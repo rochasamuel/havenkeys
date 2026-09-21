@@ -103,7 +103,7 @@ Copied from `CLAUDE.md` and the spec; every task's requirements include these.
 | `crates/havenkeys-server/tests/isolation.rs` | Account A against every authenticated route of account B. |
 | `crates/havenkeys-server/tests/limits.rs` | Sizes, shapes, unknown fields, non-UUIDs. |
 | `crates/havenkeys-server/tests/no_logging.rs` | No secret-bearing value reaches a log line. |
-| `crates/havenkeys-server/Dockerfile` | Multi-stage build for Railway. |
+| `Dockerfile` (repository root) | Multi-stage build for Railway. At the root because that is where a platform looks, and the build needs the whole workspace as context. |
 | `crates/havenkeys-server/railway.json` | Railway service definition. |
 | `scripts/test-server.sh` | Starts the disposable Postgres and runs the suite. |
 | `docs/deployment.md` | Deploy, environment, backup **and tested restore** runbook. |
@@ -1685,7 +1685,7 @@ git commit -m "test(server): account isolation, limits, and a no-logging guard"
 ## Task 11: Deployment, audit and docs
 
 **Files:**
-- Create: `crates/havenkeys-server/Dockerfile`, `railway.json`,
+- Create: `Dockerfile` (repository root), `railway.json`,
   `docs/deployment.md`
 - Modify: `docs/roadmap.md`, `deny.toml`, `README.md` (a line naming the
   server, without claiming it is deployed)

@@ -22,7 +22,7 @@ holds ciphertext it has no key for, plus the metadata needed to route it.
 * The `havenkeys-server` image, built from the repository root:
 
 ```sh
-docker build -f crates/havenkeys-server/Dockerfile -t havenkeys-server .
+docker build -t havenkeys-server .
 ```
 
 ## 2. Environment
@@ -49,11 +49,12 @@ Migrations run at startup, so a fresh database needs no manual step.
 
 ## 3. Railway, step by step
 
-Railway reads `railway.json` from the repository root, which is where this
-repo keeps it: it names the Dockerfile, the health check and the restart
-policy, so the dashboard needs almost no configuration. The build context is
-the repository root, because the Dockerfile has to read the whole Cargo
-workspace to resolve it.
+Two files at the repository root do the configuring: the `Dockerfile`, which
+Railway uses for any service it finds one for, and `railway.json`, which adds
+the health check and the restart policy. The build context is the repository
+root, because the build has to read the whole Cargo workspace to resolve it —
+which is also why the Dockerfile lives at the root rather than beside the
+crate.
 
 ### 3.1 Push the branch
 
@@ -72,8 +73,20 @@ git push origin main
 ### 3.3 Add the server service
 
 1. In the same project: **New** → **GitHub Repo** → this repository.
-2. Railway finds `railway.json` and uses the Dockerfile in it. The first
-   build takes a few minutes: it compiles the crate from scratch.
+2. Railway finds the root `Dockerfile` and builds with it. The first build
+   takes a few minutes: it compiles the crate from scratch.
+
+If the build log says **Railpack** and `No start command detected`, Railway
+did not see the Dockerfile. Check, on the service's **Settings**:
+
+* **Source → Root Directory** must be empty or `/`. Anything else and Railway
+  looks for the Dockerfile and `railway.json` inside that directory instead.
+* **Build → Builder** must be Dockerfile (or automatic). A builder pinned to
+  Railpack in the dashboard wins over what the repository contains.
+* **Config-as-code** path must be empty or `/railway.json`.
+* The deployment must be from a commit that *has* these files — a service
+  created before they were pushed keeps building the commit it knew.
+  **Deployments → Redeploy** on the latest commit.
 
 ### 3.4 Set the variables
 

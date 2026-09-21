@@ -1,5 +1,11 @@
-# Build context is the repository root:
-#   docker build -f crates/havenkeys-server/Dockerfile -t havenkeys-server .
+# Builds havenkeys-server, the only deployable in this repository. It lives at
+# the root because that is where a platform looks for a Dockerfile, and because
+# the build needs the whole Cargo workspace as context anyway:
+#
+#   docker build -t havenkeys-server .
+#
+# The desktop app and the extension are not built here; they ship as installers
+# and as an unpacked extension (see docs/development.md).
 #
 # Nothing secret enters the image. There is no DATABASE_URL at build time —
 # the crate builds every query at runtime precisely so that stays true — and
