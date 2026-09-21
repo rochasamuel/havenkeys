@@ -2,9 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "crates/havenkeys-server/Dockerfile",
+    "dockerfilePath": "Dockerfile",
     "watchPatterns": [
       "crates/havenkeys-server/**",
+      "Dockerfile",
       "crates/havenkeys-core/**",
       "Cargo.toml",
       "Cargo.lock",
