@@ -26,8 +26,12 @@ pub const MAX_CONNECTIONS: usize = 8;
 const OUTBOX: usize = 16;
 /// A connection that sends nothing for this long is closed, so idle or
 /// half-sent connections cannot hold slots forever. The extension closes its
-/// port after 60 s idle, so real hosts never hit this. (Unix only: named pipes
-/// have no receive timeout.)
+/// port after 60 s idle, so real hosts never hit this.
+///
+/// Unix only, and the `cfg` says so rather than leaving a constant Windows
+/// builds warn about: named pipes have no receive timeout, so there an idle
+/// connection holds its slot until the host exits.
+#[cfg(unix)]
 const IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 
 type Frame = Zeroizing<Vec<u8>>;

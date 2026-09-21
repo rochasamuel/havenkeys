@@ -1529,3 +1529,13 @@ input[type="range"] {
   color: var(--brass-hi, var(--brass));
   border: 1px solid var(--line-strong);
 }
+
+/* The app could not open the vault file at all. Not an error toast: it is
+   the only thing on screen, and it has to be readable enough to act on. */
+.fatal-message {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
