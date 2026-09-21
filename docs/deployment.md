@@ -47,60 +47,127 @@ probing `auth/params`.
 
 Migrations run at startup, so a fresh database needs no manual step.
 
-## 3. Railway
+## 3. Railway, step by step
 
-1. Create a project, add the **Postgres** plugin, and add a service from this
-   repository. `crates/havenkeys-server/railway.json` already points at the
-   Dockerfile and sets `/v1/health` as the health check.
-2. Set `SERVER_SECRET` on the service. `DATABASE_URL` comes from the plugin —
-   use the **private** network URL if the plugin offers one.
-3. Deploy, then confirm:
+Railway reads `railway.json` from the repository root, which is where this
+repo keeps it: it names the Dockerfile, the health check and the restart
+policy, so the dashboard needs almost no configuration. The build context is
+the repository root, because the Dockerfile has to read the whole Cargo
+workspace to resolve it.
+
+### 3.1 Push the branch
+
+Railway deploys what GitHub has:
 
 ```sh
-curl -si https://<your-host>/v1/health          # 200 {"status":"ok"}
-curl -si http://<your-host>/v1/health           # must redirect or fail, never serve
+git push origin main
 ```
 
-4. Confirm TLS is real (not a self-signed placeholder):
+### 3.2 Create the project and the database
+
+1. railway.com → **New Project** → **Deploy PostgreSQL**. That alone creates
+   the project with a Postgres service in it.
+2. Note the project's environment (`production` by default).
+
+### 3.3 Add the server service
+
+1. In the same project: **New** → **GitHub Repo** → this repository.
+2. Railway finds `railway.json` and uses the Dockerfile in it. The first
+   build takes a few minutes: it compiles the crate from scratch.
+
+### 3.4 Set the variables
+
+On the **server** service → **Variables**:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` — a reference, not a copy, so it follows the database |
+| `SERVER_SECRET` | the output of `openssl rand -base64 32`, generated once |
+| `HAVENKEYS_TRUST_FORWARDED_FOR` | `1` — Railway's edge sets `X-Forwarded-For`, and without this every request looks like it comes from the proxy, which would make per-address rate limiting useless |
+
+Do **not** set `PORT`: Railway injects it, and the server binds what it is
+given.
+
+`${{Postgres.DATABASE_URL}}` is the private-network address. It never leaves
+Railway's network and costs no egress.
+
+### 3.5 Give it a domain
+
+Server service → **Settings** → **Networking** → **Generate Domain**. Railway
+terminates TLS on that domain. The server itself speaks plain HTTP and
+expects exactly this; it must never be reachable over plain HTTP from
+outside, which is why the client refuses any server URL that is not `https://`
+(localhost aside).
+
+### 3.6 Check it
 
 ```sh
+curl -si https://<your-host>/v1/health     # 200 {"status":"ok"}
 curl -sS --proto '=https' --tlsv1.2 https://<your-host>/v1/health >/dev/null && echo "TLS ok"
+```
+
+The deploy logs should show `migration applied` once, then
+`havenkeys-server listening`. If the health check fails, the logs say which
+variable is missing — they never print its value.
+
+### 3.7 The CLI, for the steps below
+
+```sh
+bash <(curl -fsSL railway.com/install.sh)   # install
+railway login
+railway link                                # pick the project and the server service
 ```
 
 ## 4. The first account
 
-There is no public signup. Accounts exist because an operator created one:
+There is no public signup: an account exists because an operator created one.
+On Railway that means running the CLI inside the deployed service, where the
+binary and the private `DATABASE_URL` both are:
 
 ```sh
+railway ssh
 havenkeys-server admin new-account --email you@example.com \
                                    --server-url https://<your-host>
 ```
 
-It prints one invite string (`HKINV1-…`), **once**. Only its SHA-256 is
-stored, it is single-use, and it expires after seven days. Paste it into the
-desktop app's first-run screen.
+It prints one invite string (`HKINV1-…`), **once**, to that terminal; only its
+SHA-256 reaches the database. It is single-use and expires after seven days.
+Paste it into the desktop app's first-run screen.
 
-Other commands:
+Other commands, in the same shell:
 
 ```sh
 havenkeys-server admin list-accounts
 havenkeys-server admin delete-account --email you@example.com   # irreversible
 ```
 
-On Railway, run these in a one-off shell against the same service so they see
-the same `DATABASE_URL`.
+Running the same binary locally works too, as long as it is given a
+`DATABASE_URL` that reaches the database (§5 explains the public one).
 
 ## 5. Backups, and the restore drill (blocking)
 
-**Railway does not enable scheduled Postgres backups on every plan.** Check,
-and turn them on, before the vault holds anything you would miss.
+**Railway does not enable scheduled backups by default.** Turn them on before
+the vault holds anything you would miss: Postgres service → **Backups** →
+choose Daily (kept 6 days), Weekly (27) or Monthly (89).
+
+Those are *volume snapshots*. Restoring one is a dashboard action — it
+stages a new volume, unmounts the old one and redeploys — and they cannot be
+downloaded. That makes them a good recovery path for "the database broke" and
+no protection at all against "the Railway account is gone". Keep your own
+dump as well, which is what the drill below produces.
+
+To reach the database from your machine you need the public address: Postgres
+service → **Settings** → **Networking** → enable the TCP proxy, which adds
+`DATABASE_PUBLIC_URL`. Egress through it is billed, so use it for backups and
+turn it off if you would rather not leave it open.
 
 A backup that has never been restored is not a backup. Do this once, and
 again after any change to the database plan:
 
 ```sh
-# 1. Take a dump of the live database.
-pg_dump --format=custom "$DATABASE_URL" > havenkeys-$(date +%F).dump
+# 1. Take a dump of the live database, through the public proxy.
+export DATABASE_PUBLIC_URL="$(railway variables --service Postgres --kv | grep '^DATABASE_PUBLIC_URL=' | cut -d= -f2-)"
+pg_dump --format=custom "$DATABASE_PUBLIC_URL" > havenkeys-$(date +%F).dump
 
 # 2. Restore it into a scratch database (locally is fine).
 createdb havenkeys_restore_test
