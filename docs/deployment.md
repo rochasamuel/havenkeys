@@ -29,7 +29,7 @@ docker build -t havenkeys-server .
 
 | Variable | Required | Meaning |
 |---|---|---|
-| `DATABASE_URL` | yes | `postgres://user:pass@host:5432/db`. Add `?sslmode=disable` only on a private network you trust. |
+| `DATABASE_URL` | yes | `postgres://user:pass@host:5432/db`. TLS is used unless the URL says `sslmode=disable`, and the certificate must be signed by a public root — this client does not accept a self-signed one. Managed databases on a **private** network (Railway's among them) present exactly that, so those URLs need `?sslmode=disable`; the private network is the boundary doing the work there. |
 | `SERVER_SECRET` | yes | 32 random bytes, base64. Used only to derive the decoy account id and salt that keep `auth/params` from revealing whether an email has an account. |
 | `PORT` | no | Defaults to 8080. Railway sets it. |
 | `HAVENKEYS_CORS_ORIGIN` | no | Exactly one browser origin. Leave unset: nothing in the MVP calls this API from a browser, and there is no wildcard. |
@@ -94,7 +94,7 @@ On the **server** service → **Variables**:
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` — a reference, not a copy, so it follows the database |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}?sslmode=disable` — a reference, not a copy, so it follows the database. The suffix matters: Railway's Postgres offers TLS with a self-signed certificate, which this client refuses, and its private network is what protects the link instead |
 | `SERVER_SECRET` | the output of `openssl rand -base64 32`, generated once |
 | `HAVENKEYS_TRUST_FORWARDED_FOR` | `1` — Railway's edge sets `X-Forwarded-For`, and without this every request looks like it comes from the proxy, which would make per-address rate limiting useless |
 | `PORT` | `8080` |
@@ -140,6 +140,7 @@ The reasons are the whole diagnosis, and none of them prints the URL:
 | `the database rejected these credentials` | The URL is stale: the database was recreated and the variable still holds the old password. Use the reference form, which follows it. |
 | `that database does not exist on the server` | The URL's path names a database that was never created. |
 | `the database is still starting up` | Normal for a few seconds after the Postgres service deploys; it retries. |
+| `the database's TLS certificate is not trusted` | The database presents a self-signed certificate. On Railway's private network that is expected: add `?sslmode=disable` to the variable. Postgres's own log shows this as `could not accept SSL connection: unexpected eof while reading`. |
 
 A failure that waiting cannot fix — wrong credentials, missing database — is
 reported immediately rather than after the full minute.
