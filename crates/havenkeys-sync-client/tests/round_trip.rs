@@ -50,7 +50,7 @@ impl Server {
             }
             None => format!("{}/{db_name}", admin_url.rsplit_once('/').unwrap().0),
         };
-        let pool = havenkeys_server::db::connect(&url).unwrap();
+        let pool = havenkeys_server::db::connect(&url).await.unwrap();
         havenkeys_server::db::migrate(&pool).await.unwrap();
 
         let state = havenkeys_server::AppState {

@@ -42,7 +42,7 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
-    let pool = match db::connect(&config.database_url) {
+    let pool = match db::connect(&config.database_url).await {
         Ok(pool) => pool,
         Err(err) => {
             eprintln!("{err}");
@@ -77,10 +77,12 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
         trust_forwarded_for: config.trust_forwarded_for,
         cors_origin: config.cors_origin.clone(),
     };
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], config.port));
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => l,
-        Err(_) => {
+    // `::` takes both families where the host allows it, which matters
+    // because a platform's proxy may reach the container over IPv6 only.
+    // Where IPv6 is unavailable, IPv4 alone is still correct.
+    let listener = match bind(config.port).await {
+        Some(l) => l,
+        None => {
             eprintln!("could not bind port {}", config.port);
             return std::process::ExitCode::FAILURE;
         }
@@ -97,6 +99,15 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(_) => std::process::ExitCode::FAILURE,
     }
+}
+
+async fn bind(port: u16) -> Option<tokio::net::TcpListener> {
+    let dual = std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, port));
+    if let Ok(listener) = tokio::net::TcpListener::bind(dual).await {
+        return Some(listener);
+    }
+    let v4 = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    tokio::net::TcpListener::bind(v4).await.ok()
 }
 
 async fn shutdown() {
