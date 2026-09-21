@@ -22,20 +22,32 @@ import { describe, expect, it } from "vitest";
 const read = (relative: string) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 
+/** Everything a regex captured in group 1, with the misses dropped. */
+function captured(text: string, pattern: RegExp): string[] {
+  return Array.from(text.matchAll(pattern), (m) => m[1]).filter(
+    (name): name is string => name !== undefined,
+  );
+}
+
+/** The one block a parser needs, or a failure that names which file moved. */
+function block(source: string, pattern: RegExp, what: string): string {
+  const found = pattern.exec(source);
+  expect(found?.[1], `${what} no longer reads the way this test parses it`).toBeTruthy();
+  return found?.[1] ?? "";
+}
+
 /** `const COMMANDS: &[&str] = &[ "a", "b" ];` → ["a", "b"] */
 function declaredInBuildRs(): string[] {
   const source = read("../../src-tauri/build.rs");
-  const block = /const COMMANDS: &\[&str\] = &\[([\s\S]*?)\];/.exec(source);
-  expect(block, "build.rs no longer declares COMMANDS the way this test reads it").toBeTruthy();
-  return Array.from(block![1].matchAll(/"([a-z0-9_]+)"/g), (m) => m[1]);
+  const list = block(source, /const COMMANDS: &\[&str\] = &\[([\s\S]*?)\];/, "build.rs");
+  return captured(list, /"([a-z0-9_]+)"/g);
 }
 
 /** The `tauri::generate_handler![...]` list, minus its module paths. */
 function registeredInLibRs(): string[] {
   const source = read("../../src-tauri/src/lib.rs");
-  const block = /generate_handler!\[([\s\S]*?)\]/.exec(source);
-  expect(block, "lib.rs no longer registers handlers the way this test reads it").toBeTruthy();
-  return Array.from(block![1].matchAll(/(?:^|\s)(?:\w+::)?(\w+),/g), (m) => m[1]);
+  const list = block(source, /generate_handler!\[([\s\S]*?)\]/, "lib.rs");
+  return captured(list, /(?:^|\s)(?:\w+::)?(\w+),/g);
 }
 
 /** `allow-create-item` → `create_item`, ignoring Tauri's own `core:` grants. */
@@ -50,8 +62,7 @@ function grantedInCapability(): string[] {
 
 /** Every `call<T>("name")` the UI makes. */
 function calledFromApi(): string[] {
-  const source = read("./api.ts");
-  return Array.from(source.matchAll(/call<[^>]*>\(\s*"([a-z0-9_]+)"/g), (m) => m[1]);
+  return captured(read("./api.ts"), /call<[^>]*>\(\s*"([a-z0-9_]+)"/g);
 }
 
 describe("the Tauri command surface", () => {
