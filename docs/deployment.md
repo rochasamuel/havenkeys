@@ -84,17 +84,24 @@ On the **server** service → **Variables**:
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` — a reference, not a copy, so it follows the database |
 | `SERVER_SECRET` | the output of `openssl rand -base64 32`, generated once |
 | `HAVENKEYS_TRUST_FORWARDED_FOR` | `1` — Railway's edge sets `X-Forwarded-For`, and without this every request looks like it comes from the proxy, which would make per-address rate limiting useless |
+| `PORT` | `8080` |
 
-Do **not** set `PORT`: Railway injects it, and the server binds what it is
-given.
+`PORT` is set explicitly because Railway's docs disagree with themselves about
+whether it injects one for a Dockerfile service, and the domain below has to
+name the same number. The server binds `0.0.0.0:$PORT` and falls back to 8080,
+so an explicit 8080 makes both paths agree.
 
 `${{Postgres.DATABASE_URL}}` is the private-network address. It never leaves
 Railway's network and costs no egress.
 
 ### 3.5 Give it a domain
 
-Server service → **Settings** → **Networking** → **Generate Domain**. Railway
-terminates TLS on that domain. The server itself speaks plain HTTP and
+Server service → **Settings** → **Networking** → **Generate Domain**, with
+**target port 8080** — the same port §3.4 set. Railway asks for it, or guesses
+from what the process is listening on; a domain pointing at a port nothing is
+bound to is what produces `Application failed to respond`. The deploy log's
+`havenkeys-server listening` line prints the port actually bound, which is the
+number to check against. Railway terminates TLS on that domain. The server itself speaks plain HTTP and
 expects exactly this; it must never be reachable over plain HTTP from
 outside, which is why the client refuses any server URL that is not `https://`
 (localhost aside).
