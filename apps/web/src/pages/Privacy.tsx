@@ -13,24 +13,26 @@ export function Privacy() {
 
       <h2>The desktop app and browser extension</h2>
       <p>
-        HavenKeys the application contains no telemetry, no analytics, no crash reporting, and no
-        accounts system in this version. Your master password never leaves your device and is
-        never transmitted anywhere, including to the browser extension. Vault keys are generated
-        on your device.
+        HavenKeys the application contains no telemetry, no analytics, and no crash reporting.
+        Your master password and Secret Key never leave your device, and neither is ever sent to
+        the browser extension. To sign in, the app sends the server a key derived from them, never
+        the password itself. Vault keys are generated on your device and never leave it
+        unencrypted.
       </p>
       <p>
-        If you choose to run <code>havenkeys-server</code> yourself and connect a device to it,
-        that server stores encrypted vault data it cannot decrypt, plus the minimum routing
-        metadata described in the{" "}
+        Every vault belongs to an account on a <code>havenkeys-server</code> that you, or whoever
+        invited you, runs. That server stores your vault encrypted, which it cannot decrypt, plus
+        the metadata it needs to serve it: the vault ID, your account's email address, the
+        key-derivation parameters and salt, the wrapped vault key, item revisions, and the number
+        and rough size of your items. The{" "}
         <a
           href="https://github.com/rochasamuel/havenkeys/blob/main/docs/server-sync.md"
           target="_blank"
           rel="noreferrer"
         >
           server-sync design
-        </a>
-        . That server is one you host and control — we do not operate a hosted version and have
-        no access to it.
+        </a>{" "}
+        describes this in full. We do not operate a hosted server and have no access to yours.
       </p>
 
       <h2>What we never collect</h2>
