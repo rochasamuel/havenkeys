@@ -1,6 +1,5 @@
 {
   "minimum_chrome_version": "120",
   "background": { "service_worker": "background.js" },
-  "externally_connectable": { "ids": [], "matches": [] },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxKj9Fj1kHsu6TRhCGRFqkFJ2SGIQSux/TA72O8khUhlTaV74LuyUXHWJJVlyq6t7aRLndrv81qPrZEGa/De54nyL4bWEh2Glq4ig/WqaotEMvNlcPpk6VGFSgjVORhZTrFys+GrtZ1fpMI5+xFYA8YAhzG0WnLqYov4ak6P+U05qiYYyXAdFdtKyN6s+bucjUfTvrzCS9DUoPd2eHJ7w1BZmtXUBNV4Plm4cisQJt5umq5tmtHz0XcOQStPn4H6krv5wD5nluZCiWWqqGS2i5DOTREmkHYE8bsvf+jA6cDQ67C+MwdfrFOYyrR6jVbdwQ68Is+hzRoD04BN960nOrQIDAQAB"
+  "externally_connectable": { "ids": [], "matches": [] }
 }
