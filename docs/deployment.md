@@ -271,3 +271,8 @@ The test suite manages its own disposable databases:
 ```sh
 scripts/test-server.sh
 ```
+
+## Desktop installers
+
+Releases are built by `.github/workflows/release.yml`; the installers are
+unsigned; see `docs/website.md` for how to cut a release.
