@@ -6,3 +6,25 @@ node_modules/
 docs/
 apps/extension/
 *.md
+
+# Mirrors the secret patterns in .gitignore. The builder stage does `COPY . .`,
+# so without these a developer's local vault or a plaintext password-manager
+# export sitting in the working tree would be copied into a build layer — it
+# never reaches the final image, but it is still in the cache and in anything
+# built with `--target builder`.
+*.sqlite3
+**/*.sqlite3
+*.sqlite3-journal
+**/*.sqlite3-journal
+*.1pux
+**/*.1pux
+*.1pif
+**/*.1pif
+*.csv
+**/*.csv
+.env
+.env.*
+**/.env
+**/.env.*
+.claude/
+.superpowers/
