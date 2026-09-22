@@ -135,4 +135,5 @@ docs/                      Threat model, security model, crypto, architecture, r
 
 ## Licence
 
-MIT OR Apache-2.0.
+MIT OR Apache-2.0, at your option. See [LICENSE-MIT](LICENSE-MIT) and
+[LICENSE-APACHE](LICENSE-APACHE).
