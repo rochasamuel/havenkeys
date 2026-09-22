@@ -3,6 +3,7 @@ import { Nav } from "./components/Nav";
 import { Footer } from "./components/Footer";
 import { Home } from "./pages/Home";
 import { Download } from "./pages/Download";
+import { Security } from "./pages/Security";
 
 export function App() {
   return (
@@ -12,6 +13,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/download" element={<Download />} />
+          <Route path="/security" element={<Security />} />
         </Routes>
       </main>
       <Footer />
