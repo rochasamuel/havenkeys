@@ -5,6 +5,9 @@ on:
     tags:
       - "desktop-v*"
 
+permissions:
+  contents: write
+
 jobs:
   release:
     strategy:
@@ -12,8 +15,11 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
+            args: ""
           - platform: macos-latest
+            args: "--target universal-apple-darwin"
           - platform: ubuntu-latest
+            args: ""
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +32,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -50,3 +58,4 @@ jobs:
           releaseBody: "Installers for this release. Unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first run."
           releaseDraft: true
           prerelease: false
+          args: ${{ matrix.args }}
