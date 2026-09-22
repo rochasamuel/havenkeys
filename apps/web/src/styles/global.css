@@ -210,6 +210,25 @@ code {
   color: var(--muted);
 }
 
+.download__notice {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--space-3xl) var(--space-4xl);
+  background: var(--raised);
+  margin: var(--space-3xl) 0;
+}
+
+.download__notice h2 {
+  margin-top: 0;
+  font-size: var(--text-2xl);
+  color: var(--text-strong);
+}
+
+.download__notice li {
+  color: var(--muted);
+  margin-bottom: var(--space-sm);
+}
+
 .download__grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
