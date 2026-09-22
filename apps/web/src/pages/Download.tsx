@@ -36,21 +36,51 @@ export function Download() {
   return (
     <section className="download">
       <h1>Download HavenKeys</h1>
-      {state.status === "ready" && (
-        <p className="download__status">Latest version: {state.release.tag_name}</p>
-      )}
-      {state.status === "loading" && (
-        <p className="download__status">Checking latest release…</p>
-      )}
-      {state.status === "unavailable" && (
-        <p className="download__status">
-          Couldn't reach GitHub to find the latest build.{" "}
-          <a href={RELEASES_PAGE_URL} target="_blank" rel="noreferrer">
-            View releases on GitHub
-          </a>
-          .
-        </p>
-      )}
+      <div className="download__notice">
+        <h2>Before you install</h2>
+        <ul>
+          <li>
+            HavenKeys needs an account on a <code>havenkeys-server</code>: run your own (see the{" "}
+            <a
+              href="https://github.com/rochasamuel/havenkeys/blob/main/docs/deployment.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              deployment guide
+            </a>
+            ) or get an invite from someone who does.
+          </li>
+          <li>
+            The browser extension and its native messaging host are not in these installers yet.
+            Build them from source with the steps in the{" "}
+            <a href="https://github.com/rochasamuel/havenkeys#readme" target="_blank" rel="noreferrer">
+              README
+            </a>
+            .
+          </li>
+          <li>
+            The installers are unsigned, so Windows SmartScreen and macOS Gatekeeper will warn on
+            first run. The Windows and macOS builds are new and less tested than Linux.
+          </li>
+        </ul>
+      </div>
+      <div aria-live="polite">
+        {state.status === "ready" && (
+          <p className="download__status">Latest version: {state.release.tag_name}</p>
+        )}
+        {state.status === "loading" && (
+          <p className="download__status">Checking latest release…</p>
+        )}
+        {state.status === "unavailable" && (
+          <p className="download__status">
+            The latest release couldn't be loaded — there may not be one published yet.{" "}
+            <a href={RELEASES_PAGE_URL} target="_blank" rel="noreferrer">
+              View releases on GitHub
+            </a>
+            .
+          </p>
+        )}
+      </div>
       <div className="download__grid">
         {PLATFORMS.map((platform) => {
           const asset =
