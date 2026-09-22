@@ -24,6 +24,19 @@ export function Terms() {
         </a>
         . You may use, modify, and redistribute it under the terms of either.
       </p>
+      <p>
+        This site and the desktop app embed the Hanken Grotesk and JetBrains Mono typefaces, which are
+        licensed separately under the SIL Open Font License 1.1. Their copyright notices and that license
+        are in{" "}
+        <a
+          href="https://github.com/rochasamuel/havenkeys/blob/main/THIRD-PARTY-NOTICES.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          THIRD-PARTY-NOTICES.md
+        </a>
+        .
+      </p>
 
       <h2>No warranty</h2>
       <p>
