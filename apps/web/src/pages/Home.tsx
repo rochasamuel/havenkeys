@@ -19,7 +19,7 @@ const FEATURES = [
   },
   {
     title: "Your own server",
-    body: "havenkeys-server is a small server you run yourself. It stores ciphertext it cannot open, and it's the only thing keeping your devices in sync.",
+    body: "Every vault lives on a havenkeys-server that you, or someone you trust, runs. It holds only ciphertext it cannot open and is the single writer; each device keeps an encrypted read-only copy, so unlocking and autofill still work offline.",
   },
   {
     title: "Browser extension",
@@ -35,8 +35,8 @@ export function Home() {
         <h1>Your passwords, encrypted before they ever leave your device.</h1>
         <p className="hero__lede">
           HavenKeys pairs a Tauri desktop app with a Rust security core, a browser extension, and
-          a small server you run yourself. Keys and plaintext never leave your device — the
-          server only ever holds ciphertext it has no way to open.
+          a small server you run yourself. Your master password, Secret Key and unencrypted keys
+          never leave your device — the server only ever holds ciphertext it has no way to open.
         </p>
         <div className="hero__actions">
           <Link to="/download" className="button button--primary">
@@ -61,18 +61,29 @@ export function Home() {
             is never used as an encryption key directly.
           </li>
           <li>
-            The master key unwraps a key-encryption key, which unwraps a randomly generated vault
-            key.
+            The master key is combined with your 128-bit Secret Key through HKDF to derive a
+            key-encryption key, which unwraps a randomly generated vault key.
           </li>
           <li>
-            Every item is encrypted individually with <code>AES-256-GCM</code> under the vault
-            key, with a unique nonce every time.
+            Each item is encrypted with <code>AES-256-GCM</code> under a data key derived from the
+            vault key, with a unique nonce every time.
           </li>
           <li>
             The desktop UI never does cryptography and never sees your master password after
             unlock — that stays in the Rust core.
           </li>
         </ol>
+        <p>
+          The full design is in the{" "}
+          <a
+            href="https://github.com/rochasamuel/havenkeys/blob/main/docs/crypto.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            cryptography document
+          </a>
+          .
+        </p>
       </section>
 
       <section className="features">
