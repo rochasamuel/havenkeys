@@ -89,11 +89,11 @@ code {
   text-decoration: none;
 }
 
-.nav__cta {
+.nav__links .nav__cta {
   padding: var(--space-sm) var(--space-2xl);
   border-radius: var(--r-md);
   background: var(--primary-bg);
-  color: var(--primary-fg) !important;
+  color: var(--primary-fg);
 }
 
 .hero {
@@ -275,7 +275,21 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .nav__inner {
+    padding: var(--space-2xl);
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+  }
+
   .nav__links {
     gap: var(--space-2xl);
+  }
+
+  .hero {
+    padding: 96px var(--space-2xl) var(--space-5xl);
+  }
+
+  .hero h1 {
+    font-size: 30px;
   }
 }
