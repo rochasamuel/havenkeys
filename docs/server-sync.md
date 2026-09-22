@@ -246,7 +246,9 @@ to undo a master-password change.
 * **Metadata visible to the server:** the vault ID, the account's email, the
   KDF parameters and salt, the wrapped vault key, item revisions, and the
   number and rough size of items. It cannot read any of it, but it can see
-  that it exists and roughly how much of it there is.
+  that it exists and roughly how much of it there is. It also records failed
+  login attempts per account and per client address in `login_attempts` for
+  rate limiting, cleared on a successful login (`docs/deployment.md` §6).
 
 ## 8. For a future mobile app
 
