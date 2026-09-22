@@ -45,8 +45,16 @@ crate, not the core.
    `apps/extension/dist/chrome` and `dist/firefox`.
 4. Load it:
    * **Chrome/Edge/Brave:** `chrome://extensions` → Developer mode → *Load
-     unpacked* → `apps/extension/dist/chrome`. The `key` in the manifest pins
-     the ID to `olbclkanfbmilnmfhoojgcnpgdmilfmf`.
+     unpacked* → `apps/extension/dist/chrome`. Chrome Web Store rejects a
+     manifest `key` field on upload, so the manifest no longer pins an ID:
+     unpacked loads get an ID derived from the folder's path (stable on one
+     machine, different on another), and once published the Chrome Web Store
+     assigns the extension's permanent ID at first upload. `CHROME_EXTENSION_ORIGIN`
+     in `crates/havenkeys-native-host/src/lib.rs`, `CHROME_ORIGIN` in
+     `scripts/install-native-host.sh` and `install-native-host.ps1` must be
+     updated to that published ID before release; until then, local testing
+     needs `scripts/install-native-host.sh <path>` edited to the ID shown in
+     `chrome://extensions` for your unpacked load.
    * **Firefox:** `about:debugging` → This Firefox → *Load Temporary Add-on* →
      `apps/extension/dist/firefox/manifest.json` (ID `havenkeys@havenkeys.app`).
 5. Start HavenKeys, unlock it, and turn on Settings → *Browser extension*.
