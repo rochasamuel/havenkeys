@@ -22,6 +22,7 @@ changes need the server.
 | Export | Not implemented |
 | Secret Key + Emergency Kit | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
 | Account server (`havenkeys-server`) | Implemented and tested against Postgres; **not deployed anywhere yet** ([docs/deployment.md](docs/deployment.md)) |
+| Marketing/download website (havenkeys.net) | Implemented; static site on Vercel, download page reads GitHub Releases ([docs/website.md](docs/website.md)) |
 | Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
 
 What the desktop app does today:
