@@ -5,6 +5,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 // Tokens first: everything below reads them as custom properties.
 import "@havenkeys/ui/tokens.css";
+import "./styles/global.css";
 import { App } from "./App";
 
 const root = document.getElementById("root");
