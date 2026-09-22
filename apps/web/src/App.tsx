@@ -7,6 +7,7 @@ import { Download } from "./pages/Download";
 import { Security } from "./pages/Security";
 import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
+import { NotFound } from "./pages/NotFound";
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
           <Route path="/security" element={<Security />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <Footer />

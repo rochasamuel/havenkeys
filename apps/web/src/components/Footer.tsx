@@ -13,13 +13,7 @@ export function Footer() {
           <a href="https://github.com/rochasamuel/havenkeys" target="_blank" rel="noreferrer">
             GitHub
           </a>
-          <a
-            href="https://github.com/rochasamuel/havenkeys/blob/main/LICENSE-MIT"
-            target="_blank"
-            rel="noreferrer"
-          >
-            License
-          </a>
+          <Link to="/terms">License</Link>
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>
         </div>
