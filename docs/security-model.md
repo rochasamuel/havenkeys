@@ -13,8 +13,11 @@ This document describes *how* HavenKeys enforces the properties listed in
    the vault file on disk — is treated as input to be validated.
 3. Secrets are returned only for the operation that needs them, and only after
    explicit user action.
-4. No network. The desktop app makes no outbound connections, has no
-   telemetry, analytics, crash reporting, or update checks.
+4. No telemetry, analytics, crash reporting or update checks, and no
+   third-party network calls of any kind. The only outbound connections the
+   desktop app makes are to the account server you configure: on unlock, every
+   60 seconds while unlocked, and on every write (§13). Reads work offline
+   from the local encrypted replica.
 
 ## 2. What is protected
 
@@ -23,11 +26,11 @@ This document describes *how* HavenKeys enforces the properties listed in
 | Confidentiality at rest | AES-256-GCM under a random vault key, wrapped by a KEK derived from the master password (Argon2id) and the Secret Key (HKDF) |
 | Copies away from your devices | The server's database and any backup need the master password **and** the 128-bit Secret Key |
 | The server cannot read the vault | It stores item blobs and the header as opaque bytes; no key it holds opens any of them |
-| The server cannot forge item content | Every blob authenticates under the vault's data key; one that does not open is skipped and counted, never applied |
+| The server cannot forge item content | Every blob authenticates under the vault's data key; one that does not open is skipped and counted, never applied. It can still **replay** a blob it was given earlier — see §3 |
 | The server cannot replay an old header | The attestation must verify, and the revision may not fall below the highest the device has seen (`max_header_rev`) |
 | Requests are bound to a session | The server derives the account and vault from the bearer token, never from the request body |
 | Integrity at rest (per blob) | GCM tag + AAD binding to vault ID / item ID / role |
-| No plaintext secrets in SQLite | Items table holds only `id` + two encrypted blobs |
+| No plaintext secrets in SQLite | Items table holds only `id`, the server revision, and two encrypted blobs (§4) |
 | Master password never persisted | Held in `Zeroizing<String>` only for the duration of `unlock`/`create` |
 | Locked vault refuses secret access | Every secret-returning core function requires an active `Session`; locking drops it |
 | Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `reveal_previous_password` / `copy_secret` / `get_totp_code` |
@@ -37,6 +40,11 @@ This document describes *how* HavenKeys enforces the properties listed in
 
 * A malicious process running as your user while the vault is unlocked.
 * Rollback of the vault file to an older version, or deletion of rows.
+* **Per-item rollback by the server.** A hostile or rolled-back server can
+  re-serve an item blob it was given earlier at a higher revision. The blob is
+  genuine, so it authenticates and is applied, silently returning a login to a
+  previous password. Items have no revision floor; only the vault header does
+  (`max_header_rev`). Password history (5 entries) is what limits the damage.
 * Offline guessing of a weak master password.
 * Anything already copied to the clipboard before it is cleared.
 * Secrets in WebView memory after they have been displayed (JS strings cannot
@@ -125,8 +133,12 @@ also covers the suspend heuristic's blind spot there: `Instant` keeps
 counting during sleep on Windows. See `security-review.md` #10.
 
 Only real input while the window has focus, and commands the user triggers,
-count as activity. Timer-driven calls such as TOTP refresh do not, and neither
-do browser extension requests.
+count as activity. Machine-driven calls do not: TOTP refresh, the periodic
+pull, browser-extension requests, and the item-list refreshes that follow a
+sync or an extension save (`list_items` and `get_item` deliberately do not
+touch the timer, so a server that changes one item a minute cannot hold the
+vault open). Typing in the search box still counts — it reaches the timer as
+a keystroke through `record_activity`, not through the search command.
 
 ## 6. Desktop (Tauri) hardening
 
@@ -138,31 +150,50 @@ do browser extension requests.
   `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'`.
   The dev CSP additionally allows inline styles for Vite HMR only.
 * `withGlobalTauri: false`, `freezePrototype: true`.
-* Navigation to any non-app URL is blocked; new windows are denied.
+* Navigation to any non-app URL is blocked (`on_navigation` + `is_app_url`);
+  the app never opens a second window, and the CSP's `frame-src 'none'`
+  stops embedded content. There is no explicit `window.open` handler: the
+  renderer has no reason to call it, but nothing in this repository denies
+  it beyond the navigation guard and the CSP.
 * No `eval`, `new Function`, `dangerouslySetInnerHTML`, or `innerHTML` in the UI.
 * Devtools are disabled in release builds (Tauri default).
 
 ## 7. Renderer ↔ core interface
 
+Every command the renderer can call — all 31 of them, which is the whole
+surface. `build.rs` declares this list, the capability file grants exactly it,
+and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
+means a live server session, which a locked vault does not have.
+
 | Command | Requires unlocked | Returns secrets |
 |---|---|---|
 | `vault_status` | no | no |
-| `create_vault`, `unlock_vault` | no | no |
+| `unlock_vault` | no | no |
 | `lock_vault` | no | no |
-| `change_master_password` | yes | no |
-| `record_activity` | no | no |
+| `change_master_password` | yes (online) | no |
+| `record_activity` | no | no. The only intended way the idle timer is reset |
 | `list_items` (optional search query) | yes | no (title, username, URLs, flags) |
 | `get_item` | yes | no (secret fields reported only as *present/absent*) |
 | `reveal_secret` | yes | one field: password, login notes, or note body. Never the TOTP secret |
-| `get_totp_code` | yes | current code only |
+| `password_history` | yes | no, timestamps only |
+| `reveal_previous_password` | yes | one superseded password, on an explicit click |
+| `get_totp_code` | yes | current code only, never the seed |
 | `copy_secret` | yes | no, the value is copied to the clipboard inside Rust |
-| `create_item`, `update_item` | yes | no. Edits send `keep`/`set`/`clear` per secret, so editing never requires reading the password or TOTP secret |
-| `delete_item` | yes | no |
+| `create_item`, `update_item` | yes (online) | no. Edits send `keep`/`set`/`clear` per secret, so editing never requires reading the password or TOTP secret |
+| `delete_item` | yes (online) | no |
 | `generate_password` | no | a fresh password (not stored) |
 | `copy_generated_password` | no | no |
 | `get_settings`, `update_settings` | yes | no |
-| `import_1pux` | yes | no. Rust opens the native file picker; the renderer never supplies a path |
+| `import_1pux` | yes (online) | no. Rust opens the native file picker; the renderer never supplies a path |
 | `delete_import_file` | yes | no. Deletes only the file picked in the last import |
+| `device_status` | no | no (key scheme, whether a Secret Key is needed, online) |
+| `account_status` | no | no (email, server URL, account ID, last sync) |
+| `activate_account` | no | no. Creates the vault from an invite |
+| `sign_in` | no | no. Joins an existing account on a new computer |
+| `sign_out` | no | no. Ends the server session and locks |
+| `list_devices`, `revoke_device` | yes (online) | no |
+| `sync_now`, `resync_vault` | yes (online) | no |
+| `get_emergency_kit` | yes | **the Secret Key**, plus a QR encoding it. The only command that returns long-term key material, on explicit request, with its own unlocked check because the Secret Key lives outside the vault (`server-sync.md` §7) |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
 convenience only.

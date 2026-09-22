@@ -96,11 +96,20 @@ stores, and they see every request.
   bytes and never parsed there.
 * They **cannot forge** item content or a header: both authenticate. A blob
   that does not open under the vault's data key is skipped and counted
-  (`SyncReport::skipped_items`), leaving the previous row alone — a hostile
-  server can fail to update a replica, not corrupt it. A header must carry an
-  attestation only a vault-key holder could write, and its revision may not go
-  below the highest one the device has seen (`max_header_rev`), so an old
-  header cannot be replayed to make a retired master password work again.
+  (`SyncReport::skipped_items`), leaving the previous row alone. A header must
+  carry an attestation only a vault-key holder could write.
+* They **can replay** an item blob they were given earlier. Forging is
+  impossible, but an old blob is genuine, so it authenticates and is applied:
+  the server can silently return a login to a previous password by re-serving
+  its old blob at a higher revision. Items have no revision floor — only the
+  header does (`max_header_rev`), which is what stops an old *header* being
+  replayed to make a retired master password work again on a device that has
+  already seen a newer one. Two consequences worth stating plainly:
+  * A device signing in **for the first time** has no floor to compare
+    against, so a captured pre-rotation header plus the retired master
+    password and the Secret Key will open the vault on a fresh device.
+  * Password history (5 entries) is what limits an item rollback; a patient
+    server can cycle through it.
 * They **cannot impersonate a device**: the auth key is stored only as an
   Argon2id hash, and `auth/params` answers identically for addresses that have
   no account, so the server is not an account-enumeration oracle either.

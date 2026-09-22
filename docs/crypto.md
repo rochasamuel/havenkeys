@@ -86,11 +86,13 @@ feeding the KEK derivation.
   Secret Key and derives the KEK and the auth key from one Argon2id run,
   during activation or second-device sign-in. There is no other way to
   create a vault.
-* **Refused before derivation.** `derive_kek_for` requires both a Secret Key
-  and an `AccountRef` and returns `Error::SecretKeyRequired` or
-  `Error::InvalidInput` immediately, before `derive_master_key` runs. A
-  caller that forgets to pass either is refused without paying for an
-  Argon2id derivation.
+* **Impossible to forget, not merely refused.**
+  `UnlockTicket::derive_session_for_account` takes `&SecretKey` and
+  `&AccountRef` by reference, not as options, so a caller cannot reach a
+  derivation without both. The earlier `derive_kek_for`, which accepted
+  options and returned `Error::SecretKeyRequired` before `derive_master_key`
+  ran, is gone: the guarantee now lives in the type signature rather than in
+  a runtime check and its tests.
 * **Email normalization.** The salt above depends on the account's email, so
   every client must reduce it to the same bytes. `NormalizedEmail::parse`
   applies exactly three steps, in this order: trim leading/trailing

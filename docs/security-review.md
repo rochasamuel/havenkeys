@@ -100,8 +100,12 @@ flag, and on Linux logind's `LockedHint`. macOS remains open.
 Keys and decrypted buffers in Rust are zeroized on drop. Copies remain that we
 don't control: JSON IPC buffers, JavaScript strings in the WebView, serde
 intermediates, stack copies of fixed arrays, and pages swapped to disk. The UI
-limits how long secrets stay in React state. Revealed passwords hide again
-after 30 s, and all state is discarded on lock.
+limits how long secrets stay in React state: a revealed password hides again
+after 30 s and revealed login notes after 120 s. A secure note's body is the
+exception — it is decrypted when the note is opened and stays in renderer
+state until you navigate away, because the note *is* the view. On lock, the
+whole vault tree is unmounted (`key={session}`), so every revealed secret in
+component state goes with it.
 
 ### 12. Unlock rate limiting (Low, accepted)
 Local online guessing through the UI costs one Argon2id run (~0.3–1 s) per
@@ -148,8 +152,10 @@ that is not a secure wipe.
   with rejection, verified in source), and TOTP matches the RFC 6238 vectors.
 * Lock ordering (vault → lock manager; clipboard independent) has no
   reverse acquisition.
-* The capability grants exactly the 18 app commands plus event listen and
-  unlisten. The production CSP has no `unsafe-*` sources.
+* The capability grants exactly the 31 app commands plus event listen and
+  unlisten, and `src/lib/commands.test.ts` fails if `build.rs`, the
+  `generate_handler!` list and the capability file ever disagree. The
+  production CSP has no `unsafe-*` sources.
 
 ---
 
@@ -411,13 +417,13 @@ export, and the manual runtime checks (#14, Phase 5 browser checklist).
 
 Scope: `crates/havenkeys-core/src/{crypto/secret_key.rs, crypto/keys.rs,
 vault.rs, store.rs, sync.rs}`, and `apps/desktop/src-tauri/src/{device.rs,
-account.rs, sync.rs}` with its UI. Design: `sync.md`, `crypto.md`.
+account.rs, sync.rs}` with its UI. Design: `server-sync.md` (then `sync.md`), `crypto.md`.
 
 | # | Severity | Component | Finding | Status |
 |---|---|---|---|---|
 | K1 | Info | Design | The Secret Key is stored in plain text in `device.json` on each device | Accepted, same model as 1Password: it protects copies away from your devices, not a device someone can already read. The mobile app should use the platform keystore |
 | K2 | Info | Design | Losing every device that holds the Secret Key, and the Emergency Kit, loses the vault | Accepted; the kit is shown at creation, confirming it was saved is required, and it can be shown again while unlocked |
-| K3 | Low | Sync | Conflicts are decided by device clocks (newest `updatedAt` wins) | Accepted, documented (`sync.md` §6) |
+| K3 | Low | Sync | Conflicts are decided by device clocks (newest `updatedAt` wins) | Accepted, documented (superseded by `server-sync.md`; the server now orders writes) |
 | K4 | Low | Sync | Anyone with access to the folder can delete files and stop updates | Accepted (denial of service only), documented |
 | K5 | Info | Sync | The folder reveals the vault ID, KDF parameters, wrapped key, number of devices, snapshot sizes and sync times | Accepted, documented |
 | K6 | Info | Sync | Any unlocked device can change any item or the master password for all devices | Inherent: every device holds the vault key. Same-user malware is out of scope |

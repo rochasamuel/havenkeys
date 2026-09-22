@@ -210,9 +210,20 @@ to undo a master-password change.
 * Integrity of what a device accepts: a pulled item that does not
   authenticate under the data key is not applied.
 * A header replay (an old, genuinely-signed header served again to undo a
-  password change) is refused by the `max_header_rev` floor.
+  password change) is refused by the `max_header_rev` floor — **on a device
+  that has already seen the newer header**. A device signing in for the first
+  time has no floor, so a captured pre-rotation header will be accepted there
+  by someone who also has the retired master password and the Secret Key.
 
 **Not protected, or worth stating plainly:**
+
+* **Item replay has no equivalent floor.** The header has `max_header_rev`;
+  items have nothing. A hostile server can re-serve an item blob it was given
+  earlier at a higher revision, and because the blob is genuine it
+  authenticates and is applied — silently returning a login to a previous
+  password, reported as an ordinary update. Password history (5 entries) is
+  what bounds the damage, and a patient server can cycle through it. Adding
+  a per-item monotonicity check in `apply_remote_changes` is the fix.
 
 * **The local replica is not a backup.** It follows the server, including
   deletions. A hostile or compromised server can delete an item on every

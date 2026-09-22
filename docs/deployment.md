@@ -33,7 +33,21 @@ docker build -t havenkeys-server .
 | `SERVER_SECRET` | yes | 32 random bytes, base64. Used only to derive the decoy account id and salt that keep `auth/params` from revealing whether an email has an account. |
 | `PORT` | no | Defaults to 8080. Railway sets it. |
 | `HAVENKEYS_CORS_ORIGIN` | no | Exactly one browser origin. Leave unset: nothing in the MVP calls this API from a browser, and there is no wildcard. |
-| `HAVENKEYS_TRUST_FORWARDED_FOR` | no | `1` only when a proxy you control sets `X-Forwarded-For`. Off by default, because a client could otherwise spread its login attempts over invented addresses and escape the per-IP rate limit. |
+| `HAVENKEYS_TRUST_FORWARDED_FOR` | no | `1` only when a proxy you control sets `X-Forwarded-For`. Off by default, because a client could otherwise spread its login attempts over invented addresses and escape the per-IP rate limit. **Known weakness — read the note below before enabling it.** |
+
+> **`X-Forwarded-For` is read left-to-right, which is the wrong end.** With
+> this on, the server takes the *first* entry of the header and uses it as the
+> rate-limit key without parsing it as an IP address. Proxies append the peer
+> address to whatever the client sent, so the first entry is client-controlled.
+> An attacker can therefore vary it to get a fresh per-IP budget on every
+> request, put a victim's address there to have the victim blocked, or grow the
+> `login_attempts` table without bound. The per-account limit still applies,
+> and the auth key is 256-bit, so this is a rate-limiting and storage problem
+> rather than a route to guessing a password — but the per-IP limit is the only
+> thing throttling invite guessing on `POST /v1/accounts/activate`. Until the
+> server takes the Nth entry from the right and validates it as an IP, treat
+> the per-address limit as advisory, and put the throttling you actually rely
+> on in your proxy or edge.
 
 Generate the secret once and store it as a platform variable:
 
@@ -96,7 +110,7 @@ On the **server** service → **Variables**:
 |---|---|
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}?sslmode=disable` — a reference, not a copy, so it follows the database. The suffix matters: Railway's Postgres offers TLS with a self-signed certificate, which this client refuses, and its private network is what protects the link instead |
 | `SERVER_SECRET` | the output of `openssl rand -base64 32`, generated once |
-| `HAVENKEYS_TRUST_FORWARDED_FOR` | `1` — Railway's edge sets `X-Forwarded-For`, and without this every request looks like it comes from the proxy, which would make per-address rate limiting useless |
+| `HAVENKEYS_TRUST_FORWARDED_FOR` | `1` — Railway's edge sets `X-Forwarded-For`, and without this every request looks like it comes from the proxy, which would make per-address rate limiting useless (and worse: five failures from anyone would then block every login). Read the warning in §3 first — with it on, the per-address limit is spoofable and should be treated as advisory |
 | `PORT` | `8080` |
 
 `PORT` is set explicitly because Railway's docs disagree with themselves about

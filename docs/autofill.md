@@ -249,6 +249,17 @@ user clicked in. Picks are accepted only from a menu frame in the same tab,
 only for items the menu offered, once, and within 5 minutes. Locking the
 vault drops every session.
 
+The token is **not** a secret the page cannot see. It is passed in the menu
+frame's URL fragment, and the frame is attached to the page's own
+`documentElement`, so page script can read it off the iframe's `src` and can
+instantiate `menu.html` itself (it is a web-accessible resource on every
+http(s) origin, with no `use_dynamic_url`). What the token does is scope a
+pick to one tab, one frame and one offer set; what stops it becoming a
+credential leak is that the fill is addressed to the frame the user focused
+and the core re-checks the item against that frame's origin in Rust. The
+residual risk is a misdirected fill or save prompt on the page's *own*
+origin, driven by a click the user meant for something else. See Limitations.
+
 ## Toolbar popup (no host permission)
 
 Each login in the popup has **Fill**, and TOTP logins have **Code**; click
@@ -300,8 +311,14 @@ new login is saved with the page's origin as a whole-site rule and the host
 * In-page suggestions and save prompts are opt-in, from the options page.
   They request the optional host permissions `https://*/*` and `http://*/*`.
   When granted, the background registers the content script for the granted
-  patterns in all frames. When revoked, it unregisters it. Browsers also let
-  the user limit this to chosen sites, and registration follows.
+  patterns in all frames. When revoked, it unregisters it.
+* **Per-site grants are not followed yet.** Registration asks only whether the
+  broad `https://*/*` / `http://*/*` patterns are held. If you narrow site
+  access to chosen sites through the browser's own controls, that check
+  returns false and in-page suggestions stop working everywhere rather than
+  working on the sites you chose. It fails closed, but it is not the
+  behaviour the browser UI implies; reading the real grant with
+  `permissions.getAll()` is the fix.
 
 See `security-model.md` §12.
 

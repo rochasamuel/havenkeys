@@ -297,10 +297,20 @@ page. See `security-model.md` §12 and `autofill.md`.
   memory. Possible future mitigations include verifying the peer's code
   signature (as 1Password does), a per-browser pairing approval in the
   desktop UI, or requiring desktop confirmation for each fill.
-* **The extension ID is not a secret.** The public key in the Chromium
-  manifest pins the ID of unpacked installs. Anyone can load a different
-  unpacked extension with the same key (Developer mode is required). A
-  store-published build would have its ID enforced by the store.
+* **The extension ID is not a secret, and is not yet real.** The Chromium
+  manifest no longer carries a `key` field — the Chrome Web Store rejects
+  one on upload (§2) — so an unpacked install gets an ID derived from its
+  folder path, and the published ID will be whatever the store assigns.
+  `CHROME_EXTENSION_ORIGIN` in `havenkeys-native-host` and `CHROME_ORIGIN` in
+  the install scripts still hold the old development ID, so **the Chromium
+  side will not connect until both are updated to the real store ID** — a
+  release-checklist item, not a runtime check that can be relied on. Note
+  also that an ID derived from a public key pins nothing on its own: the key
+  that produced the old ID is in this repository's history, and anyone can
+  put it in their own manifest to reproduce that ID. Only a store-published
+  build has its ID enforced by the store. What actually keeps other local
+  callers out is the same-user socket check in the bullet above — and, as
+  that bullet says, it does not keep out a process running as you.
 * **Windows pipe squatting.** Another user logged into the same machine
   could create your pipe name before HavenKeys starts, because the name is
   derived from your profile path and is predictable. Your native host would

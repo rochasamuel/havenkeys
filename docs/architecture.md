@@ -187,8 +187,12 @@ searched (they live in details blobs). There is no persistent index.
 
 `LockManager` is pure logic fed with monotonic and wall-clock timestamps. The
 Tauri shell ticks it every 5 seconds from a background thread and locks the
-vault when it returns a reason (idle timeout or suspend detected). Every
-command and a throttled UI activity ping reset the idle timer.
+vault when it returns a reason (idle timeout or suspend detected). A throttled
+UI activity ping (`record_activity`, fed by real input while the window has
+focus) and the commands the user triggers reset the idle timer. Machine-driven
+calls deliberately do not: TOTP refresh, the periodic pull, and the list
+refreshes that follow a sync or a browser-extension save all leave the timer
+alone, so neither a timer nor a hostile server can hold the vault open.
 
 ## Browser integration
 
