@@ -148,16 +148,24 @@ pub fn run() {
                 })?;
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if matches!(
-                event,
-                WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
-            ) {
+        .on_window_event(|window, event| match event {
+            // Closing the window hides HavenKeys to the tray instead of
+            // quitting: the tray menu's "Open HavenKeys" brings it back, and
+            // "Quit HavenKeys" is the way out. The vault is deliberately not
+            // locked here — the idle timer keeps running while the window is
+            // hidden, so auto-lock still applies (`security-model.md` §5).
+            WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            // The window is actually going away (quit, or the session ending).
+            WindowEvent::Destroyed => {
                 let app = window.app_handle();
                 if let Some(state) = app.try_state::<AppState>() {
                     state.lock(app, "exit");
                 }
             }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::vault_status,

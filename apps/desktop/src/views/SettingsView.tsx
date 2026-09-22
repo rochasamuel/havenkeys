@@ -141,8 +141,8 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
             </select>
           </label>
           <p className="muted">
-            The vault also locks when the screen locks, when the computer sleeps, and when you quit HavenKeys. Closing the window keeps
-            HavenKeys in the tray.
+            The vault also locks when the computer sleeps and when you quit HavenKeys, and — on Windows and Linux — when the screen
+            locks. Closing the window keeps HavenKeys in the tray, where the timeout above keeps running.
           </p>
           <label className="control">
             <span>Clear copied items from the clipboard</span>

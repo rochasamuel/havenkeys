@@ -301,6 +301,12 @@ impl AppState {
         if let Ok(mut last) = self.last_sync_attempt.lock() {
             *last = None;
         }
+        // The path of the last imported `.1pux` is only there so the UI can
+        // offer to delete it after an import. A locked vault has no import in
+        // progress, so the offer — and the ability to act on it — goes away.
+        if let Ok(mut last) = self.last_import.lock() {
+            *last = None;
+        }
         if was_open {
             self.bridge.notify(Event::Locked {});
             let _ = app.emit(LOCKED_EVENT, LockedPayload { reason });

@@ -110,6 +110,12 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
 #[tauri::command]
 pub fn delete_import_file(state: tauri::State<'_, AppState>) -> CmdResult<()> {
     state.touch();
+    // Documented as requiring an unlocked vault (`security-model.md` §7), and
+    // enforced here rather than left to the renderer. `lock()` also clears the
+    // remembered path, so this fails with `NotFound` after a lock either way.
+    if !state.vault()?.is_unlocked() {
+        return Err(havenkeys_core::Error::Locked.into());
+    }
     let path = state
         .last_import
         .lock()

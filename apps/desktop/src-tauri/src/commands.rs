@@ -212,7 +212,12 @@ pub fn list_items(
     state: State<'_, AppState>,
     query: Option<String>,
 ) -> CmdResult<Vec<ItemOverview>> {
-    state.touch();
+    // No `touch()`: the UI also refreshes this list from `vault://synced` and
+    // `vault://items-changed`, which are driven by the sync thread and by the
+    // browser extension, not by the user. Counting those as activity would let
+    // a server that changes one item every minute hold the vault unlocked
+    // forever. Real interaction — including typing in the search box — reaches
+    // the timer through `record_activity`.
     let v = state.vault()?;
     Ok(match query {
         Some(q) => v.search(&q)?,
@@ -222,7 +227,8 @@ pub fn list_items(
 
 #[tauri::command]
 pub fn get_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<ItemOverview> {
-    state.touch();
+    // No `touch()`, for the same reason as `list_items`: a refresh driven by
+    // sync or by the extension must not count as user activity.
     Ok(state.vault()?.get_item(&id)?)
 }
 
