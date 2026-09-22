@@ -18,6 +18,8 @@ pnpm --filter @havenkeys/web test     # vitest
 2. **Root Directory:** `apps/web`. Framework preset: **Vite**. No
    environment variables are required.
 3. Deploy. Vercel builds `apps/web` on every push to `main`.
+4. **Analytics → Enable Web Analytics** in the Vercel project. Until it is
+   enabled, the analytics script 404s and nothing is counted.
 
 ## Custom domain (`havenkeys.net`)
 
