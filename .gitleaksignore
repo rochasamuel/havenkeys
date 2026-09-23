@@ -1,5 +1,5 @@
 # Reviewed false positives from `gitleaks git` (2026-09-23).
 # Fixed dummy token used by the extension's message-validator fuzz test.
-5afebe392dcab5d2d5d09405f49c88addb51eb20:apps/extension/src/fuzz.test.ts:generic-api-key:35
-# RSA *public* key (SubjectPublicKeyInfo) once used to pin the extension ID; removed in 6695ff5.
-1e7f20188696e8c764e421aa217d853da3bca443:apps/extension/manifest/chrome.json:generic-api-key:5
+d1e7f558ab914a9d8976598eee00eb7d780fa14c:apps/extension/src/fuzz.test.ts:generic-api-key:35
+# RSA *public* key (SubjectPublicKeyInfo) once used to pin the extension ID; removed later ("drop the manifest key Chrome Web Store rejects").
+660ca285cb662f44c9ae9ff9d2eeb3783284fab3:apps/extension/manifest/chrome.json:generic-api-key:5
