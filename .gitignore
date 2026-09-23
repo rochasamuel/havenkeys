@@ -10,3 +10,7 @@ apps/desktop/src-tauri/gen/
 *.1pif
 *.csv
 .claude/scheduled_tasks.lock
+# Impeccable design-tool scratch: review screenshots, decision logs, caches.
+apps/web/.impeccable/review/
+apps/web/.impeccable/questions/
+apps/web/.impeccable/hook.cache.json

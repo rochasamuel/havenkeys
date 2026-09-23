@@ -1,0 +1,629 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-23T19:39:03.652429+00:00",
+  "title": "Design System: HavenKeys (havenkeys.net)",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#080d0b",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Forest Ground",
+        "canonical": "#0b110f",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Window Green",
+        "canonical": "#0f1614",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "bg-list": {
+        "role": "neutral",
+        "displayName": "List Green",
+        "canonical": "#121b18",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised Green",
+        "canonical": "#172320",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#1f2c28",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "canonical": "#2c3d37",
+        "tonalRamp": [
+          "oklch(15% 0.02 165)",
+          "oklch(25% 0.02 165)",
+          "oklch(35% 0.02 165)",
+          "oklch(48% 0.02 165)",
+          "oklch(60% 0.02 165)",
+          "oklch(72% 0.02 165)",
+          "oklch(84% 0.02 165)",
+          "oklch(95% 0.02 165)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Bone",
+        "canonical": "#e2eae6",
+        "tonalRamp": [
+          "oklch(15% 0.01 160)",
+          "oklch(25% 0.01 160)",
+          "oklch(35% 0.01 160)",
+          "oklch(48% 0.01 160)",
+          "oklch(60% 0.01 160)",
+          "oklch(72% 0.01 160)",
+          "oklch(84% 0.01 160)",
+          "oklch(95% 0.01 160)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "text-strong": {
+        "role": "neutral",
+        "displayName": "Bright Bone",
+        "canonical": "#f3f7f5",
+        "tonalRamp": [
+          "oklch(15% 0.01 160)",
+          "oklch(25% 0.01 160)",
+          "oklch(35% 0.01 160)",
+          "oklch(48% 0.01 160)",
+          "oklch(60% 0.01 160)",
+          "oklch(72% 0.01 160)",
+          "oklch(84% 0.01 160)",
+          "oklch(95% 0.01 160)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Lichen",
+        "canonical": "#86968f",
+        "tonalRamp": [
+          "oklch(15% 0.015 160)",
+          "oklch(25% 0.015 160)",
+          "oklch(35% 0.015 160)",
+          "oklch(48% 0.015 160)",
+          "oklch(60% 0.015 160)",
+          "oklch(72% 0.015 160)",
+          "oklch(84% 0.015 160)",
+          "oklch(95% 0.015 160)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "muted-hi": {
+        "role": "neutral",
+        "displayName": "Pale Lichen",
+        "canonical": "#a3b2ab",
+        "tonalRamp": [
+          "oklch(15% 0.015 160)",
+          "oklch(25% 0.015 160)",
+          "oklch(35% 0.015 160)",
+          "oklch(48% 0.015 160)",
+          "oklch(60% 0.015 160)",
+          "oklch(72% 0.015 160)",
+          "oklch(84% 0.015 160)",
+          "oklch(95% 0.015 160)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "brass": {
+        "role": "primary",
+        "displayName": "Fitting Brass",
+        "canonical": "#c9a45c",
+        "tonalRamp": [
+          "oklch(15% 0.1 82)",
+          "oklch(25% 0.1 82)",
+          "oklch(35% 0.1 82)",
+          "oklch(48% 0.1 82)",
+          "oklch(60% 0.1 82)",
+          "oklch(72% 0.1 82)",
+          "oklch(84% 0.1 82)",
+          "oklch(95% 0.1 82)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "brass-hi": {
+        "role": "primary",
+        "displayName": "Lit Brass",
+        "canonical": "#e3c483",
+        "tonalRamp": [
+          "oklch(15% 0.1 82)",
+          "oklch(25% 0.1 82)",
+          "oklch(35% 0.1 82)",
+          "oklch(48% 0.1 82)",
+          "oklch(60% 0.1 82)",
+          "oklch(72% 0.1 82)",
+          "oklch(84% 0.1 82)",
+          "oklch(95% 0.1 82)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "brass-hover": {
+        "role": "primary",
+        "displayName": "Brass Hover",
+        "canonical": "#d8b56f",
+        "tonalRamp": [
+          "oklch(15% 0.1 82)",
+          "oklch(25% 0.1 82)",
+          "oklch(35% 0.1 82)",
+          "oklch(48% 0.1 82)",
+          "oklch(60% 0.1 82)",
+          "oklch(72% 0.1 82)",
+          "oklch(84% 0.1 82)",
+          "oklch(95% 0.1 82)"
+        ],
+        "source": "@havenkeys/ui tokens.css --primary-hover (inherited)"
+      },
+      "brass-soft": {
+        "role": "primary",
+        "displayName": "Brass Wash",
+        "canonical": "rgba(201, 164, 92, 0.14)",
+        "tonalRamp": [
+          "oklch(15% 0.1 82)",
+          "oklch(25% 0.1 82)",
+          "oklch(35% 0.1 82)",
+          "oklch(48% 0.1 82)",
+          "oklch(60% 0.1 82)",
+          "oklch(72% 0.1 82)",
+          "oklch(84% 0.1 82)",
+          "oklch(95% 0.1 82)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "brass-line": {
+        "role": "primary",
+        "displayName": "Brass Hairline",
+        "canonical": "rgba(201, 164, 92, 0.38)",
+        "tonalRamp": [
+          "oklch(15% 0.1 82)",
+          "oklch(25% 0.1 82)",
+          "oklch(35% 0.1 82)",
+          "oklch(48% 0.1 82)",
+          "oklch(60% 0.1 82)",
+          "oklch(72% 0.1 82)",
+          "oklch(84% 0.1 82)",
+          "oklch(95% 0.1 82)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "cipher-green": {
+        "role": "secondary",
+        "displayName": "Cipher Green",
+        "canonical": "#8fc4ad",
+        "tonalRamp": [
+          "oklch(15% 0.06 165)",
+          "oklch(25% 0.06 165)",
+          "oklch(35% 0.06 165)",
+          "oklch(48% 0.06 165)",
+          "oklch(60% 0.06 165)",
+          "oklch(72% 0.06 165)",
+          "oklch(84% 0.06 165)",
+          "oklch(95% 0.06 165)"
+        ],
+        "source": "@havenkeys/ui tokens.css --symbol (inherited)"
+      },
+      "ok": {
+        "role": "tertiary",
+        "displayName": "Leaf OK",
+        "canonical": "#5fa785",
+        "tonalRamp": [
+          "oklch(15% 0.09 160)",
+          "oklch(25% 0.09 160)",
+          "oklch(35% 0.09 160)",
+          "oklch(48% 0.09 160)",
+          "oklch(60% 0.09 160)",
+          "oklch(72% 0.09 160)",
+          "oklch(84% 0.09 160)",
+          "oklch(95% 0.09 160)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Ember",
+        "canonical": "#e0775f",
+        "tonalRamp": [
+          "oklch(15% 0.13 35)",
+          "oklch(25% 0.13 35)",
+          "oklch(35% 0.13 35)",
+          "oklch(48% 0.13 35)",
+          "oklch(60% 0.13 35)",
+          "oklch(72% 0.13 35)",
+          "oklch(84% 0.13 35)",
+          "oklch(95% 0.13 35)"
+        ],
+        "source": "@havenkeys/ui tokens.css (inherited)"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#e6ece8",
+        "tonalRamp": [
+          "oklch(15% 0.01 155)",
+          "oklch(25% 0.01 155)",
+          "oklch(35% 0.01 155)",
+          "oklch(48% 0.01 155)",
+          "oklch(60% 0.01 155)",
+          "oklch(72% 0.01 155)",
+          "oklch(84% 0.01 155)",
+          "oklch(95% 0.01 155)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "paper-sheet": {
+        "role": "neutral",
+        "displayName": "Paper Sheet",
+        "canonical": "#fbfcfb",
+        "tonalRamp": [
+          "oklch(15% 0.01 155)",
+          "oklch(25% 0.01 155)",
+          "oklch(35% 0.01 155)",
+          "oklch(48% 0.01 155)",
+          "oklch(60% 0.01 155)",
+          "oklch(72% 0.01 155)",
+          "oklch(84% 0.01 155)",
+          "oklch(95% 0.01 155)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "paper-strong": {
+        "role": "neutral",
+        "displayName": "Paper Ink",
+        "canonical": "#121a17",
+        "tonalRamp": [
+          "oklch(15% 0.015 155)",
+          "oklch(25% 0.015 155)",
+          "oklch(35% 0.015 155)",
+          "oklch(48% 0.015 155)",
+          "oklch(60% 0.015 155)",
+          "oklch(72% 0.015 155)",
+          "oklch(84% 0.015 155)",
+          "oklch(95% 0.015 155)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      },
+      "paper-brass": {
+        "role": "neutral",
+        "displayName": "Paper Brass",
+        "canonical": "#7f6430",
+        "tonalRamp": [
+          "oklch(15% 0.08 80)",
+          "oklch(25% 0.08 80)",
+          "oklch(35% 0.08 80)",
+          "oklch(48% 0.08 80)",
+          "oklch(60% 0.08 80)",
+          "oklch(72% 0.08 80)",
+          "oklch(84% 0.08 80)",
+          "oklch(95% 0.08 80)"
+        ],
+        "source": "apps/web global.css :root (site layer)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The single h1 per page; may carry the brass italic emphasis only on the home hero."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section h2s, roman; the closer h2 is the only one with brass italic emphasis."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Journey chapter heads (with brass italic emphasis) and other h3s (roman)."
+      },
+      "title-sm": {
+        "displayName": "Small Serif Title",
+        "purpose": "Definition terms, chain nodes, reading-list titles."
+      },
+      "emphasis": {
+        "displayName": "Brass Italic",
+        "purpose": "Reserved: hero headline, journey chapter heads, final call-to-action."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "The sentence under a hero or section head, in muted-hi."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "All prose."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, rail steps, zone terms; sentence case."
+      },
+      "mono": {
+        "displayName": "Literal String",
+        "purpose": "Keys, ciphertext, commands, domains and literal identifiers only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "lift",
+        "value": "0 40px 80px -24px rgba(0,0,0,0.65), 0 12px 24px -12px rgba(0,0,0,0.5)",
+        "purpose": "Framed windows, the browser frame, the hero popup screenshot. Site layer token --lift."
+      },
+      {
+        "name": "stage",
+        "value": "0 30px 60px -30px rgba(0,0,0,0.6)",
+        "purpose": "The journey stage."
+      },
+      {
+        "name": "screenshot-drop",
+        "value": "drop-shadow(0 24px 34px rgba(0,0,0,0.5))",
+        "purpose": "filter on transparent extension renders."
+      },
+      {
+        "name": "paper-sheet",
+        "value": "0 1px 0 #d6ded9, 0 36px 60px -24px rgba(22,35,31,0.38), 0 8px 18px -8px rgba(22,35,31,0.2)",
+        "purpose": "The Emergency Kit sheet on paper only."
+      },
+      {
+        "name": "brass-hover-glow",
+        "value": "0 10px 22px -10px rgba(201,164,92,0.6)",
+        "purpose": "Primary button hover only."
+      },
+      {
+        "name": "focus",
+        "value": "outline: 2px solid #e3c483; outline-offset: 3px",
+        "purpose": "Keyboard focus on every interactive element."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-mechanical",
+        "value": "cubic-bezier(0.3, 0.7, 0.2, 1)",
+        "purpose": "Inherited product easing; every site transition uses it."
+      },
+      {
+        "name": "control",
+        "value": "160ms",
+        "purpose": "Button and link state changes."
+      },
+      {
+        "name": "stage-scene",
+        "value": "opacity 520ms, transform 620ms, filter blur(6px) 520ms",
+        "purpose": "Journey scene cross-fade; the site's one orchestrated motion."
+      },
+      {
+        "name": "chapter-dim",
+        "value": "color 500ms",
+        "purpose": "Inactive journey chapters fade to muted."
+      },
+      {
+        "name": "overlay-in",
+        "value": "420ms, translateY(-4px) to 0",
+        "purpose": "Extension screenshots appearing in the showcase."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation/transition none",
+        "purpose": "All motion removed; scenes shown settled."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "900px"
+      },
+      {
+        "name": "lg",
+        "value": "1100px"
+      }
+    ],
+    "constraints": {
+      "csp": "style-src 'self'; img-src 'self' (vercel.json): no inline <style> elements, no data: images",
+      "vite": "build.assetsInlineLimit = 0",
+      "demoData": "fernway.example and example.com only, labeled 'demo site' / 'demo data'",
+      "desktopScreenshots": "DesktopPlaceholder until real captures exist",
+      "extensionScreenshots": "src/assets/shots are real renders of the extension UI"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one committing action per view (Download), with a leading icon.",
+      "html": "<a class=\"ds-btn ds-btn-primary\" href=\"#\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 3v10M5.5 8.5 10 13l4.5-4.5M4 16.5h12\"/></svg>Download HavenKeys</a>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:42px;padding:0 18px;border-radius:8px;border:1px solid transparent;font-family:\"Hanken Grotesk Variable\",\"Hanken Grotesk\",system-ui,sans-serif;font-size:15px;font-weight:600;text-decoration:none;white-space:nowrap;cursor:pointer;transition:background-color 160ms cubic-bezier(0.3,0.7,0.2,1),border-color 160ms cubic-bezier(0.3,0.7,0.2,1),transform 160ms cubic-bezier(0.3,0.7,0.2,1),box-shadow 160ms cubic-bezier(0.3,0.7,0.2,1)}.ds-btn-primary{background:#c9a45c;color:#121a17}.ds-btn-primary:hover{background:#d8b56f;transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(201,164,92,0.6)}.ds-btn:focus-visible{outline:2px solid #e3c483;outline-offset:3px}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary action beside the primary, with a trailing arrow.",
+      "html": "<a class=\"ds-btn-ghost\" href=\"#\">See how it works<svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 4v12M5 11l5 5 5-5\"/></svg></a>",
+      "css": ".ds-btn-ghost{display:inline-flex;align-items:center;gap:10px;height:42px;padding:0 18px;border-radius:8px;border:1px solid #2c3d37;background:transparent;color:#f3f7f5;font-family:\"Hanken Grotesk Variable\",\"Hanken Grotesk\",system-ui,sans-serif;font-size:15px;font-weight:600;text-decoration:none;transition:background-color 160ms,border-color 160ms}.ds-btn-ghost:hover{border-color:rgba(201,164,92,0.38);background:#1b2925}.ds-btn-ghost:focus-visible{outline:2px solid #e3c483;outline-offset:3px}"
+    },
+    {
+      "name": "Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Pill label for status; brass variant marks optional or yours.",
+      "html": "<span class=\"ds-tag\">Always</span> <span class=\"ds-tag ds-tag-brass\">Optional, off by default</span>",
+      "css": ".ds-tag{display:inline-block;padding:2px 9px;border:1px solid #2c3d37;border-radius:999px;font-family:\"Hanken Grotesk Variable\",system-ui,sans-serif;font-size:12px;font-weight:560;color:#a3b2ab}.ds-tag-brass{border-color:rgba(201,164,92,0.38);color:#e3c483}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav",
+      "description": "Sticky translucent bar with brand, links and a small Download.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-brand\" href=\"#\">HavenKeys</a><div class=\"ds-nav-links\"><a href=\"#\">How it works</a><a href=\"#\" class=\"is-active\">Security</a><a class=\"ds-nav-cta\" href=\"#\">Download</a></div></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 24px;background:rgba(11,17,15,0.82);backdrop-filter:saturate(140%) blur(14px);border-bottom:1px solid #1f2c28;font-family:\"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-nav-brand{font-weight:660;font-size:17px;color:#f3f7f5;text-decoration:none}.ds-nav-links{display:flex;align-items:center;gap:24px;font-size:15px}.ds-nav-links a{color:#e2eae6;text-decoration:none;transition:color 160ms}.ds-nav-links a:hover,.ds-nav-links a.is-active{color:#e3c483}.ds-nav-links a.ds-nav-cta{height:36px;display:inline-flex;align-items:center;padding:0 14px;border-radius:8px;background:#c9a45c;color:#121a17;font-size:14px;font-weight:600}.ds-nav-links a.ds-nav-cta:hover{background:#d8b56f;color:#121a17}"
+    },
+    {
+      "name": "Panel with highlight",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat ground panel; the one highlighted item in a group takes the brass wash and hairline.",
+      "html": "<div class=\"ds-panel\"><h3>Linux</h3><p>AppImage and .deb</p></div><div class=\"ds-panel ds-panel-yours\"><h3>macOS</h3><p>Universal .dmg</p></div>",
+      "css": ".ds-panel{padding:22px 26px;margin-bottom:12px;border:1px solid #1f2c28;border-radius:14px;background:#0b110f;font-family:\"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-panel h3{margin:0;font-family:\"Source Serif 4 Variable\",Georgia,serif;font-weight:500;font-size:1.55rem;color:#f3f7f5}.ds-panel p{margin:4px 0 0;font-size:14.5px;color:#86968f}.ds-panel-yours{border-color:rgba(201,164,92,0.38);background:linear-gradient(rgba(201,164,92,0.14),rgba(201,164,92,0.14)),#0b110f}"
+    },
+    {
+      "name": "Desktop Placeholder",
+      "kind": "custom",
+      "refersTo": "DesktopPlaceholder",
+      "description": "Framed window with the vault skeleton and a dashed brass tag naming the missing screenshot.",
+      "html": "<figure class=\"ds-window\"><div class=\"ds-window-bar\"><span></span><span></span><span></span><em>HavenKeys</em></div><div class=\"ds-skel\"><div class=\"ds-skel-side\"></div><div class=\"ds-skel-list\"></div><div></div></div><figcaption class=\"ds-ph-tag\"><strong>Desktop app screenshot</strong>The vault view goes here.</figcaption></figure>",
+      "css": ".ds-window{position:relative;margin:0;border:1px solid #2c3d37;border-radius:14px;background:#0b110f;overflow:hidden;box-shadow:0 40px 80px -24px rgba(0,0,0,0.65),0 12px 24px -12px rgba(0,0,0,0.5)}.ds-window-bar{display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;background:#0b110f;border-bottom:1px solid #1f2c28}.ds-window-bar span{width:11px;height:11px;border-radius:50%;background:#2c3d37}.ds-window-bar em{margin-left:10px;font-style:normal;font-size:12.5px;color:#86968f;font-family:system-ui,sans-serif}.ds-skel{display:grid;grid-template-columns:120px 180px 1fr;height:220px}.ds-skel-side{background:#0b110f;border-right:1px solid #1f2c28}.ds-skel-list{background:#121b18;border-right:1px solid #1f2c28}.ds-ph-tag{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);padding:14px 18px;border:1px dashed rgba(201,164,92,0.38);border-radius:10px;background:rgba(11,17,15,0.88);color:#a3b2ab;font:13.5px/1.4 \"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-ph-tag strong{display:block;color:#f3f7f5;font-weight:600}"
+    },
+    {
+      "name": "Journey Rail",
+      "kind": "custom",
+      "refersTo": "journey-stage",
+      "description": "The four-step rail atop the sticky stage; active in brass-hi, done steps filled.",
+      "html": "<ol class=\"ds-rail\"><li class=\"is-done\">Typed</li><li class=\"is-active\">Sealed</li><li>Stored</li><li>Filled</li></ol>",
+      "css": ".ds-rail{display:flex;justify-content:center;gap:6px;margin:0;padding:18px;list-style:none;background:#0b110f;border:1px solid #1f2c28;border-radius:18px;font-family:\"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-rail li{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:560;color:#86968f;transition:color 300ms}.ds-rail li::before{content:\"\";width:7px;height:7px;border-radius:50%;border:1px solid currentColor}.ds-rail li:not(:last-child)::after{content:\"\";width:22px;height:1px;background:#2c3d37}.ds-rail li.is-done{color:#e2eae6}.ds-rail li.is-done::before{background:currentColor}.ds-rail li.is-active{color:#e3c483}.ds-rail li.is-active::before{background:#e3c483}"
+    },
+    {
+      "name": "Emergency Kit Sheet",
+      "kind": "custom",
+      "refersTo": "kit-sheet",
+      "description": "The printed kit on the paper field: serif italic document title, Secret Key in mono.",
+      "html": "<div class=\"ds-paper\"><div class=\"ds-kit\"><div class=\"ds-kit-head\"><b>HavenKeys</b><i>Emergency Kit</i></div><span class=\"ds-kit-label\">Secret Key</span><span class=\"ds-kit-value\">H1-7QKP-2M9X-R4TD-8WVN</span></div></div>",
+      "css": ".ds-paper{padding:40px;background:#e6ece8}.ds-kit{padding:36px;border-radius:4px;background:#fbfcfb;color:#3a4842;transform:rotate(-1.6deg);box-shadow:0 1px 0 #d6ded9,0 36px 60px -24px rgba(22,35,31,0.38),0 8px 18px -8px rgba(22,35,31,0.2);font-family:\"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-kit-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:12px;margin-bottom:18px;border-bottom:2px solid #121a17}.ds-kit-head b{font-size:17px;color:#121a17}.ds-kit-head i{font-family:\"Source Serif 4 Variable\",Georgia,serif;font-size:19px;color:#7f6430}.ds-kit-label{display:block;font-size:12.5px;font-weight:650;color:#5a6a63}.ds-kit-value{display:block;margin-top:6px;padding:12px 14px;border-radius:6px;background:#edf1ee;font-family:\"JetBrains Mono\",ui-monospace,monospace;font-size:17px;letter-spacing:0.04em;color:#121a17}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Brass-Fitted Strongroom",
+    "overview": "The site is a dark forest-green room with one metal fitting. Grounds step from near-black green (ink, ground, bg) up through raised panels, all divided by hairline green rules; brass is the only accent and it marks the one thing that commits (Download), the active state, and the human voice in the three headlines that carry it. An engraved guilloche rosette, drawn in brass at about a tenth of its strength, sits behind the hero and the closing call, the banknote pattern that says \"hard to forge\" without a word. One chapter, the Emergency Kit, changes the whole field to pale paper: the only light surface on the site, and the only place a sheet of paper is shown as an object.\n\nType is a conversation between a serif and a grotesque. Source Serif 4, with optical sizing, sets every heading in roman at a light 440 weight; its italic, in brass, is the human voice and is spent in three places only. Hanken Grotesk carries all reading text at a relaxed 1.6 line height. JetBrains Mono appears only where the visitor is looking at a literal machine string. The product is shown, not described: real extension renders, framed windows, and a sticky journey stage that moves one fictional login through four states.\n\nThis site builds on the product's shared token layer (`@havenkeys/ui/tokens.css`, dark theme): surfaces, lines, text, brass, ok/danger, radii, the mono and sans stacks and the mechanical easing are inherited from the desktop app and must not be redefined here. The site adds its own layer on `:root` in `src/styles/global.css`: the serif voice, a deeper ink and ground, a brighter muted (`muted-hi`) for long reading on dark, the paper palette, a brass hairline, the `lift` shadow, and the page measures (max, gutter, section).",
+    "keyCharacteristics": [
+      "Dark green grounds with brass as the single accent; one paper field per page at most.",
+      "Serif roman headings; brass italic emphasis reserved for three moments.",
+      "Hairline 1px green rules instead of cards-on-cards; dashed rules mark what is outside the trust boundary or not defended.",
+      "Framed product windows with a deep, soft lift shadow; real screenshots overlap their edges.",
+      "One orchestrated motion (the journey stage); everything else is static or a short state transition."
+    ],
+    "rules": [
+      {
+        "name": "The One Fitting Rule",
+        "body": "Brass is the only accent. A screen has one brass-filled control at most (Download); everything else brass is a hairline, a dot, a word or a wash.",
+        "section": "colors"
+      },
+      {
+        "name": "The Inherited Palette Rule",
+        "body": "Surface, line, text, brass, ok and danger values come from `@havenkeys/ui` tokens. The site adds only the `:root` site layer; a new hex in component CSS is drift, not a new token.",
+        "section": "colors"
+      },
+      {
+        "name": "The Foreign Page Rule",
+        "body": "The simulated website inside the browser showcase and the fill scene (white card, blue focus #3b6cf6, system font) is a page HavenKeys does not own, so it deliberately uses none of this palette. That styling stays inside the browser frame.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Italics Rule",
+        "body": "The italic brass emphasis (Source Serif italic, 380, brass-hi) appears only in the hero headline, the four journey chapter heads, and the final call-to-action. Every other heading on every page, including the paper chapter, is roman with no emphasis.",
+        "section": "typography"
+      },
+      {
+        "name": "The Literal String Rule",
+        "body": "Mono is only for strings a machine produced or a person must type or match exactly: keys, ciphertext, commands, domains, and the identifiers around them (KDF operation names, permission strings, file paths, release tags). Never for headings, numbers-as-decoration or labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Objects-Only Shadow Rule",
+        "body": "Only things that represent a real object (an app window, a screenshot, a sheet of paper, the stage) cast a shadow. Text panels, tables, ledger columns and disclaimers stay flat on a tonal ground with a hairline.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take surface, text, line, brass and status colors from `@havenkeys/ui` tokens, and add site-only values to the `:root` site layer, never inline in a component rule.",
+      "Do keep brass italic emphasis to the hero headline, the journey chapter heads and the final call-to-action.",
+      "Do use mono only for keys, ciphertext, commands, domains and the literal identifiers around them.",
+      "Do use the fictional `fernway.example` (and `example.com` addresses) for all demo data, and label it where it appears (\"demo site\", \"demo data\").",
+      "Do fill any missing desktop screenshot with `DesktopPlaceholder` and a label saying what goes there.",
+      "Do use only real extension renders from `src/assets/shots` for extension imagery.",
+      "Do ship styles only through the bundled stylesheet and images only as emitted files: the CSP is `style-src 'self'; img-src 'self'`, so no inline `<style>` elements and no `data:` images, and Vite's `assetsInlineLimit` stays at 0. Dynamic values go through React style props (CSSOM), as the stage delays and showcase scale do.",
+      "Do carry the verbatim audit disclaimer in a flat ground panel wherever security claims are summarized."
+    ],
+    "donts": [
+      "Don't add a second accent color or fill large areas with brass.",
+      "Don't set any other heading in italic or brass, including the paper chapter heading.",
+      "Don't use real brands or real people as demo accounts, or leave demo data unlabeled.",
+      "Don't invent desktop UI in place of a screenshot, or redraw the extension UI in HTML.",
+      "Don't put small all-caps tracked labels above headings; headings stand on their own.",
+      "Don't give flat text panels, tables or ledger columns a shadow; shadows are for objects.",
+      "Don't add a second scroll-driven animation; the journey stage is the one orchestrated motion.",
+      "Don't use a light field anywhere except a single paper chapter."
+    ]
+  }
+}
