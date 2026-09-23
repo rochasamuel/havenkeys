@@ -71,8 +71,8 @@ export const en = {
       "Your keys stay on your devices; the only server is one you run, and it holds ciphertext it has no key for.",
     seeHow: "See how it works",
     heroMeta: "Free and open source · Windows, macOS and Linux · Chrome and Firefox",
-    placeholderLabel: "Desktop app screenshot",
-    placeholderNote: "The vault view goes here.",
+    desktopAlt:
+      "The HavenKeys desktop app: a sidebar with the vault's sections, a list of logins, and the Fernway login open with its username, hidden password and a live one-time code.",
     popupAlt: "The HavenKeys browser popup: two saved Fernway logins, a Fill button, and a one-time code.",
     menuAlt: "The HavenKeys in-page menu offering two saved logins.",
 
@@ -541,9 +541,9 @@ export const en = {
           modify, and redistribute it under the terms of either.
         </p>
         <p>
-          This site and the desktop app embed the Hanken Grotesk and JetBrains Mono typefaces, and
-          this site also embeds Source Serif 4. All three are licensed separately under the SIL Open
-          Font License 1.1. Their copyright notices and that license are in{" "}
+          This site, the desktop app and the browser extension embed the Hanken Grotesk, Source
+          Serif 4 and JetBrains Mono typefaces, which are licensed separately under the SIL Open Font
+          License 1.1. Their copyright notices and that license are in{" "}
           <Ext href={`${GH}/blob/main/THIRD-PARTY-NOTICES.md`}>THIRD-PARTY-NOTICES.md</Ext>.
         </p>
 

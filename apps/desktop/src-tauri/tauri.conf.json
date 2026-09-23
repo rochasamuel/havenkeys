@@ -21,7 +21,9 @@
         "minHeight": 500,
         "center": true,
         "theme": "Dark",
-        "backgroundColor": "#0f1614"
+        "backgroundColor": "#0f1614",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

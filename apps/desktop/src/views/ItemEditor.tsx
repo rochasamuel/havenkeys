@@ -119,105 +119,127 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
 
   const heading = `${isNew ? "New" : "Edit"} ${itemType === "login" ? "login" : "secure note"}`;
 
+  const saveDisabled = saving || loadingText || !title.trim() || readOnly;
+
   return (
     <form className="editor" onSubmit={submit}>
-      <header className="editor-head">
+      <header className="editor-head" data-tauri-drag-region>
         <h2>{heading}</h2>
+        <div className="editor-actions">
+          <button type="button" className="btn btn-small" onClick={onCancel} disabled={saving}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-small btn-primary" disabled={saveDisabled}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
       </header>
 
-      <label className="control">
-        <span>Title</span>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={itemType === "login" ? "e.g. GitHub" : "e.g. Wi-Fi at home"}
-          maxLength={256}
-          autoFocus
-          required
-        />
-      </label>
+      <div className="group">
+        <label className="row edit-row">
+          <span className="edit-label">Title</span>
+          <input
+            className="edit-input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={itemType === "login" ? "e.g. GitHub" : "e.g. Wi-Fi at home"}
+            maxLength={256}
+            autoFocus
+            required
+          />
+        </label>
+
+        {itemType === "login" && (
+          <>
+            <label className="row edit-row">
+              <span className="edit-label">Username</span>
+              <input
+                className="edit-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Username or email"
+                autoComplete="off"
+                spellCheck={false}
+                autoCapitalize="off"
+                maxLength={512}
+              />
+            </label>
+
+            <div className="row edit-row">
+              <span className="edit-label">Password</span>
+              {password.mode === "keep" ? (
+                <div className="edit-secret">
+                  <span className="mono masked">••••••••••••</span>
+                  <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
+                    Change
+                  </button>
+                  <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
+                    Remove
+                  </button>
+                </div>
+              ) : password.mode === "clear" ? (
+                <div className="edit-secret">
+                  <span className="muted">The password will be removed.</span>
+                  <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
+                    Undo
+                  </button>
+                </div>
+              ) : (
+                <div className="edit-secret">
+                  <input
+                    className="edit-input mono"
+                    type={showPassword ? "text" : "password"}
+                    value={password.value}
+                    onChange={(e) => setPassword({ mode: "set", value: e.target.value })}
+                    placeholder="Password"
+                    autoComplete="new-password"
+                    spellCheck={false}
+                    autoCapitalize="off"
+                    aria-label="Password"
+                  />
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setShowPassword((s) => !s)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
+                  </button>
+                  <button type="button" className="btn btn-small" onClick={() => void generate()}>
+                    <Icon name="dice" size={15} /> Generate
+                  </button>
+                  {!isNew && existing.hasPassword && (
+                    <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       {itemType === "login" && (
         <>
-          <label className="control">
-            <span>Username or email</span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              autoCapitalize="off"
-              maxLength={512}
-            />
-          </label>
-
-          <div className="control">
-            <span>Password</span>
-            {password.mode === "keep" ? (
-              <div className="secret-keep">
-                <span className="mono masked">••••••••••••</span>
-                <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
-                  Change
-                </button>
-                <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
-                  Remove
-                </button>
-              </div>
-            ) : password.mode === "clear" ? (
-              <div className="secret-keep">
-                <span className="muted">The password will be removed.</span>
-                <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
-                  Undo
-                </button>
-              </div>
-            ) : (
-              <div className="input-row">
+          <h3 className="group-title">Websites</h3>
+          <div className="group">
+            {urls.map((rule, i) => (
+              <div className="row edit-row url-edit" key={i}>
                 <input
-                  className="mono"
-                  type={showPassword ? "text" : "password"}
-                  value={password.value}
-                  onChange={(e) => setPassword({ mode: "set", value: e.target.value })}
-                  autoComplete="new-password"
+                  className="edit-input"
+                  value={rule.url}
+                  onChange={(e) =>
+                    setUrls((list) => list.map((r, j) => (j === i ? { ...r, url: e.target.value } : r)))
+                  }
+                  placeholder="github.com"
                   spellCheck={false}
                   autoCapitalize="off"
+                  inputMode="url"
+                  aria-label={`Website ${i + 1}`}
                 />
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => setShowPassword((s) => !s)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
-                </button>
-                <button type="button" className="btn btn-small" onClick={() => void generate()}>
-                  <Icon name="dice" size={15} /> Generate
-                </button>
-                {!isNew && existing.hasPassword && (
-                  <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
-                    Cancel
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="control">
-            <span>Websites</span>
-            <div className="url-rows">
-              {urls.map((rule, i) => (
-                <div className="input-row" key={i}>
-                  <input
-                    value={rule.url}
-                    onChange={(e) =>
-                      setUrls((list) => list.map((r, j) => (j === i ? { ...r, url: e.target.value } : r)))
-                    }
-                    placeholder="github.com"
-                    spellCheck={false}
-                    autoCapitalize="off"
-                    inputMode="url"
-                    aria-label={`Website ${i + 1}`}
-                  />
+                <span className="select-wrap">
                   <select
                     value={rule.matchType}
                     onChange={(e) =>
@@ -233,70 +255,75 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={() => setUrls((list) => list.filter((_, j) => j !== i))}
-                    aria-label={`Remove website ${i + 1}`}
-                    title="Remove website"
-                  >
-                    <Icon name="x" size={16} />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="btn btn-small btn-ghost"
-                onClick={() => setUrls((list) => [...list, { url: "", matchType: "domain" }])}
-                disabled={urls.length >= 32}
-              >
-                <Icon name="plus" size={15} /> Add website
-              </button>
-            </div>
+                  <Icon name="chevronDown" size={14} className="select-chevron" />
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setUrls((list) => list.filter((_, j) => j !== i))}
+                  aria-label={`Remove website ${i + 1}`}
+                  title="Remove website"
+                >
+                  <Icon name="x" size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="row row-button add-row"
+              onClick={() => setUrls((list) => [...list, { url: "", matchType: "domain" }])}
+              disabled={urls.length >= 32}
+            >
+              <Icon name="plus" size={15} /> Add website
+            </button>
           </div>
 
-          <div className="control">
-            <span>One-time codes (TOTP)</span>
-            {totp.mode === "keep" ? (
-              <div className="secret-keep">
-                <span className="muted">Set up.</span>
-                <button type="button" className="btn btn-small" onClick={() => setTotp({ mode: "set", value: "" })}>
-                  Replace
-                </button>
-                <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setTotp({ mode: "clear" })}>
-                  Remove
-                </button>
-              </div>
-            ) : totp.mode === "clear" ? (
-              <div className="secret-keep">
-                <span className="muted">One-time codes will be removed.</span>
-                <button type="button" className="btn btn-small" onClick={() => setTotp(KEEP)}>
-                  Undo
-                </button>
-              </div>
-            ) : (
-              <input
-                className="mono"
-                type="password"
-                value={totp.value}
-                onChange={(e) => setTotp({ mode: "set", value: e.target.value })}
-                placeholder="Setup key or otpauth:// link"
-                autoComplete="off"
-                spellCheck={false}
-                autoCapitalize="off"
-              />
-            )}
+          <h3 className="group-title">One-time codes</h3>
+          <div className="group">
+            <div className="row edit-row">
+              {totp.mode === "keep" ? (
+                <div className="edit-secret">
+                  <span className="muted">Set up.</span>
+                  <button type="button" className="btn btn-small" onClick={() => setTotp({ mode: "set", value: "" })}>
+                    Replace
+                  </button>
+                  <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setTotp({ mode: "clear" })}>
+                    Remove
+                  </button>
+                </div>
+              ) : totp.mode === "clear" ? (
+                <div className="edit-secret">
+                  <span className="muted">One-time codes will be removed.</span>
+                  <button type="button" className="btn btn-small" onClick={() => setTotp(KEEP)}>
+                    Undo
+                  </button>
+                </div>
+              ) : (
+                <input
+                  className="edit-input mono"
+                  type="password"
+                  value={totp.value}
+                  onChange={(e) => setTotp({ mode: "set", value: e.target.value })}
+                  placeholder="Setup key or otpauth:// link"
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  aria-label="One-time code setup key"
+                />
+              )}
+            </div>
           </div>
         </>
       )}
 
-      <label className="control">
-        <span>{itemType === "login" ? "Notes" : "Note"}</span>
+      <h3 className="group-title">{itemType === "login" ? "Notes" : "Note"}</h3>
+      <div className="group">
         <textarea
-          className={itemType === "secure_note" ? "note-input" : undefined}
+          className={`edit-area${itemType === "secure_note" ? " note-input" : ""}`}
           value={notesText}
           disabled={loadingText}
-          placeholder={loadingText ? "Decrypting…" : undefined}
+          placeholder={loadingText ? "Decrypting…" : itemType === "login" ? "Anything else worth keeping with this login" : undefined}
+          aria-label={itemType === "login" ? "Notes" : "Note"}
           onChange={(e) => {
             setNotesText(e.target.value);
             setNotes({ mode: "set", value: e.target.value });
@@ -304,7 +331,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
           spellCheck={false}
           rows={itemType === "login" ? 4 : 14}
         />
-      </label>
+      </div>
 
       {error && (
         <p className="form-error" role="alert">
@@ -317,19 +344,6 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
           Offline — the vault is read-only until it reconnects.
         </p>
       )}
-
-      <footer className="editor-foot">
-        <button type="button" className="btn" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={saving || loadingText || !title.trim() || readOnly}
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </footer>
     </form>
   );
 }

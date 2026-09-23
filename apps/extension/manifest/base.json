@@ -39,7 +39,10 @@
         "save.js",
         "inline.css",
         "theme.css",
-        "icons/32.png"
+        "fonts.css",
+        "fonts/hanken-grotesk-latin-wght-normal.woff2",
+        "fonts/source-serif-4-latin-opsz-normal.woff2",
+        "fonts/jetbrains-mono-latin-500-normal.woff2"
       ],
       "matches": [
         "https://*/*",
@@ -48,6 +51,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
   }
 }

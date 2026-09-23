@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "The only capability: the main window may call exactly these commands and listen for events. No plugins, no filesystem, no shell, no network.",
+  "description": "The only capability: the main window may call exactly these commands, listen for events, and start a window drag from its own title-bar areas (macOS overlay title bar). No plugins, no filesystem, no shell, no network.",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-start-dragging",
     "allow-vault-status",
     "allow-unlock-vault",
     "allow-lock-vault",

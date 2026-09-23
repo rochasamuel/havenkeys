@@ -24,8 +24,11 @@ describe("format", () => {
   });
 
   it("builds monograms", () => {
-    expect(monogram("GitHub")).toBe("GI");
-    expect(monogram("Bank of Mars")).toBe("BO");
+    expect(monogram("GitHub")).toBe("G");
+    expect(monogram("bank of Mars")).toBe("B");
+    // Punctuation is skipped, so "(work)" never becomes a monogram.
+    expect(monogram("(work) Fernway")).toBe("W");
+    expect(monogram("1Password")).toBe("1");
     expect(monogram("  ")).toBe("?");
   });
 

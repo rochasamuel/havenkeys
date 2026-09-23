@@ -83,7 +83,7 @@ export function App() {
 
   if (fatal) {
     return (
-      <main className="welcome">
+      <main className="welcome" data-tauri-drag-region>
         <div className="welcome-card">
           <header className="welcome-head">
             <Seal />
@@ -111,7 +111,8 @@ export function App() {
   if (showKit && unlocked) {
     return (
       <main className="kit-screen">
-        <header className="kit-screen-head">
+        <header className="kit-screen-head" data-tauri-drag-region>
+          <Seal size={48} />
           <h1>Save your Emergency Kit</h1>
           <p>
             This is the only copy of your Secret Key. Without it — and your master password — nobody can open this
@@ -140,7 +141,7 @@ export function App() {
   return (
     <div className="app-shell">
       {device?.online === false && (
-        <div className="banner banner-muted" role="status">
+        <div className="banner" role="status">
           Offline — the vault is read-only until it reconnects.
         </div>
       )}

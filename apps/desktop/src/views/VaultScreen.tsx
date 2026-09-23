@@ -118,29 +118,23 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
     setPane({ kind: "new", itemType });
   }
 
+  const isMac = document.documentElement.dataset.platform === "mac";
+
   return (
     <div className="vault">
       <aside className="sidebar">
-        <div className="brand">
-          <Seal size={28} />
-          <span className="brand-name">HavenKeys</span>
+        <div className="sidebar-top" data-tauri-drag-region>
+          <div className="brand" data-tauri-drag-region>
+            <Seal size={22} />
+            <span className="brand-name">HavenKeys</span>
+          </div>
         </div>
 
-        <button className="latch" onClick={() => void lock()} title="Lock now (Ctrl+L)">
-          <span className="latch-track" aria-hidden="true">
-            <span className="latch-knob" />
-          </span>
-          <span className="latch-text">
-            <strong>Unlocked</strong>
-            <small>Lock now</small>
-          </span>
-        </button>
-
         <label className="search">
-          <Icon name="search" size={16} />
+          <Icon name="search" size={15} />
           <input
             type="search"
-            placeholder="Search vault"
+            placeholder="Search"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -153,6 +147,7 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
         </label>
 
         <nav className="nav" aria-label="Vault sections">
+          <p className="nav-heading">Vault</p>
           {sections.map((s) => (
             <button
               key={s.id}
@@ -165,7 +160,7 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
               <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note"]}</span>
             </button>
           ))}
-          <div className="nav-gap" />
+          <p className="nav-heading">Tools</p>
           <button
             className="nav-item"
             aria-current={section === "generator" ? "page" : undefined}
@@ -183,6 +178,23 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
             <span>Settings</span>
           </button>
         </nav>
+
+        <footer className="sidebar-foot">
+          <div className={`conn${readOnly ? " is-offline" : ""}`} role="status">
+            <Icon name={readOnly ? "cloudOff" : "cloud"} size={15} />
+            <span>{readOnly ? "Offline, read-only" : "Connected"}</span>
+          </div>
+          <button className="lock-btn" onClick={() => void lock()} title={`Lock now (${isMac ? "⌘L" : "Ctrl+L"})`}>
+            <span className="lock-btn-icon" aria-hidden="true">
+              <Icon name="unlock" size={16} />
+            </span>
+            <span className="lock-btn-text">
+              <strong>Unlocked</strong>
+              <small>Lock now</small>
+            </span>
+            <kbd>{isMac ? "⌘L" : "Ctrl L"}</kbd>
+          </button>
+        </footer>
       </aside>
 
       {section === "generator" && <GeneratorView />}
@@ -202,7 +214,13 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
           <section className="detail" aria-label="Item details">
             {pane.kind === "empty" && (
               <div className="detail-empty">
-                <p>{items.length === 0 ? "Your vault is empty." : "Select an item to see its details."}</p>
+                <Seal size={44} />
+                <p className="detail-empty-title">{items.length === 0 ? "Your vault is empty" : "Nothing selected"}</p>
+                <p className="muted">
+                  {items.length === 0
+                    ? "Add a login or a note, or bring everything over from 1Password."
+                    : "Choose an item to see its details."}
+                </p>
                 {items.length === 0 && (
                   <div className="detail-empty-actions">
                     <button className="btn btn-primary" onClick={() => newItem("login")} disabled={readOnly}>

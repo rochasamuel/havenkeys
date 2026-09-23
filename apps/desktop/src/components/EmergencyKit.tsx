@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { EmergencyKit as Kit } from "../lib/types";
 import { formatDate } from "../lib/format";
+import { Icon } from "./Icon";
 
 /** The QR code as one SVG path (one square per dark module). */
 function QrCode({ size, modules }: { size: number; modules: boolean[] }) {
@@ -98,8 +99,8 @@ export function EmergencyKit({ onDone }: Props) {
       </article>
 
       <div className="kit-actions">
-        <button className="btn btn-primary" type="button" onClick={() => window.print()}>
-          Print or save as PDF
+        <button className="btn" type="button" onClick={() => window.print()}>
+          <Icon name="printer" size={16} /> Print or save as PDF
         </button>
         {onDone && (
           <>

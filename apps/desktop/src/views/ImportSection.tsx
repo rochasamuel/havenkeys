@@ -57,12 +57,12 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
 
   return (
     <div className="settings-block">
-      <h3>Import from 1Password</h3>
-      <p className="muted">
+      <h3 className="group-title">Import from 1Password</h3>
+      <p className="group-note group-note-top">
         In 1Password, choose File › Export and the 1PUX format, then pick that file here. The export contains all of your
         passwords unencrypted, so delete it once the import is done.
       </p>
-      <div>
+      <div className="group-actions">
         <button className="btn" onClick={() => void runImport()} disabled={busy}>
           {busy ? "Importing…" : "Choose .1pux file…"}
         </button>

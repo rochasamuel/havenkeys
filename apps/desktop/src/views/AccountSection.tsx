@@ -63,13 +63,13 @@ function Devices({ online }: { online: boolean }) {
   }
 
   if (!online) {
-    return <p className="muted">Your devices are listed when this computer is connected to the server.</p>;
+    return <p className="group-note">Your devices are listed when this computer is connected to the server.</p>;
   }
   if (error) return <p className="form-error">{error}</p>;
   if (!devices) return <p className="muted">Loading…</p>;
 
   return (
-    <ul className="device-list">
+    <ul className="group device-list">
       {devices.map((device) => (
         <li key={device.id} className="device-row">
           <div className="device-main">
@@ -156,10 +156,10 @@ export function AccountSection({ online }: { online: boolean }) {
 
   return (
     <div className="settings-block">
-      <h3>Account</h3>
+      <h3 className="group-title">Account</h3>
 
       {account ? (
-        <dl className="kv">
+        <dl className="group kv">
           <div>
             <dt>Email</dt>
             <dd>{account.email}</dd>
@@ -182,7 +182,7 @@ export function AccountSection({ online }: { online: boolean }) {
           </div>
         </dl>
       ) : (
-        <p className="muted">This vault is not linked to an account.</p>
+        <p className="group-note">This vault is not linked to an account.</p>
       )}
 
       <div className="row-actions">
@@ -197,19 +197,19 @@ export function AccountSection({ online }: { online: boolean }) {
         </button>
       </div>
 
-      <h4>Devices</h4>
+      <h3 className="group-title">Devices</h3>
       <Devices online={online} />
 
-      <h4>Emergency Kit</h4>
+      <h3 className="group-title">Emergency Kit</h3>
       {!showKit ? (
-        <div className="row-actions">
+        <div className="kit-teaser">
+          <p className="muted">
+            Your Secret Key, the account and the server — everything another computer needs, besides your master
+            password.
+          </p>
           <button className="btn" type="button" onClick={() => setShowKit(true)}>
             Show Emergency Kit
           </button>
-          <span className="muted">
-            Your Secret Key, the account and the server — everything another computer needs, besides your master
-            password.
-          </span>
         </div>
       ) : (
         <EmergencyKit onDone={() => setShowKit(false)} />

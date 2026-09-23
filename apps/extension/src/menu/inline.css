@@ -1,5 +1,10 @@
 /* Shared by the in-page menu and save prompt. Sizes must agree with
-   content/frames.ts: header 34px, rows 46px, 8px of padding. */
+   content/frames.ts: header 34px, rows 46px, 8px of padding, save prompt
+   340 x 138.
+
+   Nothing here animates the .card itself: the click guard in common.ts
+   watches it, and Chromium's visibility check counts a card that is still
+   fading or scaling in as not visible. Only the contents move. */
 
 * {
   box-sizing: border-box;
@@ -15,7 +20,8 @@ body {
 
 body {
   color: var(--text);
-  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 13px/1.4 "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .card {
@@ -23,7 +29,7 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -34,12 +40,29 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 0 10px;
+  padding: 0 11px;
   border-bottom: 1px solid var(--line);
 }
 
+.mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.mark-shield {
+  fill: none;
+  stroke: var(--brass);
+  stroke-width: 52;
+  stroke-linejoin: round;
+}
+
+.mark-key {
+  fill: var(--brass);
+}
+
 .brand {
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text-strong);
 }
 
@@ -65,21 +88,46 @@ main {
   height: 46px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: row-in 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.row:nth-child(2) {
+  animation-delay: 30ms;
+}
+
+.row:nth-child(3) {
+  animation-delay: 60ms;
+}
+
+.row:nth-child(n + 4) {
+  animation-delay: 90ms;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
 }
 
 .row:hover,
 .row:focus-visible {
-  background: var(--hover);
+  background: var(--brass-soft);
   outline: none;
+}
+
+.row:focus-visible {
+  box-shadow: inset 0 0 0 1.5px rgba(201, 164, 92, 0.55);
 }
 
 .row:disabled {
@@ -89,14 +137,21 @@ main {
 
 .avatar {
   flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
+  background: var(--avatar-bg);
+  color: var(--avatar-fg);
+  font-family: "Source Serif 4 Variable", Georgia, serif;
+  font-size: 16px;
+  font-weight: 520;
+}
+
+.avatar-icon {
   background: var(--brass-soft);
   color: var(--brass-ink);
-  font-weight: 600;
 }
 
 .who {
@@ -114,6 +169,7 @@ main {
 
 .title {
   color: var(--text-strong);
+  font-weight: 600;
 }
 
 .user {
@@ -127,6 +183,7 @@ main {
   flex-direction: column;
   justify-content: center;
   padding: 0 8px;
+  animation: row-in 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 .message strong {
@@ -150,11 +207,22 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 10px 12px 12px;
+  padding: 11px 12px 12px;
+  animation: row-in 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 .prompt p {
   margin: 0;
+}
+
+#question {
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+#question.error {
+  color: var(--danger);
 }
 
 .prompt .detail {
@@ -172,17 +240,26 @@ main {
 }
 
 .btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
   font: inherit;
-  color: var(--text);
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 5px 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color 140ms,
+    transform 140ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .btn:hover {
   background: var(--hover);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .btn:focus-visible {
@@ -198,9 +275,19 @@ main {
 
 .btn.primary:hover {
   background: var(--brass-hi);
+  border-color: var(--brass-hi);
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

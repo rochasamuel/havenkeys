@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-23T00:00:00Z",
+  "title": "Design System: HavenKeys (desktop app and browser extension)",
+  "extensions": {
+    "colorMeta": {
+      "pane": { "role": "neutral", "displayName": "Window Green", "canonical": "oklch(19.2% 0.011 176)", "tonalRamp": ["#0b110f", "#0f1614", "#121b18", "#152120", "#172320", "#1f2c28", "#2c3d37", "#86968f"] },
+      "sidebar": { "role": "neutral", "displayName": "Sidebar Forest", "tonalRamp": ["#0b110f", "#0f1614", "#121b18", "#152120", "#172320", "#1f2c28", "#2c3d37", "#86968f"] },
+      "sidebar-light": { "role": "neutral", "displayName": "Sidebar Forest (light theme)", "canonical": "oklch(24.3% 0.020 174)", "tonalRamp": ["#030e0a", "#1a2723", "#35433f", "#53615d", "#72817c", "#93a39d", "#b8c8c3", "#e2f3ed"] },
+      "list": { "role": "neutral", "displayName": "List Green" },
+      "raised": { "role": "neutral", "displayName": "Raised Green" },
+      "group": { "role": "neutral", "displayName": "Group Green", "canonical": "oklch(23.6% 0.017 190)", "tonalRamp": ["#040d0d", "#1b2726", "#364342", "#536160", "#72817f", "#93a2a1", "#b8c8c6", "#e2f2f1"] },
+      "group-light": { "role": "neutral", "displayName": "Group Mist" },
+      "group-line": { "role": "neutral", "displayName": "Group Hairline" },
+      "group-line-light": { "role": "neutral", "displayName": "Group Hairline (light)" },
+      "field": { "role": "neutral", "displayName": "Field Green" },
+      "hover": { "role": "neutral", "displayName": "Hover Green" },
+      "line": { "role": "neutral", "displayName": "Hairline" },
+      "line-strong": { "role": "neutral", "displayName": "Strong Hairline" },
+      "text": { "role": "neutral", "displayName": "Bone" },
+      "text-strong": { "role": "neutral", "displayName": "Bright Bone" },
+      "muted": { "role": "neutral", "displayName": "Lichen" },
+      "pane-light": { "role": "neutral", "displayName": "White Pane" },
+      "list-light": { "role": "neutral", "displayName": "Pale List" },
+      "text-light": { "role": "neutral", "displayName": "Forest Ink" },
+      "text-strong-light": { "role": "neutral", "displayName": "Deep Forest Ink" },
+      "muted-light": { "role": "neutral", "displayName": "Lichen (light)" },
+      "brass": { "role": "primary", "displayName": "Fitting Brass", "canonical": "oklch(73.7% 0.101 83)", "tonalRamp": ["#1e0200", "#3b1c00", "#593900", "#795700", "#9a772d", "#bd9850", "#e4be76", "#ffe99f"] },
+      "brass-hi": { "role": "primary", "displayName": "Lit Brass" },
+      "brass-ink-light": { "role": "primary", "displayName": "Brass Ink (light theme text brass)" },
+      "brass-soft": { "role": "primary", "displayName": "Brass Wash" },
+      "sel": { "role": "primary", "displayName": "Selection Wash" },
+      "on-brass": { "role": "neutral", "displayName": "Text on Brass" },
+      "primary-light": { "role": "primary", "displayName": "Forest Primary (light theme)" },
+      "primary-hover-light": { "role": "primary", "displayName": "Forest Primary Hover" },
+      "primary-fg-light": { "role": "neutral", "displayName": "Text on Forest Primary" },
+      "avatar": { "role": "neutral", "displayName": "Avatar Green" },
+      "side-text": { "role": "neutral", "displayName": "Sidebar Bone" },
+      "side-muted": { "role": "neutral", "displayName": "Sidebar Lichen" },
+      "side-hover": { "role": "neutral", "displayName": "Sidebar Hover" },
+      "glass": { "role": "neutral", "displayName": "Toast Glass" },
+      "glass-light": { "role": "neutral", "displayName": "Toast Glass (light)" },
+      "symbol": { "role": "secondary", "displayName": "Cipher Green", "canonical": "oklch(77.7% 0.064 166)", "tonalRamp": ["#001305", "#002d1d", "#154a38", "#366955", "#578a74", "#77ac95", "#9dd2bb", "#c6fde5"] },
+      "ok": { "role": "tertiary", "displayName": "Leaf OK", "canonical": "oklch(67.1% 0.089 162)", "tonalRamp": ["#001401", "#003016", "#004e31", "#226d4e", "#468e6d", "#68b08e", "#8ed7b3", "#b8ffdd"] },
+      "danger": { "role": "tertiary", "displayName": "Ember", "canonical": "oklch(68.3% 0.136 34)", "tonalRamp": ["#2d0000", "#4f0000", "#721e0b", "#953f2c", "#b9604c", "#de816c", "#ffa790", "#ffd1b9"] },
+      "danger-light": { "role": "tertiary", "displayName": "Ember (light)" },
+      "paper-sheet": { "role": "neutral", "displayName": "Paper Sheet", "tonalRamp": ["#121a17", "#3a4842", "#5a6a63", "#a3b3ab", "#c7d2cc", "#edf1ee", "#f4f7f5", "#fbfcfb"] },
+      "paper-text": { "role": "neutral", "displayName": "Paper Text" },
+      "paper-strong": { "role": "neutral", "displayName": "Paper Strong" },
+      "paper-muted": { "role": "neutral", "displayName": "Paper Muted" },
+      "paper-well": { "role": "neutral", "displayName": "Paper Well" },
+      "paper-line": { "role": "neutral", "displayName": "Paper Hairline" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The unlock headline (30px); the extension options h1." },
+      "emphasis": { "displayName": "Brass Italic", "purpose": "The one italic word in \"HavenKeys is locked.\" on the unlock screen, in brass-ink. Nowhere else." },
+      "headline": { "displayName": "Headline", "purpose": "Item title, editor and tool heads, Emergency Kit screen head." },
+      "title": { "displayName": "Pane Title", "purpose": "The list pane title; kit sheet heading; empty-detail line." },
+      "title-sm": { "displayName": "Small Serif", "purpose": "Avatar monograms, empty-list line, popup notice." },
+      "body": { "displayName": "Body", "purpose": "The app's reading size; 13px in popup and in-page frames, 14px on the options page." },
+      "value": { "displayName": "Row Value", "purpose": "The value a row exists to show." },
+      "row-title": { "displayName": "Row Title", "purpose": "First line of list, popup and menu rows." },
+      "label": { "displayName": "Row Label", "purpose": "Muted label above a row value." },
+      "group-title": { "displayName": "Group Title", "purpose": "Sentence-case heading above an inset group." },
+      "mono": { "displayName": "Secret Mono", "purpose": "Passwords, Secret Key, setup keys and the literal machine strings around them." },
+      "code": { "displayName": "TOTP Code", "purpose": "The live one-time code, brass-ink, tabular; 15px in the popup." }
+    },
+    "shadows": [
+      { "name": "lift", "value": "0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45)", "purpose": "Popover menus, the toast, the Emergency Kit sheet (dark theme)." },
+      { "name": "lift-light", "value": "0 24px 48px -18px rgba(22,35,31,0.28), 0 8px 16px -8px rgba(22,35,31,0.14)", "purpose": "The same floating objects in light theme." },
+      { "name": "thumb", "value": "0 1px 3px rgba(0,0,0,0.35)", "purpose": "Switch thumb; the slider thumb uses 0 1px 4px rgba(0,0,0,0.45)." },
+      { "name": "segmented-thumb", "value": "0 1px 3px rgba(0,0,0,0.25), inset 0 0 0 1px var(--line-strong)", "purpose": "The selected segment of a segmented control." },
+      { "name": "focus", "value": "0 0 0 2px var(--bg), 0 0 0 4px rgba(201,164,92,0.6)", "purpose": "Keyboard focus ring on buttons, switches and sliders." },
+      { "name": "field-focus", "value": "0 0 0 3px var(--brass-soft)", "purpose": "Brass halo around a focused bordered input, with a brass border (4px on the unlock field)." },
+      { "name": "row-focus", "value": "inset 0 0 0 1.5px var(--brass)", "purpose": "A focused editor row, over the selection wash; in-page menu rows use rgba(201,164,92,0.55)." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.32, 0.72, 0, 1)", "purpose": "The one curve for every transition and entrance, desktop and extension." },
+      { "name": "t-fast", "value": "160ms", "purpose": "Hover, press, border and colour changes (the extension uses 140ms)." },
+      { "name": "t-med", "value": "280ms", "purpose": "Copy-to-check morph, reveal un-blur, menus, switches, small entrances." },
+      { "name": "t-slow", "value": "420ms", "purpose": "The key turning in the mark, unlock and empty-state entrances, toast in." },
+      { "name": "vault-in", "value": "520ms scale(0.985) + fade", "purpose": "The vault rising in after unlock." },
+      { "name": "pane-in", "value": "340ms translateY(6px) + fade", "purpose": "Detail, editor and tool panes cross-fading on selection." },
+      { "name": "totp-tick", "value": "250ms linear", "purpose": "The TOTP ring draining; linear so it never misreports time." },
+      { "name": "rosette", "value": "240s linear infinite rotate", "purpose": "The guilloche rosette behind unlock and welcome." },
+      { "name": "reduced-motion", "value": "animation: none; transition: none", "purpose": "Everything off under prefers-reduced-motion, every surface." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "960px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one committing action in a view: brass in dark theme (forest in light).",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Save</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; padding: 0 13px; border: 1px solid #2c3d37; border-radius: 8px; background: transparent; color: #f3f7f5; font: 560 13px \"Hanken Grotesk Variable\", system-ui, sans-serif; transition: background-color 160ms cubic-bezier(0.32,0.72,0,1), transform 160ms cubic-bezier(0.32,0.72,0,1); } .ds-btn-primary { border-color: transparent; background: #c9a45c; color: #121a17; } .ds-btn-primary:hover { background: #e3c483; } .ds-btn:active { transform: scale(0.97); } .ds-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px #0f1614, 0 0 0 4px rgba(201,164,92,0.6); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined, transparent; every non-committing action.",
+      "html": "<button class=\"ds-btn-secondary\">Edit</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; height: 32px; padding: 0 13px; border: 1px solid #2c3d37; border-radius: 8px; background: transparent; color: #f3f7f5; font: 560 13px \"Hanken Grotesk Variable\", system-ui, sans-serif; transition: background-color 160ms cubic-bezier(0.32,0.72,0,1), transform 160ms cubic-bezier(0.32,0.72,0,1); } .ds-btn-secondary:hover { background: #1b2925; } .ds-btn-secondary:active { transform: scale(0.97); } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px #0f1614, 0 0 0 4px rgba(201,164,92,0.6); }"
+    },
+    {
+      "name": "Inset Group",
+      "kind": "card",
+      "refersTo": "group",
+      "description": "Rows on a quiet surface with hairlines between them; the detail and settings grammar.",
+      "html": "<div class=\"ds-group\"><div class=\"ds-row\"><div><div class=\"ds-row-label\">Username</div><div class=\"ds-row-value\">sam@example.com</div></div></div><div class=\"ds-row\"><div><div class=\"ds-row-label\">Password</div><div class=\"ds-row-value ds-masked\">••••••••••••</div></div></div><div class=\"ds-row\"><div><div class=\"ds-row-label\">One-time code</div><div class=\"ds-code\">381 492</div></div></div></div>",
+      "css": ".ds-group { width: 420px; border: 1px solid rgba(226,234,230,0.07); border-radius: 12px; background: #152120; overflow: hidden; font-family: \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-row { display: flex; align-items: center; min-height: 50px; padding: 9px 12px 9px 16px; transition: background-color 160ms; } .ds-row + .ds-row { border-top: 1px solid rgba(226,234,230,0.07); } .ds-row:hover { background: #1b2925; } .ds-row-label { margin-bottom: 2px; font-size: 12px; font-weight: 560; color: #86968f; } .ds-row-value { font-size: 14px; color: #f3f7f5; } .ds-masked { font-family: \"JetBrains Mono\", ui-monospace, monospace; letter-spacing: 0.18em; color: #86968f; } .ds-code { font: 500 21px \"JetBrains Mono\", ui-monospace, monospace; letter-spacing: 0.05em; color: #e3c483; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Editor Row",
+      "kind": "input",
+      "refersTo": "edit-row-focus",
+      "description": "The row is the field: borderless input, 96px label; focus washes the row and rings it in brass.",
+      "html": "<div class=\"ds-edit-group\"><label class=\"ds-edit-row\"><span class=\"ds-edit-label\">Title</span><input class=\"ds-edit-input\" placeholder=\"e.g. GitHub\"></label><label class=\"ds-edit-row\"><span class=\"ds-edit-label\">Username</span><input class=\"ds-edit-input\" placeholder=\"Username or email\"></label></div>",
+      "css": ".ds-edit-group { width: 420px; border: 1px solid rgba(226,234,230,0.07); border-radius: 12px; background: #152120; overflow: hidden; font-family: \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-edit-row { display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 9px 12px 9px 16px; cursor: text; transition: background-color 160ms; } .ds-edit-row + .ds-edit-row { border-top: 1px solid rgba(226,234,230,0.07); } .ds-edit-row:focus-within { background: rgba(201,164,92,0.15); box-shadow: inset 0 0 0 1.5px #c9a45c; } .ds-edit-label { flex: 0 0 96px; font-size: 13px; color: #86968f; } .ds-edit-input { flex: 1; min-width: 0; height: 30px; padding: 0; border: 0; background: none; outline: none; color: #f3f7f5; font: inherit; font-size: 14px; } .ds-edit-input::placeholder { color: #86968f; opacity: 0.75; }"
+    },
+    {
+      "name": "Unlock Field",
+      "kind": "input",
+      "refersTo": "unlock-field",
+      "description": "The single master-password field with its inline brass arrow.",
+      "html": "<label class=\"ds-unlock\"><input type=\"password\" placeholder=\"Master password\"><button class=\"ds-unlock-go\" aria-label=\"Unlock\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg></button></label>",
+      "css": ".ds-unlock { position: relative; display: block; width: 380px; } .ds-unlock input { width: 100%; box-sizing: border-box; height: 48px; padding: 0 54px 0 16px; border: 1px solid #2c3d37; border-radius: 12px; background: #0b110f; color: #f3f7f5; font: 15px \"Hanken Grotesk Variable\", system-ui, sans-serif; letter-spacing: 0.06em; transition: border-color 160ms cubic-bezier(0.32,0.72,0,1), box-shadow 280ms cubic-bezier(0.32,0.72,0,1); } .ds-unlock input::placeholder { letter-spacing: 0; color: #86968f; } .ds-unlock input:focus { outline: none; border-color: #c9a45c; box-shadow: 0 0 0 4px rgba(201,164,92,0.14); } .ds-unlock-go { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 9px; background: #c9a45c; color: #121a17; transition: background-color 160ms, transform 160ms cubic-bezier(0.32,0.72,0,1); } .ds-unlock-go:hover { background: #e3c483; } .ds-unlock-go:active { transform: scale(0.92); }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "sidebar",
+      "description": "The source list: forest green in every theme, brass wash on the current row.",
+      "html": "<nav class=\"ds-side\"><div class=\"ds-side-head\">Vault</div><button class=\"ds-nav ds-nav-current\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 4.5h5v6H5zM14 4.5h5v6h-5zM5 13.5h5v6H5zM14 13.5h5v6h-5z\"/></svg>All items<span class=\"ds-count\">8</span></button><button class=\"ds-nav\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 3.5a6 6 0 1 1-5.2 9L4 17.8V20h2.5v-2h2v-2h2l1.4-1.4A6 6 0 0 1 14.5 3.5z\"/></svg>Logins<span class=\"ds-count\">6</span></button></nav>",
+      "css": ".ds-side { display: flex; flex-direction: column; gap: 1px; width: 232px; padding: 0 10px 10px; background: #0b110f; font-family: \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-side-head { padding: 14px 10px 5px; font-size: 11.5px; font-weight: 600; color: #7f8f88; } .ds-nav { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: #c3cfc9; font: inherit; font-size: 13.5px; text-align: left; transition: background-color 160ms cubic-bezier(0.32,0.72,0,1); } .ds-nav svg { color: #7f8f88; } .ds-nav:hover { background: #16211e; } .ds-nav-current { background: rgba(201,164,92,0.15); color: #f3f7f5; } .ds-nav-current svg { color: #e3c483; } .ds-count { margin-left: auto; font-size: 12px; color: #7f8f88; font-variant-numeric: tabular-nums; } .ds-nav:focus-visible { outline: none; box-shadow: 0 0 0 2px #0b110f, 0 0 0 4px rgba(201,164,92,0.6); }"
+    },
+    {
+      "name": "List Row",
+      "kind": "custom",
+      "refersTo": "list-item-selected",
+      "description": "Serif monogram avatar, title and username; selection is the brass wash.",
+      "html": "<div class=\"ds-list\"><button class=\"ds-li ds-li-sel\"><span class=\"ds-av\">F</span><span class=\"ds-li-text\"><span class=\"ds-li-title\">Fernway</span><span class=\"ds-li-sub\">sam@example.com</span></span></button><button class=\"ds-li\"><span class=\"ds-av\">N</span><span class=\"ds-li-text\"><span class=\"ds-li-title\">Northbank</span><span class=\"ds-li-sub\">sam.rivera</span></span></button></div>",
+      "css": ".ds-list { width: 300px; padding: 8px; background: #121b18; font-family: \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-li { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; text-align: left; transition: background-color 160ms cubic-bezier(0.32,0.72,0,1); } .ds-li:hover { background: #1b2925; } .ds-li-sel { background: rgba(201,164,92,0.15); } .ds-av { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #1d2b27; color: #e3c483; font: 520 17px \"Source Serif 4 Variable\", Georgia, serif; } .ds-li-text { display: grid; } .ds-li-title { font-size: 13.5px; font-weight: 600; color: #f3f7f5; } .ds-li-sub { font-size: 12.5px; color: #86968f; } .ds-li:focus-visible { outline: none; box-shadow: 0 0 0 2px #121b18, 0 0 0 4px rgba(201,164,92,0.6); }"
+    },
+    {
+      "name": "Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Brass-wash marker for a state or a device.",
+      "html": "<span class=\"ds-pill\">This device</span>",
+      "css": ".ds-pill { padding: 1px 8px; border-radius: 999px; background: rgba(201,164,92,0.14); color: #e3c483; font: 600 11px \"Hanken Grotesk Variable\", system-ui, sans-serif; }"
+    },
+    {
+      "name": "Emergency Kit Sheet",
+      "kind": "card",
+      "refersTo": "kit-sheet",
+      "description": "Paper in every theme: the printable sheet with the Secret Key.",
+      "html": "<article class=\"ds-kit\"><header class=\"ds-kit-head\"><h2>Emergency Kit</h2><p>HavenKeys</p></header><div class=\"ds-kit-label\">Secret Key</div><code class=\"ds-kit-key\">A3-4KQ7ZP-9WXM2R-TD8C6N-JH5V</code></article>",
+      "css": ".ds-kit { width: 460px; padding: 36px 40px 30px; border-radius: 6px; background: #fbfcfb; color: #3a4842; box-shadow: 0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45); font-family: \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-kit-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 18px; border-bottom: 2px solid #121a17; } .ds-kit-head h2 { margin: 0; font: 500 22px \"Source Serif 4 Variable\", Georgia, serif; color: #121a17; } .ds-kit-head p { margin: 0; font-size: 12px; color: #5a6a63; } .ds-kit-label { margin-bottom: 4px; font-size: 11.5px; font-weight: 650; color: #5a6a63; } .ds-kit-key { display: block; padding: 10px 12px; border-radius: 6px; background: #edf1ee; font: 500 17px \"JetBrains Mono\", ui-monospace, monospace; letter-spacing: 0.04em; color: #121a17; }"
+    },
+    {
+      "name": "In-page Menu",
+      "kind": "custom",
+      "refersTo": "ext-menu-card",
+      "description": "The extension's in-page card: 34px head, 46px rows. The card itself never animates; only rows do.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\"><svg class=\"ds-mark\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"#c9a45c\" stroke-width=\"2\" stroke-linejoin=\"round\"><path d=\"M12 3.5l7 2.8V12c0 4.3-3 7.4-7 8.8-4-1.4-7-4.5-7-8.8V6.3l7-2.8z\"/></svg><span class=\"ds-card-brand\">HavenKeys</span><span class=\"ds-card-site\">fernway.example</span></div><div class=\"ds-card-main\"><button class=\"ds-mrow\"><span class=\"ds-mav\">F</span><span><span class=\"ds-mt\">Fernway</span><span class=\"ds-mu\">sam@example.com</span></span></button><button class=\"ds-mrow\"><span class=\"ds-mav\">F</span><span><span class=\"ds-mt\">Fernway (work)</span><span class=\"ds-mu\">sam@work.example</span></span></button></div></div>",
+      "css": ".ds-card { width: 320px; display: flex; flex-direction: column; background: #0f1614; border: 1px solid #2c3d37; border-radius: 10px; overflow: hidden; color: #e2eae6; font: 13px/1.4 \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-card-head { height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 11px; border-bottom: 1px solid #1f2c28; } .ds-card-brand { font-weight: 650; color: #f3f7f5; } .ds-card-site { flex: 1; text-align: right; font-size: 11.5px; color: #86968f; } .ds-card-main { padding: 4px; } .ds-mrow { width: 100%; height: 46px; display: flex; align-items: center; gap: 11px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; transition: background-color 140ms cubic-bezier(0.32,0.72,0,1); animation: ds-row-in 260ms cubic-bezier(0.32,0.72,0,1) both; } .ds-mrow:hover, .ds-mrow:focus-visible { background: rgba(201,164,92,0.14); outline: none; } .ds-mrow:focus-visible { box-shadow: inset 0 0 0 1.5px rgba(201,164,92,0.55); } .ds-mav { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: #1d2b27; color: #e3c483; font: 520 16px \"Source Serif 4 Variable\", Georgia, serif; } .ds-mt { display: block; font-weight: 600; color: #f3f7f5; } .ds-mu { display: block; font-size: 12px; color: #86968f; } @keyframes ds-row-in { from { opacity: 0; transform: translateY(-3px); } } @media (prefers-reduced-motion: reduce) { .ds-mrow { animation: none; transition: none; } }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "A dark glass pill that confirms an action, in both themes.",
+      "html": "<div class=\"ds-toast\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#5fa785\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"/></svg>Username copied. The clipboard clears in 30 s.</div>",
+      "css": ".ds-toast { display: inline-flex; align-items: center; gap: 9px; padding: 10px 16px 10px 13px; border: 1px solid rgba(226,234,230,0.1); border-radius: 999px; background: rgba(15,22,20,0.9); color: #f3f7f5; font: 13px \"Hanken Grotesk Variable\", system-ui, sans-serif; box-shadow: 0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45); backdrop-filter: blur(14px) saturate(140%); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Vault Room",
+    "overview": "The desktop app is the room the website shows from outside: the same forest-green grounds and single brass fitting, arranged in the grammar of Apple's own apps. A source-list sidebar, an item list and a detail pane sit side by side; details and forms are inset groups of rows divided by hairlines, never a bordered card per field. Titles speak in Source Serif 4, everything else in Hanken Grotesk, and secrets alone in JetBrains Mono. The shield-and-keyhole mark is the only emblem; behind the unlock and welcome screens a faint brass guilloche rosette turns very slowly, the banknote pattern inherited from the website.\n\nThe browser extension is the same room in miniature: the popup is the vault list at 320px, the in-page menu and save prompt are small cards in the same grounds, and the options page is laid out like the app's Settings. Both surfaces take colour, radius and text tokens from `@havenkeys/ui` (the desktop via `tokens.css` and its `data-theme` switch; the extension via `tokens-auto.css`, which follows the OS colour scheme). The desktop adds a per-theme layer at the top of `src/styles.css` (pane, group, group-line, field, sel, sel-strong, glass, lift, serif) and a motion grammar.\n\nMotion is quiet and physical, on one curve (`cubic-bezier(0.32, 0.72, 0, 1)`) at three speeds (160, 280, 420ms): on unlock the key in the mark turns and the vault rises in (scale 0.985 to 1 with a fade), panes cross-fade up 6px on selection, copy buttons morph into a check, a revealed secret un-blurs, and the TOTP ring drains continuously. Reduced motion turns all of it off.",
+    "keyCharacteristics": [
+      "Three panes (232px sidebar, 300px list, detail up to 720px); tools span list and detail at a centred 660px reading width.",
+      "Inset groups (12px radius) of hairline-separated rows; the editor uses the same rows with borderless inputs.",
+      "Serif titles; one brass italic, on the unlock headline only.",
+      "Mono only for secrets, one-time codes, keys and the literal machine strings around them.",
+      "Brass as a fitting: selection wash, the committing action, focus, the live TOTP code.",
+      "The sidebar is forest green in every theme; the Emergency Kit sheet is paper in every theme."
+    ],
+    "rules": [
+      { "name": "The One Fitting Rule", "body": "Brass is a fitting, not a finish: selection, the one committing action, focus, and the live TOTP code. In light theme the everyday primary button turns forest (`primary-light`) and brass stays on the unlock arrow, the kit's Done and the fittings.", "section": "colors" },
+      { "name": "The Evergreen Sidebar Rule", "body": "The sidebar is forest green in dark, light and system themes. Its text uses the `side-*` inks, never the theme's text tokens.", "section": "colors" },
+      { "name": "The Paper Sheet Rule", "body": "The Emergency Kit sheet is paper in every theme, because it is what gets printed. It is the only light surface in the dark theme and uses only the paper set.", "section": "colors" },
+      { "name": "The One Italic Rule", "body": "The serif italic in brass appears once in the app: \"HavenKeys is *locked*.\" on the unlock screen (400, brass-ink). Every other title is roman, with no emphasis.", "section": "typography" },
+      { "name": "The Literal String Rule", "body": "JetBrains Mono is for secrets, one-time codes, keys and the literal machine strings around them (Secret Key, setup keys, the server URL). Never for labels, headings or numbers-as-decoration.", "section": "typography" },
+      { "name": "The Sentence Case Rule", "body": "Labels, group titles and sidebar headings are sentence case at their size; no all-caps tracked labels.", "section": "typography" },
+      { "name": "The Fixed Frame Rule", "body": "In-page menu and save-prompt geometry is owned by `content/frames.ts` (header 34px, rows 46px, 8px padding, save prompt 340 x 138). CSS must agree with those numbers exactly; change both or neither.", "section": "layout" },
+      { "name": "The Floating-Only Shadow Rule", "body": "Only things that float over the window cast a shadow. Groups, rows, panes and the in-page cards stay flat with a hairline.", "section": "elevation" },
+      { "name": "The Row Is the Field Rule", "body": "Editing never adds a box around an input. The grouped row is the field; focus marks the row with the selection wash and a brass ring.", "section": "components" },
+      { "name": "The Still Card Rule", "body": "The in-page menu and save-prompt `.card` never animates opacity or transform. The IntersectionObserver v2 click guard watches it, and Chromium counts a card that is still fading or scaling in as not visible. Only its children animate.", "section": "components" },
+      { "name": "The Own-Origin Fonts Rule", "body": "The extension loads fonts only from its own package (CSP `font-src 'self'`). No font CDN, no system display face standing in.", "section": "components" },
+      { "name": "The No Inline Style Rule", "body": "The desktop CSP is `style-src 'self'` (the extension pages' too): no inline `<style>` elements or style attributes in markup. Dynamic values go through CSSOM style properties from React, as the generator's slider fill does.", "section": "components" },
+      { "name": "The Stillness Rule", "body": "Under `prefers-reduced-motion: reduce` every transition and animation is off, on every desktop and extension surface, including the rosette and the TOTP ring.", "section": "components" }
+    ],
+    "dos": [
+      "**Do** build details, forms and settings from inset groups (12px) of hairline-separated rows.",
+      "**Do** set titles in Source Serif 4 roman (28px item and editor, 22px pane, 30px unlock).",
+      "**Do** keep brass to selection, the one committing action, focus and the live TOTP code.",
+      "**Do** keep the sidebar forest green and the Emergency Kit sheet paper in every theme.",
+      "**Do** move on `cubic-bezier(0.32, 0.72, 0, 1)` at 160, 280 or 420ms, and turn every animation off under reduced motion.",
+      "**Do** keep in-page frame CSS in lockstep with `content/frames.ts` (34px header, 46px rows, 8px padding, 340 x 138 save prompt).",
+      "**Do** animate only the children of the in-page `.card`.",
+      "**Do** load extension fonts from the package, and pass dynamic desktop styles through CSSOM, never inline style tags.",
+      "**Do** give the sidebar top row a 38px height and 76px left inset when `data-platform=\"mac\"`, and verify it on a real Mac before relying on it."
+    ],
+    "donts": [
+      "**Don't** wrap each field in its own bordered card, or give editor inputs their own border or focus ring inside a row.",
+      "**Don't** use the brass italic anywhere but the unlock headline.",
+      "**Don't** set labels, headings or counts in mono.",
+      "**Don't** fill large surfaces with brass or add a second accent.",
+      "**Don't** animate opacity or transform on the in-page `.card`.",
+      "**Don't** change frame heights or the save prompt size in CSS alone.",
+      "**Don't** fetch fonts or styles from the network in the extension.",
+      "**Don't** give flat groups, rows or in-page cards a shadow; shadows are for floating things.",
+      "**Don't** put small all-caps tracked labels above headings."
+    ]
+  }
+}

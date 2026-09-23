@@ -3,6 +3,7 @@ import { api, ApiError } from "../lib/api";
 import type { GeneratedPassword, GeneratorOptions } from "../lib/types";
 import { strengthLabel } from "../lib/format";
 import { Icon } from "../components/Icon";
+import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
 
 const initial: GeneratorOptions = {
@@ -14,12 +15,12 @@ const initial: GeneratorOptions = {
   avoidAmbiguous: false,
 };
 
-const toggles: Array<{ key: keyof Omit<GeneratorOptions, "length">; label: string }> = [
-  { key: "uppercase", label: "Uppercase (A–Z)" },
-  { key: "lowercase", label: "Lowercase (a–z)" },
-  { key: "digits", label: "Numbers (0–9)" },
-  { key: "symbols", label: "Symbols (!@#…)" },
-  { key: "avoidAmbiguous", label: "Avoid look-alikes (l, 1, O, 0)" },
+const toggles: Array<{ key: keyof Omit<GeneratorOptions, "length">; label: string; hint: string }> = [
+  { key: "uppercase", label: "Uppercase", hint: "A–Z" },
+  { key: "lowercase", label: "Lowercase", hint: "a–z" },
+  { key: "digits", label: "Numbers", hint: "0–9" },
+  { key: "symbols", label: "Symbols", hint: "!@#…" },
+  { key: "avoidAmbiguous", label: "Avoid look-alikes", hint: "l, 1, O, 0" },
 ];
 
 /** Colour digits and symbols differently so a password is easier to read out. */
@@ -70,62 +71,81 @@ export function GeneratorView() {
 
   const label = result ? strengthLabel(result.entropyBits) : null;
 
+  const bits = result ? Math.round(result.entropyBits) : 0;
+
   return (
     <section className="tool" aria-labelledby="gen-title">
-      <h2 id="gen-title">Password generator</h2>
-      <p className="tool-lede">Generated on this computer from the operating system’s secure random source. Nothing is saved until you use it.</p>
+      <header className="tool-head" data-tauri-drag-region>
+        <h2 id="gen-title">Password generator</h2>
+        <p className="tool-lede">
+          Made on this computer from the operating system’s secure random source. Nothing is saved until you use it.
+        </p>
+      </header>
 
       <div className="gen-output">
         <p className="mono gen-password" aria-live="polite">
-          {result ? <Characters value={result.password} /> : <span className="muted">{error}</span>}
+          {result ? (
+            <span className="gen-chars" key={result.password}>
+              <Characters value={result.password} />
+            </span>
+          ) : (
+            <span className="muted">{error}</span>
+          )}
         </p>
-        <div className="gen-actions">
-          <button className="btn" onClick={() => void regenerate(options)}>
-            <Icon name="refresh" size={16} /> Regenerate
-          </button>
-          <button className="btn btn-primary" onClick={() => void copy()} disabled={!result}>
-            <Icon name="copy" size={16} /> Copy
-          </button>
+        <div className="gen-foot">
+          {result && label ? (
+            <div className={`strength strength-${label.toLowerCase()}`}>
+              <div className="strength-bar">
+                <span style={{ transform: `scaleX(${Math.min(1, result.entropyBits / 128)})` }} />
+              </div>
+              <span>
+                <strong>{label}</strong> · about {bits} bits
+              </span>
+            </div>
+          ) : (
+            <span />
+          )}
+          <div className="gen-actions">
+            <button className="btn" onClick={() => void regenerate(options)}>
+              <Icon name="refresh" size={16} /> Regenerate
+            </button>
+            <button className="btn btn-primary" onClick={() => void copy()} disabled={!result}>
+              <Icon name="copy" size={16} /> Copy
+            </button>
+          </div>
         </div>
       </div>
 
-      {result && label && (
-        <div className={`strength strength-${label.toLowerCase()}`}>
-          <div className="strength-bar">
-            <span style={{ width: `${Math.min(100, (result.entropyBits / 128) * 100)}%` }} />
-          </div>
-          <span>
-            {label}, about {Math.round(result.entropyBits)} bits of entropy
-          </span>
-        </div>
-      )}
-
-      <div className="gen-options">
-        <label className="control">
-          <span>
-            Length <strong className="gen-length">{options.length}</strong>
-          </span>
+      <h3 className="group-title">Length</h3>
+      <div className="group">
+        <label className="row row-slider">
+          <span className="sr-only">Length</span>
           <input
             type="range"
             min={8}
             max={128}
             value={options.length}
+            style={{ ["--fill" as string]: `${((options.length - 8) / 120) * 100}%` }}
             onChange={(e) => setOptions((o) => ({ ...o, length: Number(e.target.value) }))}
           />
+          <strong className="gen-length">{options.length}</strong>
         </label>
-        <fieldset className="checks">
-          <legend>Characters</legend>
-          {toggles.map((t) => (
-            <label key={t.key} className="check">
-              <input
-                type="checkbox"
-                checked={options[t.key]}
-                onChange={(e) => setOptions((o) => ({ ...o, [t.key]: e.target.checked }))}
-              />
-              <span>{t.label}</span>
-            </label>
-          ))}
-        </fieldset>
+      </div>
+
+      <h3 className="group-title">Characters</h3>
+      <div className="group">
+        {toggles.map((t) => (
+          <div key={t.key} className="row">
+            <span className="row-label-inline">
+              {t.label} <span className="muted">{t.hint}</span>
+            </span>
+            <Switch
+              label={t.label}
+              checked={options[t.key]}
+              onChange={(checked) => setOptions((o) => ({ ...o, [t.key]: checked }))}
+            />
+          </div>
+        ))}
       </div>
     </section>
   );

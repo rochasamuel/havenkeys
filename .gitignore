@@ -14,3 +14,6 @@ apps/desktop/src-tauri/gen/
 apps/web/.impeccable/review/
 apps/web/.impeccable/questions/
 apps/web/.impeccable/hook.cache.json
+apps/desktop/.impeccable/review/
+apps/desktop/.impeccable/questions/
+apps/desktop/.impeccable/hook.cache.json

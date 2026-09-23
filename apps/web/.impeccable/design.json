@@ -493,7 +493,7 @@
       "csp": "style-src 'self'; img-src 'self' (vercel.json): no inline <style> elements, no data: images",
       "vite": "build.assetsInlineLimit = 0",
       "demoData": "fernway.example and example.com only, labeled 'demo site' / 'demo data'",
-      "desktopScreenshots": "DesktopPlaceholder until real captures exist",
+      "desktopScreenshots": "real 2x render of the desktop app (src/assets/shots/desktop-vault.png)",
       "extensionScreenshots": "src/assets/shots are real renders of the extension UI"
     }
   },
@@ -539,12 +539,12 @@
       "css": ".ds-panel{padding:22px 26px;margin-bottom:12px;border:1px solid #1f2c28;border-radius:14px;background:#0b110f;font-family:\"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-panel h3{margin:0;font-family:\"Source Serif 4 Variable\",Georgia,serif;font-weight:500;font-size:1.55rem;color:#f3f7f5}.ds-panel p{margin:4px 0 0;font-size:14.5px;color:#86968f}.ds-panel-yours{border-color:rgba(201,164,92,0.38);background:linear-gradient(rgba(201,164,92,0.14),rgba(201,164,92,0.14)),#0b110f}"
     },
     {
-      "name": "Desktop Placeholder",
+      "name": "Product Window",
       "kind": "custom",
-      "refersTo": "DesktopPlaceholder",
-      "description": "Framed window with the vault skeleton and a dashed brass tag naming the missing screenshot.",
-      "html": "<figure class=\"ds-window\"><div class=\"ds-window-bar\"><span></span><span></span><span></span><em>HavenKeys</em></div><div class=\"ds-skel\"><div class=\"ds-skel-side\"></div><div class=\"ds-skel-list\"></div><div></div></div><figcaption class=\"ds-ph-tag\"><strong>Desktop app screenshot</strong>The vault view goes here.</figcaption></figure>",
-      "css": ".ds-window{position:relative;margin:0;border:1px solid #2c3d37;border-radius:14px;background:#0b110f;overflow:hidden;box-shadow:0 40px 80px -24px rgba(0,0,0,0.65),0 12px 24px -12px rgba(0,0,0,0.5)}.ds-window-bar{display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;background:#0b110f;border-bottom:1px solid #1f2c28}.ds-window-bar span{width:11px;height:11px;border-radius:50%;background:#2c3d37}.ds-window-bar em{margin-left:10px;font-style:normal;font-size:12.5px;color:#86968f;font-family:system-ui,sans-serif}.ds-skel{display:grid;grid-template-columns:120px 180px 1fr;height:220px}.ds-skel-side{background:#0b110f;border-right:1px solid #1f2c28}.ds-skel-list{background:#121b18;border-right:1px solid #1f2c28}.ds-ph-tag{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);padding:14px 18px;border:1px dashed rgba(201,164,92,0.38);border-radius:10px;background:rgba(11,17,15,0.88);color:#a3b2ab;font:13.5px/1.4 \"Hanken Grotesk Variable\",system-ui,sans-serif}.ds-ph-tag strong{display:block;color:#f3f7f5;font-weight:600}"
+      "refersTo": ".window + .window__shot (Home hero)",
+      "description": "A framed real render of the desktop app with a slim title bar; extension popup and menu overlap its edges.",
+      "html": "<figure class=\"ds-window\"><div class=\"ds-window-bar\"><span></span><span></span><span></span><em>HavenKeys</em></div><div class=\"ds-window-shot\"></div></figure>",
+      "css": ".ds-window{position:relative;margin:0;border:1px solid #2c3d37;border-radius:14px;background:#0b110f;overflow:hidden;box-shadow:0 40px 80px -24px rgba(0,0,0,0.65),0 12px 24px -12px rgba(0,0,0,0.5)}.ds-window-bar{display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;background:#0b110f;border-bottom:1px solid #1f2c28}.ds-window-bar span{width:11px;height:11px;border-radius:50%;background:#2c3d37}.ds-window-bar em{margin-left:10px;font-style:normal;font-size:12.5px;color:#86968f;font-family:system-ui,sans-serif}.ds-window-shot{aspect-ratio:1040/660;background:#0f1614}"
     },
     {
       "name": "Journey Rail",
@@ -610,7 +610,7 @@
       "Do keep brass italic emphasis to the hero headline, the journey chapter heads and the final call-to-action.",
       "Do use mono only for keys, ciphertext, commands, domains and the literal identifiers around them.",
       "Do use the fictional `fernway.example` (and `example.com` addresses) for all demo data, and label it where it appears (\"demo site\", \"demo data\").",
-      "Do fill any missing desktop screenshot with `DesktopPlaceholder` and a label saying what goes there.",
+      "Do use real renders of the shipped desktop and extension UI with labeled demo data; re-render them when the UI changes.",
       "Do use only real extension renders from `src/assets/shots` for extension imagery.",
       "Do ship styles only through the bundled stylesheet and images only as emitted files: the CSP is `style-src 'self'; img-src 'self'`, so no inline `<style>` elements and no `data:` images, and Vite's `assetsInlineLimit` stays at 0. Dynamic values go through React style props (CSSOM), as the stage delays and showcase scale do.",
       "Do carry the verbatim audit disclaimer in a flat ground panel wherever security claims are summarized."

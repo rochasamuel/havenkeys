@@ -143,7 +143,10 @@ a keystroke through `record_activity`, not through the search command.
 ## 6. Desktop (Tauri) hardening
 
 * **Command allowlist.** `build.rs` declares every app command; the only
-  capability file grants exactly those plus `core:event` listen/unlisten.
+  capability file grants exactly those plus `core:event` listen/unlisten and
+  `core:window:allow-start-dragging`, which lets the window be dragged by
+  its own title-bar areas now that macOS uses an overlay title bar. It moves
+  the window and nothing else.
   No `fs`, `shell`, `http`, `dialog`, `opener`, or `clipboard` plugins are
   installed (clipboard is handled in Rust).
 * **CSP** (production):
@@ -278,12 +281,16 @@ Not requested: `<all_urls>` as a required permission, `tabs`, `storage`,
 message the extension.
 
 **web_accessible_resources:** `menu.html`, `save.html`, their scripts and
-styles, the theme and one icon, for `https://*/*` and `http://*/*`. These are
-the pages shown inside web pages. Nothing else can be loaded or framed by a
-website.
+styles, the theme, and the bundled fonts (`fonts.css` and three
+Latin-subset `.woff2` files), for `https://*/*` and `http://*/*`. These are
+the pages shown inside web pages and what they load. Nothing else can be
+loaded or framed by a website. The fonts add no new signal: a site could
+already tell the extension is installed by probing `menu.html`.
 
 **CSP (extension pages):**
-`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`.
+`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`.
+`font-src 'self'` lets extension pages use the fonts bundled in the package;
+no font is ever fetched from the network.
 It has no `unsafe-eval` and no `unsafe-inline`. `frame-ancestors 'none'` was
 removed in Phase 5, because the menu and save pages must be framed by web
 pages. Framing by websites is limited to those pages by

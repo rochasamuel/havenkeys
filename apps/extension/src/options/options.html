@@ -3,35 +3,46 @@
   <head>
     <meta charset="utf-8" />
     <title>HavenKeys settings</title>
+    <link rel="stylesheet" href="fonts.css" />
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="options.css" />
     <script src="options.js" defer></script>
   </head>
   <body>
     <main>
-      <h1>HavenKeys</h1>
+      <header class="page-head">
+        <svg class="mark" viewBox="0 0 1024 1024" aria-hidden="true"><path class="mark-shield" d="M512 196 L772 300 V500 C772 668 662 792 512 846 C362 792 252 668 252 500 V300 Z" /><circle class="mark-key" cx="512" cy="468" r="84" /><rect class="mark-key" x="486" y="520" width="52" height="170" rx="18" /></svg>
+        <div>
+          <h1>HavenKeys</h1>
+          <p>Browser extension settings</p>
+        </div>
+      </header>
 
-      <section>
-        <h2>Suggestions in login fields</h2>
-        <p>
-          When this is on, clicking a username, password or one-time-code field on a website shows your matching
-          HavenKeys logins right under the field. Nothing is filled until you pick a login, and logins are only
-          offered on the websites they are saved for.
-        </p>
-        <p>
-          It needs permission to run on the websites you visit. The extension reads login fields when you interact
-          with them and never sends page contents anywhere; the desktop app decides which logins a website may use.
-        </p>
-        <p id="status" class="status" aria-live="polite"></p>
-        <button id="toggle" class="btn primary" type="button" hidden></button>
+      <h2 class="group-title">Suggestions in login fields</h2>
+      <section class="group">
+        <div class="row">
+          <div class="row-main">
+            <strong>Show my logins under login fields</strong>
+            <p id="status" class="status" aria-live="polite"></p>
+          </div>
+          <button id="toggle" class="btn primary" type="button" hidden></button>
+        </div>
       </section>
+      <p class="note">
+        When this is on, clicking a username, password or one-time-code field on a website shows your matching
+        HavenKeys logins right under the field. Nothing is filled until you pick a login, and logins are only offered
+        on the websites they are saved for.
+      </p>
+      <p class="note">
+        It needs permission to run on the websites you visit. The extension reads login fields when you interact with
+        them and never sends page contents anywhere; the desktop app decides which logins a website may use.
+      </p>
 
-      <section>
-        <h2>Without it</h2>
-        <p>
-          Click the HavenKeys button in the toolbar and choose <em>Fill</em>. The extension then has access only to
-          the tab you clicked on, and only until you leave the page. Offers to save new logins need suggestions to
-          be on.
+      <h2 class="group-title">Without it</h2>
+      <section class="group">
+        <p class="group-text">
+          Click the HavenKeys button in the toolbar and choose <em>Fill</em>. The extension then has access only to the
+          tab you clicked on, and only until you leave the page. Offers to save new logins need suggestions to be on.
         </p>
       </section>
     </main>

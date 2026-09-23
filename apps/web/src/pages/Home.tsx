@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
 import popup from "../assets/shots/popup.png";
 import menuLogins from "../assets/shots/menu-logins.png";
+import desktopVault from "../assets/shots/desktop-vault.png";
 import { BrowserShowcase } from "../components/browser/BrowserShowcase";
 import { EmergencyKit } from "../components/EmergencyKit";
 import { Guilloche } from "../components/Guilloche";
 import { Icon } from "../components/Icon";
 import { Journey } from "../components/journey/Journey";
-import { DesktopPlaceholder } from "../components/Placeholder";
 import { useI18n } from "../i18n/context";
 
 const GITHUB = "https://github.com/rochasamuel/havenkeys";
@@ -35,8 +35,16 @@ export function Home() {
         </div>
 
         <div className="hero__stage">
-          <DesktopPlaceholder label={h.placeholderLabel} note={h.placeholderNote} />
-          <img className="hero__popup" src={popup} width={320} height={246} alt={h.popupAlt} />
+          <figure className="window">
+            <div className="window__bar" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <em>HavenKeys</em>
+            </div>
+            <img className="window__shot" src={desktopVault} width={1040} height={660} alt={h.desktopAlt} />
+          </figure>
+          <img className="hero__popup" src={popup} width={320} height={251} alt={h.popupAlt} />
           <img className="hero__menu" src={menuLogins} width={340} height={136} alt={h.menuAlt} />
         </div>
       </section>

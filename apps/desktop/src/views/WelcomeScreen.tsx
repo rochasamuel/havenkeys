@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api";
 import type { VaultStatus } from "../lib/types";
+import { Guilloche } from "../components/Guilloche";
 import { Seal } from "../components/Seal";
 
 /**
@@ -34,11 +35,11 @@ function Field(props: {
   autoComplete?: string;
 }) {
   return (
-    <label className="field">
-      <span className="field-label">{props.label}</span>
+    <label className="wf">
+      <span className="wf-label">{props.label}</span>
       <input
         ref={props.inputRef}
-        className={props.mono ? "field-input field-mono" : "field-input"}
+        className={props.mono ? "wf-input mono" : "wf-input"}
         type={props.type ?? "text"}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
@@ -49,7 +50,7 @@ function Field(props: {
         autoCapitalize="off"
         autoCorrect="off"
       />
-      {props.hint && <span className="field-hint">{props.hint}</span>}
+      {props.hint && <span className="wf-hint">{props.hint}</span>}
     </label>
   );
 }
@@ -88,10 +89,10 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
 
   return (
     <form className="welcome-form" onSubmit={submit} noValidate>
-      <label className="field">
-        <span className="field-label">Invite</span>
+      <label className="wf">
+        <span className="wf-label">Invite</span>
         <textarea
-          className="field-input field-mono field-area"
+          className="wf-input mono wf-area"
           value={invite}
           onChange={(e) => setInvite(e.target.value)}
           placeholder="HKINV1-…"
@@ -102,7 +103,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
           autoCorrect="off"
           ref={first as unknown as React.Ref<HTMLTextAreaElement>}
         />
-        <span className="field-hint">
+        <span className="wf-hint">
           One line, from whoever runs your HavenKeys server. It works once and expires after seven days.
         </span>
       </label>
@@ -131,7 +132,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
         </p>
       )}
 
-      <button className="btn btn-brass btn-lg" type="submit" disabled={busy || !ready}>
+      <button className="btn btn-primary btn-lg" type="submit" disabled={busy || !ready}>
         {busy ? "Setting up…" : "Create my vault"}
       </button>
       <p className="welcome-note">
@@ -208,7 +209,7 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
         </p>
       )}
 
-      <button className="btn btn-brass btn-lg" type="submit" disabled={busy || !ready}>
+      <button className="btn btn-primary btn-lg" type="submit" disabled={busy || !ready}>
         {busy ? "Signing in…" : "Sign in"}
       </button>
       <p className="welcome-note">
@@ -222,11 +223,12 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
   const [path, setPath] = useState<Path>("invite");
 
   return (
-    <main className="welcome">
+    <main className="welcome" data-tauri-drag-region>
+      <Guilloche className="unlock-rosette" />
       <div className="welcome-card">
         <header className="welcome-head">
-          <Seal />
-          <h1>HavenKeys</h1>
+          <Seal size={60} />
+          <h1>Welcome to HavenKeys</h1>
           <p className="welcome-sub">
             {path === "invite"
               ? "Set up this computer with your invite."

@@ -15,11 +15,29 @@ function message(title: string, detail: string, error = false): HTMLElement {
   return h("div", { className: "message" }, h("strong", { text: title, ...(error ? { className: "error" } : {}) }), h("span", { text: detail }));
 }
 
-function row(avatar: string, title: string, detail: string, onPick: () => Promise<void>): HTMLButtonElement {
+/** The generate row's glyph: a sparkle drawn in the app's 1.6-stroke icon set. */
+function sparkle(): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M6 6l2.6 2.6M15.4 15.4 18 18M6 18l2.6-2.6M15.4 8.6 18 6");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.6");
+  path.setAttribute("stroke-linecap", "round");
+  svg.append(path);
+  return svg;
+}
+
+function row(avatar: string | Node, title: string, detail: string, onPick: () => Promise<void>): HTMLButtonElement {
   const b = h(
     "button",
     { className: "row" },
-    h("span", { className: "avatar", text: avatar }),
+    typeof avatar === "string" ? h("span", { className: "avatar", text: avatar }) : h("span", { className: "avatar avatar-icon" }, avatar),
     h("span", { className: "who" }, h("span", { className: "title", text: title }), h("span", { className: "user", text: detail })),
   );
   b.type = "button";
@@ -50,7 +68,7 @@ function render(t: string, view: MenuView): void {
   site.textContent = view.site;
   if (view.kind === "new_password") {
     main.replaceChildren(
-      row("✱", "Generate strong password", "Fills the new password fields", () => pick({ type: "menu_generate", token: t })),
+      row(sparkle(), "Generate strong password", "Fills the new password fields", () => pick({ type: "menu_generate", token: t })),
     );
     return;
   }

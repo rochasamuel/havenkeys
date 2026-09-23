@@ -12,7 +12,8 @@ Five crates (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`,
 redistributed unmodified from crates.io.
 
 The fonts below are different: their files are embedded in the desktop
-application bundle and in the website's built assets, and the SIL Open Font
+application bundle, the browser extension package and the website's built
+assets, and the SIL Open Font
 License requires this notice and the licence text to accompany them.
 
 ## Fonts
@@ -34,7 +35,7 @@ Distributed via the `@fontsource/jetbrains-mono` package.
 Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 
 Distributed via the `@fontsource-variable/source-serif-4` package. Used by
-the website only.
+the website, the desktop app and the browser extension.
 
 ### Licence
 

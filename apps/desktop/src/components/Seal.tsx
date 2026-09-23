@@ -1,19 +1,24 @@
-/** The brass shield mark. `open` lifts the shackle while unlocking. */
-export function Seal({ open = false, size = 72 }: { open?: boolean; size?: number }) {
+/**
+ * The HavenKeys mark: a shield with a keyhole, the same drawing as the app
+ * icon and the website. `open` turns the key while the vault unlocks.
+ */
+export function Seal({ open = false, size = 64 }: { open?: boolean; size?: number }) {
   return (
     <svg
       className={`seal${open ? " seal-open" : ""}`}
       width={size}
       height={size}
-      viewBox="0 0 64 64"
+      viewBox="0 0 1024 1024"
       aria-hidden="true"
     >
       <path
         className="seal-shield"
-        d="M32 5 L54 13.5 V30 C54 44 45 54.5 32 59 C19 54.5 10 44 10 30 V13.5 Z"
+        d="M512 196 L772 300 V500 C772 668 662 792 512 846 C362 792 252 668 252 500 V300 Z"
       />
-      <path className="seal-shackle" d="M25 30 V24 a7 7 0 0 1 14 0 V30" />
-      <rect className="seal-body" x="22" y="29" width="20" height="15" rx="3" />
+      <g className="seal-key">
+        <circle cx="512" cy="468" r="84" />
+        <rect x="486" y="520" width="52" height="170" rx="18" />
+      </g>
     </svg>
   );
 }

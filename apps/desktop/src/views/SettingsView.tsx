@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../lib/api";
 import type { Settings, Theme } from "../lib/types";
 import { applyTheme } from "../lib/theme";
+import { Icon } from "../components/Icon";
+import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
 import { ImportSection } from "./ImportSection";
 import { AccountSection } from "./AccountSection";
@@ -44,8 +46,8 @@ function ChangePassword() {
   }
 
   const input = (value: string, set: (v: string) => void, label: string) => (
-    <label className="control">
-      <span>{label}</span>
+    <label className="row row-input">
+      <span className="row-label-inline">{label}</span>
       <input
         type="password"
         value={value}
@@ -59,18 +61,20 @@ function ChangePassword() {
 
   return (
     <form className="settings-block" onSubmit={submit}>
-      <h3>Master password</h3>
-      <p className="muted">Your items are not re-encrypted; only the key that protects them changes.</p>
-      {input(current, setCurrent, "Current master password")}
-      {input(next, setNext, "New master password")}
-      {input(confirm, setConfirm, "Confirm new master password")}
+      <h3 className="group-title">Master password</h3>
+      <div className="group">
+        {input(current, setCurrent, "Current")}
+        {input(next, setNext, "New")}
+        {input(confirm, setConfirm, "Confirm new")}
+      </div>
+      <p className="group-note">Your items are not re-encrypted; only the key that protects them changes.</p>
       {mismatch && <p className="form-error">The new passwords don’t match.</p>}
       {error && (
         <p className="form-error" role="alert">
           {error}
         </p>
       )}
-      <div>
+      <div className="group-actions">
         <button className="btn btn-primary" type="submit" disabled={busy || mismatch || !current || !next || !confirm}>
           {busy ? "Changing…" : "Change master password"}
         </button>
@@ -104,74 +108,91 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
 
   return (
     <section className="tool" aria-labelledby="settings-title">
-      <h2 id="settings-title">Settings</h2>
+      <header className="tool-head" data-tauri-drag-region>
+        <h2 id="settings-title">Settings</h2>
+      </header>
 
       {settings && (
         <div className="settings-block">
-          <h3>Appearance</h3>
-          <div className="segmented" role="radiogroup" aria-label="Theme">
-            {(["dark", "light", "system"] as Theme[]).map((t) => (
-              <button
-                key={t}
-                role="radio"
-                aria-checked={settings.theme === t}
-                onClick={() => void update({ theme: t })}
-              >
-                {t === "dark" ? "Dark" : t === "light" ? "Light" : "Match system"}
-              </button>
-            ))}
+          <h3 className="group-title">Appearance</h3>
+          <div className="group">
+            <div className="row">
+              <span className="row-label-inline">Theme</span>
+              <div className="segmented" role="radiogroup" aria-label="Theme">
+                {(["dark", "light", "system"] as Theme[]).map((t) => (
+                  <button
+                    key={t}
+                    role="radio"
+                    aria-checked={settings.theme === t}
+                    onClick={() => void update({ theme: t })}
+                  >
+                    {t === "dark" ? "Dark" : t === "light" ? "Light" : "System"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {settings && (
         <div className="settings-block">
-          <h3>Security</h3>
-          <label className="control">
-            <span>Lock automatically</span>
-            <select
-              value={settings.autoLockMinutes}
-              onChange={(e) => void update({ autoLockMinutes: Number(e.target.value) })}
-            >
-              {autoLockChoices.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="muted">
-            The vault also locks when the computer sleeps and when you quit HavenKeys, and — on Windows and Linux — when the screen
-            locks. Closing the window keeps HavenKeys in the tray, where the timeout above keeps running.
+          <h3 className="group-title">Security</h3>
+          <div className="group">
+            <label className="row">
+              <span className="row-label-inline">Lock automatically</span>
+              <span className="select-wrap">
+                <select
+                  value={settings.autoLockMinutes}
+                  onChange={(e) => void update({ autoLockMinutes: Number(e.target.value) })}
+                >
+                  {autoLockChoices.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="chevronDown" size={14} className="select-chevron" />
+              </span>
+            </label>
+            <label className="row">
+              <span className="row-label-inline">Clear copied items</span>
+              <span className="select-wrap">
+                <select
+                  value={settings.clipboardClearSeconds}
+                  onChange={(e) => void update({ clipboardClearSeconds: Number(e.target.value) })}
+                >
+                  {clipboardChoices.map((s) => (
+                    <option key={s} value={s}>
+                      After {s} seconds
+                    </option>
+                  ))}
+                </select>
+                <Icon name="chevronDown" size={14} className="select-chevron" />
+              </span>
+            </label>
+          </div>
+          <p className="group-note">
+            The vault also locks when the computer sleeps and when you quit HavenKeys, and — on Windows and Linux — when
+            the screen locks. Closing the window keeps HavenKeys in the tray, where the timeout above keeps running.
           </p>
-          <label className="control">
-            <span>Clear copied items from the clipboard</span>
-            <select
-              value={settings.clipboardClearSeconds}
-              onChange={(e) => void update({ clipboardClearSeconds: Number(e.target.value) })}
-            >
-              {clipboardChoices.map((s) => (
-                <option key={s} value={s}>
-                  After {s} seconds
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
       )}
 
       {settings && (
         <div className="settings-block">
-          <h3>Browser extension</h3>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={settings.browserIntegration}
-              onChange={(e) => void update({ browserIntegration: e.target.checked })}
-            />
-            <span>Allow the HavenKeys browser extension to suggest and fill logins</span>
-          </label>
-          <p className="muted">
+          <h3 className="group-title">Browser extension</h3>
+          <div className="group">
+            <div className="row">
+              <span className="row-label-inline">Suggest and fill logins in the browser</span>
+              <Switch
+                label="Allow the HavenKeys browser extension to suggest and fill logins"
+                checked={settings.browserIntegration}
+                onChange={(checked) => void update({ browserIntegration: checked })}
+              />
+            </div>
+          </div>
+          <p className="group-note">
             The extension only receives a login when you choose it on a website that login is saved for, and only while
             HavenKeys is unlocked. It never receives your master password. Off by default: while it is on, other programs
             running under your account can make the same requests as the extension.
@@ -186,8 +207,8 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
       <ChangePassword />
 
       <div className="settings-block">
-        <h3>About</h3>
-        <p className="muted">
+        <h3 className="group-title">About</h3>
+        <p className="group-note">
           HavenKeys 0.1.1. Your vault is encrypted with AES-256-GCM under a key derived from your master password (with
           Argon2id) and your Secret Key. It stays on this computer unless you turn on sync. This software has not
           undergone an independent security audit.

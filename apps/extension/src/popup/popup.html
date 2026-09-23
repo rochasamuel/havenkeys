@@ -3,20 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <title>HavenKeys</title>
+    <link rel="stylesheet" href="fonts.css" />
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="popup.css" />
     <script src="popup.js" defer></script>
   </head>
   <body>
     <header class="bar">
-      <img class="logo" src="icons/32.png" alt="" width="18" height="18" />
+      <svg class="mark" viewBox="0 0 1024 1024" aria-hidden="true"><path class="mark-shield" d="M512 196 L772 300 V500 C772 668 662 792 512 846 C362 792 252 668 252 500 V300 Z" /><circle class="mark-key" cx="512" cy="468" r="84" /><rect class="mark-key" x="486" y="520" width="52" height="170" rx="18" /></svg>
       <span class="name">HavenKeys</span>
       <span id="state" class="pill" hidden></span>
-      <button id="options" class="btn small ghost" type="button" title="Settings">Settings</button>
+      <button id="options" class="icon-btn" type="button" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM10.3 3.5h3.4l.5 2.3 1.6.9 2.2-.8 1.7 3-1.8 1.5v1.8l1.8 1.5-1.7 3-2.2-.8-1.6.9-.5 2.3h-3.4l-.5-2.3-1.6-.9-2.2.8-1.7-3 1.8-1.5v-1.8L4.3 8.9l1.7-3 2.2.8 1.6-.9.5-2.3z" /></svg>
+      </button>
     </header>
     <main id="main" aria-live="polite"></main>
     <footer class="foot">
-      <button id="lock" class="btn" type="button" hidden>Lock HavenKeys</button>
+      <button id="lock" class="btn lock" type="button" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5M6 10.5h12a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1zM12 14.5v2" /></svg>
+        Lock HavenKeys
+      </button>
     </footer>
   </body>
 </html>

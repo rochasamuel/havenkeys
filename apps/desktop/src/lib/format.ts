@@ -11,11 +11,10 @@ export function primaryHost(item: ItemOverview): string | null {
   }
 }
 
-/** Two-letter monogram for an item. */
+/** One-letter monogram for an item: the first letter or digit of its title. */
 export function monogram(title: string): string {
-  const words = title.trim().split(/\s+/).filter(Boolean);
-  const letters = words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : title.trim().slice(0, 2);
-  return letters.toUpperCase() || "?";
+  const first = title.trim().match(/[\p{L}\p{N}]/u);
+  return first ? first[0].toUpperCase() : "?";
 }
 
 /** "381 492" / "3814 9275" — split codes in half for readability. */

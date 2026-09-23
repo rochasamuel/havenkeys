@@ -14,8 +14,8 @@ const SOLO: Record<SceneId, { src: string; w: number; h: number }> = {
   signin: { src: menuLogins, w: 340, h: 136 },
   otp: { src: menuOtp, w: 340, h: 90 },
   signup: { src: menuGenerate, w: 340, h: 90 },
-  save: { src: saveAdd, w: 340, h: 124 },
-  popup: { src: popup, w: 320, h: 246 },
+  save: { src: saveAdd, w: 340, h: 138 },
+  popup: { src: popup, w: 320, h: 251 },
 };
 
 const SCENARIOS: Array<{ id: SceneId; path: string }> = [
@@ -193,10 +193,10 @@ export function BrowserShowcase() {
               </div>
               <DemoCard scene={scenario.id} />
               {scenario.id === "save" && (
-                <img className="fw-overlay fw-overlay--corner" src={saveAdd} width={340} height={124} alt={t.showcase.scenarios.save.alt} />
+                <img className="fw-overlay fw-overlay--corner" src={saveAdd} width={340} height={138} alt={t.showcase.scenarios.save.alt} />
               )}
               {scenario.id === "popup" && (
-                <img className="fw-overlay fw-overlay--popup" src={popup} width={320} height={246} alt={t.showcase.scenarios.popup.alt} />
+                <img className="fw-overlay fw-overlay--popup" src={popup} width={320} height={251} alt={t.showcase.scenarios.popup.alt} />
               )}
             </div>
           </div>

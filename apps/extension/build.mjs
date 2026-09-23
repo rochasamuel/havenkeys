@@ -16,6 +16,12 @@ const targets = {
 
 const base = await read("manifest/base.json");
 
+const FONTS = [
+  ["@fontsource-variable/hanken-grotesk", "hanken-grotesk-latin-wght-normal.woff2"],
+  ["@fontsource-variable/source-serif-4", "source-serif-4-latin-opsz-normal.woff2"],
+  ["@fontsource/jetbrains-mono", "jetbrains-mono-latin-500-normal.woff2"],
+];
+
 for (const [browser, t] of Object.entries(targets)) {
   const out = join(root, "dist", browser);
   await rm(out, { recursive: true, force: true });
@@ -60,6 +66,13 @@ for (const [browser, t] of Object.entries(targets)) {
     join(out, "theme.css"),
   );
   await cp(join(root, "icons"), join(out, "icons"), { recursive: true });
+
+  // Brand fonts, Latin subsets only, next to the stylesheet that names them.
+  await cp(join(root, "src/fonts/fonts.css"), join(out, "fonts.css"));
+  await mkdir(join(out, "fonts"), { recursive: true });
+  for (const [pkg, file] of FONTS) {
+    await cp(join(root, "node_modules", pkg, "files", file), join(out, "fonts", file));
+  }
 
   const manifest = { ...base, ...(await read(`manifest/${browser}.json`)) };
   await writeFile(join(out, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");

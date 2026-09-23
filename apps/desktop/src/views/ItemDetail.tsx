@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api";
 import type { CopyField, ItemOverview } from "../lib/types";
-import { formatDate, groupCode, monogram } from "../lib/format";
+import { formatDate, groupCode, monogram, primaryHost } from "../lib/format";
 import { useRevealedSecret, useTotp } from "../lib/hooks";
+import { CopyButton } from "../components/CopyButton";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 
@@ -21,8 +22,10 @@ function useCopy(itemId: string) {
       try {
         const r = await api.copy(itemId, field);
         toast(`${label} copied. The clipboard clears in ${r.clearAfterSeconds} s.`);
+        return true;
       } catch (e) {
         toast(e instanceof ApiError ? e.message : "Could not copy.", "error");
+        return false;
       }
     },
     [itemId, toast],
@@ -31,12 +34,12 @@ function useCopy(itemId: string) {
 
 function Field({ label, children, actions }: { label: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="field">
-      <div className="field-label">{label}</div>
-      <div className="field-body">
-        <div className="field-value">{children}</div>
-        {actions && <div className="field-actions">{actions}</div>}
+    <div className="row">
+      <div className="row-main">
+        <div className="row-label">{label}</div>
+        <div className="row-value">{children}</div>
       </div>
+      {actions && <div className="row-actions-inline">{actions}</div>}
     </div>
   );
 }
@@ -49,12 +52,12 @@ function IconButton({ icon, label, onClick }: { icon: Parameters<typeof Icon>[0]
   );
 }
 
-function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => void }) {
+function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise<boolean> }) {
   const { code, remaining, failed } = useTotp(item.id, true);
   const period = code?.period ?? 30;
   const progress = code ? remaining / period : 0;
   return (
-    <Field label="One-time code" actions={<IconButton icon="copy" label="Copy one-time code" onClick={onCopy} />}>
+    <Field label="One-time code" actions={<CopyButton label="Copy one-time code" onCopy={onCopy} />}>
       {failed ? (
         <span className="muted">Could not generate a code.</span>
       ) : (
@@ -67,7 +70,8 @@ function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => void })
               cy="10"
               r="8"
               className="totp-ring-fill"
-              strokeDasharray={`${progress * 50.27} 50.27`}
+              strokeDasharray="50.27"
+              strokeDashoffset={50.27 * (1 - progress)}
             />
           </svg>
           <span className="totp-seconds" aria-label={`${remaining} seconds remaining`}>
@@ -116,17 +120,17 @@ function PasswordHistory({ itemId }: { itemId: string }) {
     );
   if (dates === null) {
     return (
-      <div className="field">
-        <button className="btn btn-small btn-ghost" onClick={() => void load()}>
-          Show password history
-        </button>
-      </div>
+      <button className="row row-button" onClick={() => void load()}>
+        <span className="row-label-inline">Password history</span>
+        <Icon name="chevronDown" size={15} className="row-chevron" />
+      </button>
     );
   }
   if (dates.length === 0) {
     return (
-      <div className="field">
-        <span className="muted">No previous passwords.</span>
+      <div className="row">
+        <span className="row-label-inline">Password history</span>
+        <span className="muted">No previous passwords</span>
       </div>
     );
   }
@@ -166,15 +170,17 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
 
   const onRevealError = (e: unknown) => toast(e instanceof ApiError ? e.message : "Could not reveal.", "error");
 
+  const host = primaryHost(item);
+
   return (
     <article className="item">
-      <header className="item-head">
+      <header className="item-head" data-tauri-drag-region>
         <span className={`avatar avatar-lg avatar-${item.itemType}`} aria-hidden="true">
-          {item.itemType === "secure_note" ? <Icon name="note" size={24} /> : monogram(item.title)}
+          {item.itemType === "secure_note" ? <Icon name="note" size={26} /> : monogram(item.title)}
         </span>
         <div className="item-head-text">
           <h2 className="item-title">{item.title}</h2>
-          <p className="item-kind">{item.itemType === "login" ? "Login" : "Secure note"}</p>
+          <p className="item-kind">{item.itemType === "login" ? (host ?? "Login") : "Secure note"}</p>
         </div>
         <div className="item-head-actions">
           <button className="btn btn-small" onClick={onEdit} disabled={readOnly}>
@@ -184,99 +190,115 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
       </header>
 
       {item.itemType === "login" && (
-        <div className="fields">
-          {item.username && (
-            <Field
-              label="Username"
-              actions={<IconButton icon="copy" label="Copy username" onClick={() => void copy("username", "Username")} />}
-            >
-              <span className="selectable">{item.username}</span>
-            </Field>
-          )}
+        <>
+          <div className="group">
+            {item.username && (
+              <Field
+                label="Username"
+                actions={<CopyButton label="Copy username" onCopy={() => copy("username", "Username")} />}
+              >
+                <span className="selectable">{item.username}</span>
+              </Field>
+            )}
 
-          {item.hasPassword && (
-            <Field
-              label="Password"
-              actions={
-                <>
-                  <IconButton
-                    icon={password.value === null ? "eye" : "eyeOff"}
-                    label={password.value === null ? "Show password" : "Hide password"}
-                    onClick={() => (password.value === null ? void password.reveal().catch(onRevealError) : password.hide())}
-                  />
-                  <IconButton icon="copy" label="Copy password" onClick={() => void copy("password", "Password")} />
-                </>
-              }
-            >
-              {password.value === null ? (
-                <span className="mono masked" aria-label="Hidden password">
-                  ••••••••••••
+            {item.hasPassword && (
+              <Field
+                label="Password"
+                actions={
+                  <>
+                    <IconButton
+                      icon={password.value === null ? "eye" : "eyeOff"}
+                      label={password.value === null ? "Show password" : "Hide password"}
+                      onClick={() =>
+                        password.value === null ? void password.reveal().catch(onRevealError) : password.hide()
+                      }
+                    />
+                    <CopyButton label="Copy password" onCopy={() => copy("password", "Password")} />
+                  </>
+                }
+              >
+                <span className="secret" data-revealed={password.value !== null}>
+                  {password.value === null ? (
+                    <span className="mono masked" aria-label="Hidden password">
+                      ••••••••••••
+                    </span>
+                  ) : (
+                    <span className="mono selectable revealed">{password.value}</span>
+                  )}
                 </span>
-              ) : (
-                <span className="mono selectable revealed">{password.value}</span>
-              )}
-            </Field>
-          )}
+              </Field>
+            )}
 
-          <PasswordHistory itemId={item.id} />
-
-          {item.hasTotp && <TotpField item={item} onCopy={() => void copy("totp", "One-time code")} />}
+            {item.hasTotp && <TotpField item={item} onCopy={() => copy("totp", "One-time code")} />}
+          </div>
 
           {item.urls.length > 0 && (
-            <Field label={item.urls.length > 1 ? "Websites" : "Website"}>
-              <ul className="url-list">
-                {item.urls.map((u) => (
-                  <li key={u.url}>
-                    <Icon name="globe" size={14} />
-                    <span className="selectable">{u.url}</span>
-                    <span className="muted url-match">
-                      {u.matchType === "domain" ? "whole site" : u.matchType === "origin" ? "exact site" : "exact page"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Field>
+            <div className="group">
+              {item.urls.map((u) => (
+                <div className="row" key={u.url}>
+                  <div className="row-main">
+                    <div className="row-label">Website</div>
+                    <div className="row-value url-value">
+                      <span className="selectable">{u.url}</span>
+                    </div>
+                  </div>
+                  <span className="url-match">
+                    {u.matchType === "domain" ? "Whole site" : u.matchType === "origin" ? "Exact site" : "Exact page"}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
 
           {item.hasNotes && (
-            <Field
-              label="Notes"
-              actions={
-                <IconButton
-                  icon={notes.value === null ? "eye" : "eyeOff"}
-                  label={notes.value === null ? "Show notes" : "Hide notes"}
-                  onClick={() => (notes.value === null ? void notes.reveal().catch(onRevealError) : notes.hide())}
-                />
-              }
-            >
-              {notes.value === null ? (
-                <span className="muted">Hidden</span>
-              ) : (
-                <p className="note-body selectable">{notes.value}</p>
-              )}
-            </Field>
+            <div className="group">
+              <Field
+                label="Notes"
+                actions={
+                  <IconButton
+                    icon={notes.value === null ? "eye" : "eyeOff"}
+                    label={notes.value === null ? "Show notes" : "Hide notes"}
+                    onClick={() => (notes.value === null ? void notes.reveal().catch(onRevealError) : notes.hide())}
+                  />
+                }
+              >
+                {notes.value === null ? (
+                  <span className="muted">Hidden</span>
+                ) : (
+                  <p className="note-body selectable">{notes.value}</p>
+                )}
+              </Field>
+            </div>
           )}
-        </div>
+
+          <div className="group group-history">
+            <PasswordHistory itemId={item.id} />
+          </div>
+        </>
       )}
 
       {item.itemType === "secure_note" && (
         <div className="note-sheet">
-          {content === null ? <p className="muted">Decrypting…</p> : <p className="note-body selectable">{content}</p>}
+          {content === null ? (
+            <p className="muted">Decrypting…</p>
+          ) : (
+            <p className="note-body selectable">{content}</p>
+          )}
         </div>
       )}
 
       <footer className="item-foot">
         <p className="muted">
-          Created {formatDate(item.createdAt)}. Last changed {formatDate(item.updatedAt)}.
+          Created {formatDate(item.createdAt)} · Changed {formatDate(item.updatedAt)}
         </p>
         {confirmDelete ? (
           <div className="confirm">
             <span>Delete “{item.title}” permanently?</span>
-            <button className="btn btn-small btn-danger" onClick={onDelete}>
-              Delete
-            </button>
             <button className="btn btn-small" onClick={() => setConfirmDelete(false)}>
               Keep
+            </button>
+            <button className="btn btn-small btn-danger" onClick={onDelete}>
+              Delete
             </button>
           </div>
         ) : (

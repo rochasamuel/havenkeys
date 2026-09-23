@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ItemOverview, ItemType } from "../lib/types";
 import { monogram, primaryHost } from "../lib/format";
 import { Icon } from "../components/Icon";
@@ -23,23 +23,45 @@ const headings: Partial<Record<Section, string>> = {
 
 export function ItemList({ items, query, section, selectedId, onSelect, onNew, newDisabled }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close the New menu on Escape or a click anywhere else.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   return (
     <section className="list" aria-label="Items">
-      <header className="list-head">
-        <h2>{query.trim() ? "Search results" : headings[section]}</h2>
-        <div className="new-menu">
+      <header className="list-head" data-tauri-drag-region>
+        <div className="list-title" data-tauri-drag-region>
+          <h2>{query.trim() ? "Results" : headings[section]}</h2>
+          <span className="list-count">{items.length}</span>
+        </div>
+        <div className="new-menu" ref={menuRef}>
           <button
-            className="btn btn-primary btn-small"
+            className="icon-btn icon-btn-solid"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
+            aria-label="New item"
+            title="New item"
             onClick={() => setMenuOpen((o) => !o)}
             disabled={newDisabled}
           >
-            <Icon name="plus" size={16} /> New
+            <Icon name="plus" size={17} />
           </button>
           {menuOpen && !newDisabled && (
-            <div className="menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
+            <div className="menu" role="menu">
+              <p className="menu-heading">New item</p>
               <button
                 role="menuitem"
                 onClick={() => {
@@ -64,9 +86,13 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
       </header>
 
       {items.length === 0 ? (
-        <p className="list-empty">
-          {query.trim() ? "No items match your search. Search looks at titles, usernames and websites." : "Nothing here yet."}
-        </p>
+        <div className="list-empty">
+          <Icon name={query.trim() ? "search" : "grid"} size={22} />
+          <p>{query.trim() ? "No matches" : "Nothing here yet"}</p>
+          <span>
+            {query.trim() ? "Search looks at titles, usernames and websites." : "New items you add appear here."}
+          </span>
+        </div>
       ) : (
         <ul className="list-items">
           {items.map((item) => {
@@ -80,7 +106,7 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                   onClick={() => onSelect(item.id)}
                 >
                   <span className={`avatar avatar-${item.itemType}`} aria-hidden="true">
-                    {item.itemType === "secure_note" ? <Icon name="note" size={16} /> : monogram(item.title)}
+                    {item.itemType === "secure_note" ? <Icon name="note" size={15} /> : monogram(item.title)}
                   </span>
                   <span className="list-item-text">
                     <span className="list-item-title">{item.title}</span>
@@ -88,7 +114,7 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                   </span>
                   {item.hasTotp && (
                     <span className="list-item-flag" title="Has one-time codes">
-                      <Icon name="clock" size={14} />
+                      <Icon name="clock" size={13} />
                     </span>
                   )}
                 </button>

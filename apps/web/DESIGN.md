@@ -180,7 +180,7 @@ A near-monochrome forest-green ramp with a single brass fitting, plus one pale p
 
 ### Primary
 - **Fitting Brass** (brass): the primary button fill, focus rings, the guilloche rosette, chain and flow lines, and the active journey rail dot. Never a large fill beyond a button.
-- **Lit Brass** (brass-hi): brass that carries text or a hairline dot: italic heading emphasis, links, active nav, brass tags, placeholder labels.
+- **Lit Brass** (brass-hi): brass that carries text or a hairline dot: italic heading emphasis, links, active nav, brass tags.
 - **Brass Wash** (brass-soft) and **Brass Hairline** (brass-line): the tint and border of the one highlighted box in a group (the vault-key output, the Rust core zone, the visitor's own platform card, the sealed item).
 
 ### Secondary
@@ -254,7 +254,7 @@ Depth is mostly tonal: grounds step from ink to raised, and hairlines separate. 
 
 Gently rounded, from the product's radius scale: controls at 8px, scene cards at 10px, frames and screenshots at 12px, panels, tables and windows at 14px, ledger columns at 16px, the stage at 18px. Pills (999px) are for tags and the showcase tab group only. The kit sheet is nearly square-cornered (4px) and tilted -1.6deg, the one rotated object on the site (untilted on mobile).
 
-Borders are 1px. Solid hairlines mean inside or defended; dashed hairlines mean outside, not defended, or placeholder (the "Not defended" column, zone separators, the placeholder tag, stored blob rows). Flow and chain lines are 1px verticals with small hollow or filled dots at the nodes, graded from brass to line-strong.
+Borders are 1px. Solid hairlines mean inside or defended; dashed hairlines mean outside or not defended (the "Not defended" column, zone separators, stored blob rows). Flow and chain lines are 1px verticals with small hollow or filled dots at the nodes, graded from brass to line-strong.
 
 ## Components
 
@@ -278,9 +278,8 @@ Borders are 1px. Solid hairlines mean inside or defended; dashed hairlines mean 
 ### Navigation
 Sticky 64px bar over a translucent ground with blur and a bottom hairline. Brand mark and wordmark at left (660 weight); 15px links in text color turning brass-hi on hover and when active; a small primary Download button at the end. Below 640px secondary links and the wordmark hide.
 
-### Desktop Placeholder (signature)
-Desktop app screenshots do not exist yet, so every desktop slot uses `DesktopPlaceholder`: a framed window with a title bar and a skeleton of the real three-pane vault layout, overlaid with a dashed brass tag that names what screenshot belongs there. Never a stock image, a mock UI with invented data, or an unlabeled grey box.
-
+### Product Window (signature)
+The hero frames a real 2x render of the desktop app (`src/assets/shots/desktop-vault.png`) in a window with a slim title bar (three dots and the app name), with the real extension popup and in-page menu overlapping its edges. Every product image is a real render of the shipped UI with labeled demo data (fictional Fernway / fernway.example); re-render after UI changes instead of mocking.
 ### Extension Screenshots (signature)
 The PNGs in `src/assets/shots` are real renders of the extension UI (popup, in-page menus, save prompt), placed with a lift or drop shadow, overlapping a window edge in the hero and floating inside the browser showcase frame. They are shown at their real size or smaller, never redrawn.
 
@@ -297,7 +296,7 @@ On the paper field, a white sheet with a heavy 2px rule under the header, an ita
 - **Do** keep brass italic emphasis to the hero headline, the journey chapter heads and the final call-to-action.
 - **Do** use mono only for keys, ciphertext, commands, domains and the literal identifiers around them.
 - **Do** use the fictional `fernway.example` (and `example.com` addresses) for all demo data, and label it where it appears ("demo site", "demo data").
-- **Do** fill any missing desktop screenshot with `DesktopPlaceholder` and a label saying what goes there.
+- **Do** use real renders of the shipped desktop and extension UI with labeled demo data; re-render them when the UI changes.
 - **Do** use only real extension renders from `src/assets/shots` for extension imagery.
 - **Do** ship styles only through the bundled stylesheet and images only as emitted files: the CSP is `style-src 'self'; img-src 'self'`, so no inline `<style>` elements and no `data:` images, and Vite's `assetsInlineLimit` stays at 0. Dynamic values go through React style props (CSSOM), as the stage delays and showcase scale do.
 - **Do** carry the verbatim audit disclaimer in a flat ground panel wherever security claims are summarized.

@@ -66,8 +66,8 @@ export const ptBR: Messages = {
       "Suas chaves ficam nos seus dispositivos; o único servidor é um que você roda, e ele guarda dados cifrados que não tem como abrir.",
     seeHow: "Veja como funciona",
     heroMeta: "Gratuito e open source · Windows, macOS e Linux · Chrome e Firefox",
-    placeholderLabel: "Captura de tela do app de desktop",
-    placeholderNote: "A tela do cofre entra aqui.",
+    desktopAlt:
+      "O app de desktop do HavenKeys: uma barra lateral com as seções do cofre, uma lista de logins e o login da Fernway aberto com o usuário, a senha oculta e um código de uso único ao vivo.",
     popupAlt: "O popup do HavenKeys no navegador: dois logins salvos da Fernway, um botão Fill e um código de uso único.",
     menuAlt: "O menu do HavenKeys na página oferecendo dois logins salvos.",
 
@@ -556,9 +556,8 @@ export const ptBR: Messages = {
           modificá-lo e redistribuí-lo nos termos de qualquer uma delas.
         </p>
         <p>
-          Este site e o app de desktop incorporam as fontes Hanken Grotesk e JetBrains Mono, e este
-          site também incorpora a Source Serif 4. As três são licenciadas à parte sob a SIL Open
-          Font License 1.1. Os avisos de copyright e essa licença estão em{" "}
+          Este site, o app de desktop e a extensão do navegador incorporam as fontes Hanken Grotesk,
+          Source Serif 4 e JetBrains Mono, licenciadas à parte sob a SIL Open Font License 1.1. Os avisos de copyright e essa licença estão em{" "}
           <Ext href={`${GH}/blob/main/THIRD-PARTY-NOTICES.md`}>THIRD-PARTY-NOTICES.md</Ext>.
         </p>
 
