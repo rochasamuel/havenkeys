@@ -9,7 +9,7 @@
 set -euo pipefail
 
 NAME="com.havenkeys.bridge"
-CHROME_ORIGIN="chrome-extension://olbclkanfbmilnmfhoojgcnpgdmilfmf/"
+CHROME_ORIGIN="chrome-extension://fmmfkakdkkcfpdnfmbngnlelbfaogafo/"
 FIREFOX_ID="havenkeys@havenkeys.app"
 
 case "$(uname -s)" in

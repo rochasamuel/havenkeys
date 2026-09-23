@@ -49,12 +49,12 @@ crate, not the core.
      manifest `key` field on upload, so the manifest no longer pins an ID:
      unpacked loads get an ID derived from the folder's path (stable on one
      machine, different on another), and once published the Chrome Web Store
-     assigns the extension's permanent ID at first upload. `CHROME_EXTENSION_ORIGIN`
-     in `crates/havenkeys-native-host/src/lib.rs`, `CHROME_ORIGIN` in
-     `scripts/install-native-host.sh` and `install-native-host.ps1` must be
-     updated to that published ID before release; until then, local testing
-     needs `scripts/install-native-host.sh <path>` edited to the ID shown in
-     `chrome://extensions` for your unpacked load.
+     assigns the extension's permanent ID at first upload. That ID is
+     `fmmfkakdkkcfpdnfmbngnlelbfaogafo`, and it is what
+     `CHROME_EXTENSION_ORIGIN` in `crates/havenkeys-native-host/src/lib.rs`
+     and `CHROME_ORIGIN` in `scripts/install-native-host.sh` and
+     `install-native-host.ps1` allow. Local testing of an unpacked load needs
+     those edited to the ID shown in `chrome://extensions`.
    * **Firefox:** `about:debugging` → This Firefox → *Load Temporary Add-on* →
      `apps/extension/dist/firefox/manifest.json` (ID `havenkeys@havenkeys.app`).
 5. Start HavenKeys, unlock it, and turn on Settings → *Browser extension*.
@@ -297,14 +297,13 @@ page. See `security-model.md` §12 and `autofill.md`.
   memory. Possible future mitigations include verifying the peer's code
   signature (as 1Password does), a per-browser pairing approval in the
   desktop UI, or requiring desktop confirmation for each fill.
-* **The extension ID is not a secret, and is not yet real.** The Chromium
+* **The extension ID is not a secret.** The Chromium
   manifest no longer carries a `key` field — the Chrome Web Store rejects
   one on upload (§2) — so an unpacked install gets an ID derived from its
-  folder path, and the published ID will be whatever the store assigns.
-  `CHROME_EXTENSION_ORIGIN` in `havenkeys-native-host` and `CHROME_ORIGIN` in
-  the install scripts still hold the old development ID, so **the Chromium
-  side will not connect until both are updated to the real store ID** — a
-  release-checklist item, not a runtime check that can be relied on. Note
+  folder path, and the published ID is the one the store assigned,
+  `fmmfkakdkkcfpdnfmbngnlelbfaogafo`. `CHROME_EXTENSION_ORIGIN` in
+  `havenkeys-native-host` and `CHROME_ORIGIN` in the install scripts allow
+  only that ID, so an unpacked load won't connect unless you edit them. Note
   also that an ID derived from a public key pins nothing on its own: the key
   that produced the old ID is in this repository's history, and anyone can
   put it in their own manifest to reproduce that ID. Only a store-published

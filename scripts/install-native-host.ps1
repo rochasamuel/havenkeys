@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Name = "com.havenkeys.bridge"
-$ChromeOrigin = "chrome-extension://olbclkanfbmilnmfhoojgcnpgdmilfmf/"
+$ChromeOrigin = "chrome-extension://fmmfkakdkkcfpdnfmbngnlelbfaogafo/"
 $FirefoxId = "havenkeys@havenkeys.app"
 $Dir = Join-Path $env:LOCALAPPDATA "HavenKeys"
 $ChromeManifest = Join-Path $Dir "$Name.chrome.json"

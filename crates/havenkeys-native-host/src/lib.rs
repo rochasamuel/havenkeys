@@ -29,7 +29,7 @@ use zeroize::Zeroizing;
 /// Extension IDs allowed to launch the host. The browser enforces the same
 /// list through `allowed_origins` / `allowed_extensions` in the host
 /// manifest; this is a second check.
-pub const CHROME_EXTENSION_ORIGIN: &str = "chrome-extension://olbclkanfbmilnmfhoojgcnpgdmilfmf/";
+pub const CHROME_EXTENSION_ORIGIN: &str = "chrome-extension://fmmfkakdkkcfpdnfmbngnlelbfaogafo/";
 pub const FIREFOX_EXTENSION_ID: &str = "havenkeys@havenkeys.app";
 
 /// Chrome passes the caller's origin as the first argument; Firefox passes
