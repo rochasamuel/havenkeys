@@ -1,7 +1,7 @@
 {
   "name": "@havenkeys/protocol",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "HavenKeys bridge protocol: message types and strict validators (mirrors crates/havenkeys-protocol)",
   "exports": {

@@ -188,7 +188,7 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
       <div className="settings-block">
         <h3>About</h3>
         <p className="muted">
-          HavenKeys 0.1.0. Your vault is encrypted with AES-256-GCM under a key derived from your master password (with
+          HavenKeys 0.1.1. Your vault is encrypted with AES-256-GCM under a key derived from your master password (with
           Argon2id) and your Secret Key. It stays on this computer unless you turn on sync. This software has not
           undergone an independent security audit.
         </p>
