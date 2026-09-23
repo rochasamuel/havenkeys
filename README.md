@@ -86,6 +86,7 @@ Read these before trusting it with anything:
 * [Native messaging](docs/native-messaging.md): browser ↔ desktop protocol and its checks
 * [Autofill](docs/autofill.md): field detection, matching rules, in-page UI security
 * [Security review](docs/security-review.md): findings from reviewing this implementation
+* [Reporting a vulnerability](SECURITY.md): please report privately, not in a public issue
 * [Development](docs/development.md): building, testing, auditing
 * [Roadmap](docs/roadmap.md): what is left, including the proposed standalone extension mode
 
