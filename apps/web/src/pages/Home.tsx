@@ -1,115 +1,146 @@
 import { Link } from "react-router-dom";
+import popup from "../assets/shots/popup.png";
+import menuLogins from "../assets/shots/menu-logins.png";
+import { BrowserShowcase } from "../components/browser/BrowserShowcase";
+import { EmergencyKit } from "../components/EmergencyKit";
+import { Guilloche } from "../components/Guilloche";
+import { Icon } from "../components/Icon";
+import { Journey } from "../components/journey/Journey";
+import { DesktopPlaceholder } from "../components/Placeholder";
+import { useI18n } from "../i18n/context";
 
-const FEATURES = [
-  {
-    title: "Logins & autofill",
-    body: "Save usernames and passwords once. The browser extension suggests them only on the sites they were saved for — never automatically, never on a look-alike domain.",
-  },
-  {
-    title: "Secure notes",
-    body: "Arbitrary encrypted text for anything that isn't a login: recovery codes, passphrases, whatever needs to stay off a screenshot.",
-  },
-  {
-    title: "TOTP codes",
-    body: "Import an otpauth:// URI once; HavenKeys generates the six- or eight-digit code from then on, in Rust, without ever handing the secret to a webpage.",
-  },
-  {
-    title: "Password generator",
-    body: "Cryptographically random and unbiased, generated in Rust — length and character sets are yours to configure.",
-  },
-  {
-    title: "Your own server",
-    body: "Every vault lives on a havenkeys-server that you, or someone you trust, runs. It holds only ciphertext it cannot open and is the single writer; each device keeps an encrypted read-only copy, so unlocking and autofill still work offline.",
-  },
-  {
-    title: "Browser extension",
-    body: "Manifest V3, minimal permissions, and every fill request checked against the current page's origin in Rust — not trusted from the extension.",
-  },
-];
+const GITHUB = "https://github.com/rochasamuel/havenkeys";
 
 export function Home() {
+  const { t, path } = useI18n();
+  const h = t.home;
   return (
     <>
       <section className="hero">
-        <p className="hero__eyebrow">Local-first password manager</p>
-        <h1>Your passwords, encrypted before they ever leave your device.</h1>
-        <p className="hero__lede">
-          HavenKeys pairs a Tauri desktop app with a Rust security core, a browser extension, and
-          a small server you run yourself. Your master password, Secret Key and unencrypted keys
-          never leave your device — the server only ever holds ciphertext it has no way to open.
-        </p>
-        <div className="hero__actions">
-          <Link to="/download" className="button button--primary">
-            Download HavenKeys
+        <Guilloche className="hero__rosette" />
+        <div className="hero__copy">
+          <h1>{h.heroTitle}</h1>
+          <p className="hero__lede">{h.heroLede}</p>
+          <div className="hero__actions">
+            <Link to={path("/download")} className="btn btn--primary btn--lg">
+              <Icon name="download" />
+              {t.common.downloadCta}
+            </Link>
+            <a href="#journey" className="btn btn--ghost btn--lg">
+              {h.seeHow}
+              <Icon name="arrowDown" />
+            </a>
+          </div>
+          <p className="hero__meta">{h.heroMeta}</p>
+        </div>
+
+        <div className="hero__stage">
+          <DesktopPlaceholder label={h.placeholderLabel} note={h.placeholderNote} />
+          <img className="hero__popup" src={popup} width={320} height={246} alt={h.popupAlt} />
+          <img className="hero__menu" src={menuLogins} width={340} height={136} alt={h.menuAlt} />
+        </div>
+      </section>
+
+      <section className="section intro" id="journey">
+        <div className="section__head">
+          <h2>{h.journeyTitle}</h2>
+          <p>{h.journeyLede}</p>
+        </div>
+        <Journey />
+      </section>
+
+      <section className="section browser-section" id="browser">
+        <div className="section__head">
+          <h2>{h.browserTitle}</h2>
+          <p>{h.browserLede}</p>
+        </div>
+        <BrowserShowcase />
+      </section>
+
+      <section className="section desktop-section">
+        <div className="desktop-section__grid">
+          <div className="section__head section__head--left">
+            <h2>{h.desktopTitle}</h2>
+            <p>{h.desktopLede}</p>
+          </div>
+          <dl className="features">
+            {h.features.map((f) => (
+              <div key={f.term}>
+                <dt>{f.term}</dt>
+                <dd>{f.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      <section className="paper">
+        <div className="paper__inner">
+          <div className="paper__copy">
+            <h2>{h.paperTitle}</h2>
+            <p>{h.paperP1}</p>
+            <p>{h.paperP2}</p>
+            <p className="paper__warn">
+              <Icon name="lock" size={16} />
+              {h.paperWarn}
+            </p>
+          </div>
+          <EmergencyKit />
+        </div>
+      </section>
+
+      <section className="section ledger-section">
+        <div className="section__head">
+          <h2>{h.ledgerTitle}</h2>
+          <p>{h.ledgerLede}</p>
+        </div>
+        <div className="ledger">
+          <div className="ledger__col ledger__col--yes">
+            <h3>{h.defendsTitle}</h3>
+            <ul>
+              {h.defends.map((d) => (
+                <li key={d}>
+                  <Icon name="check" size={16} />
+                  <span>{d}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="ledger__col ledger__col--no">
+            <h3>{h.doesntTitle}</h3>
+            <ul>
+              {h.doesnt.map((d) => (
+                <li key={d}>
+                  <Icon name="cross" size={16} />
+                  <span>{d}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="ledger__foot">
+          <p className="disclaimer">{t.common.disclaimer}</p>
+          <Link to={path("/security")} className="btn btn--ghost">
+            {h.securityOverview}
+            <Icon name="arrowRight" />
           </Link>
-          <a
-            className="button button--secondary"
-            href="https://github.com/rochasamuel/havenkeys"
-            target="_blank"
-            rel="noreferrer"
-          >
-            View on GitHub
-          </a>
         </div>
       </section>
 
-      <section className="how-it-works">
-        <h2>How it's built</h2>
-        <ol>
-          <li>
-            Your master password runs through <code>Argon2id</code> to derive a master key — it
-            is never used as an encryption key directly.
-          </li>
-          <li>
-            The master key is combined with your 128-bit Secret Key through HKDF to derive a
-            key-encryption key, which unwraps a randomly generated vault key.
-          </li>
-          <li>
-            Each item is encrypted with <code>AES-256-GCM</code> under a data key derived from the
-            vault key, with a unique nonce every time.
-          </li>
-          <li>
-            The desktop UI never does cryptography and never sees your master password after
-            unlock — that stays in the Rust core.
-          </li>
-        </ol>
-        <p>
-          The full design is in the{" "}
-          <a
-            href="https://github.com/rochasamuel/havenkeys/blob/main/docs/crypto.md"
-            target="_blank"
-            rel="noreferrer"
-          >
-            cryptography document
+      <section className="closer">
+        <Guilloche className="closer__rosette" />
+        <h2>{h.closerTitle}</h2>
+        <p>{h.closerLede}</p>
+        <div className="hero__actions">
+          <Link to={path("/download")} className="btn btn--primary btn--lg">
+            <Icon name="download" />
+            {t.common.downloadCta}
+          </Link>
+          <a href={GITHUB} className="btn btn--ghost btn--lg" target="_blank" rel="noreferrer">
+            <Icon name="github" />
+            {h.readSource}
           </a>
-          .
-        </p>
-      </section>
-
-      <section className="features">
-        <h2>What it does</h2>
-        <div className="features__grid">
-          {FEATURES.map((feature) => (
-            <div className="feature-card" key={feature.title}>
-              <h3>{feature.title}</h3>
-              <p>{feature.body}</p>
-            </div>
-          ))}
         </div>
-      </section>
-
-      <section className="security-teaser">
-        <h2>Security, not marketing</h2>
-        <p>
-          We'd rather point you at the actual documents than summarize them: the{" "}
-          <Link to="/security">security page</Link> links straight to the threat model, the
-          security model, and the cryptography design.
-        </p>
-        <p>
-          This software has not undergone an independent security audit and should not be
-          considered a replacement for professionally audited password managers for high-value
-          production use.
-        </p>
       </section>
     </>
   );

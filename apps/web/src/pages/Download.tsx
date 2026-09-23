@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { Icon } from "../components/Icon";
+import { Mark } from "../components/Mark";
+import { useI18n } from "../i18n/context";
 import {
   fetchLatestRelease,
   pickAsset,
@@ -7,11 +10,11 @@ import {
   type Platform,
 } from "../lib/releases";
 
-const PLATFORMS: Array<{ id: Platform; label: string; format: string }> = [
-  { id: "windows", label: "Windows", format: ".msi installer" },
-  { id: "macos", label: "macOS", format: ".dmg disk image" },
-  { id: "linux-appimage", label: "Linux", format: ".AppImage" },
-  { id: "linux-deb", label: "Linux (Debian/Ubuntu)", format: ".deb package" },
+const PLATFORMS: Array<{ id: Platform; os: "windows" | "macos" | "linux" }> = [
+  { id: "windows", os: "windows" },
+  { id: "macos", os: "macos" },
+  { id: "linux-appimage", os: "linux" },
+  { id: "linux-deb", os: "linux" },
 ];
 
 type LoadState =
@@ -19,8 +22,20 @@ type LoadState =
   | { status: "ready"; release: LatestRelease }
   | { status: "unavailable" };
 
+function detectOs(): "windows" | "macos" | "linux" | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return "windows";
+  if (/Macintosh|Mac OS X/i.test(ua)) return "macos";
+  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return "linux";
+  return null;
+}
+
 export function Download() {
+  const { t } = useI18n();
+  const d = t.download;
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [os] = useState(detectOs);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,79 +49,68 @@ export function Download() {
   }, []);
 
   return (
-    <section className="download">
-      <h1>Download HavenKeys</h1>
-      <div className="download__notice">
-        <h2>Before you install</h2>
-        <ul>
-          <li>
-            HavenKeys needs an account on a <code>havenkeys-server</code>: run your own (see the{" "}
-            <a
-              href="https://github.com/rochasamuel/havenkeys/blob/main/docs/deployment.md"
-              target="_blank"
-              rel="noreferrer"
-            >
-              deployment guide
-            </a>
-            ) or get an invite from someone who does.
-          </li>
-          <li>
-            The browser extension and its native messaging host are not in these installers yet.
-            Build them from source with the steps in the{" "}
-            <a href="https://github.com/rochasamuel/havenkeys#readme" target="_blank" rel="noreferrer">
-              README
-            </a>
-            .
-          </li>
-          <li>
-            The installers are unsigned, so Windows SmartScreen and macOS Gatekeeper will warn on
-            first run. The Windows and macOS builds are new and less tested than Linux.
-          </li>
-        </ul>
-      </div>
-      <div aria-live="polite">
-        {state.status === "ready" && (
-          <p className="download__status">Latest version: {state.release.tag_name}</p>
-        )}
-        {state.status === "loading" && (
-          <p className="download__status">Checking latest release…</p>
-        )}
-        {state.status === "unavailable" && (
-          <p className="download__status">
-            The latest release couldn't be loaded — there may not be one published yet.{" "}
-            <a href={RELEASES_PAGE_URL} target="_blank" rel="noreferrer">
-              View releases on GitHub
-            </a>
-            .
-          </p>
-        )}
-      </div>
-      <div className="download__grid">
+    <div className="download">
+      <section className="page-hero page-hero--download">
+        <Mark size={64} />
+        <h1>{d.title}</h1>
+        <div aria-live="polite" className="download__status">
+          {state.status === "ready" && (
+            <p>
+              {d.latest} <code>{state.release.tag_name}</code>
+            </p>
+          )}
+          {state.status === "loading" && <p>{d.checking}</p>}
+          {state.status === "unavailable" && (
+            <p>
+              {d.unavailable}{" "}
+              <a href={RELEASES_PAGE_URL} target="_blank" rel="noreferrer">
+                {d.seeReleases}
+              </a>
+              .
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="download__grid" aria-label={d.installersAria}>
         {PLATFORMS.map((platform) => {
-          const asset =
-            state.status === "ready" ? pickAsset(state.release.assets, platform.id) : null;
+          const asset = state.status === "ready" ? pickAsset(state.release.assets, platform.id) : null;
+          const yours = PLATFORMS.find((p) => p.os === os)?.id === platform.id;
+          const copy = d.platforms[platform.id];
           return (
-            <div className="download__card" key={platform.id}>
-              <h2>{platform.label}</h2>
-              <p>{platform.format}</p>
+            <div className={`platform ${yours ? "platform--yours" : ""}`} key={platform.id}>
+              <div className="platform__text">
+                <h2>{copy.label}</h2>
+                <p>{copy.format}</p>
+                {yours && <span className="tag">{d.yourSystem}</span>}
+              </div>
               {asset ? (
-                <a className="download__button" href={asset.browser_download_url}>
-                  Download for {platform.label}
+                <a className={`btn ${yours ? "btn--primary" : "btn--ghost"}`} href={asset.browser_download_url}>
+                  <Icon name="download" />
+                  {d.download}
                 </a>
               ) : (
-                <a
-                  className="download__button download__button--secondary"
-                  href={RELEASES_PAGE_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View releases
+                <a className="btn btn--ghost" href={RELEASES_PAGE_URL} target="_blank" rel="noreferrer">
+                  {d.viewReleases}
+                  <Icon name="external" size={15} />
                 </a>
               )}
             </div>
           );
         })}
-      </div>
-    </section>
+      </section>
+
+      <section className="setup">
+        <h2>{d.beforeTitle}</h2>
+        <ol className="setup__steps">
+          {d.steps.map((step) => (
+            <li key={step.title}>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
   );
 }

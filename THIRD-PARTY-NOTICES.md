@@ -29,9 +29,16 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 
 Distributed via the `@fontsource/jetbrains-mono` package.
 
+### Source Serif 4
+
+Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+
+Distributed via the `@fontsource-variable/source-serif-4` package. Used by
+the website only.
+
 ### Licence
 
-Both fonts are licensed under the SIL Open Font License, Version 1.1,
+All three fonts are licensed under the SIL Open Font License, Version 1.1,
 reproduced in full below. It is also available, with a FAQ, at
 <http://scripts.sil.org/OFL>.
 

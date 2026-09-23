@@ -1,12 +1,11 @@
-import { Link } from "react-router-dom";
+import { useI18n } from "../i18n/context";
 
 export function NotFound() {
+  const { t, path } = useI18n();
   return (
     <section className="docs-page">
-      <h1>Page not found</h1>
-      <p>
-        There's nothing at this address. <Link to="/">Go to the homepage</Link>.
-      </p>
+      <h1>{t.notFound.title}</h1>
+      <p>{t.notFound.body(path("/"))}</p>
     </section>
   );
 }

@@ -12,6 +12,29 @@ pnpm --filter @havenkeys/web build    # typecheck + production build
 pnpm --filter @havenkeys/web test     # vitest
 ```
 
+## Languages
+
+The site is in English (at `/`) and Brazilian Portuguese (under `/pt-br`).
+Every visible string lives in `apps/web/src/i18n/en.tsx` and
+`apps/web/src/i18n/pt-BR.tsx`; components never hard-code copy. The
+Portuguese file is typed against the English one, so adding a string to
+`en.tsx` without translating it fails `pnpm --filter @havenkeys/web typecheck`.
+
+* The nav toggle and the footer switch to the same page in the other
+  language, keeping any `#section`.
+* A browser whose first language is Portuguese that lands on `/` is sent to
+  `/pt-br` once. Picking a language with the switcher stores that choice in
+  `localStorage` (`hk-locale`), and the redirect stops. Only `/` redirects, so
+  shared links to English pages stay English.
+* Names the app shows in English (Secret Key, Emergency Kit,
+  `havenkeys-server`) stay in English in the Portuguese copy. The Emergency Kit
+  illustration stays in English because it depicts the printed kit.
+* The Portuguese pages carry a Portuguese translation of the audit disclaimer.
+
+To add a language: add it to `LOCALES` in `src/i18n/locale.ts`, write a
+dictionary typed as `Messages`, register it in `src/i18n/context.tsx`, and add
+its routes in `src/App.tsx`.
+
 ## Deploying to Vercel
 
 1. vercel.com → **Add New Project** → import `rochasamuel/havenkeys`.
