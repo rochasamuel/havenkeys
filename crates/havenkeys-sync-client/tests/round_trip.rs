@@ -14,7 +14,9 @@ use havenkeys_core::sync::prepare_sign_in;
 use havenkeys_core::vault::{derive_auth_key, prepare_new_account_vault, VaultService};
 use havenkeys_core::SecretString;
 use havenkeys_server::admin::{self, AdminCommand};
-use havenkeys_sync_client::{Activation, HttpTransport, Session, SyncClient, SyncError};
+use havenkeys_sync_client::{
+    Activation, CredentialChange, HttpTransport, Session, SyncClient, SyncError,
+};
 use uuid::Uuid;
 
 const PASSWORD: &str = "correct horse battery staple";
@@ -340,7 +342,164 @@ async fn a_write_that_lost_a_race_comes_back_as_a_conflict() {
     server.cleanup().await;
 }
 
-// Replaced by a password-change round trip (plan Task 5).
+#[tokio::test]
+async fn a_password_change_reaches_the_second_device() {
+    let server = Server::start().await;
+    let client = server.client();
+    let mut one = activate(&server, "rekey@example.com").await;
+
+    // Device two signs in with the original password.
+    let params = client.auth_params("rekey@example.com").await.unwrap();
+    let auth = derive_auth_key(
+        &SecretString::from(PASSWORD),
+        &one.secret_key,
+        &params.kdf,
+        &one.account,
+    )
+    .unwrap();
+    let session_two = client
+        .login(
+            "rekey@example.com",
+            &auth,
+            one.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
+        .await
+        .unwrap();
+
+    // Device one changes it, server first.
+    const NEW: &str = "a much better master password";
+    let ticket = one.vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &SecretString::from(PASSWORD),
+            &SecretString::from(NEW),
+            cheap_kdf(),
+            &one.secret_key,
+            &one.account,
+        )
+        .unwrap();
+    let header = one.vault.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    let revision = client
+        .change_credentials(
+            &one.session,
+            CredentialChange {
+                current_auth_key: rekeyed.current_auth_key(),
+                kdf: rekeyed.kdf(),
+                new_auth_key: rekeyed.new_auth_key(),
+                header: &header,
+                base_header_revision: 0,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(revision, 1);
+    one.vault.commit_rekey(ticket, Ok(rekeyed), 1).unwrap();
+
+    // Device two's session is gone; the old password no longer logs in.
+    assert_eq!(
+        client.pull(&session_two, 0).await.unwrap_err(),
+        SyncError::Unauthorized
+    );
+    let old = derive_auth_key(
+        &SecretString::from(PASSWORD),
+        &one.secret_key,
+        &params.kdf,
+        &one.account,
+    )
+    .unwrap();
+    assert!(client
+        .login(
+            "rekey@example.com",
+            &old,
+            one.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
+        .await
+        .is_err());
+
+    // The new password, with the parameters the server now serves, does,
+    // and the header it serves opens with it.
+    let params = client.auth_params("rekey@example.com").await.unwrap();
+    let auth = derive_auth_key(
+        &SecretString::from(NEW),
+        &one.secret_key,
+        &params.kdf,
+        &one.account,
+    )
+    .unwrap();
+    let session_two = client
+        .login(
+            "rekey@example.com",
+            &auth,
+            one.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
+        .await
+        .unwrap();
+    let served = client.header(&session_two).await.unwrap();
+    assert_eq!(served.revision, 1);
+    prepare_sign_in(
+        &served.bytes,
+        &SecretString::from(NEW),
+        &one.secret_key,
+        &one.account,
+    )
+    .unwrap();
+
+    // Device one kept its session and can still write.
+    let staged = one
+        .vault
+        .stage_create(login_item("After", "pw"), NOW)
+        .unwrap();
+    push(&client, &mut one, vec![staged]).await.unwrap();
+
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_lost_response_heals_on_the_next_sync() {
+    let server = Server::start().await;
+    let client = server.client();
+    let mut one = activate(&server, "lost@example.com").await;
+    const NEW: &str = "a much better master password";
+    let ticket = one.vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &SecretString::from(PASSWORD),
+            &SecretString::from(NEW),
+            cheap_kdf(),
+            &one.secret_key,
+            &one.account,
+        )
+        .unwrap();
+    let header = one.vault.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    client
+        .change_credentials(
+            &one.session,
+            CredentialChange {
+                current_auth_key: rekeyed.current_auth_key(),
+                kdf: rekeyed.kdf(),
+                new_auth_key: rekeyed.new_auth_key(),
+                header: &header,
+                base_header_revision: 0,
+            },
+        )
+        .await
+        .unwrap();
+    drop((ticket, rekeyed)); // the response "never arrived": nothing committed
+
+    let served = client.header(&one.session).await.unwrap();
+    assert!(one.vault.adopt_account_header(&served.bytes).unwrap());
+    one.vault.lock();
+    one.vault
+        .unlock_for_account(&SecretString::from(NEW), &one.secret_key, &one.account)
+        .unwrap();
+    server.cleanup().await;
+}
 
 #[tokio::test]
 async fn a_revoked_device_is_signed_out_at_its_next_request() {
