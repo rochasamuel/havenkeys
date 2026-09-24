@@ -17,9 +17,11 @@ use std::fmt;
 
 pub(crate) mod cbor;
 mod rp;
+mod vault;
 mod webauthn;
 
 pub use rp::{authorize_rp, RpContext, MAX_RP_ID_BYTES};
+pub use vault::{CreateCheck, PasskeyCreate, PasskeyInfo, PasskeyMatch, StagedPasskey};
 pub(crate) use webauthn::{assert, register};
 pub use webauthn::{
     authenticator_data, client_data_json, Assertion, Ceremony, NewUser, Registration,

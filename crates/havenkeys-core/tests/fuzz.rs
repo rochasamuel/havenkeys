@@ -333,3 +333,55 @@ fn fuzz_account_headers() {
         ));
     }
 }
+
+/// Random and mutated `rp_id`/page pairs must never let `authorize_rp`
+/// return an rpId that is not the page's own host or a dot-suffix parent of
+/// it (CLAUDE.md §47).
+#[test]
+fn fuzz_authorize_rp() {
+    use havenkeys_core::passkey::authorize_rp;
+    let mut r = Rng::new(0x9a55_c0de);
+    let rps = [
+        "github.com",
+        "com",
+        "github.io",
+        "a.b.c",
+        "localhost",
+        "127.0.0.1",
+        "",
+        ".",
+        "xn--",
+        "[::1]",
+    ];
+    let pages = [
+        "https://github.com/",
+        "https://a.github.com/x",
+        "http://localhost/",
+        "https://127.0.0.1/",
+        "https://github.com.evil.com/",
+        "file:///x",
+        "https://[::1]/",
+        "https://user.github.io/",
+    ];
+    for _ in 0..20_000 {
+        let mut rp = r.pick(&rps).to_string();
+        if r.below(3) == 0 {
+            let b = r.bytes(12);
+            rp.push_str(&String::from_utf8_lossy(&b));
+        }
+        let page = *r.pick(&pages);
+        if let Ok(ctx) = authorize_rp(&rp, page, None) {
+            let host = url::Url::parse(page)
+                .unwrap()
+                .host_str()
+                .unwrap()
+                .trim_matches(['[', ']'])
+                .to_owned();
+            let rp_host = ctx.rp_id.trim_matches(['[', ']']).to_owned();
+            assert!(
+                host == rp_host || host.ends_with(&format!(".{rp_host}")),
+                "{rp:?} on {page}"
+            );
+        }
+    }
+}
