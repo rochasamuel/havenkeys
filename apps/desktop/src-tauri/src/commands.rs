@@ -342,7 +342,16 @@ pub async fn change_master_password(
         .map_err(|_| CmdError::internal())?
         .secret_key(account.id)
         .ok_or(havenkeys_core::Error::SecretKeyRequired)?;
-    let ticket = state.vault()?.begin_rekey()?;
+    // The account's address, for the re-check below: `account` moves into
+    // the KDF task.
+    let email = account.email.as_str().to_owned();
+    let account_id = account.id;
+    // The current KDF parameters, read under the same guard as the ticket.
+    let (ticket, old_kdf) = {
+        let v = state.vault()?;
+        let ticket = v.begin_rekey()?;
+        (ticket, v.kdf()?.ok_or(havenkeys_core::Error::NoVault)?)
+    };
     // Both Argon2id runs happen without the vault lock, so locking (button,
     // auto-lock, window close) is never delayed; the commit re-checks the
     // lock epoch and the header.
@@ -357,7 +366,7 @@ pub async fn change_master_password(
     // of its statement: none is held across the request.
     let header = state.vault()?.encode_rekeyed_header(&ticket, &rekeyed)?;
     let (session, client) = (state.session()?, sync::client(&state)?);
-    let revision = client
+    let sent = client
         .change_credentials(
             &session,
             CredentialChange {
@@ -368,10 +377,33 @@ pub async fn change_master_password(
                 base_header_revision: ticket.base_revision() as i64,
             },
         )
-        .await
-        .map_err(|e| credential_change_conflict(&e).unwrap_or_else(|| sync::failed(&app, e)))?;
+        .await;
+    let revision = match sent {
+        Ok(revision) => u64::try_from(revision).map_err(|_| CmdError::internal())?,
+        // The request may have reached the server and been applied, with
+        // only the answer lost. Saying "failed" then would send the user
+        // back to a password that no longer works, and going offline would
+        // stop the sync that would adopt the new header. So ask the server
+        // which KDF parameters the account has now; the session is kept.
+        Err(e @ (SyncError::Unavailable | SyncError::Protocol(_))) => {
+            let now = client
+                .auth_params(&email)
+                .await
+                .ok()
+                .filter(|p| p.account_id == account_id)
+                .map(|p| p.kdf);
+            match change_outcome(now.as_ref(), &old_kdf, rekeyed.kdf()) {
+                // The server applies the change at base + 1.
+                ChangeOutcome::Applied => ticket.base_revision().saturating_add(1),
+                ChangeOutcome::NotApplied => return Err(e.into()),
+                ChangeOutcome::Unknown => return Err(password_change_unknown()),
+            }
+        }
+        Err(e) => {
+            return Err(credential_change_conflict(&e).unwrap_or_else(|| sync::failed(&app, e)))
+        }
+    };
     // The server has it; from here on the change has happened.
-    let revision = u64::try_from(revision).map_err(|_| CmdError::internal())?;
     let committed = state.vault()?.commit_rekey(ticket, Ok(rekeyed), revision);
     match committed {
         // `Busy`: a background sync already adopted this very header from
@@ -381,6 +413,35 @@ pub async fn change_master_password(
         // a password that no longer works.
         Ok(()) | Err(havenkeys_core::Error::Busy | havenkeys_core::Error::Locked) => Ok(()),
         Err(e) => Err(e.into()),
+    }
+}
+
+/// What a credential change whose answer was lost did, judged by the KDF
+/// parameters the server serves for the account afterwards. The new
+/// parameters carry a fresh random salt, so they cannot be confused with
+/// the old ones.
+#[derive(Debug, PartialEq, Eq)]
+enum ChangeOutcome {
+    /// The server serves the new parameters: it applied the change.
+    Applied,
+    /// The server still serves the old ones: nothing changed.
+    NotApplied,
+    /// No answer, or parameters that are neither.
+    Unknown,
+}
+
+fn change_outcome(server: Option<&KdfParams>, old: &KdfParams, new: &KdfParams) -> ChangeOutcome {
+    match server {
+        Some(k) if k == new => ChangeOutcome::Applied,
+        Some(k) if k == old => ChangeOutcome::NotApplied,
+        _ => ChangeOutcome::Unknown,
+    }
+}
+
+fn password_change_unknown() -> CmdError {
+    CmdError {
+        code: "password_change_unknown",
+        message: "HavenKeys could not confirm whether the server applied the new master password. If your current password stops working, use the new one.".into(),
     }
 }
 
@@ -607,6 +668,34 @@ pub fn update_settings(state: State<'_, AppState>, settings: Settings) -> CmdRes
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lost_credential_change_is_judged_by_the_servers_kdf() {
+        let old = KdfParams::generate().unwrap();
+        let new = KdfParams::generate().unwrap();
+        assert_ne!(old, new, "a fresh salt every time");
+        assert_eq!(
+            change_outcome(Some(&new), &old, &new),
+            ChangeOutcome::Applied
+        );
+        assert_eq!(
+            change_outcome(Some(&old), &old, &new),
+            ChangeOutcome::NotApplied
+        );
+        let other = KdfParams::generate().unwrap();
+        assert_eq!(
+            change_outcome(Some(&other), &old, &new),
+            ChangeOutcome::Unknown
+        );
+        assert_eq!(change_outcome(None, &old, &new), ChangeOutcome::Unknown);
+    }
+
+    #[test]
+    fn an_unconfirmed_password_change_says_so() {
+        let err = password_change_unknown();
+        assert_eq!(err.code, "password_change_unknown");
+        assert!(err.message.contains("use the new one"));
+    }
 
     #[test]
     fn a_conflict_on_a_credential_change_means_changed_elsewhere() {
