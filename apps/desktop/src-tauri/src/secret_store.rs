@@ -11,7 +11,7 @@
 
 use havenkeys_core::SecretString;
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -148,24 +148,60 @@ impl KeyStore for TimedKeyStore {
 /// The platform keychain through keyring-core. Calls here block without a
 /// limit; `Device` only ever uses it through `TimedKeyStore`.
 pub struct OsKeyStore {
-    available: bool,
+    /// One of the `PLATFORM_*` values. Shared with the install thread, which
+    /// may finish after `install` stopped waiting for it.
+    platform: Arc<AtomicU8>,
 }
+
+/// This build has no keychain for this OS: a definite "nothing stored".
+const PLATFORM_NONE: u8 = 0;
+/// Installing the platform store has not finished (it timed out and is
+/// still running). The keychain may well hold the key.
+const PLATFORM_PENDING: u8 = 1;
+/// The platform store is installed as keyring-core's default.
+const PLATFORM_READY: u8 = 2;
+/// Installing the platform store failed (for example the Secret Service did
+/// not answer on D-Bus). Not a definite answer either: it may be transient.
+const PLATFORM_FAILED: u8 = 3;
 
 impl OsKeyStore {
     /// Install the platform store as keyring-core's default. Called once at
-    /// start; a failure (or no answer within the timeout) leaves every call
-    /// below failing, i.e. the file fallback.
+    /// start, and waits at most `TIMEOUT`. An install that is still running
+    /// then finishes in the background and the store becomes usable when it
+    /// does; until then, and after a failure, every call fails (the caller
+    /// treats that as "the keychain did not answer", never as "no key").
     pub fn install() -> Self {
-        let installed = run_timed(TIMEOUT, || {
-            platform_store().map(keyring_core::set_default_store)
+        if !cfg!(any(target_os = "linux", windows, target_os = "macos")) {
+            return Self::with_platform(PLATFORM_NONE);
+        }
+        let platform = Arc::new(AtomicU8::new(PLATFORM_PENDING));
+        let done = Arc::clone(&platform);
+        // Whether it answered in time or not, the thread records the result.
+        let installed = run_timed(TIMEOUT, move || {
+            let state = match platform_store().map(keyring_core::set_default_store) {
+                Ok(()) => PLATFORM_READY,
+                Err(_) => PLATFORM_FAILED,
+            };
+            done.store(state, Ordering::Release);
         });
+        if let Err(NoAnswer::NotStarted) = installed {
+            platform.store(PLATFORM_FAILED, Ordering::Release);
+        }
+        Self { platform }
+    }
+
+    fn with_platform(state: u8) -> Self {
         Self {
-            available: matches!(installed, Ok(Ok(()))),
+            platform: Arc::new(AtomicU8::new(state)),
         }
     }
 
+    fn platform(&self) -> u8 {
+        self.platform.load(Ordering::Acquire)
+    }
+
     fn entry(&self, account: Uuid) -> Result<keyring_core::Entry, StoreError> {
-        if !self.available {
+        if self.platform() != PLATFORM_READY {
             return Err(StoreError);
         }
         keyring_core::Entry::new(SERVICE, &account.to_string()).map_err(|_| StoreError)
@@ -197,9 +233,11 @@ fn platform_store() -> Result<Arc<keyring_core::CredentialStore>, StoreError> {
 
 impl KeyStore for OsKeyStore {
     fn get(&self, account: Uuid) -> Result<Option<SecretString>, StoreError> {
-        // No keychain on this computer holds nothing: a definite answer, so
-        // a device without one is asked for its Secret Key as usual.
-        if !self.available {
+        // No keychain for this OS holds nothing: a definite answer, so a
+        // device without one is asked for its Secret Key as usual. A store
+        // that failed to install, or is still installing, is not: it may
+        // hold the key, so that is an error, never `Ok(None)`.
+        if self.platform() == PLATFORM_NONE {
             return Ok(None);
         }
         match self.entry(account)?.get_password() {
@@ -216,7 +254,9 @@ impl KeyStore for OsKeyStore {
     }
 
     fn delete(&self, account: Uuid) -> Result<(), StoreError> {
-        if !self.available {
+        // Nothing can be stored without a keychain; with one that did not
+        // install, a deletion cannot be confirmed.
+        if self.platform() == PLATFORM_NONE {
             return Ok(());
         }
         match self.entry(account)?.delete_credential() {
@@ -430,6 +470,24 @@ mod tests {
         // The worker clears the busy flag just after the fake returns.
         wait_until(|| timed.set(ACCOUNT, &SecretString::from("v")).is_ok());
         assert_eq!(timed.get(ACCOUNT).unwrap().unwrap().expose(), "v");
+    }
+
+    #[test]
+    fn no_platform_keychain_is_a_definite_answer() {
+        let os = OsKeyStore::with_platform(PLATFORM_NONE);
+        assert!(os.get(ACCOUNT).unwrap().is_none());
+        assert!(os.delete(ACCOUNT).is_ok());
+        assert!(os.set(ACCOUNT, &SecretString::from("v")).is_err());
+    }
+
+    #[test]
+    fn a_keychain_that_failed_or_is_still_installing_is_not_a_definite_answer() {
+        for state in [PLATFORM_PENDING, PLATFORM_FAILED] {
+            let os = OsKeyStore::with_platform(state);
+            assert!(os.get(ACCOUNT).is_err(), "get must not say \"no key\"");
+            assert!(os.delete(ACCOUNT).is_err(), "delete must not claim success");
+            assert!(os.set(ACCOUNT, &SecretString::from("v")).is_err());
+        }
     }
 
     #[test]
