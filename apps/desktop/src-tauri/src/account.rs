@@ -494,10 +494,14 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
             havenkeys_core::Error::InvalidInput("type this account's email to confirm").into(),
         );
     }
-    // Best effort: the server may be gone, which may be why this is happening.
-    if let (Ok(session), Ok(client)) = (state.session(), sync::client(&state)) {
-        let _ = client.revoke_device(&session, state.device_id()?).await;
-    }
+    // Captured now, because locking drops the session. The revocation itself
+    // waits until the file is set aside: revoking first and then failing the
+    // rename would leave an intact vault on a device the server refuses
+    // forever.
+    let revoke = match (state.session(), sync::client(&state), state.device_id()) {
+        (Ok(session), Ok(client), Ok(device_id)) => Some((session, client, device_id)),
+        _ => None,
+    };
     state.lock(&app, "user");
     state.forget_sync_client();
     let _ = app.emit(sync::CONNECTIVITY_EVENT, false);
@@ -515,6 +519,12 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
             let _ = vault.replace_store(Store::open(&path).map_err(CmdError::from)?);
             return Err(CmdError::file());
         }
+    }
+
+    // Best effort: the server may be gone, which may be why this is
+    // happening. No vault guard is held here.
+    if let Some((session, client, device_id)) = revoke {
+        let _ = client.revoke_device(&session, device_id).await;
     }
 
     // Past this point the file is already renamed aside: this device must
