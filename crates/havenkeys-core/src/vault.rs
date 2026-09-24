@@ -525,6 +525,11 @@ impl VaultService {
         Ok(self.store.header()?.map(|h| h.revision))
     }
 
+    /// The KDF parameters of the header stored locally (not secret). Safe while locked.
+    pub fn kdf(&self) -> Result<Option<KdfParams>> {
+        Ok(self.store.header()?.map(|h| h.kdf))
+    }
+
     pub fn vault_id(&self) -> Result<Option<Uuid>> {
         Ok(self.store.header()?.map(|h| h.vault_id))
     }

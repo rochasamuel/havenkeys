@@ -23,6 +23,10 @@ use uuid::Uuid;
 pub const SYNCED_EVENT: &str = "vault://synced";
 /// Online or offline changed.
 pub const CONNECTIVITY_EVENT: &str = "vault://connectivity";
+/// The server refused this device's sign-in after an unlock. Most often the
+/// master password was changed on another device, which ends every other
+/// session; the UI explains that instead of a bare "offline".
+pub const SIGNED_OUT_EVENT: &str = "vault://signed-out";
 
 /// The label this device reports. Deliberately not the hostname, which is
 /// metadata the server has no use for.
@@ -82,7 +86,7 @@ pub fn bridge_error(err: CmdError) -> havenkeys_protocol::ErrorCode {
 
 /// Map a failure, and drop the session when the server says it is gone, so
 /// the app falls back to read-only instead of retrying with a dead token.
-fn failed(app: &AppHandle, err: SyncError) -> CmdError {
+pub(crate) fn failed(app: &AppHandle, err: SyncError) -> CmdError {
     if matches!(err, SyncError::Unauthorized | SyncError::Unavailable) {
         go_offline(app);
     }
@@ -135,7 +139,12 @@ pub async fn connect(app: &AppHandle, auth_key: AuthKey) -> CmdResult<()> {
     let session = client
         .login(&email, &auth_key, account_id, device_id, DEVICE_NAME)
         .await
-        .map_err(|e| failed(app, e))?;
+        .map_err(|e| {
+            if e == SyncError::Unauthorized {
+                let _ = app.emit(SIGNED_OUT_EVENT, ());
+            }
+            failed(app, e)
+        })?;
     drop(auth_key);
 
     app.state::<AppState>().set_online(session);
@@ -155,9 +164,9 @@ pub async fn sync_now(app: &AppHandle) -> CmdResult<SyncReport> {
     let mut report = SyncReport::default();
 
     // The header first: a master password changed on another device must be
-    // adopted before anything else, and a local change that has not reached
-    // the server yet must be published. The core checks the attestation and
-    // refuses a revision that goes backwards.
+    // adopted before anything else. Nothing is ever published from here: the
+    // header only changes through `change_credentials`. The core checks the
+    // attestation and refuses a revision that goes backwards.
     let remote = client.header(&session).await.map_err(|e| failed(app, e))?;
     {
         let state = app.state::<AppState>();

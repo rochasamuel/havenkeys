@@ -579,3 +579,13 @@ fn a_rekey_is_refused_if_the_header_revision_moved_meanwhile() {
         .unlock_for_account(&secret(PASSWORD), &sk, &account())
         .unwrap();
 }
+
+#[test]
+fn kdf_reports_the_local_header_params_even_while_locked() {
+    let (mut vault, _sk, _header) = activate();
+    let expected = current_kdf(&vault);
+    vault.lock();
+    assert_eq!(vault.kdf().unwrap(), Some(expected));
+    let empty = VaultService::new(Store::open_in_memory().unwrap());
+    assert_eq!(empty.kdf().unwrap(), None);
+}

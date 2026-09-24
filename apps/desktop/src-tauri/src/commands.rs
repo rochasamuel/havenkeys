@@ -15,12 +15,14 @@ use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
 use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings};
+use havenkeys_core::sync::prepare_sign_in;
 use havenkeys_core::totp::TotpCode;
 use havenkeys_core::vault::{self, VaultStatus};
 use havenkeys_core::SecretString;
+use havenkeys_sync_client::{CredentialChange, SyncError};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 const DEFAULT_CLIPBOARD_CLEAR_SECS: u32 = 30;
@@ -48,11 +50,10 @@ pub async fn unlock_vault(
         .account()?
         .ok_or(havenkeys_core::Error::NoVault)?
         .to_ref()?;
-    let stored = state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
-        .secret_key();
+    let (stored, stored_text) = {
+        let device = state.device.lock().map_err(|_| CmdError::internal())?;
+        (device.secret_key(), device.secret_key_text().cloned())
+    };
     let typed = match secret_key {
         Some(t) if !t.is_empty() => Some(SecretKey::parse(t.expose())?),
         _ => None,
@@ -70,6 +71,10 @@ pub async fn unlock_vault(
             .into());
     }
     let key_text = typed.as_ref().map(|k| k.to_text());
+    // Kept for the fallback below: `SecretKey` is not `Clone`, so the text
+    // is re-parsed there. The typed key wins, as it does here.
+    let key_text_for_fallback = key_text.clone().or(stored_text);
+    let password_for_fallback = password.clone();
     let ticket = state.vault()?.begin_unlock()?;
     let joined = tauri::async_runtime::spawn_blocking(move || {
         // One Argon2id run yields both the KEK and the auth key: the first
@@ -94,25 +99,48 @@ pub async fn unlock_vault(
         Ok((key, auth_key)) => (Ok(key), Some(auth_key)),
         Err(e) => (Err(e), None),
     };
-    let mut v = state.vault()?;
-    v.finish_unlock(ticket, key)?;
-    let minutes = v.settings()?.auto_lock_minutes;
-    let status = v.status()?;
-    // Arm before releasing the vault lock so the auto-lock thread can never
-    // tick against the previous session's timestamps.
-    state.arm_auto_lock(minutes);
-    // Still under the vault lock, so a concurrent lock's `locked` event can
-    // never be overtaken by this one. `notify` never blocks.
-    state.notify_unlocked();
-    drop(v);
-    // A Secret Key typed from the Emergency Kit proved correct: remember it.
-    if let Some(text) = key_text {
-        if let Ok(k) = SecretKey::parse(text.expose()) {
-            if let Ok(mut d) = state.device.lock() {
-                let _ = d.set_secret_key(&k);
+    // One guard from `finish_unlock` to `notify_unlocked`, so a concurrent
+    // lock cannot fall between them. Scoped: it is released before the
+    // fallback's requests, never held across an await.
+    let unlocked = {
+        let mut v = state.vault()?;
+        match v.finish_unlock(ticket, key) {
+            Ok(()) => {
+                let minutes = v.settings()?.auto_lock_minutes;
+                let status = v.status()?;
+                // Arm before releasing the vault lock so the auto-lock thread
+                // can never tick against the previous session's timestamps.
+                state.arm_auto_lock(minutes);
+                // Still under the vault lock, so a concurrent lock's `locked`
+                // event can never be overtaken by this one. `notify` never
+                // blocks.
+                state.notify_unlocked();
+                Ok(status)
             }
+            Err(err) => Err(err),
         }
-    }
+    };
+    let status = match unlocked {
+        Ok(status) => status,
+        Err(err) => {
+            let Some(sk_text) = key_text_for_fallback.filter(|_| err.code() == "unlock_failed")
+            else {
+                return Err(err.into());
+            };
+            // The password may have been changed on another device: this
+            // device's header still has the old salt. Ask the server. Any
+            // failure below is reported as the original wrong password, so a
+            // caller learns nothing about which step failed.
+            return match unlock_from_server(&app, password_for_fallback, sk_text).await {
+                Ok(status) => {
+                    remember_typed_secret_key(&state, key_text);
+                    Ok(status)
+                }
+                Err(_) => Err(err.into()),
+            };
+        }
+    };
+    remember_typed_secret_key(&state, key_text);
     // Open the server session in the background. The vault is already
     // usable: a device that cannot reach its server is offline and
     // read-only, not locked.
@@ -122,6 +150,100 @@ pub async fn unlock_vault(
             let _ = sync::connect(&handle, auth_key).await;
         });
     }
+    Ok(status)
+}
+
+/// A Secret Key typed from the Emergency Kit proved correct: remember it.
+fn remember_typed_secret_key(state: &AppState, key_text: Option<SecretString>) {
+    if let Some(text) = key_text {
+        if let Ok(k) = SecretKey::parse(text.expose()) {
+            if let Ok(mut d) = state.device.lock() {
+                let _ = d.set_secret_key(&k);
+            }
+        }
+    }
+}
+
+/// Unlock with a header the server serves, when the local one no longer
+/// matches the password (changed on another device). The header is verified
+/// exactly as a sign-in verifies it, and adopted only if it is newer than
+/// everything this device has seen (`adopt_and_unlock`).
+///
+/// Only reached from `unlock_vault` after the local unlock failed with
+/// `unlock_failed`, so the vault is LOCKED on entry; it stays LOCKED unless
+/// the final adoption succeeds. The caller hides every error from here.
+async fn unlock_from_server(
+    app: &AppHandle,
+    password: SecretString,
+    secret_key_text: SecretString,
+) -> CmdResult<VaultStatus> {
+    let state = app.state::<AppState>();
+    let account = state
+        .vault()?
+        .account()?
+        .ok_or(havenkeys_core::Error::NoVault)?
+        .to_ref()?;
+    let local_kdf = state.vault()?.kdf()?;
+    let client = sync::client(&state)?;
+    let params = client.auth_params(account.email.as_str()).await?;
+    // Same parameters as the local header means the password really is
+    // wrong: no change was made elsewhere, so there is nothing to fetch.
+    // Another account ID means the server is not the one this vault knows.
+    if params.account_id != account.id || local_kdf.as_ref() == Some(&params.kdf) {
+        return Err(havenkeys_core::Error::UnlockFailed.into());
+    }
+    let (pw, sk_text, acct) = (password.clone(), secret_key_text.clone(), account.clone());
+    let kdf = params.kdf;
+    let auth_key = tauri::async_runtime::spawn_blocking(move || {
+        let sk = SecretKey::parse(sk_text.expose())?;
+        vault::derive_auth_key(&pw, &sk, &kdf, &acct)
+    })
+    .await
+    .map_err(|_| CmdError::internal())??;
+    let session = client
+        .login(
+            account.email.as_str(),
+            &auth_key,
+            account.id,
+            state.device_id()?,
+            sync::DEVICE_NAME,
+        )
+        .await?;
+    drop(auth_key);
+    let header = client.header(&session).await?;
+    let prepared = tauri::async_runtime::spawn_blocking(move || {
+        let sk = SecretKey::parse(secret_key_text.expose())?;
+        prepare_sign_in(&header.bytes, &password, &sk, &account).map(|(p, _)| p)
+    })
+    .await
+    .map_err(|_| CmdError::internal())??;
+    let status = {
+        let mut v = state.vault()?;
+        v.adopt_and_unlock(prepared)?;
+        let opened = v
+            .settings()
+            .and_then(|s| Ok((s.auto_lock_minutes, v.status()?)));
+        let (minutes, status) = match opened {
+            Ok(opened) => opened,
+            Err(e) => {
+                // Never report a failure while leaving the vault open.
+                v.lock();
+                return Err(e.into());
+            }
+        };
+        // As in `unlock_vault`: armed and announced under the vault lock,
+        // and the session set there too, so a concurrent lock (which takes
+        // the vault lock first) always drops it afterwards.
+        state.arm_auto_lock(minutes);
+        state.notify_unlocked();
+        state.set_online(session);
+        status
+    };
+    let _ = app.emit(sync::CONNECTIVITY_EVENT, true);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = sync::sync_now(&handle).await;
+    });
     Ok(status)
 }
 
@@ -154,6 +276,14 @@ pub fn lock_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     Ok(())
 }
 
+/// Change the master password: server first, local second.
+///
+/// The re-wrapped header goes to the server together with the current and
+/// the new login keys, in one request (`change_credentials`); the server
+/// applies it atomically at base + 1 and signs out every other device. Only
+/// once it has answered 2xx is the new wrap committed here. The other order
+/// would leave this device holding a header, and a password, the server has
+/// never heard of: every later sign-in with the new password would fail.
 #[tauri::command]
 pub async fn change_master_password(
     app: AppHandle,
@@ -164,6 +294,8 @@ pub async fn change_master_password(
     state.touch();
     state.require_online()?;
     vault::check_new_master_password(&new)?;
+    // Adopt a change made elsewhere first, so the base revision is current.
+    sync::sync_now(&app).await?;
     let kdf = KdfParams::generate()?;
     let account = state
         .vault()?
@@ -186,19 +318,39 @@ pub async fn change_master_password(
     })
     .await
     .map_err(|_| CmdError::internal())?;
-    {
-        // Scoped so the vault lock is released before the request below: a
-        // guard held across an await would also block locking the vault.
-        let mut v = state.vault()?;
-        let revision = ticket.base_revision() + 1;
-        v.commit_rekey(ticket, rekeyed, revision)?;
-    }
-    // The new wrap is local until the server has it. `sync_now` sees the
-    // local header revision ahead of the server's and publishes it; if that
-    // fails, the next sync tries again, so the two cannot drift apart
-    // silently.
-    sync::sync_now(&app).await?;
+    let rekeyed = rekeyed?;
+    // Each `state.vault()?` guard below is a temporary, dropped at the end
+    // of its statement: none is held across the request.
+    let header = state.vault()?.encode_rekeyed_header(&ticket, &rekeyed)?;
+    let (session, client) = (state.session()?, sync::client(&state)?);
+    let revision = client
+        .change_credentials(
+            &session,
+            CredentialChange {
+                current_auth_key: rekeyed.current_auth_key(),
+                kdf: rekeyed.kdf(),
+                new_auth_key: rekeyed.new_auth_key(),
+                header: &header,
+                base_header_revision: ticket.base_revision() as i64,
+            },
+        )
+        .await
+        .map_err(|e| credential_change_conflict(&e).unwrap_or_else(|| sync::failed(&app, e)))?;
+    // The server has it. If this commit fails (the vault was locked in the
+    // meantime), the next sync adopts the header from the server instead.
+    let revision = u64::try_from(revision).map_err(|_| CmdError::internal())?;
+    state.vault()?.commit_rekey(ticket, Ok(rekeyed), revision)?;
     Ok(())
+}
+
+/// A 409 on a credential change: the header moved on the server since this
+/// device read it, which only another device's password change does. The
+/// password this device knows is no longer the account's.
+fn credential_change_conflict(err: &SyncError) -> Option<CmdError> {
+    matches!(err, SyncError::Conflict(_)).then(|| CmdError {
+        code: "password_changed_elsewhere",
+        message: "Your master password was changed on another device. Lock and unlock with the new password.".into(),
+    })
 }
 
 #[tauri::command]
@@ -409,4 +561,31 @@ pub fn update_settings(state: State<'_, AppState>, settings: Settings) -> CmdRes
     drop(v);
     state.arm_auto_lock(settings.auto_lock_minutes);
     Ok(settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_conflict_on_a_credential_change_means_changed_elsewhere() {
+        let err = credential_change_conflict(&SyncError::Conflict(vec![])).unwrap();
+        assert_eq!(err.code, "password_changed_elsewhere");
+        assert_eq!(
+            err.message,
+            "Your master password was changed on another device. Lock and unlock with the new password."
+        );
+    }
+
+    #[test]
+    fn other_credential_change_failures_keep_their_usual_mapping() {
+        for e in [
+            SyncError::Unauthorized,
+            SyncError::Unavailable,
+            SyncError::RateLimited,
+            SyncError::TooLarge,
+        ] {
+            assert!(credential_change_conflict(&e).is_none());
+        }
+    }
 }

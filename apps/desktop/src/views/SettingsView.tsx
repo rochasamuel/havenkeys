@@ -67,7 +67,10 @@ function ChangePassword() {
         {input(next, setNext, "New")}
         {input(confirm, setConfirm, "Confirm new")}
       </div>
-      <p className="group-note">Your items are not re-encrypted; only the key that protects them changes.</p>
+      <p className="group-note">
+        Your items are not re-encrypted; only the key that protects them changes. Other computers signed in to this
+        account will be signed out.
+      </p>
       {mismatch && <p className="form-error">The new passwords don’t match.</p>}
       {error && (
         <p className="form-error" role="alert">

@@ -23,6 +23,10 @@ export function App() {
   // Shown once, right after activation: the kit is the only copy of the
   // Secret Key, so the vault waits behind an explicit confirmation.
   const [showKit, setShowKit] = useState(false);
+  // The server refused this computer's sign-in (most often: the master
+  // password was changed on another device). Replaces the offline banner
+  // until the next lock or a successful reconnect.
+  const [signedOut, setSignedOut] = useState(false);
 
   useEffect(() => {
     api.status().then(setStatus, (err) =>
@@ -36,6 +40,7 @@ export function App() {
       setLockReason(reason);
       setSession((s) => s + 1);
       setShowKit(false);
+      setSignedOut(false);
       setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0 } : s));
     });
     return () => void unlisten.then((f) => f());
@@ -55,8 +60,13 @@ export function App() {
   useEffect(() => {
     const unlisten = api.onConnectivity((online) => {
       setDevice((d) => (d ? { ...d, online } : d));
+      if (online) setSignedOut(false);
     });
-    return () => void unlisten.then((f) => f());
+    const unlistenSignedOut = api.onSignedOut(() => setSignedOut(true));
+    return () => {
+      void unlisten.then((f) => f());
+      void unlistenSignedOut.then((f) => f());
+    };
   }, []);
 
   // The theme lives in the encrypted settings; apply it once they're readable.
@@ -140,10 +150,17 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {device?.online === false && (
+      {signedOut ? (
         <div className="banner" role="status">
-          Offline — the vault is read-only until it reconnects.
+          The server did not accept this computer&apos;s sign-in. If your master password was changed on another
+          device, lock and unlock with the new one.
         </div>
+      ) : (
+        device?.online === false && (
+          <div className="banner" role="status">
+            Offline — the vault is read-only until it reconnects.
+          </div>
+        )
       )}
       <VaultScreen
         key={session}
@@ -151,6 +168,7 @@ export function App() {
         readOnly={!device?.online}
         onLock={() => {
           setLockReason("user");
+          setSignedOut(false);
           setSession((s) => s + 1);
           setStatus({ ...status, state: "locked", damagedItems: 0 });
         }}

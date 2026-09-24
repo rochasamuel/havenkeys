@@ -130,6 +130,8 @@ export const api = {
   /** The server session was opened or lost. */
   onConnectivity: (handler: (online: boolean) => void): Promise<UnlistenFn> =>
     listen<boolean>("vault://connectivity", (e) => handler(e.payload)),
+  /** The server refused this computer's sign-in after an unlock. */
+  onSignedOut: (handler: () => void): Promise<UnlistenFn> => listen("vault://signed-out", () => handler()),
   /** A pull finished; carries counts only. */
   onSynced: (handler: (report: SyncReport) => void): Promise<UnlistenFn> =>
     listen<SyncReport>("vault://synced", (e) => handler(e.payload)),
