@@ -329,7 +329,7 @@ impl VaultService {
     /// then, never a replace). Nothing is stored until the
     /// caller sends `write` and commits it.
     pub fn stage_passkey_create(
-        &self,
+        &mut self,
         req: PasskeyCreate<'_>,
         now_ms: i64,
     ) -> Result<StagedPasskey> {
@@ -426,6 +426,16 @@ impl VaultService {
         overview.has_passkey = true;
         let item_id = overview.id;
         let write = self.stage(overview, Some(&details), base)?;
+        // One fill grants one silent passkey: spend it now, so a script on
+        // the site cannot repeat the create with fresh user handles. Spent
+        // even if the write later fails; the user can fill again.
+        if req.conditional {
+            if let Some(site) = PageUrl::parse(req.page_url).as_ref().and_then(site_of) {
+                self.session_mut()?
+                    .recent_fills
+                    .retain(|f| !(f.item_id == item_id && f.site == site));
+            }
+        }
         Ok(StagedPasskey {
             write,
             item_id,

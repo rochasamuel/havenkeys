@@ -409,7 +409,7 @@ fn remove_passkey() {
 
 #[test]
 fn inputs_are_bounded() {
-    let (v, _) = activated_vault();
+    let (mut v, _) = activated_vault();
     let big = vec![1u8; 65];
     let mut r = create_req("octo", &big, None);
     assert!(matches!(
@@ -700,4 +700,39 @@ fn conditional_create_never_replaces_the_filled_logins_own_passkey() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].item_id, gh);
     assert_eq!(found[0].credential_id, old_cred);
+}
+
+#[test]
+fn one_fill_grants_one_silent_passkey() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    let cond = |handle| PasskeyCreate {
+        conditional: true,
+        ..create_req("octo", handle, Some(gh))
+    };
+    let s = v.stage_passkey_create(cond(&[1]), NOW).unwrap();
+    commit(&mut v, &mut rev, s);
+    // The fill is spent: another handle needs another fill (or the card).
+    assert_eq!(
+        v.stage_passkey_create(cond(&[2]), NOW).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::None);
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    assert!(v.stage_passkey_create(cond(&[2]), NOW).is_ok());
+}
+
+#[test]
+fn a_clicked_create_does_not_spend_the_fill() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], Some(gh)), NOW)
+        .unwrap();
+    commit(&mut v, &mut rev, s);
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::Auto(gh));
 }
