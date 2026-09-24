@@ -679,6 +679,11 @@ button {
   font-size: 13px;
 }
 
+/* The wrapper's :focus-within ring marks focus; skip the global one. */
+.search input:focus-visible {
+  box-shadow: none;
+}
+
 .search input::placeholder {
   color: var(--side-muted);
 }
