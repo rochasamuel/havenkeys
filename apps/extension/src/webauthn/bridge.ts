@@ -28,8 +28,19 @@ interface Pending {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
+/**
+ * Never rejects and never throws. After an extension update/reload/disable,
+ * `chrome.runtime.sendMessage` throws synchronously ("Extension context
+ * invalidated") instead of returning a rejected promise, and a bridge that
+ * let that throw escape here would leave the timer callback or the frame's
+ * onGone callback before they reach `respond`, hanging the page.
+ */
 function send(msg: WaRequest): Promise<unknown> {
-  return chrome.runtime.sendMessage(msg).catch(() => undefined);
+  try {
+    return Promise.resolve(chrome.runtime.sendMessage(msg)).catch(() => undefined);
+  } catch {
+    return Promise.resolve(undefined);
+  }
 }
 
 function viewport() {

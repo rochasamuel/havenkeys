@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 let granted: string[] = [];
 let registered: Array<{ id: string; matches?: string[]; world?: string; runAt?: string }> = [];
 
+/** Swappable per test; defaults to the plain "record what was registered" behaviour below. */
+let registerImpl: (s: typeof registered) => Promise<void> = async (s) => {
+  registered.push(...s);
+};
+
 (globalThis as { chrome?: unknown }).chrome = {
   permissions: { contains: async ({ origins }: { origins: string[] }) => origins.every((o) => granted.includes(o)) },
   scripting: {
@@ -10,9 +15,7 @@ let registered: Array<{ id: string; matches?: string[]; world?: string; runAt?: 
     unregisterContentScripts: async ({ ids }: { ids: string[] }) => {
       registered = registered.filter((s) => !ids.includes(s.id));
     },
-    registerContentScripts: async (s: typeof registered) => {
-      registered.push(...s);
-    },
+    registerContentScripts: (s: typeof registered) => registerImpl(s),
   },
 };
 
@@ -21,6 +24,9 @@ const { syncContentScripts } = await import("./registration");
 beforeEach(() => {
   granted = [];
   registered = [];
+  registerImpl = async (s) => {
+    registered.push(...s);
+  };
 });
 
 describe("content script registration", () => {
@@ -42,5 +48,15 @@ describe("content script registration", () => {
     registered = [{ id: "havenkeys-inline", matches: ["https://*/*"] }];
     await syncContentScripts();
     expect(registered.map((s) => s.id).sort()).toEqual(["havenkeys-inline", "havenkeys-webauthn-bridge", "havenkeys-webauthn-page"]);
+  });
+
+  it("keeps the inline script registered even when the passkey scripts fail to register", async () => {
+    granted = ["https://*/*"];
+    registerImpl = async (s) => {
+      if (s.some((entry) => entry.world === "MAIN")) throw new Error("world not supported");
+      registered.push(...s);
+    };
+    await syncContentScripts();
+    expect(registered.map((s) => s.id)).toEqual(["havenkeys-inline"]);
   });
 });

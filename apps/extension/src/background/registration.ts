@@ -27,9 +27,12 @@ export async function grantedOrigins(): Promise<string[]> {
   return out;
 }
 
-function scripts(matches: string[]): chrome.scripting.RegisteredContentScript[] {
+function inlineScript(matches: string[]): chrome.scripting.RegisteredContentScript {
+  return { id: SCRIPT_ID, matches, js: ["content.js"], allFrames: true, runAt: "document_idle", persistAcrossSessions: true };
+}
+
+function passkeyScripts(matches: string[]): chrome.scripting.RegisteredContentScript[] {
   return [
-    { id: SCRIPT_ID, matches, js: ["content.js"], allFrames: true, runAt: "document_idle", persistAcrossSessions: true },
     {
       id: PAGE_SCRIPT_ID,
       matches,
@@ -53,5 +56,12 @@ export async function syncContentScripts(): Promise<void> {
   if (same) return;
   if (existing.length > 0) await chrome.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
   if (matches.length === 0) return;
-  await chrome.scripting.registerContentScripts(scripts(matches));
+  // Two calls, not one: some browsers reject `world: "MAIN"`, and that must
+  // not take inline autofill down with it.
+  await chrome.scripting.registerContentScripts([inlineScript(matches)]);
+  try {
+    await chrome.scripting.registerContentScripts(passkeyScripts(matches));
+  } catch {
+    // Passkeys are unavailable on this browser; inline autofill still works.
+  }
 }
