@@ -185,13 +185,14 @@ export function createInlineHandler(deps: InlineDeps) {
    * which the page cannot read.
    */
   async function passkeyHint(frame: FrameRef): Promise<{ hint: MenuHint | null; help: string | null }> {
-    let has = false;
+    let status: ResultFor<"passkey_status">;
     try {
-      has = (await deps.client.request({ type: "passkey_status", ...frameFields(frame) })).hasPasskey;
+      status = await deps.client.request({ type: "passkey_status", ...frameFields(frame) });
     } catch {
-      // Locked meanwhile, desktop gone, rate limited: no hint.
+      // Locked meanwhile, desktop gone, rate limited: no hint, no directory row either.
+      return { hint: null, help: null };
     }
-    if (has) return { hint: { kind: "use_passkey" }, help: null };
+    if (status.hasPasskey) return { hint: { kind: "use_passkey" }, help: null };
     const site = deps.passkeySite?.(frame.url);
     return site?.help ? { hint: { kind: "add_passkey", name: site.name }, help: site.help } : { hint: null, help: null };
   }

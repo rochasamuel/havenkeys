@@ -394,6 +394,14 @@ describe("passkey hints in the login menu", () => {
     expect(otp.requests.some((r) => r.type === "passkey_status")).toBe(false);
   });
 
+  it("never falls back to the directory row when passkey_status itself fails", async () => {
+    // Even though the site is a known passkey site with a help link, a failed
+    // status check must not be treated as "no passkey" -> no directory hint.
+    const { h } = setup(defaultAnswer, { passkeySite: () => GH_SITE }); // passkey_status throws in defaultAnswer
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ ok: true, value: { hint: null } });
+  });
+
   it("does not ask when the site offers passkey autofill (passkey rows already lead)", async () => {
     const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
     const { h, requests } = setup(status(true), {
