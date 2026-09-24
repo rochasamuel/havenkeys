@@ -3,7 +3,11 @@
 //! different protocol version, and over-long URLs.
 
 use crate::secret::WireSecret;
-use crate::{MAX_MATCHES, MAX_SECRET_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, PROTOCOL_VERSION};
+use crate::{
+    COSE_ES256, CREDENTIAL_ID_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST, MAX_MATCHES,
+    MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES,
+    PROTOCOL_VERSION,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
@@ -81,6 +85,79 @@ pub enum Request {
         password: WireSecret,
         item_id: Option<Uuid>,
     },
+    /// Passkeys for `rp_id` usable on `url`. Public data only.
+    /// `allow_credentials`: the site's allowCredentials (ours only).
+    FindPasskeys {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        rp_id: String,
+        allow_credentials: Vec<String>,
+    },
+    /// Sign a WebAuthn assertion with one passkey, only if it is bound to
+    /// `rp_id` and `url` may use `rp_id`.
+    PasskeyGet {
+        item_id: Uuid,
+        credential_id: String,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        rp_id: String,
+        challenge: String,
+    },
+    /// Before showing the save card: excluded? which logins can hold it?
+    CheckPasskeyCreate {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        rp_id: String,
+        user_name: String,
+        exclude_credentials: Vec<String>,
+    },
+    /// Create a passkey after the user confirmed. A server write.
+    PasskeyCreate {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        rp_id: String,
+        challenge: String,
+        user_handle: String,
+        user_name: String,
+        display_name: Option<String>,
+        item_id: Option<Uuid>,
+    },
+}
+
+/// Decoded length of an unpadded base64url string, or `None`.
+fn b64url_len(s: &str) -> Option<usize> {
+    if s.len() % 4 == 1
+        || !s
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return None;
+    }
+    Some(s.len() / 4 * 3 + [0, 0, 1, 2][s.len() % 4])
+}
+
+fn b64url_ok(s: &str, min: usize, max: usize) -> bool {
+    b64url_len(s).is_some_and(|n| (min..=max).contains(&n))
+}
+
+fn credential_ok(s: &str) -> bool {
+    b64url_ok(s, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES)
+}
+
+fn credential_list_ok(v: &[String]) -> bool {
+    v.len() <= MAX_CREDENTIAL_LIST && v.iter().all(|c| credential_ok(c))
+}
+
+fn rp_ok(s: &str) -> bool {
+    !s.is_empty() && s.len() <= MAX_RP_ID_BYTES
+}
+
+fn name_ok(s: &str) -> bool {
+    s.len() <= MAX_USERNAME_BYTES
 }
 
 impl Request {
@@ -94,6 +171,10 @@ impl Request {
             Request::GeneratePassword {} => "generate_password",
             Request::CheckLogin { .. } => "check_login",
             Request::SaveLogin { .. } => "save_login",
+            Request::FindPasskeys { .. } => "find_passkeys",
+            Request::PasskeyGet { .. } => "passkey_get",
+            Request::CheckPasskeyCreate { .. } => "check_passkey_create",
+            Request::PasskeyCreate { .. } => "passkey_create",
         }
     }
 
@@ -104,7 +185,11 @@ impl Request {
             | Request::FillItem { url, top_url, .. }
             | Request::GetTotp { url, top_url, .. }
             | Request::CheckLogin { url, top_url, .. }
-            | Request::SaveLogin { url, top_url, .. } => [Some(url), top_url.as_deref()],
+            | Request::SaveLogin { url, top_url, .. }
+            | Request::FindPasskeys { url, top_url, .. }
+            | Request::PasskeyGet { url, top_url, .. }
+            | Request::CheckPasskeyCreate { url, top_url, .. }
+            | Request::PasskeyCreate { url, top_url, .. } => [Some(url), top_url.as_deref()],
         }
     }
 
@@ -129,7 +214,45 @@ impl Request {
             }
             _ => true,
         };
-        urls_ok && login_ok
+        let passkey_ok = match self {
+            Request::FindPasskeys {
+                rp_id,
+                allow_credentials,
+                ..
+            } => rp_ok(rp_id) && credential_list_ok(allow_credentials),
+            Request::PasskeyGet {
+                credential_id,
+                rp_id,
+                challenge,
+                ..
+            } => {
+                rp_ok(rp_id)
+                    && credential_ok(credential_id)
+                    && b64url_ok(challenge, 1, MAX_CHALLENGE_BYTES)
+            }
+            Request::CheckPasskeyCreate {
+                rp_id,
+                user_name,
+                exclude_credentials,
+                ..
+            } => rp_ok(rp_id) && name_ok(user_name) && credential_list_ok(exclude_credentials),
+            Request::PasskeyCreate {
+                rp_id,
+                challenge,
+                user_handle,
+                user_name,
+                display_name,
+                ..
+            } => {
+                rp_ok(rp_id)
+                    && b64url_ok(challenge, 1, MAX_CHALLENGE_BYTES)
+                    && b64url_ok(user_handle, 1, MAX_USER_HANDLE_BYTES)
+                    && name_ok(user_name)
+                    && display_name.as_deref().is_none_or(name_ok)
+            }
+            _ => true,
+        };
+        urls_ok && login_ok && passkey_ok
     }
 }
 
@@ -239,6 +362,20 @@ impl Response {
             Some(ResultBody::CheckLogin { action, item_id }) => {
                 (*action == SaveAction::Update) == item_id.is_some()
             }
+            Some(ResultBody::FindPasskeys { passkeys }) => {
+                passkeys.len() <= MAX_MATCHES
+                    && passkeys.iter().all(|p| credential_ok(&p.credential_id))
+            }
+            Some(ResultBody::CheckPasskeyCreate {
+                excluded,
+                candidates,
+            }) => candidates.len() <= MAX_MATCHES && !(*excluded && !candidates.is_empty()),
+            Some(ResultBody::PasskeyCreate {
+                credential_id,
+                public_key_algorithm,
+                ..
+            }) => credential_ok(credential_id) && *public_key_algorithm == COSE_ES256,
+            Some(ResultBody::PasskeyGet { credential_id, .. }) => credential_ok(credential_id),
             _ => true,
         }
     }
@@ -291,6 +428,29 @@ pub enum ResultBody {
     SaveLogin {
         item_id: Uuid,
     },
+    FindPasskeys {
+        passkeys: Vec<PasskeyMatch>,
+    },
+    PasskeyGet {
+        credential_id: String,
+        authenticator_data: String,
+        client_data_json: String,
+        signature: String,
+        user_handle: String,
+    },
+    CheckPasskeyCreate {
+        excluded: bool,
+        candidates: Vec<PasskeyCandidate>,
+    },
+    PasskeyCreate {
+        credential_id: String,
+        attestation_object: String,
+        client_data_json: String,
+        authenticator_data: String,
+        /// SPKI DER, base64url.
+        public_key: String,
+        public_key_algorithm: i64,
+    },
 }
 
 /// What saving a submitted login would do.
@@ -315,6 +475,10 @@ impl fmt::Debug for ResultBody {
             ResultBody::GeneratePassword { .. } => "generate_password",
             ResultBody::CheckLogin { .. } => "check_login",
             ResultBody::SaveLogin { .. } => "save_login",
+            ResultBody::FindPasskeys { .. } => "find_passkeys",
+            ResultBody::PasskeyGet { .. } => "passkey_get",
+            ResultBody::CheckPasskeyCreate { .. } => "check_passkey_create",
+            ResultBody::PasskeyCreate { .. } => "passkey_create",
         };
         write!(f, "ResultBody({kind})")
     }
@@ -353,6 +517,41 @@ impl fmt::Debug for Match {
         f.debug_struct("Match")
             .field("id", &self.id)
             .field("strength", &self.strength)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A passkey offered for a page. No secrets.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PasskeyMatch {
+    pub item_id: Uuid,
+    pub credential_id: String,
+    pub title: String,
+    pub user_name: String,
+}
+
+impl fmt::Debug for PasskeyMatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PasskeyMatch")
+            .field("item_id", &self.item_id)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A login that could hold a new passkey. No secrets.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PasskeyCandidate {
+    pub item_id: Uuid,
+    pub title: String,
+    pub username: Option<String>,
+}
+
+impl fmt::Debug for PasskeyCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PasskeyCandidate")
+            .field("item_id", &self.item_id)
             .finish_non_exhaustive()
     }
 }

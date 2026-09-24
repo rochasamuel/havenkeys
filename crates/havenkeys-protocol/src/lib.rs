@@ -48,3 +48,16 @@ pub const MAX_USERNAME_BYTES: usize = 4 * 512;
 
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;
+
+/// Credential IDs HavenKeys creates, and the only length it accepts.
+pub const CREDENTIAL_ID_BYTES: usize = 16;
+/// WebAuthn challenge bounds, in bytes.
+pub const MAX_CHALLENGE_BYTES: usize = 1024;
+/// WebAuthn user handle bound, in bytes.
+pub const MAX_USER_HANDLE_BYTES: usize = 64;
+/// Relying-party ID bound (a DNS name).
+pub const MAX_RP_ID_BYTES: usize = 253;
+/// `allowCredentials` / `excludeCredentials` entries accepted.
+pub const MAX_CREDENTIAL_LIST: usize = 64;
+/// COSE ES256, the only algorithm HavenKeys creates keys for.
+pub const COSE_ES256: i64 = -7;

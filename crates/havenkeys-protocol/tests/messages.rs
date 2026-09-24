@@ -362,6 +362,58 @@ fn debug_output_hides_urls_and_secrets() {
     assert!(!format!("{r:?}").contains("123456"));
 }
 
+const CRED: &str = "AQEBAQEBAQEBAQEBAQEBAQ"; // 16 bytes
+const CHAL: &str = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"; // 32 bytes
+
+#[test]
+fn passkey_requests_parse() {
+    let ok = [
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"find_passkeys","url":"https://github.com/","rpId":"github.com","allowCredentials":["{CRED}"]}}}}"#),
+        format!(r#"{{"v":1,"id":2,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}"}}}}"#),
+        r#"{"v":1,"id":3,"request":{"type":"check_passkey_create","url":"https://github.com/","rpId":"github.com","userName":"octo","excludeCredentials":[]}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":4,"request":{{"type":"passkey_create","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","userHandle":"AQ","userName":"octo","displayName":null,"itemId":null}}}}"#),
+    ];
+    for s in &ok {
+        assert!(parse(s).is_ok(), "{s}");
+    }
+}
+
+#[test]
+fn passkey_requests_are_bounded() {
+    let long_chal = "A".repeat(1368); // 1026 bytes → over the limit
+    let many: Vec<String> = (0..65).map(|_| format!("\"{CRED}\"")).collect();
+    let bad = [
+        // credential IDs must be exactly 16 bytes
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"AQ","url":"https://a.com/","rpId":"a.com","challenge":"{CHAL}"}}}}"#),
+        // not base64url
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://a.com/","rpId":"a.com","challenge":"a+b/"}}}}"#),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://a.com/","rpId":"a.com","challenge":"{long_chal}"}}}}"#),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://a.com/","rpId":"a.com","challenge":""}}}}"#),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"find_passkeys","url":"https://a.com/","rpId":"a.com","allowCredentials":[{}]}}}}"#, many.join(",")),
+        r#"{"v":1,"id":1,"request":{"type":"find_passkeys","url":"https://a.com/","rpId":"","allowCredentials":[]}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"passkey_create","url":"https://a.com/","rpId":"a.com","challenge":"{CHAL}","userHandle":"{}","userName":"u","displayName":null,"itemId":null}}}}"#, "A".repeat(90)),
+        // unknown field
+        r#"{"v":1,"id":1,"request":{"type":"find_passkeys","url":"https://a.com/","rpId":"a.com","allowCredentials":[],"privateKey":"x"}}"#.to_owned(),
+    ];
+    for s in &bad {
+        assert!(parse(s).is_err(), "{s}");
+    }
+}
+
+#[test]
+fn passkey_results_round_trip_and_validate() {
+    let good = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"passkey_create","credentialId":"{CRED}","attestationObject":"oA","clientDataJson":"e30","authenticatorData":"AA","publicKey":"MA","publicKeyAlgorithm":-7}}}}"#
+    );
+    assert!(Outgoing::parse(good.as_bytes()).is_some());
+    let wrong_alg = good.replace("-7", "-257");
+    assert!(Outgoing::parse(wrong_alg.as_bytes()).is_none());
+    let excluded_with_candidates = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"check_passkey_create","excluded":true,"candidates":[{{"itemId":"{ITEM}","title":"t","username":null}}]}}}}"#
+    );
+    assert!(Outgoing::parse(excluded_with_candidates.as_bytes()).is_none());
+}
+
 /// Deterministic fuzz: random bytes and mutated valid messages must never
 /// panic, and anything accepted must be a well-formed request.
 #[test]
@@ -385,6 +437,10 @@ fn fuzz_parse_request_never_panics() {
         r#"{"v":1,"id":10,"result":{"type":"generate_password","password":"x"}}"#.to_string(),
         r#"{"v":1,"id":11,"error":{"code":"denied","message":"x"}}"#.to_string(),
         r#"{"v":1,"event":{"type":"locked"}}"#.to_string(),
+        format!(r#"{{"v":1,"id":12,"request":{{"type":"find_passkeys","url":"https://github.com/","rpId":"github.com","allowCredentials":["{CRED}"]}}}}"#),
+        format!(r#"{{"v":1,"id":13,"request":{{"type":"passkey_get","itemId":"{ITEM}","credentialId":"{CRED}","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}"}}}}"#),
+        r#"{"v":1,"id":14,"request":{"type":"check_passkey_create","url":"https://github.com/","rpId":"github.com","userName":"octo","excludeCredentials":[]}}"#.to_string(),
+        format!(r#"{{"v":1,"id":15,"request":{{"type":"passkey_create","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","userHandle":"AQ","userName":"octo","displayName":null,"itemId":null}}}}"#),
     ]
     .into_iter()
     .map(String::into_bytes)
