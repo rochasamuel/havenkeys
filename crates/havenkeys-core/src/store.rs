@@ -370,17 +370,29 @@ impl Store {
 
     /// IDs of items pulled from the server that did not decrypt under this
     /// vault's data key, ordered for a stable, deterministic retry batch.
-    /// Rows with a malformed ID are skipped rather than surfaced as an
-    /// error: this table only ever holds IDs this device wrote itself.
     pub fn unreadable_ids(&self) -> Result<Vec<Uuid>> {
+        Ok(self
+            .unreadable_revisions()?
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect())
+    }
+
+    /// `(id, revision)` for every item pulled from the server that did not
+    /// decrypt, ordered by id: the revision is what a retry must not regress
+    /// behind (`apply_refetched`). Rows with a malformed ID are skipped
+    /// rather than surfaced as an error: this table only ever holds IDs this
+    /// device wrote itself.
+    pub fn unreadable_revisions(&self) -> Result<Vec<(Uuid, i64)>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id FROM unreadable_items ORDER BY id")?;
-        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            .prepare("SELECT id, revision FROM unreadable_items ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
         let mut out = Vec::new();
         for row in rows {
-            if let Ok(id) = Uuid::parse_str(&row?) {
-                out.push(id);
+            let (id, revision) = row?;
+            if let Ok(id) = Uuid::parse_str(&id) {
+                out.push((id, revision));
             }
         }
         Ok(out)

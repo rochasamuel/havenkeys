@@ -301,22 +301,47 @@ impl VaultService {
     }
 
     /// Apply a fetch-by-ID of items that did not open before. The cursor does
-    /// not move. Changes for IDs that were not asked for are dropped: the
-    /// server does not get to add items through a retry. An ID the server no
-    /// longer has is treated as deleted.
+    /// not move.
+    ///
+    /// Retry only touches what is still actually pending retry: `requested`
+    /// is intersected with what this device currently has recorded in
+    /// `unreadable_items`, so a stale or simply wrong `requested` list can
+    /// never delete or overwrite a readable item that just happens to share
+    /// an ID with it. A returned change whose revision is older than the
+    /// currently recorded one is dropped rather than applied — the vault
+    /// lock is released across the network round-trip this retries, so an
+    /// ordinary periodic pull can land in the meantime; without this check a
+    /// slow refetch response could roll a since-fixed item back to stale
+    /// data, or re-record as unreadable an item a later pull already
+    /// resolved. An ID still recorded unreadable that the server did not
+    /// return in this response is treated as deleted.
     pub fn apply_refetched(
         &mut self,
         requested: &[Uuid],
         changes: Vec<RemoteChange>,
         now_ms: i64,
     ) -> Result<SyncReport> {
-        let wanted: std::collections::HashSet<Uuid> = requested.iter().copied().collect();
+        let recorded: HashMap<Uuid, i64> = self.store.unreadable_revisions()?.into_iter().collect();
+        let wanted: std::collections::HashSet<Uuid> = requested
+            .iter()
+            .copied()
+            .filter(|id| recorded.contains_key(id))
+            .collect();
         let mut changes: Vec<RemoteChange> = changes
             .into_iter()
             .filter(|c| wanted.contains(&c.item_id))
             .collect();
+        // What the server actually said something about, *before* dropping
+        // stale ones below — a change dropped for staleness is not the same
+        // as "the server does not have this item" and must not turn into a
+        // synthetic deletion.
         let returned: std::collections::HashSet<Uuid> = changes.iter().map(|c| c.item_id).collect();
-        for id in requested.iter().filter(|id| !returned.contains(id)) {
+        changes.retain(|c| {
+            recorded
+                .get(&c.item_id)
+                .is_some_and(|&rev| c.revision >= rev)
+        });
+        for id in wanted.iter().filter(|id| !returned.contains(id)) {
             changes.push(RemoteChange {
                 item_id: *id,
                 revision: 0,
@@ -703,12 +728,97 @@ mod tests {
     #[test]
     fn a_refetch_the_server_no_longer_has_removes_it() {
         let mut vault = activated_vault();
-        let id = Uuid::from_u128(9);
+        // The item exists locally at a good revision...
+        let good = good_change(&mut vault, "Present", 3);
+        let id = good.item_id;
+        vault.apply_remote_changes(3, vec![good], NOW).unwrap();
+        assert!(vault.get_item(&id).is_ok());
+
+        // ...then a later revision fails to decrypt: the old row survives,
+        // but the item is now also recorded unreadable.
+        vault
+            .apply_remote_changes(4, vec![bad_change(id, 4)], NOW)
+            .unwrap();
+        assert_eq!(vault.unreadable_item_ids().unwrap(), vec![id]);
+        assert!(vault.get_item(&id).is_ok());
+
+        // The refetch comes back empty: the server no longer has it. The
+        // stale local row and the unreadable record both go away.
+        vault.apply_refetched(&[id], vec![], NOW).unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+        assert!(vault.get_item(&id).is_err());
+    }
+
+    #[test]
+    fn a_refetch_does_not_touch_a_readable_item_not_recorded_unreadable() {
+        let mut vault = activated_vault();
+        let staged = vault.stage_create(login("Readable"), NOW).unwrap();
+        let item = vault.commit_write(staged, 1).unwrap().unwrap();
+        let id = item.id;
+
+        // A stale or simply wrong `requested` list must not be able to
+        // delete a perfectly good local item just by naming its ID.
+        vault.apply_refetched(&[id], vec![], NOW).unwrap();
+        assert!(vault.get_item(&id).is_ok());
+    }
+
+    #[test]
+    fn a_refetch_cannot_roll_back_an_item_a_later_pull_already_fixed() {
+        let mut vault = activated_vault();
+        let good = good_change(&mut vault, "Fixed", 5);
+        let id = good.item_id;
         vault
             .apply_remote_changes(3, vec![bad_change(id, 3)], NOW)
             .unwrap();
-        vault.apply_refetched(&[id], vec![], NOW).unwrap();
+        vault.apply_remote_changes(5, vec![good], NOW).unwrap();
         assert!(vault.unreadable_item_ids().unwrap().is_empty());
+
+        // A refetch response that was in flight from before the pull above
+        // lands late, still carrying the old, now-superseded revision. It
+        // must not resurrect the unreadable record or roll the item back.
+        vault
+            .apply_refetched(&[id], vec![bad_change(id, 3)], NOW)
+            .unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+        assert_eq!(vault.get_item(&id).unwrap().title, "Fixed");
+    }
+
+    #[test]
+    fn a_refetch_rejects_a_response_stale_relative_to_the_recorded_revision() {
+        let mut vault = activated_vault();
+        let good = good_change(&mut vault, "Stale", 3);
+        let id = good.item_id;
+        vault
+            .apply_remote_changes(3, vec![bad_change(id, 3)], NOW)
+            .unwrap();
+        // A newer bad attempt raises the recorded revision without ever
+        // producing a locally-stored row.
+        vault
+            .apply_remote_changes(4, vec![bad_change(id, 4)], NOW)
+            .unwrap();
+        assert_eq!(vault.unreadable_item_ids().unwrap(), vec![id]);
+
+        // This response is well-formed but stale (revision 3, below the
+        // recorded 4): applying it would regress what this device knows.
+        vault.apply_refetched(&[id], vec![good], NOW).unwrap();
+        assert_eq!(vault.unreadable_item_ids().unwrap(), vec![id]);
+        assert!(vault.get_item(&id).is_err());
+    }
+
+    #[test]
+    fn a_non_deleted_change_missing_a_blob_is_recorded_unreadable() {
+        let mut vault = activated_vault();
+        let id = Uuid::from_u128(9);
+        let change = RemoteChange {
+            item_id: id,
+            revision: 3,
+            overview: None,
+            details: Some(vec![0u8; 64]),
+            deleted: false,
+        };
+        let report = vault.apply_remote_changes(3, vec![change], NOW).unwrap();
+        assert_eq!(report.skipped_items, 1);
+        assert_eq!(vault.unreadable_item_ids().unwrap(), vec![id]);
     }
 
     #[test]
