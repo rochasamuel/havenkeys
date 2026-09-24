@@ -126,11 +126,23 @@ mod tests {
         assert_eq!(c.rp_id, "github.com");
         assert_eq!(c.origin, "https://github.com");
         assert!(!c.cross_origin);
-        assert_eq!(ok("github.com", "https://accounts.github.com/").rp_id, "github.com");
-        assert_eq!(ok("accounts.github.com", "https://accounts.github.com/").rp_id, "accounts.github.com");
+        assert_eq!(
+            ok("github.com", "https://accounts.github.com/").rp_id,
+            "github.com"
+        );
+        assert_eq!(
+            ok("accounts.github.com", "https://accounts.github.com/").rp_id,
+            "accounts.github.com"
+        );
         assert_eq!(ok("GitHub.COM", "https://github.com/").rp_id, "github.com");
-        assert_eq!(ok("bücher.de", "https://login.xn--bcher-kva.de/").rp_id, "xn--bcher-kva.de");
-        assert_eq!(ok("localhost", "http://localhost:8080/").origin, "http://localhost:8080");
+        assert_eq!(
+            ok("bücher.de", "https://login.xn--bcher-kva.de/").rp_id,
+            "xn--bcher-kva.de"
+        );
+        assert_eq!(
+            ok("localhost", "http://localhost:8080/").origin,
+            "http://localhost:8080"
+        );
         assert_eq!(ok("127.0.0.1", "https://127.0.0.1/").rp_id, "127.0.0.1");
     }
 
@@ -160,17 +172,35 @@ mod tests {
         ] {
             denied(rp, page, None);
         }
-        denied(&"a".repeat(MAX_RP_ID_BYTES + 1), "https://github.com/", None);
+        denied(
+            &"a".repeat(MAX_RP_ID_BYTES + 1),
+            "https://github.com/",
+            None,
+        );
     }
 
     #[test]
     fn frames_must_be_same_site_with_the_top_page() {
-        denied("github.com", "https://github.com/", Some("https://evil.com/"));
+        denied(
+            "github.com",
+            "https://github.com/",
+            Some("https://evil.com/"),
+        );
         denied("github.com", "https://github.com/", Some("not a url"));
-        let same = authorize_rp("github.com", "https://github.com/a", Some("https://github.com/b")).unwrap();
+        let same = authorize_rp(
+            "github.com",
+            "https://github.com/a",
+            Some("https://github.com/b"),
+        )
+        .unwrap();
         assert!(!same.cross_origin);
         assert_eq!(same.top_origin, None);
-        let sub = authorize_rp("github.com", "https://gist.github.com/", Some("https://github.com/")).unwrap();
+        let sub = authorize_rp(
+            "github.com",
+            "https://gist.github.com/",
+            Some("https://github.com/"),
+        )
+        .unwrap();
         assert!(sub.cross_origin);
         assert_eq!(sub.top_origin.as_deref(), Some("https://github.com"));
     }
