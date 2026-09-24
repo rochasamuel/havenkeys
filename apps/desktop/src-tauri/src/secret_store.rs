@@ -50,33 +50,53 @@ pub trait KeyStore: Send + Sync {
     fn delete(&self, account: Uuid) -> Result<(), StoreError>;
 }
 
-/// Run `f` on its own thread; `None` if it does not answer within
-/// `TIMEOUT` (the thread is then abandoned) or cannot be started.
-fn run_timed<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+/// Why `run_timed` has no result.
+enum NoAnswer {
+    /// The thread could not be started; `f` never ran.
+    NotStarted,
+    /// `f` is still running on its (now abandoned) thread.
+    TimedOut,
+}
+
+/// Run `f` on its own thread and wait at most `timeout` for it.
+fn run_timed<T: Send + 'static>(
+    timeout: Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, NoAnswer> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::Builder::new()
         .name("keychain".into())
         .spawn(move || {
             let _ = tx.send(f());
         })
-        .ok()?;
-    rx.recv_timeout(TIMEOUT).ok()
+        .map_err(|_| NoAnswer::NotStarted)?;
+    rx.recv_timeout(timeout).map_err(|_| NoAnswer::TimedOut)
 }
 
-/// Wraps any store so that every call is bounded by `TIMEOUT`. A store that
-/// once failed to answer in time is not asked again for the life of the
-/// process: a hung keychain would otherwise cost every unlock five seconds
-/// and leave another thread waiting on it each time.
+/// Wraps any store so that every call is bounded by `TIMEOUT`.
+///
+/// A call that did not answer in time keeps running on its thread (it may be
+/// waiting on a keyring unlock prompt the user has not answered yet). While
+/// it runs the store is *busy*: further calls fail at once instead of
+/// waiting five seconds each and stacking up threads. Once the abandoned
+/// call returns, the store is asked again as normal, so a slow prompt never
+/// downgrades a working keychain for the rest of the session.
 pub struct TimedKeyStore {
     inner: Arc<dyn KeyStore>,
-    gave_up: Arc<AtomicBool>,
+    busy: Arc<AtomicBool>,
+    timeout: Duration,
 }
 
 impl TimedKeyStore {
     pub fn new(inner: Box<dyn KeyStore>) -> Self {
+        Self::with_timeout(inner, TIMEOUT)
+    }
+
+    fn with_timeout(inner: Box<dyn KeyStore>, timeout: Duration) -> Self {
         Self {
             inner: Arc::from(inner),
-            gave_up: Arc::new(AtomicBool::new(false)),
+            busy: Arc::new(AtomicBool::new(false)),
+            timeout,
         }
     }
 
@@ -84,14 +104,26 @@ impl TimedKeyStore {
         &self,
         f: impl FnOnce(&dyn KeyStore) -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
-        if self.gave_up.load(Ordering::Relaxed) {
+        // One call at a time; a pending (possibly abandoned) one fails the
+        // rest fast.
+        if self.busy.swap(true, Ordering::AcqRel) {
             return Err(StoreError);
         }
         let inner = Arc::clone(&self.inner);
-        match run_timed(move || f(&*inner)) {
-            Some(result) => result,
-            None => {
-                self.gave_up.store(true, Ordering::Relaxed);
+        let busy = Arc::clone(&self.busy);
+        let result = run_timed(self.timeout, move || {
+            let r = f(&*inner);
+            // Cleared before the result is sent, so a caller that got it can
+            // make its next call straight away.
+            busy.store(false, Ordering::Release);
+            r
+        });
+        match result {
+            Ok(r) => r,
+            // Still running: its thread clears the flag when it returns.
+            Err(NoAnswer::TimedOut) => Err(StoreError),
+            Err(NoAnswer::NotStarted) => {
+                self.busy.store(false, Ordering::Release);
                 Err(StoreError)
             }
         }
@@ -124,9 +156,11 @@ impl OsKeyStore {
     /// start; a failure (or no answer within the timeout) leaves every call
     /// below failing, i.e. the file fallback.
     pub fn install() -> Self {
-        let installed = run_timed(|| platform_store().map(keyring_core::set_default_store));
+        let installed = run_timed(TIMEOUT, || {
+            platform_store().map(keyring_core::set_default_store)
+        });
         Self {
-            available: matches!(installed, Some(Ok(()))),
+            available: matches!(installed, Ok(Ok(()))),
         }
     }
 
@@ -163,6 +197,11 @@ fn platform_store() -> Result<Arc<keyring_core::CredentialStore>, StoreError> {
 
 impl KeyStore for OsKeyStore {
     fn get(&self, account: Uuid) -> Result<Option<SecretString>, StoreError> {
+        // No keychain on this computer holds nothing: a definite answer, so
+        // a device without one is asked for its Secret Key as usual.
+        if !self.available {
+            return Ok(None);
+        }
         match self.entry(account)?.get_password() {
             Ok(v) => Ok(Some(SecretString::new(v))),
             Err(keyring_core::Error::NoEntry) => Ok(None),
@@ -177,6 +216,9 @@ impl KeyStore for OsKeyStore {
     }
 
     fn delete(&self, account: Uuid) -> Result<(), StoreError> {
+        if !self.available {
+            return Ok(());
+        }
         match self.entry(account)?.delete_credential() {
             Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
             Err(_) => Err(StoreError),
@@ -227,6 +269,64 @@ impl KeyStore for FailingKeyStore {
 
     fn delete(&self, _: Uuid) -> Result<(), StoreError> {
         Err(StoreError)
+    }
+}
+
+/// A working keychain whose first call hangs for `delay` (a prompt the user
+/// is slow to answer); every call after that answers at once.
+#[cfg(test)]
+#[derive(Clone)]
+pub struct SlowOnceKeyStore {
+    delay: Duration,
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+    finished: Arc<AtomicBool>,
+    inner: MemoryKeyStore,
+}
+
+#[cfg(test)]
+impl SlowOnceKeyStore {
+    pub fn new(delay: Duration) -> Self {
+        Self {
+            delay,
+            calls: Default::default(),
+            finished: Default::default(),
+            inner: MemoryKeyStore::default(),
+        }
+    }
+
+    /// How many calls reached this store.
+    pub fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+
+    /// Whether the slow first call has returned.
+    pub fn slow_call_finished(&self) -> bool {
+        self.finished.load(Ordering::SeqCst)
+    }
+
+    fn enter(&self) {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            std::thread::sleep(self.delay);
+            self.finished.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+#[cfg(test)]
+impl KeyStore for SlowOnceKeyStore {
+    fn get(&self, account: Uuid) -> Result<Option<SecretString>, StoreError> {
+        self.enter();
+        self.inner.get(account)
+    }
+
+    fn set(&self, account: Uuid, value: &SecretString) -> Result<(), StoreError> {
+        self.enter();
+        self.inner.set(account, value)
+    }
+
+    fn delete(&self, account: Uuid) -> Result<(), StoreError> {
+        self.enter();
+        self.inner.delete(account)
     }
 }
 
@@ -291,14 +391,53 @@ mod tests {
     }
 
     #[test]
-    fn a_store_that_hangs_times_out_and_is_not_asked_again() {
+    fn a_store_that_hangs_times_out_at_the_real_timeout() {
         let timed = TimedKeyStore::new(Box::new(SlowKeyStore::new(Duration::from_secs(30))));
         let started = Instant::now();
         assert!(timed.get(ACCOUNT).is_err());
         let first = started.elapsed();
         assert!(first >= TIMEOUT && first < Duration::from_secs(10));
+    }
+
+    fn wait_until(what: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !what() {
+            assert!(Instant::now() < deadline, "timed out waiting");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn while_a_timed_out_call_is_pending_calls_fail_fast_without_reaching_the_store() {
+        let slow = SlowOnceKeyStore::new(Duration::from_millis(1500));
+        let timed = TimedKeyStore::with_timeout(Box::new(slow.clone()), Duration::from_millis(100));
+        assert!(timed.get(ACCOUNT).is_err());
+        assert!(!slow.slow_call_finished());
         let again = Instant::now();
         assert!(timed.set(ACCOUNT, &SecretString::from("v")).is_err());
-        assert!(again.elapsed() < Duration::from_secs(1));
+        assert!(timed.get(ACCOUNT).is_err());
+        assert!(again.elapsed() < Duration::from_millis(100));
+        // Neither reached the store: no thread was started for them.
+        assert_eq!(slow.calls(), 1);
+    }
+
+    #[test]
+    fn once_the_timed_out_call_returns_the_store_is_asked_again() {
+        let slow = SlowOnceKeyStore::new(Duration::from_millis(300));
+        let timed = TimedKeyStore::with_timeout(Box::new(slow.clone()), Duration::from_millis(50));
+        assert!(timed.get(ACCOUNT).is_err());
+        wait_until(|| slow.slow_call_finished());
+        // The worker clears the busy flag just after the fake returns.
+        wait_until(|| timed.set(ACCOUNT, &SecretString::from("v")).is_ok());
+        assert_eq!(timed.get(ACCOUNT).unwrap().unwrap().expose(), "v");
+    }
+
+    #[test]
+    fn back_to_back_calls_do_not_trip_the_busy_flag() {
+        let timed = TimedKeyStore::new(Box::new(MemoryKeyStore::default()));
+        for _ in 0..200 {
+            timed.set(ACCOUNT, &SecretString::from("v")).unwrap();
+            assert!(timed.get(ACCOUNT).unwrap().is_some());
+        }
     }
 }

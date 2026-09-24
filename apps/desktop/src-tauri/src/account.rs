@@ -39,20 +39,40 @@ pub struct DeviceStatus {
     secret_key_storage: Storage,
 }
 
+/// Run `f` on a blocking thread. For commands that touch the keychain
+/// (through `Device`): a sync command runs on the main thread, where a
+/// keychain waiting on D-Bus or a prompt would freeze the window.
+async fn off_main_thread<T: Send + 'static>(
+    app: AppHandle,
+    f: impl FnOnce(&AppState) -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(move || f(&app.state::<AppState>()))
+        .await
+        .map_err(|_| CmdError::internal())?
+}
+
 /// Safe to call while locked: reveals no secrets.
 #[tauri::command]
-pub fn device_status(state: State<'_, AppState>) -> CmdResult<DeviceStatus> {
+pub async fn device_status(app: AppHandle) -> CmdResult<DeviceStatus> {
+    off_main_thread(app, device_status_blocking).await
+}
+
+fn device_status_blocking(state: &AppState) -> CmdResult<DeviceStatus> {
+    // Vault before device, as everywhere.
     let (key_scheme, account) = {
         let v = state.vault()?;
         (v.key_scheme()?, v.account()?)
     };
-    let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
     let uses_secret_key = key_scheme.is_some_and(KeyScheme::uses_secret_key);
     let (needs_secret_key, secret_key_storage) = match account {
-        Some(a) => (
-            uses_secret_key && device.secret_key(a.account_id).is_none(),
-            device.storage(a.account_id),
-        ),
+        Some(a) => {
+            let status = state
+                .device
+                .lock()
+                .map_err(|_| CmdError::internal())?
+                .key_status(a.account_id);
+            (uses_secret_key && status.missing, status.storage)
+        }
         None => (false, Storage::None),
     };
     Ok(DeviceStatus {
@@ -377,7 +397,11 @@ pub struct EmergencyKit {
 /// use without the master password. Only while unlocked, and only on explicit
 /// request.
 #[tauri::command]
-pub fn get_emergency_kit(state: State<'_, AppState>) -> CmdResult<EmergencyKit> {
+pub async fn get_emergency_kit(app: AppHandle) -> CmdResult<EmergencyKit> {
+    off_main_thread(app, emergency_kit).await
+}
+
+fn emergency_kit(state: &AppState) -> CmdResult<EmergencyKit> {
     state.touch();
     let (vault_id, created_at, account) = {
         let v = state.vault()?;

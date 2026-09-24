@@ -40,6 +40,14 @@ struct Cached {
     storage: Storage,
 }
 
+/// Whether this computer has the Secret Key for an account, and where.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyStatus {
+    /// Definitely not here: not in the keychain (which answered) nor the file.
+    pub missing: bool,
+    pub storage: Storage,
+}
+
 pub struct Device {
     path: PathBuf,
     pub id: Uuid,
@@ -84,12 +92,13 @@ impl Device {
         device
     }
 
-    /// Find the key for `account`: the keychain first, then the file. A
-    /// keychain that failed is not cached, so the next call asks again
-    /// (unless the timed store has given up on it).
-    fn resolve(&mut self, account: Uuid) -> (Option<SecretString>, Storage) {
+    /// Find the key for `account`: the keychain first, then the file. The
+    /// third value says whether the answer is definite; a keychain that
+    /// failed or did not answer in time is not, is not cached, and is asked
+    /// again next time.
+    fn resolve(&mut self, account: Uuid) -> (Option<SecretString>, Storage, bool) {
         if let Some(c) = self.cached.as_ref().filter(|c| c.account == account) {
-            return (c.text.clone(), c.storage);
+            return (c.text.clone(), c.storage, true);
         }
         let (text, storage, definite) = match self.store.get(account) {
             Ok(Some(v)) if parses(&v) => (Some(v), Storage::Keychain, true),
@@ -103,7 +112,18 @@ impl Device {
             text: text.clone(),
             storage,
         });
-        (text, storage)
+        (text, storage, definite)
+    }
+
+    /// What Settings and the unlock screen need, from one lookup.
+    pub fn key_status(&mut self, account: Uuid) -> KeyStatus {
+        let (text, storage, definite) = self.resolve(account);
+        KeyStatus {
+            // Only a definite "no key": a keychain that is busy or failing
+            // may well hold it, and unlocking asks if it really is missing.
+            missing: text.is_none() && definite,
+            storage,
+        }
     }
 
     pub fn secret_key(&mut self, account: Uuid) -> Option<SecretKey> {
@@ -113,11 +133,6 @@ impl Device {
 
     pub fn secret_key_text(&mut self, account: Uuid) -> Option<SecretString> {
         self.resolve(account).0
-    }
-
-    /// Where the key for `account` is kept.
-    pub fn storage(&mut self, account: Uuid) -> Storage {
-        self.resolve(account).1
     }
 
     /// Keep `key` for `account`: in the keychain if it takes the key and
@@ -212,7 +227,9 @@ fn private_create(path: &Path) -> std::io::Result<std::fs::File> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::secret_store::{FailingKeyStore, KeyStore, MemoryKeyStore, SlowKeyStore, Storage};
+    use crate::secret_store::{
+        FailingKeyStore, KeyStore, MemoryKeyStore, SlowKeyStore, SlowOnceKeyStore, Storage,
+    };
 
     const ACCOUNT: Uuid = Uuid::from_u128(7);
 
@@ -245,7 +262,7 @@ mod tests {
         let k = key();
         assert_eq!(d.set_secret_key(ACCOUNT, &k).unwrap(), Storage::File);
         assert!(file_text(dir.path()).contains(k.to_text().expose()));
-        assert_eq!(d.storage(ACCOUNT), Storage::File);
+        assert_eq!(d.key_status(ACCOUNT).storage, Storage::File);
     }
 
     #[test]
@@ -276,7 +293,7 @@ mod tests {
             store.get(ACCOUNT).unwrap().unwrap().expose(),
             k.to_text().expose()
         );
-        assert_eq!(d.storage(ACCOUNT), Storage::Keychain);
+        assert_eq!(d.key_status(ACCOUNT).storage, Storage::Keychain);
     }
 
     #[test]
@@ -290,6 +307,93 @@ mod tests {
         assert!(store.get(ACCOUNT).unwrap().is_none());
         assert!(d.secret_key(ACCOUNT).is_none());
         assert_ne!(d.id, old_id);
-        assert_eq!(d.storage(ACCOUNT), Storage::None);
+        assert_eq!(d.key_status(ACCOUNT).storage, Storage::None);
+    }
+
+    /// Fails its first `get`, then behaves like `MemoryKeyStore`.
+    #[derive(Clone, Default)]
+    struct FailsFirstGet {
+        failed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        inner: MemoryKeyStore,
+    }
+
+    impl KeyStore for FailsFirstGet {
+        fn get(
+            &self,
+            account: Uuid,
+        ) -> Result<Option<SecretString>, crate::secret_store::StoreError> {
+            if !self.failed.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                return Err(crate::secret_store::StoreError);
+            }
+            self.inner.get(account)
+        }
+        fn set(
+            &self,
+            account: Uuid,
+            value: &SecretString,
+        ) -> Result<(), crate::secret_store::StoreError> {
+            self.inner.set(account, value)
+        }
+        fn delete(&self, account: Uuid) -> Result<(), crate::secret_store::StoreError> {
+            self.inner.delete(account)
+        }
+    }
+
+    #[test]
+    fn a_keychain_that_answers_no_entry_means_the_key_is_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut d = Device::load(dir.path(), Box::new(MemoryKeyStore::default()));
+        assert_eq!(
+            d.key_status(ACCOUNT),
+            KeyStatus {
+                missing: true,
+                storage: Storage::None
+            }
+        );
+    }
+
+    #[test]
+    fn a_keychain_that_fails_is_not_reported_as_a_missing_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut d = Device::load(dir.path(), Box::new(FailingKeyStore));
+        assert!(!d.key_status(ACCOUNT).missing);
+    }
+
+    #[test]
+    fn a_failed_lookup_is_not_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FailsFirstGet::default();
+        let k = key();
+        store.inner.set(ACCOUNT, &k.to_text()).unwrap();
+        let mut d = Device::load(dir.path(), Box::new(store));
+        assert!(d.secret_key(ACCOUNT).is_none());
+        assert_eq!(d.key_status(ACCOUNT).storage, Storage::Keychain);
+        assert_eq!(
+            d.secret_key_text(ACCOUNT).unwrap().expose(),
+            k.to_text().expose()
+        );
+    }
+
+    #[test]
+    fn a_keychain_that_answers_after_a_slow_prompt_is_used_again() {
+        // The first lookup waits past the real 5 s timeout (a keyring
+        // unlock prompt answered slowly); once it returns, the keychain is
+        // asked again and the key found, rather than falling back for good.
+        let dir = tempfile::tempdir().unwrap();
+        let slow = SlowOnceKeyStore::new(std::time::Duration::from_millis(5500));
+        let mut d = Device::load(dir.path(), Box::new(slow.clone()));
+        let started = std::time::Instant::now();
+        let status = d.key_status(ACCOUNT);
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
+        assert!(!status.missing, "a busy keychain is not a missing key");
+        while !slow.slow_call_finished() {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        // The worker clears the busy flag just after the fake returns.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let k = key();
+        assert_eq!(d.set_secret_key(ACCOUNT, &k).unwrap(), Storage::Keychain);
+        assert!(!file_text(dir.path()).contains(k.to_text().expose()));
+        assert_eq!(slow.calls(), 3);
     }
 }

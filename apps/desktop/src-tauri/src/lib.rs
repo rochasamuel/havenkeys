@@ -86,14 +86,9 @@ pub fn run() {
                 ),
             };
             let vault = Arc::new(Mutex::new(VaultService::new(store)));
-            let mut device =
-                device::Device::load(&dir, Box::new(secret_store::OsKeyStore::install()));
-            // A Secret Key an earlier version (or a keychain that was
-            // unavailable then) left in device.json moves to the keychain.
-            let account = vault.lock().ok().and_then(|v| v.account().ok().flatten());
-            if let Some(account) = account {
-                device.migrate(account.account_id);
-            }
+            // Bounded by the keychain timeout; `Device::load` itself reads
+            // only device.json.
+            let device = device::Device::load(&dir, Box::new(secret_store::OsKeyStore::install()));
 
             // Browser integration. The bridge locks through AppState so an
             // extension-initiated lock behaves exactly like any other.
@@ -124,6 +119,22 @@ pub fn run() {
                 },
             );
             app.manage(AppState::new(vault, bridge.clone(), device, storage_error));
+            // A Secret Key an earlier version (or a keychain that was
+            // unavailable then) left in device.json moves to the keychain.
+            // Off the setup path: it may wait on the keychain.
+            let migrate_handle = app.handle().clone();
+            let _ = std::thread::Builder::new()
+                .name("keychain-migrate".into())
+                .spawn(move || {
+                    let state = migrate_handle.state::<AppState>();
+                    // Vault before device; the vault guard ends here.
+                    let account = state.vault().ok().and_then(|v| v.account().ok().flatten());
+                    if let Some(account) = account {
+                        if let Ok(mut device) = state.device.lock() {
+                            device.migrate(account.account_id);
+                        }
+                    }
+                });
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
             let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));
