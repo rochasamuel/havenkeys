@@ -1,7 +1,7 @@
 mod support;
 
 use data_encoding::BASE64;
-use serde_json::json;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 // ------------------------------------------------------------------- header
@@ -381,5 +381,57 @@ async fn a_page_never_cuts_a_batch_in_half() {
         }
     }
     assert_eq!(seen.len(), 1200, "every item is pulled exactly once");
+    server.cleanup().await;
+}
+
+// -------------------------------------------------------------------- fetch
+
+async fn fetch(server: &support::TestServer, sess: &support::Sess, ids: &[Uuid]) -> (u16, Value) {
+    let res = server
+        .post_as("/v1/items/fetch", sess)
+        .json(&json!({ "itemIds": ids }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    (status, res.json().await.unwrap_or(Value::Null))
+}
+
+#[tokio::test]
+async fn a_fetch_returns_current_rows_and_tombstones() {
+    let server = support::TestServer::start().await;
+    let (_a, sess) = support::signed_in(&server, "fetch@example.com").await;
+    let (live, _) = support::create_item(&server, &sess, b"ov", b"det").await;
+    let (gone, rev) = support::create_item(&server, &sess, b"ov2", b"det2").await;
+    support::write(&server, &sess, vec![support::deletion(gone, Some(rev))]).await;
+    let unknown = Uuid::new_v4();
+
+    let (status, body) = fetch(&server, &sess, &[live, gone, unknown]).await;
+    assert_eq!(status, 200);
+    let changes = body["changes"].as_array().unwrap();
+    assert_eq!(changes.len(), 2);
+    let by_id = |id: Uuid| changes.iter().find(|c| c["itemId"] == id.to_string()).unwrap();
+    assert_eq!(by_id(live)["deleted"], false);
+    assert_eq!(by_id(gone)["deleted"], true);
+    assert!(by_id(gone)["overview"].is_null());
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_fetch_is_bounded_and_well_formed() {
+    let server = support::TestServer::start().await;
+    let (_a, sess) = support::signed_in(&server, "fetch-bad@example.com").await;
+    assert_eq!(fetch(&server, &sess, &[]).await.0, 400);
+    let many: Vec<Uuid> = (0..501).map(|_| Uuid::new_v4()).collect();
+    assert_eq!(fetch(&server, &sess, &many).await.0, 400);
+    let id = Uuid::new_v4();
+    assert_eq!(fetch(&server, &sess, &[id, id]).await.0, 400);
+    let res = server
+        .post_as("/v1/items/fetch", &sess)
+        .json(&json!({ "itemIds": [], "x": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
     server.cleanup().await;
 }

@@ -46,6 +46,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/vault/header", get(vault::get_header))
         .route("/v1/sync", get(sync::pull))
         .route("/v1/items", post(items::write))
+        .route("/v1/items/fetch", post(items::fetch))
         .route("/v1/devices", get(devices::list))
         .route("/v1/devices/{id}", delete(devices::revoke))
         // Checked before the body is read, so an oversized request never

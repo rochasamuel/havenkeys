@@ -17,6 +17,19 @@ async fn account_a_cannot_touch_account_b() {
     let a_changes = support::pull(&server, &a, 0).await;
     assert!(a_changes["changes"].as_array().unwrap().is_empty());
 
+    // Fetch: A asking for B's item id gets nothing back, not an error — the
+    // id is simply absent from A's vault, the same as an id that never
+    // existed at all.
+    let fetch_res = server
+        .post_as("/v1/items/fetch", &a)
+        .json(&json!({ "itemIds": [b_item] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(fetch_res.status(), 200);
+    let fetch_body: serde_json::Value = fetch_res.json().await.unwrap();
+    assert!(fetch_body["changes"].as_array().unwrap().is_empty());
+
     // Write: A writing B's item id lands in A's own vault, because item ids
     // are unique per vault, and leaves B's row untouched.
     let (status, _) = support::write(
@@ -118,6 +131,7 @@ async fn every_authenticated_route_needs_a_live_token() {
         ("POST", "/v1/account/credentials".into()),
         ("GET", "/v1/sync?since=0".into()),
         ("POST", "/v1/items".into()),
+        ("POST", "/v1/items/fetch".into()),
         ("GET", "/v1/devices".into()),
         ("DELETE", format!("/v1/devices/{device}")),
         ("POST", "/v1/auth/logout".into()),

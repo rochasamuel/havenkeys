@@ -201,3 +201,51 @@ pub async fn write(
     }))
     .into_response())
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FetchRequest {
+    item_ids: Vec<Uuid>,
+}
+
+/// The current row for each requested item in the caller's vault, in the
+/// pull's change shape. For a client retrying items it could not open. IDs
+/// in another vault, or not at all, are simply absent: the answer is the
+/// same either way, so it is not an oracle.
+pub async fn fetch(
+    State(state): State<AppState>,
+    session: Session,
+    Json(req): Json<FetchRequest>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    if req.item_ids.is_empty() || req.item_ids.len() > MAX_CHANGES_PER_BATCH {
+        return Err(ApiError::InvalidRequest("itemIds is not valid"));
+    }
+    let distinct: HashSet<Uuid> = req.item_ids.iter().copied().collect();
+    if distinct.len() != req.item_ids.len() {
+        return Err(ApiError::InvalidRequest("an item appears twice"));
+    }
+    let db = state.pool.get().await?;
+    let rows = db
+        .query(
+            "SELECT item_id, revision, overview, details, deleted_at IS NOT NULL
+               FROM items WHERE vault_id = $1 AND item_id = ANY($2)
+              ORDER BY item_id",
+            &[&session.vault_id, &req.item_ids],
+        )
+        .await?;
+    let changes: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|row| {
+            let overview: Option<Vec<u8>> = row.get(2);
+            let details: Option<Vec<u8>> = row.get(3);
+            serde_json::json!({
+                "itemId": row.get::<_, Uuid>(0),
+                "revision": row.get::<_, i64>(1),
+                "overview": overview.map(Blob),
+                "details": details.map(Blob),
+                "deleted": row.get::<_, bool>(4),
+            })
+        })
+        .collect();
+    Ok(axum::Json(serde_json::json!({ "changes": changes })))
+}
