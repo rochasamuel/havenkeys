@@ -5,6 +5,7 @@
 //! * [`ItemDetails`]  — secrets; decrypted per request only.
 
 use crate::error::{Error, Result};
+use crate::passkey::Passkey;
 use crate::secret::SecretString;
 use crate::totp::TotpConfig;
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,10 @@ pub struct ItemOverview {
     pub has_password: bool,
     pub has_totp: bool,
     pub has_notes: bool,
+    /// The login holds at least one passkey. `default`: overviews written
+    /// before passkeys existed.
+    #[serde(default)]
+    pub has_passkey: bool,
     /// Unix milliseconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -100,6 +105,9 @@ pub enum ItemDetails {
         /// password changed from the browser (or by mistake) can be recovered.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         password_history: Vec<PreviousPassword>,
+        /// Passkeys this login holds. Private keys never leave the core.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        passkeys: Vec<Passkey>,
     },
     SecureNote {
         content: SecretString,
@@ -476,5 +484,30 @@ mod tests {
     fn item_input_rejects_unknown_fields() {
         let json = r#"{"itemType":"login","title":"x","isAdmin":true}"#;
         assert!(serde_json::from_str::<ItemInput>(json).is_err());
+    }
+
+    #[test]
+    fn logins_saved_before_passkeys_still_parse() {
+        let d: ItemDetails = serde_json::from_str(r#"{"type":"login","password":"pw"}"#).unwrap();
+        match d {
+            ItemDetails::Login { passkeys, .. } => assert!(passkeys.is_empty()),
+            ItemDetails::SecureNote { .. } => panic!("wrong type"),
+        }
+        // An empty passkey list is not written, so existing blobs are unchanged.
+        let json = serde_json::to_string(&ItemDetails::Login {
+            password: None,
+            totp: None,
+            notes: None,
+            password_history: Vec::new(),
+            passkeys: Vec::new(),
+        })
+        .unwrap();
+        assert!(!json.contains("passkeys"));
+        let ov: ItemOverview = serde_json::from_str(
+            r#"{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","itemType":"login","title":"t",
+                "hasPassword":true,"hasTotp":false,"hasNotes":false,"createdAt":1,"updatedAt":1}"#,
+        )
+        .unwrap();
+        assert!(!ov.has_passkey);
     }
 }

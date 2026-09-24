@@ -14,6 +14,7 @@ pub mod import;
 pub mod lock;
 pub mod model;
 pub mod origin;
+pub mod passkey;
 pub mod secret;
 pub mod store;
 pub mod sync;
@@ -21,4 +22,4 @@ pub mod totp;
 pub mod vault;
 
 pub use error::{Error, Result};
-pub use secret::SecretString;
+pub use secret::{SecretBytes, SecretString};

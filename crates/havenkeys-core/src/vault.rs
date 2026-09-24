@@ -1285,7 +1285,7 @@ impl VaultService {
         })
     }
 
-    fn stage(
+    pub(crate) fn stage(
         &self,
         overview: ItemOverview,
         details: Option<&ItemDetails>,
@@ -1463,7 +1463,7 @@ fn secrets_equal(a: &SecretString, b: &SecretString) -> bool {
 }
 
 /// Validate input and merge with existing secrets.
-fn build_item(
+pub(crate) fn build_item(
     id: Uuid,
     input: ItemInput,
     current: Option<ItemDetails>,
@@ -1485,15 +1485,16 @@ fn build_item(
 
     let details = match item_type {
         ItemType::Login => {
-            let (cur_pw, cur_totp, cur_notes, mut history) = match current {
+            let (cur_pw, cur_totp, cur_notes, mut history, passkeys) = match current {
                 Some(ItemDetails::Login {
                     password,
                     totp,
                     notes,
                     password_history,
-                }) => (password, totp, notes, password_history),
+                    passkeys,
+                }) => (password, totp, notes, password_history, passkeys),
                 Some(_) => return Err(Error::Corrupted),
-                None => (None, None, None, Vec::new()),
+                None => (None, None, None, Vec::new(), Vec::new()),
             };
             let previous = cur_pw.clone();
             let password = password.apply(cur_pw);
@@ -1528,6 +1529,7 @@ fn build_item(
                 totp,
                 notes,
                 password_history: history,
+                passkeys,
             }
         }
         ItemType::SecureNote => {
@@ -1542,14 +1544,20 @@ fn build_item(
         }
     };
 
-    let (has_password, has_totp, has_notes) = match &details {
+    let (has_password, has_totp, has_notes, has_passkey) = match &details {
         ItemDetails::Login {
             password,
             totp,
             notes,
+            passkeys,
             ..
-        } => (password.is_some(), totp.is_some(), notes.is_some()),
-        ItemDetails::SecureNote { .. } => (false, false, false),
+        } => (
+            password.is_some(),
+            totp.is_some(),
+            notes.is_some(),
+            !passkeys.is_empty(),
+        ),
+        ItemDetails::SecureNote { .. } => (false, false, false, false),
     };
     let overview = ItemOverview {
         id,
@@ -1566,6 +1574,7 @@ fn build_item(
         has_password,
         has_totp,
         has_notes,
+        has_passkey,
         created_at,
         updated_at: now_ms,
     };

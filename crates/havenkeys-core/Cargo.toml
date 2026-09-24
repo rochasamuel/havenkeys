@@ -17,6 +17,7 @@ sha1 = "0.11"
 sha2 = "0.11"
 rand = { version = "0.10", default-features = false, features = ["std", "sys_rng", "unbiased"] }
 zeroize = "1.9"
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std", "pkcs8"] }
 # --- encoding / parsing ---
 data-encoding = "2.11"
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +34,7 @@ psl = "2"
 
 [dev-dependencies]
 tempfile = "3"
+ciborium = "0.2"
 
 [features]
 # Exposes test-only constructors (e.g. StagedWrite::for_test) to other

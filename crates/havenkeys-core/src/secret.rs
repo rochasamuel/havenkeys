@@ -1,5 +1,6 @@
 //! Wrapper for secret strings: zeroized on drop, never printed.
 
+use data_encoding::BASE64URL_NOPAD;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use zeroize::Zeroizing;
@@ -58,6 +59,45 @@ impl<'de> Deserialize<'de> for SecretString {
     }
 }
 
+/// Secret bytes (a passkey private key): zeroized on drop, never printed.
+/// Serialized as unpadded base64url. Copies made by serde's buffers are
+/// outside our control (docs/security-model.md §Memory).
+#[derive(Clone, Default)]
+pub struct SecretBytes(Zeroizing<Vec<u8>>);
+
+impl SecretBytes {
+    pub fn new(value: Vec<u8>) -> Self {
+        Self(Zeroizing::new(value))
+    }
+
+    pub fn expose(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
+impl fmt::Debug for SecretBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SecretBytes(<redacted>)")
+    }
+}
+
+impl Serialize for SecretBytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        let encoded = Zeroizing::new(BASE64URL_NOPAD.encode(self.expose()));
+        serializer.serialize_str(&encoded)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let encoded = Zeroizing::new(String::deserialize(deserializer)?);
+        BASE64URL_NOPAD
+            .decode(encoded.as_bytes())
+            .map(SecretBytes::new)
+            .map_err(|_| serde::de::Error::custom("invalid secret bytes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -76,5 +116,16 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         let back: SecretString = serde_json::from_str(&json).unwrap();
         assert_eq!(back.expose(), "p@ss");
+    }
+
+    #[test]
+    fn secret_bytes_are_redacted_and_round_trip() {
+        let s = SecretBytes::new(vec![0xde, 0xad, 0xbe, 0xef]);
+        assert!(format!("{s:?}").contains("redacted"));
+        let json = serde_json::to_string(&s).unwrap();
+        assert_eq!(json, "\"3q2-7w\"");
+        let back: SecretBytes = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.expose(), &[0xde, 0xad, 0xbe, 0xef]);
+        assert!(serde_json::from_str::<SecretBytes>("\"not base64!\"").is_err());
     }
 }
