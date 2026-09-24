@@ -1,20 +1,20 @@
 //! Request → core call. The authorization decisions live in the core
 //! (`VaultService::{find_matches, fill_for_page, totp_for_page, check_login,
 //! save_login, find_passkeys, passkey_assert, check_passkey_create,
-//! stage_passkey_create}`); this layer
+//! stage_passkey_create, has_passkey_for_page}`); this layer
 //! adds the integration switch and maps types, and never widens what the core
 //! returns.
 
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::origin::MatchStrength as CoreStrength;
-use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate};
+use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
 use havenkeys_core::vault::{
     SaveAction as CoreSaveAction, StagedSave, StagedWrite, VaultService, VaultState,
 };
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
     ErrorCode, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
-    ResultBody, SaveAction, WireSecret, MAX_MATCHES,
+    ResultBody, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
 };
 
 fn code(e: Error) -> ErrorCode {
@@ -265,6 +265,7 @@ pub fn dispatch(
             rp_id,
             user_name,
             exclude_credentials,
+            conditional,
         } => {
             require_enabled(v)?;
             let exclude = byte_list(exclude_credentials)?;
@@ -276,8 +277,7 @@ pub fn dispatch(
                         top_url: top_url.as_deref(),
                         user_name,
                         exclude: &exclude,
-                        // Task 4 wires the wire protocol's conditional flag.
-                        conditional: false,
+                        conditional: *conditional,
                     },
                     now_ms(unix_seconds),
                 )
@@ -296,9 +296,15 @@ pub fn dispatch(
                     })
                     .collect()
             };
+            let upgrade = match check.upgrade {
+                Upgrade::None => UpgradeHint::None {},
+                Upgrade::Ask(item_id) => UpgradeHint::Ask { item_id },
+                Upgrade::Auto(item_id) => UpgradeHint::Auto { item_id },
+            };
             Ok(Dispatched::Done(ResultBody::CheckPasskeyCreate {
                 excluded: check.excluded,
                 candidates,
+                upgrade,
             }))
         }
         Request::PasskeyCreate {
@@ -310,6 +316,7 @@ pub fn dispatch(
             user_name,
             display_name,
             item_id,
+            conditional,
         } => {
             require_enabled(v)?;
             let challenge = bytes(challenge)?;
@@ -325,8 +332,7 @@ pub fn dispatch(
                         user_name,
                         display_name: display_name.as_deref(),
                         item_id: *item_id,
-                        // Task 4 wires the wire protocol's conditional flag.
-                        conditional: false,
+                        conditional: *conditional,
                     },
                     now_ms(unix_seconds),
                 )
@@ -344,6 +350,13 @@ pub fn dispatch(
                 write: staged.write,
                 result,
             })
+        }
+        Request::PasskeyStatus { url, top_url } => {
+            require_enabled(v)?;
+            let has_passkey = v
+                .has_passkey_for_page(url, top_url.as_deref())
+                .map_err(code)?;
+            Ok(Dispatched::Done(ResultBody::PasskeyStatus { has_passkey }))
         }
     }
 }

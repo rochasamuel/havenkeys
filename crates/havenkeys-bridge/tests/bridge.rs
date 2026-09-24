@@ -628,6 +628,7 @@ fn create_passkey(f: &Fixture, url: &str, item: Option<Uuid>) -> serde_json::Val
         serde_json::json!({
             "type": "passkey_create", "url": url, "rpId": "github.com", "challenge": CHAL,
             "userHandle": "AQ", "userName": "octo", "displayName": null, "itemId": item,
+            "conditional": false,
         }),
     )
 }
@@ -639,7 +640,7 @@ fn passkey_create_then_get_through_the_bridge() {
         &f,
         serde_json::json!({
             "type": "check_passkey_create", "url": "https://github.com/", "rpId": "github.com",
-            "userName": "octo", "excludeCredentials": [],
+            "userName": "octo", "excludeCredentials": [], "conditional": false,
         }),
     );
     assert_eq!(check["result"]["excluded"], false);
@@ -729,6 +730,75 @@ fn passkey_create_offline_is_refused_and_nothing_is_stored() {
             .unwrap()
             .has_passkey
     );
+}
+
+#[test]
+fn passkey_upgrade_through_the_bridge() {
+    let f = online_fixture();
+    let check = |url: &str, rp: &str| {
+        call(
+            &f,
+            serde_json::json!({
+                "type": "check_passkey_create", "url": url, "rpId": rp,
+                "userName": "octo", "excludeCredentials": [], "conditional": true,
+            }),
+        )
+    };
+    let create = |url: &str, rp: &str, item: Uuid| {
+        call(
+            &f,
+            serde_json::json!({
+                "type": "passkey_create", "url": url, "rpId": rp, "challenge": CHAL,
+                "userHandle": "AQ", "userName": "octo", "displayName": null, "itemId": item,
+                "conditional": true,
+            }),
+        )
+    };
+    // No fill yet: nothing, and a silent create is refused.
+    assert_eq!(
+        check("https://github.com/", "github.com")["result"]["upgrade"]["kind"],
+        "none"
+    );
+    assert_eq!(
+        error_code(&create("https://github.com/", "github.com", f.github)),
+        Some("denied")
+    );
+    // A fill of the GitHub login.
+    let filled = fill(&f, f.github, "https://github.com/login");
+    assert!(filled["result"].is_object());
+    assert_eq!(
+        check("https://github.com/", "github.com")["result"]["upgrade"]["kind"],
+        "auto"
+    );
+    // A1: another site gets nothing and cannot create.
+    assert!(check("https://evil.com/", "github.com")["error"].is_object());
+    assert_eq!(
+        error_code(&create("https://evil.com/", "evil.com", f.github)),
+        Some("denied")
+    );
+    // A2: another item.
+    assert_eq!(
+        error_code(&create("https://github.com/", "github.com", f.bank)),
+        Some("denied")
+    );
+    // Allowed.
+    assert!(create("https://github.com/", "github.com", f.github)["result"].is_object());
+    // A3: locked.
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&check("https://github.com/", "github.com")),
+        Some("locked")
+    );
+}
+
+#[test]
+fn passkey_status_through_the_bridge() {
+    let f = online_fixture();
+    let status =
+        |url: &str| call(&f, serde_json::json!({"type": "passkey_status", "url": url}));
+    assert_eq!(status("https://github.com/")["result"]["hasPasskey"], false);
+    f.vault.lock().unwrap().lock();
+    assert_eq!(error_code(&status("https://github.com/")), Some("locked"));
 }
 
 // ------------------------------------------------------------------ socket

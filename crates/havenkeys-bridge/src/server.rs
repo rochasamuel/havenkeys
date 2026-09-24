@@ -139,7 +139,8 @@ impl Bridge {
             Request::FindMatches { .. }
             | Request::GeneratePassword {}
             | Request::FindPasskeys { .. }
-            | Request::CheckPasskeyCreate { .. } => Some(RequestClass::Lookup),
+            | Request::CheckPasskeyCreate { .. }
+            | Request::PasskeyStatus { .. } => Some(RequestClass::Lookup),
             Request::FillItem { .. }
             | Request::GetTotp { .. }
             | Request::CheckLogin { .. }

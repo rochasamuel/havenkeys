@@ -113,6 +113,8 @@ pub enum Request {
         rp_id: String,
         user_name: String,
         exclude_credentials: Vec<String>,
+        /// mediation: "conditional" (the site's automatic upgrade).
+        conditional: bool,
     },
     /// Create a passkey after the user confirmed. A server write.
     PasskeyCreate {
@@ -125,6 +127,14 @@ pub enum Request {
         user_name: String,
         display_name: Option<String>,
         item_id: Option<Uuid>,
+        /// mediation: "conditional" (the site's automatic upgrade).
+        conditional: bool,
+    },
+    /// Does HavenKeys hold a passkey `url` may use? A yes/no only.
+    PasskeyStatus {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
     },
 }
 
@@ -175,6 +185,7 @@ impl Request {
             Request::PasskeyGet { .. } => "passkey_get",
             Request::CheckPasskeyCreate { .. } => "check_passkey_create",
             Request::PasskeyCreate { .. } => "passkey_create",
+            Request::PasskeyStatus { .. } => "passkey_status",
         }
     }
 
@@ -189,7 +200,8 @@ impl Request {
             | Request::FindPasskeys { url, top_url, .. }
             | Request::PasskeyGet { url, top_url, .. }
             | Request::CheckPasskeyCreate { url, top_url, .. }
-            | Request::PasskeyCreate { url, top_url, .. } => [Some(url), top_url.as_deref()],
+            | Request::PasskeyCreate { url, top_url, .. }
+            | Request::PasskeyStatus { url, top_url } => [Some(url), top_url.as_deref()],
         }
     }
 
@@ -369,7 +381,12 @@ impl Response {
             Some(ResultBody::CheckPasskeyCreate {
                 excluded,
                 candidates,
-            }) => candidates.len() <= MAX_MATCHES && !(*excluded && !candidates.is_empty()),
+                upgrade,
+            }) => {
+                candidates.len() <= MAX_MATCHES
+                    && !(*excluded && !candidates.is_empty())
+                    && !(*excluded && *upgrade != UpgradeHint::None {})
+            }
             Some(ResultBody::PasskeyCreate {
                 credential_id,
                 public_key_algorithm,
@@ -441,6 +458,7 @@ pub enum ResultBody {
     CheckPasskeyCreate {
         excluded: bool,
         candidates: Vec<PasskeyCandidate>,
+        upgrade: UpgradeHint,
     },
     PasskeyCreate {
         credential_id: String,
@@ -450,6 +468,9 @@ pub enum ResultBody {
         /// SPKI DER, base64url.
         public_key: String,
         public_key_algorithm: i64,
+    },
+    PasskeyStatus {
+        has_passkey: bool,
     },
 }
 
@@ -479,6 +500,7 @@ impl fmt::Debug for ResultBody {
             ResultBody::PasskeyGet { .. } => "passkey_get",
             ResultBody::CheckPasskeyCreate { .. } => "check_passkey_create",
             ResultBody::PasskeyCreate { .. } => "passkey_create",
+            ResultBody::PasskeyStatus { .. } => "passkey_status",
         };
         write!(f, "ResultBody({kind})")
     }
@@ -554,6 +576,20 @@ impl fmt::Debug for PasskeyCandidate {
             .field("item_id", &self.item_id)
             .finish_non_exhaustive()
     }
+}
+
+/// The core's decision on a site's automatic passkey upgrade.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum UpgradeHint {
+    None {},
+    Ask { item_id: Uuid },
+    Auto { item_id: Uuid },
 }
 
 // ------------------------------------------------------------------ errors
