@@ -29,6 +29,7 @@ const create: CreateOptions = {
   algs: [-7, -257],
   excludeCredentials: [CRED],
   timeoutMs: 60_000,
+  conditional: false,
 };
 const get: GetOptions = { rpId: null, challenge: "BwcHBwcHBwcHBwcHBwcHBw", allowCredentials: [], conditional: false, timeoutMs: null };
 
@@ -64,6 +65,8 @@ describe("page ↔ bridge", () => {
       { kind: "create", id: ID, options: { ...create, userName: "x".repeat(513) } },
       { kind: "create", id: ID, options: { ...create, algs: [1.5] } },
       { kind: "create", id: ID, options: { ...create, extra: 1 } },
+      { kind: "create", id: ID, options: { ...create, conditional: "yes" } },
+      { kind: "create", id: ID, options: (({ conditional: _c, ...rest }) => rest)(create) },
       { kind: "get", id: "short", options: get },
       { kind: "get", id: ID, options: { ...get, allowCredentials: Array(65).fill(CRED) } },
       { kind: "get", id: ID, options: { ...get, timeoutMs: -1 } },
@@ -112,11 +115,24 @@ describe("bridge ↔ background ↔ frames", () => {
     expect(parseWaReply({ ok: true, token: TOKEN, ui: "chooser" })).not.toBeNull();
     expect(parseWaReply({ ok: false, outcome: { outcome: "fallback" } })).not.toBeNull();
     expect(parseWaReply({ ok: false, outcome: { outcome: "credential" } })).toBeNull();
+    expect(parseWaRequest({ type: "wa_create", options: { ...create, conditional: true } })).toEqual({ type: "wa_create", options: { ...create, conditional: true } });
+    expect(parseWaRequest({ type: "wa_create", options: (({ conditional: _c, ...rest }) => rest)(create) })).toBeNull();
     expect(parseBgWaResult({ type: "bg_wa_result", token: TOKEN, outcome: { outcome: "fallback" } })).not.toBeNull();
     expect(parsePkRequest({ type: "pk_pick", token: TOKEN, itemId: ITEM, credentialId: CRED })).not.toBeNull();
     expect(parsePkRequest({ type: "pk_save", token: TOKEN, itemId: null })).not.toBeNull();
     expect(parsePkRequest({ type: "pk_pick", token: TOKEN, itemId: "../x", credentialId: CRED })).toBeNull();
     expect(parsePkRequest({ type: "pk_close", token: TOKEN, x: 1 })).toBeNull();
     for (const t of ["pk_state", "pk_fallback", "pk_cancel", "pk_close"]) expect(parsePkRequest({ type: t, token: TOKEN })).not.toBeNull();
+  });
+
+  it("accepts a silent-save reply only with a create credential and nothing else", () => {
+    const created = { type: "create", credentialId: CRED, clientDataJson: "e30", attestationObject: "oA", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 };
+    const asserted = { type: "get", credentialId: CRED, clientDataJson: "e30", authenticatorData: "AA", signature: "MEU", userHandle: "AQ" };
+    expect(parseWaReply({ ok: true, token: TOKEN, ui: "saved", credential: created })).toEqual({ ok: true, token: TOKEN, ui: "saved", credential: created });
+    expect(parseWaReply({ ok: true, token: TOKEN, ui: "saved" })).toBeNull();
+    expect(parseWaReply({ ok: true, token: TOKEN, ui: "saved", credential: asserted })).toBeNull();
+    expect(parseWaReply({ ok: true, token: TOKEN, ui: "saved", credential: created, x: 1 })).toBeNull();
+    expect(parseWaReply({ ok: true, token: "x", ui: "saved", credential: created })).toBeNull();
+    for (const ui of ["chooser", "create", "none"]) expect(parseWaReply({ ok: true, token: TOKEN, ui, credential: created })).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, PING_INTERVAL_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
+import { MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, NOTICE_MS, PING_INTERVAL_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
 
 type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }) => boolean | void;
 const sent: unknown[] = [];
@@ -14,6 +14,8 @@ const acks: string[] = [];
 const ID = "0123456789abcdef0123456789abcdef";
 const TOKEN = "a".repeat(32);
 const get = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: 1000 };
+const create = { rpId: null, challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: 1000, conditional: false };
+const savedCredential = { type: "create", credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", clientDataJson: "e30", attestationObject: "oA", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 };
 
 /** A 32-hex-char id/token distinct from the fixtures above, so tests never share pending state. */
 const hex = (n: number): string => n.toString(16).padStart(32, "0");
@@ -287,5 +289,48 @@ describe("additional security paths", () => {
     responses.length = 0;
     onMessage?.({ type: "bg_wa_result", token: condToken, outcome: { outcome: "fallback" } }, { id: "ext" });
     expect(responses).toEqual([]);
+  });
+});
+
+describe("automatic passkey upgrade", () => {
+  it("answers a silent save with the credential and shows the notice for NOTICE_MS", async () => {
+    vi.useFakeTimers();
+    const token = hex(900);
+    reply = (m) => ((m as { type: string }).type === "wa_create" ? { ok: true, token, ui: "saved", credential: savedCredential } : undefined);
+    const id = hex(901);
+    request({ kind: "create", id, options: { ...create, conditional: true } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(responses.find((r) => r.id === id)).toMatchObject({ outcome: "credential", credential: { credentialId: savedCredential.credentialId } });
+    const frame = () => document.querySelector(`iframe[src$="#${token}"]`);
+    expect(frame()?.getAttribute("src")).toContain("passkey.html");
+    // No session: nothing to ping or cancel.
+    expect(sent.filter((m) => (m as { type: string }).type !== "wa_create")).toEqual([]);
+    await vi.advanceTimersByTimeAsync(NOTICE_MS);
+    expect(frame()).toBeNull();
+  });
+
+  it("removes the notice at once when the page touches it", async () => {
+    const token = hex(904);
+    reply = (m) => ((m as { type: string }).type === "wa_create" ? { ok: true, token, ui: "saved", credential: savedCredential } : undefined);
+    request({ kind: "create", id: hex(905), options: { ...create, conditional: true } });
+    await flush();
+    const frame = document.querySelector(`iframe[src$="#${token}"]`) as HTMLIFrameElement;
+    expect(frame).not.toBeNull();
+    frame.setAttribute("style", "display:none");
+    await flush();
+    expect(document.querySelector(`iframe[src$="#${token}"]`)).toBeNull();
+  });
+
+  it("shows no notice when the page cancelled during a silent save", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    reply = (m) => ((m as { type: string }).type === "wa_create" ? new Promise((r) => (answer = r)) : undefined);
+    const id = hex(902);
+    request({ kind: "create", id, options: { ...create, conditional: true } });
+    await flush();
+    request({ kind: "cancel", id });
+    answer({ ok: true, token: hex(903), ui: "saved", credential: savedCredential });
+    await flush();
+    expect(document.querySelector(`iframe[src$="#${hex(903)}"]`)).toBeNull();
+    expect(responses.some((r) => r.id === id)).toBe(false);
   });
 });

@@ -10,7 +10,10 @@
 // * A session binds a random token to one tab and frame. The passkey frame
 //   is accepted only from that tab, and only for passkeys or logins the
 //   session offered; the desktop re-checks everything regardless.
-// * Nothing is signed or created without a pick/save from the frame.
+// * Nothing is signed or created without a pick/save from the frame, except
+//   the site's automatic upgrade, which the desktop allows only after a
+//   HavenKeys password fill of that login on that site within the last 5
+//   minutes (`upgrade: auto`).
 // * Whether HavenKeys holds a passkey the site excluded is shown to the user,
 //   and told to the site only after the user closes that card.
 // * Nothing is persisted.
@@ -27,7 +30,9 @@ import { displayHost } from "../shared/url";
 import {
   clampTimeout,
   MAX_TIMEOUT_MS,
+  NOTICE_MS,
   type BgWaResult,
+  type CreatedCredential,
   type CreateOptions,
   type GetOptions,
   type Outcome,
@@ -41,6 +46,8 @@ import type { FrameRef, InlineDeps } from "./inline-handler";
 
 export const SESSION_TTL_MS = MAX_TIMEOUT_MS;
 export const CONDITIONAL_TTL_MS = 30 * 60_000;
+/** How long the "passkey saved" notice can still ask for its site. */
+export const NOTICE_TTL_MS = NOTICE_MS + 10_000;
 const ES256 = -7;
 
 type Client = {
@@ -54,6 +61,8 @@ type Client = {
  * `busy`: a sign or save is in flight; a second one is refused.
  * `exists`: the site's excludeCredentials names a passkey we hold; the card
  * says so and nothing can be saved.
+ * `upgradeItemId`: the login the desktop proposes for the site's automatic
+ * upgrade ("Add a passkey?"); null for an ordinary create.
  */
 type Common = {
   token: string;
@@ -66,13 +75,25 @@ type Common = {
 };
 type Session =
   | (Common & { kind: "get"; options: GetOptions; passkeys: PasskeyRow[] })
-  | (Common & { kind: "create"; options: CreateOptions; candidates: PasskeyCandidate[]; exists: boolean });
+  | (Common & { kind: "create"; options: CreateOptions; candidates: PasskeyCandidate[]; exists: boolean; upgradeItemId: string | null });
 
 const FALLBACK: WaReply = { ok: false, outcome: { outcome: "fallback" } };
 const BUSY = { ok: false as const, message: "Please wait…" };
 
 function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
+}
+
+function created(r: ResultFor<"passkey_create">): CreatedCredential {
+  return {
+    type: "create",
+    credentialId: r.credentialId,
+    clientDataJson: r.clientDataJson,
+    attestationObject: r.attestationObject,
+    authenticatorData: r.authenticatorData,
+    publicKey: r.publicKey,
+    publicKeyAlgorithm: r.publicKeyAlgorithm,
+  };
 }
 
 export interface WebAuthnDeps extends InlineDeps {
@@ -86,6 +107,16 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
   // Tabs with a wa_get/wa_create lookup in flight: a page firing requests in
   // a loop must not drain the desktop's shared lookup budget.
   const looking = new Set<number>();
+  // Tabs showing the "passkey saved" notice: the notice frame asks for its
+  // site by token, after the silent save finished and no session is left.
+  const notices = new Map<number, { token: string; site: string; timer: ReturnType<typeof setTimeout> }>();
+
+  function dropNotice(tabId: number): void {
+    const n = notices.get(tabId);
+    if (!n) return;
+    notices.delete(tabId);
+    clearTimeout(n.timer);
+  }
 
   const frameFields = (f: FrameRef) => (f.topUrl === undefined ? { url: f.url } : { url: f.url, topUrl: f.topUrl });
   const rpIdFor = (f: FrameRef, rpId: string | null) => rpId ?? new URL(f.url).hostname;
@@ -143,9 +174,65 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
     return { ok: true, token, ui: options.conditional ? "none" : "chooser" };
   }
 
+  /**
+   * The site's automatic upgrade. The desktop decides (`upgrade`), from a
+   * HavenKeys password fill on this site in the last few minutes; anything
+   * but a usable decision falls back to the browser, silently.
+   */
+  async function beginUpgrade(frame: FrameRef, options: CreateOptions, rpId: string): Promise<WaReply> {
+    let check: ResultFor<"check_passkey_create">;
+    try {
+      check = await deps.client.request({
+        type: "check_passkey_create",
+        ...frameFields(frame),
+        rpId,
+        userName: options.userName,
+        excludeCredentials: options.excludeCredentials,
+        conditional: true,
+      });
+    } catch {
+      return FALLBACK;
+    }
+    const upgrade = check.upgrade;
+    if (check.excluded || upgrade.kind === "none") return FALLBACK;
+    if (upgrade.kind === "ask") {
+      const candidates = check.candidates;
+      const token = open(
+        frame.tabId,
+        (token, timer) => ({ kind: "create", token, frame, rpId, options, locked: false, refreshing: null, busy: false, candidates, exists: false, upgradeItemId: upgrade.itemId, timer }),
+        clampTimeout(options.timeoutMs),
+      );
+      return { ok: true, token, ui: "create" };
+    }
+    let r: ResultFor<"passkey_create">;
+    try {
+      r = await deps.client.request({
+        type: "passkey_create",
+        ...frameFields(frame),
+        rpId,
+        challenge: options.challenge,
+        userHandle: options.userId,
+        userName: options.userName,
+        displayName: options.userDisplayName,
+        itemId: upgrade.itemId,
+        conditional: true,
+      });
+    } catch {
+      return FALLBACK;
+    }
+    dropNotice(frame.tabId);
+    const token = deps.newToken();
+    const timer = setTimeout(() => {
+      if (notices.get(frame.tabId)?.token === token) notices.delete(frame.tabId);
+    }, NOTICE_TTL_MS);
+    notices.set(frame.tabId, { token, site: displayHost(frame.url) ?? "", timer });
+    return { ok: true, token, ui: "saved", credential: created(r) };
+  }
+
   async function beginCreate(frame: FrameRef, options: CreateOptions): Promise<WaReply> {
     if (!options.algs.includes(ES256)) return FALLBACK;
     const rpId = rpIdFor(frame, options.rpId);
+    if (options.conditional) return beginUpgrade(frame, options, rpId);
     let candidates: PasskeyCandidate[] = [];
     let locked = false;
     let exists = false;
@@ -156,6 +243,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         rpId,
         userName: options.userName,
         excludeCredentials: options.excludeCredentials,
+        conditional: false,
       });
       // Not answered yet: an immediate InvalidStateError would tell any
       // page, without a click, which accounts HavenKeys holds.
@@ -166,7 +254,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
       else return FALLBACK;
     }
     const ttl = clampTimeout(options.timeoutMs);
-    const token = open(frame.tabId, (token, timer) => ({ kind: "create", token, frame, rpId, options, locked, refreshing: null, busy: false, candidates, exists, timer }), ttl);
+    const token = open(frame.tabId, (token, timer) => ({ kind: "create", token, frame, rpId, options, locked, refreshing: null, busy: false, candidates, exists, upgradeItemId: null, timer }), ttl);
     return { ok: true, token, ui: "create" };
   }
 
@@ -220,21 +308,12 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         userName: s.options.userName,
         displayName: s.options.userDisplayName,
         itemId,
+        // A click on the card, even for the site's automatic upgrade.
+        conditional: false,
       });
       // The page may have aborted meanwhile; finish() is then a no-op and
       // the passkey stays in the vault, visible in the desktop app.
-      finish(s.frame.tabId, s.token, {
-        outcome: "credential",
-        credential: {
-          type: "create",
-          credentialId: r.credentialId,
-          clientDataJson: r.clientDataJson,
-          attestationObject: r.attestationObject,
-          authenticatorData: r.authenticatorData,
-          publicKey: r.publicKey,
-          publicKeyAlgorithm: r.publicKeyAlgorithm,
-        },
-      });
+      finish(s.frame.tabId, s.token, { outcome: "credential", credential: created(r) });
       return { ok: true, value: null };
     } catch (e) {
       return fail(e);
@@ -277,12 +356,14 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
     if (s.locked) return { state: "locked", site };
     if (s.kind === "get") return { state: "chooser", site, passkeys: s.passkeys };
     if (s.exists) return { state: "exists", site };
-    return { state: "create", site, userName: s.options.userName, candidates: s.candidates };
+    return { state: "create", site, userName: s.options.userName, candidates: s.candidates, upgradeItemId: s.upgradeItemId };
   }
 
   async function handleFrame(tabId: number, req: PkRequest): Promise<InlineReply<PkView | null>> {
     const s = live(tabId, req.token);
     if (!s) {
+      const n = notices.get(tabId);
+      if (req.type === "pk_state" && n && n.token === req.token) return { ok: true, value: { state: "saved", site: n.site } };
       // The session is gone (worker restarted, or already finished) but the
       // card is still up. Closing it must still work: the answer goes to
       // every frame of the card's tab, and only the bridge that holds this
@@ -380,6 +461,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         rpId: s.rpId,
         userName: s.options.userName,
         excludeCredentials: s.options.excludeCredentials,
+        conditional: false,
       });
       if (!current()) return;
       s.exists = r.excluded;
@@ -400,6 +482,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
 
   function forgetTab(tabId: number): void {
     drop(tabId);
+    dropNotice(tabId);
   }
 
   return { handleContent, handleFrame, conditionalFor, pickConditional, refreshLocked, reset, forgetTab };

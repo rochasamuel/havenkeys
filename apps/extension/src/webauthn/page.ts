@@ -100,7 +100,7 @@ export function install(win: Win): void {
     return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
   }
 
-  function createOptions(pk: PublicKeyCredentialCreationOptions): CreateOptions | null {
+  function createOptions(pk: PublicKeyCredentialCreationOptions, conditional: boolean): CreateOptions | null {
     try {
       const challenge = withinBridgeLimits(bufferSourceBytes(pk.challenge), MAX_CHALLENGE_BYTES);
       const userId = withinBridgeLimits(bufferSourceBytes(pk.user?.id), MAX_USER_HANDLE_BYTES);
@@ -124,6 +124,7 @@ export function install(win: Win): void {
         algs,
         excludeCredentials: exclude,
         timeoutMs: readTimeout(pk.timeout),
+        conditional,
       };
     } catch {
       return null;
@@ -316,11 +317,12 @@ export function install(win: Win): void {
   function wrappedCreate(options?: CredentialCreationOptions): Promise<Credential | null> {
     const fallback = () => origCreate(options as never);
     const pk = options?.publicKey;
+    if (!pk) return fallback();
     // Automatic passkey upgrade (not yet in lib.dom's CredentialCreationOptions):
-    // like a silent get, never our business.
-    const mediation = (options as { mediation?: string } | undefined)?.mediation;
-    if (!pk || mediation === "conditional") return fallback();
-    const opts = createOptions(pk);
+    // HavenKeys answers only right after it filled this site's password; the
+    // desktop decides, and anything else ends in the browser's own create().
+    const conditional = (options as { mediation?: string }).mediation === "conditional";
+    const opts = createOptions(pk, conditional);
     if (!opts) return fallback();
     const signal = options?.signal ?? undefined;
     return ask({ kind: "create", id: newId(), options: opts }, signal).then((o) => settle(o, fallback, signal));

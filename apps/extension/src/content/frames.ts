@@ -122,3 +122,10 @@ export const PASSKEY_HEIGHT = 300;
 export function passkeyBox(viewport: { width: number }): Box {
   return { top: 12, left: Math.max(4, viewport.width - PASSKEY_WIDTH - 16), width: PASSKEY_WIDTH, height: PASSKEY_HEIGHT };
 }
+
+export const NOTICE_HEIGHT = 112;
+
+/** The "passkey saved" notice: where the passkey card would be, shorter. */
+export function noticeBox(viewport: { width: number }): Box {
+  return { ...passkeyBox(viewport), height: NOTICE_HEIGHT };
+}

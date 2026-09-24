@@ -316,6 +316,11 @@ main {
   padding: 0 12px 12px;
 }
 
+/* The "passkey saved" notice has no buttons, and no room for their row. */
+.card > .actions[hidden] {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

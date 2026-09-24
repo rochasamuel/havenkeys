@@ -76,12 +76,26 @@ describe("page wrapper", () => {
     expect(nativeCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("passes a conditional create straight through, like a silent get", async () => {
+  it("forwards a conditional create (the automatic upgrade), and falls back with the site's own options", async () => {
     const win = fresh();
     install(win);
-    await win.navigator.credentials.create({ publicKey: pk, mediation: "conditional" } as CredentialCreationOptions);
-    expect(requests).toEqual([]);
+    answer = () => ({ outcome: "fallback" });
+    const options = { publicKey: pk, mediation: "conditional" } as CredentialCreationOptions;
+    expect(await win.navigator.credentials.create(options)).toEqual({ native: "create" });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.kind).toBe("create");
+    expect((requests[0]?.options as { conditional: boolean }).conditional).toBe(true);
     expect(nativeCreate).toHaveBeenCalledTimes(1);
+    expect(nativeCreate.mock.calls[0]?.[0]).toBe(options);
+    expect((nativeCreate.mock.calls[0]?.[0] as { mediation?: string }).mediation).toBe("conditional");
+  });
+
+  it("sends conditional: false for an ordinary create", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "fallback" });
+    await win.navigator.credentials.create({ publicKey: pk } as CredentialCreationOptions);
+    expect((requests[0]?.options as { conditional: boolean }).conditional).toBe(false);
   });
 
   it("falls back instead of sending a request the bridge would silently drop", async () => {

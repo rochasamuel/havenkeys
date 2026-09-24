@@ -32,6 +32,8 @@ export const MAX_TIMEOUT_MS = 5 * 60_000;
 export const MIN_TIMEOUT_MS = 10_000;
 /** How often the bridge asks whether its session is still alive. */
 export const PING_INTERVAL_MS = 20_000;
+/** How long the "passkey saved" notice stays up. */
+export const NOTICE_MS = 4_000;
 /** Largest CustomEvent detail accepted from the page. */
 export const MAX_EVENT_CHARS = 16_384;
 const MAX_NAME_CHARS = 512;
@@ -49,6 +51,8 @@ export interface CreateOptions {
   /** Only 16-byte IDs; others cannot be ours and are dropped by page.ts. */
   excludeCredentials: string[];
   timeoutMs: number | null;
+  /** `mediation: "conditional"`: the site's automatic passkey upgrade. */
+  conditional: boolean;
 }
 
 export interface GetOptions {
@@ -112,9 +116,14 @@ export type WaRequest =
   /** Is this session still alive? Also keeps the worker awake. */
   | { type: "wa_ping"; token: string };
 
-/** `ui`: which frame the bridge shows; "none" for conditional mediation. */
+/**
+ * `ui`: which frame the bridge shows; "none" for conditional mediation.
+ * "saved": the automatic upgrade already saved the passkey; the bridge
+ * answers the page with `credential` and shows the notice for `token`.
+ */
 export type WaReply =
   | { ok: true; token: string; ui: "chooser" | "create" | "none" }
+  | { ok: true; token: string; ui: "saved"; credential: CreatedCredential }
   | { ok: false; outcome: Exclude<Outcome, { outcome: "credential" }> };
 
 export interface BgWaResult {
@@ -144,9 +153,12 @@ export interface PasskeyRow {
 export type PkView =
   | { state: "locked"; site: string }
   | { state: "chooser"; site: string; passkeys: PasskeyRow[] }
-  | { state: "create"; site: string; userName: string; candidates: PasskeyCandidate[] }
+  /** `upgradeItemId`: the login just filled, for the site's automatic upgrade; null otherwise. */
+  | { state: "create"; site: string; userName: string; candidates: PasskeyCandidate[]; upgradeItemId: string | null }
   /** The site's excludeCredentials names a passkey HavenKeys holds. */
-  | { state: "exists"; site: string };
+  | { state: "exists"; site: string }
+  /** The notice after the automatic upgrade saved a passkey. */
+  | { state: "saved"; site: string };
 
 // ---------------------------------------------------------------- validation
 
@@ -176,14 +188,14 @@ const ERROR_NAMES: readonly ErrorName[] = ["NotAllowedError", "InvalidStateError
 
 function parseCreateOptions(v: unknown): CreateOptions | null {
   const o = obj(v);
-  const keys = ["rpId", "challenge", "userId", "userName", "userDisplayName", "algs", "excludeCredentials", "timeoutMs"];
+  const keys = ["rpId", "challenge", "userId", "userName", "userDisplayName", "algs", "excludeCredentials", "timeoutMs", "conditional"];
   if (!o || !keysAre(o, keys)) return null;
-  const { rpId, challenge, userId, userName, userDisplayName, algs, excludeCredentials, timeoutMs } = o;
+  const { rpId, challenge, userId, userName, userDisplayName, algs, excludeCredentials, timeoutMs, conditional } = o;
   if (!isRpId(rpId) || !isChallenge(challenge) || !isB64Url(userId, 1, MAX_USER_HANDLE_BYTES)) return null;
   if (!isName(userName) || !(userDisplayName === null || isName(userDisplayName))) return null;
   if (!Array.isArray(algs) || algs.length > MAX_ALGS || !algs.every((a) => Number.isInteger(a))) return null;
-  if (!isCredList(excludeCredentials) || !isTimeout(timeoutMs)) return null;
-  return { rpId, challenge, userId, userName, userDisplayName, algs: algs as number[], excludeCredentials, timeoutMs };
+  if (!isCredList(excludeCredentials) || !isTimeout(timeoutMs) || typeof conditional !== "boolean") return null;
+  return { rpId, challenge, userId, userName, userDisplayName, algs: algs as number[], excludeCredentials, timeoutMs, conditional };
 }
 
 function parseGetOptions(v: unknown): GetOptions | null {
@@ -304,7 +316,13 @@ export function parseWaReply(msg: unknown): WaReply | null {
   const o = obj(msg);
   if (!o) return null;
   if (o.ok === true) {
-    if (!keysAre(o, ["ok", "token", "ui"]) || !isToken(o.token)) return null;
+    if (!isToken(o.token)) return null;
+    if (o.ui === "saved") {
+      if (!keysAre(o, ["ok", "token", "ui", "credential"])) return null;
+      const c = parseCredential(o.credential);
+      return c && c.type === "create" ? { ok: true, token: o.token, ui: "saved", credential: c } : null;
+    }
+    if (!keysAre(o, ["ok", "token", "ui"])) return null;
     if (o.ui !== "chooser" && o.ui !== "create" && o.ui !== "none") return null;
     return { ok: true, token: o.token, ui: o.ui };
   }

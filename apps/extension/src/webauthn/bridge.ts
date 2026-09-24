@@ -13,14 +13,20 @@
 // worker from being suspended, and notices when it was anyway (the session
 // is then gone). A lost conditional session is asked for again; a lost modal
 // one ends in the browser's own implementation.
+//
+// The site's automatic passkey upgrade (a conditional create) may come back
+// already saved (`ui: "saved"`, with the credential): the bridge answers the
+// page at once and shows a "passkey saved" notice for NOTICE_MS, which the
+// page cannot keep up (touching it removes it). No session is left to ping.
 
-import { InlineFrame, passkeyBox } from "../content/frames";
+import { InlineFrame, noticeBox, passkeyBox } from "../content/frames";
 import {
   clampTimeout,
   parseBgWaResult,
   parsePageRequest,
   parsePingReply,
   parseWaReply,
+  NOTICE_MS,
   PING_INTERVAL_MS,
   REQUEST_EVENT,
   RESPONSE_EVENT,
@@ -138,6 +144,11 @@ export function startBridge(): void {
     }
     if (!reply) return respond(req.id, { outcome: "fallback" });
     if (!reply.ok) return respond(req.id, reply.outcome);
+    if (reply.ui === "saved") {
+      respond(req.id, { outcome: "credential", credential: reply.credential });
+      showNotice(reply.token);
+      return;
+    }
     entry.token = reply.token;
     startPing(req.id, entry);
     if (reply.ui === "none") return;
@@ -148,6 +159,12 @@ export function startBridge(): void {
       void send({ type: "wa_cancel", token });
       respond(req.id, { outcome: "error", name: "NotAllowedError" });
     });
+  }
+
+  /** "Passkey saved", for NOTICE_MS; gone at once if the page touches it. */
+  function showNotice(token: string): void {
+    const frame: InlineFrame = new InlineFrame("passkey.html", token, noticeBox(viewport()), () => frame.remove());
+    setTimeout(() => frame.remove(), NOTICE_MS);
   }
 
   window.addEventListener(REQUEST_EVENT, (e) => {

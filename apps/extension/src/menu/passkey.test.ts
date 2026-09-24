@@ -87,4 +87,30 @@ describe("passkey card", () => {
     expect(confirm.textContent).toBe("Close");
     expect((document.getElementById("cancel") as HTMLButtonElement).hidden).toBe(true);
   });
+
+  it("titles the upgrade card and preselects the filled login", async () => {
+    const OTHER = "11111111-2222-4333-8444-555555555555";
+    replies = [{ ok: true, value: { state: "create", site: "github.com", userName: "octo", upgradeItemId: OTHER, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }, { itemId: OTHER, title: "GitHub work", username: "work" }] } }];
+    await load();
+    expect(text("question")).toBe("Add a passkey?");
+    const checked = [...document.querySelectorAll<HTMLInputElement>("input[type=radio]")].map((r) => r.checked);
+    expect(checked).toEqual([false, true, false]);
+  });
+
+  it("keeps the ordinary save card for ordinary creates", async () => {
+    replies = [{ ok: true, value: { state: "create", site: "github.com", userName: "octo", upgradeItemId: null, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }] } }];
+    await load();
+    expect(text("question")).toBe("Save a passkey to HavenKeys?");
+    const checked = [...document.querySelectorAll<HTMLInputElement>("input[type=radio]")].map((r) => r.checked);
+    expect(checked).toEqual([true, false]);
+  });
+
+  it("shows the saved notice without buttons", async () => {
+    replies = [{ ok: true, value: { state: "saved", site: "github.com" } }];
+    await load();
+    expect(text("question")).toBe("Passkey saved to HavenKeys");
+    expect(text("detail")).toBe("Manage it in the HavenKeys app");
+    expect(text("site")).toBe("github.com");
+    for (const id of ["cancel", "fallback", "confirm"]) expect((document.getElementById(id) as HTMLButtonElement).hidden).toBe(true);
+  });
 });

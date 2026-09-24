@@ -3,13 +3,13 @@ import type { Request } from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
 import type { CreateOptions, GetOptions } from "../webauthn/messages";
 import type { FrameRef } from "./inline-handler";
-import { createWebAuthnHandler } from "./webauthn-handler";
+import { createWebAuthnHandler, NOTICE_TTL_MS } from "./webauthn-handler";
 
 const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 const T1 = "0".repeat(31) + "1";
 const getOpts: GetOptions = { rpId: null, challenge: "AQ", allowCredentials: [], conditional: false, timeoutMs: null };
-const createOpts: CreateOptions = { rpId: "github.com", challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: null };
+const createOpts: CreateOptions = { rpId: "github.com", challenge: "AQ", userId: "AQ", userName: "octo", userDisplayName: null, algs: [-7], excludeCredentials: [], timeoutMs: null, conditional: false };
 const match = { itemId: ITEM, credentialId: CRED, title: "GitHub", userName: "octo" };
 const signed = { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" };
 const created = { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 };
@@ -41,7 +41,7 @@ const defaults = (r: Request): unknown => {
     case "passkey_get":
       return signed;
     case "check_passkey_create":
-      return { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }] };
+      return { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }], upgrade: { kind: "none" } };
     case "passkey_create":
       return created;
     default:
@@ -136,7 +136,7 @@ describe("create", () => {
     expect(await h.handleContent(frame(), { type: "wa_create", options: createOpts })).toEqual({ ok: true, token: T1, ui: "create" });
     expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({
       ok: true,
-      value: { state: "create", site: "github.com", userName: "octo", candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }] },
+      value: { state: "create", site: "github.com", userName: "octo", candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }], upgradeItemId: null },
     });
     expect(requests.some((r) => r.type === "passkey_create")).toBe(false);
     await h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
@@ -149,6 +149,7 @@ describe("create", () => {
       userName: "octo",
       displayName: null,
       itemId: ITEM,
+      conditional: false,
     });
     expect(sent.at(-1)).toMatchObject({ outcome: { outcome: "credential", credential: { type: "create", publicKeyAlgorithm: -7 } } });
   });
@@ -165,7 +166,7 @@ describe("create", () => {
   });
 
   it("reports an excluded credential only after the user closes the card", async () => {
-    const excluded = (r: Request) => (r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [] } : defaults(r));
+    const excluded = (r: Request) => (r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } : defaults(r));
     const { h, sent, requests } = setup(excluded);
     expect(await h.handleContent(frame(), { type: "wa_create", options: createOpts })).toEqual({ ok: true, token: T1, ui: "create" });
     expect(sent).toEqual([]);
@@ -284,7 +285,7 @@ describe("unlock while a card is open", () => {
     let mode: "locked" | "excluded" = "locked";
     const { h, sent } = setup((r) => {
       if (mode === "locked") throw new BridgeError("locked", "x");
-      return r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [] } : defaults(r);
+      return r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } : defaults(r);
     });
     await h.handleContent(frame(), { type: "wa_create", options: createOpts });
     await h.refreshLocked();
@@ -405,5 +406,74 @@ describe("lookups per tab", () => {
     expect(requests.filter((r) => r.type === "find_passkeys")).toHaveLength(2);
     // Once the first lookup is done, the tab may ask again.
     expect(await h.handleContent(frame(), { type: "wa_get", options: getOpts })).toMatchObject({ ok: true });
+  });
+});
+
+const cond: CreateOptions = { ...createOpts, conditional: true };
+const withUpgrade = (upgrade: unknown) => (r: Request) =>
+  r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }], upgrade } : defaults(r);
+const FB = { ok: false, outcome: { outcome: "fallback" } };
+
+describe("automatic passkey upgrade", () => {
+  it("saves silently on auto and returns the credential with a notice token", async () => {
+    const { h, requests, sent } = setup(withUpgrade({ kind: "auto", itemId: ITEM }));
+    const reply = await h.handleContent(frame(), { type: "wa_create", options: cond });
+    expect(reply).toMatchObject({ ok: true, token: T1, ui: "saved", credential: { type: "create", credentialId: CRED } });
+    expect(requests[0]).toMatchObject({ type: "check_passkey_create", conditional: true });
+    expect(requests[1]).toMatchObject({ type: "passkey_create", itemId: ITEM, conditional: true, url: "https://github.com/login" });
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "saved", site: "github.com" } });
+    expect((await h.handleFrame(2, { type: "pk_state", token: T1 })).ok).toBe(false);
+    // No session: nothing else is sent, and the notice token opens nothing else.
+    expect(sent).toEqual([]);
+    expect((await h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM })).ok).toBe(false);
+    expect(requests.filter((r) => r.type === "passkey_create")).toHaveLength(1);
+  });
+
+  it("forgets the notice after its TTL and when the tab goes away", async () => {
+    const { h } = setup(withUpgrade({ kind: "auto", itemId: ITEM }));
+    await h.handleContent(frame(), { type: "wa_create", options: cond });
+    await vi.advanceTimersByTimeAsync(NOTICE_TTL_MS + 1);
+    expect((await h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
+    const other = setup(withUpgrade({ kind: "auto", itemId: ITEM }));
+    await other.h.handleContent(frame(), { type: "wa_create", options: cond });
+    other.h.forgetTab(1);
+    expect((await other.h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
+  });
+
+  it("shows the Add a passkey card on ask, and the click saves non-conditionally", async () => {
+    const { h, requests } = setup(withUpgrade({ kind: "ask", itemId: ITEM }));
+    expect(await h.handleContent(frame(), { type: "wa_create", options: cond })).toEqual({ ok: true, token: T1, ui: "create" });
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toMatchObject({ ok: true, value: { state: "create", upgradeItemId: ITEM } });
+    expect(requests.some((r) => r.type === "passkey_create")).toBe(false);
+    await h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
+    expect(requests.at(-1)).toMatchObject({ type: "passkey_create", itemId: ITEM, conditional: false });
+  });
+
+  it("falls back on none, excluded, locked, offline and failed saves", async () => {
+    expect(await setup(withUpgrade({ kind: "none" })).h.handleContent(frame(), { type: "wa_create", options: cond })).toEqual(FB);
+    const excluded = setup((r) => (r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } : defaults(r)));
+    expect(await excluded.h.handleContent(frame(), { type: "wa_create", options: cond })).toEqual(FB);
+    const excludedAuto = setup((r) => (r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "auto", itemId: ITEM } } : defaults(r)));
+    expect(await excludedAuto.h.handleContent(frame(), { type: "wa_create", options: cond })).toEqual(FB);
+    expect(excludedAuto.requests.some((r) => r.type === "passkey_create")).toBe(false);
+    const locked = setup(() => {
+      throw new BridgeError("locked", "x");
+    });
+    expect(await locked.h.handleContent(frame(), { type: "wa_create", options: cond })).toEqual(FB);
+    expect((await locked.h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
+    const offline = setup((r) => {
+      if (r.type === "passkey_create") throw new BridgeError("offline", "x");
+      return withUpgrade({ kind: "auto", itemId: ITEM })(r);
+    });
+    expect(await offline.h.handleContent(frame(), { type: "wa_create", options: cond })).toEqual(FB);
+    expect((await offline.h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
+  });
+
+  it("sends conditional: false for ordinary creates", async () => {
+    const { h, requests } = setup(defaults);
+    await h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    expect(requests[0]).toMatchObject({ type: "check_passkey_create", conditional: false });
+    await h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM });
+    expect(requests.at(-1)).toMatchObject({ type: "passkey_create", conditional: false });
   });
 });

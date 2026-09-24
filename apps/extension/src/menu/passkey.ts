@@ -46,8 +46,8 @@ function row(p: PasskeyRow, t: string): HTMLButtonElement {
   return b;
 }
 
-/** "Add to <login>" radios plus "New login". */
-function choices(candidates: PasskeyCandidate[], userName: string): { el: HTMLElement; selected(): string | null } {
+/** "Add to <login>" radios plus "New login"; `preselect` (the login just filled) wins over a username match. */
+function choices(candidates: PasskeyCandidate[], userName: string, preselect: string | null): { el: HTMLElement; selected(): string | null } {
   const list = h("div", { className: "choices" });
   const radios: Array<{ input: HTMLInputElement; itemId: string | null }> = [];
   const add = (label: string, itemId: string | null, checked: boolean) => {
@@ -58,7 +58,9 @@ function choices(candidates: PasskeyCandidate[], userName: string): { el: HTMLEl
     radios.push({ input, itemId });
     list.append(h("label", { className: "choice" }, input, h("span", { text: label })));
   };
-  const preferred = candidates.find((c) => (c.username ?? "").toLowerCase() === userName.toLowerCase());
+  const preferred = preselect
+    ? candidates.find((c) => c.itemId === preselect)
+    : candidates.find((c) => (c.username ?? "").toLowerCase() === userName.toLowerCase());
   for (const c of candidates) add(`Add to “${c.title}”`, c.itemId, c === preferred);
   add("New login", null, preferred === undefined);
   return { el: list, selected: () => radios.find((r) => r.input.checked)?.itemId ?? null };
@@ -102,9 +104,9 @@ function render(t: string, view: PkView): void {
       main.replaceChildren(...view.passkeys.map((p) => row(p, t)));
       return;
     case "create": {
-      question.textContent = "Save a passkey to HavenKeys?";
+      question.textContent = view.upgradeItemId ? "Add a passkey?" : "Save a passkey to HavenKeys?";
       detail.textContent = view.userName || "No account name";
-      const c = choices(view.candidates, view.userName);
+      const c = choices(view.candidates, view.userName, view.upgradeItemId);
       main.replaceChildren(c.el);
       confirmBtn.hidden = false;
       onClick(confirmBtn, async () => {
@@ -127,6 +129,14 @@ function render(t: string, view: PkView): void {
         const r = await ask<null>({ type: "pk_close", token: t });
         if (!r?.ok) showError(r?.message ?? UNREACHABLE);
       });
+      return;
+    case "saved":
+      // A notice, not a question: the bridge removes it after NOTICE_MS.
+      question.textContent = "Passkey saved to HavenKeys";
+      detail.textContent = "Manage it in the HavenKeys app";
+      main.replaceChildren();
+      cancelBtn.hidden = fallbackBtn.hidden = confirmBtn.hidden = true;
+      document.querySelector(".actions")?.setAttribute("hidden", "");
       return;
   }
 }
