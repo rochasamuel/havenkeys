@@ -279,6 +279,50 @@ public data and the user's click. New or changed threats:
   when no bridge acknowledges within 1 s and has its own ceiling; a card
   whose session is gone can still be closed. *Residual:* none known beyond
   the delay (`security-review.md` PK17, PK20).
+* **The automatic upgrade's relaxed click rule.** A site's automatic passkey
+  upgrade — `create()` with `mediation: "conditional"`, right after HavenKeys
+  fills a password on that site — can save a passkey with no click in
+  HavenKeys UI. The consent is that password fill itself: Rust remembers, in
+  the unlocked session only, which login it filled on which site
+  (`VaultService::fill_for_page` → `Session::recent_fills`), and
+  `upgrade_for` allows the silent save only within the next 5 minutes
+  (`UPGRADE_WINDOW_MS`), for that same login, on that same site, and only
+  when the account name the site sent matches (folded) or the login has
+  none. `stage_passkey_create` re-derives this decision itself and refuses
+  (`Denied`) unless it comes out `Auto` for exactly the requested item — the
+  extension's claim that a request is the automatic upgrade is not trusted.
+  *Mitigation:* the vault setting `auto_passkey_upgrade` (on by default)
+  turns this off; when off, the save card asks first, as for any other
+  `create()`. *Residual:* within the window, a compromised extension can add
+  a passkey to the login the user just filled, on that site, without a
+  further click; it cannot add one to any other login, any other site, a
+  look-alike domain, or after the window closes
+  (`crates/havenkeys-core/tests/passkeys.rs`
+  `conditional_create_needs_auto_for_exactly_that_login`,
+  `upgrade_is_per_site_and_never_for_look_alikes`;
+  `crates/havenkeys-bridge/tests/bridge.rs` `passkey_upgrade_through_the_bridge`).
+* **Fill memory.** The recent-fill list that grants that consent holds only
+  an item ID and a site (the page's registrable domain, or its host with
+  none), never a username, password or full URL. It exists only in the
+  unlocked session's memory, is capped at 16 entries, is never written to
+  disk, and is dropped on lock along with the rest of the session
+  (`fill_memory_is_dropped_on_lock`).
+* **`passkey_status` oracle.** The field menu's "you have a passkey" /
+  "this site supports passkeys" hint asks the desktop whether it holds any
+  passkey the page's rpId may use (`has_passkey_for_page`, wire request
+  `passkey_status`). It is Lookup-class, like `find_matches`, and is asked
+  only when the user opens a field menu on a page that already lists a saved
+  login. The answer itself never reaches the page — it only changes which
+  row our menu shows — but a page can see the menu frame's size change,
+  which is the same residual signal `autofill.md` already documents for
+  menu presence generally.
+* **Directory data.** The "supports passkeys" hint's site names and help
+  links (`apps/extension/src/data/passkey-sites.json`) are third-party text
+  from the 2factorauth Passkeys Directory, not verified by HavenKeys or by
+  the site itself. It is a snapshot committed to the repository and reviewed
+  like code (`scripts/update-passkey-directory.mjs`), never fetched at
+  runtime; the extension renders the name with `textContent` only, keeps
+  only `https:` help links, and opens one only on a trusted click.
 
 ## 4. Out of scope (not defended)
 
@@ -339,3 +383,5 @@ public data and the user's click. New or changed threats:
 | A17 | Page tries to get a passkey signature without a click in the extension's frame | No signature: only a pick from the passkey frame or the field menu signs | `apps/extension/src/background/webauthn-handler.test.ts` |
 | A18 | Page probes `excludeCredentials` to learn, without a click, whether HavenKeys holds one of its accounts' passkeys | No answer until the user clicks **Close** on the "already saved" card | `apps/extension/src/background/webauthn-handler.test.ts` ("reports an excluded credential only after the user closes the card") |
 | A19 | Page fires WebAuthn requests in a loop to drain the desktop's lookup rate limit | One lookup per tab at a time; the rest go to the browser | `apps/extension/src/background/webauthn-handler.test.ts` ("allows one wa_get/wa_create lookup in flight per tab") |
+| A1u | Automatic passkey upgrade (`conditional create`) requested for a login other than the one just filled, for another site, before any fill, or after the 5-minute window | DENIED; falls back to the browser, nothing created | `crates/havenkeys-core/tests/passkeys.rs` (`conditional_create_needs_auto_for_exactly_that_login`), `crates/havenkeys-bridge/tests/bridge.rs` (`passkey_upgrade_through_the_bridge`) |
+| A2u | Automatic upgrade on the same registrable domain as the fill (a subdomain) versus a look-alike domain | Subdomain: allowed if the login is offered there; look-alike (`github.com.evil.com`): `upgrade: none`, `authorize_rp` itself refuses | `crates/havenkeys-core/tests/passkeys.rs` (`upgrade_is_per_site_and_never_for_look_alikes`) |

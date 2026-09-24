@@ -326,8 +326,6 @@ It hands the call straight to the browser's own implementation, unchanged,
 when:
 
 * there is no `publicKey` member, or `get()` asks for `mediation: "silent"`;
-* `create()` asks for `mediation: "conditional"` (automatic passkey upgrade
-  after a password sign-in is not offered);
 * `create()` asks for `authenticatorAttachment: "cross-platform"`, or does not
   list ES256 (`-7`) in `pubKeyCredParams`;
 * the challenge is empty or over 1024 bytes, the user handle is empty or over
@@ -383,6 +381,94 @@ user handle), the new one **replaces** it, in the login that holds it, even
 if the user picked a different login or "New login". WebAuthn authenticators
 do the same.
 
+### Automatic upgrade
+
+Right after HavenKeys fills a password on a site and the user signs in, some
+sites call `create()` with `mediation: "conditional"` to offer a passkey for
+that same sign-in (the *automatic passkey upgrade*). `page.ts` forwards this
+like any other `create()` (`CreateOptions.conditional`); it is the desktop,
+not the extension, that decides what happens next:
+
+* The desktop remembers each password fill — which login, which site
+  (registrable domain), when — for 5 minutes, in the unlocked session's
+  memory only (`threat-model.md` T8, "Fill memory"). A conditional
+  `create()` on that same site, within that window, naming that login's
+  account name (folded) or none, and while the login can still take another
+  passkey, is that fill's automatic upgrade.
+* **`auto`** (the vault setting `auto_passkey_upgrade`, on by default): the
+  passkey is created without a card. The credential goes back to the site at
+  once, and the bridge shows a small notice frame for 4 seconds — "Passkey
+  saved to HavenKeys · `<site>`", "Manage it in the HavenKeys app" — that the
+  page cannot keep up (touching it removes it).
+* **`ask`** (the setting off): the ordinary save card opens, titled "Add a
+  passkey?" instead of "Save a passkey to HavenKeys?", with the login that
+  was just filled preselected among the "Add to …" choices.
+* Anything else — no recent fill, a different account name, the matching
+  login already has 8 passkeys, the site's `excludeCredentials` already
+  names a passkey HavenKeys holds, the desktop locked or unreachable, or any
+  error — falls back to the browser, exactly like a conditional `create()`
+  from a site HavenKeys does not recognize (normally a no-op).
+
+Rust makes this decision twice: once to answer `check_passkey_create`'s
+`upgrade` field (`none` / `ask{itemId}` / `auto{itemId}`), and again inside
+`passkey_create` itself, which refuses (`Denied`) a conditional request
+unless it still comes out `Auto` for exactly the item named. The extension's
+claim that a request is the automatic upgrade, or that it is for a
+particular item, is never trusted on its own.
+
+Setting: Settings → *Browser extension* → "Add passkeys automatically after
+I sign in" (off: "HavenKeys asks first").
+
+If the page aborts, navigates away, or otherwise cancels its request while
+an `auto` save is already in flight, the cancellation reaches the extension
+too late to stop it: the passkey the desktop already created and sent to the
+server **stays in the vault**, visible in that login's Passkeys list in the
+desktop app, even though the site never receives it and no "saved" notice
+appears. See Limitations.
+
+### Passkey hints in the field menu
+
+Opening a login field's menu on a site that has at least one saved login:
+
+1. If the site's own conditional `get()` is already waiting (passkey
+   autofill), HavenKeys' matching passkeys lead the menu, unchanged (see
+   [Sign in](#sign-in)).
+2. Otherwise, if HavenKeys already holds a passkey the page may use
+   (`passkey_status`, answered by `has_passkey_for_page`), the first row is
+   a hint with no click action: "You have a passkey for `<site>`" / "Use the
+   site's 'Sign in with a passkey' option", ahead of the saved logins.
+3. Otherwise, if the page matches an entry in the **Passkeys Directory**
+   that has a help link, the last row is "`<name>` supports passkeys" /
+   "How to add one". A click, through the menu's usual trusted-click guard,
+   opens the entry's help URL with `chrome.tabs.create` and closes the menu.
+   With no help link, or no match, the row is not shown.
+
+`passkey_status` is a Lookup-class request (like `find_matches`), asked once
+each time the menu opens. Its answer never reaches the page — only whether
+our own menu shows a hint does, and a page can already see that the menu
+frame appeared and roughly how tall it is (see Limitations, and the
+`passkey_status` oracle entry in `threat-model.md` T8).
+
+**Passkeys Directory.** The names, domains and help links behind row 3 are a
+snapshot of the [Passkeys Directory by
+2factorauth](https://github.com/2factorauth/passkeys), licensed
+CC-BY-4.0 ("Passkeys Directory by 2factorauth"; see
+`THIRD-PARTY-NOTICES.md`), committed at
+`apps/extension/src/data/passkey-sites.json` and never fetched at runtime.
+The Directory's public API (`passkeys-api.2fa.directory`) is keyed by domain
+and carries no site names, so `scripts/update-passkey-directory.mjs` — run
+by hand, not at build time — instead clones
+`github.com/2factorauth/passkeys` and reads its source `entries/*/*.json`
+files directly, keeping only entries with a valid hostname and passwordless
+or MFA support, and only `https:` documentation links. The generated file is
+reviewed like any other change before it is committed. Matching a page to an
+entry (`findPasskeySite`) is a plain host-suffix comparison — the page's
+host equals a domain or ends with `.` + a domain, longest domain wins — with
+no Public Suffix List: this is only a UI hint, never an authorization
+decision, so the worst a wrong match can do is show or hide a help link.
+`github.com.evil.com` still never matches `github.com`. The site name is
+rendered with `textContent` only, as untrusted third-party text.
+
 ### Errors and states
 
 | Situation | What the site sees |
@@ -397,7 +483,12 @@ do the same.
 | Page leaves (`pagehide`, including entering the back/forward cache), or removes, hides or moves the card's frame | Request cancelled (`AbortError` on `pagehide`, `NotAllowedError` for the frame). For a conditional request only HavenKeys' side ends; the browser's own conditional request still answers the site |
 | Extension disabled or updated while the page stays open (the page script remains, the bridge is gone) | No acknowledgement within 1 s: the browser's own WebAuthn |
 | Background worker restarted, losing the session | Modal: the browser's own WebAuthn (within 20 s, or at once when the user clicks Cancel or **Use another device** on the card). Conditional: HavenKeys asks again |
-| Vault locks while the card is open | The card closes; `NotAllowedError` |
+| Vault locks while the card is open | The card closes; `NotAllowedError`. This includes an automatic upgrade's "Add a passkey?" card |
+| Conditional create, no recent password fill / a different account name / the matching login already at 8 passkeys | Fallback, silently — as if HavenKeys were not installed |
+| Conditional create, `auto_passkey_upgrade` off, a recent matching fill | "Add a passkey?" card, that login preselected |
+| Automatic upgrade fails (offline, an internal error) | Fallback, no notice, nothing stored |
+| Vault locks within the fill's 5-minute window | The fill memory is gone; a later conditional `create()` on that site falls back |
+| `passkey_status` fails (locked, desktop not running, rate limited) | Treated as false: no "you have a passkey" hint, no Passkeys Directory row |
 
 ### Sessions
 
@@ -496,3 +587,13 @@ See `security-model.md` §12.
 * **No WebAuthn extensions** (PRF, largeBlob, credProps, …), no attestation
   other than `none`, and no hybrid (phone) transport from HavenKeys itself;
   **Use another device** reaches the browser's own.
+* **`PublicKeyCredential.getClientCapabilities()` is unchanged.** A site
+  that checks its `conditionalCreate` capability before offering the
+  automatic upgrade sees the browser's own answer; HavenKeys does not
+  intercept or change that call.
+* **An abort during a silent save can leave an orphaned passkey.** If a page
+  aborts, navigates away, or otherwise cancels its `create()` while the
+  automatic upgrade's save is already in flight, the save is not rolled
+  back: the passkey stays in the vault (visible in that login's Passkeys
+  list in the desktop app) even though the site never receives it, and the
+  "saved" notice does not appear either.

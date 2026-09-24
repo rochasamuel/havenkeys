@@ -442,8 +442,10 @@ See `native-messaging.md` for the full protocol. In summary:
 * The socket lives in a `0700` per-user directory that both sides verify.
   Peer UIDs are checked on Unix.
 * Browser integration is opt-in (off by default) in Settings. The switch is
-  stored in the encrypted settings blob and enforced in Rust.
-* Passkeys add one more write, `passkey_create`, and three lookups or
+  stored in the encrypted settings blob and enforced in Rust. The automatic
+  passkey upgrade has its own switch in the same blob, `auto_passkey_upgrade`
+  (on by default; §15).
+* Passkeys add one more write, `passkey_create`, and four lookups or
   signatures (§15). Toward the browser they carry only public WebAuthn data
   (credential IDs, public keys, signatures, authenticator data).
 
@@ -526,6 +528,24 @@ in `autofill.md` §Passkeys, and the threats in `threat-model.md` T8.
   the same account (rpId and user handle) again replaces its passkey
   wherever in the vault it is (WebAuthn does the same), ignoring the login
   the user picked.
+* **Automatic upgrade.** A conditional `create()` (`mediation:
+  "conditional"`) right after HavenKeys fills a password can save a passkey
+  with no click at all, but the consent still lives entirely in Rust, in the
+  unlocked session: `fill_for_page` records which login it filled, on which
+  site, and when, in memory only (never persisted, dropped on lock); a
+  conditional `check_passkey_create`/`passkey_create` for that same login and
+  site within the next 5 minutes is `auto` when the vault setting
+  `auto_passkey_upgrade` is on (`ask` when it is off), and `passkey_create`
+  itself refuses (`denied`) unless it still comes out `auto` for exactly the
+  item named. The extension's word that a request is the automatic upgrade
+  is never enough on its own (`threat-model.md` T8, "Relaxed click rule" and
+  "Fill memory"; `native-messaging.md` §7).
+* **`passkey_status`.** A Lookup-class request answering only whether the
+  vault holds any passkey `authorize_rp` allows for the page — nothing else
+  about it. The field menu asks it once when it opens, to decide between a
+  "you have a passkey" hint and a Passkeys Directory help link; the answer
+  shapes only that menu and never reaches the page (`autofill.md`, "Passkey
+  hints in the field menu").
 * **What the extension sees:** titles, account names, credential IDs, and
   the public outputs of WebAuthn. Never a private key.
 

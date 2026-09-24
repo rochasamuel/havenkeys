@@ -18,7 +18,7 @@ changes need the server.
 | Domain matching + origin binding for autofill | Implemented in the core ([docs/autofill.md](docs/autofill.md)) |
 | Native messaging (native host + desktop bridge) | Implemented ([docs/native-messaging.md](docs/native-messaging.md)) |
 | Browser extension (MV3, Chrome + Firefox) | Toolbar popup with Fill; opt-in in-page suggestions for logins, one-time codes and generated passwords; save/update prompts ([docs/autofill.md](docs/autofill.md)) |
-| Passkeys (WebAuthn, ES256) | Implemented and unit-tested: create, save to a login, sign in (chooser and passkey autofill), delete from the desktop. Not yet checked against real sites in a browser ([docs/security-review.md](docs/security-review.md), Passkeys) |
+| Passkeys (WebAuthn, ES256) | Implemented and unit-tested: create, save to a login, sign in (chooser and passkey autofill), an automatic upgrade after a password fill, a field-menu hint for known passkey sites, delete from the desktop. Not yet checked against real sites in a browser ([docs/security-review.md](docs/security-review.md), Passkeys) |
 | Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
 | Export | Not implemented |
 | Secret Key + Emergency Kit | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
@@ -58,6 +58,12 @@ What the browser extension does:
   The private key is created, stored and used only in the desktop's Rust
   core, and the site is checked in Rust against the page the browser
   reports. "Use another device" always hands the request to the browser.
+* Right after HavenKeys fills a password, a site that offers its own
+  automatic passkey upgrade gets one saved to that same login — silently by
+  default, or with a card if you turn that off in Settings. On sites known
+  to support passkeys where you have a saved password but no passkey yet,
+  the field menu offers a link to that site's passkey help
+  ([docs/autofill.md](docs/autofill.md) §Passkeys).
 * Logins are only ever offered on the sites they are saved for, and that is
   checked in Rust
 

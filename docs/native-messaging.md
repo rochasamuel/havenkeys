@@ -93,12 +93,21 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null) | yes | secret, plus one update per item per 10 min |
 | `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |
 | `passkey_get` | `itemId` (UUID), `credentialId`, `url`, `topUrl`?, `rpId`, `challenge` | yes | secret |
-| `check_passkey_create` | `url`, `topUrl`?, `rpId`, `userName`, `excludeCredentials` (list) | yes | lookup |
-| `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null) | yes | secret; a server write |
+| `check_passkey_create` | `url`, `topUrl`?, `rpId`, `userName`, `excludeCredentials` (list), `conditional` (bool) | yes | lookup |
+| `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null), `conditional` (bool) | yes | secret; a server write |
+| `passkey_status` | `url`, `topUrl`? | yes | lookup |
 
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
 be omitted, which means null.
+
+`conditional` on `check_passkey_create` and `passkey_create` marks the
+site's automatic passkey upgrade (`create()` with `mediation:
+"conditional"`, right after a HavenKeys password fill). It does not change
+either request's shape, only what the core checks: `check_passkey_create`'s
+result then carries a real `upgrade` decision instead of always `none`, and
+`passkey_create` refuses (`denied`) unless that decision is still `auto` for
+exactly the item named (`autofill.md`, Automatic upgrade).
 
 There is deliberately no request to unlock the vault, list items, search,
 reveal notes, read a TOTP secret, read a passkey's private key, delete items
@@ -120,10 +129,14 @@ kept in the item's history. `passkey_create` adds a passkey (see
 {"v":1,"id":13,"result":{"type":"save_login","itemId":"…"}}
 {"v":1,"id":14,"result":{"type":"find_passkeys","passkeys":[{"itemId":"…","credentialId":"…","title":"GitHub","userName":"octo"}]}}
 {"v":1,"id":15,"result":{"type":"passkey_get","credentialId":"…","authenticatorData":"…","clientDataJson":"…","signature":"…","userHandle":"…"}}
-{"v":1,"id":16,"result":{"type":"check_passkey_create","excluded":false,"candidates":[{"itemId":"…","title":"GitHub","username":"octo"}]}}
+{"v":1,"id":16,"result":{"type":"check_passkey_create","excluded":false,"candidates":[{"itemId":"…","title":"GitHub","username":"octo"}],"upgrade":{"kind":"auto","itemId":"…"}}}
 {"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
+{"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
 {"v":1,"id":10,"error":{"code":"denied","message":"This item is not saved for this website."}}
 ```
+
+`upgrade.kind` is `"none"`, `"ask"` or `"auto"`; `itemId` is present only for
+`"ask"` and `"auto"`, and is `"none"` whenever `conditional` was false.
 
 `id` is `null` only when a request was so broken that its ID could not be
 read.
@@ -319,23 +332,26 @@ page. See `security-model.md` §12 and `autofill.md`.
 
 ### Passkeys
 
-The four passkey requests come from the background worker's WebAuthn
+The five passkey requests come from the background worker's WebAuthn
 handler (`background/webauthn-handler.ts`), which the passkey bridge in the
-page feeds. `url` and `topUrl` come from the browser's sender data, exactly as
-for logins; `rpId` comes from the site (or defaults to the frame's host) and
-is untrusted.
+page feeds, plus `passkey_status` from the inline field-menu handler
+(`background/inline-handler.ts`). `url` and `topUrl` come from the browser's
+sender data, exactly as for logins; `rpId` comes from the site (or defaults
+to the frame's host) and is untrusted.
 
 | Request | Core function | Returns | Checks |
 |---|---|---|---|
 | `find_passkeys` | `find_passkeys` | per passkey: item ID, credential ID, login title, account name. **No secrets** | `authorize_rp(rpId, url, topUrl)`; stored rpId equals it; filtered by `allowCredentials` when non-empty |
 | `passkey_get` | `passkey_assert` | credential ID, authenticator data, `clientDataJSON`, signature, user handle | challenge 1–1024 bytes; `authorize_rp`; the item is a login holding that credential ID with that stored rpId. Anything else is `denied` (an unknown item's `not_found` is mapped to `denied` too) |
-| `check_passkey_create` | `check_passkey_create` | `excluded`, and logins that could hold the new passkey (ID, title, username; no candidates when `excluded`) | `authorize_rp`; candidates are logins whose own website rules match the page and that hold fewer than 8 passkeys, same username first |
-| `passkey_create` | `stage_passkey_create` | credential ID, attestation object, `clientDataJSON`, authenticator data, SPKI public key, algorithm `-7` | `authorize_rp`; bounds; `itemId`, if given, must be a login offered for the page. If a login anywhere in the vault already holds a passkey for the same rpId and user handle, the new one replaces it **in that login**, whatever `itemId` says. Sent to the server; `offline` if it cannot be, and nothing is stored |
+| `check_passkey_create` | `check_passkey_create` | `excluded`, logins that could hold the new passkey (ID, title, username; no candidates when `excluded`), and `upgrade` | `authorize_rp`; candidates are logins whose own website rules match the page and that hold fewer than 8 passkeys, same username first. `upgrade` is computed only when `conditional` is true and nothing is excluded: `auto`/`ask` needs a password fill of that same login on that same site within the last 5 minutes (`vault.rs::RecentFill`, `UPGRADE_WINDOW_MS`), a matching (folded) account name or none, and room for another passkey; `auto` when the vault setting `auto_passkey_upgrade` is on, `ask` when it is off; otherwise `none` |
+| `passkey_create` | `stage_passkey_create` | credential ID, attestation object, `clientDataJSON`, authenticator data, SPKI public key, algorithm `-7` | `authorize_rp`; bounds; `itemId`, if given, must be a login offered for the page. When `conditional` is true, the same upgrade decision is recomputed and the request is `denied` unless it is still `auto` for exactly `itemId` — the caller's claim that this is the automatic upgrade is never taken on trust. If a login anywhere in the vault already holds a passkey for the same rpId and user handle, the new one replaces it **in that login**, whatever `itemId` says. Sent to the server; `offline` if it cannot be, and nothing is stored |
+| `passkey_status` | `has_passkey_for_page` | `hasPasskey`: whether any passkey in the vault has a stored rpId `authorize_rp` allows for this page. **No other data** | `authorize_rp` for every stored passkey it checks; no item is named or returned |
 
-`find_passkeys` and `check_passkey_create` draw from the lookup bucket;
-`passkey_get` and `passkey_create` from the secret bucket. There is no
-per-item cooldown for passkey writes. No response ever contains a private
-key, and `Debug` of the requests and results shows only their type.
+`find_passkeys`, `check_passkey_create` and `passkey_status` draw from the
+lookup bucket; `passkey_get` and `passkey_create` from the secret bucket.
+There is no per-item cooldown for passkey writes. No response ever contains
+a private key, and `Debug` of the requests and results shows only their
+type.
 
 The extension side of the passkey flow — which page events become which
 request, and what the user clicks — is in `autofill.md` §Passkeys.
@@ -406,6 +422,7 @@ request, and what the user clicks — is in `autofill.md` §Passkeys.
 | `packages/protocol/src/index.test.ts` | TS validator accepts exact shapes only |
 | `apps/extension/src/**/*.test.ts` | Native client (ID correlation, timeouts, host loss, idle close, type mismatch), popup request validation, URL stripping, the popup never supplying URLs, content/menu/save message validation, menu sessions (single use, same tab only, offered items only, expiry, lock), save prompts (unchanged logins, multi-step, expiry, other tabs), content-script origin check and sender check, untrusted events, source hygiene |
 | `crates/havenkeys-core/tests/security.rs` (Phase 5) | Frames on foreign top pages (A1), `check_login` classification, `save_login` origin binding (A2 for writes), password history bound |
-| `crates/havenkeys-core/tests/passkeys.rs`, `src/passkey/*.rs` | Passkey create → sign in, A1p/A2p/A3p, attaching to a login and keeping passkeys through edits, re-registration replacing across logins, the per-login limit, removal, input bounds; `authorize_rp` rules; byte layouts |
-| `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | Passkey requests parse with exact shapes and bounds, results validate; create → get over the bridge, attacks, offline create stores nothing |
-| `apps/extension/src/webauthn/*.test.ts`, `background/webauthn-handler.test.ts`, `background/registration.test.ts` | Page script fallback paths and rebuilt credentials, bridge parsing, abort and timeout handling, sessions (offered passkeys only, same tab and frame, one operation at a time, lock and unlock), script registration groups |
+| `crates/havenkeys-core/tests/passkeys.rs`, `src/passkey/*.rs` | Passkey create → sign in, A1p/A2p/A3p, attaching to a login and keeping passkeys through edits, re-registration replacing across logins, the per-login limit, removal, input bounds; `authorize_rp` rules; byte layouts; the automatic upgrade (A1u/A2u): `auto`/`ask` after a recent fill, the 5-minute window and clock-skew handling, folded account-name matching, per-site scoping (`upgrade_is_per_site_and_never_for_look_alikes`), `conditional_create_needs_auto_for_exactly_that_login`, fill memory dropped on lock |
+| `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | Passkey requests parse with exact shapes and bounds, results validate; create → get over the bridge, attacks, offline create stores nothing; `passkey_upgrade_through_the_bridge` (A1u end to end), `passkey_status_through_the_bridge` |
+| `apps/extension/src/webauthn/*.test.ts`, `background/webauthn-handler.test.ts`, `background/registration.test.ts` | Page script fallback paths and rebuilt credentials, bridge parsing, abort and timeout handling, sessions (offered passkeys only, same tab and frame, one operation at a time, lock and unlock), script registration groups, the automatic upgrade's auto/ask/fallback routing and the "saved" notice |
+| `apps/extension/src/background/passkey-sites.test.ts`, `menu/passkey.test.ts`, `menu/menu.test.ts` | Passkeys Directory file shape and host matching (including evil-suffix cases), the field-menu hint rows and their order, the help link opening only on a trusted click |

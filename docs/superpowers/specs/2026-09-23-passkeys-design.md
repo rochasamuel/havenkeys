@@ -166,6 +166,16 @@ for creation, both extension-origin iframes the page cannot read or script.
 The existing overlay/clickjacking mitigations apply unchanged. A `get()` from
 page JavaScript without that click never yields a signature.
 
+> Amended on 2026-09-24 by
+> `docs/superpowers/specs/2026-09-24-passkey-upgrade-design.md` §3.4: a
+> passkey may now be created without a click in HavenKeys UI through the
+> site's automatic upgrade (`create()` with `mediation: "conditional"`,
+> right after a HavenKeys password fill), whose consent is that password
+> fill itself, on the same site, within the previous 5 minutes, confirmed in
+> Rust and never taken from the extension's claim. It can be turned off (the
+> vault setting `auto_passkey_upgrade`), in which case the save card asks as
+> before.
+
 ## 6. Native messaging protocol
 
 New `Request` variants in `havenkeys-protocol`, `deny_unknown_fields`,
