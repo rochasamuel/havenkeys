@@ -339,6 +339,35 @@ impl<T: Transport> SyncClient<T> {
         })
     }
 
+    /// The current version of specific items, for retrying ones that did not
+    /// open. Every returned change must be for an ID that was asked for,
+    /// and at most once.
+    pub async fn fetch_items(&self, session: &Session, ids: &[Uuid]) -> Result<Vec<RemoteChange>> {
+        if ids.is_empty() || ids.len() > MAX_CHANGES {
+            return Err(SyncError::Refused("item list is not valid"));
+        }
+        let response = self
+            .send(
+                Method::Post,
+                "/v1/items/fetch",
+                Some(session),
+                Some(json(&wire::FetchBody { item_ids: ids })?),
+            )
+            .await?;
+        let dto: wire::FetchDto = self.expect_ok(response)?;
+        let asked: std::collections::HashSet<Uuid> = ids.iter().copied().collect();
+        let mut seen = std::collections::HashSet::new();
+        for change in &dto.changes {
+            if !asked.contains(&change.item_id) || !seen.insert(change.item_id) {
+                return Err(SyncError::Protocol("an item that was not asked for"));
+            }
+        }
+        dto.changes
+            .into_iter()
+            .map(RemoteChange::try_from)
+            .collect()
+    }
+
     pub async fn devices(&self, session: &Session) -> Result<Vec<Device>> {
         let response = self
             .send(Method::Get, "/v1/devices", Some(session), None)

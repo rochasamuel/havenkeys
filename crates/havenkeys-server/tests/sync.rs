@@ -410,7 +410,12 @@ async fn a_fetch_returns_current_rows_and_tombstones() {
     assert_eq!(status, 200);
     let changes = body["changes"].as_array().unwrap();
     assert_eq!(changes.len(), 2);
-    let by_id = |id: Uuid| changes.iter().find(|c| c["itemId"] == id.to_string()).unwrap();
+    let by_id = |id: Uuid| {
+        changes
+            .iter()
+            .find(|c| c["itemId"] == id.to_string())
+            .unwrap()
+    };
     assert_eq!(by_id(live)["deleted"], false);
     assert_eq!(by_id(gone)["deleted"], true);
     assert!(by_id(gone)["overview"].is_null());

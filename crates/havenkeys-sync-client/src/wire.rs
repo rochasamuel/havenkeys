@@ -258,6 +258,18 @@ impl TryFrom<HeaderDto> for RemoteHeader {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FetchBody<'a> {
+    pub item_ids: &'a [Uuid],
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchDto {
+    pub changes: Vec<RemoteChangeDto>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullDto {

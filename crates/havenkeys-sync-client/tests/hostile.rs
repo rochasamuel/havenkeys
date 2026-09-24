@@ -358,3 +358,41 @@ async fn a_credential_change_conflict_and_rejection_are_mapped() {
         .unwrap_err();
     assert_eq!(err, SyncError::Unauthorized);
 }
+
+#[tokio::test]
+async fn a_fetch_answer_is_bounded_to_what_was_asked() {
+    let asked = Uuid::from_u128(1);
+    let other = Uuid::from_u128(2);
+    let body = format!(r#"{{"changes":[{{"itemId":"{other}","revision":1,"deleted":true}}]}}"#);
+    let err = Stub::ok(&body)
+        .fetch_items(&session(), &[asked])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Protocol(_)));
+
+    let body = format!(
+        r#"{{"changes":[{{"itemId":"{asked}","revision":1,"deleted":true}},{{"itemId":"{asked}","revision":1,"deleted":true}}]}}"#
+    );
+    let err = Stub::ok(&body)
+        .fetch_items(&session(), &[asked])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Protocol(_)));
+
+    let body = format!(r#"{{"changes":[{{"itemId":"{asked}","revision":1,"deleted":true}}]}}"#);
+    assert_eq!(
+        Stub::ok(&body)
+            .fetch_items(&session(), &[asked])
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn a_fetch_request_is_bounded() {
+    assert!(Stub::ok("{}").fetch_items(&session(), &[]).await.is_err());
+    let many: Vec<Uuid> = (0..501).map(Uuid::from_u128).collect();
+    assert!(Stub::ok("{}").fetch_items(&session(), &many).await.is_err());
+}
