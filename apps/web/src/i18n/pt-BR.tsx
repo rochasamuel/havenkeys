@@ -489,7 +489,7 @@ export const ptBR: Messages = {
 
   privacy: {
     title: "Política de Privacidade",
-    updated: "Atualizada em 23 de setembro de 2026.",
+    updated: "Atualizada em 24 de setembro de 2026.",
     body: (
       <>
         <h2>Este site</h2>
@@ -526,13 +526,93 @@ export const ptBR: Messages = {
           acesso ao seu.
         </p>
 
-        <h2>O que nunca coletamos</h2>
+        <h2>A extensão do navegador</h2>
+        <p>
+          A extensão HavenKeys tem um único propósito: preencher, salvar e gerar logins do app de
+          desktop HavenKeys nos sites que você usa. Para isso ela lida com os dados abaixo, e só
+          quando você a usa:
+        </p>
         <ul>
-          <li>Senhas mestras</li>
+          <li>
+            <strong>O endereço da página</strong> (e do frame que contém o formulário de login) em
+            que você abre a extensão ou as sugestões dela, para que o app de desktop encontre os
+            logins salvos para aquele site.
+          </li>
+          <li>
+            <strong>Os campos de login dessa página</strong>: tipos, nomes, rótulos e o texto ao
+            redor, para reconhecer os campos de usuário, senha e código de uso único. Isso é lido
+            dentro da página e nunca é enviado a lugar nenhum, nem mesmo ao app de desktop.
+          </li>
+          <li>
+            <strong>Usuários, senhas e códigos de uso único</strong> que você escolhe preencher, que
+            o app de desktop envia só para aquele site, e senhas que a extensão gera para você.
+          </li>
+          <li>
+            <strong>Um usuário e uma senha que você envia em um formulário de login</strong>, para
+            perguntar se você quer salvá-los. Isso exige que as sugestões nas páginas estejam
+            ativadas, e nada é salvo sem a sua confirmação.
+          </li>
+        </ul>
+        <p>
+          Os endereços das páginas e os logins que você salva vão apenas para o app de desktop
+          HavenKeys no mesmo computador, pelo canal de native messaging do navegador. Eles nunca são
+          enviados para nós nem para terceiros. Quando você confirma que quer salvar, o app de
+          desktop cifra o login no seu dispositivo e o envia, cifrado, ao seu próprio{" "}
+          <code>havenkeys-server</code> por HTTPS (HTTP simples só é aceito para um servidor no
+          mesmo computador). O servidor não consegue decifrá-lo.
+        </p>
+        <p>
+          A extensão não guarda nada no armazenamento do navegador, em cookies ou no disco. Um login
+          que ela preenche fica na memória só enquanto ela preenche a página. Um login aguardando
+          para ser salvo fica na memória por no máximo três minutos e é descartado assim que você o
+          salva, dispensa o aviso ou o cofre é bloqueado. As sugestões dentro das páginas ficam
+          desativadas até você ativá-las nas opções da extensão; sem elas, a extensão só roda em uma
+          página quando você clica no botão dela na barra de ferramentas.
+        </p>
+
+        <h2>O que nunca coletamos</h2>
+        <p>
+          Nós, os desenvolvedores do HavenKeys, não recebemos nenhum dado seu. Em particular, nunca
+          recebemos:
+        </p>
+        <ul>
+          <li>Senhas mestras ou Secret Keys</li>
           <li>Chaves de cifragem do cofre</li>
           <li>Senhas, usuários, segredos TOTP ou notas seguras guardados</li>
-          <li>Histórico de navegação ou o conteúdo das páginas que você visita</li>
+          <li>
+            O seu histórico de navegação ou o conteúdo das páginas que você visita. A extensão lida
+            com endereços de páginas e formulários de login apenas no seu dispositivo, como descrito
+            acima.
+          </li>
         </ul>
+
+        <h2>Como os dados são usados e compartilhados</h2>
+        <p>
+          Os dados são usados apenas para oferecer os recursos descritos acima. Eles nunca são
+          vendidos, nunca são usados nem compartilhados para publicidade e nunca são usados para
+          avaliar crédito ou conceder empréstimos. Ninguém lê os seus dados: não temos acesso a eles,
+          e o servidor guarda o seu cofre apenas de forma cifrada.
+        </p>
+        <p>
+          O uso das informações recebidas pela extensão HavenKeys segue a{" "}
+          <Ext href="https://developer.chrome.com/docs/webstore/program-policies/">
+            Política de Dados do Usuário da Chrome Web Store
+          </Ext>{" "}
+          (em inglês), incluindo os requisitos de Uso Limitado (Limited Use).
+        </p>
+
+        <h2>Guarda e exclusão dos seus dados</h2>
+        <p>
+          O seu cofre é guardado até você excluí-lo. Excluir um item o remove de todos os
+          dispositivos. No servidor, o conteúdo cifrado dele é apagado e só fica um marcador (o ID
+          aleatório do item e o horário da exclusão), para que os seus outros dispositivos saibam que
+          devem removê-lo também. "Remove this device" (remover este dispositivo), no app de
+          desktop, desconecta o computador e deixa a cópia local do cofre de lado; depois disso você
+          pode excluir esse arquivo. Quem opera o seu servidor pode excluir a sua conta, o que remove o seu cofre e os
+          metadados dele do servidor, embora cópias possam continuar nos backups desse servidor até
+          expirarem. Desinstalar a extensão a remove por completo, já que ela não guarda dados
+          próprios.
+        </p>
 
         <h2>Contato</h2>
         <p>

@@ -477,7 +477,7 @@ export const en = {
 
   privacy: {
     title: "Privacy Policy",
-    updated: "Last updated September 23, 2026.",
+    updated: "Last updated September 24, 2026.",
     body: (
       <>
         <h2>This website</h2>
@@ -511,13 +511,91 @@ export const en = {
           not operate a hosted server and have no access to yours.
         </p>
 
-        <h2>What we never collect</h2>
+        <h2>The browser extension</h2>
+        <p>
+          The HavenKeys extension has one purpose: to fill, save and generate logins from the
+          HavenKeys desktop app on the websites you use. To do that it handles the following data,
+          and only when you use it:
+        </p>
         <ul>
-          <li>Master passwords</li>
+          <li>
+            <strong>The address of the page</strong> (and of the frame holding the login form) where
+            you open the extension or its suggestions, so the desktop app can find the logins saved
+            for that site.
+          </li>
+          <li>
+            <strong>The login fields on that page</strong>: their types, names, labels and nearby
+            text, to recognise username, password and one-time-code fields. This is read inside the
+            page and never sent anywhere, not even to the desktop app.
+          </li>
+          <li>
+            <strong>Usernames, passwords and one-time codes</strong> you choose to fill, which the
+            desktop app sends for that one site, and passwords the extension generates for you.
+          </li>
+          <li>
+            <strong>A username and password you submit on a login form</strong>, so it can ask
+            whether to save them. This needs in-page suggestions to be turned on, and nothing is
+            saved unless you confirm.
+          </li>
+        </ul>
+        <p>
+          Page addresses and the logins you save go only to the HavenKeys desktop app on the same
+          computer, through the
+          browser's native-messaging channel. It is never sent to us or to any third party. When
+          you confirm a save, the desktop app encrypts the login on your device and sends it,
+          encrypted, to your own <code>havenkeys-server</code> over HTTPS (plain HTTP is accepted
+          only for a server on the same computer). The server cannot decrypt it.
+        </p>
+        <p>
+          The extension keeps nothing in browser storage, cookies or on disk. A login it fills
+          stays in memory only while it fills the page. A login waiting to be saved is kept in
+          memory for at most three minutes, and is dropped as soon as you save it, dismiss the
+          prompt, or the vault locks. Suggestions inside web pages are off until you turn them on
+          in the extension's options; without them the extension runs on a page only when you
+          click its toolbar button.
+        </p>
+
+        <h2>What we never collect</h2>
+        <p>
+          We, the developers of HavenKeys, receive none of your data. In particular we never
+          receive:
+        </p>
+        <ul>
+          <li>Master passwords or Secret Keys</li>
           <li>Vault encryption keys</li>
           <li>Stored passwords, usernames, TOTP secrets, or secure notes</li>
-          <li>Browsing history or the contents of pages you visit</li>
+          <li>
+            Your browsing history or the content of pages you visit. The extension handles page
+            addresses and login forms on your device only, as described above.
+          </li>
         </ul>
+
+        <h2>How data is used and shared</h2>
+        <p>
+          Data is used only to provide the features described above. It is never sold, never used
+          or shared for advertising, and never used to determine creditworthiness or for lending.
+          Nobody reads your data: we have no access to it, and the server stores your vault only in
+          encrypted form.
+        </p>
+        <p>
+          The use of information received by the HavenKeys browser extension adheres to the{" "}
+          <Ext href="https://developer.chrome.com/docs/webstore/program-policies/">
+            Chrome Web Store User Data Policy
+          </Ext>
+          , including the Limited Use requirements.
+        </p>
+
+        <h2>Keeping and deleting your data</h2>
+        <p>
+          Your vault is kept until you delete it. Deleting an item removes it from every device. On
+          the server, its encrypted content is erased and only a marker remains (the item's random
+          ID and the time of deletion), so your other devices know to remove it too. "Remove this
+          device" in the desktop app signs the computer out and sets its copy of the vault aside;
+          you can then delete that file. The operator of your server can delete your account, which
+          removes your vault and its metadata from the server, although copies may remain in that
+          server's backups until they expire. Uninstalling the extension removes it completely,
+          since it keeps no data of its own.
+        </p>
 
         <h2>Contact</h2>
         <p>
