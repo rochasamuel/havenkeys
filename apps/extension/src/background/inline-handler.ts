@@ -22,6 +22,7 @@ import type {
   FillReply,
   InlineReply,
   InlineRequest,
+  MenuHint,
   MenuKind,
   MenuView,
   OpenMenuReply,
@@ -30,6 +31,7 @@ import type {
 } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 import type { BgWaResult, PasskeyRow } from "../webauthn/messages";
+import type { PasskeySite } from "./passkey-sites";
 
 type Client = {
   request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>>;
@@ -59,6 +61,10 @@ export interface InlineDeps {
     conditionalFor(frame: FrameRef): PasskeyRow[];
     pickConditional(frame: FrameRef, itemId: string, credentialId: string): Promise<InlineReply<null>>;
   };
+  /** The page's entry in the Passkeys Directory, if any (Task 7). */
+  passkeySite?(url: string): PasskeySite | null;
+  /** Opens a new tab, e.g. for the directory's help link. */
+  openTab?(url: string): void;
 }
 
 export const MENU_TTL_MS = 5 * 60_000;
@@ -74,6 +80,8 @@ interface MenuSession {
   locked: boolean;
   items: Match[];
   passkeys: PasskeyRow[];
+  hint: MenuHint | null;
+  help: string | null;
   expires: number;
 }
 
@@ -160,12 +168,32 @@ export function createInlineHandler(deps: InlineDeps) {
     if (kind === "new_password") items = [];
     const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
     if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0) return { ok: false };
+    const { hint, help } =
+      kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
 
     closeMenu(frame.tabId);
     const token = deps.newToken();
-    menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, expires: deps.now() + MENU_TTL_MS });
-    const rows = locked || kind === "new_password" ? 1 : Math.min(items.length + passkeys.length, MAX_ROWS);
+    menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, expires: deps.now() + MENU_TTL_MS });
+    const rows = locked || kind === "new_password" ? 1 : Math.min(items.length + passkeys.length + (hint ? 1 : 0), MAX_ROWS);
     return { ok: true, token, rows };
+  }
+
+  /**
+   * Passkeys first: a hint to use the site's own passkey sign-in when
+   * HavenKeys holds one for the page, otherwise, for a site in the Passkeys
+   * Directory, a link to its help article. The answer only shapes our menu,
+   * which the page cannot read.
+   */
+  async function passkeyHint(frame: FrameRef): Promise<{ hint: MenuHint | null; help: string | null }> {
+    let has = false;
+    try {
+      has = (await deps.client.request({ type: "passkey_status", ...frameFields(frame) })).hasPasskey;
+    } catch {
+      // Locked meanwhile, desktop gone, rate limited: no hint.
+    }
+    if (has) return { hint: { kind: "use_passkey" }, help: null };
+    const site = deps.passkeySite?.(frame.url);
+    return site?.help ? { hint: { kind: "add_passkey", name: site.name }, help: site.help } : { hint: null, help: null };
   }
 
   async function submit(frame: FrameRef, username: string | null, password: string | null): Promise<void> {
@@ -246,7 +274,7 @@ export function createInlineHandler(deps: InlineDeps) {
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username }));
-        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys } };
+        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint } };
       }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
@@ -286,6 +314,13 @@ export function createInlineHandler(deps: InlineDeps) {
         } catch (e) {
           return fail(e);
         }
+        return { ok: true, value: null };
+      }
+      case "menu_open_help": {
+        const m = liveMenu(tabId, req.token);
+        if (!m || m.locked || !m.help || !deps.openTab) return { ok: false, message: "This menu has expired." };
+        closeMenu(tabId);
+        deps.openTab(m.help);
         return { ok: true, value: null };
       }
       case "menu_close":

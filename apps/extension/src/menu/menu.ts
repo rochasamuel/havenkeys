@@ -60,6 +60,15 @@ function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButt
   return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }));
 }
 
+/** A row that only informs: no button, not in the arrow-key order. */
+function hintNote(title: string, detail: string): HTMLElement {
+  return h(
+    "div",
+    { className: "row hint" },
+    h("span", { className: "who" }, h("span", { className: "title", text: title }), h("span", { className: "user", text: detail })),
+  );
+}
+
 function render(t: string, view: MenuView): void {
   if (view.state === "locked") {
     main.replaceChildren(message("HavenKeys is locked", "Unlock the HavenKeys app to fill."));
@@ -78,7 +87,13 @@ function render(t: string, view: MenuView): void {
       pick({ type: "menu_pick_passkey", token: t, itemId: p.itemId, credentialId: p.credentialId }),
     ),
   );
-  main.replaceChildren(...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)));
+  const hint = view.hint;
+  const lead = hint?.kind === "use_passkey" ? [hintNote(`You have a passkey for ${view.site}`, "Use the site’s “Sign in with a passkey” option")] : [];
+  const tail =
+    hint?.kind === "add_passkey"
+      ? [row(sparkle(), `${hint.name} supports passkeys`, "How to add one", () => pick({ type: "menu_open_help", token: t }))]
+      : [];
+  main.replaceChildren(...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...tail);
 }
 
 /** Arrow keys move between rows; Escape closes. */
@@ -89,7 +104,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>(".row"));
+  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row"));
   if (rows.length === 0) return;
   const i = rows.indexOf(document.activeElement as HTMLButtonElement);
   const next = e.key === "ArrowDown" ? (i + 1) % rows.length : (i - 1 + rows.length) % rows.length;
@@ -99,7 +114,7 @@ document.addEventListener("keydown", (e) => {
 
 // Focused from the page with ArrowDown: start on the first row.
 window.addEventListener("focus", () => {
-  if (!main.contains(document.activeElement)) main.querySelector<HTMLButtonElement>(".row")?.focus();
+  if (!main.contains(document.activeElement)) main.querySelector<HTMLButtonElement>("button.row")?.focus();
 });
 
 async function init(): Promise<void> {

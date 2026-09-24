@@ -120,10 +120,14 @@ main {
   }
 }
 
-.row:hover,
+.row:hover:not(.hint),
 .row:focus-visible {
   background: var(--brass-soft);
   outline: none;
+}
+
+.row.hint {
+  cursor: default;
 }
 
 .row:focus-visible {

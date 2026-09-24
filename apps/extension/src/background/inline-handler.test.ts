@@ -7,11 +7,12 @@ import {
   parseInlineRequest,
   type BackgroundToContent,
 } from "../messaging/inline";
-import { createInlineHandler, MENU_TTL_MS, SAVE_TTL_MS, type FrameRef } from "./inline-handler";
+import { createInlineHandler, MENU_TTL_MS, SAVE_TTL_MS, type FrameRef, type InlineDeps } from "./inline-handler";
 
 const GH = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const OTHER = "11111111-2222-4333-8444-555555555555";
 const T1 = "0".repeat(31) + "1";
+const GH_SITE = { name: "GitHub", domains: ["github.com"], passwordless: true, mfa: true, help: "https://docs.github.com/passkeys" };
 
 const ghMatch = { id: GH, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" as const };
 
@@ -19,7 +20,7 @@ function frame(over: Partial<FrameRef> = {}): FrameRef {
   return { tabId: 1, frameId: 0, url: "https://github.com/login", origin: "https://github.com", ...over };
 }
 
-function setup(answer: (r: Request) => unknown = defaultAnswer) {
+function setup(answer: (r: Request) => unknown = defaultAnswer, extra: Partial<InlineDeps> = {}) {
   const requests: Request[] = [];
   const sent: Array<{ to: { tabId: number; frameId: number }; msg: BackgroundToContent }> = [];
   let n = 0;
@@ -38,6 +39,7 @@ function setup(answer: (r: Request) => unknown = defaultAnswer) {
     },
     now: () => clock,
     newToken: () => (++n).toString(16).padStart(32, "0"),
+    ...extra,
   });
   return { h, requests, sent, advance: (ms: number) => (clock += ms) };
 }
@@ -87,12 +89,14 @@ describe("message validation", () => {
   it("accepts exact menu/save frame requests only", () => {
     expect(parseInlineRequest({ type: "menu_pick", token: T1, itemId: GH })).not.toBeNull();
     expect(parseInlineRequest({ type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ" })).not.toBeNull();
+    expect(parseInlineRequest({ type: "menu_open_help", token: T1 })).toEqual({ type: "menu_open_help", token: T1 });
     for (const bad of [
       { type: "menu_pick", token: T1, itemId: "x" },
       { type: "menu_pick", token: "nope", itemId: GH },
       { type: "menu_state", token: T1, url: "https://evil.com" },
       { type: "save_confirm", token: T1, password: "x" },
       { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQ" },
+      { type: "menu_open_help", token: T1, url: "https://evil.com" },
     ]) {
       expect(parseInlineRequest(bad), JSON.stringify(bad)).toBeNull();
     }
@@ -122,7 +126,14 @@ describe("suggestion menus", () => {
     const state = await h.handleInline(1, { type: "menu_state", token: T1 });
     expect(state).toEqual({
       ok: true,
-      value: { state: "ready", kind: "login", site: "github.com", items: [{ id: GH, title: "GitHub", username: "octo" }], passkeys: [] },
+      value: {
+        state: "ready",
+        kind: "login",
+        site: "github.com",
+        items: [{ id: GH, title: "GitHub", username: "octo" }],
+        passkeys: [],
+        hint: null,
+      },
     });
     expect(JSON.stringify(state)).not.toContain("pw");
 
@@ -175,7 +186,7 @@ describe("suggestion menus", () => {
     });
     expect((await h.handleInline(2, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
     expect((await h.handleInline(1, { type: "menu_pick", token: "f".repeat(32), itemId: GH })).ok).toBe(false);
-    expect(requests.map((r) => r.type)).toEqual(["find_matches"]);
+    expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status"]);
   });
 
   it("menus expire", async () => {
@@ -344,5 +355,53 @@ describe("passkeys in the field menu", () => {
   it("no passkeys without a waiting request", async () => {
     const { h } = withPasskeys([]);
     expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
+  });
+});
+
+describe("passkey hints in the login menu", () => {
+  const status = (has: boolean) => (r: Request) => (r.type === "passkey_status" ? { type: "passkey_status", hasPasskey: has } : defaultAnswer(r));
+
+  it("leads with a use-your-passkey hint when a passkey exists", async () => {
+    const { h, requests } = setup(status(true), { passkeySite: () => GH_SITE });
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 2 });
+    expect(requests.find((r) => r.type === "passkey_status")).toEqual({ type: "passkey_status", url: "https://github.com/login" });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ ok: true, value: { hint: { kind: "use_passkey" } } });
+  });
+
+  it("offers the directory help link when there is no passkey, and opens it only through the menu", async () => {
+    const opened: string[] = [];
+    const { h } = setup(status(false), { passkeySite: () => GH_SITE, openTab: (u) => void opened.push(u) });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ ok: true, value: { hint: { kind: "add_passkey", name: "GitHub" } } });
+    expect((await h.handleInline(2, { type: "menu_open_help", token: T1 })).ok).toBe(false);
+    expect(opened).toEqual([]);
+    expect(await h.handleInline(1, { type: "menu_open_help", token: T1 })).toEqual({ ok: true, value: null });
+    expect(opened).toEqual(["https://docs.github.com/passkeys"]);
+    // The menu closed: a second click does nothing.
+    expect((await h.handleInline(1, { type: "menu_open_help", token: T1 })).ok).toBe(false);
+  });
+
+  it("shows no hint without a help link, when the status fails, for unknown sites, or in OTP menus", async () => {
+    const noHelp = setup(status(false), { passkeySite: () => ({ ...GH_SITE, help: null }) });
+    await noHelp.h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(await noHelp.h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ value: { hint: null } });
+
+    const failing = setup(defaultAnswer, { passkeySite: () => null }); // passkey_status throws in defaultAnswer
+    expect(await failing.h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+
+    const otp = setup(status(true), { passkeySite: () => GH_SITE });
+    await otp.h.handleContent(frame(), { type: "cs_open_menu", kind: "otp" });
+    expect(otp.requests.some((r) => r.type === "passkey_status")).toBe(false);
+  });
+
+  it("does not ask when the site offers passkey autofill (passkey rows already lead)", async () => {
+    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
+    const { h, requests } = setup(status(true), {
+      passkeySite: () => GH_SITE,
+      passkeys: { conditionalFor: () => [row], pickConditional: async () => ({ ok: true, value: null }) },
+    });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(requests.some((r) => r.type === "passkey_status")).toBe(false);
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ value: { hint: null } });
   });
 });

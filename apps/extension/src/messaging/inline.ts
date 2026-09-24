@@ -55,6 +55,7 @@ export type InlineRequest =
   | { type: "menu_pick"; token: string; itemId: string }
   | { type: "menu_pick_passkey"; token: string; itemId: string; credentialId: string }
   | { type: "menu_generate"; token: string }
+  | { type: "menu_open_help"; token: string }
   | { type: "menu_close"; token: string }
   | { type: "save_state"; token: string }
   | { type: "save_confirm"; token: string }
@@ -66,9 +67,17 @@ export interface MenuItemView {
   username: string | null;
 }
 
+/**
+ * Passkeys first: either HavenKeys already holds a passkey for the page (use
+ * the site's own sign-in), or the page is a known passkey site with no
+ * saved passkey yet (a link to add one). `name` is third-party text from
+ * the Passkeys Directory; the menu renders it with textContent only.
+ */
+export type MenuHint = { kind: "use_passkey" } | { kind: "add_passkey"; name: string };
+
 export type MenuView =
   | { state: "locked" }
-  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[] };
+  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null };
 
 export interface SaveView {
   action: "add" | "update";
@@ -144,6 +153,7 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
         : null;
     case "menu_state":
     case "menu_generate":
+    case "menu_open_help":
     case "menu_close":
     case "save_state":
     case "save_confirm":

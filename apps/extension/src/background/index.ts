@@ -17,6 +17,7 @@ import { parsePopupRequest } from "../messaging/popup";
 import { NATIVE_HOST_NAME } from "../shared/constants";
 import { pageUrlForRequest } from "../shared/url";
 import { createInlineHandler, type FrameRef } from "./inline-handler";
+import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
 import { createWebAuthnHandler } from "./webauthn-handler";
@@ -57,7 +58,15 @@ async function sendToTab(tabId: number, msg: BgWaResult): Promise<unknown> {
 }
 
 const passkeys = createWebAuthnHandler({ client, sendToFrame, sendToTab, now: Date.now, newToken });
-const inline = createInlineHandler({ client, sendToFrame, now: Date.now, newToken, passkeys });
+const inline = createInlineHandler({
+  client,
+  sendToFrame,
+  now: Date.now,
+  newToken,
+  passkeys,
+  passkeySite: (url) => findPasskeySite(url),
+  openTab: (url) => void chrome.tabs.create({ url }).catch(() => undefined),
+});
 
 async function activeTab(): Promise<ActiveTab | undefined> {
   // Readable because the user opened the popup on this tab (activeTab).
