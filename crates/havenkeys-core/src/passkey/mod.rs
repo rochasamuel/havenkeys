@@ -17,8 +17,13 @@ use std::fmt;
 
 pub(crate) mod cbor;
 mod rp;
+mod webauthn;
 
 pub use rp::{authorize_rp, RpContext, MAX_RP_ID_BYTES};
+pub(crate) use webauthn::{assert, register};
+pub use webauthn::{
+    authenticator_data, client_data_json, Assertion, Ceremony, NewUser, Registration,
+};
 
 pub const MAX_PASSKEYS_PER_LOGIN: usize = 8;
 /// Every credential ID HavenKeys creates has exactly this length.
