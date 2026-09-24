@@ -1,7 +1,7 @@
 {
   "name": "@havenkeys/ui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "HavenKeys design tokens: authored in TypeScript, emitted as CSS custom properties. No runtime dependency, no framework.",
   "exports": {
