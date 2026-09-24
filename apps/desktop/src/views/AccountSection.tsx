@@ -170,6 +170,12 @@ export function AccountSection({ online }: { online: boolean }) {
     } catch (e) {
       toast(e instanceof ApiError ? e.message : "Could not remove this device.", "error");
       setRemoving(false);
+      // Belt and braces: the command can fail after the file was already
+      // renamed aside (the rest of removal still ran — see remove_device),
+      // so this section's own view of the account may be stale even though
+      // an error came back. Re-reading it here does not depend on the
+      // vault://removed listener in App.tsx also having run.
+      refresh();
     }
   }
 

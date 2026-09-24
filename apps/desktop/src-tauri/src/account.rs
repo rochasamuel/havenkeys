@@ -393,19 +393,46 @@ fn confirms(typed: &str, email: &str) -> bool {
 
 /// Rename the vault file (and SQLite's journal files, if any) aside. Never
 /// overwrites: an earlier removal's file is somebody's last copy too.
+///
+/// The journal files move first and the main file last, so any failure —
+/// including the main file's own rename — leaves the vault still openable
+/// at `path`: anything already moved is put back (best effort; the store
+/// does not normally use WAL, so this path is rarely exercised).
 fn set_aside(path: &Path, stamp: &str) -> std::io::Result<PathBuf> {
     let target = PathBuf::from(format!("{}.removed-{stamp}", path.display()));
     if target.exists() {
         return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
     }
-    std::fs::rename(path, &target)?;
-    for suffix in ["-wal", "-shm"] {
+    let mut moved: Vec<&str> = Vec::new();
+    for suffix in ["-wal", "-shm", "-journal"] {
         let from = PathBuf::from(format!("{}{suffix}", path.display()));
-        if from.exists() {
-            std::fs::rename(&from, format!("{}{suffix}", target.display()))?;
+        if !from.exists() {
+            continue;
         }
+        let to = format!("{}{suffix}", target.display());
+        if let Err(e) = std::fs::rename(&from, &to) {
+            restore_journal_files(path, &target, &moved);
+            return Err(e);
+        }
+        moved.push(suffix);
+    }
+    if let Err(e) = std::fs::rename(path, &target) {
+        restore_journal_files(path, &target, &moved);
+        return Err(e);
     }
     Ok(target)
+}
+
+/// Move journal files already renamed to `target` back next to `path`,
+/// after a later step in `set_aside` failed. Best effort: a failure here
+/// just leaves a `.removed-<stamp>-wal`/`-shm`/`-journal` orphan, which is
+/// harmless (the main file itself is still at `path` either way).
+fn restore_journal_files(path: &Path, target: &Path, moved: &[&str]) {
+    for suffix in moved {
+        let from = format!("{}{suffix}", target.display());
+        let to = PathBuf::from(format!("{}{suffix}", path.display()));
+        let _ = std::fs::rename(from, to);
+    }
 }
 
 /// `SystemTime::now()` as `YYYYMMDDTHHMMSSZ`, without pulling in `time` or
@@ -448,13 +475,20 @@ fn chrono_free_utc_stamp() -> String {
 /// The vault stays on the server. The local file is renamed, not deleted:
 /// if the old server is gone, it is the only copy left, and it still opens
 /// with the master password and the Emergency Kit.
+///
+/// Only while unlocked: the renderer is not trusted to gate this (CLAUDE.md
+/// §4), and locked would still let a page-less caller delete the Secret Key
+/// for an account nobody has proven they can open.
 #[tauri::command]
 pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()> {
     let state = app.state::<AppState>();
-    let account = state
-        .vault()?
-        .account()?
-        .ok_or(havenkeys_core::Error::NoVault)?;
+    let account = {
+        let vault = state.vault()?;
+        if !vault.is_unlocked() {
+            return Err(havenkeys_core::Error::Locked.into());
+        }
+        vault.account()?.ok_or(havenkeys_core::Error::NoVault)?
+    };
     if !confirms(&confirmation, &account.email) {
         return Err(
             havenkeys_core::Error::InvalidInput("type this account's email to confirm").into(),
@@ -466,6 +500,7 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
     }
     state.lock(&app, "user");
     state.forget_sync_client();
+    let _ = app.emit(sync::CONNECTIVITY_EVENT, false);
 
     let path = state.data_dir().join(crate::VAULT_FILE);
     let stamp = chrono_free_utc_stamp();
@@ -474,17 +509,38 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
         let old = vault.replace_store(Store::open_in_memory().map_err(CmdError::from)?);
         drop(old); // closes the connection before the rename
         if set_aside(&path, &stamp).is_err() {
-            // Leave everything as it was: a failure here must not strand the
-            // account bound to an in-memory store with no file behind it.
+            // Nothing to undo below: the rename never happened (or was
+            // rolled back), so `path` is still the original file. Reopen it
+            // and report failure — the account is still on this device.
             let _ = vault.replace_store(Store::open(&path).map_err(CmdError::from)?);
             return Err(CmdError::file());
         }
-        vault.replace_store(Store::open(&path).map_err(CmdError::from)?);
     }
+
+    // Past this point the file is already renamed aside: this device must
+    // end up fully removed even if a step below fails, rather than left
+    // locked with a session, keychain entry and device.json that still name
+    // an account whose file is gone. So every remaining step runs
+    // regardless of earlier failures here, and the first error (if any) is
+    // what's reported — after `forget` ran and the event fired.
+    let mut first_error: Option<CmdError> = None;
+
+    // Neither a reopen failure nor a poisoned vault mutex here should skip
+    // `forget` or the event below, so this collects its error rather than
+    // using `?`. Either way the vault stays on the in-memory store from
+    // above, which the renderer reads as "no vault", i.e. first run —
+    // acceptable per the brief for this rare case.
+    let reopened = Store::open(&path)
+        .map_err(CmdError::from)
+        .and_then(|store| state.vault().map(|mut v| v.replace_store(store)));
+    if let Err(e) = reopened {
+        first_error = Some(e);
+    }
+
     // Off the main thread: `forget` deletes from the OS keychain, which can
     // wait on D-Bus or a keyring prompt.
     let account_id = account.account_id;
-    off_main_thread(app.clone(), move |state| {
+    let forgot = off_main_thread(app.clone(), move |state| {
         state
             .device
             .lock()
@@ -492,9 +548,16 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
             .forget(account_id)
             .map_err(|_| CmdError::file())
     })
-    .await?;
+    .await;
+    if let Err(e) = forgot {
+        first_error.get_or_insert(e);
+    }
+
     let _ = app.emit(REMOVED_EVENT, ());
-    Ok(())
+    match first_error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 // ------------------------------------------------------------------ Emergency Kit
@@ -625,6 +688,59 @@ mod tests {
         std::fs::write(dir.path().join("vault.sqlite3.removed-S"), b"older").unwrap();
         assert!(super::set_aside(&path, "S").is_err());
         assert!(path.exists());
+    }
+
+    /// The new order (journal files, then the main file) means the guard
+    /// against overwriting an earlier removal must still fire before
+    /// anything moves — including the journal files — not just the main
+    /// file. `set_aside_never_overwrites` above already covers the case
+    /// with no journal files; this is the same failure with `-wal`/`-shm`
+    /// present, confirming they are left exactly where they were.
+    #[test]
+    fn a_pre_existing_target_leaves_the_journal_files_untouched_too() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.sqlite3");
+        std::fs::write(&path, b"x").unwrap();
+        std::fs::write(format!("{}-wal", path.display()), b"wal").unwrap();
+        std::fs::write(format!("{}-shm", path.display()), b"shm").unwrap();
+        std::fs::write(dir.path().join("vault.sqlite3.removed-S"), b"older").unwrap();
+
+        assert!(super::set_aside(&path, "S").is_err());
+
+        assert!(path.exists());
+        assert!(dir.path().join("vault.sqlite3-wal").exists());
+        assert!(dir.path().join("vault.sqlite3-shm").exists());
+        assert!(!dir.path().join("vault.sqlite3.removed-S-wal").exists());
+        assert!(!dir.path().join("vault.sqlite3.removed-S-shm").exists());
+    }
+
+    /// A failure partway through the journal-file renames must put back
+    /// anything already moved, so a later failure at the main file's own
+    /// rename (the case this ordering exists for) never has to reconcile a
+    /// half-moved journal on top of it. The "-shm" rename is made to fail
+    /// by blocking its destination with a non-empty directory, which a
+    /// plain-file rename cannot replace.
+    #[test]
+    fn a_failed_journal_rename_puts_earlier_ones_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.sqlite3");
+        std::fs::write(&path, b"x").unwrap();
+        std::fs::write(format!("{}-wal", path.display()), b"wal").unwrap();
+        std::fs::write(format!("{}-shm", path.display()), b"shm").unwrap();
+        let blocked = dir.path().join("vault.sqlite3.removed-S-shm");
+        std::fs::create_dir(&blocked).unwrap();
+        std::fs::write(blocked.join("keep"), b"y").unwrap();
+
+        assert!(super::set_aside(&path, "S").is_err());
+
+        // The vault itself was never touched (the main rename is last), and
+        // the "-wal" file that did move is back where it started.
+        assert!(path.exists());
+        assert!(dir.path().join("vault.sqlite3-wal").exists());
+        assert!(!dir.path().join("vault.sqlite3.removed-S-wal").exists());
+        // The "-shm" source is untouched too: its own rename never
+        // completed.
+        assert!(dir.path().join("vault.sqlite3-shm").exists());
     }
 
     #[test]
