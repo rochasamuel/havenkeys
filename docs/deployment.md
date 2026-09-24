@@ -280,12 +280,13 @@ so nothing is lost if the steps are followed in order:
 1. **Check first, on the old build.** If any account had its master password
    changed with the old build, its server verifier is stale
    (`security-review.md` S14): every device of that account fails to sign in
-   and stays offline. No admin command resets a verifier — it is derived
-   from the password on the client. The only in-place repair (untested) is,
-   still on the old build and the old server, to change that account's
-   password back to the one it was activated with and let it sync.
-   Otherwise the account has to be deleted and recreated with
-   `admin delete-account` / `admin new-account`, which loses its items.
+   and stays offline. There is no in-place repair: no admin command resets
+   a verifier (it is derived from the password on the client), and changing
+   the password again on the old build cannot fix it, because that build
+   needs a server session to change a password and picks a fresh KDF salt
+   each time. The account has to be deleted and recreated with
+   `admin delete-account` / `admin new-account`, which loses the items the
+   server holds for it.
 2. **Upgrade the server.**
 3. **Upgrade every desktop.** Change no master password between steps 2
    and 3.

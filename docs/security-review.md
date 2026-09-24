@@ -691,10 +691,10 @@ it lives on the server). Upgrade in this order:
    stale verifier (S14): its devices all fail to sign in after the change,
    so it shows as permanently offline. There is **no admin command that
    resets a verifier** — it is derived from the password on the client and
-   cannot be computed on the server. The only in-place repair is, *still on
-   the old build and old server*, to change the master password back to the
-   one the account was activated with and let it publish; this path has not
-   been tested. Otherwise the account must be deleted and recreated
+   cannot be computed on the server. There is no in-place repair: changing
+   the password again on the old build cannot fix it, because that build
+   needs a server session to change a password and picks a fresh KDF salt
+   each time. The account must be deleted and recreated
    (`admin delete-account`, `admin new-account`), which loses its items.
 2. Upgrade the server.
 3. Upgrade every desktop. Change no passwords in between.
