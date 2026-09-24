@@ -440,6 +440,33 @@ impl std::fmt::Debug for StagedWrite {
     }
 }
 
+impl StagedWrite {
+    /// Builds a [`StagedWrite`] directly from raw blobs, bypassing the
+    /// normal staging path (which seals `overview`/`details` under the
+    /// unlocked vault's session and records `plain` for the in-memory
+    /// cache). Exists so test code can put arbitrary — including
+    /// deliberately malformed — bytes on a test server under a given item
+    /// id, without an unlocked vault to stage through. Never used outside
+    /// tests: `epoch` is set to `0` and `plain` to `None`, so committing the
+    /// result with [`VaultService::commit_write`] would misbehave.
+    #[cfg(any(test, feature = "test-util"))]
+    pub fn for_test(
+        item_id: Uuid,
+        base_revision: Option<i64>,
+        overview: Vec<u8>,
+        details: Vec<u8>,
+    ) -> Self {
+        StagedWrite {
+            item_id,
+            base_revision,
+            overview: Some(overview),
+            details: Some(details),
+            epoch: 0,
+            plain: None,
+        }
+    }
+}
+
 /// A login from the browser, sealed and ready to send. `item_id` is what the
 /// extension is told, whether the login was created or updated.
 pub struct StagedSave {

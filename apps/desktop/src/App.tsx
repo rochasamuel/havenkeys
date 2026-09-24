@@ -41,7 +41,7 @@ export function App() {
       setSession((s) => s + 1);
       setShowKit(false);
       setSignedOut(false);
-      setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0 } : s));
+      setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0, unreadableItems: 0 } : s));
     });
     return () => void unlisten.then((f) => f());
   }, []);
@@ -165,12 +165,13 @@ export function App() {
       <VaultScreen
         key={session}
         damagedItems={status.damagedItems}
+        unreadableItems={status.unreadableItems}
         readOnly={!device?.online}
         onLock={() => {
           setLockReason("user");
           setSignedOut(false);
           setSession((s) => s + 1);
-          setStatus({ ...status, state: "locked", damagedItems: 0 });
+          setStatus({ ...status, state: "locked", damagedItems: 0, unreadableItems: 0 });
         }}
       />
     </div>

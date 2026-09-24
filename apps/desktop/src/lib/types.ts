@@ -7,6 +7,8 @@ export interface VaultStatus {
   state: VaultState;
   vaultExists: boolean;
   damagedItems: number;
+  /** Items from the server that could not be opened; retried on every sync. */
+  unreadableItems: number;
 }
 
 export type ItemType = "login" | "secure_note";

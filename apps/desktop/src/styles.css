@@ -591,6 +591,17 @@ button {
   }
 }
 
+/* A banner scoped to a narrower pane (the item list) rather than the whole
+   window: it wraps its text and action instead of assuming one line. */
+.banner-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 8px;
+  padding: 8px 14px;
+}
+
 .vault {
   flex: 1;
   min-height: 0;
@@ -842,12 +853,21 @@ button {
 
 /* ----------------------------------------------------------------- list */
 
-.list {
+/* The grid's list-column item: the list itself, plus an optional banner
+   (e.g. unreadable items) stacked above it. */
+.list-col {
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--bg-list);
   border-right: 1px solid var(--line);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .list-head {

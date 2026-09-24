@@ -20,6 +20,10 @@ zeroize = { version = "1", features = ["zeroize_derive"] }
 url = "2"
 
 [dev-dependencies]
+# test-util exposes StagedWrite::for_test, used only by this crate's tests to
+# put malformed data on a test server; never enabled by the normal dependency
+# above, so the desktop build never gets it.
+havenkeys-core = { path = "../havenkeys-core", features = ["test-util"] }
 havenkeys-server = { path = "../havenkeys-server" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }

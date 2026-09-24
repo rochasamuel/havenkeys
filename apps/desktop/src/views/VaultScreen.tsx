@@ -20,6 +20,7 @@ type Pane =
 
 interface Props {
   damagedItems: number;
+  unreadableItems: number;
   /** Offline: writes would fail, so the mutating controls are disabled up front. */
   readOnly: boolean;
   onLock: () => void;
@@ -31,12 +32,14 @@ const sections: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "secure_note", label: "Secure notes", icon: "note" },
 ];
 
-export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
+export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }: Props) {
   const toast = useToast();
   const [section, setSection] = useState<Section>("all");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemOverview[]>([]);
   const [pane, setPane] = useState<Pane>({ kind: "empty" });
+  const [unreadable, setUnreadable] = useState(unreadableItems);
+  const [busyResync, setBusyResync] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -57,19 +60,44 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
     return () => void unlisten.then((f) => f());
   }, [refresh]);
 
-  // A pull can add, change or remove items behind the UI's back.
+  const refreshUnreadable = useCallback(async () => {
+    try {
+      const status = await api.status();
+      setUnreadable(status.unreadableItems);
+    } catch {
+      // Best-effort: the banner just keeps its last known count.
+    }
+  }, []);
+
+  // A pull can add, change or remove items behind the UI's back. The
+  // unreadable count is re-read every time, not derived from the report:
+  // a sync that only clears a previously-unreadable row reports 0 changes.
   useEffect(() => {
     const unlisten = api.onSynced((report) => {
       if (report.added + report.updated + report.deleted > 0) void refresh();
+      void refreshUnreadable();
     });
     return () => void unlisten.then((f) => f());
-  }, [refresh]);
+  }, [refresh, refreshUnreadable]);
 
   useEffect(() => {
     if (damagedItems > 0) {
       toast(`${damagedItems} item(s) could not be decrypted and are hidden.`, "error");
     }
   }, [damagedItems, toast]);
+
+  async function redownload() {
+    setBusyResync(true);
+    try {
+      await api.resync();
+      await refreshUnreadable();
+      await refresh();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Could not re-download the vault.", "error");
+    } finally {
+      setBusyResync(false);
+    }
+  }
 
   const visible = useMemo(
     () => (section === "login" || section === "secure_note" ? items.filter((i) => i.itemType === section) : items),
@@ -202,15 +230,32 @@ export function VaultScreen({ damagedItems, readOnly, onLock }: Props) {
 
       {!isToolSection && (
         <>
-          <ItemList
-            items={visible}
-            query={query}
-            section={section}
-            selectedId={selectedId}
-            onSelect={(id) => setPane({ kind: "view", id })}
-            onNew={newItem}
-            newDisabled={readOnly}
-          />
+          <div className="list-col">
+            {unreadable > 0 && (
+              <div className="banner banner-warn" role="status">
+                {unreadable === 1
+                  ? "1 item couldn't be read from the server."
+                  : `${unreadable} items couldn't be read from the server.`}{" "}
+                <button
+                  className="btn btn-quiet"
+                  type="button"
+                  disabled={readOnly || busyResync}
+                  onClick={() => void redownload()}
+                >
+                  Re-download
+                </button>
+              </div>
+            )}
+            <ItemList
+              items={visible}
+              query={query}
+              section={section}
+              selectedId={selectedId}
+              onSelect={(id) => setPane({ kind: "view", id })}
+              onNew={newItem}
+              newDisabled={readOnly}
+            />
+          </div>
           <section className="detail" aria-label="Item details">
             {pane.kind === "empty" && (
               <div className="detail-empty">

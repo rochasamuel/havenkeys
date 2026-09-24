@@ -522,3 +522,38 @@ async fn a_revoked_device_is_signed_out_at_its_next_request() {
 
     server.cleanup().await;
 }
+
+#[tokio::test]
+async fn an_unreadable_item_is_retried_and_clears_once_fixed() {
+    let server = Server::start().await;
+    let client = server.client();
+    let mut one = activate(&server, "retry@example.com").await;
+    let staged = one
+        .vault
+        .stage_create(login_item("Good", "pw"), NOW)
+        .unwrap();
+    let id = staged.item_id;
+    let good = (
+        staged.overview.clone().unwrap(),
+        staged.details.clone().unwrap(),
+    );
+    // Put garbage on the server under that id, bypassing the core.
+    let bad = havenkeys_core::vault::StagedWrite::for_test(id, None, vec![0u8; 64], vec![0u8; 64]);
+    client.write(&one.session, &[bad]).await.unwrap();
+    let pulled = client.pull(&one.session, 0).await.unwrap();
+    one.vault
+        .apply_remote_changes(pulled.cursor, pulled.changes, NOW)
+        .unwrap();
+    assert_eq!(one.vault.unreadable_item_ids().unwrap(), vec![id]);
+
+    // Fix it on the server, then retry by id.
+    let revision = client.fetch_items(&one.session, &[id]).await.unwrap()[0].revision;
+    let fixed = havenkeys_core::vault::StagedWrite::for_test(id, Some(revision), good.0, good.1);
+    client.write(&one.session, &[fixed]).await.unwrap();
+    let ids = one.vault.unreadable_item_ids().unwrap();
+    let changes = client.fetch_items(&one.session, &ids).await.unwrap();
+    one.vault.apply_refetched(&ids, changes, NOW).unwrap();
+    assert!(one.vault.unreadable_item_ids().unwrap().is_empty());
+    assert_eq!(one.vault.get_item(&id).unwrap().title, "Good");
+    server.cleanup().await;
+}

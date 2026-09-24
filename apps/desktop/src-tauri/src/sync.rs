@@ -211,6 +211,23 @@ pub async fn sync_now(app: &AppHandle) -> CmdResult<SyncReport> {
         cursor = next;
     }
 
+    // Items that did not open earlier are asked for again, by id, on every
+    // sync, until they open, are deleted, or a Re-download clears them.
+    let pending = app.state::<AppState>().vault()?.unreadable_item_ids()?;
+    for chunk in pending.chunks(MAX_BATCH) {
+        let changes = client
+            .fetch_items(&session, chunk)
+            .await
+            .map_err(|e| failed(app, e))?;
+        let state = app.state::<AppState>();
+        let page = state
+            .vault()?
+            .apply_refetched(chunk, changes, AppState::now_ms())?;
+        report.added += page.added;
+        report.updated += page.updated;
+        report.deleted += page.deleted;
+    }
+
     app.state::<AppState>().mark_sync_attempt();
     let _ = app.emit(SYNCED_EVENT, report);
     Ok(report)
