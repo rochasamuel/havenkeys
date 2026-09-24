@@ -35,6 +35,8 @@ for (const [browser, t] of Object.entries(targets)) {
       menu: join(root, "src/menu/menu.ts"),
       save: join(root, "src/menu/save.ts"),
       options: join(root, "src/options/options.ts"),
+      "webauthn-page": join(root, "src/webauthn/page-main.ts"),
+      "webauthn-bridge": join(root, "src/webauthn/bridge-main.ts"),
     },
     outdir: out,
     bundle: true,

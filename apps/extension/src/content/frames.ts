@@ -47,11 +47,11 @@ export class InlineFrame {
   #observer: MutationObserver;
   #closed = false;
 
-  constructor(page: "menu.html" | "save.html", token: string, box: Box, onGone: () => void) {
+  constructor(page: "menu.html" | "save.html" | "passkey.html", token: string, box: Box, onGone: () => void) {
     this.token = token;
     const el = document.createElement("iframe");
     el.src = `${chrome.runtime.getURL(page)}#${token}`;
-    el.title = page === "menu.html" ? "HavenKeys suggestions" : "HavenKeys";
+    el.title = page === "menu.html" ? "HavenKeys suggestions" : page === "passkey.html" ? "HavenKeys passkeys" : "HavenKeys";
     el.setAttribute("referrerpolicy", "no-referrer");
     el.setAttribute("allow", "");
     this.el = el;
@@ -113,4 +113,12 @@ export function menuBox(field: DOMRect, rows: number, viewport: { width: number;
 
 export function saveBox(viewport: { width: number }): Box {
   return { top: 12, left: Math.max(4, viewport.width - SAVE_WIDTH - 16), width: SAVE_WIDTH, height: SAVE_HEIGHT };
+}
+
+export const PASSKEY_WIDTH = 360;
+export const PASSKEY_HEIGHT = 300;
+
+/** Top right of the viewport, like the save prompt. */
+export function passkeyBox(viewport: { width: number }): Box {
+  return { top: 12, left: Math.max(4, viewport.width - PASSKEY_WIDTH - 16), width: PASSKEY_WIDTH, height: PASSKEY_HEIGHT };
 }
