@@ -4,11 +4,11 @@
 mod common;
 
 use common::*;
-use havenkeys_core::model::Settings;
+use havenkeys_core::model::{MatchType, Settings, UrlRule};
 use havenkeys_core::passkey::{
     CreateQuery, PasskeyCreate, StagedPasskey, Upgrade, MAX_PASSKEYS_PER_LOGIN,
 };
-use havenkeys_core::vault::{VaultService, UPGRADE_WINDOW_MS};
+use havenkeys_core::vault::{VaultService, MAX_RECENT_FILLS, UPGRADE_WINDOW_MS};
 use havenkeys_core::Error;
 use uuid::Uuid;
 
@@ -735,4 +735,46 @@ fn a_clicked_create_does_not_spend_the_fill() {
         .unwrap();
     commit(&mut v, &mut rev, s);
     assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::Auto(gh));
+}
+
+#[test]
+fn only_the_newest_recent_fills_are_kept() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let ids: Vec<Uuid> = (0..=MAX_RECENT_FILLS)
+        .map(|i| github_login(&mut v, &mut rev, &format!("u{i}")))
+        .collect();
+    for id in &ids {
+        v.fill_for_page(id, GH, None, NOW).unwrap();
+    }
+    // The first fill was evicted; the last is still there.
+    assert_eq!(upgrade(&v, GH, "u0", NOW), Upgrade::None);
+    let last = format!("u{MAX_RECENT_FILLS}");
+    assert_eq!(
+        upgrade(&v, GH, &last, NOW),
+        Upgrade::Auto(ids[MAX_RECENT_FILLS])
+    );
+}
+
+#[test]
+fn a_fill_on_one_site_is_no_upgrade_on_another_site_of_the_same_login() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let mut input = login("Git", "octo", "pw", "https://github.com");
+    input.urls.push(UrlRule {
+        url: "https://gitlab.com".into(),
+        match_type: MatchType::Domain,
+    });
+    let s = v.stage_create(input, NOW).unwrap();
+    let id = v.commit_write(s, rev.next()).unwrap().unwrap().id;
+    v.fill_for_page(&id, GH, None, NOW).unwrap();
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::Auto(id));
+    let q = CreateQuery {
+        rp_id: "gitlab.com",
+        ..query("https://gitlab.com/", "octo")
+    };
+    assert_eq!(
+        v.check_passkey_create(&q, NOW).unwrap().upgrade,
+        Upgrade::None
+    );
 }
