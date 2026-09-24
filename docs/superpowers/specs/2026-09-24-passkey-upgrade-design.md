@@ -102,6 +102,16 @@ password-fill click on the same site within the previous 5 minutes, confirmed
 in Rust. A compromised extension can at most add a passkey to the login the
 user just filled on that site, within that window.
 
+> Note (2026-09-24, implementation review): the last sentence above is
+> wrong. A compromised extension can send `passkey_create {conditional:
+> false}` (the clicked path), which the core cannot tell from a real click,
+> so it can already create passkeys for sites it names. The Rust check keeps
+> the *silent* path narrow against extension bugs and hostile pages (no
+> silent save without a recent HavenKeys fill of that login on that site);
+> it adds no capability for a compromised extension. The implementation
+> also makes a silent save add-only (never a replace) and spends the fill,
+> so one fill grants at most one silent passkey (`threat-model.md` T8).
+
 ### 3.5 Setting
 
 `Settings.auto_passkey_upgrade: bool`, `#[serde(default = "true")]`, saved in

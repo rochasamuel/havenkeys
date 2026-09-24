@@ -537,9 +537,14 @@ in `autofill.md` §Passkeys, and the threats in `threat-model.md` T8.
   site within the next 5 minutes is `auto` when the vault setting
   `auto_passkey_upgrade` is on (`ask` when it is off), and `passkey_create`
   itself refuses (`denied`) unless it still comes out `auto` for exactly the
-  item named. The extension's word that a request is the automatic upgrade
-  is never enough on its own (`threat-model.md` T8, "Relaxed click rule" and
-  "Fill memory"; `native-messaging.md` §7).
+  item named. A silent save only adds a passkey (never replaces one) and
+  spends the fill, so one fill grants at most one. This keeps the silent
+  path narrow against extension bugs and hostile pages: a page cannot
+  trigger a silent save without a recent HavenKeys fill of that login on
+  that site. It is not a boundary against a compromised extension, which
+  could already create passkeys for sites it names through the ordinary
+  clicked `passkey_create` (`threat-model.md` T8, "Compromised extension",
+  "Relaxed click rule" and "Fill memory"; `native-messaging.md` §7).
 * **`passkey_status`.** A Lookup-class request answering only whether the
   vault holds any passkey `authorize_rp` allows for the page — nothing else
   about it. The field menu asks it once when it opens, to decide between a

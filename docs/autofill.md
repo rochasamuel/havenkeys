@@ -405,8 +405,9 @@ not the extension, that decides what happens next:
   was just filled preselected among the "Add to …" choices.
 * Anything else — no recent fill, a different account name, the matching
   login already has 8 passkeys, the site's `excludeCredentials` already
-  names a passkey HavenKeys holds, the desktop locked or unreachable, or any
-  error — falls back to the browser, exactly like a conditional `create()`
+  names a passkey HavenKeys holds, a passkey for that account already in the
+  vault, a fill already spent on a silent save, the desktop locked or
+  unreachable, or any error — falls back to the browser, exactly like a conditional `create()`
   from a site HavenKeys does not recognize (normally a no-op).
 
 Rust makes this decision twice: once to answer `check_passkey_create`'s
@@ -414,7 +415,15 @@ Rust makes this decision twice: once to answer `check_passkey_create`'s
 `passkey_create` itself, which refuses (`Denied`) a conditional request
 unless it still comes out `Auto` for exactly the item named. The extension's
 claim that a request is the automatic upgrade, or that it is for a
-particular item, is never trusted on its own.
+particular item, is never trusted on its own. A silent save only adds a
+passkey: if any login already holds one for the same account (rpId and user
+handle), the conditional request is refused and replacing it needs the card.
+A successful silent save spends the fill, so one password fill grants at
+most one silent passkey; a second conditional `create()` falls back until
+the user fills again. This keeps the silent path narrow against hostile
+pages and extension bugs; it is not a boundary against a compromised
+extension, which could already use the ordinary clicked save
+(`threat-model.md` T8).
 
 Setting: Settings → *Browser extension* → "Add passkeys automatically after
 I sign in" (off: "HavenKeys asks first").

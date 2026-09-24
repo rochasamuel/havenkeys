@@ -293,13 +293,23 @@ public data and the user's click. New or changed threats:
   extension's claim that a request is the automatic upgrade is not trusted.
   *Mitigation:* the vault setting `auto_passkey_upgrade` (on by default)
   turns this off; when off, the save card asks first, as for any other
-  `create()`. *Residual:* within the window, a compromised extension can add
-  a passkey to the login the user just filled, on that site, without a
-  further click; it cannot add one to any other login, any other site, a
-  look-alike domain, or after the window closes
-  (`crates/havenkeys-core/tests/passkeys.rs`
+  `create()`. A silent save only ever *adds* a passkey: a conditional create
+  for an account (rpId and user handle) that any login already holds is
+  refused, so replacing a passkey always needs the card. Each fill grants at
+  most one silent passkey: a successful conditional create spends the fill
+  for that login on that site, so a script on the site cannot repeat it with
+  fresh user handles. *Residual:* the Rust check keeps the *silent* path
+  narrow against extension bugs and hostile pages — a page cannot trigger a
+  silent save without a recent HavenKeys fill of that login on that site. It
+  is not a boundary against a compromised extension, and adds no capability
+  to one: such an extension can already create passkeys for sites it names
+  through the clicked path (`passkey_create` with `conditional: false`),
+  which the core cannot tell from a real click ("Compromised extension"
+  above) (`crates/havenkeys-core/tests/passkeys.rs`
   `conditional_create_needs_auto_for_exactly_that_login`,
-  `upgrade_is_per_site_and_never_for_look_alikes`;
+  `upgrade_is_per_site_and_never_for_look_alikes`,
+  `conditional_create_never_replaces_the_filled_logins_own_passkey`,
+  `one_fill_grants_one_silent_passkey`;
   `crates/havenkeys-bridge/tests/bridge.rs` `passkey_upgrade_through_the_bridge`).
 * **Fill memory.** The recent-fill list that grants that consent holds only
   an item ID and a site (the page's registrable domain, or its host with
@@ -385,3 +395,4 @@ public data and the user's click. New or changed threats:
 | A19 | Page fires WebAuthn requests in a loop to drain the desktop's lookup rate limit | One lookup per tab at a time; the rest go to the browser | `apps/extension/src/background/webauthn-handler.test.ts` ("allows one wa_get/wa_create lookup in flight per tab") |
 | A1u | Automatic passkey upgrade (`conditional create`) requested for a login other than the one just filled, for another site, before any fill, or after the 5-minute window | DENIED; falls back to the browser, nothing created | `crates/havenkeys-core/tests/passkeys.rs` (`conditional_create_needs_auto_for_exactly_that_login`), `crates/havenkeys-bridge/tests/bridge.rs` (`passkey_upgrade_through_the_bridge`) |
 | A2u | Automatic upgrade on the same registrable domain as the fill (a subdomain) versus a look-alike domain | Subdomain: allowed if the login is offered there; look-alike (`github.com.evil.com`): `upgrade: none`, `authorize_rp` itself refuses | `crates/havenkeys-core/tests/passkeys.rs` (`upgrade_is_per_site_and_never_for_look_alikes`) |
+| A3u | Page repeats the automatic upgrade after one silent save (fresh user handles), or aims it at an account whose passkey the vault already holds | DENIED; falls back to the browser, the existing passkey is untouched | `crates/havenkeys-core/tests/passkeys.rs` (`one_fill_grants_one_silent_passkey`, `conditional_create_never_replaces_the_filled_logins_own_passkey`) |
