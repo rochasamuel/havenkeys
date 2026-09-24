@@ -244,6 +244,16 @@ pub struct Settings {
     /// default, including for settings saved before this field existed.
     #[serde(default)]
     pub browser_integration: bool,
+    /// Whether a site's automatic passkey upgrade (a conditional
+    /// `create()` right after HavenKeys filled a password there) may save a
+    /// passkey without asking. On by default, including for settings saved
+    /// before this field existed; when off, the save card asks instead.
+    #[serde(default = "default_true")]
+    pub auto_passkey_upgrade: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 pub const AUTO_LOCK_CHOICES: [u32; 5] = [0, 5, 15, 30, 60];
@@ -255,6 +265,7 @@ impl Default for Settings {
             clipboard_clear_seconds: 30,
             theme: Theme::Dark,
             browser_integration: false,
+            auto_passkey_upgrade: true,
         }
     }
 }
@@ -448,6 +459,22 @@ mod tests {
             serde_json::from_str(r#"{"autoLockMinutes":5,"clipboardClearSeconds":30}"#).unwrap();
         assert_eq!(old.theme, Theme::Dark);
         assert!(!old.browser_integration);
+    }
+
+    #[test]
+    fn auto_passkey_upgrade_defaults_on() {
+        assert!(Settings::default().auto_passkey_upgrade);
+        // Settings saved before the field existed.
+        let old: Settings = serde_json::from_str(
+            r#"{"autoLockMinutes":5,"clipboardClearSeconds":30,"theme":"dark","browserIntegration":true}"#,
+        )
+        .unwrap();
+        assert!(old.auto_passkey_upgrade);
+        let off: Settings = serde_json::from_str(
+            r#"{"autoLockMinutes":5,"clipboardClearSeconds":30,"autoPasskeyUpgrade":false}"#,
+        )
+        .unwrap();
+        assert!(!off.auto_passkey_upgrade);
     }
 
     #[test]

@@ -229,11 +229,23 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
                 onChange={(checked) => void update({ browserIntegration: checked })}
               />
             </div>
+            <div className="row">
+              <span className="row-label-inline">Add passkeys automatically after I sign in</span>
+              <Switch
+                label="Add passkeys automatically after I sign in"
+                checked={settings.autoPasskeyUpgrade}
+                onChange={(checked) => void update({ autoPasskeyUpgrade: checked })}
+              />
+            </div>
           </div>
           <p className="group-note">
             The extension only receives a login when you choose it on a website that login is saved for, and only while
             HavenKeys is unlocked. It never receives your master password. Off by default: while it is on, other programs
             running under your account can make the same requests as the extension.
+          </p>
+          <p className="group-note">
+            When a website offers to add a passkey right after HavenKeys fills your password there, HavenKeys saves it to
+            that login. When off, HavenKeys asks first.
           </p>
         </div>
       )}

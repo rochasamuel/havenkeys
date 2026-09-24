@@ -285,6 +285,26 @@ fn settings_are_encrypted_and_persisted() {
 }
 
 #[test]
+fn auto_passkey_upgrade_setting_round_trips() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("v.db");
+    let sk = {
+        let (mut v, sk) = activated_vault_at(&path);
+        assert!(v.settings().unwrap().auto_passkey_upgrade);
+        v.update_settings(Settings {
+            auto_passkey_upgrade: false,
+            ..v.settings().unwrap()
+        })
+        .unwrap();
+        sk
+    };
+    let mut v = open_file(&path);
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    assert!(!v.settings().unwrap().auto_passkey_upgrade);
+}
+
+#[test]
 fn lock_during_unlock_discards_result() {
     let (mut v, sk) = activated_vault();
     v.lock();

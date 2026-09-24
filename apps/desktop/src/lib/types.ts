@@ -90,6 +90,7 @@ export interface Settings {
   clipboardClearSeconds: number;
   theme: Theme;
   browserIntegration: boolean;
+  autoPasskeyUpgrade: boolean;
 }
 
 export interface CopyResult {
