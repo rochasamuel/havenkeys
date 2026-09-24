@@ -23,9 +23,10 @@ use uuid::Uuid;
 pub const SYNCED_EVENT: &str = "vault://synced";
 /// Online or offline changed.
 pub const CONNECTIVITY_EVENT: &str = "vault://connectivity";
-/// The server refused this device's sign-in after an unlock. Most often the
-/// master password was changed on another device, which ends every other
-/// session; the UI explains that instead of a bare "offline".
+/// The server refused this device's sign-in after an unlock, or refused a
+/// session it had accepted. Most often the master password was changed on
+/// another device, which ends every other session; the UI explains that
+/// instead of a bare "offline".
 pub const SIGNED_OUT_EVENT: &str = "vault://signed-out";
 
 /// The label this device reports. Deliberately not the hostname, which is
@@ -86,19 +87,30 @@ pub fn bridge_error(err: CmdError) -> havenkeys_protocol::ErrorCode {
 
 /// Map a failure, and drop the session when the server says it is gone, so
 /// the app falls back to read-only instead of retrying with a dead token.
+///
+/// A session the server refused (most often: the master password was
+/// changed on another device, which ends every other session) is announced
+/// as signed out, not just offline, so an unlocked device explains why it
+/// stopped syncing.
 pub(crate) fn failed(app: &AppHandle, err: SyncError) -> CmdError {
     if matches!(err, SyncError::Unauthorized | SyncError::Unavailable) {
-        go_offline(app);
+        let dropped = go_offline(app);
+        if dropped && err == SyncError::Unauthorized {
+            let _ = app.emit(SIGNED_OUT_EVENT, ());
+        }
     }
     err.into()
 }
 
-pub fn go_offline(app: &AppHandle) {
+/// Drop the session. Returns whether one was held.
+pub fn go_offline(app: &AppHandle) -> bool {
     if let Some(state) = app.try_state::<AppState>() {
         if state.go_offline() {
             let _ = app.emit(CONNECTIVITY_EVENT, false);
+            return true;
         }
     }
+    false
 }
 
 /// The client for this vault's server. Cached, because building one sets up
@@ -140,6 +152,8 @@ pub async fn connect(app: &AppHandle, auth_key: AuthKey) -> CmdResult<()> {
         .login(&email, &auth_key, account_id, device_id, DEVICE_NAME)
         .await
         .map_err(|e| {
+            // No session is held here as a rule, so `failed` would not
+            // announce this one; the UI's flag is idempotent if it did.
             if e == SyncError::Unauthorized {
                 let _ = app.emit(SIGNED_OUT_EVENT, ());
             }
