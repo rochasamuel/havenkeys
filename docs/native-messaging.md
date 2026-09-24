@@ -21,7 +21,7 @@ happens.
 | Extension background worker | `apps/extension/src/background/` | Nothing on the desktop side. It picks page URLs from the browser's sender and tab data, never from page content |
 | Native host | `crates/havenkeys-native-host` | Nothing. It has no keys and cannot open the vault. It validates and relays messages |
 | Bridge | `crates/havenkeys-bridge` | Enforcing the rules in §5 |
-| Core | `crates/havenkeys-core` | Origin binding (`find_matches`, `fill_for_page`, `totp_for_page`) |
+| Core | `crates/havenkeys-core` | Origin binding (`find_matches`, `fill_for_page`, `totp_for_page`; for passkeys `authorize_rp` and the stored rpId) |
 
 The browser starts the native host as a child process for each
 `connectNative` port. The host does not open the vault itself. It connects
@@ -91,16 +91,22 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `generate_password` | none | yes | lookup |
 | `check_login` | `url`, `topUrl`?, `username` (string or null), `password` | yes | secret |
 | `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null) | yes | secret, plus one update per item per 10 min |
+| `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |
+| `passkey_get` | `itemId` (UUID), `credentialId`, `url`, `topUrl`?, `rpId`, `challenge` | yes | secret |
+| `check_passkey_create` | `url`, `topUrl`?, `rpId`, `userName`, `excludeCredentials` (list) | yes | lookup |
+| `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null) | yes | secret; a server write |
 
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
 be omitted, which means null.
 
 There is deliberately no request to unlock the vault, list items, search,
-reveal notes, read a TOTP secret, delete items, or change anything except
-one login's password. `save_login` is the only write. It can add a login
-for the page it names, or replace the password of a login that matches that
-page. The old password is kept in the item's history.
+reveal notes, read a TOTP secret, read a passkey's private key, delete items
+or passkeys, or change anything except one login's password or passkeys.
+There are two writes. `save_login` can add a login for the page it names, or
+replace the password of a login that matches that page; the old password is
+kept in the item's history. `passkey_create` adds a passkey (see
+[Passkeys](#passkeys) below).
 
 **Responses** answer one request ID and carry exactly one of `result` or
 `error`:
@@ -112,6 +118,10 @@ page. The old password is kept in the item's history.
 {"v":1,"id":11,"result":{"type":"generate_password","password":"…"}}
 {"v":1,"id":12,"result":{"type":"check_login","action":"update","itemId":"…"}}
 {"v":1,"id":13,"result":{"type":"save_login","itemId":"…"}}
+{"v":1,"id":14,"result":{"type":"find_passkeys","passkeys":[{"itemId":"…","credentialId":"…","title":"GitHub","userName":"octo"}]}}
+{"v":1,"id":15,"result":{"type":"passkey_get","credentialId":"…","authenticatorData":"…","clientDataJson":"…","signature":"…","userHandle":"…"}}
+{"v":1,"id":16,"result":{"type":"check_passkey_create","excluded":false,"candidates":[{"itemId":"…","title":"GitHub","username":"octo"}]}}
+{"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
 {"v":1,"id":10,"error":{"code":"denied","message":"This item is not saved for this website."}}
 ```
 
@@ -125,7 +135,7 @@ the desktop app goes away.
 **Error codes:** `locked`, `busy`, `no_vault`, `not_found`, `denied`,
 `invalid_input`, `decryption`, `corrupted`, `malformed`, `too_large`,
 `unsupported_version`, `rate_limited`, `integration_disabled`,
-`desktop_unavailable`, `internal`. Messages are fixed strings chosen by the
+`desktop_unavailable`, `offline`, `internal`. Messages are fixed strings chosen by the
 Rust side. The host replaces any message text coming from the socket with
 its own fixed text, so no input or secret can be echoed back through an
 error.
@@ -140,6 +150,15 @@ error.
 | Password in `check_login`/`save_login` | 16 KiB (the core allows 4096 characters) | host, bridge, core |
 | Username | 2 KiB (the core allows 512 characters) | host, bridge, core |
 | Suggestions per `find_matches` | 50 | bridge, host, extension |
+| Passkeys per `find_passkeys`, candidates per `check_passkey_create` | 50 | bridge, host, extension |
+| Binary fields (`credentialId`, `challenge`, `userHandle`, list entries, and every binary result) | unpadded base64url | extension, host, bridge |
+| `credentialId`, and each `allowCredentials`/`excludeCredentials` entry | exactly 16 bytes | page script (drops others), extension, host, bridge |
+| `allowCredentials`, `excludeCredentials` | at most 64 entries | extension, host, bridge |
+| `challenge` | 1–1024 bytes | page script (hands others to the browser), extension, host, bridge, core |
+| `userHandle` | 1–64 bytes | page script, extension, host, bridge, core |
+| `rpId` | 1–253 bytes | page script, extension, host, bridge; the core also requires a valid domain or IP |
+| `userName`, `displayName` | 2 KiB on the wire; 512 characters, no control characters, in the core (the page script cuts them to 512) | page script, host, bridge, core |
+| Passkeys per login | 8 | core |
 | Concurrent host connections | 8 | bridge |
 | Lookup rate | burst 60, then 5/s | bridge (global) |
 | Secret rate | burst 10, then 1 per 2 s | bridge (global) |
@@ -179,7 +198,8 @@ For every request the bridge and core check, in this order:
    `autofill.md`. The extension's opinion about which item belongs to a page
    is never used. An unknown item ID, a secure note, a login for another
    site, and a login with no TOTP all return the same `denied`, so IDs cannot
-   be probed.
+   be probed. Passkey requests are bound by the relying-party ID instead
+   ([Passkeys](#passkeys)).
 6. **Secret minimization:** `find_matches` returns ID, title, username, a
    has-TOTP flag and the match strength. `fill_item` returns the username and
    password only. `get_totp` returns the current code only; the secret never
@@ -190,6 +210,8 @@ For every request the bridge and core check, in this order:
    allows one such change per item every 10 minutes, so a flood cannot push
    the real password out of the history quickly. After a successful save, the
    desktop UI is told to refresh its list (`vault://items-changed`, no data).
+   `passkey_create` is the same kind of write: sealed, sent to the server,
+   and answered only after the server accepted it.
 
 `lock` locks the vault exactly like the lock button: the session is dropped,
 the clipboard is cleared if it still holds our value, the UI is notified, and
@@ -256,10 +278,11 @@ page. See `security-model.md` §12 and `autofill.md`.
 * It accepts runtime messages from three kinds of sender, told apart by the
   browser's sender data. Each has its own strict parser:
   * the toolbar popup (`popup.html`, no tab);
-  * the in-page menu and save frames (`menu.html`, `save.html`, in a tab).
-    These carry only a 128-bit session token, which is valid only for that
-    tab;
-  * content scripts, in http(s) frames of a tab. The frame URL, the top URL
+  * the in-page menu, save and passkey frames (`menu.html`, `save.html`,
+    `passkey.html`, in a tab). These carry only a 128-bit session token,
+    which is valid only for that tab;
+  * content scripts, in http(s) frames of a tab, including the passkey
+    bridge (`webauthn-bridge.js`). The frame URL, the top URL
     for iframes, and on Chromium the frame's origin and document ID come from
     the browser. A sandboxed frame (origin `null`) is ignored.
 * `externally_connectable` is empty (Chromium), so web pages and other
@@ -283,8 +306,31 @@ page. See `security-model.md` §12 and `autofill.md`.
   `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`.
   `frame-ancestors` was dropped in Phase 5 because the menu and save pages
   must be framed by web pages. Which extension pages a web page may frame is
-  controlled by `web_accessible_resources`, which lists only those two pages
-  and their assets.
+  controlled by `web_accessible_resources`, which lists only those pages
+  (`menu.html`, `save.html`, `passkey.html`) and their assets.
+
+### Passkeys
+
+The four passkey requests come from the background worker's WebAuthn
+handler (`background/webauthn-handler.ts`), which the passkey bridge in the
+page feeds. `url` and `topUrl` come from the browser's sender data, exactly as
+for logins; `rpId` comes from the site (or defaults to the frame's host) and
+is untrusted.
+
+| Request | Core function | Returns | Checks |
+|---|---|---|---|
+| `find_passkeys` | `find_passkeys` | per passkey: item ID, credential ID, login title, account name. **No secrets** | `authorize_rp(rpId, url, topUrl)`; stored rpId equals it; filtered by `allowCredentials` when non-empty |
+| `passkey_get` | `passkey_assert` | credential ID, authenticator data, `clientDataJSON`, signature, user handle | challenge 1–1024 bytes; `authorize_rp`; the item is a login holding that credential ID with that stored rpId. Anything else is `denied` (an unknown item's `not_found` is mapped to `denied` too) |
+| `check_passkey_create` | `check_passkey_create` | `excluded`, and logins that could hold the new passkey (ID, title, username; no candidates when `excluded`) | `authorize_rp`; candidates are logins whose own website rules match the page and that hold fewer than 8 passkeys, same username first |
+| `passkey_create` | `stage_passkey_create` | credential ID, attestation object, `clientDataJSON`, authenticator data, SPKI public key, algorithm `-7` | `authorize_rp`; bounds; `itemId`, if given, must be a login offered for the page. If a login anywhere in the vault already holds a passkey for the same rpId and user handle, the new one replaces it **in that login**, whatever `itemId` says. Sent to the server; `offline` if it cannot be, and nothing is stored |
+
+`find_passkeys` and `check_passkey_create` draw from the lookup bucket;
+`passkey_get` and `passkey_create` from the secret bucket. There is no
+per-item cooldown for passkey writes. No response ever contains a private
+key, and `Debug` of the requests and results shows only their type.
+
+The extension side of the passkey flow — which page events become which
+request, and what the user clicks — is in `autofill.md` §Passkeys.
 
 ## 8. Known limitations
 
@@ -352,3 +398,6 @@ page. See `security-model.md` §12 and `autofill.md`.
 | `packages/protocol/src/index.test.ts` | TS validator accepts exact shapes only |
 | `apps/extension/src/**/*.test.ts` | Native client (ID correlation, timeouts, host loss, idle close, type mismatch), popup request validation, URL stripping, the popup never supplying URLs, content/menu/save message validation, menu sessions (single use, same tab only, offered items only, expiry, lock), save prompts (unchanged logins, multi-step, expiry, other tabs), content-script origin check and sender check, untrusted events, source hygiene |
 | `crates/havenkeys-core/tests/security.rs` (Phase 5) | Frames on foreign top pages (A1), `check_login` classification, `save_login` origin binding (A2 for writes), password history bound |
+| `crates/havenkeys-core/tests/passkeys.rs`, `src/passkey/*.rs` | Passkey create → sign in, A1p/A2p/A3p, attaching to a login and keeping passkeys through edits, re-registration replacing across logins, the per-login limit, removal, input bounds; `authorize_rp` rules; byte layouts |
+| `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | Passkey requests parse with exact shapes and bounds, results validate; create → get over the bridge, attacks, offline create stores nothing |
+| `apps/extension/src/webauthn/*.test.ts`, `background/webauthn-handler.test.ts`, `background/registration.test.ts` | Page script fallback paths and rebuilt credentials, bridge parsing, abort and timeout handling, sessions (offered passkeys only, same tab and frame, one operation at a time, lock and unlock), script registration groups |

@@ -15,6 +15,9 @@ screen-lock code has not run on Windows.
   save and update prompts, and the overlay (clickjacking) test on Chromium.
 * Runtime check of the desktop CSP and capabilities (#14).
 * Windows: the named-pipe DACL (P1), and the vault locking on Win+L (H1).
+* The passkey checklist in `security-review.md` (Passkeys): webauthn.io,
+  github.com and google.com in Chrome and Firefox, including Firefox 128's
+  support for `world: "MAIN"` script registration.
 
 ## 2. Finish Phase 6 (hardening)
 
@@ -148,5 +151,17 @@ decision, recorded in the threat model, and not an incremental feature.
 
 ## Later (out of MVP scope)
 
-A hosted sync service, passkeys, sharing. See CLAUDE.md for the
-current scope.
+A hosted sync service, sharing. See CLAUDE.md for the current scope.
+
+Passkeys are in scope since 2026-09-23 (CLAUDE.md, amendment), as a provider
+for websites. Later work on them:
+
+* **Passkey import and export** in the FIDO Credential Exchange Format (CXF),
+  with the same plaintext warnings as password export.
+* **OS credential-provider integration** (Windows, macOS, Android), so
+  passkeys work outside the extension's granted sites and in native apps.
+  Not possible on Linux today.
+* Smaller follow-ups tracked in `security-review.md` (Passkeys): the
+  locked-card refresh after the native port idles out (PK12), a top-page
+  secure-context check (PK9), and confirming a re-registration before
+  replacing a working passkey (PK5).

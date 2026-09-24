@@ -15,6 +15,7 @@ adversaries it does **not** defend against.
 | Master key / KEK | Critical | Rust core memory during unlock only. Never persisted. |
 | Vault key | Critical | Persisted **only** wrapped (encrypted) by the KEK. Plaintext only in Rust core memory while unlocked. |
 | Passwords, TOTP secrets, notes | Critical | Encrypted at rest. Decrypted on demand in Rust core. |
+| Passkey private keys (P-256) | Critical | Inside a login's encrypted details, like its password. Decrypted and used only in the Rust core (`passkey/`); never in any protocol message, command result, log or `Debug` output. |
 | Usernames, titles, URLs | High (reveals which services a user has) | Encrypted at rest. Decrypted into memory on unlock (for list/search). |
 | Item count, vault creation time, KDF parameters | Low | Plaintext in SQLite (needed to unlock). |
 | Auth key | Critical if reused elsewhere, but it unwraps nothing | Derived at unlock from the master password and the Secret Key; sent to the server over TLS, stored there only as an Argon2id hash. |
@@ -66,6 +67,9 @@ adversaries it does **not** defend against.
   DOM as untrusted input. It acts only on trusted user events, and fills
   only what the background sends after the user picked an item in an
   extension-origin frame (`autofill.md`).
+* **The passkey page script** (`webauthn/page.ts`) runs in the page's own
+  JavaScript world, on granted hosts only, so it is exactly as trusted as
+  the page: not at all. It holds no secrets and decides nothing; see T8.
 
 ## 3. Adversaries we defend against
 
@@ -207,6 +211,57 @@ window is hidden in the tray); lock on quit; lock when the OS session locks
 (Windows, Linux with logind); lock on system suspend (detected by
 wall-clock vs monotonic clock divergence).
 
+### T8 — Passkeys
+HavenKeys acts as a WebAuthn authenticator for websites
+(`docs/superpowers/specs/2026-09-23-passkeys-design.md`). The private key is
+generated, stored and used only in the Rust core; the extension relays
+public data and the user's click. New or changed threats:
+
+* **The MAIN-world script.** To answer `navigator.credentials.create/get`,
+  a script (`webauthn/page.ts`) runs in the page's own world, alongside
+  hostile page JavaScript, which can call, replace or observe the wrapper,
+  and forge every field of a request. *Mitigation:* the wrapper holds no
+  secrets and makes no decisions. A request crosses to the isolated-world
+  bridge as a JSON string, is parsed there with exact shapes and limits, and
+  the background takes the frame URL (and the top URL for iframes) from the
+  browser's sender data, never from the message. Rust checks the relying-party
+  ID against that URL (`authorize_rp`), and a passkey is used only if its
+  stored rpId equals the checked one. *Residual:* the page gains nothing it
+  lacked — it could already call WebAuthn itself — but it can see that
+  HavenKeys answered, and it can hand every request to the browser instead.
+* **UV from an unlocked vault.** Assertions and new credentials carry
+  UV=1 ("user verified") because the vault is unlocked and the user clicked
+  in the extension's own UI. That is not biometrics and not a fresh
+  verification: anyone at an unlocked, unattended computer can sign in with a
+  passkey. *Mitigation:* auto-lock, lock on OS screen lock and on suspend
+  (T7). *Residual:* accepted and stated (`security-review.md` PK1).
+* **Synced private keys.** Passkey keys live in the vault and reach the
+  server as ciphertext under the vault data key, like passwords (T1b applies
+  unchanged). The BE and BS flags are set, which tells relying parties the
+  credential is backup-eligible and backed up. *Residual:* a device with the
+  vault unlocked holds every passkey; there is no device-bound passkey.
+* **Signature counter 0.** The counter is always 0, so relying parties cannot
+  use it to detect a cloned credential. A counter that incremented would make
+  every sign-in a server write and would fail offline. *Residual:* accepted
+  (`security-review.md` PK2).
+* **Compromised extension.** It can request a signature only for a frame URL
+  the browser reports, and only with a passkey whose stored rpId the core
+  allows for that URL — the same bound as password fill (T4). It can create
+  passkeys (a server write) for sites it names, within the rate limit, and a
+  re-registration for an account that already has a passkey replaces the old
+  one, with no history to recover it from (`security-review.md` PK5).
+  *Residual:* as T4; the browser-reported URL is only as trustworthy as
+  the extension that reports it.
+* **Old app versions.** A HavenKeys build from before passkeys does not know
+  the `passkeys` field, so editing a login there and saving it drops the
+  login's passkeys. *Mitigation:* operational only — update every device
+  before saving a passkey. *Residual:* accepted (`security-review.md` PK3).
+* **Clickjacking the passkey card.** The chooser and save card are an
+  extension-origin frame with the same click guard as the menu. On Firefox
+  only the 400 ms delay applies, so a page could trick a click on its *own*
+  passkey prompt. *Residual:* the result is a sign-in or a new passkey for
+  that page's own rpId, nothing else (`security-review.md` PK7).
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can
@@ -259,3 +314,8 @@ wall-clock vs monotonic clock divergence).
 | A13 | Menu frame or other tab tries to pick an item the menu did not offer | Refused | `inline-handler.test.ts` |
 | A14 | Page plants a password and forges a submit to probe the vault | No report, no prompt | `autofill.test.ts`, `content.test.ts` |
 | A15 | Extension overwrites another site's login, or floods password changes | DENIED / one change per item per 10 min; old passwords kept in history | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |
+| A1p | Passkey assertion for github.com requested from evil.com (or from a look-alike, a public suffix, plain http, a cross-site frame) | DENIED; nothing signed | `crates/havenkeys-core/src/passkey/rp.rs`, `crates/havenkeys-core/tests/passkeys.rs` (`attack_wrong_origin_is_denied`), `crates/havenkeys-bridge/tests/bridge.rs` (`passkey_attacks_through_the_bridge`), `tests/fuzz.rs` (`fuzz_authorize_rp`) |
+| A2p | Extension asks to sign with an arbitrary item ID / credential ID, or one bound to another rpId | DENIED, indistinguishable from "no such passkey" at the bridge | `crates/havenkeys-core/tests/passkeys.rs` (`attack_arbitrary_ids_are_denied`), `crates/havenkeys-bridge/tests/bridge.rs` |
+| A3p | Vault locked, passkey sign-in or creation requested | `locked`; nothing signed or created | `crates/havenkeys-core/tests/passkeys.rs` (`attack_locked_vault_is_refused`), `crates/havenkeys-bridge/tests/bridge.rs` |
+| A16 | Page forges or oversizes a WebAuthn request (challenge, user handle, rpId, credential lists, unknown fields) | Handed to the browser by the page script, or rejected by the bridge parser, the native host and the Rust protocol | `apps/extension/src/webauthn/page.test.ts`, `messages.test.ts`, `crates/havenkeys-protocol/tests/messages.rs` (`passkey_requests_are_bounded`) |
+| A17 | Page tries to get a passkey signature without a click in the extension's frame | No signature: only a pick from the passkey frame or the field menu signs | `apps/extension/src/background/webauthn-handler.test.ts` |

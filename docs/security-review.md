@@ -759,3 +759,324 @@ Each of these has a test that fails if the property stops holding.
   and watched a change cross.
 * **Argon2id parameters on target hardware** for the server's verifier
   (19 MiB, t=2, p=1) under concurrent load.
+
+---
+
+# Security Review: Passkeys
+
+**Date:** 2026-09-24
+**Scope:** `crates/havenkeys-core/src/passkey/` and how `vault.rs`,
+`model.rs` and `secret.rs` use it; the passkey requests in
+`crates/havenkeys-protocol` and `crates/havenkeys-bridge`;
+`list_passkeys`/`delete_passkey` in `apps/desktop/src-tauri`; in the
+extension, `src/webauthn/`, `background/webauthn-handler.ts`,
+`background/registration.ts`, `menu/passkey.ts` and the passkey rows of the
+field menu; the TypeScript protocol mirror. Branch base `cd81037`, reviewed
+at `2e0eb73`. Design: `docs/superpowers/specs/2026-09-23-passkeys-design.md`.
+**Method:** self-review of the implementation against the design, per-task
+code reviews during development, the test suites written alongside it, and
+the audits below. No browser was available, so nothing here has been run
+against a real relying party (see the manual checklist at the end).
+
+> This is an internal review, not an independent security audit.
+
+## Summary
+
+We found no critical or high-severity issues. Passkey private keys stay in
+the Rust core. Every signature and creation is bound in Rust to a
+relying-party ID that the page, at the URL the browser reports, is allowed
+to use. Nothing is signed or created without a guarded click in extension
+UI. What remains is design trade-offs (UV from an unlocked vault, counter 0,
+synced keys) and edge cases around replacement, sessions and old app
+versions. All of them are listed below.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| PK1 | Medium | Design | UV is asserted because the vault is unlocked and the user clicked. There is no fresh verification and no biometrics | Accepted, documented |
+| PK2 | Low | Design | The signature counter is always 0, so relying parties cannot detect cloned credentials by counter | Accepted, documented |
+| PK3 | Medium | Core / operations | An app version without passkey support drops a login's passkeys when it edits that login | Accepted; update every device first |
+| PK4 | Low | Extension | "Use another device" calls the browser after an async hop, and may lose user activation on sites that require it | Accepted |
+| PK5 | Medium | Core / bridge | Replace-before-confirm: re-registering an account replaces its working passkey before the site has accepted the new one | Accepted, documented |
+| PK6 | Low | Extension | One passkey session per tab: a granted-host iframe can abort the top frame's request | Accepted (denial of service only) |
+| PK7 | Low | Extension | Firefox has only the time-based click guard, so a page can clickjack its own `passkey.html#token` | Accepted (page's own rpId only) |
+| PK8 | Low | Core | IP-address rpIds are accepted when they equal the page host, although browsers refuse WebAuthn there | Accepted |
+| PK9 | Low | Core | `authorize_rp` does not check that the top-level page is a secure context | Open (one-line fix) |
+| PK10 | Info | Core | `clientDataJSON` strings are escaped with `serde_json`, not WebAuthn's `CCDToString` | Accepted; the bytes are identical for every value that can occur |
+| PK11 | Low | Extension | `pagehide` cancels conditional requests, so a page restored from the back/forward cache loses passkey autofill until it asks again | Accepted |
+| PK12 | Low | Extension | Lock and unlock events arrive only while the native port is open, and it closes after 60 s idle. A locked card may never refresh, and a card may outlive a lock | Open |
+| PK13 | Info | Extension / core | If the site aborts a `create()` after the server accepted it, the vault keeps a passkey the site never registered | Accepted; visible and deletable in the desktop |
+| PK14 | Info | Extension | The save card shows the account name the site chose (up to 512 characters) | Accepted |
+| PK15 | Info | Core | The redacting `Debug` of `Registration`, `Assertion`, `StagedPasskey` and `PasskeyMatch` was confirmed by reading the code; only `Passkey` has a test | Accepted |
+| PK16 | Info | Deps | New dependencies: `p256` 0.14 and its RustCrypto tree, plus `ciborium` (dev only) | Audited below: no advisories, licenses allowed |
+
+## Details
+
+### PK1. UV from an unlocked vault (Medium, accepted)
+**Attack scenario:** someone sits at the user's unlocked, unattended
+computer, opens a site that has a HavenKeys passkey, and signs in with one
+click. The relying party sees UV=1 and may treat it as a second factor.
+**Mitigation:** auto-lock, and lock on OS screen lock and on suspend
+(`threat-model.md` T7). A signature needs a click in the extension's passkey
+card or field menu. **Remaining:** UV=1 means "the vault was unlocked with
+the master password". It does not mean biometrics or a fresh check. The
+design rejected a desktop confirmation or a re-prompt for each sign-in.
+
+### PK2. Counter 0 (Low, accepted)
+Every assertion carries signCount 0 (`crypto.md` §Passkeys). A relying party
+that uses the counter to spot a cloned authenticator gets no signal from it.
+Synced passkeys from other providers do the same. The BE and BS flags tell
+the relying party that the credential is synced.
+
+### PK3. Old app versions drop passkeys (Medium, accepted)
+**Attack scenario (accidental):** a device still runs a build from before
+passkeys, and the user edits a login there. That build reads the details
+without the `passkeys` field and seals them back without it. The server
+accepts the write, and every device loses that login's passkeys. There is no
+history to restore them from. **Mitigation:** operational only: update
+HavenKeys on every device before saving a passkey. The design chose not to
+bump the format, because the only vault belongs to the project owner and may
+be reset. **Remaining:** the loss is silent.
+
+### PK4. "Use another device" and user activation (Low, accepted)
+The click happens in the extension's frame. The fallback then reaches the
+page's original `navigator.credentials` through the background and the
+bridge. A site or browser that requires transient user activation for
+WebAuthn may refuse the call if that hop takes too long. The user can cancel
+and use the site's own "sign in with a security key" path.
+
+### PK5. Replace-before-confirm (Medium, accepted)
+When the vault already holds a passkey for the same rpId and user handle, a
+new `create()` replaces it. The replacement happens in the same server write
+that stores the new passkey (`stage_passkey_create`), which is how WebAuthn
+Level 3 §5.1.3 step 21.3 says an authenticator behaves.
+**Failure and attack scenarios:**
+* (a) The site rejects the new credential after we returned it. Causes
+  include the site's own error, the user closing the tab, or the page
+  aborting after the server accepted.
+* (b) The server accepted the write but the local commit fails, for example
+  because the vault locked in between. The site gets an error.
+
+In both cases the old, working passkey is gone, and the site knows only the
+old one. A compromised extension that has learned a user handle (assertions
+return it) can do the same on purpose, within the secret rate limit. There
+is no per-item cooldown for passkey writes. **Mitigation:** none in code.
+The design keeps one passkey per account. **Remaining:** the user may lose
+passkey access to that account and have to recover through the site. Later
+work (`roadmap.md`) could add a confirmation step that keeps the old key
+until the site has used the new one.
+
+### PK6. One passkey session per tab (Low, accepted)
+The background keeps one session per tab. A new request from any granted
+frame in the tab ends the pending one with `AbortError`. So an iframe on a
+granted host, such as an ad, can keep aborting the top page's passkey
+request. It gains nothing else, because the iframe's own request is checked
+against its own origin. This is a denial of service only.
+
+### PK7. Firefox clickjacking of the passkey card (Low, accepted)
+This is the same issue as F3 for the menu. Firefox has no
+IntersectionObserver v2, so the card's only click guard is the 400 ms delay.
+The token is in the frame's URL fragment, which the page can read, and
+`passkey.html` is a web-accessible resource the page can frame itself. So a
+page could trick the user into clicking its own passkey prompt. The result
+is a sign-in or a new passkey for that page's own origin and rpId, which the
+page could request anyway.
+
+### PK8. IP-address rpIds (Low, accepted)
+As the design specified, `authorize_rp` accepts an IP rpId when it equals
+the page's host (rpId `127.0.0.1` on `https://127.0.0.1/`). Browsers refuse
+WebAuthn on IP hosts, so HavenKeys is more permissive than the platform
+here. No other site's passkey is reachable, because the stored rpId must
+equal the host.
+
+### PK9. Top page's scheme not checked (Low, open)
+For an iframe, `authorize_rp` requires the frame to be a secure context and
+same-site with the top page. It does not require the top page to be a secure
+context, and `same_site` compares hosts, not schemes. So an
+`https://login.example.com` frame inside `http://example.com` would get a
+signature, with `crossOrigin: true` and an `http:` `topOrigin` in
+`clientDataJSON`. Browsers treat such a frame as a non-secure context and
+refuse WebAuthn. The impact stays within the same site, and a relying party
+can reject the `topOrigin`. Fix: apply `secure_context` to the top URL too.
+
+### PK10. clientDataJSON escaping (Info, accepted)
+Values are escaped with `serde_json`. WebAuthn's `CCDToString` escapes
+differently only for control characters and some non-ASCII characters. None
+of those can occur here: the type is fixed, the challenge is base64url, and
+origins are ASCII serializations. The test `client_data_is_exact` pins the
+bytes. See `crypto.md` §Passkeys.
+
+### PK11. Back/forward cache (Low, accepted)
+The bridge cancels every pending request on `pagehide`, and `pagehide` also
+fires when a page enters the back/forward cache. So when a page is restored,
+its conditional `get()` has already been rejected with `AbortError`, and
+HavenKeys passkeys no longer appear in its field menu until the page calls
+`get()` again. In that path the wrapper also does not abort the browser's own
+conditional request, which keeps running with nobody waiting for its
+result.
+
+### PK12. Events need an open native port (Low, open)
+The background learns of `locked` and `unlocked` only while its port to the
+native host is open. It closes the port after 60 s without a request (H3 is
+the same effect for save prompts). While a card is open, it polls the
+background, not the desktop, so the port can close under it. Two things
+follow:
+* A card opened while the vault was locked does not refresh when the vault
+  is unlocked. The user has to cancel and try again.
+* A card that is open when the vault locks stays up. A pick or save from it
+  is refused by the desktop with `locked`.
+
+Both fail closed. Fix: keep the port open while a passkey session exists, or
+re-run the lookup on `pk_state` while a session is locked.
+
+### PK13. Orphan passkey after a late abort (Info, accepted)
+The page may abort after the user clicked Save and the server accepted the
+write. Then the site never receives the credential, but the passkey stays in
+the vault. It is listed on the login in the desktop app and can be deleted
+there.
+
+### PK14. Site-supplied account name on the save card (Info, accepted)
+The card shows `user.name` as the site sent it. The page script cuts it to
+512 characters, and the core refuses control characters. A site can put
+misleading text there. It cannot change the site name the card shows, which
+comes from the browser-reported URL.
+
+### PK15. Debug redaction coverage (Info, accepted)
+See the secret-logging review below. By inspection, the redacting `Debug`
+impls exist and are correct. Only `Passkey`'s has a unit test.
+
+### PK16. Dependencies (Info)
+See Audits.
+
+The per-task reviews also deferred some minor items that are not security
+findings. They are tracked in the development ledger, not here. Examples:
+`Host::parse` percent-decodes an rpId such as `github%2Ecom` into
+`github.com` before the equality check, which cannot widen what a page
+reaches; `assert` accepts a stored key shorter than 32 bytes; and
+`find_passkeys` results are cut off at 50.
+
+## Audits and full verification
+
+Run on 2026-09-24 at `2e0eb73` (WSL2, Linux 6.6).
+
+| Command | Result |
+|---|---|
+| `cargo test` | Everything passes except the tests that need Postgres. `cargo test` stops at the first failing binary, so it was re-run with `--no-fail-fast`: 329 passed, 60 failed. Every failure is in the 10 `havenkeys-server` integration-test binaries or in `havenkeys-sync-client/tests/round_trip.rs`, and all of them panic with `Postgres is not reachable — run scripts/test-server.sh: … ConnectionRefused`. **Environmental:** there is no Postgres here, and this branch does not touch those tests. The passkey suites pass: `passkeys.rs` (11), core unit tests (117), `fuzz.rs` (8), `security.rs` (24), bridge (26) and protocol `messages.rs` (17) |
+| `cargo test -p havenkeys-desktop` (not a default member) | 34 passed |
+| `cargo clippy -p havenkeys-core -p havenkeys-protocol -p havenkeys-bridge -p havenkeys-native-host -p havenkeys-oslock -p havenkeys-server -p havenkeys-sync-client --all-targets -- -D warnings` | Clean |
+| `cargo clippy -p havenkeys-desktop --all-targets -- -D warnings` | Clean |
+| `cargo fmt --all -- --check` | Failed on test code in `passkey/rp.rs` (from `8973fec`). Formatted in `2e0eb73` (a `style:` commit); now clean |
+| `pnpm -r test` | All pass: extension 172, protocol 11, desktop 10, ui 6, web 14 |
+| `pnpm -r typecheck` | Clean |
+| `pnpm --filter @havenkeys/extension build` | Builds |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok`. Two warnings are about `deny.toml` itself. The `Unicode-DFS-2016` allowance matches no crate. The `RUSTSEC-2024-0429` (glib) ignore matches nothing in cargo-deny's view, although `cargo audit` still reports that advisory (below). Both are left as they are |
+| `cargo audit` | Fetched the advisory database (1269 advisories) and scanned 676 crates: **no vulnerabilities**. There are 7 allowed warnings, the same as #13: `proc-macro-error` and five `unic-*` crates are unmaintained, and `glib`'s `VariantStrIter` is unsound. All come through Tauri's Linux GTK stack. None comes from the passkey dependencies |
+| `pnpm audit` | No known vulnerabilities found |
+
+**Licenses of the new crates** (all in the `deny.toml` allow list):
+* Apache-2.0 OR MIT: `p256` 0.14.0, `ecdsa` 0.17.0, `elliptic-curve` 0.14.1,
+  `primefield` 0.14.0, `primeorder` 0.14.0, `crypto-bigint` 0.7.5, `rfc6979`
+  0.6.0, `sec1` 0.8.1, `pkcs8` 0.11.0, `spki` 0.8.0, `der` 0.8.2,
+  `signature` 3.0.0, `hybrid-array` 0.4.15, `base16ct` 1.0.0.
+* MIT/Apache-2.0: `ff` 0.14.0 and `group` 0.14.0.
+* Apache-2.0, dev-dependency only: `ciborium` 0.2.2, with `ciborium-io` and
+  `ciborium-ll`.
+
+## Secret-logging and trust-boundary review
+
+* **Where private keys appear.** `grep -rn "private_key\|SecretBytes" crates
+  apps/desktop/src-tauri/src` finds hits only in `passkey/` (`mod.rs`,
+  `webauthn.rs`), `secret.rs`, their tests, and the `pub use` in `lib.rs`.
+  There are none in the desktop shell, the bridge, the protocol or the host.
+  `Passkey` is serialized only as part of `ItemDetails`, and `ItemDetails`
+  only through `seal_json` (encryption) in `vault.rs`. No other
+  `serde_json::to_*` call in the core touches it. `PasskeyInfo`, the only
+  passkey type the desktop commands return, has no key field.
+* **Extension output.** `grep -rn "console\.\|innerHTML" apps/extension/src`
+  finds nothing outside test files: `hygiene.test.ts`, which enforces the
+  rule, and DOM fixtures in `content.test.ts` and `autofill.test.ts`.
+* **No page-supplied field is used as a URL.** This was confirmed by reading
+  `webauthn-handler.ts`, `bridge.ts` and `index.ts` in full:
+  * The frame URL, top URL, origin and document ID come from the browser's
+    sender data (`contentFrame`), with credentials, query and fragment
+    stripped.
+  * The page's `rpId` is only ever sent as `rpId`. When it is absent, the
+    default is the host of the sender URL.
+  * The card's site label is `displayHost` of the sender URL.
+  * The only URL the bridge builds is `chrome.runtime.getURL("passkey.html")`
+    plus the token the background returned, which is checked against the
+    token pattern.
+* **`Debug` output.** No names, credential IDs, user handles or keys appear
+  in any `Debug` output:
+  * `Passkey` prints `Passkey(<redacted>)` (tested), and `SecretBytes`
+    prints `SecretBytes(<redacted>)`.
+  * `B64Url` prints its length only.
+  * `Registration` and `Assertion` print `Registration(..)` and
+    `Assertion(..)`.
+  * `StagedPasskey`, the core and protocol `PasskeyMatch`, and
+    `PasskeyCandidate` print the item ID only.
+  * `CreateCheck` prints `Suggestion`s, whose `Debug` shows the ID and
+    strength only.
+  * The protocol's `Request` and `ResultBody` print the request type only.
+  * `RpContext` derives `Debug` and would print the rpId and origins. Those
+    are browsing metadata, not secrets, and nothing prints them.
+* **Trust boundaries** match `security-model.md` §15:
+  * the page script is treated as hostile;
+  * the bridge parses exact shapes;
+  * the background never takes a URL from a message;
+  * the core re-derives everything from the URL.
+
+## Verified properties (this phase)
+
+Each property has a test that fails if it stops holding.
+
+* A passkey for github.com cannot be used from evil.com, a look-alike, a
+  public suffix, plain http (other than localhost) or a cross-site frame
+  (`rp.rs`, `tests/passkeys.rs`, `bridge.rs`, `fuzz_authorize_rp`).
+* An item ID or credential ID that is not bound to the requested rpId gets
+  `denied`, and at the bridge that looks the same as an unknown one (A2p).
+* A locked vault signs nothing and creates nothing (A3p).
+* Every registration gets a fresh private key and a random 16-byte
+  credential ID. A damaged stored key gives `Corrupted`, never a signature.
+* Authenticator data, flags (`0x1d`/`0x5d`), counter 0, the zero AAGUID,
+  `none` attestation and `clientDataJSON` are byte-exact. The COSE and SPKI
+  keys agree, and signatures verify.
+* Logins saved before passkeys existed still open. Editing a login keeps its
+  passkeys. The limit of 8 per login is enforced. Re-registering an account
+  replaces its passkey across logins. An offline create stores nothing.
+* Oversized, malformed and unknown-field passkey messages are rejected
+  without a panic, in Rust and in TypeScript, and results are validated.
+* The page script falls back to the browser on every path the user did not
+  choose, keeps working when the page replaces globals, and honours
+  `AbortSignal`.
+* The background signs or creates only after a pick from the session's own
+  frame, only for an offered passkey or login, and one at a time. Sessions
+  are bound to the tab, frame, document and origin, and end when the vault
+  locks.
+* The passkey script group registers independently of the inline one.
+
+## Manual checklist (verification pending)
+
+No browser is available in the environment this was built in, so none of
+these checks has been run. Record the results here when they are.
+
+Setup: build and load `apps/extension/dist/chrome` (and `dist/firefox`).
+Run the desktop app with Settings → Browser extension on, and turn on
+in-page suggestions (the host grant).
+
+| # | Check | Chrome | Firefox |
+|---|---|---|---|
+| M1 | Firefox 128: `scripting.registerContentScripts` accepts `world: "MAIN"`. The page script runs at `document_start` **before the site's own scripts**, so a site that captures `navigator.credentials` early still gets the wrapper. The isolated bridge is listening before the first request | n/a | Not yet run |
+| M2 | The same ordering on Chrome: the wrapper runs before site scripts, and the bridge listens before the first request | Not yet run | n/a |
+| M3 | webauthn.io: register a passkey, get the save card, click **Save to HavenKeys**. The site accepts the attestation (`none`, ES256) | Not yet run | Not yet run |
+| M4 | webauthn.io: modal sign-in, get the chooser, pick a passkey. The site verifies the assertion | Not yet run | Not yet run |
+| M5 | webauthn.io: conditional sign-in (passkey autofill). The passkey appears first in the field menu, and picking it signs in. Picking from the browser's own UI instead also works | Not yet run | Not yet run |
+| M6 | github.com: add a passkey, sign out, and sign in with it | Not yet run | Not yet run |
+| M7 | google.com: add a passkey and sign in with it | Not yet run | Not yet run |
+| M8 | "Use another device" reaches the browser's own UI, on create and on get. Note any site that refuses because user activation was lost (PK4) | Not yet run | Not yet run |
+| M9 | Offline create: stop the server, then create. The card shows the offline message, nothing is stored, and "Use another device" works | Not yet run | Not yet run |
+| M10 | Locked vault: a modal request shows the locked card, and unlocking within 60 s turns it into the chooser or save card. A conditional request shows only the browser's UI | Not yet run | Not yet run |
+| M11 | Locking the vault while the card is open closes it with `NotAllowedError`. After the port idles out, a pick is refused as locked instead (PK12) | Not yet run | Not yet run |
+| M12 | A site with a strict CSP (for example github.com): the MAIN-world script runs and the passkey frame loads | Not yet run | Not yet run |
+| M13 | Desktop: the login shows its passkey (site, account, created date) and the list shows the badge. Deleting the passkey asks for confirmation, and afterwards the site no longer accepts it | Not yet run | Not yet run |
+| M14 | Re-registering the same account replaces the passkey (one entry in the desktop), and the site accepts the new one | Not yet run | Not yet run |
+| M15 | On Chromium, a translucent overlay over the passkey card cannot get clicks through | Not yet run | n/a |

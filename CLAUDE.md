@@ -28,8 +28,15 @@ The application should initially support:
 6. Password generation
 7. TOTP
 8. High-quality autofill
+9. Passkeys (create, save and sign in with WebAuthn credentials)
 
-Mobile, cloud synchronization, accounts, sharing, passkeys and other advanced functionality are explicitly OUT OF SCOPE for this MVP.
+Mobile, cloud synchronization, accounts, sharing and other advanced functionality are explicitly OUT OF SCOPE for this MVP.
+
+> Amended on 2026-09-23 by
+> `docs/superpowers/specs/2026-09-23-passkeys-design.md`: HavenKeys is a
+> passkey provider for websites. The private key is generated, stored and
+> used only in the Rust core; the relying-party ID is checked in Rust against
+> the page URL the browser reports.
 
 ---
 

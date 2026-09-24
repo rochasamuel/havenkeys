@@ -304,6 +304,104 @@ the bridge allows one browser-initiated change per item every 10 minutes. A
 new login is saved with the page's origin as a whole-site rule and the host
 (without `www.`) as its title.
 
+## Passkeys
+
+HavenKeys answers a site's WebAuthn calls on the hosts the user granted for
+in-page suggestions, and on no others. Keys, formats and the Rust checks are
+in `crypto.md` §Passkeys and `security-model.md` §15.
+
+### How a request reaches HavenKeys
+
+`webauthn-page.js` runs in the page's own world at `document_start`, before
+the site's scripts, and wraps `navigator.credentials.create`,
+`navigator.credentials.get` and `PublicKeyCredential.isConditionalMediationAvailable`.
+It turns a request into plain data for the isolated-world bridge, and turns
+the answer back into a `PublicKeyCredential`-shaped object (`rawId`, `type`,
+`authenticatorAttachment: "platform"`, `toJSON()`,
+`getClientExtensionResults()` returning `{}`, and on create
+`getPublicKey()`, `getPublicKeyAlgorithm()`, `getAuthenticatorData()`,
+`getTransports()`).
+
+It hands the call straight to the browser's own implementation, unchanged,
+when:
+
+* there is no `publicKey` member, or `get()` asks for `mediation: "silent"`;
+* `create()` asks for `mediation: "conditional"` (automatic passkey upgrade
+  after a password sign-in is not offered);
+* `create()` asks for `authenticatorAttachment: "cross-platform"`, or does not
+  list ES256 (`-7`) in `pubKeyCredParams`;
+* the challenge is empty or over 1024 bytes, the user handle is empty or over
+  64 bytes, the `rpId` is empty or over 253 characters, or the options cannot
+  be read;
+* `get()` names `allowCredentials`, none of them 16 bytes long (so none can
+  be ours).
+
+A non-finite or negative `timeout` is sent as "none". Otherwise the request
+goes through the bridge to the background, which asks the desktop.
+
+### Sign in
+
+* **Modal `get()`:** if the vault has passkeys for this page, the passkey
+  card (`passkey.html`) opens at the top right of the viewport and lists them
+  (login title and account name). The user clicks one to sign in — one match
+  is still one click, never automatic — or clicks **Use another device**
+  (the browser's own UI), **Cancel** or Escape (`NotAllowedError`). With no
+  match, nothing appears and the browser's own UI runs.
+* **Conditional `get()`** (`mediation: "conditional"`, passkey autofill):
+  HavenKeys and the browser's own conditional request run side by side. When
+  the user clicks a username or password field in the frame that made the
+  request, the field menu lists that frame's matching passkeys first, marked
+  "Passkey · account", above the saved logins. Picking one signs in and
+  aborts the browser's request; if the user picks from the browser's UI
+  instead, HavenKeys' request is cancelled. `isConditionalMediationAvailable()`
+  returns true wherever the script runs.
+* After a passkey sign-in nothing else is filled. A later OTP field uses the
+  normal one-time-code menu.
+
+### Create
+
+1. The desktop is asked whether the site's `excludeCredentials` names a
+   passkey already in the vault. If so, the site gets `InvalidStateError` and
+   no card appears.
+2. Otherwise the save card opens: the site, the account name the site sent,
+   and a choice of **Add to "…"** for each login saved for this page (at most
+   8 passkeys per login; the one with the same username first) or **New
+   login** (titled after the host, with a whole-site rule for the page's
+   origin).
+3. **Save to HavenKeys** creates the key in the desktop, sends the updated
+   login to the server, and only then returns the credential to the site.
+   **Use another device** hands the original request to the browser.
+   **Cancel** or Escape gives `NotAllowedError`.
+
+If the vault already holds a passkey for the same site and account (rpId and
+user handle), the new one **replaces** it, in the login that holds it, even
+if the user picked a different login or "New login". WebAuthn authenticators
+do the same.
+
+### Errors and states
+
+| Situation | What the site sees |
+|---|---|
+| Desktop not running, integration off, internal error, nothing to offer | The browser's own WebAuthn, as if HavenKeys were not installed |
+| Vault locked, modal request | A card saying HavenKeys is locked; it updates to the real chooser or save card when the desktop reports the vault unlocked. **Use another device** still works |
+| Vault locked, conditional request | The browser's own conditional UI only; the page has to ask again after unlock |
+| Offline during create | The card shows that HavenKeys is offline and stays open; nothing is stored. **Use another device** still works |
+| `rpId` not allowed for the page (checked in Rust) | `SecurityError` |
+| Site aborts (`AbortSignal`) | The card closes; the site's own abort reason |
+| Site's timeout (capped at 5 minutes) passes | The card closes; `NotAllowedError` |
+| Page leaves (`pagehide`, including entering the back/forward cache), or removes, hides or moves the card's frame | Request cancelled (`AbortError` on `pagehide`, `NotAllowedError` for the frame) |
+| Vault locks while the card is open | The card closes; `NotAllowedError` |
+
+### Sessions
+
+The background keeps one passkey session per tab, bound to the random token
+in the card's URL fragment and to the tab, frame, `documentId` (Chromium)
+and origin of the frame that asked. Picks are accepted only for passkeys or
+logins the session offered, one at a time. A new request in the same tab
+ends the previous one with `AbortError`. The token is visible to the page
+(as for the menu); what it cannot do is change which origin the desktop
+checks.
+
 ## Permissions and injection
 
 * Default: `nativeMessaging`, `activeTab`, `scripting`. The content script
@@ -311,7 +409,10 @@ new login is saved with the page's origin as a whole-site rule and the host
 * In-page suggestions and save prompts are opt-in, from the options page.
   They request the optional host permissions `https://*/*` and `http://*/*`.
   When granted, the background registers the content script for the granted
-  patterns in all frames. When revoked, it unregisters it.
+  patterns in all frames. When revoked, it unregisters it. The two passkey
+  scripts (§Passkeys) follow the same grant, registered as a separate group
+  at `document_start`, so a browser that refuses `world: "MAIN"` keeps
+  in-page suggestions.
 * **Per-site grants are not followed yet.** Registration asks only whether the
   broad `https://*/*` / `http://*/*` patterns are held. If you narrow site
   access to chosen sites through the browser's own controls, that check
@@ -347,3 +448,23 @@ See `security-model.md` §12.
   never fire a submit, click or Enter are missed, except for generated
   passwords (offered on unload).
 * **Tabs opened before inline suggestions were turned on** need a reload.
+  So do passkeys: the page script must run before the site's own scripts.
+* **Passkeys only on granted sites.** Without the host grant, sites get the
+  browser's own WebAuthn.
+* **Passkey clickjacking on Firefox** has only the 400 ms delay, as for the
+  menu. The worst case is a sign-in or a new passkey for the page's own
+  rpId.
+* **One passkey request per tab.** A granted iframe that calls WebAuthn ends
+  the top page's pending request (and the reverse). Denial of service only.
+* **Back/forward cache.** Leaving a page cancels its passkey requests, so a
+  page restored from the cache has no HavenKeys passkey autofill until it
+  calls `get()` again.
+* **Lock and unlock events need an open native port.** The extension closes
+  its port to the host after 60 s without a request, and then hears no
+  events. A locked card left open longer than that does not update when the
+  vault is unlocked (cancel and retry), and a card open when the vault locks
+  stays up until it is used or expires; using it then gets "HavenKeys is
+  locked" from the desktop (`security-review.md` PK12).
+* **No WebAuthn extensions** (PRF, largeBlob, credProps, …), no attestation
+  other than `none`, and no hybrid (phone) transport from HavenKeys itself;
+  **Use another device** reaches the browser's own.

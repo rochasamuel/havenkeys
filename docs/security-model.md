@@ -35,6 +35,7 @@ This document describes *how* HavenKeys enforces the properties listed in
 | Locked vault refuses secret access | Every secret-returning core function requires an active `Session`; locking drops it |
 | Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `reveal_previous_password` / `copy_secret` / `get_totp_code` |
 | Recoverable password changes | A replaced password is kept, encrypted, in the item's password history (5 entries) |
+| Passkey private keys never leave the core | Generated from the OS CSPRNG, sealed inside the login's encrypted details, and used to sign only in `havenkeys-core` (`passkey/`). No protocol message, Tauri command result, log or `Debug` output carries one (§15) |
 | Master-password change is authenticated, not just session-authorized | `POST /v1/account/credentials` requires the *current* auth key, checked against the server's stored verifier under the same rate limiting as login; a stolen session token alone cannot change the password |
 | Master-password change revokes other sessions | On success the server deletes every other session on the account; other devices must unlock again (locally with the old password, or online with the new one) before they can sync |
 
@@ -81,7 +82,10 @@ encrypted blob and when it last changed. That metadata is the price of this
 design; it is listed in `server-sync.md` §6 and in `threat-model.md` T1b.
 
 Everything else — item type, title, username, URLs, timestamps, passwords, TOTP
-configuration, notes, and settings — is encrypted.
+configuration, notes, passkeys, and settings — is encrypted. Passkeys add no
+plaintext: the relying-party ID, account name, credential ID, user handle
+and private key are inside the item's encrypted details, and the only new
+overview field, `has_passkey`, is inside the encrypted overview.
 
 ## 5. Lock states
 
@@ -181,7 +185,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 31 of them, which is the whole
+Every command the renderer can call — all 36 of them, which is the whole
 surface. `build.rs` declares this list, the capability file grants exactly it,
 and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
 means a live server session, which a locked vault does not have.
@@ -198,6 +202,8 @@ means a live server session, which a locked vault does not have.
 | `reveal_secret` | yes | one field: password, login notes, or note body. Never the TOTP secret |
 | `password_history` | yes | no, timestamps only |
 | `reveal_previous_password` | yes | one superseded password, on an explicit click |
+| `list_passkeys` | yes | no: relying-party ID, account name, credential ID and creation time. Never the private key |
+| `delete_passkey` | yes (online) | no. Removes one passkey from a login; passkeys cannot be created or edited from the desktop |
 | `get_totp_code` | yes | current code only, never the seed |
 | `copy_secret` | yes | no, the value is copied to the clipboard inside Rust |
 | `create_item`, `update_item` | yes (online) | no. Edits send `keep`/`set`/`clear` per secret, so editing never requires reading the password or TOTP secret |
@@ -213,6 +219,8 @@ means a live server session, which a locked vault does not have.
 | `sign_in` | no | no. Joins an existing account on a new computer |
 | `sign_out` | no | no. Ends the server session and locks |
 | `list_devices`, `revoke_device` | yes (online) | no |
+| `remove_device` | yes | no. See §13 |
+| `launch_at_login`, `set_launch_at_login` | no | no |
 | `sync_now`, `resync_vault` | yes (online) | no |
 | `get_emergency_kit` | yes | **the Secret Key**, plus a QR encoding it. The only command that returns long-term key material, on explicit request, with its own unlocked check because the Secret Key lives outside the vault (`server-sync.md` §7) |
 
@@ -221,8 +229,9 @@ convenience only.
 
 The browser extension does not use these commands. It reaches the core
 through the native-messaging bridge, which has its own much narrower request
-set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`), all
-origin-bound and rate-limited. See `native-messaging.md`.
+set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`,
+`generate_password`, `check_login`, `save_login`, and the four passkey
+requests), all origin-bound and rate-limited. See `native-messaging.md`.
 
 ## 8. Memory handling
 
@@ -230,8 +239,13 @@ origin-bound and rate-limited. See `native-messaging.md`.
   `Zeroizing<[u8; 32]>` and are wiped on drop.
 * Decrypted plaintext buffers are `Zeroizing<Vec<u8>>`; secret fields in item
   structs are a `SecretString` type that zeroizes on drop and redacts `Debug`.
+* Passkey private keys are `SecretBytes` (`secret.rs`): a zeroize-on-drop
+  byte buffer with a redacting `Debug` and no `Display`. A key is generated
+  into a `Zeroizing` array, and during signing it exists as a `p256`
+  `SigningKey`, which zeroizes its scalar on drop.
 * **Limitations:** `serde_json` and the Tauri IPC layer allocate intermediate
-  copies we cannot wipe; the WebView keeps JavaScript strings until garbage
+  copies we cannot wipe (for passkeys, the base64url text of the key while
+  the login's details are sealed or opened); the WebView keeps JavaScript strings until garbage
   collection; the OS may swap pages to disk (we do not `mlock`). Zeroization
   reduces, but does not eliminate, the window in which secrets are in memory.
 
@@ -298,8 +312,8 @@ Not requested: `<all_urls>` as a required permission, `tabs`, `storage`,
 `externally_connectable` is empty, so web pages and other extensions cannot
 message the extension.
 
-**web_accessible_resources:** `menu.html`, `save.html`, their scripts and
-styles, the theme, and the bundled fonts (`fonts.css` and three
+**web_accessible_resources:** `menu.html`, `save.html`, `passkey.html`,
+their scripts and styles, the theme, and the bundled fonts (`fonts.css` and three
 Latin-subset `.woff2` files), for `https://*/*` and `http://*/*`. These are
 the pages shown inside web pages and what they load. Nothing else can be
 loaded or framed by a website. The fonts add no new signal: a site could
@@ -313,6 +327,18 @@ It has no `unsafe-eval` and no `unsafe-inline`. `frame-ancestors 'none'` was
 removed in Phase 5, because the menu and save pages must be framed by web
 pages. Framing by websites is limited to those pages by
 `web_accessible_resources`.
+
+**Passkey scripts:** when the user grants host access, the background also
+registers two scripts with `chrome.scripting.registerContentScripts`, for
+exactly the same granted patterns, in all frames, at `document_start`:
+`webauthn-page.js` in the page's own world (`world: "MAIN"`), which wraps
+`navigator.credentials`, and `webauthn-bridge.js` in the isolated world,
+which relays it. They are registered and removed with the grant, as a group
+separate from the inline content script, so a browser that rejects
+`world: "MAIN"` loses passkeys but keeps in-page suggestions. No new
+permission is needed: `scripting` and the optional host permissions already
+cover registering scripts in granted pages, and neither script is a
+web-accessible resource. See §15.
 
 **Content script:** it runs in the isolated world, keeps no state beyond the
 page, reads the DOM as untrusted input, and acts only on trusted user
@@ -417,7 +443,78 @@ See `native-messaging.md` for the full protocol. In summary:
   Peer UIDs are checked on Unix.
 * Browser integration is opt-in (off by default) in Settings. The switch is
   stored in the encrypted settings blob and enforced in Rust.
+* Passkeys add one more write, `passkey_create`, and three lookups or
+  signatures (§15). Toward the browser they carry only public WebAuthn data
+  (credential IDs, public keys, signatures, authenticator data).
 
-## 15. Known limitations
+## 15. Passkeys
+
+HavenKeys is a WebAuthn authenticator for websites
+(`docs/superpowers/specs/2026-09-23-passkeys-design.md`). Keys and formats
+are in `crypto.md` §Passkeys, the messages in `native-messaging.md`, the UI
+in `autofill.md` §Passkeys, and the threats in `threat-model.md` T8.
+
+```text
+ page JavaScript + webauthn-page.js     MAIN world: hostile. Wraps navigator.credentials,
+        │                               holds nothing, decides nothing
+        │  CustomEvent, JSON string only
+        ▼
+ webauthn-bridge.js                     ISOLATED world: parses exact shapes and limits
+        │  runtime message (no URL in it)
+        ▼
+ background worker                      frame URL, top URL, origin, documentId from the
+        │                               browser's sender data; one session per tab
+        │  ◄── pick/save from passkey.html or the field menu (extension origin,
+        │      click guard) — nothing is signed or created without it
+        ▼
+ native host ──► desktop bridge         strict protocol, sizes, rate limits,
+        │                               unlocked + integration on
+        ▼
+ havenkeys-core (passkey/)              authorize_rp(rpId, url, topUrl); stored rpId must
+                                        equal it; sign or create; key never leaves
+```
+
+* **The origin is the only thing the page cannot forge, and it alone decides
+  which passkeys are reachable.** `authorize_rp` requires a secure context
+  (https, or http on `localhost`), an rpId equal to the frame's host or a
+  parent of it within the host's registrable domain (never a public suffix;
+  an IP only when it is the host itself), and, for an iframe, a top page
+  that is same-site with the frame. A signature needs a passkey whose stored
+  rpId equals the authorized one. The page's `rpId` is otherwise just input.
+* **`clientDataJSON` is built in Rust** from the origin `authorize_rp`
+  derived from the browser-reported URL, so the extension cannot choose the
+  origin that is signed.
+* **Explicit action.** A modal `get()` or a `create()` opens the passkey card
+  (`passkey.html`, an extension-origin frame the page cannot read or script,
+  with the same click guard as the menu). A conditional `get()` offers its
+  passkeys in the field menu. Only a trusted, guarded click there makes the
+  background ask the desktop to sign or create. The background accepts a
+  pick only for a passkey (or a save target) the session offered, from a
+  frame in the same tab, with the session's random token, one operation at a
+  time.
+* **Sessions** bind the token to the tab, frame, `documentId` (Chromium) and
+  origin of the requesting frame. They end on a result, on cancel, on the
+  site's `AbortSignal`, on the page's `pagehide`, after the site's timeout
+  (at most 5 minutes; 30 minutes for conditional requests), when the tab
+  closes, and when the vault locks or the desktop goes away. A card opened
+  while the vault was locked shows "locked" and refreshes when the desktop
+  reports `unlocked` (if the extension's native port is still open;
+  `security-review.md` PK12).
+* **Fallback.** Every failure the user did not choose — the desktop not
+  running, locked for a conditional request, integration off, no matching
+  passkey, a request HavenKeys does not support, an internal error — hands
+  the call to the browser's own `navigator.credentials`, so the site behaves
+  as if HavenKeys were not installed. The user can also choose "Use another
+  device".
+* **Writes.** `passkey_create` is a server write like `save_login`: the
+  credential goes back to the site only after the server accepted the
+  sealed login. Offline, it is refused and nothing is stored. Registering
+  the same account (rpId and user handle) again replaces its passkey
+  wherever in the vault it is (WebAuthn does the same), ignoring the login
+  the user picked.
+* **What the extension sees:** titles, account names, credential IDs, and
+  the public outputs of WebAuthn. Never a private key.
+
+## 16. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.
