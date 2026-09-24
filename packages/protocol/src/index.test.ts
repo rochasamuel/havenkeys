@@ -95,11 +95,30 @@ describe("passkey results", () => {
     const ok = [
       { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "GitHub", userName: "octo" }] } },
       { v: 1, id: 2, result: { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" } },
-      { v: 1, id: 3, result: { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ID, title: "t", username: null }] } },
-      { v: 1, id: 4, result: { type: "check_passkey_create", excluded: true, candidates: [] } },
+      { v: 1, id: 3, result: { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ID, title: "t", username: null }], upgrade: { kind: "none" } } },
+      { v: 1, id: 4, result: { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } },
       { v: 1, id: 5, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 } },
     ];
     for (const m of ok) expect(parseIncoming(m), JSON.stringify(m)).not.toBeNull();
+  });
+
+  it("parses the upgrade decision and passkey_status exactly", () => {
+    const ok = [
+      { v: 1, id: 1, result: { type: "check_passkey_create", excluded: false, candidates: [], upgrade: { kind: "auto", itemId: ID } } },
+      { v: 1, id: 2, result: { type: "check_passkey_create", excluded: false, candidates: [], upgrade: { kind: "ask", itemId: ID } } },
+      { v: 1, id: 3, result: { type: "passkey_status", hasPasskey: false } },
+    ];
+    for (const m of ok) expect(parseIncoming(m)).not.toBeNull();
+    const bad = [
+      { v: 1, id: 1, result: { type: "check_passkey_create", excluded: false, candidates: [] } },
+      { v: 1, id: 1, result: { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "auto", itemId: ID } } },
+      { v: 1, id: 1, result: { type: "check_passkey_create", excluded: false, candidates: [], upgrade: { kind: "auto" } } },
+      { v: 1, id: 1, result: { type: "check_passkey_create", excluded: false, candidates: [], upgrade: { kind: "none", itemId: ID } } },
+      { v: 1, id: 1, result: { type: "check_passkey_create", excluded: false, candidates: [], upgrade: { kind: "maybe" } } },
+      { v: 1, id: 1, result: { type: "passkey_status", hasPasskey: "yes" } },
+      { v: 1, id: 1, result: { type: "passkey_status", hasPasskey: true, rpId: "x" } },
+    ];
+    for (const m of bad) expect(parseIncoming(m)).toBeNull();
   });
 
   it("rejects loose or dangerous shapes", () => {

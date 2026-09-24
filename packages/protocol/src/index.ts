@@ -45,7 +45,7 @@ export type Request =
     }
   | { type: "find_passkeys"; url: string; topUrl?: string; rpId: string; allowCredentials: string[] }
   | { type: "passkey_get"; itemId: string; credentialId: string; url: string; topUrl?: string; rpId: string; challenge: string }
-  | { type: "check_passkey_create"; url: string; topUrl?: string; rpId: string; userName: string; excludeCredentials: string[] }
+  | { type: "check_passkey_create"; url: string; topUrl?: string; rpId: string; userName: string; excludeCredentials: string[]; conditional: boolean }
   | {
       type: "passkey_create";
       url: string;
@@ -56,7 +56,9 @@ export type Request =
       userName: string;
       displayName: string | null;
       itemId: string | null;
-    };
+      conditional: boolean;
+    }
+  | { type: "passkey_status"; url: string; topUrl?: string };
 
 export type RequestType = Request["type"];
 
@@ -71,6 +73,7 @@ export interface RequestEnvelope {
 export type LockState = "locked" | "unlocking" | "unlocked" | "locking";
 export type MatchStrength = "exact_url" | "same_host" | "same_site";
 export type SaveAction = "add" | "update" | "unchanged";
+export type UpgradeHint = { kind: "none" } | { kind: "ask"; itemId: string } | { kind: "auto"; itemId: string };
 
 /** A suggestion. Never contains a secret. */
 export interface Match {
@@ -107,7 +110,7 @@ export type Result =
   | { type: "save_login"; itemId: string }
   | { type: "find_passkeys"; passkeys: PasskeyMatch[] }
   | { type: "passkey_get"; credentialId: string; authenticatorData: string; clientDataJson: string; signature: string; userHandle: string }
-  | { type: "check_passkey_create"; excluded: boolean; candidates: PasskeyCandidate[] }
+  | { type: "check_passkey_create"; excluded: boolean; candidates: PasskeyCandidate[]; upgrade: UpgradeHint }
   | {
       type: "passkey_create";
       credentialId: string;
@@ -116,7 +119,8 @@ export type Result =
       authenticatorData: string;
       publicKey: string;
       publicKeyAlgorithm: number;
-    };
+    }
+  | { type: "passkey_status"; hasPasskey: boolean };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -220,6 +224,15 @@ function parseCandidate(v: unknown): PasskeyCandidate | null {
   return { itemId, title, username };
 }
 
+function parseUpgrade(v: unknown): UpgradeHint | null {
+  if (!isObj(v)) return null;
+  if (v.kind === "none") return hasExactKeys(v, ["kind"]) ? { kind: "none" } : null;
+  if (v.kind === "ask" || v.kind === "auto") {
+    return hasExactKeys(v, ["kind", "itemId"]) && isUuid(v.itemId) ? { kind: v.kind, itemId: v.itemId } : null;
+  }
+  return null;
+}
+
 function parseList<T>(v: unknown, one: (x: unknown) => T | null): T[] | null {
   if (!Array.isArray(v) || v.length > MAX_MATCHES) return null;
   const out: T[] = [];
@@ -298,10 +311,11 @@ function parseResult(v: unknown): Result | null {
       return { type: "passkey_get", credentialId, authenticatorData, clientDataJson, signature, userHandle };
     }
     case "check_passkey_create": {
-      if (!hasExactKeys(v, ["type", "excluded", "candidates"]) || !isBool(v.excluded)) return null;
+      if (!hasExactKeys(v, ["type", "excluded", "candidates", "upgrade"]) || !isBool(v.excluded)) return null;
       const candidates = parseList(v.candidates, parseCandidate);
-      if (!candidates || (v.excluded && candidates.length > 0)) return null;
-      return { type: "check_passkey_create", excluded: v.excluded, candidates };
+      const upgrade = parseUpgrade(v.upgrade);
+      if (!candidates || !upgrade || (v.excluded && (candidates.length > 0 || upgrade.kind !== "none"))) return null;
+      return { type: "check_passkey_create", excluded: v.excluded, candidates, upgrade };
     }
     case "passkey_create": {
       const keys = ["type", "credentialId", "attestationObject", "clientDataJson", "authenticatorData", "publicKey", "publicKeyAlgorithm"];
@@ -311,6 +325,9 @@ function parseResult(v: unknown): Result | null {
       if (publicKeyAlgorithm !== COSE_ES256) return null;
       return { type: "passkey_create", credentialId, attestationObject, clientDataJson, authenticatorData, publicKey, publicKeyAlgorithm };
     }
+    case "passkey_status":
+      if (!hasExactKeys(v, ["type", "hasPasskey"]) || !isBool(v.hasPasskey)) return null;
+      return { type: "passkey_status", hasPasskey: v.hasPasskey };
     default:
       return null;
   }
