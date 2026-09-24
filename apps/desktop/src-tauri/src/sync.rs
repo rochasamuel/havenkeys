@@ -227,16 +227,25 @@ pub async fn sync_now(app: &AppHandle) -> CmdResult<SyncReport> {
 
     // Items that did not open earlier are asked for again, by id, on every
     // sync, until they open, are deleted, or a Re-download clears them.
+    // Best effort: the pull above already succeeded, so a failure here stops
+    // the retry for this sync and nothing more. It does not fail the sync,
+    // take the device offline or block a password change; the next sync
+    // asks again. Only a refused session is acted on, as everywhere.
     let pending = app.state::<AppState>().vault()?.unreadable_item_ids()?;
     for chunk in pending.chunks(MAX_BATCH) {
-        let changes = client
-            .fetch_items(&session, chunk)
-            .await
-            .map_err(|e| failed(app, e))?;
+        let changes = match client.fetch_items(&session, chunk).await {
+            Ok(changes) => changes,
+            Err(SyncError::Unauthorized) => {
+                let _ = failed(app, SyncError::Unauthorized);
+                break;
+            }
+            Err(_) => break,
+        };
         let state = app.state::<AppState>();
-        let page = state
-            .vault()?
-            .apply_refetched(chunk, changes, AppState::now_ms())?;
+        let applied = state
+            .vault()
+            .and_then(|mut v| Ok(v.apply_refetched(chunk, changes, AppState::now_ms())?));
+        let Ok(page) = applied else { break };
         report.added += page.added;
         report.updated += page.updated;
         report.deleted += page.deleted;
