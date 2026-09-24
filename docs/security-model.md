@@ -354,6 +354,9 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   usually read a Linux Secret Service or Windows Credential Manager entry
   too; macOS may prompt for access. It protects copies of the vault away
   from this device, not this device from something already running as you.
+  A keychain that fails or does not answer is never read as "no key": unlock
+  asks the user to approve the keychain's prompt and retry
+  (`keychain_unavailable`) instead of asking for the Emergency Kit.
 * **Changing the master password** (`change_master_password`) is one atomic
   server operation, not a local-first one: the device proves it knows the
   *current* auth key (rate-limited like login), and the server updates the
@@ -362,14 +365,21 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   commits its local rewrap only after the server accepts it. Other devices
   are signed out and pick up the new password at their next unlock, through
   an online fallback that independently verifies the served header before
-  adopting it (`server-sync.md` §6).
+  adopting it (`server-sync.md` §6). A lost response is resolved by asking
+  the server's current KDF parameters: the new ones mean the change was
+  applied and it is committed locally; otherwise the user is told it did not
+  happen, or that it could not be confirmed (`password_change_unknown`).
 * **"Remove this device"** (Settings → Account, typed email required) locks
-  the vault, best-effort revokes the device on the server, and renames the
-  local vault file to `vault.sqlite3.removed-<timestamp>` rather than
-  deleting it — it stays on disk as ciphertext, openable later only with the
-  master password and the Secret Key from the Emergency Kit. It forgets the
-  Secret Key from both stores and issues a fresh device ID, returning the
-  app to first run. It requires an unlocked vault, so it is not reachable
+  the vault, renames the local vault file to
+  `vault.sqlite3.removed-<timestamp>` rather than deleting it — it stays on
+  disk as ciphertext, openable later only with the master password and the
+  Secret Key from the Emergency Kit — and only then best-effort revokes the
+  device on the server (revoking first would leave an intact vault on a
+  device the server refuses if the rename failed). It forgets the Secret Key
+  from both stores and issues a fresh device ID, returning the app to first
+  run. A keychain delete that fails is retried once after a busy keychain
+  frees up; if it still fails, the user is told to delete the
+  `app.havenkeys` entry by hand. It requires an unlocked vault, so it is not reachable
   when the vault fails to open at startup.
 
 ## 14. Browser bridge

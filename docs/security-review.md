@@ -470,7 +470,8 @@ at all.
 **Update, 2026-09-24** (`docs/superpowers/specs/2026-09-23-vault-account-fixes-design.md`):
 S14 and S15 are new findings from that design's implementation, S12 is
 resolved by the same fix as S14, and S16–S25 record the Secret Key keychain
-and "Remove this device" limitations it introduced. Numbering continues in
+and "Remove this device" limitations it introduced; S26–S28 come from the
+final whole-branch review. Numbering continues in
 this table rather than starting a new one, since this work extends the same
 server/desktop account surface reviewed below.
 
@@ -493,14 +494,17 @@ server/desktop account surface reviewed below.
 | S15 | Low | Core / Desktop | A pulled item that failed to decrypt was skipped and the cursor still advanced past it unconditionally; it was never retried, and nothing beyond a per-run count said so | **Fixed** (`unreadable_items` table; retried every sync via `POST /v1/items/fetch`; shown in a persistent banner) |
 | S16 | Low | Desktop | Unlocking with the new password while the local header is stale costs up to 3 s before "wrong password" is shown, because a local failure now falls back to an online check | Accepted, documented (`server-sync.md` §6) |
 | S17 | Info | Desktop | A keychain call that does not answer within 5 s falls back to `device.json` for that save; the key is migrated back to the keychain at the next start | Accepted, documented (`server-sync.md` §7) |
-| S18 | Info | Desktop | If installing or connecting to the platform keychain fails at startup, the device is treated as having no keychain for the rest of that run (the Secret Key may be asked for) | Accepted, documented (`server-sync.md` §7) |
+| S18 | Info | Desktop | If installing or connecting to the platform keychain fails at startup, keys saved during that run go to `device.json`. It is no longer treated as "no keychain": a lookup is reported as *no answer*, never as *no key*, so unlock asks to retry (`keychain_unavailable`) instead of asking for the Emergency Kit, and an install that timed out becomes usable once it finishes | Accepted, documented (`server-sync.md` §7) |
 | S19 | Low | Desktop | A keychain `set` that timed out and completes later could re-add an entry after "Remove this device" deleted it — a narrow race between an abandoned write and a delete | Accepted, documented (`server-sync.md` §7) |
 | S20 | Info | Desktop | Any process running as the user can usually read this computer's keychain entry (Linux Secret Service, Windows Credential Manager); macOS may prompt. Same trust boundary as the `device.json` fallback it replaces (K1) | Accepted, documented (`server-sync.md` §7, `security-model.md` §13) |
 | S21 | Info | Desktop | "Remove this device" renames the vault file (`vault.sqlite3.removed-<timestamp>`) instead of deleting it; it stays on disk as ciphertext, recoverable only with the master password and the Secret Key from the Emergency Kit | Accepted, documented (design §6.1) |
 | S22 | Info | Desktop | "Remove this device" requires an unlocked vault, so it is not reachable when the vault fails to open at startup | Accepted, known gap |
 | S23 | Low | Server | A device whose online unlock fallback logs in but then fails locally (for example a header that fails to verify) leaves a server session live until it expires (24 h) | Accepted |
-| S24 | Info | Deployment | The desktop and server must be upgraded together: `PUT /v1/vault/header` is gone, so an old desktop cannot publish a header to a new server | Accepted, operational |
+| S24 | Info | Deployment | The desktop and server must be upgraded together: `PUT /v1/vault/header` is gone, so an old desktop cannot publish a header to a new server. The local store also moved from schema 4 to 5 with no migration, so an existing `vault.sqlite3` does not open in the new desktop; each desktop signs in again from its Emergency Kit. An account whose password was changed with the old build has a stale server verifier (S14) that no admin command can reset | Accepted, operational; upgrade steps below and in `deployment.md` §6.1 |
 | S25 | Info | Verification | The Windows and macOS keychain backends (`windows_native_keyring_store`, `apple_native_keyring_store`) were not compiled or tested in this environment (Linux only); verify on Windows and macOS before relying on them | Open, not yet verified on Windows/macOS |
+| S26 | Low | Desktop | A sync already in flight when "Remove this device" runs, followed at once by a sign-in to another account, could apply the old account's pulled data to the new vault | Accepted, not fixed (unlikely: needs a pull to straddle removal *and* a completed sign-in) |
+| S27 | Low | Desktop | A master-password change whose response was lost used to report failure although the server may have applied it, and took the device offline so the next sync could not adopt the new header | **Fixed** (the device asks the server's current KDF parameters: new → committed as a success; old → reported as offline; no answer → `password_change_unknown`, "use the new one if the current stops working"; the session is kept) |
+| S28 | Low | Desktop | "Remove this device" ignored a failed keychain delete, leaving the Secret Key behind (design §6.3), and revoked the device on the server before setting the file aside | **Fixed** (a busy or failing keychain is waited for and retried once; if the entry still cannot be deleted, removal completes and the user is told to delete `app.havenkeys` by hand; the revocation now follows the rename) |
 
 ## Details
 
@@ -675,6 +679,29 @@ server has since deleted, leaves the table. `VaultStatus.unreadableItems`
 drives a persistent banner on the vault screen with a **Re-download** action
 until the count reaches zero. `reset_sync_cursor` clears the table too, since
 a full re-download re-evaluates every item anyway.
+
+### S24. Upgrading to the account-fixes build (Info, operational)
+The server route set changed (`PUT /v1/vault/header` is gone, replaced by
+`POST /v1/account/credentials`), and the desktop's local store went from
+schema 4 to schema 5 with no migration (the only vault is the owner's, and
+it lives on the server). Upgrade in this order:
+
+1. **Before upgrading anything**, check that no account on the server had
+   its master password changed with the old build. Such an account has a
+   stale verifier (S14): its devices all fail to sign in after the change,
+   so it shows as permanently offline. There is **no admin command that
+   resets a verifier** — it is derived from the password on the client and
+   cannot be computed on the server. The only in-place repair is, *still on
+   the old build and old server*, to change the master password back to the
+   one the account was activated with and let it publish; this path has not
+   been tested. Otherwise the account must be deleted and recreated
+   (`admin delete-account`, `admin new-account`), which loses its items.
+2. Upgrade the server.
+3. Upgrade every desktop. Change no passwords in between.
+4. On each desktop, before starting the new build, move `vault.sqlite3` and
+   `device.json` out of the app's data folder to somewhere safe. Start the
+   new build and choose **Sign in** with the Emergency Kit. Once the vault
+   has synced, the moved files can be deleted.
 
 ### S13. A bridge thread waits for the network (Info, accepted)
 Saving a login from the browser blocks the bridge thread that is handling

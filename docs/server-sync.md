@@ -222,7 +222,21 @@ before adopting it — a wrong password still costs only a local Argon2id run
 plus this fallback's own, so it can add a few seconds before "wrong password"
 is shown. A device that unlocks offline with the old password stays usable
 locally but is told, once, that the password changed elsewhere and it needs
-to unlock again online.
+to unlock again online. A device that is *unlocked* when the change happens
+learns it at its next request: the server refuses its session, and the app
+drops to read-only with a banner saying the sign-in was refused (not just
+"offline") until it is locked and unlocked with the new password.
+
+If the answer to the credential change is lost (a timeout, a dropped
+connection, or a garbled reply), the server may have applied it. The device
+then asks `POST /v1/auth/params` which KDF parameters the account has now —
+the new ones carry a fresh salt, so they cannot be confused with the old.
+The new parameters mean the change was applied: it is committed locally as a
+success. The old ones mean nothing changed, and the usual offline error is
+shown. No usable answer is reported as `password_change_unknown` ("could not
+confirm … if your current password stops working, use the new one"). In all
+three cases the session is kept, so the next sync can still adopt the new
+header.
 
 ## 7. Security properties and limitations
 
@@ -275,6 +289,22 @@ to unlock again online.
   removed from the file once the move is confirmed. A `set` that timed out
   and completes later could, in principle, re-add a keychain entry that
   "Remove this device" had just deleted — a narrow race, accepted.
+  A keychain that errors or does not answer is never taken to mean "no key":
+  at unlock, when nothing else holds the key, the app says the keychain did
+  not answer and asks to approve its prompt and retry (`keychain_unavailable`)
+  rather than asking for the Emergency Kit — a key typed then would go to
+  `device.json`, since the same keychain would not take it. The user can
+  still choose to enter the Secret Key from the kit. A platform keychain that
+  failed to install, or is still installing after the 5-second wait, counts
+  as "did not answer"; only an OS with no keychain support at all is a
+  definite "no key". "Remove this device" waits for a busy keychain (up to
+  one call's timeout) and retries the delete once; if the entry still cannot
+  be deleted, removal completes anyway and the app tells the user to delete
+  the `app.havenkeys` entry by hand.
+* **A sync in flight during "Remove this device"** could, if a new sign-in to
+  another account completed before that pull returned, apply the old
+  account's pulled data to the new vault. Unlikely, and not fixed
+  (`security-review.md` S26).
 * **The vault key is never rotated** (`security-review.md` #8). A master
   password change re-wraps the vault key; it does not replace it.
 * **A pulled item that fails to decrypt is retried, not lost.** A change from
@@ -284,7 +314,9 @@ to unlock again online.
   pull's changes, so the cursor and the retry list never disagree. At the end
   of every `sync_now`, the app fetches those IDs from `POST /v1/items/fetch`
   (chunks of up to 500) and applies them through the same path, without
-  moving the cursor; an item that now decrypts, or that the server has since
+  moving the cursor. This retry is best effort: a failure stops it for that
+  sync without failing the sync or taking the device offline (a refused
+  session still signs it out); an item that now decrypts, or that the server has since
   deleted, leaves the table. The vault screen shows a persistent banner while
   any remain, with a **Re-download** action. Item-level replay is still not
   addressed by this — a server that keeps re-serving the *same* stale blob at

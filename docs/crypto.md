@@ -58,8 +58,10 @@ Why this shape:
   the `keyring-core` crate; service `app.havenkeys`, user = account ID), with
   `device.json` (0600) as the fallback when no keychain is available, a call
   errors, or it does not answer within 5 seconds. Only the `H1-…` text is
-  ever stored; errors from the store never carry the value. See
-  `server-sync.md` §7 for the trade-off this fallback keeps.
+  ever stored; errors from the store never carry the value. A keychain that
+  errors or does not answer is never taken as "no key" (unlock asks to retry
+  rather than for the Emergency Kit). See `server-sync.md` §7 for the
+  trade-off this fallback keeps.
 * **HKDF domain separation** (`info` strings) ensures the KEK, the auth key
   and the data key can never collide with each other or with future keys.
 * **The KEK derivation takes the account ID and the normalized email as HKDF

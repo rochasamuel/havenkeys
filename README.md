@@ -82,7 +82,7 @@ Read these before trusting it with anything:
 * [Cryptography](docs/crypto.md): key hierarchy, formats, parameters
 * [Architecture](docs/architecture.md)
 * [Server sync and the Secret Key](docs/server-sync.md): the replica model, the account, and what the server can and cannot do
-* [Deployment](docs/deployment.md): running the server, and the backup restore drill that has to pass before you trust it
+* [Deployment](docs/deployment.md): running the server, upgrading it together with the desktops (§6.1), and the backup restore drill that has to pass before you trust it
 * [Native messaging](docs/native-messaging.md): browser ↔ desktop protocol and its checks
 * [Autofill](docs/autofill.md): field detection, matching rules, in-page UI security
 * [Security review](docs/security-review.md): findings from reviewing this implementation

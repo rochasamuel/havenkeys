@@ -264,9 +264,36 @@ The mitigation is backups and the user noticing, not cryptography.
   sessions go with it.
 * **Upgrades:** the image runs migrations at boot under a table lock, so two
   instances starting at once is safe. Deploy one replica anyway; nothing here
-  has been tested horizontally.
+  has been tested horizontally. Some releases also need the desktops
+  upgraded in step; see §6.1.
 * **Restarting** the server drops nothing but sessions. Devices re-derive
   their auth key at the next unlock and sign in again.
+
+### 6.1 Upgrading to the account-fixes release (desktop schema 5)
+
+This release removed `PUT /v1/vault/header` (a password change now goes
+through `POST /v1/account/credentials`) and moved the desktop's local store
+from schema 4 to schema 5 **with no migration**: after the upgrade a desktop
+cannot open its existing `vault.sqlite3`. The vault itself is on the server,
+so nothing is lost if the steps are followed in order:
+
+1. **Check first, on the old build.** If any account had its master password
+   changed with the old build, its server verifier is stale
+   (`security-review.md` S14): every device of that account fails to sign in
+   and stays offline. No admin command resets a verifier — it is derived
+   from the password on the client. The only in-place repair (untested) is,
+   still on the old build and the old server, to change that account's
+   password back to the one it was activated with and let it sync.
+   Otherwise the account has to be deleted and recreated with
+   `admin delete-account` / `admin new-account`, which loses its items.
+2. **Upgrade the server.**
+3. **Upgrade every desktop.** Change no master password between steps 2
+   and 3.
+4. **On each desktop**, before starting the new build, move `vault.sqlite3`
+   and `device.json` out of the app's data folder to somewhere safe. Start
+   the new build, choose **Sign in**, and use the Emergency Kit (email,
+   server, Secret Key) and the master password. Delete the moved files once
+   the vault has synced.
 
 ## 7. Running it locally
 
