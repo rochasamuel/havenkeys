@@ -113,6 +113,8 @@ export interface DeviceStatus {
   needsSecretKey: boolean;
   /** Whether this device currently has a server session. Independent of the lock state. */
   online: boolean;
+  /** Where the Secret Key is kept: the OS keychain, `device.json` (no keychain answered), or nowhere yet. */
+  secretKeyStorage: "keychain" | "file" | "none";
 }
 
 export interface EmergencyKit {

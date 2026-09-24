@@ -1190,6 +1190,10 @@ button {
   max-width: 68ch;
 }
 
+.group-note.warn {
+  color: var(--danger);
+}
+
 .group-note-top {
   margin: 0 4px 10px;
 }

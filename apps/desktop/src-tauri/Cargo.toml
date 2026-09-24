@@ -33,3 +33,20 @@ sha2 = "0.11"
 zeroize = "1.8"
 tauri-plugin-dialog = "2"
 qrcode = { version = "0.14", default-features = false }
+# The Secret Key lives in the OS keychain (secret_store.rs). keyring-core plus
+# only this platform's native store: no mock, file or keyutils backends.
+keyring-core = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = { version = "1.1", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0", features = ["keychain"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Blocking API only (calls run on their own thread in secret_store.rs), with
+# the pure-Rust crypto for the encrypted Secret Service session.
+zbus-secret-service-keyring-store = { version = "1.0", features = ["crypto-rust"] }
+
+[dev-dependencies]
+tempfile = "3"

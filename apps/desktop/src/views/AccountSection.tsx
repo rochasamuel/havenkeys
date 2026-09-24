@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import type { AccountStatus, DeviceEntry } from "../lib/types";
+import type { AccountStatus, DeviceEntry, DeviceStatus } from "../lib/types";
 import { useToast } from "../components/Toast";
 import { EmergencyKit } from "../components/EmergencyKit";
 
@@ -105,11 +105,16 @@ function Devices({ online }: { online: boolean }) {
 export function AccountSection({ online }: { online: boolean }) {
   const toast = useToast();
   const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [storage, setStorage] = useState<DeviceStatus["secretKeyStorage"] | null>(null);
   const [showKit, setShowKit] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   const refresh = useCallback(() => {
     api.accountStatus().then(setAccount, () => setAccount(null));
+    api.deviceStatus().then(
+      (d) => setStorage(d.secretKeyStorage),
+      () => setStorage(null),
+    );
   }, []);
   useEffect(refresh, [refresh, online]);
 
@@ -201,6 +206,11 @@ export function AccountSection({ online }: { online: boolean }) {
       <Devices online={online} />
 
       <h3 className="group-title">Emergency Kit</h3>
+      {storage === "file" && (
+        <p className="group-note warn">
+          Your Secret Key is stored in a file on this computer because no system keychain is available.
+        </p>
+      )}
       {!showKit ? (
         <div className="kit-teaser">
           <p className="muted">

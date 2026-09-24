@@ -8,6 +8,7 @@ mod clipboard;
 mod commands;
 mod device;
 mod import;
+mod secret_store;
 mod state;
 mod sync;
 mod tray;
@@ -84,8 +85,15 @@ pub fn run() {
                     Some(state::CmdError::vault_unreadable(&dir)),
                 ),
             };
-            let device = device::Device::load(&dir);
             let vault = Arc::new(Mutex::new(VaultService::new(store)));
+            let mut device =
+                device::Device::load(&dir, Box::new(secret_store::OsKeyStore::install()));
+            // A Secret Key an earlier version (or a keychain that was
+            // unavailable then) left in device.json moves to the keychain.
+            let account = vault.lock().ok().and_then(|v| v.account().ok().flatten());
+            if let Some(account) = account {
+                device.migrate(account.account_id);
+            }
 
             // Browser integration. The bridge locks through AppState so an
             // extension-initiated lock behaves exactly like any other.

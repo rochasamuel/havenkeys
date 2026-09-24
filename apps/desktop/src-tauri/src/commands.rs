@@ -53,8 +53,12 @@ pub async fn unlock_vault(
         .ok_or(havenkeys_core::Error::NoVault)?
         .to_ref()?;
     let (stored, stored_text) = {
-        let device = state.device.lock().map_err(|_| CmdError::internal())?;
-        (device.secret_key(), device.secret_key_text().cloned())
+        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+        let text = device.secret_key_text(account.id);
+        let key = text
+            .as_ref()
+            .and_then(|t| SecretKey::parse(t.expose()).ok());
+        (key, text)
     };
     let typed = match secret_key {
         Some(t) if !t.is_empty() => Some(SecretKey::parse(t.expose())?),
@@ -72,6 +76,7 @@ pub async fn unlock_vault(
             .unwrap_or(havenkeys_core::Error::SecretKeyRequired)
             .into());
     }
+    let account_id = account.id;
     let key_text = typed.as_ref().map(|k| k.to_text());
     // Kept for the fallback below: `SecretKey` is not `Clone`, so the text
     // is re-parsed there. The typed key wins, as it does here.
@@ -138,14 +143,14 @@ pub async fn unlock_vault(
             // caller learns nothing about which step failed.
             return match unlock_from_server(&app, password_for_fallback, sk_text, epoch).await {
                 Ok(status) => {
-                    remember_typed_secret_key(&state, key_text);
+                    remember_typed_secret_key(&state, account_id, key_text);
                     Ok(status)
                 }
                 Err(_) => Err(err.into()),
             };
         }
     };
-    remember_typed_secret_key(&state, key_text);
+    remember_typed_secret_key(&state, account_id, key_text);
     // Open the server session in the background. The vault is already
     // usable: a device that cannot reach its server is offline and
     // read-only, not locked.
@@ -159,11 +164,11 @@ pub async fn unlock_vault(
 }
 
 /// A Secret Key typed from the Emergency Kit proved correct: remember it.
-fn remember_typed_secret_key(state: &AppState, key_text: Option<SecretString>) {
+fn remember_typed_secret_key(state: &AppState, account: Uuid, key_text: Option<SecretString>) {
     if let Some(text) = key_text {
         if let Ok(k) = SecretKey::parse(text.expose()) {
             if let Ok(mut d) = state.device.lock() {
-                let _ = d.set_secret_key(&k);
+                let _ = d.set_secret_key(account, &k);
             }
         }
     }
@@ -320,7 +325,7 @@ pub async fn change_master_password(
         .device
         .lock()
         .map_err(|_| CmdError::internal())?
-        .secret_key()
+        .secret_key(account.id)
         .ok_or(havenkeys_core::Error::SecretKeyRequired)?;
     let ticket = state.vault()?.begin_rekey()?;
     // Both Argon2id runs happen without the vault lock, so locking (button,

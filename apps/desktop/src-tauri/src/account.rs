@@ -6,6 +6,7 @@
 //! server records the result and never sees the master password, the Secret
 //! Key, the KEK or the vault key.
 
+use crate::secret_store::Storage;
 use crate::state::{AppState, CmdError, CmdResult};
 use crate::sync::{self, DEVICE_NAME};
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
@@ -33,18 +34,32 @@ pub struct DeviceStatus {
     /// Whether this device currently has a server session (spec 2026-09-20
     /// §8.6). Independent of the lock state.
     online: bool,
+    /// Where the Secret Key is kept: "keychain", "file" (no keychain
+    /// answered; Settings warns) or "none".
+    secret_key_storage: Storage,
 }
 
 /// Safe to call while locked: reveals no secrets.
 #[tauri::command]
 pub fn device_status(state: State<'_, AppState>) -> CmdResult<DeviceStatus> {
-    let key_scheme = state.vault()?.key_scheme()?;
-    let device = state.device.lock().map_err(|_| CmdError::internal())?;
+    let (key_scheme, account) = {
+        let v = state.vault()?;
+        (v.key_scheme()?, v.account()?)
+    };
+    let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
     let uses_secret_key = key_scheme.is_some_and(KeyScheme::uses_secret_key);
+    let (needs_secret_key, secret_key_storage) = match account {
+        Some(a) => (
+            uses_secret_key && device.secret_key(a.account_id).is_none(),
+            device.storage(a.account_id),
+        ),
+        None => (false, Storage::None),
+    };
     Ok(DeviceStatus {
         key_scheme,
-        needs_secret_key: uses_secret_key && device.secret_key().is_none(),
+        needs_secret_key,
         online: state.is_online(),
+        secret_key_storage,
     })
 }
 
@@ -124,7 +139,7 @@ pub async fn activate_account(
     {
         let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
         device
-            .set_secret_key(&made.secret_key)
+            .set_secret_key(account.id, &made.secret_key)
             .map_err(|_| CmdError::file())?;
     }
 
@@ -185,18 +200,9 @@ pub async fn sign_in(
         return Err(havenkeys_core::Error::VaultExists.into());
     }
     let email = NormalizedEmail::parse(&email)?;
-    // A key already on this computer is used when none is typed. That is
-    // what makes an activation interrupted after the server accepted it
-    // recoverable: the Secret Key was written here before the server was
-    // asked, so signing in finishes what activation started.
-    let secret_key = match secret_key {
-        Some(typed) if !typed.is_empty() => SecretKey::parse(typed.expose())?,
-        _ => state
-            .device
-            .lock()
-            .map_err(|_| CmdError::internal())?
-            .secret_key()
-            .ok_or(havenkeys_core::Error::SecretKeyRequired)?,
+    let typed = match secret_key {
+        Some(typed) if !typed.is_empty() => Some(SecretKey::parse(typed.expose())?),
+        _ => None,
     };
     let server_url = server_url.trim().trim_end_matches('/').to_string();
     let client = sync::client_for(&state, &server_url)?;
@@ -207,6 +213,20 @@ pub async fn sign_in(
     // has never seen.
     let params = client.auth_params(email.as_str()).await?;
     let account = AccountRef::new(params.account_id, email);
+
+    // A key already on this computer for this account is used when none is
+    // typed. That is what makes an activation interrupted after the server
+    // accepted it recoverable: the Secret Key was written here before the
+    // server was asked, so signing in finishes what activation started.
+    let secret_key = match typed {
+        Some(k) => k,
+        None => state
+            .device
+            .lock()
+            .map_err(|_| CmdError::internal())?
+            .secret_key(account.id)
+            .ok_or(havenkeys_core::Error::SecretKeyRequired)?,
+    };
 
     let (account_for_auth, secret_key) = (account.clone(), secret_key);
     let password_for_auth = password.clone();
@@ -263,7 +283,7 @@ pub async fn sign_in(
     {
         let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
         device
-            .set_secret_key(&secret_key)
+            .set_secret_key(account.id, &secret_key)
             .map_err(|_| CmdError::file())?;
     }
     state.arm_auto_lock(minutes);
@@ -374,8 +394,7 @@ pub fn get_emergency_kit(state: State<'_, AppState>) -> CmdResult<EmergencyKit> 
         .device
         .lock()
         .map_err(|_| CmdError::internal())?
-        .secret_key_text()
-        .cloned()
+        .secret_key_text(account.account_id)
         .ok_or(havenkeys_core::Error::NotFound)?;
     // v2 carries the account, the address and the server, because a new
     // device needs all four (design §5).
