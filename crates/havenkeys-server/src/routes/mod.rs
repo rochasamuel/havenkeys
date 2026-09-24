@@ -10,6 +10,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
+pub mod account;
 pub mod accounts;
 pub mod auth;
 pub mod devices;
@@ -38,13 +39,11 @@ pub fn router(state: AppState) -> Router {
     let router = Router::new()
         .route("/v1/health", get(health::health))
         .route("/v1/accounts/activate", post(accounts::activate))
+        .route("/v1/account/credentials", post(account::change_credentials))
         .route("/v1/auth/params", post(auth::params))
         .route("/v1/auth/login", post(auth::login))
         .route("/v1/auth/logout", post(auth::logout))
-        .route(
-            "/v1/vault/header",
-            get(vault::get_header).put(vault::put_header),
-        )
+        .route("/v1/vault/header", get(vault::get_header))
         .route("/v1/sync", get(sync::pull))
         .route("/v1/items", post(items::write))
         .route("/v1/devices", get(devices::list))
@@ -81,7 +80,7 @@ fn build_cors(origin: String) -> Option<CorsLayer> {
     Some(
         CorsLayer::new()
             .allow_origin(AllowOrigin::exact(value))
-            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+            .allow_methods([Method::GET, Method::POST, Method::DELETE])
             .allow_headers([
                 HeaderName::from_static("authorization"),
                 HeaderName::from_static("content-type"),

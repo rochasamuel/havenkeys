@@ -77,15 +77,15 @@ pub struct ActivateRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct KdfDto {
-    algorithm: String,
-    memory_kib: i32,
-    iterations: i32,
-    parallelism: i32,
-    salt: String,
+    pub(crate) algorithm: String,
+    pub(crate) memory_kib: i32,
+    pub(crate) iterations: i32,
+    pub(crate) parallelism: i32,
+    pub(crate) salt: String,
 }
 
 impl KdfDto {
-    fn check(&self) -> Result<Vec<u8>, ApiError> {
+    pub(crate) fn check(&self) -> Result<Vec<u8>, ApiError> {
         const BAD: ApiError = ApiError::InvalidRequest("kdf parameters are not valid");
         if self.algorithm != "argon2id" {
             return Err(BAD);

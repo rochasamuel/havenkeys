@@ -44,14 +44,17 @@ async fn an_oversized_blob_is_refused() {
 #[tokio::test]
 async fn an_oversized_header_is_refused() {
     let server = support::TestServer::start().await;
-    let (_, sess) = support::signed_in(&server, "user@example.com").await;
+    let (account, sess) = support::signed_in(&server, "user@example.com").await;
+    let oversized = vec![1u8; havenkeys_server::limits::MAX_HEADER_BYTES + 1];
+    let new_key = [55u8; 32];
     let res = server
-        .put_as("/v1/vault/header", &sess)
-        .json(&json!({
-            "header": data_encoding::BASE64.encode(&vec![1u8; 65 * 1024]),
-            "headerRevision": 1,
-            "keyScheme": 3,
-        }))
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::credentials_body(
+            &account.auth_key,
+            &new_key,
+            0,
+            &oversized,
+        ))
         .send()
         .await
         .unwrap();

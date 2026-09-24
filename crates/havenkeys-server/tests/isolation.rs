@@ -8,7 +8,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn account_a_cannot_touch_account_b() {
     let server = support::TestServer::start().await;
-    let (_, a) = support::signed_in(&server, "a@example.com").await;
+    let (account_a, a) = support::signed_in(&server, "a@example.com").await;
     let (_, b) = support::signed_in(&server, "b@example.com").await;
 
     let (b_item, b_rev) = support::create_item(&server, &b, b"b-overview", b"b-details").await;
@@ -40,20 +40,22 @@ async fn account_a_cannot_touch_account_b() {
     let b_after = support::pull(&server, &b, 0).await;
     assert_eq!(b_after["changes"].as_array().unwrap()[0]["deleted"], false);
 
-    // Header: A's write does not move B's header.
+    // Header: A's credential change does not move B's header.
+    let new_key = [77u8; 32];
     assert_eq!(
         server
-            .put_as("/v1/vault/header", &a)
-            .json(&json!({
-                "header": data_encoding::BASE64.encode(b"a-header-2"),
-                "headerRevision": 1,
-                "keyScheme": 3,
-            }))
+            .post_as("/v1/account/credentials", &a)
+            .json(&support::credentials_body(
+                &account_a.auth_key,
+                &new_key,
+                0,
+                b"a-header-2",
+            ))
             .send()
             .await
             .unwrap()
             .status(),
-        204
+        200
     );
     let b_header: serde_json::Value = server
         .get_as("/v1/vault/header", &b)
@@ -113,7 +115,7 @@ async fn every_authenticated_route_needs_a_live_token() {
 
     let routes: Vec<(&str, String)> = vec![
         ("GET", "/v1/vault/header".into()),
-        ("PUT", "/v1/vault/header".into()),
+        ("POST", "/v1/account/credentials".into()),
         ("GET", "/v1/sync?since=0".into()),
         ("POST", "/v1/items".into()),
         ("GET", "/v1/devices".into()),
@@ -125,11 +127,6 @@ async fn every_authenticated_route_needs_a_live_token() {
         for token in [None, Some("garbage"), Some("")] {
             let request = match method {
                 "GET" => server.get(&path),
-                "PUT" => server.put(&path).json(&json!({
-                    "header": data_encoding::BASE64.encode(b"x"),
-                    "headerRevision": 1,
-                    "keyScheme": 3,
-                })),
                 "DELETE" => server.delete(&path),
                 _ => server.post(&path).json(&json!({
                     "changes": [support::change(Uuid::new_v4(), None, b"ov", b"det")]

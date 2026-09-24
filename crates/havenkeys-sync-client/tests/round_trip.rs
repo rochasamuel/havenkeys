@@ -340,32 +340,7 @@ async fn a_write_that_lost_a_race_comes_back_as_a_conflict() {
     server.cleanup().await;
 }
 
-#[tokio::test]
-async fn a_header_published_by_one_device_is_adopted_by_another() {
-    let server = Server::start().await;
-    let client = server.client();
-    let device = activate(&server, "header@example.com").await;
-
-    let header = device.vault.encode_account_header().unwrap();
-    client
-        .put_header(&device.session, &header, 1)
-        .await
-        .unwrap();
-
-    let fetched = client.header(&device.session).await.unwrap();
-    assert_eq!(fetched.bytes, header);
-    assert_eq!(fetched.revision, 1);
-    assert_eq!(fetched.key_scheme, 3);
-
-    // The same revision twice is a conflict, not an overwrite.
-    let err = client
-        .put_header(&device.session, &header, 1)
-        .await
-        .unwrap_err();
-    assert!(matches!(err, SyncError::Conflict(_)), "{err:?}");
-
-    server.cleanup().await;
-}
+// Replaced by a password-change round trip (plan Task 5).
 
 #[tokio::test]
 async fn a_revoked_device_is_signed_out_at_its_next_request() {

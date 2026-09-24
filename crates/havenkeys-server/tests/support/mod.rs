@@ -305,6 +305,23 @@ pub async fn create_item(
     (id, body["applied"][0]["revision"].as_i64().unwrap())
 }
 
+/// A credential change as the desktop sends it.
+pub fn credentials_body(current: &[u8; 32], new: &[u8; 32], base: i64, header: &[u8]) -> Value {
+    json!({
+        "currentAuthKey": data_encoding::BASE64.encode(current),
+        "kdf": {
+            "algorithm": "argon2id",
+            "memoryKib": 131072,
+            "iterations": 4,
+            "parallelism": 4,
+            "salt": data_encoding::BASE64.encode(&[4u8; 16]),
+        },
+        "newAuthKey": data_encoding::BASE64.encode(new),
+        "header": data_encoding::BASE64.encode(header),
+        "baseHeaderRevision": base,
+    })
+}
+
 pub async fn pull(server: &TestServer, sess: &Sess, since: i64) -> Value {
     let res = server
         .get_as(&format!("/v1/sync?since={since}"), sess)

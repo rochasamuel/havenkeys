@@ -74,13 +74,15 @@ async fn no_secret_reaches_a_log_line() {
     let details = b"DETAILS-CIPHERTEXT-MARKER";
     let (item, _) = support::create_item(&server, &session, overview, details).await;
     support::pull(&server, &session, 0).await;
+    let new_key = [88u8; 32];
     server
-        .put_as("/v1/vault/header", &session)
-        .json(&serde_json::json!({
-            "header": data_encoding::BASE64.encode(b"HEADER-MARKER"),
-            "headerRevision": 1,
-            "keyScheme": 3,
-        }))
+        .post_as("/v1/account/credentials", &session)
+        .json(&support::credentials_body(
+            &auth_key,
+            &new_key,
+            0,
+            b"HEADER-MARKER",
+        ))
         .send()
         .await
         .unwrap();
@@ -116,6 +118,7 @@ async fn no_secret_reaches_a_log_line() {
             havenkeys_server::invite::decode(&invite).unwrap().secret,
         ),
         ("the auth key", data_encoding::BASE64.encode(&auth_key)),
+        ("the new auth key", data_encoding::BASE64.encode(&new_key)),
         ("the overview blob", data_encoding::BASE64.encode(overview)),
         (
             "the overview plaintext",
