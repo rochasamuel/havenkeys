@@ -108,7 +108,10 @@ fn header_ctx(vault_id: Uuid) -> BlobContext {
     BlobContext::vault(Purpose::SyncHeader, vault_id)
 }
 
-fn encode_header(data_key: &crate::crypto::keys::Key256, h: &HeaderRecord) -> Result<Vec<u8>> {
+pub(crate) fn encode_header(
+    data_key: &crate::crypto::keys::Key256,
+    h: &HeaderRecord,
+) -> Result<Vec<u8>> {
     let body = header_body(h);
     let attestation = blob::seal(data_key, &header_ctx(h.vault_id), &canonical(&body)?)?;
     serde_json::to_vec_pretty(&HeaderFile {

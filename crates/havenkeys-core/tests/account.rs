@@ -111,7 +111,7 @@ fn an_older_header_is_refused_after_a_password_change() {
             &account(),
         )
         .unwrap();
-    vault.commit_rekey(ticket, Ok(rekeyed)).unwrap();
+    vault.commit_rekey(ticket, Ok(rekeyed), 1).unwrap();
     let new_header = vault.encode_account_header().unwrap();
 
     // A hostile server replays the header from before the change.
@@ -161,7 +161,7 @@ fn a_persisted_floor_refuses_a_header_newer_than_local_but_not_newer_than_the_fl
             &account(),
         )
         .unwrap();
-    first.commit_rekey(ticket, Ok(rekeyed)).unwrap();
+    first.commit_rekey(ticket, Ok(rekeyed), 1).unwrap();
     let newer_header = first.encode_account_header().unwrap();
 
     // Newer than `second`'s local header, but at or below the persisted
@@ -278,4 +278,245 @@ fn create_account_vault_stores_the_account_record() {
     assert_eq!(vault.key_scheme().unwrap(), Some(KeyScheme::AccountBound));
     assert!(vault.is_unlocked());
     assert_eq!(vault.account().unwrap().unwrap().account_id, account().id);
+}
+
+// ------------------------------------------------ server-first rekey, adoption
+
+const NEW_PASSWORD: &str = "a much longer new password";
+
+/// The KDF parameters the vault's current header carries (not secret; the
+/// server serves them to anyone who asks).
+fn current_kdf(vault: &VaultService) -> havenkeys_core::crypto::kdf::KdfParams {
+    let json: serde_json::Value =
+        serde_json::from_slice(&vault.encode_account_header().unwrap()).unwrap();
+    serde_json::from_value(json["header"]["kdf"].clone()).unwrap()
+}
+
+/// A second device on the same vault, left LOCKED so adoption can be tried.
+fn locked_second_device(
+    first: &VaultService,
+    sk: &havenkeys_core::crypto::secret_key::SecretKey,
+) -> VaultService {
+    let mut two = common::second_device(first, sk);
+    two.lock();
+    two
+}
+
+#[test]
+fn a_rekey_yields_both_login_keys_and_commits_at_the_given_revision() {
+    let (mut vault, sk) = common::activated_vault();
+    let before = derive_auth_key(&secret(PASSWORD), &sk, &current_kdf(&vault), &account()).unwrap();
+    let ticket = vault.begin_rekey().unwrap();
+    assert_eq!(ticket.base_revision(), 0);
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &sk,
+            &account(),
+        )
+        .unwrap();
+    assert_eq!(
+        rekeyed.current_auth_key().to_base64().as_str(),
+        before.to_base64().as_str()
+    );
+    assert_ne!(
+        rekeyed.new_auth_key().to_base64().as_str(),
+        rekeyed.current_auth_key().to_base64().as_str()
+    );
+    let after = derive_auth_key(&secret(NEW_PASSWORD), &sk, rekeyed.kdf(), &account()).unwrap();
+    assert_eq!(
+        rekeyed.new_auth_key().to_base64().as_str(),
+        after.to_base64().as_str()
+    );
+
+    let header = vault.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    assert!(!header.is_empty());
+    assert_eq!(vault.header_revision().unwrap(), Some(0)); // nothing written yet
+
+    // The server can only have assigned base + 1; anything else is refused
+    // and nothing is written.
+    let err = vault.commit_rekey(ticket, Ok(rekeyed), 5).unwrap_err();
+    assert_eq!(err.code(), "corrupted");
+    assert_eq!(vault.header_revision().unwrap(), Some(0));
+    vault.lock();
+    vault
+        .unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+}
+
+#[test]
+fn a_rekey_commits_at_base_plus_one() {
+    let (mut vault, sk) = common::activated_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket.derive_for_account(
+        &secret(PASSWORD),
+        &secret(NEW_PASSWORD),
+        fast_kdf(),
+        &sk,
+        &account(),
+    );
+    vault.commit_rekey(ticket, rekeyed, 1).unwrap();
+    assert_eq!(vault.header_revision().unwrap(), Some(1));
+    vault.lock();
+    vault
+        .unlock_for_account(&secret(NEW_PASSWORD), &sk, &account())
+        .unwrap();
+}
+
+#[test]
+fn the_rekeyed_header_is_the_one_committed() {
+    // What the server receives must be exactly what this device then holds.
+    let (mut vault, sk) = common::activated_vault();
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &sk,
+            &account(),
+        )
+        .unwrap();
+    let served = vault.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    vault.commit_rekey(ticket, Ok(rekeyed), 1).unwrap();
+    let served: serde_json::Value = serde_json::from_slice(&served).unwrap();
+    let local: serde_json::Value =
+        serde_json::from_slice(&vault.encode_account_header().unwrap()).unwrap();
+    assert_eq!(served["header"], local["header"]);
+}
+
+#[test]
+fn another_device_adopts_a_changed_password_at_unlock() {
+    // Device 1 changes the password; device 2 still has the old header.
+    let (mut one, sk) = common::activated_vault();
+    let mut two = locked_second_device(&one, &sk);
+    let ticket = one.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &sk,
+            &account(),
+        )
+        .unwrap();
+    let served = one.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    one.commit_rekey(ticket, Ok(rekeyed), 1).unwrap();
+
+    // The new password does not open device 2's local header...
+    assert!(two
+        .unlock_for_account(&secret(NEW_PASSWORD), &sk, &account())
+        .is_err());
+    // ...but the header the server serves does, and it is adopted.
+    let (prepared, _auth) =
+        prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
+    two.adopt_and_unlock(prepared).unwrap();
+    assert!(two.is_unlocked());
+    assert_eq!(two.header_revision().unwrap(), Some(1));
+    assert_eq!(two.account().unwrap().unwrap().max_header_rev, 1);
+    two.lock();
+    assert!(two
+        .unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .is_err());
+    two.unlock_for_account(&secret(NEW_PASSWORD), &sk, &account())
+        .unwrap();
+}
+
+#[test]
+fn adopt_and_unlock_refuses_an_old_or_foreign_header() {
+    let (one, sk) = common::activated_vault();
+    let mut two = locked_second_device(&one, &sk);
+
+    // Same revision as local (0): refused.
+    let current = one.encode_account_header().unwrap();
+    let (prepared, _) = prepare_sign_in(&current, &secret(PASSWORD), &sk, &account()).unwrap();
+    assert!(two.adopt_and_unlock(prepared).is_err());
+    assert!(!two.is_unlocked());
+
+    // A different vault, on a different account: refused, even at a higher
+    // revision.
+    let other_account = AccountRef::new(
+        Uuid::from_u128(0xbeef),
+        havenkeys_core::account::NormalizedEmail::parse("other@example.com").unwrap(),
+    );
+    let made =
+        prepare_new_account_vault(&secret(PASSWORD), &other_account, fast_kdf(), NOW).unwrap();
+    let foreign = havenkeys_core::sync::encode_header_for(&made.prepared).unwrap();
+    let (prepared, _) = prepare_sign_in(
+        &foreign,
+        &secret(PASSWORD),
+        &made.secret_key,
+        &other_account,
+    )
+    .unwrap();
+    assert!(two.adopt_and_unlock(prepared).is_err());
+    assert!(!two.is_unlocked());
+    assert_eq!(two.header_revision().unwrap(), Some(0));
+    two.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+}
+
+#[test]
+fn adopt_and_unlock_refuses_a_header_at_or_below_the_persisted_floor() {
+    let (one, sk) = common::activated_vault();
+    // Device 2 has already seen revision 1 somewhere (its floor), though its
+    // local header is still at 0.
+    let header0 = one.encode_account_header().unwrap();
+    let mut floor_rec = account_record();
+    floor_rec.max_header_rev = 1;
+    let (prepared, _) = prepare_sign_in(&header0, &secret(PASSWORD), &sk, &account()).unwrap();
+    let mut two = VaultService::new(Store::open_in_memory().unwrap());
+    two.create_account_vault(prepared, &floor_rec).unwrap();
+    two.lock();
+
+    let ticket = one.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &sk,
+            &account(),
+        )
+        .unwrap();
+    let served = one.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    let (prepared, _) = prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
+    assert!(two.adopt_and_unlock(prepared).is_err());
+    assert!(!two.is_unlocked());
+    assert_eq!(two.header_revision().unwrap(), Some(0));
+}
+
+#[test]
+fn adopt_and_unlock_refuses_unless_locked() {
+    let (one, sk) = common::activated_vault();
+    let mut two = common::second_device(&one, &sk); // unlocked
+    let ticket = one.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &sk,
+            &account(),
+        )
+        .unwrap();
+    let served = one.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    let (prepared, _) = prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
+    assert_eq!(
+        two.adopt_and_unlock(prepared).unwrap_err().code(),
+        havenkeys_core::Error::Busy.code()
+    );
+    assert_eq!(two.header_revision().unwrap(), Some(0));
+}
+
+#[test]
+fn a_forged_header_does_not_pass_sign_in_verification() {
+    let (one, sk) = common::activated_vault();
+    let mut served: serde_json::Value =
+        serde_json::from_slice(&one.encode_account_header().unwrap()).unwrap();
+    served["header"]["revision"] = 7.into(); // attestation no longer matches
+    let bytes = serde_json::to_vec(&served).unwrap();
+    assert!(prepare_sign_in(&bytes, &secret(PASSWORD), &sk, &account()).is_err());
 }

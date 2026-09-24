@@ -190,7 +190,8 @@ pub async fn change_master_password(
         // Scoped so the vault lock is released before the request below: a
         // guard held across an await would also block locking the vault.
         let mut v = state.vault()?;
-        v.commit_rekey(ticket, rekeyed)?;
+        let revision = ticket.base_revision() + 1;
+        v.commit_rekey(ticket, rekeyed, revision)?;
     }
     // The new wrap is local until the server has it. `sync_now` sees the
     // local header revision ahead of the server's and publishes it; if that

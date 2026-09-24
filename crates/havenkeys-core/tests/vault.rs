@@ -320,7 +320,7 @@ fn rekey_is_discarded_if_vault_locked_meanwhile() {
     v.lock();
     v.unlock_for_account(&secret(PASSWORD), &sk, &account())
         .unwrap();
-    assert_eq!(v.commit_rekey(ticket, rekeyed), Err(Error::Locked));
+    assert_eq!(v.commit_rekey(ticket, rekeyed, 1), Err(Error::Locked));
     v.lock();
     v.unlock_for_account(&secret(PASSWORD), &sk, &account())
         .unwrap(); // old password still valid
@@ -344,7 +344,7 @@ fn rekey_refused_if_header_changed_meanwhile() {
         &sk,
     )
     .unwrap();
-    assert_eq!(v.commit_rekey(t1, r1), Err(Error::Busy));
+    assert_eq!(v.commit_rekey(t1, r1, 1), Err(Error::Busy));
     v.lock();
     v.unlock_for_account(&secret("second new password"), &sk, &account())
         .unwrap();

@@ -206,10 +206,32 @@ pub struct RekeyTicket {
 }
 
 /// Output of [`RekeyTicket::derive_for_account`].
+///
+/// Carries both login keys: the server checks `current_auth_key` before it
+/// accepts the change, and stores `new_auth_key` in its place.
 pub struct Rekeyed {
     kdf: KdfParams,
     wrapped_vault_key: Vec<u8>,
     key_scheme: KeyScheme,
+    current_auth_key: AuthKey,
+    new_auth_key: AuthKey,
+}
+
+impl Rekeyed {
+    /// The KDF parameters the new wrap was derived with (not secret).
+    pub fn kdf(&self) -> &KdfParams {
+        &self.kdf
+    }
+
+    /// The login key for the current master password.
+    pub fn current_auth_key(&self) -> &AuthKey {
+        &self.current_auth_key
+    }
+
+    /// The login key for the new master password.
+    pub fn new_auth_key(&self) -> &AuthKey {
+        &self.new_auth_key
+    }
 }
 
 impl RekeyTicket {
@@ -219,6 +241,11 @@ impl RekeyTicket {
     /// rather than derive a KEK for an identity they invented.
     pub fn account(&self) -> Option<&AccountRef> {
         self.account.as_ref()
+    }
+
+    /// The revision the server is asked to move from.
+    pub fn base_revision(&self) -> u64 {
+        self.header.revision
     }
 
     /// Master password change for an account-bound vault (key scheme 3).
@@ -234,13 +261,19 @@ impl RekeyTicket {
     ) -> Result<Rekeyed> {
         check_new_master_password(new)?;
         let h = &self.header;
-        let current_kek = derive_kek_v3(&derive_master_key(current, &h.kdf)?, secret_key, account)?;
+        let current_master = derive_master_key(current, &h.kdf)?;
+        let current_kek = derive_kek_v3(&current_master, secret_key, account)?;
+        let current_auth_key = derive_auth_key_from_master(&current_master, secret_key, account)?;
         let vault_key = unwrap_vault_key(&current_kek, h.vault_id, &h.wrapped_vault_key)?;
-        let new_kek = derive_kek_v3(&derive_master_key(new, &new_kdf)?, secret_key, account)?;
+        let new_master = derive_master_key(new, &new_kdf)?;
+        let new_kek = derive_kek_v3(&new_master, secret_key, account)?;
+        let new_auth_key = derive_auth_key_from_master(&new_master, secret_key, account)?;
         Ok(Rekeyed {
             wrapped_vault_key: wrap_vault_key(&new_kek, h.vault_id, &vault_key)?,
             kdf: new_kdf,
             key_scheme: KeyScheme::AccountBound,
+            current_auth_key,
+            new_auth_key,
         })
     }
 }
@@ -608,8 +641,13 @@ impl VaultService {
             return Err(Error::UnlockFailed);
         }
         let vault_key = unwrap_vault_key(&kek, header.vault_id, &header.wrapped_vault_key)?;
-        let data_key = derive_data_key(&vault_key)?;
-        let vault_id = header.vault_id;
+        self.open_session(header.vault_id, &vault_key)
+    }
+
+    /// Build a session from an unwrapped vault key: derive the data key,
+    /// then decrypt settings and item overviews.
+    fn open_session(&self, vault_id: Uuid, vault_key: &Key256) -> Result<Session> {
+        let data_key = derive_data_key(vault_key)?;
 
         let settings = match self.store.settings_blob()? {
             Some(b) => open_json::<Settings>(
@@ -662,6 +700,50 @@ impl VaultService {
         self.finish_unlock(ticket, key)
     }
 
+    /// LOCKED → UNLOCKED with a header newer than the local one, already
+    /// verified by `prepare_sign_in`. Refuses another vault, a revision at or
+    /// below the floor, or any state but LOCKED.
+    ///
+    /// This is how a device learns of a master-password change made on
+    /// another device: the new password no longer opens the local header, so
+    /// the caller signs in against the header the server serves and adopts
+    /// it here. Only a [`PreparedVault`] is accepted, and its fields are
+    /// crate-private, so the header has necessarily passed
+    /// `prepare_sign_in`'s attestation check under the vault key it unwraps.
+    /// The rollback floor is the same as `adopt_account_header`'s, so a
+    /// hostile server cannot replay an older genuine header.
+    pub fn adopt_and_unlock(&mut self, prepared: PreparedVault) -> Result<()> {
+        if self.state != VaultState::Locked {
+            return Err(Error::Busy);
+        }
+        let local = self.store.header()?.ok_or(Error::NoVault)?;
+        let floor = self
+            .store
+            .account()?
+            .ok_or(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ))?
+            .max_header_rev
+            .max(local.revision as i64);
+        let h = &prepared.header;
+        if h.vault_id != local.vault_id
+            || h.key_scheme != KeyScheme::AccountBound
+            || h.format_version != FORMAT_VERSION
+        {
+            return Err(Error::UnlockFailed);
+        }
+        if (h.revision as i64) <= floor {
+            return Err(Error::UnlockFailed);
+        }
+        self.store
+            .update_key_wrap(&h.kdf, &h.wrapped_vault_key, h.key_scheme, h.revision)?;
+        self.store.raise_max_header_rev(h.revision as i64)?;
+        let session = self.open_session(h.vault_id, &prepared.vault_key)?;
+        self.session = Some(session);
+        self.state = VaultState::Unlocked;
+        Ok(())
+    }
+
     /// Lock (idempotent). Returns true if the vault was unlocked or unlocking.
     pub fn lock(&mut self) -> bool {
         let was_open = self.state != VaultState::Locked;
@@ -686,12 +768,41 @@ impl VaultService {
         })
     }
 
-    /// Persist a re-wrapped vault key. Refused if the vault was locked in the
-    /// meantime, the header changed since the ticket was taken, or the
-    /// account row is missing (every vault is account-bound; a race against
-    /// sign-out, or a hand-edited database, must not persist a rewrap for an
-    /// identity nothing can reproduce).
-    pub fn commit_rekey(&mut self, ticket: RekeyTicket, rekeyed: Result<Rekeyed>) -> Result<()> {
+    /// The attested header the rekey will produce, at base + 1. Writes
+    /// nothing: the desktop sends it to the server first and only commits
+    /// once the server has accepted it.
+    pub fn encode_rekeyed_header(
+        &self,
+        ticket: &RekeyTicket,
+        rekeyed: &Rekeyed,
+    ) -> Result<Vec<u8>> {
+        let session = self.session()?;
+        if ticket.epoch != self.epoch {
+            return Err(Error::Locked);
+        }
+        let record = HeaderRecord {
+            kdf: rekeyed.kdf.clone(),
+            wrapped_vault_key: rekeyed.wrapped_vault_key.clone(),
+            key_scheme: rekeyed.key_scheme,
+            revision: ticket.header.revision.saturating_add(1),
+            ..ticket.header.clone()
+        };
+        crate::sync::encode_header(&session.data_key, &record)
+    }
+
+    /// Persist the rekey at the revision the server assigned (must be base +
+    /// 1). Refused if the vault was locked in the meantime, the header
+    /// changed since the ticket was taken, the account row is missing (every
+    /// vault is account-bound; a race against sign-out, or a hand-edited
+    /// database, must not persist a rewrap for an identity nothing can
+    /// reproduce), or the revision is not the one the ticket's header leads
+    /// to.
+    pub fn commit_rekey(
+        &mut self,
+        ticket: RekeyTicket,
+        rekeyed: Result<Rekeyed>,
+        revision: u64,
+    ) -> Result<()> {
         self.session()?;
         if ticket.epoch != self.epoch {
             return Err(Error::Locked);
@@ -710,7 +821,10 @@ impl VaultService {
                 "this vault is not linked to an account",
             ));
         }
-        let new_revision = current.revision.saturating_add(1);
+        if revision != current.revision.saturating_add(1) {
+            return Err(Error::Corrupted);
+        }
+        let new_revision = revision;
         self.store.update_key_wrap(
             &rekeyed.kdf,
             &rekeyed.wrapped_vault_key,
@@ -733,6 +847,9 @@ impl VaultService {
     /// untouched (see docs/crypto.md for what this does and does not protect
     /// against). The account comes from the local store, never from the
     /// caller.
+    ///
+    /// Local only. The desktop goes through the server first
+    /// (`change_credentials`); this remains for tests and tools.
     pub fn change_master_password_for_account(
         &mut self,
         current: &SecretString,
@@ -745,7 +862,8 @@ impl VaultService {
             "this vault is not linked to an account",
         ))?;
         let rekeyed = ticket.derive_for_account(current, new, new_kdf, secret_key, &account);
-        self.commit_rekey(ticket, rekeyed)
+        let revision = ticket.base_revision().saturating_add(1);
+        self.commit_rekey(ticket, rekeyed, revision)
     }
 
     // ------------------------------------------------------------ settings
