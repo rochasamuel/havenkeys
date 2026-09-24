@@ -11,10 +11,9 @@ Five crates (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`,
 `selectors`) are MPL-2.0, a file-level copyleft satisfied by their being
 redistributed unmodified from crates.io.
 
-The fonts below are different: their files are embedded in the desktop
-application bundle, the browser extension package and the website's built
-assets, and the SIL Open Font
-License requires this notice and the licence text to accompany them.
+The fonts and data below are different: their files are embedded in the
+desktop application bundle, the browser extension package and the website's
+built assets, and their licences require this notice to accompany them.
 
 ## Fonts
 
@@ -132,3 +131,16 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
+
+## Data
+
+### Passkeys Directory
+
+`apps/extension/src/data/passkey-sites.json` is derived from the
+[Passkeys Directory by 2factorauth](https://github.com/2factorauth/passkeys)
+(site names, domains, passkey support and documentation links; snapshot of
+commit `b711c588aa0a1cace2afb5b5a20a70810bb0433b`), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changes: entries
+without a valid hostname or passkey support are dropped, non-https
+documentation links are removed, and fields not used by HavenKeys are left
+out. It is embedded in the browser extension package.
