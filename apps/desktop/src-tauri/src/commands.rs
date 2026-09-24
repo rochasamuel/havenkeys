@@ -510,7 +510,7 @@ pub fn list_passkeys(
     state: State<'_, AppState>,
     id: Uuid,
 ) -> CmdResult<Vec<havenkeys_core::passkey::PasskeyInfo>> {
-    state.touch();
+    // No `touch()`: reading must not reset auto-lock (see `list_items`).
     Ok(state.vault()?.list_passkeys(&id)?)
 }
 

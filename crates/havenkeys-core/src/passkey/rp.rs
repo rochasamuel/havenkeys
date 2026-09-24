@@ -58,7 +58,8 @@ fn same_site(a: &str, b: &str) -> bool {
 /// * `rp_id` equals the page's host, or is a parent domain of it that is
 ///   still inside the host's registrable domain (never a public suffix,
 ///   never for an IP host);
-/// * a frame must be same-site with the top-level page.
+/// * a frame must be same-site with the top-level page, and the top-level
+///   page must be a secure context too.
 pub fn authorize_rp(rp_id: &str, page_url: &str, top_url: Option<&str>) -> Result<RpContext> {
     let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
     let frame = page.url();
@@ -84,6 +85,9 @@ pub fn authorize_rp(rp_id: &str, page_url: &str, top_url: Option<&str>) -> Resul
         Some(t) => {
             let top_page = PageUrl::parse(t).ok_or(Error::Denied)?;
             let top = top_page.url();
+            if !secure_context(top) {
+                return Err(Error::Denied);
+            }
             let top_host = host_key(top).ok_or(Error::Denied)?;
             if !same_site(&host, &top_host) {
                 return Err(Error::Denied);
@@ -187,6 +191,12 @@ mod tests {
             Some("https://evil.com/"),
         );
         denied("github.com", "https://github.com/", Some("not a url"));
+        // A secure frame inside an insecure top page is not a secure context.
+        denied(
+            "github.com",
+            "https://github.com/",
+            Some("http://github.com/"),
+        );
         let same = authorize_rp(
             "github.com",
             "https://github.com/a",
