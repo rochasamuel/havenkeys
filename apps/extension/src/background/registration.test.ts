@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 let granted: string[] = [];
 let registered: Array<{ id: string; matches?: string[]; world?: string; runAt?: string }> = [];
+let unregisterCalls: string[][] = [];
 
 /** Swappable per test; defaults to the plain "record what was registered" behaviour below. */
 let registerImpl: (s: typeof registered) => Promise<void> = async (s) => {
@@ -13,6 +14,7 @@ let registerImpl: (s: typeof registered) => Promise<void> = async (s) => {
   scripting: {
     getRegisteredContentScripts: async ({ ids }: { ids: string[] }) => registered.filter((s) => ids.includes(s.id)),
     unregisterContentScripts: async ({ ids }: { ids: string[] }) => {
+      unregisterCalls.push(ids);
       registered = registered.filter((s) => !ids.includes(s.id));
     },
     registerContentScripts: (s: typeof registered) => registerImpl(s),
@@ -24,6 +26,7 @@ const { syncContentScripts } = await import("./registration");
 beforeEach(() => {
   granted = [];
   registered = [];
+  unregisterCalls = [];
   registerImpl = async (s) => {
     registered.push(...s);
   };
@@ -58,5 +61,31 @@ describe("content script registration", () => {
     };
     await syncContentScripts();
     expect(registered.map((s) => s.id)).toEqual(["havenkeys-inline"]);
+  });
+
+  it("does not touch the inline script on repeated syncs when the passkey group keeps failing to register", async () => {
+    granted = ["https://*/*"];
+    registerImpl = async (s) => {
+      if (s.some((entry) => entry.world === "MAIN")) throw new Error("world not supported");
+      registered.push(...s);
+    };
+    await syncContentScripts();
+    expect(registered.map((s) => s.id)).toEqual(["havenkeys-inline"]);
+    unregisterCalls = [];
+    await syncContentScripts();
+    expect(unregisterCalls.some((ids) => ids.includes("havenkeys-inline"))).toBe(false);
+    expect(registered.map((s) => s.id)).toEqual(["havenkeys-inline"]);
+  });
+
+  it("re-registers both groups when the grant changes", async () => {
+    granted = ["https://*/*"];
+    await syncContentScripts();
+    granted = ["http://*/*"];
+    await syncContentScripts();
+    const byId = Object.fromEntries(registered.map((s) => [s.id, s]));
+    expect(Object.keys(byId).sort()).toEqual(["havenkeys-inline", "havenkeys-webauthn-bridge", "havenkeys-webauthn-page"]);
+    expect(byId["havenkeys-inline"]?.matches).toEqual(["http://*/*"]);
+    expect(byId["havenkeys-webauthn-page"]?.matches).toEqual(["http://*/*"]);
+    expect(byId["havenkeys-webauthn-bridge"]?.matches).toEqual(["http://*/*"]);
   });
 });

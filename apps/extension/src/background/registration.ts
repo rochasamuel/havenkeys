@@ -16,7 +16,6 @@ const SCRIPT_ID = "havenkeys-inline";
 // load at document_start, for exactly the hosts the user granted.
 const PAGE_SCRIPT_ID = "havenkeys-webauthn-page";
 const BRIDGE_SCRIPT_ID = "havenkeys-webauthn-bridge";
-const IDS = [SCRIPT_ID, PAGE_SCRIPT_ID, BRIDGE_SCRIPT_ID];
 
 /** Which of INLINE_ORIGINS the user has granted. */
 export async function grantedOrigins(): Promise<string[]> {
@@ -46,22 +45,50 @@ function passkeyScripts(matches: string[]): chrome.scripting.RegisteredContentSc
   ];
 }
 
-/** Make the registered content scripts match the current grant. Idempotent. */
-export async function syncContentScripts(): Promise<void> {
-  const matches = await grantedOrigins();
-  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: IDS });
-  const same =
-    existing.length === (matches.length > 0 ? IDS.length : 0) &&
-    existing.every((s) => (s.matches ?? []).length === matches.length && (s.matches ?? []).every((m) => matches.includes(m)));
-  if (same) return;
+interface Group {
+  ids: string[];
+  build: (matches: string[]) => chrome.scripting.RegisteredContentScript[];
+  /** Swallow a registration failure (some browsers reject `world: "MAIN"`). */
+  optional: boolean;
+}
+
+const INLINE_GROUP: Group = { ids: [SCRIPT_ID], build: (matches) => [inlineScript(matches)], optional: false };
+const PASSKEY_GROUP: Group = { ids: [PAGE_SCRIPT_ID, BRIDGE_SCRIPT_ID], build: passkeyScripts, optional: true };
+
+function matchesGrant(existing: chrome.scripting.RegisteredContentScript[], group: Group, matches: string[]): boolean {
+  return (
+    existing.length === (matches.length > 0 ? group.ids.length : 0) &&
+    existing.every((s) => (s.matches ?? []).length === matches.length && (s.matches ?? []).every((m) => matches.includes(m)))
+  );
+}
+
+/**
+ * Sync one group's registration to the grant, independently of every other
+ * group. A group that already matches is left untouched — in particular, a
+ * browser that permanently rejects the passkey group (`optional: true`)
+ * must not cause the inline group to be unregistered and re-registered on
+ * every call: index.ts calls this at service-worker startup, so that would
+ * churn on every MV3 wake.
+ */
+async function syncGroup(group: Group, matches: string[]): Promise<void> {
+  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: group.ids });
+  if (matchesGrant(existing, group, matches)) return;
   if (existing.length > 0) await chrome.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
   if (matches.length === 0) return;
-  // Two calls, not one: some browsers reject `world: "MAIN"`, and that must
-  // not take inline autofill down with it.
-  await chrome.scripting.registerContentScripts([inlineScript(matches)]);
+  if (!group.optional) {
+    await chrome.scripting.registerContentScripts(group.build(matches));
+    return;
+  }
   try {
-    await chrome.scripting.registerContentScripts(passkeyScripts(matches));
+    await chrome.scripting.registerContentScripts(group.build(matches));
   } catch {
     // Passkeys are unavailable on this browser; inline autofill still works.
   }
+}
+
+/** Make the registered content scripts match the current grant. Idempotent per group. */
+export async function syncContentScripts(): Promise<void> {
+  const matches = await grantedOrigins();
+  await syncGroup(INLINE_GROUP, matches);
+  await syncGroup(PASSKEY_GROUP, matches);
 }
