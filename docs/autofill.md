@@ -436,7 +436,7 @@ Opening a login field's menu on a site that has at least one saved login:
 2. Otherwise, if HavenKeys already holds a passkey the page may use
    (`passkey_status`, answered by `has_passkey_for_page`), the first row is
    a hint with no click action: "You have a passkey for `<site>`" / "Use the
-   site's 'Sign in with a passkey' option", ahead of the saved logins.
+   site’s “Sign in with a passkey” option", ahead of the saved logins.
 3. Otherwise, if the page matches an entry in the **Passkeys Directory**
    that has a help link, the last row is "`<name>` supports passkeys" /
    "How to add one". A click, through the menu's usual trusted-click guard,

@@ -135,8 +135,9 @@ kept in the item's history. `passkey_create` adds a passkey (see
 {"v":1,"id":10,"error":{"code":"denied","message":"This item is not saved for this website."}}
 ```
 
-`upgrade.kind` is `"none"`, `"ask"` or `"auto"`; `itemId` is present only for
-`"ask"` and `"auto"`, and is `"none"` whenever `conditional` was false.
+`upgrade.kind` is `"none"`, `"ask"` or `"auto"`. `itemId` is present only
+when `kind` is `"ask"` or `"auto"`; `kind` is `"none"` whenever `conditional`
+was false (and whenever `excluded` is true).
 
 `id` is `null` only when a request was so broken that its ID could not be
 read.
