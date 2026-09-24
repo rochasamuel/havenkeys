@@ -430,6 +430,31 @@ impl VaultService {
         })
     }
 
+    /// Does the vault hold any passkey this page may use (its rpId passes
+    /// `authorize_rp` for the page)? Nothing else about it is returned. A
+    /// login whose details do not open is skipped.
+    pub fn has_passkey_for_page(&self, page_url: &str, top_url: Option<&str>) -> Result<bool> {
+        let session = self.session()?;
+        let holders: Vec<Uuid> = session
+            .overviews
+            .values()
+            .filter(|o| o.item_type == ItemType::Login && o.has_passkey)
+            .map(|o| o.id)
+            .collect();
+        for id in holders {
+            let Ok(ItemDetails::Login { passkeys, .. }) = self.load_details(&id) else {
+                continue;
+            };
+            if passkeys
+                .iter()
+                .any(|p| authorize_rp(&p.rp_id, page_url, top_url).is_ok())
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Public details of a login's passkeys, for the desktop app.
     pub fn list_passkeys(&self, item_id: &Uuid) -> Result<Vec<PasskeyInfo>> {
         match self.load_details(item_id)? {
