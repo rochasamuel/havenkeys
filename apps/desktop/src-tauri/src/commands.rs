@@ -26,6 +26,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 const DEFAULT_CLIPBOARD_CLEAR_SECS: u32 = 30;
+/// How long the unlock fallback waits for the server's KDF parameters.
+const FALLBACK_PARAMS_TIMEOUT: Duration = Duration::from_secs(3);
 
 // ------------------------------------------------------------------ lifecycle
 
@@ -117,12 +119,15 @@ pub async fn unlock_vault(
                 state.notify_unlocked();
                 Ok(status)
             }
-            Err(err) => Err(err),
+            // The epoch as of this failure, under the same guard: a lock
+            // requested while the fallback runs advances it, and the
+            // adoption is then refused.
+            Err(err) => Err((err, v.epoch())),
         }
     };
     let status = match unlocked {
         Ok(status) => status,
-        Err(err) => {
+        Err((err, epoch)) => {
             let Some(sk_text) = key_text_for_fallback.filter(|_| err.code() == "unlock_failed")
             else {
                 return Err(err.into());
@@ -131,7 +136,7 @@ pub async fn unlock_vault(
             // device's header still has the old salt. Ask the server. Any
             // failure below is reported as the original wrong password, so a
             // caller learns nothing about which step failed.
-            return match unlock_from_server(&app, password_for_fallback, sk_text).await {
+            return match unlock_from_server(&app, password_for_fallback, sk_text, epoch).await {
                 Ok(status) => {
                     remember_typed_secret_key(&state, key_text);
                     Ok(status)
@@ -176,6 +181,7 @@ async fn unlock_from_server(
     app: &AppHandle,
     password: SecretString,
     secret_key_text: SecretString,
+    epoch: u64,
 ) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
     let account = state
@@ -185,7 +191,15 @@ async fn unlock_from_server(
         .to_ref()?;
     let local_kdf = state.vault()?.kdf()?;
     let client = sync::client(&state)?;
-    let params = client.auth_params(account.email.as_str()).await?;
+    // Short, because this runs on every wrong password: an unreachable server
+    // must not hold the unlock screen for the transport's full timeout. The
+    // later requests keep the normal ones; the server has answered by then.
+    let params = tokio::time::timeout(
+        FALLBACK_PARAMS_TIMEOUT,
+        client.auth_params(account.email.as_str()),
+    )
+    .await
+    .map_err(|_| havenkeys_core::Error::UnlockFailed)??;
     // Same parameters as the local header means the password really is
     // wrong: no change was made elsewhere, so there is nothing to fetch.
     // Another account ID means the server is not the one this vault knows.
@@ -219,7 +233,7 @@ async fn unlock_from_server(
     .map_err(|_| CmdError::internal())??;
     let status = {
         let mut v = state.vault()?;
-        v.adopt_and_unlock(prepared)?;
+        v.adopt_and_unlock(prepared, epoch)?;
         let opened = v
             .settings()
             .and_then(|s| Ok((s.auto_lock_minutes, v.status()?)));
@@ -336,11 +350,18 @@ pub async fn change_master_password(
         )
         .await
         .map_err(|e| credential_change_conflict(&e).unwrap_or_else(|| sync::failed(&app, e)))?;
-    // The server has it. If this commit fails (the vault was locked in the
-    // meantime), the next sync adopts the header from the server instead.
+    // The server has it; from here on the change has happened.
     let revision = u64::try_from(revision).map_err(|_| CmdError::internal())?;
-    state.vault()?.commit_rekey(ticket, Ok(rekeyed), revision)?;
-    Ok(())
+    let committed = state.vault()?.commit_rekey(ticket, Ok(rekeyed), revision);
+    match committed {
+        // `Busy`: a background sync already adopted this very header from
+        // the server. `Locked`: the vault was locked meanwhile; the next
+        // unlock (via the server fallback) or sync adopts it. Either way the
+        // change succeeded, and saying otherwise would send the user back to
+        // a password that no longer works.
+        Ok(()) | Err(havenkeys_core::Error::Busy | havenkeys_core::Error::Locked) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// A 409 on a credential change: the header moved on the server since this

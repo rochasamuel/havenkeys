@@ -23,6 +23,8 @@ havenkeys-sync-client = { path = "../../../crates/havenkeys-sync-client" }
 # No Tauri plugins: no fs, shell, http, dialog, opener or clipboard plugin.
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
+# Only for a timer (the unlock fallback); already in the tree through Tauri.
+tokio = { version = "1", features = ["time"] }
 serde_json = "1"
 uuid = { version = "1.20", features = ["serde"] }
 # Clipboard is handled in Rust so copied secrets never transit the renderer.

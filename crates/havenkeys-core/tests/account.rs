@@ -412,7 +412,7 @@ fn another_device_adopts_a_changed_password_at_unlock() {
     // ...but the header the server serves does, and it is adopted.
     let (prepared, _auth) =
         prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
-    two.adopt_and_unlock(prepared).unwrap();
+    two.adopt_and_unlock(prepared, two.epoch()).unwrap();
     assert!(two.is_unlocked());
     assert_eq!(two.header_revision().unwrap(), Some(1));
     assert_eq!(two.account().unwrap().unwrap().max_header_rev, 1);
@@ -432,7 +432,7 @@ fn adopt_and_unlock_refuses_an_old_or_foreign_header() {
     // Same revision as local (0): refused.
     let current = one.encode_account_header().unwrap();
     let (prepared, _) = prepare_sign_in(&current, &secret(PASSWORD), &sk, &account()).unwrap();
-    assert!(two.adopt_and_unlock(prepared).is_err());
+    assert!(two.adopt_and_unlock(prepared, two.epoch()).is_err());
     assert!(!two.is_unlocked());
 
     // A different vault, on a different account, at revision 1 — above
@@ -470,7 +470,10 @@ fn adopt_and_unlock_refuses_an_old_or_foreign_header() {
     .unwrap();
     assert_eq!(prepared.header_revision(), 1);
     assert_eq!(
-        two.adopt_and_unlock(prepared).err().unwrap().code(),
+        two.adopt_and_unlock(prepared, two.epoch())
+            .err()
+            .unwrap()
+            .code(),
         "unlock_failed"
     );
     assert!(!two.is_unlocked());
@@ -505,7 +508,7 @@ fn adopt_and_unlock_refuses_a_header_at_or_below_the_persisted_floor() {
         .unwrap();
     let served = one.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
     let (prepared, _) = prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
-    assert!(two.adopt_and_unlock(prepared).is_err());
+    assert!(two.adopt_and_unlock(prepared, two.epoch()).is_err());
     assert!(!two.is_unlocked());
     assert_eq!(two.header_revision().unwrap(), Some(0));
 }
@@ -527,7 +530,9 @@ fn adopt_and_unlock_refuses_unless_locked() {
     let served = one.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
     let (prepared, _) = prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
     assert_eq!(
-        two.adopt_and_unlock(prepared).unwrap_err().code(),
+        two.adopt_and_unlock(prepared, two.epoch())
+            .unwrap_err()
+            .code(),
         havenkeys_core::Error::Busy.code()
     );
     assert_eq!(two.header_revision().unwrap(), Some(0));
@@ -588,4 +593,33 @@ fn kdf_reports_the_local_header_params_even_while_locked() {
     assert_eq!(vault.kdf().unwrap(), Some(expected));
     let empty = VaultService::new(Store::open_in_memory().unwrap());
     assert_eq!(empty.kdf().unwrap(), None);
+}
+
+#[test]
+fn adopt_and_unlock_refuses_if_the_vault_was_locked_meanwhile() {
+    let (one, sk) = common::activated_vault();
+    let mut two = locked_second_device(&one, &sk);
+    // The epoch is taken when the local unlock fails; a lock requested while
+    // the fallback talks to the server must win.
+    let epoch = two.epoch();
+    let ticket = one.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &sk,
+            &account(),
+        )
+        .unwrap();
+    let served = one.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    let (prepared, _) = prepare_sign_in(&served, &secret(NEW_PASSWORD), &sk, &account()).unwrap();
+    two.lock();
+    assert_eq!(
+        two.adopt_and_unlock(prepared, epoch).unwrap_err().code(),
+        havenkeys_core::Error::Locked.code()
+    );
+    assert!(!two.is_unlocked());
+    assert_eq!(two.header_revision().unwrap(), Some(0));
+    assert_eq!(two.account().unwrap().unwrap().max_header_rev, 0);
 }

@@ -717,9 +717,17 @@ impl VaultService {
     /// `prepare_sign_in`'s attestation check under the vault key it unwraps.
     /// The rollback floor is the same as `adopt_account_header`'s, so a
     /// hostile server cannot replay an older genuine header.
-    pub fn adopt_and_unlock(&mut self, prepared: PreparedVault) -> Result<()> {
+    ///
+    /// `epoch` is [`Self::epoch`] as read when the local unlock failed. The
+    /// caller spends seconds on the network and Argon2id in between with the
+    /// vault LOCKED; a lock requested meanwhile (screen lock, auto-lock,
+    /// window close) advances the epoch, and must win: refused with `Locked`.
+    pub fn adopt_and_unlock(&mut self, prepared: PreparedVault, epoch: u64) -> Result<()> {
         if self.state != VaultState::Locked {
             return Err(Error::Busy);
+        }
+        if epoch != self.epoch {
+            return Err(Error::Locked);
         }
         let local = self.store.header()?.ok_or(Error::NoVault)?;
         let floor = self
