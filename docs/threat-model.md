@@ -261,6 +261,24 @@ public data and the user's click. New or changed threats:
   only the 400 ms delay applies, so a page could trick a click on its *own*
   passkey prompt. *Residual:* the result is a sign-in or a new passkey for
   that page's own rpId, nothing else (`security-review.md` PK7).
+* **Presence probing.** A page can list credential IDs in
+  `excludeCredentials` or `allowCredentials` and watch what happens, to learn
+  whether HavenKeys holds a passkey for one of its accounts. *Mitigation:* an
+  excluded credential is reported (`InvalidStateError`) only after the user
+  clicks **Close** on the "already saved" card, never at once. *Residual:*
+  a card appearing, or the field menu answering a conditional request, shows
+  that HavenKeys has something for the site; with `allowCredentials`, a
+  chooser versus an immediate fallback tells whether a listed credential is
+  held. The page learns this only about its own rpId (`security-review.md`
+  PK19).
+* **Lost sessions.** A Manifest V3 worker can be suspended, losing every
+  passkey session, and Firefox unloads the isolated bridge (not the page
+  script) when the extension is disabled or updated. *Mitigation:* the
+  bridge pings its session every 20 s and falls back (modal) or asks again
+  (conditional) when it is gone; the page script falls back to the browser
+  when no bridge acknowledges within 1 s and has its own ceiling; a card
+  whose session is gone can still be closed. *Residual:* none known beyond
+  the delay (`security-review.md` PK17, PK20).
 
 ## 4. Out of scope (not defended)
 
@@ -319,3 +337,5 @@ public data and the user's click. New or changed threats:
 | A3p | Vault locked, passkey sign-in or creation requested | `locked`; nothing signed or created | `crates/havenkeys-core/tests/passkeys.rs` (`attack_locked_vault_is_refused`), `crates/havenkeys-bridge/tests/bridge.rs` |
 | A16 | Page forges or oversizes a WebAuthn request (challenge, user handle, rpId, credential lists, unknown fields) | Handed to the browser by the page script, or rejected by the bridge parser, the native host and the Rust protocol | `apps/extension/src/webauthn/page.test.ts`, `messages.test.ts`, `crates/havenkeys-protocol/tests/messages.rs` (`passkey_requests_are_bounded`) |
 | A17 | Page tries to get a passkey signature without a click in the extension's frame | No signature: only a pick from the passkey frame or the field menu signs | `apps/extension/src/background/webauthn-handler.test.ts` |
+| A18 | Page probes `excludeCredentials` to learn, without a click, whether HavenKeys holds one of its accounts' passkeys | No answer until the user clicks **Close** on the "already saved" card | `apps/extension/src/background/webauthn-handler.test.ts` ("reports an excluded credential only after the user closes the card") |
+| A19 | Page fires WebAuthn requests in a loop to drain the desktop's lookup rate limit | One lookup per tab at a time; the rest go to the browser | `apps/extension/src/background/webauthn-handler.test.ts` ("allows one wa_get/wa_create lookup in flight per tab") |

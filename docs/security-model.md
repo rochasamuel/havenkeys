@@ -479,7 +479,7 @@ in `autofill.md` §Passkeys, and the threats in `threat-model.md` T8.
   (https, or http on `localhost`), an rpId equal to the frame's host or a
   parent of it within the host's registrable domain (never a public suffix;
   an IP only when it is the host itself), and, for an iframe, a top page
-  that is same-site with the frame. A signature needs a passkey whose stored
+  that is same-site with the frame and itself a secure context. A signature needs a passkey whose stored
   rpId equals the authorized one. The page's `rpId` is otherwise just input.
 * **`clientDataJSON` is built in Rust** from the origin `authorize_rp`
   derived from the browser-reported URL, so the extension cannot choose the
@@ -495,14 +495,28 @@ in `autofill.md` §Passkeys, and the threats in `threat-model.md` T8.
 * **Sessions** bind the token to the tab, frame, `documentId` (Chromium) and
   origin of the requesting frame. They end on a result, on cancel, on the
   site's `AbortSignal`, on the page's `pagehide`, after the site's timeout
-  (at most 5 minutes; 30 minutes for conditional requests), when the tab
-  closes, and when the vault locks or the desktop goes away. A card opened
-  while the vault was locked shows "locked" and refreshes when the desktop
-  reports `unlocked` (if the extension's native port is still open;
-  `security-review.md` PK12).
+  (clamped to 10 seconds – 5 minutes; 30 minutes for conditional requests),
+  when the tab closes, and when the vault locks or the desktop goes away. A
+  card opened while the vault was locked shows "locked"; each time it polls,
+  the background looks the passkeys up again, so it updates on unlock even
+  after the native port has closed. The bridge pings its session every 20 s,
+  which keeps the Manifest V3 worker awake and detects a session lost to a
+  worker restart: a conditional request is then asked for again, a modal
+  one goes to the browser. The page script falls back to the browser when
+  the bridge does not acknowledge a request within 1 s.
+* **No presence answer without a click.** When the site's
+  `excludeCredentials` names a passkey HavenKeys holds, the card says so and
+  the site gets `InvalidStateError` only after the user clicks **Close**.
+  Signals that remain are listed in `security-review.md` PK19.
+* **Lookup budget.** One `get()`/`create()` lookup per tab at a time; another
+  from the same tab meanwhile goes to the browser, so a page cannot drain the
+  desktop's shared lookup rate limit.
 * **Fallback.** Every failure the user did not choose — the desktop not
   running, locked for a conditional request, integration off, no matching
-  passkey, a request HavenKeys does not support, an internal error — hands
+  passkey, an rpId the desktop does not allow for the page (the browser
+  applies its own rule and raises `SecurityError` itself, or serves related
+  origins and permitted cross-site frames), a request HavenKeys does not
+  support, an internal error — hands
   the call to the browser's own `navigator.credentials`, so the site behaves
   as if HavenKeys were not installed. The user can also choose "Use another
   device".

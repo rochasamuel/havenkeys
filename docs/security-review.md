@@ -800,14 +800,19 @@ versions. All of them are listed below.
 | PK6 | Low | Extension | One passkey session per tab: a granted-host iframe can abort the top frame's request | Accepted (denial of service only) |
 | PK7 | Low | Extension | Firefox has only the time-based click guard, so a page can clickjack its own `passkey.html#token` | Accepted (page's own rpId only) |
 | PK8 | Low | Core | IP-address rpIds are accepted when they equal the page host, although browsers refuse WebAuthn there | Accepted |
-| PK9 | Low | Core | `authorize_rp` does not check that the top-level page is a secure context | Open (one-line fix) |
+| PK9 | Low | Core | `authorize_rp` does not check that the top-level page is a secure context | **Fixed** (final review) |
 | PK10 | Info | Core | `clientDataJSON` strings are escaped with `serde_json`, not WebAuthn's `CCDToString` | Accepted; the bytes are identical for every value that can occur |
-| PK11 | Low | Extension | `pagehide` cancels conditional requests, so a page restored from the back/forward cache loses passkey autofill until it asks again | Accepted |
-| PK12 | Low | Extension | Lock and unlock events arrive only while the native port is open, and it closes after 60 s idle. A locked card may never refresh, and a card may outlive a lock | Open |
+| PK11 | Low | Extension | `pagehide` cancels conditional requests, so a page restored from the back/forward cache loses passkey autofill until it asks again | **Fixed** (final review): the site's promise is left to the browser's own conditional request |
+| PK12 | Low | Extension | Lock and unlock events arrive only while the native port is open, and it closes after 60 s idle. A locked card may never refresh, and a card may outlive a lock | **Fixed** (final review): the card's polling re-runs the lookup; a card that outlives a lock still fails closed |
 | PK13 | Info | Extension / core | If the site aborts a `create()` after the server accepted it, the vault keeps a passkey the site never registered | Accepted; visible and deletable in the desktop |
 | PK14 | Info | Extension | The save card shows the account name the site chose (up to 512 characters) | Accepted |
 | PK15 | Info | Core | The redacting `Debug` of `Registration`, `Assertion`, `StagedPasskey` and `PasskeyMatch` was confirmed by reading the code; only `Passkey` has a test | Accepted |
 | PK16 | Info | Deps | New dependencies: `p256` 0.14 and its RustCrypto tree, plus `ciborium` (dev only) | Audited below: no advisories, licenses allowed |
+| PK17 | Medium | Extension | The MV3 worker can be suspended once the native port idles out, losing every passkey session: conditional passkeys vanish, and a modal card cannot be closed | **Fixed** (final review) |
+| PK18 | Low | Extension | A desktop `denied` became `SecurityError`, breaking paths the browser allows (related origins, permitted cross-site iframes) | **Fixed** (final review): fallback |
+| PK19 | Low | Extension | `excludeCredentials` answered `InvalidStateError` at once, so any page could probe which of its accounts HavenKeys holds without a click | **Fixed** (final review); remaining signals accepted |
+| PK20 | Low | Extension | With the isolated bridge gone (Firefox unloads it on disable/update) the page's promise never settled | **Fixed** (final review) |
+| PK21 | Low | Extension / bridge | A page could drain the desktop's shared lookup rate limit with WebAuthn calls, and a site timeout of 0 closed the card at once | **Fixed** (final review) |
 
 ## Details
 
@@ -888,7 +893,7 @@ WebAuthn on IP hosts, so HavenKeys is more permissive than the platform
 here. No other site's passkey is reachable, because the stored rpId must
 equal the host.
 
-### PK9. Top page's scheme not checked (Low, open)
+### PK9. Top page's scheme not checked (Low, fixed)
 For an iframe, `authorize_rp` requires the frame to be a secure context and
 same-site with the top page. It does not require the top page to be a secure
 context, and `same_site` compares hosts, not schemes. So an
@@ -896,7 +901,9 @@ context, and `same_site` compares hosts, not schemes. So an
 signature, with `crossOrigin: true` and an `http:` `topOrigin` in
 `clientDataJSON`. Browsers treat such a frame as a non-secure context and
 refuse WebAuthn. The impact stays within the same site, and a relying party
-can reject the `topOrigin`. Fix: apply `secure_context` to the top URL too.
+can reject the `topOrigin`. **Fixed** in the final review: `authorize_rp`
+applies `secure_context` to the top URL too (test
+`frames_must_be_same_site_with_the_top_page`).
 
 ### PK10. clientDataJSON escaping (Info, accepted)
 Values are escaped with `serde_json`. WebAuthn's `CCDToString` escapes
@@ -905,16 +912,22 @@ of those can occur here: the type is fixed, the challenge is base64url, and
 origins are ASCII serializations. The test `client_data_is_exact` pins the
 bytes. See `crypto.md` §Passkeys.
 
-### PK11. Back/forward cache (Low, accepted)
+### PK11. Back/forward cache (Low, fixed)
 The bridge cancels every pending request on `pagehide`, and `pagehide` also
 fires when a page enters the back/forward cache. So when a page is restored,
 its conditional `get()` has already been rejected with `AbortError`, and
 HavenKeys passkeys no longer appear in its field menu until the page calls
-`get()` again. In that path the wrapper also does not abort the browser's own
-conditional request, which keeps running with nobody waiting for its
-result.
+`get()` again. In that path the wrapper also did not abort the browser's own
+conditional request, which kept running with nobody waiting for its result.
+**Fixed** in the final review: an `AbortError` on HavenKeys' side that the
+site did not cause (`pagehide`, or a newer request replacing ours) no longer
+rejects the site's promise. It is left to the browser's own conditional
+request, which is still running and can answer it. Only the site's own
+abort rejects and stops both. **Remaining:** after a restore from the cache,
+HavenKeys' passkeys are missing from the field menu until the page calls
+`get()` again.
 
-### PK12. Events need an open native port (Low, open)
+### PK12. Events need an open native port (Low, fixed)
 The background learns of `locked` and `unlocked` only while its port to the
 native host is open. It closes the port after 60 s without a request (H3 is
 the same effect for save prompts). While a card is open, it polls the
@@ -925,8 +938,10 @@ follow:
 * A card that is open when the vault locks stays up. A pick or save from it
   is refused by the desktop with `locked`.
 
-Both fail closed. Fix: keep the port open while a passkey session exists, or
-re-run the lookup on `pk_state` while a session is locked.
+Both fail closed. **Fixed** in the final review: `pk_state` on a locked
+session re-runs the lookup (once at a time), so the card's own 1.5 s polling
+turns it into the chooser or save card after an unlock, whether or not the
+`unlocked` event arrived. The second point remains and fails closed.
 
 ### PK13. Orphan passkey after a late abort (Info, accepted)
 The page may abort after the user clicked Save and the server accepted the
@@ -946,6 +961,77 @@ impls exist and are correct. Only `Passkey`'s has a unit test.
 
 ### PK16. Dependencies (Info)
 See Audits.
+
+### PK17. Worker suspension lost passkey sessions (Medium, fixed)
+Sessions live in the background worker's memory. The native port closes
+after 60 s idle, and an MV3 worker is then suspended about 30 s later,
+dropping every session. Conditional passkeys vanished from the field menu on
+a login page left open for about 90 s. A modal card got "This prompt has
+expired." on every button, could not be closed, and the page waited for the
+bridge's timer (up to 5 min 10 s). **Fix:** the bridge pings its session
+every 20 s (`wa_ping`, validated like `wa_cancel`, answered only for a live
+session of the same frame). The ping keeps the worker awake. When the
+session is gone, a conditional request is sent again with the options the
+bridge kept (if that yields a fallback, the browser's own leg carries on),
+and a modal request ends in a fallback and its card is removed. A card
+whose session is gone can still be closed at once: Cancel, Escape, Close
+and "Use another device" for an unknown token make the background send the
+result to every frame of the card's tab; only the bridge that holds the
+128-bit token (the card and the bridge know it) acts on it, and a finished
+request is no longer pending there. Tests: `webauthn-handler.test.ts`
+("worker suspension"), `bridge.test.ts` ("lost sessions"),
+`menu/passkey.test.ts`.
+
+### PK18. `denied` became `SecurityError` (Low, fixed)
+The design (§7.4) answered an rpId the desktop does not allow with
+`SecurityError`. `authorize_rp` is stricter than browsers in two places:
+Related Origin Requests, and cross-site iframes the top page permitted with
+`allow="publickey-credentials-get"`. Both are legitimate and the browser
+would serve them. **Fix:** `denied` falls back to the browser everywhere in
+the background handler (initial lookup and the lookup after an unlock). The
+browser applies the same rpId rule and raises `SecurityError` itself where
+it applies, so the site sees what it would see without HavenKeys.
+
+### PK19. Presence probing through `excludeCredentials` (Low, fixed; residual accepted)
+**Attack scenario:** a page calls `create()` with a guessed or known
+credential ID in `excludeCredentials`. HavenKeys answered `InvalidStateError`
+at once when the vault held it, and fell through otherwise, so the page
+learned, without any click, whether the user's HavenKeys holds that
+account's passkey. **Fix:** the create card opens in an "already saved"
+state ("A passkey for this account is already saved in HavenKeys") with
+**Close** and **Use another device**. Only a guarded click on Close
+finishes with `InvalidStateError`; "Use another device" hands the request to
+the browser; Escape, the timeout or the site's abort give the usual
+`NotAllowedError`/`AbortError`. **Remaining (accepted):** a frame appearing
+reveals that HavenKeys has something for the site (as for the menu); for a
+`get()` with `allowCredentials`, a chooser versus an immediate fallback tells
+the page whether one of the listed credentials is in HavenKeys. In every
+case the page learns this only about its own rpId, which a platform
+authenticator's UI reveals in similar ways.
+
+### PK20. Page promise hung without the bridge (Low, fixed)
+Firefox unloads an extension's isolated content scripts when it is disabled
+or updated but leaves the MAIN-world wrapper in open pages. A WebAuthn call
+there was sent to no one and never settled. **Fix:** the bridge acknowledges
+each valid request synchronously (`{id, outcome: "ack"}`, parsed strictly).
+Without an acknowledgement within 1 s, the wrapper hands a modal or create
+request to the browser, and ends only its own leg of a conditional one. An
+acknowledged modal request that is never answered ends with
+`NotAllowedError` after the clamped timeout plus 15 s (no ceiling for
+conditional requests). The wrapper uses `setTimeout`/`clearTimeout`
+captured before page script runs. Tests: `page.test.ts` ("missing or silent
+bridge").
+
+### PK21. Lookup budget and tiny timeouts (Low, fixed)
+The desktop's lookup rate limit is shared by every connection. A page could
+fire `get()`/`create()` in a loop and use it up, starving the field menu.
+**Fix:** at most one `wa_get`/`wa_create` lookup in flight per tab; another
+meanwhile falls back at once without reaching the desktop. Separately, a
+site `timeout` of 0 or 1000 ms closed the chooser before anyone could read
+it. Site timeouts are now clamped to 10 s – 5 min wherever they drive our
+UI or session timers (page ceiling, bridge timer, background session TTL).
+Also in this wave: `list_passkeys` (desktop) no longer resets the auto-lock
+timer, like `list_items`.
 
 The per-task reviews also deferred some minor items that are not security
 findings. They are tracked in the development ledger, not here. Examples:
@@ -1076,6 +1162,8 @@ in-page suggestions (the host grant).
 | M9 | Offline create: stop the server, then create. The card shows the offline message, nothing is stored, and "Use another device" works | Not yet run | Not yet run |
 | M10 | Locked vault: a modal request shows the locked card, and unlocking within 60 s turns it into the chooser or save card. A conditional request shows only the browser's UI | Not yet run | Not yet run |
 | M11 | Locking the vault while the card is open closes it with `NotAllowedError`. After the port idles out, a pick is refused as locked instead (PK12) | Not yet run | Not yet run |
+| M16 | Leave a login page with a conditional request open for 3 minutes: HavenKeys passkeys are still in the field menu. Open a modal chooser, stop the worker from the browser's extension page: the card closes within 20 s (or at once on Cancel) and the browser's own UI takes over (PK17) | Not yet run | Not yet run |
+| M17 | A site whose `excludeCredentials` names a HavenKeys passkey: the "already saved" card appears, and the site reports "already registered" only after **Close** (PK19) | Not yet run | Not yet run |
 | M12 | A site with a strict CSP (for example github.com): the MAIN-world script runs and the passkey frame loads | Not yet run | Not yet run |
 | M13 | Desktop: the login shows its passkey (site, account, created date) and the list shows the badge. Deleting the passkey asks for confirmation, and afterwards the site no longer accepts it | Not yet run | Not yet run |
 | M14 | Re-registering the same account replaces the passkey (one entry in the desktop), and the site accepts the new one | Not yet run | Not yet run |

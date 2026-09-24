@@ -299,6 +299,14 @@ page. See `security-model.md` §12 and `autofill.md`.
   pending save prompts (which hold the submitted password), and remembered
   usernames from a first login step live in worker memory with short
   lifetimes. They are dropped on `locked` and `disconnected` events.
+* Passkey sessions also live in worker memory. The bridge pings its session
+  (`wa_ping`, answered `{ok: true}` only for a live session of the same
+  frame) every 20 s, which keeps the worker awake and detects a session lost
+  to a worker restart. A card whose session is gone can still be closed: the
+  worker then sends the result to every frame of the card's tab, and only
+  the bridge holding that token acts on it. One `wa_get`/`wa_create` lookup
+  runs per tab at a time; another meanwhile gets a fallback without reaching
+  the host, so a page cannot drain the shared lookup rate limit.
 * All extension UI builds its DOM with `createElement`/`textContent`. A test
   (`src/hygiene.test.ts`) fails the build on `innerHTML`, `console`, `eval`,
   browser storage, or `value`/`data-` attributes.

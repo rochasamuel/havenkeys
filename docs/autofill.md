@@ -361,8 +361,13 @@ goes through the bridge to the background, which asks the desktop.
 ### Create
 
 1. The desktop is asked whether the site's `excludeCredentials` names a
-   passkey already in the vault. If so, the site gets `InvalidStateError` and
-   no card appears.
+   passkey already in the vault. If so, the card opens saying "A passkey for
+   this account is already saved in HavenKeys", with **Close** and **Use
+   another device**. Only a click on **Close** gives the site
+   `InvalidStateError`; **Use another device** hands the request to the
+   browser, and Escape or the timeout give `NotAllowedError`. The site is
+   not told at once, so a page cannot learn without a click which of its
+   accounts HavenKeys holds (`security-review.md` PK19).
 2. Otherwise the save card opens: the site, the account name the site sent,
    and a choice of **Add to "…"** for each login saved for this page (at most
    8 passkeys per login; the one with the same username first) or **New
@@ -383,13 +388,15 @@ do the same.
 | Situation | What the site sees |
 |---|---|
 | Desktop not running, integration off, internal error, nothing to offer | The browser's own WebAuthn, as if HavenKeys were not installed |
-| Vault locked, modal request | A card saying HavenKeys is locked; it updates to the real chooser or save card when the desktop reports the vault unlocked. **Use another device** still works |
+| Vault locked, modal request | A card saying HavenKeys is locked; it updates to the real chooser or save card once the vault is unlocked (the card asks every 1.5 s, and the background looks the passkeys up again each time). **Use another device** still works |
 | Vault locked, conditional request | The browser's own conditional UI only; the page has to ask again after unlock |
 | Offline during create | The card shows that HavenKeys is offline and stays open; nothing is stored. **Use another device** still works |
-| `rpId` not allowed for the page (checked in Rust) | `SecurityError` |
+| `rpId` not allowed for the page (checked in Rust) | The browser's own WebAuthn, which applies the same rule and raises `SecurityError` itself, or serves the paths it allows and HavenKeys does not (related origins, permitted cross-site iframes) |
 | Site aborts (`AbortSignal`) | The card closes; the site's own abort reason |
-| Site's timeout (capped at 5 minutes) passes | The card closes; `NotAllowedError` |
-| Page leaves (`pagehide`, including entering the back/forward cache), or removes, hides or moves the card's frame | Request cancelled (`AbortError` on `pagehide`, `NotAllowedError` for the frame) |
+| Site's timeout (clamped to 10 seconds – 5 minutes) passes | The card closes; `NotAllowedError` |
+| Page leaves (`pagehide`, including entering the back/forward cache), or removes, hides or moves the card's frame | Request cancelled (`AbortError` on `pagehide`, `NotAllowedError` for the frame). For a conditional request only HavenKeys' side ends; the browser's own conditional request still answers the site |
+| Extension disabled or updated while the page stays open (the page script remains, the bridge is gone) | No acknowledgement within 1 s: the browser's own WebAuthn |
+| Background worker restarted, losing the session | Modal: the browser's own WebAuthn (within 20 s, or at once when the user clicks Cancel or **Use another device** on the card). Conditional: HavenKeys asks again |
 | Vault locks while the card is open | The card closes; `NotAllowedError` |
 
 ### Sessions
@@ -400,7 +407,23 @@ and origin of the frame that asked. Picks are accepted only for passkeys or
 logins the session offered, one at a time. A new request in the same tab
 ends the previous one with `AbortError`. The token is visible to the page
 (as for the menu); what it cannot do is change which origin the desktop
-checks.
+checks. While one `get()`/`create()` lookup is in flight for a tab, another
+from the same tab falls back to the browser at once, so a page that fires
+requests in a loop cannot use up the desktop's shared lookup budget.
+
+Sessions live in the background worker's memory, and a Manifest V3 worker
+can be suspended when idle. The bridge therefore pings its session every
+20 s (`wa_ping`), which keeps the worker awake and tells the bridge when the
+session is gone anyway. A lost conditional session is requested again with
+the options the bridge kept; a lost modal one ends in the browser's own
+WebAuthn and the card is removed. A card whose session is gone can still be
+closed: Cancel, Escape, **Close** and **Use another device** are then sent
+to every frame of the tab, and only the bridge holding that token acts.
+
+The bridge acknowledges each request synchronously. The page script falls
+back to the browser when no acknowledgement comes within 1 s (no bridge), and
+ends an acknowledged modal request that is never answered with
+`NotAllowedError` after the clamped timeout plus 15 s.
 
 ## Permissions and injection
 
@@ -456,15 +479,20 @@ See `security-model.md` §12.
   rpId.
 * **One passkey request per tab.** A granted iframe that calls WebAuthn ends
   the top page's pending request (and the reverse). Denial of service only.
-* **Back/forward cache.** Leaving a page cancels its passkey requests, so a
-  page restored from the cache has no HavenKeys passkey autofill until it
-  calls `get()` again.
-* **Lock and unlock events need an open native port.** The extension closes
-  its port to the host after 60 s without a request, and then hears no
-  events. A locked card left open longer than that does not update when the
-  vault is unlocked (cancel and retry), and a card open when the vault locks
-  stays up until it is used or expires; using it then gets "HavenKeys is
-  locked" from the desktop (`security-review.md` PK12).
+* **Back/forward cache.** Leaving a page cancels HavenKeys' side of its
+  passkey requests, so a page restored from the cache has no HavenKeys
+  passkey autofill until it calls `get()` again. The browser's own
+  conditional request is left running and can still answer the site.
+* **Lock events need an open native port.** The extension closes its port to
+  the host after 60 s without a request, and then hears no events. A card
+  open when the vault locks stays up until it is used or expires; using it
+  then gets "HavenKeys is locked" from the desktop. A locked card does
+  update on unlock, because its own polling re-runs the lookup.
+* **Signals visible to the page (passkeys).** A card appearing, or a
+  conditional request answered by the field menu, shows the page that
+  HavenKeys has something for the site. With `allowCredentials`, a chooser
+  versus an immediate fallback to the browser tells the page whether one of
+  the listed credentials is in HavenKeys (`security-review.md` PK19).
 * **No WebAuthn extensions** (PRF, largeBlob, credProps, …), no attestation
   other than `none`, and no hybrid (phone) transport from HavenKeys itself;
   **Use another device** reaches the browser's own.

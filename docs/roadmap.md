@@ -161,7 +161,5 @@ for websites. Later work on them:
 * **OS credential-provider integration** (Windows, macOS, Android), so
   passkeys work outside the extension's granted sites and in native apps.
   Not possible on Linux today.
-* Smaller follow-ups tracked in `security-review.md` (Passkeys): the
-  locked-card refresh after the native port idles out (PK12), a top-page
-  secure-context check (PK9), and confirming a re-registration before
-  replacing a working passkey (PK5).
+* Smaller follow-ups tracked in `security-review.md` (Passkeys): confirming
+  a re-registration before replacing a working passkey (PK5).

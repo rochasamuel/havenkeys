@@ -359,8 +359,9 @@ extension chooses the origin that gets signed:
 
 Keys are in the order of WebAuthn §5.8.1.1 (limited verification algorithm).
 `crossOrigin` is true, and `topOrigin` present, only for an iframe whose
-origin differs from the top page's (same-site frames only; a cross-site frame
-is refused before this point). Challenges are 1–1024 bytes.
+origin differs from the top page's (same-site frames in a secure top page
+only; a cross-site frame, or one in an `http:` top page, is refused before
+this point). Challenges are 1–1024 bytes.
 
 String values are escaped with `serde_json`, not with the spec's
 `CCDToString`. The two differ only for characters that never appear here:

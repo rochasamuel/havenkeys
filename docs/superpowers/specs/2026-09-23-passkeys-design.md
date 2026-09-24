@@ -188,7 +188,10 @@ cases.
 
 1. Site calls `create()`. The page script forwards it unless
    `pubKeyCredParams` lacks ES256 (then: fallback).
-2. `check_passkey_create`. If `excluded`, reply `InvalidStateError`.
+2. `check_passkey_create`. If `excluded`, the card says the passkey is
+   already saved and replies `InvalidStateError` only when the user clicks
+   **Close** (amended 2026-09-24, final review: an immediate reply let any
+   page probe which accounts HavenKeys holds; `security-review.md` PK19).
 3. The save card opens:
 
    ```text
@@ -233,7 +236,7 @@ cases.
 | Locked while the desktop is running | Chooser offers "Unlock HavenKeys" and "Use another device" |
 | Offline during create | Card: "Can't save while offline", plus fallback |
 | No ES256 in `pubKeyCredParams` | Fallback |
-| `rpId` not allowed for the origin | `SecurityError`; nothing sent to the desktop |
+| `rpId` not allowed for the origin | Fallback: the browser applies the same rule and raises `SecurityError` itself, and keeps the paths it allows that HavenKeys does not (related origins, permitted cross-site iframes). Amended 2026-09-24, final review (`security-review.md` PK18) |
 | Site aborts (`AbortSignal`) or timeout | Close UI, reply `AbortError` |
 | Unexpected internal error | Fallback; fixed `ErrorCode` messages, no data |
 
