@@ -99,6 +99,13 @@ pub(crate) fn registrable_domain_of(host: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The page's site: its registrable domain, or its host when it has none
+/// (an IP address, an unknown suffix).
+pub(crate) fn site_of(page: &PageUrl) -> Option<String> {
+    let host = host_key(page.url())?;
+    Some(registrable_domain_of(&host).unwrap_or(host))
+}
+
 fn scheme_allowed(rule: &Url, page: &Url) -> bool {
     // Never downgrade https → http; allow http → https.
     matches!(

@@ -405,7 +405,7 @@ fn github_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
 /// A1: a page on evil.com asks for the github.com credential.
 #[test]
 fn a1_wrong_origin_is_denied() {
-    let (v, id) = github_vault();
+    let (mut v, id) = github_vault();
     for page in [
         "https://evil.com/login",
         "https://github.com.evil.com/login",
@@ -415,7 +415,7 @@ fn a1_wrong_origin_is_denied() {
         "",
     ] {
         assert_eq!(
-            v.fill_for_page(&id, page, None).err(),
+            v.fill_for_page(&id, page, None, NOW).err(),
             Some(Error::Denied),
             "{page}"
         );
@@ -431,9 +431,9 @@ fn a1_wrong_origin_is_denied() {
 /// A2: arbitrary item IDs are only served for pages they match.
 #[test]
 fn a2_item_only_for_matching_origin() {
-    let (v, gh) = github_vault();
+    let (mut v, gh) = github_vault();
     let creds = v
-        .fill_for_page(&gh, "https://github.com/session", None)
+        .fill_for_page(&gh, "https://github.com/session", None, NOW)
         .unwrap();
     assert_eq!(creds.username.as_deref(), Some("octo"));
     assert_eq!(creds.password.unwrap().expose(), "gh-secret");
@@ -444,12 +444,13 @@ fn a2_item_only_for_matching_origin() {
     // The bank item exists but must not be served on github.com.
     let bank = v.find_matches("https://mybank.com/", None).unwrap()[0].id;
     assert_eq!(
-        v.fill_for_page(&bank, "https://github.com/", None).err(),
+        v.fill_for_page(&bank, "https://github.com/", None, NOW)
+            .err(),
         Some(Error::Denied)
     );
     // Unknown IDs.
     assert_eq!(
-        v.fill_for_page(&Uuid::new_v4(), "https://github.com/", None)
+        v.fill_for_page(&Uuid::new_v4(), "https://github.com/", None, NOW)
             .err(),
         Some(Error::NotFound)
     );
@@ -484,7 +485,8 @@ fn notes_and_locked_vault_are_never_served_to_pages() {
         .unwrap();
     let note = v.commit_write(staged, 3).unwrap().unwrap().id;
     assert_eq!(
-        v.fill_for_page(&note, "https://github.com/", None).err(),
+        v.fill_for_page(&note, "https://github.com/", None, NOW)
+            .err(),
         Some(Error::Denied)
     );
     v.lock();
@@ -493,7 +495,7 @@ fn notes_and_locked_vault_are_never_served_to_pages() {
         Some(Error::Locked)
     );
     assert_eq!(
-        v.fill_for_page(&gh, "https://github.com/", None).err(),
+        v.fill_for_page(&gh, "https://github.com/", None, NOW).err(),
         Some(Error::Locked)
     );
     assert_eq!(
@@ -508,7 +510,7 @@ fn notes_and_locked_vault_are_never_served_to_pages() {
 /// even though the frame itself is github.com.
 #[test]
 fn a1_frame_on_foreign_top_page_is_denied() {
-    let (v, gh) = github_vault();
+    let (mut v, gh) = github_vault();
     let frame = "https://github.com/login";
     for top in [
         "https://evil.com/",
@@ -521,7 +523,7 @@ fn a1_frame_on_foreign_top_page_is_denied() {
             "{top}"
         );
         assert_eq!(
-            v.fill_for_page(&gh, frame, Some(top)).err(),
+            v.fill_for_page(&gh, frame, Some(top), NOW).err(),
             Some(Error::Denied),
             "{top}"
         );
@@ -542,7 +544,8 @@ fn a1_frame_on_foreign_top_page_is_denied() {
         .fill_for_page(
             &gh,
             "https://github.com/login",
-            Some("https://gist.github.com/")
+            Some("https://gist.github.com/"),
+            NOW,
         )
         .is_ok());
     // An evil.com frame inside github.com is still evil.com.

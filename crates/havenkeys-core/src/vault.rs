@@ -18,7 +18,7 @@ use crate::model::{
     clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
     SecretField, SecretUpdate, Settings, UrlRule, MAX_PASSWORD_HISTORY,
 };
-use crate::origin::{match_item, MatchStrength, PageUrl};
+use crate::origin::{match_item, site_of, MatchStrength, PageUrl};
 use crate::secret::SecretString;
 use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
@@ -32,6 +32,11 @@ pub const FORMAT_VERSION: u32 = 1;
 pub const MIN_MASTER_PASSWORD_CHARS: usize = 10;
 pub const MAX_MASTER_PASSWORD_CHARS: usize = 1024;
 pub const MAX_SEARCH_QUERY_CHARS: usize = 256;
+/// How long a password fill counts as consent for a site's automatic
+/// passkey upgrade (see `passkey::Upgrade`).
+pub const UPGRADE_WINDOW_MS: i64 = 5 * 60_000;
+/// Recent fills kept per session.
+pub const MAX_RECENT_FILLS: usize = 16;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -60,6 +65,22 @@ pub(crate) struct Session {
     pub(crate) overviews: HashMap<Uuid, ItemOverview>,
     pub(crate) settings: Settings,
     pub(crate) damaged_items: usize,
+    pub(crate) recent_fills: Vec<RecentFill>,
+}
+
+/// A password HavenKeys filled: which login, on which site, when. In memory
+/// only, inside the session, so it is gone when the vault locks.
+pub(crate) struct RecentFill {
+    pub(crate) item_id: Uuid,
+    pub(crate) site: String,
+    pub(crate) filled_at_ms: i64,
+}
+
+impl RecentFill {
+    /// Within the window, and not from the future (a clock set back).
+    pub(crate) fn is_recent(&self, now_ms: i64) -> bool {
+        (0..=UPGRADE_WINDOW_MS).contains(&now_ms.saturating_sub(self.filled_at_ms))
+    }
 }
 
 /// Snapshot of what is needed to derive the KEK, taken under the vault lock
@@ -621,6 +642,7 @@ impl VaultService {
             overviews: HashMap::new(),
             settings,
             damaged_items: 0,
+            recent_fills: Vec::new(),
         });
         self.state = VaultState::Unlocked;
         Ok(())
@@ -721,6 +743,7 @@ impl VaultService {
             overviews,
             settings,
             damaged_items,
+            recent_fills: Vec::new(),
         })
     }
 
@@ -1077,12 +1100,14 @@ impl VaultService {
     }
 
     /// Username and password for filling the page. Denied unless the item's
-    /// own website rules match it.
+    /// own website rules match it. A returned password is remembered for
+    /// `UPGRADE_WINDOW_MS` as consent for the site's passkey upgrade.
     pub fn fill_for_page(
-        &self,
+        &mut self,
         id: &Uuid,
         page_url: &str,
         top_url: Option<&str>,
+        now_ms: i64,
     ) -> Result<FillCredentials> {
         let username = self
             .authorize_for_page(id, page_url, top_url)?
@@ -1092,7 +1117,26 @@ impl VaultService {
             ItemDetails::Login { password, .. } => password,
             ItemDetails::SecureNote { .. } => return Err(Error::Denied),
         };
+        if password.is_some() {
+            self.record_fill(*id, page_url, now_ms)?;
+        }
         Ok(FillCredentials { username, password })
+    }
+
+    fn record_fill(&mut self, item_id: Uuid, page_url: &str, now_ms: i64) -> Result<()> {
+        let Some(site) = PageUrl::parse(page_url).as_ref().and_then(site_of) else {
+            return Ok(());
+        };
+        let fills = &mut self.session_mut()?.recent_fills;
+        fills.retain(|f| f.is_recent(now_ms) && !(f.item_id == item_id && f.site == site));
+        fills.push(RecentFill {
+            item_id,
+            site,
+            filled_at_ms: now_ms,
+        });
+        let excess = fills.len().saturating_sub(MAX_RECENT_FILLS);
+        fills.drain(..excess);
+        Ok(())
     }
 
     /// Current TOTP code for filling the page. Same origin binding as

@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::model::{
     ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule,
 };
-use crate::origin::PageUrl;
+use crate::origin::{site_of, PageUrl};
 use crate::vault::{build_item, StagedWrite, Suggestion, VaultService};
 use serde::Serialize;
 use std::fmt;
@@ -39,6 +39,27 @@ impl fmt::Debug for PasskeyMatch {
     }
 }
 
+/// A site's automatic passkey upgrade (`create()` with conditional
+/// mediation), decided here and nowhere else. `Auto`: save to this login
+/// without asking; `Ask`: offer the save card with it preselected.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Upgrade {
+    None,
+    Ask(Uuid),
+    Auto(Uuid),
+}
+
+/// A site's `create()` request, as far as the checks before saving need it.
+pub struct CreateQuery<'a> {
+    pub rp_id: &'a str,
+    pub page_url: &'a str,
+    pub top_url: Option<&'a str>,
+    pub user_name: &'a str,
+    pub exclude: &'a [Vec<u8>],
+    /// `mediation: "conditional"`: the site's automatic upgrade.
+    pub conditional: bool,
+}
+
 /// Result of [`VaultService::check_passkey_create`].
 #[derive(Debug)]
 pub struct CreateCheck {
@@ -47,6 +68,8 @@ pub struct CreateCheck {
     /// Logins saved for the page that can take another passkey, the one
     /// with the same username first.
     pub candidates: Vec<Suggestion>,
+    /// The site's automatic upgrade, if any.
+    pub upgrade: Upgrade,
 }
 
 /// A site's `create()` request, after the bridge decoded it.
@@ -61,6 +84,9 @@ pub struct PasskeyCreate<'a> {
     /// Attach to this login (it must be saved for the page); `None` makes a
     /// new login.
     pub item_id: Option<Uuid>,
+    /// The site's automatic upgrade, saved without a click in HavenKeys UI.
+    /// Refused unless the upgrade decision is `Auto(item_id)`.
+    pub conditional: bool,
 }
 
 /// A passkey sealed into its login, ready to send. `registration` goes back
@@ -217,38 +243,82 @@ impl VaultService {
         assert(passkey, &ctx, challenge)
     }
 
-    /// Before asking the user: is one of the site's `excludeCredentials`
-    /// already here, and which logins could hold the new passkey?
-    pub fn check_passkey_create(
-        &self,
-        rp_id: &str,
-        page_url: &str,
-        top_url: Option<&str>,
-        user_name: &str,
-        exclude: &[Vec<u8>],
-    ) -> Result<CreateCheck> {
-        self.session()?;
-        authorize_rp(rp_id, page_url, top_url)?;
-        let excluded = !exclude.is_empty()
-            && !self
-                .find_passkeys(rp_id, page_url, top_url, exclude)?
-                .is_empty();
-        let wanted = fold(user_name);
-        let mut candidates: Vec<Suggestion> = Vec::new();
+    /// Logins saved for the page that can take another passkey, in
+    /// `find_matches` order.
+    fn passkey_homes(&self, page_url: &str, top_url: Option<&str>) -> Result<Vec<Suggestion>> {
+        let mut out = Vec::new();
         for s in self.find_matches(page_url, top_url)? {
             let full = match self.load_details(&s.id) {
                 Ok(ItemDetails::Login { passkeys, .. }) => passkeys.len() >= MAX_PASSKEYS_PER_LOGIN,
                 _ => true,
             };
             if !full {
-                candidates.push(s);
+                out.push(s);
             }
         }
+        Ok(out)
+    }
+
+    /// The newest recent password fill on the page's site whose login is
+    /// among `homes` and has the site's account name (folded) or none.
+    /// `Auto` or `Ask` by the vault setting.
+    fn upgrade_for(
+        &self,
+        page_url: &str,
+        user_name: &str,
+        homes: &[Suggestion],
+        now_ms: i64,
+    ) -> Result<Upgrade> {
+        let session = self.session()?;
+        let Some(site) = PageUrl::parse(page_url).as_ref().and_then(site_of) else {
+            return Ok(Upgrade::None);
+        };
+        let wanted = fold(user_name);
+        let same_account = |s: &Suggestion| {
+            s.username
+                .as_deref()
+                .map(fold)
+                .filter(|u| !u.is_empty())
+                .is_none_or(|u| u == wanted)
+        };
+        let found = session
+            .recent_fills
+            .iter()
+            .rev()
+            .filter(|f| f.site == site && f.is_recent(now_ms))
+            .find_map(|f| homes.iter().find(|s| s.id == f.item_id && same_account(s)))
+            .map(|s| s.id);
+        Ok(match found {
+            None => Upgrade::None,
+            Some(id) if session.settings.auto_passkey_upgrade => Upgrade::Auto(id),
+            Some(id) => Upgrade::Ask(id),
+        })
+    }
+
+    /// Before asking the user: is one of the site's `excludeCredentials`
+    /// already here, which logins could hold the new passkey, and, for a
+    /// conditional request, is this the site's automatic upgrade after a
+    /// HavenKeys password fill?
+    pub fn check_passkey_create(&self, q: &CreateQuery<'_>, now_ms: i64) -> Result<CreateCheck> {
+        self.session()?;
+        authorize_rp(q.rp_id, q.page_url, q.top_url)?;
+        let excluded = !q.exclude.is_empty()
+            && !self
+                .find_passkeys(q.rp_id, q.page_url, q.top_url, q.exclude)?
+                .is_empty();
+        let wanted = fold(q.user_name);
+        let mut candidates = self.passkey_homes(q.page_url, q.top_url)?;
         // Stable: same username first, otherwise find_matches' order.
         candidates.sort_by_key(|s| s.username.as_deref().map(fold) != Some(wanted.clone()));
+        let upgrade = if q.conditional && !excluded {
+            self.upgrade_for(q.page_url, q.user_name, &candidates, now_ms)?
+        } else {
+            Upgrade::None
+        };
         Ok(CreateCheck {
             excluded,
             candidates,
+            upgrade,
         })
     }
 
@@ -264,6 +334,17 @@ impl VaultService {
     ) -> Result<StagedPasskey> {
         self.session()?;
         check_challenge(req.challenge)?;
+        // The site's automatic upgrade: the consent is a HavenKeys password
+        // fill of this very login on this site within the window, checked
+        // here, never taken from the extension.
+        if req.conditional {
+            let item = req.item_id.ok_or(Error::Denied)?;
+            let homes = self.passkey_homes(req.page_url, req.top_url)?;
+            if self.upgrade_for(req.page_url, req.user_name, &homes, now_ms)? != Upgrade::Auto(item)
+            {
+                return Err(Error::Denied);
+            }
+        }
         if req.user_handle.is_empty() || req.user_handle.len() > MAX_USER_HANDLE_BYTES {
             return Err(Error::InvalidInput("invalid user handle"));
         }
@@ -288,6 +369,10 @@ impl VaultService {
         // needed for a login named by the caller that is not already the
         // holder.
         let holder = self.find_passkey_holder(&ctx.rp_id, req.user_handle)?;
+        // An upgrade adds to the login that was filled, never elsewhere.
+        if req.conditional && holder.is_some_and(|h| Some(h) != req.item_id) {
+            return Err(Error::Denied);
+        }
         let (mut overview, mut details, base) = if let Some(id) = holder {
             self.load_login_for_edit(id, now_ms)?
         } else {

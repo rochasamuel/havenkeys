@@ -4,8 +4,11 @@
 mod common;
 
 use common::*;
-use havenkeys_core::passkey::{PasskeyCreate, StagedPasskey, MAX_PASSKEYS_PER_LOGIN};
-use havenkeys_core::vault::VaultService;
+use havenkeys_core::model::Settings;
+use havenkeys_core::passkey::{
+    CreateQuery, PasskeyCreate, StagedPasskey, Upgrade, MAX_PASSKEYS_PER_LOGIN,
+};
+use havenkeys_core::vault::{VaultService, UPGRADE_WINDOW_MS};
 use havenkeys_core::Error;
 use uuid::Uuid;
 
@@ -21,6 +24,20 @@ fn create_req<'a>(user: &'a str, handle: &'a [u8], item: Option<Uuid>) -> Passke
         user_name: user,
         display_name: None,
         item_id: item,
+        conditional: false,
+    }
+}
+
+/// A non-conditional `check_passkey_create` query, matching the calls this
+/// file made before `CreateQuery` existed.
+fn plain<'a>(user: &'a str, exclude: &'a [Vec<u8>]) -> CreateQuery<'a> {
+    CreateQuery {
+        rp_id: "github.com",
+        page_url: GH,
+        top_url: None,
+        user_name: user,
+        exclude,
+        conditional: false,
     }
 }
 
@@ -179,8 +196,7 @@ fn attack_locked_vault_is_refused() {
         Some(Error::Locked)
     );
     assert_eq!(
-        v.check_passkey_create("github.com", GH, None, "octo", &[])
-            .err(),
+        v.check_passkey_create(&plain("octo", &[]), NOW).err(),
         Some(Error::Locked)
     );
     assert_eq!(
@@ -200,9 +216,7 @@ fn attach_to_existing_login_and_keep_it_through_edits() {
         .unwrap();
     let gh = v.commit_write(staged, rev.next()).unwrap().unwrap().id;
 
-    let check = v
-        .check_passkey_create("github.com", GH, None, "OCTO", &[])
-        .unwrap();
+    let check = v.check_passkey_create(&plain("OCTO", &[]), NOW).unwrap();
     assert!(!check.excluded);
     assert_eq!(check.candidates[0].id, gh);
 
@@ -227,12 +241,12 @@ fn attach_to_existing_login_and_keep_it_through_edits() {
 
     // excludeCredentials naming it reports "excluded".
     assert!(
-        v.check_passkey_create("github.com", GH, None, "octo", std::slice::from_ref(&cred))
+        v.check_passkey_create(&plain("octo", std::slice::from_ref(&cred)), NOW)
             .unwrap()
             .excluded
     );
     assert!(
-        !v.check_passkey_create("github.com", GH, None, "octo", &[vec![0; 16]])
+        !v.check_passkey_create(&plain("octo", &[vec![0; 16]]), NOW)
             .unwrap()
             .excluded
     );
@@ -356,7 +370,7 @@ fn per_login_limit() {
     ));
     // A full login is not offered as a candidate.
     assert!(v
-        .check_passkey_create("github.com", GH, None, "u", &[])
+        .check_passkey_create(&plain("u", &[]), NOW)
         .unwrap()
         .candidates
         .is_empty());
@@ -429,4 +443,221 @@ fn inputs_are_bounded() {
             .err(),
         Some(Error::InvalidInput(_))
     ));
+}
+
+// ---------------------------------------------------------------- automatic upgrade
+
+/// A GitHub login with a password, committed.
+fn github_login(v: &mut VaultService, rev: &mut Rev, user: &str) -> Uuid {
+    let s = v
+        .stage_create(login("GitHub", user, "gh-pw", "https://github.com"), NOW)
+        .unwrap();
+    v.commit_write(s, rev.next()).unwrap().unwrap().id
+}
+
+fn query<'a>(page: &'a str, user: &'a str) -> CreateQuery<'a> {
+    CreateQuery {
+        rp_id: "github.com",
+        page_url: page,
+        top_url: None,
+        user_name: user,
+        exclude: &[],
+        conditional: true,
+    }
+}
+
+fn upgrade(v: &VaultService, page: &str, user: &str, now: i64) -> Upgrade {
+    v.check_passkey_create(&query(page, user), now)
+        .unwrap()
+        .upgrade
+}
+
+fn set_auto(v: &mut VaultService, on: bool) {
+    let s = v.settings().unwrap();
+    v.update_settings(Settings {
+        auto_passkey_upgrade: on,
+        ..s
+    })
+    .unwrap();
+}
+
+#[test]
+fn upgrade_is_auto_after_a_recent_fill_and_ask_when_the_setting_is_off() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::None);
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    assert_eq!(upgrade(&v, GH, "octo", NOW + 1000), Upgrade::Auto(gh));
+    // Not conditional: never an upgrade.
+    let q = CreateQuery {
+        conditional: false,
+        ..query(GH, "octo")
+    };
+    assert_eq!(
+        v.check_passkey_create(&q, NOW).unwrap().upgrade,
+        Upgrade::None
+    );
+    set_auto(&mut v, false);
+    assert_eq!(upgrade(&v, GH, "octo", NOW + 1000), Upgrade::Ask(gh));
+}
+
+#[test]
+fn upgrade_window_is_five_minutes_and_ignores_future_fills() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    assert_eq!(
+        upgrade(&v, GH, "octo", NOW + UPGRADE_WINDOW_MS),
+        Upgrade::Auto(gh)
+    );
+    assert_eq!(
+        upgrade(&v, GH, "octo", NOW + UPGRADE_WINDOW_MS + 1),
+        Upgrade::None
+    );
+    // Clock moved back: a fill "from the future" is not recent.
+    assert_eq!(upgrade(&v, GH, "octo", NOW - 1), Upgrade::None);
+}
+
+#[test]
+fn upgrade_needs_the_same_account_name_folded_or_a_login_without_one() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    assert_eq!(upgrade(&v, GH, "  OCTO ", NOW), Upgrade::Auto(gh));
+    assert_eq!(upgrade(&v, GH, "someone-else", NOW), Upgrade::None);
+
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let mut input = login("GitHub", "x", "pw", "https://github.com");
+    input.username = None;
+    let s = v.stage_create(input, NOW).unwrap();
+    let anon = v.commit_write(s, rev.next()).unwrap().unwrap().id;
+    v.fill_for_page(&anon, GH, None, NOW).unwrap();
+    assert_eq!(upgrade(&v, GH, "anyone", NOW), Upgrade::Auto(anon));
+}
+
+#[test]
+fn upgrade_is_per_site_and_never_for_look_alikes() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    // Same registrable domain, login offered there (domain rule): allowed.
+    let q = CreateQuery {
+        rp_id: "gist.github.com",
+        ..query("https://gist.github.com/", "octo")
+    };
+    assert_eq!(
+        v.check_passkey_create(&q, NOW).unwrap().upgrade,
+        Upgrade::Auto(gh)
+    );
+    // Look-alike: authorize_rp itself refuses.
+    let evil = CreateQuery {
+        rp_id: "github.com.evil.com",
+        ..query("https://github.com.evil.com/", "octo")
+    };
+    assert!(!matches!(v.check_passkey_create(&evil, NOW), Ok(c) if c.upgrade != Upgrade::None));
+}
+
+#[test]
+fn a_fill_without_a_password_is_not_remembered() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let mut input = login("GitHub", "octo", "x", "https://github.com");
+    input.password = havenkeys_core::model::SecretUpdate::Keep;
+    let s = v.stage_create(input, NOW).unwrap();
+    let id = v.commit_write(s, rev.next()).unwrap().unwrap().id;
+    v.fill_for_page(&id, GH, None, NOW).unwrap();
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::None);
+}
+
+#[test]
+fn fill_memory_is_dropped_on_lock() {
+    let (mut v, sk) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    v.lock();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::None);
+}
+
+#[test]
+fn a_full_login_gets_no_upgrade() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    for i in 0..MAX_PASSKEYS_PER_LOGIN {
+        let handle = [i as u8 + 10];
+        let s = v
+            .stage_passkey_create(create_req("octo", &handle, Some(gh)), NOW)
+            .unwrap();
+        commit(&mut v, &mut rev, s);
+    }
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    assert_eq!(upgrade(&v, GH, "octo", NOW), Upgrade::None);
+}
+
+#[test]
+fn conditional_create_needs_auto_for_exactly_that_login() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    let other = github_login(&mut v, &mut rev, "work");
+    let cond = |item| PasskeyCreate {
+        conditional: true,
+        ..create_req("octo", &[1], item)
+    };
+    // No fill yet.
+    assert_eq!(
+        v.stage_passkey_create(cond(Some(gh)), NOW).err(),
+        Some(Error::Denied)
+    );
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    // Another login, no login, too late.
+    assert_eq!(
+        v.stage_passkey_create(cond(Some(other)), NOW).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.stage_passkey_create(cond(None), NOW).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.stage_passkey_create(cond(Some(gh)), NOW + UPGRADE_WINDOW_MS + 1)
+            .err(),
+        Some(Error::Denied)
+    );
+    // Setting off: the extension must show the card (a non-conditional create).
+    set_auto(&mut v, false);
+    assert_eq!(
+        v.stage_passkey_create(cond(Some(gh)), NOW).err(),
+        Some(Error::Denied)
+    );
+    set_auto(&mut v, true);
+    let s = v.stage_passkey_create(cond(Some(gh)), NOW).unwrap();
+    assert_eq!(s.item_id, gh);
+}
+
+#[test]
+fn conditional_create_never_lands_in_another_login_that_holds_the_account() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    let other = github_login(&mut v, &mut rev, "octo2");
+    // `other` already holds the passkey for user handle [1].
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], Some(other)), NOW)
+        .unwrap();
+    commit(&mut v, &mut rev, s);
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    let cond = PasskeyCreate {
+        conditional: true,
+        ..create_req("octo", &[1], Some(gh))
+    };
+    assert_eq!(v.stage_passkey_create(cond, NOW).err(), Some(Error::Denied));
 }

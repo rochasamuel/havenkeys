@@ -7,7 +7,7 @@
 
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::origin::MatchStrength as CoreStrength;
-use havenkeys_core::passkey::{encode_b64url, B64Url, PasskeyCreate};
+use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate};
 use havenkeys_core::vault::{
     SaveAction as CoreSaveAction, StagedSave, StagedWrite, VaultService, VaultState,
 };
@@ -139,7 +139,7 @@ pub fn dispatch(
         } => {
             require_enabled(v)?;
             let creds = v
-                .fill_for_page(item_id, url, top_url.as_deref())
+                .fill_for_page(item_id, url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::FillItem {
                 username: creds.username.clone(),
@@ -269,7 +269,18 @@ pub fn dispatch(
             require_enabled(v)?;
             let exclude = byte_list(exclude_credentials)?;
             let check = v
-                .check_passkey_create(rp_id, url, top_url.as_deref(), user_name, &exclude)
+                .check_passkey_create(
+                    &CreateQuery {
+                        rp_id,
+                        page_url: url,
+                        top_url: top_url.as_deref(),
+                        user_name,
+                        exclude: &exclude,
+                        // Task 4 wires the wire protocol's conditional flag.
+                        conditional: false,
+                    },
+                    now_ms(unix_seconds),
+                )
                 .map_err(code)?;
             let candidates = if check.excluded {
                 Vec::new()
@@ -314,6 +325,8 @@ pub fn dispatch(
                         user_name,
                         display_name: display_name.as_deref(),
                         item_id: *item_id,
+                        // Task 4 wires the wire protocol's conditional flag.
+                        conditional: false,
                     },
                     now_ms(unix_seconds),
                 )
