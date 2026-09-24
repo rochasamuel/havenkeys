@@ -469,6 +469,19 @@ describe("automatic passkey upgrade", () => {
     expect((await offline.h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
   });
 
+  it("falls back to the browser when the vault locks during the Add a passkey card", async () => {
+    const { h, sent } = setup(withUpgrade({ kind: "ask", itemId: ITEM }));
+    await h.handleContent(frame(), { type: "wa_create", options: cond });
+    h.reset();
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "fallback" } });
+    expect((await h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
+    // An ordinary create still ends with NotAllowedError.
+    const plain = setup(defaults);
+    await plain.h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    plain.h.reset();
+    expect(plain.sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "NotAllowedError" } });
+  });
+
   it("sends conditional: false for ordinary creates", async () => {
     const { h, requests } = setup(defaults);
     await h.handleContent(frame(), { type: "wa_create", options: createOpts });

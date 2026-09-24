@@ -472,10 +472,15 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
     }
   }
 
-  /** Vault locked or desktop gone: every waiting page gets a refusal. */
+  /**
+   * Vault locked or desktop gone: every waiting page gets a refusal, except
+   * the "Add a passkey?" card, which hands the site's upgrade back to the
+   * browser (spec §7).
+   */
   function reset(): void {
     for (const [tabId, s] of [...sessions]) {
       if (s.kind === "get" && s.options.conditional) drop(tabId);
+      else if (s.kind === "create" && s.upgradeItemId !== null) finish(tabId, s.token, { outcome: "fallback" });
       else finish(tabId, s.token, { outcome: "error", name: "NotAllowedError" });
     }
   }

@@ -483,7 +483,7 @@ rendered with `textContent` only, as untrusted third-party text.
 | Page leaves (`pagehide`, including entering the back/forward cache), or removes, hides or moves the card's frame | Request cancelled (`AbortError` on `pagehide`, `NotAllowedError` for the frame). For a conditional request only HavenKeys' side ends; the browser's own conditional request still answers the site |
 | Extension disabled or updated while the page stays open (the page script remains, the bridge is gone) | No acknowledgement within 1 s: the browser's own WebAuthn |
 | Background worker restarted, losing the session | Modal: the browser's own WebAuthn (within 20 s, or at once when the user clicks Cancel or **Use another device** on the card). Conditional: HavenKeys asks again |
-| Vault locks while the card is open | The card closes; `NotAllowedError`. This includes an automatic upgrade's "Add a passkey?" card |
+| Vault locks while the card is open | The card closes; `NotAllowedError`. An automatic upgrade's "Add a passkey?" card instead falls back to the browser, as a locked conditional create does |
 | Conditional create, no recent password fill / a different account name / the matching login already at 8 passkeys | Fallback, silently — as if HavenKeys were not installed |
 | Conditional create, `auto_passkey_upgrade` off, a recent matching fill | "Add a passkey?" card, that login preselected |
 | Automatic upgrade fails (offline, an internal error) | Fallback, no notice, nothing stored |
