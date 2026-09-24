@@ -15,6 +15,11 @@ use data_encoding::BASE64URL_NOPAD;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
+pub(crate) mod cbor;
+mod rp;
+
+pub use rp::{authorize_rp, RpContext, MAX_RP_ID_BYTES};
+
 pub const MAX_PASSKEYS_PER_LOGIN: usize = 8;
 /// Every credential ID HavenKeys creates has exactly this length.
 pub const CREDENTIAL_ID_LEN: usize = 16;

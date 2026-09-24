@@ -64,11 +64,15 @@ impl PageUrl {
         let origin = self.url.origin().ascii_serialization();
         (origin != "null").then_some((title, origin))
     }
+
+    pub(crate) fn url(&self) -> &Url {
+        &self.url
+    }
 }
 
 /// Host with a single trailing dot removed (`example.com.` is the same DNS
 /// name as `example.com`). IP hosts are returned in canonical form.
-fn host_key(url: &Url) -> Option<String> {
+pub(crate) fn host_key(url: &Url) -> Option<String> {
     match url.host()? {
         Host::Domain(d) => Some(d.strip_suffix('.').unwrap_or(d).to_owned()),
         Host::Ipv4(ip) => Some(ip.to_string()),
@@ -81,8 +85,12 @@ fn registrable_domain(url: &Url) -> Option<String> {
     let Host::Domain(d) = url.host()? else {
         return None;
     };
-    let d = d.strip_suffix('.').unwrap_or(d);
-    let domain = psl::domain(d.as_bytes())?;
+    registrable_domain_of(d.strip_suffix('.').unwrap_or(d))
+}
+
+/// [`registrable_domain`] for a host name that is already normalized.
+pub(crate) fn registrable_domain_of(host: &str) -> Option<String> {
+    let domain = psl::domain(host.as_bytes())?;
     if !domain.suffix().is_known() {
         return None;
     }
