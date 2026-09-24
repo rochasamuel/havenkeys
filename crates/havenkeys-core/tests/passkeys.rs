@@ -667,15 +667,23 @@ fn passkey_status_sees_only_passkeys_the_page_may_use() {
     let (mut v, _) = activated_vault();
     let mut rev = Rev(0);
     assert!(!v.has_passkey_for_page(GH, None).unwrap());
-    let s = v.stage_passkey_create(create_req("octo", &[1], None), NOW).unwrap();
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], None), NOW)
+        .unwrap();
     commit(&mut v, &mut rev, s);
     assert!(v.has_passkey_for_page(GH, None).unwrap());
-    assert!(v.has_passkey_for_page("https://gist.github.com/", None).unwrap());
+    assert!(v
+        .has_passkey_for_page("https://gist.github.com/", None)
+        .unwrap());
     assert!(!v.has_passkey_for_page("https://gitlab.com/", None).unwrap());
-    assert!(!v.has_passkey_for_page("https://github.com.evil.com/", None).unwrap());
+    assert!(!v
+        .has_passkey_for_page("https://github.com.evil.com/", None)
+        .unwrap());
     assert!(!v.has_passkey_for_page("http://github.com/", None).unwrap());
     // A github.com frame inside another site.
-    assert!(!v.has_passkey_for_page(GH, Some("https://evil.com/")).unwrap());
+    assert!(!v
+        .has_passkey_for_page(GH, Some("https://evil.com/"))
+        .unwrap());
     v.lock();
     assert_eq!(v.has_passkey_for_page(GH, None).err(), Some(Error::Locked));
 }

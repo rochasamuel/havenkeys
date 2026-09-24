@@ -794,8 +794,12 @@ fn passkey_upgrade_through_the_bridge() {
 #[test]
 fn passkey_status_through_the_bridge() {
     let f = online_fixture();
-    let status =
-        |url: &str| call(&f, serde_json::json!({"type": "passkey_status", "url": url}));
+    let status = |url: &str| {
+        call(
+            &f,
+            serde_json::json!({"type": "passkey_status", "url": url}),
+        )
+    };
     assert_eq!(status("https://github.com/")["result"]["hasPasskey"], false);
     f.vault.lock().unwrap().lock();
     assert_eq!(error_code(&status("https://github.com/")), Some("locked"));
