@@ -49,6 +49,9 @@ pub struct VaultStatus {
     pub vault_exists: bool,
     /// Items whose overview failed authentication at unlock (0 normally).
     pub damaged_items: usize,
+    /// Items pulled from the server that did not decrypt, recorded for
+    /// retry (0 normally). 0 when there is no vault.
+    pub unreadable_items: usize,
 }
 
 pub(crate) struct Session {
@@ -492,6 +495,7 @@ impl VaultService {
             state: self.state,
             vault_exists: self.store.header()?.is_some(),
             damaged_items: self.session.as_ref().map_or(0, |s| s.damaged_items),
+            unreadable_items: self.store.unreadable_count().unwrap_or(0),
         })
     }
 

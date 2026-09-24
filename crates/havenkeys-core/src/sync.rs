@@ -8,8 +8,11 @@
 //!   revision never goes backwards).
 //! * `apply_remote_changes` is the local replica catching up to the server:
 //!   the server is the single writer, so this is not a merge, just an upsert
-//!   or a deletion per item, in cursor order (spec 2026-09-20 §8.5). A later
-//!   task owns the server-side transport that feeds it.
+//!   or a deletion per item, in cursor order (spec 2026-09-20 §8.5). Items
+//!   that do not decrypt are recorded in `unreadable_items` rather than lost;
+//!   `apply_refetched` re-applies a fetch-by-ID of just those items, without
+//!   moving the cursor. A later task owns the server-side transport that
+//!   feeds both.
 //!
 //! Security: every blob here is the same per-item AES-256-GCM ciphertext
 //! stored locally, copied without re-encryption, bound to its own item ID.
@@ -274,9 +277,9 @@ impl VaultService {
     /// This is not a merge: the server is the single writer, so a change is
     /// an upsert or a deletion. The only judgement is structural: a blob
     /// that does not open under this vault's data key, or that carries
-    /// another item's id, is counted in `skipped_items` and leaves the
-    /// existing row untouched — a hostile server can fail to update the
-    /// replica, not corrupt it.
+    /// another item's id, is counted in `skipped_items` and recorded in
+    /// `unreadable_items` for a retry — a hostile server can fail to update
+    /// the replica, not corrupt it.
     ///
     /// A batch may mention the same item id more than once (edited, then
     /// deleted, since the cursor this device last saw — or the other way
@@ -294,12 +297,54 @@ impl VaultService {
         changes: Vec<RemoteChange>,
         now_ms: i64,
     ) -> Result<SyncReport> {
+        self.apply_changes(changes, Some(cursor), now_ms)
+    }
+
+    /// Apply a fetch-by-ID of items that did not open before. The cursor does
+    /// not move. Changes for IDs that were not asked for are dropped: the
+    /// server does not get to add items through a retry. An ID the server no
+    /// longer has is treated as deleted.
+    pub fn apply_refetched(
+        &mut self,
+        requested: &[Uuid],
+        changes: Vec<RemoteChange>,
+        now_ms: i64,
+    ) -> Result<SyncReport> {
+        let wanted: std::collections::HashSet<Uuid> = requested.iter().copied().collect();
+        let mut changes: Vec<RemoteChange> = changes
+            .into_iter()
+            .filter(|c| wanted.contains(&c.item_id))
+            .collect();
+        let returned: std::collections::HashSet<Uuid> = changes.iter().map(|c| c.item_id).collect();
+        for id in requested.iter().filter(|id| !returned.contains(id)) {
+            changes.push(RemoteChange {
+                item_id: *id,
+                revision: 0,
+                overview: None,
+                details: None,
+                deleted: true,
+            });
+        }
+        self.apply_changes(changes, None, now_ms)
+    }
+
+    /// The bulk of `apply_remote_changes`/`apply_refetched`: authenticate
+    /// each change, then write the net effect in one transaction. `cursor`
+    /// is `Some` for a pull (advance the stored cursor) and `None` for a
+    /// refetch (leave it alone).
+    fn apply_changes(
+        &mut self,
+        changes: Vec<RemoteChange>,
+        cursor: Option<i64>,
+        now_ms: i64,
+    ) -> Result<SyncReport> {
         self.require_account()?;
         let vault_id = self.session()?.vault_id;
         let mut report = SyncReport::default();
         let mut rows: Vec<(Uuid, Vec<u8>, Vec<u8>, i64)> = Vec::new();
         let mut overviews: Vec<ItemOverview> = Vec::new();
         let mut deletions: Vec<Uuid> = Vec::new();
+        let mut unreadable: Vec<(Uuid, i64)> = Vec::new();
 
         let mut last_index: HashMap<Uuid, usize> = HashMap::new();
         for (index, change) in changes.iter().enumerate() {
@@ -317,6 +362,7 @@ impl VaultService {
             }
             let (Some(ov), Some(det)) = (change.overview, change.details) else {
                 report.skipped_items += 1;
+                unreadable.push((change.item_id, change.revision));
                 continue;
             };
             match self.check_item_bytes(vault_id, change.item_id, ov, det) {
@@ -329,40 +375,45 @@ impl VaultService {
                     rows.push((id, ov, det, change.revision));
                     overviews.push(overview);
                 }
-                None => report.skipped_items += 1,
+                None => {
+                    report.skipped_items += 1;
+                    unreadable.push((change.item_id, change.revision));
+                }
             }
         }
 
         // Every id above is the *last* change for that item, so an id
-        // appears in at most one of `rows` (via `overviews`) and
-        // `deletions` — never both. The two loops below can run in either
-        // order without one clobbering the other's result.
-        self.store.upsert_items(&rows)?;
+        // appears in at most one of `rows`/`unreadable` (via `overviews`)
+        // and `deletions` — never both.
+        let deleted =
+            self.store
+                .apply_pull(&rows, &deletions, &unreadable, cursor.map(|c| (c, now_ms)))?;
+        report.deleted = deleted;
         for overview in overviews {
             self.session_mut()?.overviews.insert(overview.id, overview);
         }
         for id in &deletions {
-            if self.store.delete_item(id)? {
-                report.deleted += 1;
-            }
             self.session_mut()?.overviews.remove(id);
         }
-        self.store.set_cursor(cursor, now_ms)?;
         Ok(report)
     }
 
     /// Ask for the whole vault again on the next pull.
     ///
-    /// The cursor advances even when a batch had items this device could not
-    /// open (`skipped_items`), because the server is the authority on what
-    /// happened and there is nothing to retry against. That leaves those
-    /// items stale on this device, silently, for good — so there has to be a
-    /// way to start over. Pulling from zero is safe: the server serves its
-    /// tombstones too, so deletions are re-applied along with everything
-    /// else.
+    /// Items this device could not open (`skipped_items`) are recorded in
+    /// `unreadable_items` rather than lost silently: `apply_refetched` can
+    /// retry them by ID without waiting for a full reset. Pulling from zero
+    /// is still safe on its own — the server serves its tombstones too, so
+    /// deletions are re-applied along with everything else.
     pub fn reset_sync_cursor(&mut self, now_ms: i64) -> Result<()> {
         self.require_account()?;
-        self.store.set_cursor(0, now_ms)
+        self.store.reset_cursor(now_ms)
+    }
+
+    /// IDs of items pulled from the server that did not decrypt, in case the
+    /// desktop app wants to show or retry them.
+    pub fn unreadable_item_ids(&self) -> Result<Vec<Uuid>> {
+        self.store.unreadable_ids()
     }
 
     /// Authenticate one remote item version. Returns `None` unless both blobs
@@ -560,5 +611,140 @@ mod tests {
         assert_eq!(report.skipped_items, 1);
         assert_eq!(report.added, 0);
         assert!(vault.list_items().unwrap().is_empty());
+    }
+
+    fn good_change(vault: &mut VaultService, title: &str, revision: i64) -> RemoteChange {
+        let staged = vault.stage_create(login(title), NOW).unwrap();
+        let id = staged.item_id;
+        let (ov, det) = (
+            staged.overview.clone().unwrap(),
+            staged.details.clone().unwrap(),
+        );
+        drop(staged);
+        RemoteChange {
+            item_id: id,
+            revision,
+            overview: Some(ov),
+            details: Some(det),
+            deleted: false,
+        }
+    }
+
+    fn bad_change(id: Uuid, revision: i64) -> RemoteChange {
+        RemoteChange {
+            item_id: id,
+            revision,
+            overview: Some(vec![0u8; 64]),
+            details: Some(vec![0u8; 64]),
+            deleted: false,
+        }
+    }
+
+    #[test]
+    fn an_unreadable_item_is_recorded_and_the_cursor_still_advances() {
+        let mut vault = activated_vault();
+        let id = Uuid::from_u128(9);
+        vault
+            .apply_remote_changes(3, vec![bad_change(id, 3)], NOW)
+            .unwrap();
+        assert_eq!(vault.unreadable_item_ids().unwrap(), vec![id]);
+        assert_eq!(vault.status().unwrap().unreadable_items, 1);
+        assert_eq!(vault.account().unwrap().unwrap().server_cursor, 3);
+    }
+
+    #[test]
+    fn a_later_good_revision_clears_it() {
+        let mut vault = activated_vault();
+        let good = good_change(&mut vault, "Fixed", 4);
+        vault
+            .apply_remote_changes(3, vec![bad_change(good.item_id, 3)], NOW)
+            .unwrap();
+        vault.apply_remote_changes(4, vec![good], NOW).unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_deletion_clears_it() {
+        let mut vault = activated_vault();
+        let id = Uuid::from_u128(9);
+        vault
+            .apply_remote_changes(3, vec![bad_change(id, 3)], NOW)
+            .unwrap();
+        vault
+            .apply_remote_changes(
+                4,
+                vec![RemoteChange {
+                    item_id: id,
+                    revision: 4,
+                    overview: None,
+                    details: None,
+                    deleted: true,
+                }],
+                NOW,
+            )
+            .unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_refetch_that_decrypts_clears_it_without_moving_the_cursor() {
+        let mut vault = activated_vault();
+        let good = good_change(&mut vault, "Fixed", 3);
+        vault
+            .apply_remote_changes(3, vec![bad_change(good.item_id, 3)], NOW)
+            .unwrap();
+        let id = good.item_id;
+        vault.apply_refetched(&[id], vec![good], NOW).unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+        assert_eq!(vault.account().unwrap().unwrap().server_cursor, 3);
+        assert!(vault.get_item(&id).is_ok());
+    }
+
+    #[test]
+    fn a_refetch_the_server_no_longer_has_removes_it() {
+        let mut vault = activated_vault();
+        let id = Uuid::from_u128(9);
+        vault
+            .apply_remote_changes(3, vec![bad_change(id, 3)], NOW)
+            .unwrap();
+        vault.apply_refetched(&[id], vec![], NOW).unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_permanently_bad_item_stays_counted_once() {
+        let mut vault = activated_vault();
+        let id = Uuid::from_u128(9);
+        vault
+            .apply_remote_changes(3, vec![bad_change(id, 3)], NOW)
+            .unwrap();
+        for _ in 0..3 {
+            vault
+                .apply_refetched(&[id], vec![bad_change(id, 3)], NOW)
+                .unwrap();
+        }
+        assert_eq!(vault.status().unwrap().unreadable_items, 1);
+    }
+
+    #[test]
+    fn a_refetch_ignores_ids_it_did_not_ask_for() {
+        let mut vault = activated_vault();
+        let good = good_change(&mut vault, "Sneaky", 3);
+        let report = vault
+            .apply_refetched(&[Uuid::from_u128(1)], vec![good], NOW)
+            .unwrap();
+        assert_eq!(report.added, 0);
+        assert!(vault.list_items().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_reset_clears_the_table() {
+        let mut vault = activated_vault();
+        vault
+            .apply_remote_changes(3, vec![bad_change(Uuid::from_u128(9), 3)], NOW)
+            .unwrap();
+        vault.reset_sync_cursor(NOW).unwrap();
+        assert!(vault.unreadable_item_ids().unwrap().is_empty());
+        assert_eq!(vault.account().unwrap().unwrap().server_cursor, 0);
     }
 }

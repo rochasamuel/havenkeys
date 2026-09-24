@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -39,6 +39,10 @@ CREATE TABLE account (
 CREATE TABLE settings (
     id   INTEGER PRIMARY KEY CHECK (id = 1),
     blob BLOB NOT NULL
+);
+CREATE TABLE unreadable_items (
+    id       TEXT PRIMARY KEY NOT NULL,
+    revision INTEGER NOT NULL
 );
 ";
 
@@ -316,20 +320,89 @@ impl Store {
         Ok(())
     }
 
-    /// Apply many rows atomically: either all land or none.
-    pub fn upsert_items(&mut self, rows: &[(Uuid, Vec<u8>, Vec<u8>, i64)]) -> Result<()> {
+    /// Everything one pull changes, in one transaction: upserts, deletions,
+    /// the unreadable-item bookkeeping and (for a pull, not a refetch) the
+    /// cursor. A crash can no longer leave the cursor past rows that were
+    /// never written. Returns how many rows were deleted.
+    pub fn apply_pull(
+        &mut self,
+        rows: &[(Uuid, Vec<u8>, Vec<u8>, i64)],
+        deletions: &[Uuid],
+        unreadable: &[(Uuid, i64)],
+        cursor: Option<(i64, i64)>,
+    ) -> Result<usize> {
         let tx = self.conn.transaction()?;
+        let mut deleted = 0;
         {
-            let mut stmt = tx.prepare(
+            let mut upsert = tx.prepare(
                 "INSERT INTO items (id, overview, details, revision) VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(id) DO UPDATE SET overview = excluded.overview,
                                                details  = excluded.details,
                                                revision = excluded.revision",
             )?;
+            let mut clear = tx.prepare("DELETE FROM unreadable_items WHERE id = ?1")?;
+            let mut delete = tx.prepare("DELETE FROM items WHERE id = ?1")?;
+            let mut record = tx.prepare(
+                "INSERT INTO unreadable_items (id, revision) VALUES (?1, ?2)
+                 ON CONFLICT(id) DO UPDATE SET revision = excluded.revision",
+            )?;
             for (id, overview, details, revision) in rows {
-                stmt.execute(params![id.to_string(), overview, details, revision])?;
+                upsert.execute(params![id.to_string(), overview, details, revision])?;
+                clear.execute(params![id.to_string()])?;
+            }
+            for id in deletions {
+                deleted += delete.execute(params![id.to_string()])?;
+                clear.execute(params![id.to_string()])?;
+            }
+            for (id, revision) in unreadable {
+                record.execute(params![id.to_string(), revision])?;
             }
         }
+        if let Some((cursor, synced_at)) = cursor {
+            tx.execute(
+                "UPDATE account SET server_cursor = ?1, last_synced_at = ?2 WHERE id = 1",
+                params![cursor, synced_at],
+            )?;
+        }
+        tx.commit()?;
+        Ok(deleted)
+    }
+
+    /// IDs of items pulled from the server that did not decrypt under this
+    /// vault's data key, ordered for a stable, deterministic retry batch.
+    /// Rows with a malformed ID are skipped rather than surfaced as an
+    /// error: this table only ever holds IDs this device wrote itself.
+    pub fn unreadable_ids(&self) -> Result<Vec<Uuid>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM unreadable_items ORDER BY id")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            if let Ok(id) = Uuid::parse_str(&row?) {
+                out.push(id);
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn unreadable_count(&self) -> Result<usize> {
+        let n: i64 = self
+            .conn
+            .query_row("SELECT count(*) FROM unreadable_items", [], |r| r.get(0))?;
+        Ok(n as usize)
+    }
+
+    /// Ask for the whole vault again: cursor back to zero, and forget what
+    /// was unreadable so far — the next full pull re-derives that list from
+    /// scratch. One transaction.
+    pub fn reset_cursor(&mut self, synced_at: i64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE account SET server_cursor = 0, last_synced_at = ?1 WHERE id = 1",
+            params![synced_at],
+        )?;
+        tx.execute("DELETE FROM unreadable_items", [])?;
         tx.commit()?;
         Ok(())
     }
