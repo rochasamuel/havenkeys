@@ -59,27 +59,30 @@ Passkey (inside the encrypted ItemDetails blob)
 `ItemOverview` gains `has_passkey: bool` only. `rp_id`, user name and
 credential ID stay inside the encrypted details; no new plaintext metadata.
 
-`ItemInput` gains a `passkeys` operation limited to **delete by credential
-ID**. Passkeys are never created or edited through `ItemInput`; creation only
-happens through `passkey_create` (§6).
+`ItemInput` is unchanged. Passkeys are created only through `passkey_create`
+(§6) and removed only through a dedicated desktop command
+(`delete_passkey`), never through the item editor.
 
 ### 3.1 Format version
 
-An older client that edits a login would deserialize `ItemDetails` without
-the unknown `passkeys` field, re-encrypt it, and silently destroy the passkey.
-To prevent that, `vault::FORMAT_VERSION` goes from 1 to 2. `sync.rs` already
-refuses a header whose `vault_format` differs from its own, so an old client
-stops syncing instead of overwriting. v2 reads v1 items unchanged; no SQLite
-schema change is needed because the change is inside the encrypted blob.
+No format bump and no migration. The only vault in existence belongs to the
+project owner and may be reset (decision of 2026-09-23), so `passkeys` is
+simply a new `#[serde(default)]` field. The residual risk — an app older than
+this change editing a login and dropping its passkeys — is handled
+operationally: update HavenKeys on every device before saving a passkey.
+This is recorded in `docs/security-review.md` as a known limitation.
 
 ## 4. Cryptography (`crates/havenkeys-core/src/passkey.rs`)
 
 The only module that touches passkey private keys.
 
 * **Library:** RustCrypto `p256` with the `ecdsa` feature (key generation from
-  `OsRng`, ES256 signatures, DER-encoded). CBOR via `ciborium`. Both are
-  vetted (maintenance, license, `cargo deny`, `cargo audit`) before being
-  added. No hand-written cryptography.
+  the core's fallible `fill_random`, ES256 signatures, DER-encoded; `pkcs8`
+  for the SPKI public key). The CBOR HavenKeys emits is three fixed shapes
+  (COSE key, attestation object, maps of ints/bytes/text), so it is written by
+  a ~40-line deterministic encoder tested against RFC 8949 Appendix A;
+  `ciborium` is a dev-dependency only, to decode what we emit in tests. No
+  hand-written cryptography.
 * **`rp_id_allowed(rp_id, page, top)`** — the WebAuthn rule:
   * the page is `https`, or `http://localhost`;
   * `rp_id` equals the page host, or is a registrable parent of it under the
@@ -145,9 +148,12 @@ native host → Rust core    rp_id_allowed, stored rp_id, sign
 ```
 
 Limits enforced in the content script and again in `havenkeys-protocol`:
-challenge ≤ 1 KiB, each credential ID ≤ 1 KiB, ≤ 64 entries in
-`allowCredentials`/`excludeCredentials`, user handle ≤ 64 bytes, names within
-the existing username limit.
+challenge 1..=1024 bytes, user handle 1..=64 bytes, names within the existing
+username limit, ≤ 64 entries in `allowCredentials`/`excludeCredentials`.
+HavenKeys only ever creates 16-byte credential IDs, so the page script drops
+every listed ID of any other length before sending (they cannot be ours), and
+the protocol accepts credential IDs of exactly 16 bytes. An `allowCredentials`
+list with none of ours left is handed straight to the browser.
 
 The page can forge every field except its origin, and the origin alone decides
 which passkeys are reachable.
@@ -168,8 +174,8 @@ binary fields as base64url strings with length checks:
 | Request | Result | Notes |
 |---|---|---|
 | `find_passkeys {url, topUrl?, rpId, allowCredentials[]}` | `[{itemId, credentialId, title, userName}]` | public data only; filtered by `allowCredentials` when non-empty |
-| `passkey_get {itemId, credentialId, url, topUrl?, rpId, challenge, crossOrigin}` | `{credentialId, authenticatorData, clientDataJSON, signature, userHandle}` | |
-| `check_passkey_create {url, topUrl?, rpId, userHandle, userName, excludeCredentials[]}` | `{excluded, candidates: [{itemId, title, userName}]}` | candidates: logins matching the page, same username first |
+| `passkey_get {itemId, credentialId, url, topUrl?, rpId, challenge}` | `{credentialId, authenticatorData, clientDataJSON, signature, userHandle}` | |
+| `check_passkey_create {url, topUrl?, rpId, userName, excludeCredentials[]}` | `{excluded, candidates: [{itemId, title, userName}]}` | candidates: logins matching the page, same username first |
 | `passkey_create {url, topUrl?, rpId, userHandle, userName, displayName?, challenge, itemId?}` | `{credentialId, attestationObject, clientDataJSON, publicKey, publicKeyAlgorithm, authenticatorData}` | server write; `itemId` must match the page; `Offline` if the server is unreachable |
 
 No response ever contains a private key. `ErrorCode` gains nothing new; the
@@ -255,8 +261,8 @@ New or changed threats, to be added to `threat-model.md`:
 * **Compromised extension.** Can request signatures only for origins the
   browser reports and only for passkeys bound to that rpId — the same bound as
   password fill today.
-* **Old clients.** Protected from destroying passkeys by `FORMAT_VERSION` 2
-  (§3.1).
+* **Old clients.** Not protected in code (§3.1); every device must run a
+  version with passkey support before one is saved.
 
 ## 9. Testing
 
@@ -268,16 +274,19 @@ New or changed threats, to be added to `threat-model.md`:
   than localhost, cross-site iframe.
 * Round trip: `register` → verify the self-reported public key → `assert` →
   verify the signature over `authData || SHA-256(clientDataJSON)`.
-* W3C WebAuthn test vectors; `webauthn-rs` (dev-dependency only) as an
-  independent relying-party verifier.
+* Golden-byte tests for `clientDataJSON`, `authenticatorData` and the CBOR
+  encodings (all deterministic), RFC 8949 Appendix A vectors for the encoder,
+  and `ciborium` (dev-only) decoding the attestation object. `webauthn-rs` was
+  dropped: it pulls in OpenSSL. Real relying parties (webauthn.io, GitHub,
+  Google) are the independent verifier, in the manual checks.
 * Flags, counter 0, zero AAGUID, `none` attestation CBOR, exact
   `clientDataJSON` bytes.
 * Security regressions: github.com passkey requested from evil.com → Denied;
   `itemId`/`credentialId` not bound to `rpId` → Denied; locked → Locked;
   tampered ciphertext → authentication failure; oversized/malformed/unknown
   fields → rejected without panic.
-* Format: v1 vault opens under v2; v1 client refuses a v2 sync header; a
-  password edit preserves passkeys; `MAX_PASSKEYS_PER_LOGIN` enforced.
+* Format: a login saved before this change still opens; a password edit
+  preserves passkeys; `MAX_PASSKEYS_PER_LOGIN` enforced.
 * Fuzz the new protocol messages and `rp_id` parsing with the existing
   harness.
 
@@ -298,7 +307,7 @@ create fallback; locked-vault behavior.
 Each step lands with its tests and a green `cargo test`, `cargo clippy`,
 `pnpm test`, `pnpm typecheck`.
 
-1. Core: model, `passkey.rs`, `FORMAT_VERSION` 2.
+1. Core: model and the `passkey` module.
 2. Protocol and native host.
 3. MAIN-world script, content-script bridge, background handlers.
 4. Save card, chooser, conditional mediation.
