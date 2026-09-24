@@ -29,6 +29,7 @@ import type {
   SaveView,
 } from "../messaging/inline";
 import { displayHost } from "../shared/url";
+import type { BgWaResult } from "../webauthn/messages";
 
 type Client = {
   request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>>;
@@ -51,7 +52,7 @@ export interface FrameRef {
 export interface InlineDeps {
   client: Client;
   /** Send to one frame's content script; resolves to its reply or undefined. */
-  sendToFrame(frame: Pick<FrameRef, "tabId" | "frameId" | "documentId">, msg: BackgroundToContent): Promise<unknown>;
+  sendToFrame(frame: Pick<FrameRef, "tabId" | "frameId" | "documentId">, msg: BackgroundToContent | BgWaResult): Promise<unknown>;
   now(): number;
   newToken(): string;
 }

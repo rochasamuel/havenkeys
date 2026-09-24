@@ -4,8 +4,10 @@
 // messages from exactly three kinds of sender, each checked from the
 // browser's own sender data:
 // * the toolbar popup (an extension page with no tab);
-// * the in-page menu and save frames (extension pages, embedded in a tab);
-// * content scripts (in http(s) frames of a tab).
+// * the in-page menu, save and passkey frames (extension pages, embedded in
+//   a tab);
+// * content scripts (in http(s) frames of a tab), including the passkey
+//   bridge, which relays the page's navigator.credentials calls.
 // Web pages cannot reach it: `externally_connectable` is empty, and page
 // script has no extension APIs.
 
@@ -17,17 +19,23 @@ import { pageUrlForRequest } from "../shared/url";
 import { createInlineHandler, type FrameRef } from "./inline-handler";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
+import { createWebAuthnHandler } from "./webauthn-handler";
+import { parsePkRequest, parseWaRequest, type BgWaResult } from "../webauthn/messages";
 
 const client = new NativeClient(() => chrome.runtime.connectNative(NATIVE_HOST_NAME) as NativePort, {
   onEvent: (event) => {
-    // Locked or desktop gone: drop menus, pending saves and their passwords.
-    if (event.type === "locked" || event.type === "disconnected") inline.reset();
+    // Locked or desktop gone: drop menus, pending saves and their passwords,
+    // and refuse every waiting passkey request.
+    if (event.type === "locked" || event.type === "disconnected") {
+      inline.reset();
+      passkeys.reset();
+    }
   },
 });
 
 type Target = Pick<FrameRef, "tabId" | "frameId" | "documentId">;
 
-async function sendToFrame(target: Target, msg: BackgroundToContent): Promise<unknown> {
+async function sendToFrame(target: Target, msg: BackgroundToContent | BgWaResult): Promise<unknown> {
   const options: { frameId: number; documentId?: string } = { frameId: target.frameId };
   if (target.documentId !== undefined) options.documentId = target.documentId;
   try {
@@ -38,6 +46,7 @@ async function sendToFrame(target: Target, msg: BackgroundToContent): Promise<un
 }
 
 const inline = createInlineHandler({ client, sendToFrame, now: Date.now, newToken });
+const passkeys = createWebAuthnHandler({ client, sendToFrame, now: Date.now, newToken });
 
 async function activeTab(): Promise<ActiveTab | undefined> {
   // Readable because the user opened the popup on this tab (activeTab).
@@ -76,11 +85,12 @@ function isFromPopup(sender: chrome.runtime.MessageSender): boolean {
   return extensionPage(sender) === "/popup.html" && sender.tab === undefined;
 }
 
-/** The tab of a menu or save frame embedded in a page. */
-function inlineFrameTab(sender: chrome.runtime.MessageSender): number | null {
+/** The tab and page of a menu, save or passkey frame embedded in a page. */
+function inlineFrame(sender: chrome.runtime.MessageSender): { tabId: number; page: string } | null {
   const page = extensionPage(sender);
-  if (page !== "/menu.html" && page !== "/save.html") return null;
-  return sender.tab?.id ?? null;
+  if (page !== "/menu.html" && page !== "/save.html" && page !== "/passkey.html") return null;
+  const tabId = sender.tab?.id;
+  return tabId === undefined ? null : { tabId, page };
 }
 
 /**
@@ -125,18 +135,28 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
     return reply(popup.handle(req));
   }
 
-  const tabId = inlineFrameTab(sender);
-  if (tabId !== null) {
+  const embedded = inlineFrame(sender);
+  if (embedded) {
+    if (embedded.page === "/passkey.html") {
+      const req = parsePkRequest(msg);
+      if (!req) {
+        sendResponse({ ok: false, message: "Invalid request." });
+        return false;
+      }
+      return reply(passkeys.handleFrame(embedded.tabId, req));
+    }
     const req = parseInlineRequest(msg);
     if (!req) {
       sendResponse({ ok: false, message: "Invalid request." });
       return false;
     }
-    return reply(inline.handleInline(tabId, req));
+    return reply(inline.handleInline(embedded.tabId, req));
   }
 
   const frame = contentFrame(sender);
   if (frame) {
+    const wa = parseWaRequest(msg);
+    if (wa) return reply(passkeys.handleContent(frame, wa));
     const req = parseContentRequest(msg);
     if (!req) return false;
     return reply(inline.handleContent(frame, req));
@@ -144,7 +164,10 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
   return false;
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => inline.forgetTab(tabId));
+chrome.tabs.onRemoved.addListener((tabId) => {
+  inline.forgetTab(tabId);
+  passkeys.forgetTab(tabId);
+});
 
 // ------------------------------------------------------------ inline suggestions opt-in
 

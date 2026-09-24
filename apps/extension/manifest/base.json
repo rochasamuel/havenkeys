@@ -35,8 +35,10 @@
       "resources": [
         "menu.html",
         "save.html",
+        "passkey.html",
         "menu.js",
         "save.js",
+        "passkey.js",
         "inline.css",
         "theme.css",
         "fonts.css",

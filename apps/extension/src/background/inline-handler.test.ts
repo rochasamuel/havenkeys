@@ -32,7 +32,8 @@ function setup(answer: (r: Request) => unknown = defaultAnswer) {
       }) as never,
     },
     sendToFrame: async (to, msg) => {
-      sent.push({ to: { tabId: to.tabId, frameId: to.frameId }, msg });
+      // The inline handler only sends BackgroundToContent; BgWaResult is the passkey handler's.
+      sent.push({ to: { tabId: to.tabId, frameId: to.frameId }, msg: msg as BackgroundToContent });
       return msg.type === "bg_fill" ? { filled: 2 } : undefined;
     },
     now: () => clock,

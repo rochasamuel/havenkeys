@@ -283,6 +283,39 @@ main {
   cursor: default;
 }
 
+/* Passkey chooser and save card */
+
+#main {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.choice input {
+  margin: 0;
+  accent-color: var(--brass);
+}
+
+/* The passkey card's buttons sit outside .prompt, so they need its inset. */
+.card > .actions {
+  padding: 0 12px 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

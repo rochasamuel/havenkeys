@@ -1,8 +1,9 @@
-// Helpers shared by the in-page menu and save prompt (extension pages
+// Helpers shared by the in-page menu, save prompt and passkey card (extension pages
 // embedded in web pages).
 
 import type { InlineReply, InlineRequest } from "../messaging/inline";
 import { TOKEN } from "../messaging/inline";
+import type { PkRequest } from "../webauthn/messages";
 
 /** The session token from our own URL fragment, or null. */
 export function tokenFromHash(): string | null {
@@ -10,7 +11,7 @@ export function tokenFromHash(): string | null {
   return TOKEN.test(t) ? t : null;
 }
 
-export async function ask<T>(req: InlineRequest): Promise<InlineReply<T>> {
+export async function ask<T>(req: InlineRequest | PkRequest): Promise<InlineReply<T>> {
   try {
     return (await chrome.runtime.sendMessage(req)) as InlineReply<T>;
   } catch {

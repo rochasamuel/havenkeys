@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HavenKeys passkeys</title>
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="inline.css" />
+    <script src="passkey.js" defer></script>
+  </head>
+  <body>
+    <div class="card" role="dialog" aria-labelledby="question">
+      <header class="head">
+        <svg class="mark" viewBox="0 0 1024 1024" aria-hidden="true"><path class="mark-shield" d="M512 196 L772 300 V500 C772 668 662 792 512 846 C362 792 252 668 252 500 V300 Z" /><circle class="mark-key" cx="512" cy="468" r="84" /><rect class="mark-key" x="486" y="520" width="52" height="170" rx="18" /></svg>
+        <span class="brand">HavenKeys</span>
+        <span id="site" class="site"></span>
+      </header>
+      <div class="prompt">
+        <p id="question">Loading…</p>
+        <p id="detail" class="detail"></p>
+      </div>
+      <main id="main"></main>
+      <div class="actions">
+        <button id="cancel" class="btn" type="button">Cancel</button>
+        <button id="fallback" class="btn" type="button">Use another device</button>
+        <button id="confirm" class="btn primary" type="button" hidden>Save to HavenKeys</button>
+      </div>
+    </div>
+  </body>
+</html>
