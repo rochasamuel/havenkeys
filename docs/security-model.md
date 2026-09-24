@@ -121,6 +121,18 @@ extension later. With auto-lock set to "Never", a hidden window keeps the
 vault unlocked until you lock or quit. The tray shows only static text,
 never item data.
 
+**Open at login.** Off by default; Settings → Startup turns it on for this
+computer. It is an OS entry (a login item on macOS, `HKCU\…\Run` on
+Windows, `~/.config/autostart` on Linux) written through
+`tauri-plugin-autostart`, and the OS is its only record: it is not stored in
+the vault or synced. A login launch passes `--autostart` and starts **locked,
+in the tray, with no window**; it never unlocks anything. Changing the
+setting requires an unlocked vault. The plugin's own JS commands are not
+granted to the renderer; only `launch_at_login` and `set_launch_at_login`
+are. `tauri-plugin-single-instance` makes a second launch show the running
+instance's window and exit, so two processes never open the same vault
+file.
+
 **Screen lock.** The vault also locks when the operating-system session
 locks (reason `screen_lock`). The auto-lock thread polls every 5 seconds
 through `crates/havenkeys-oslock`:

@@ -181,7 +181,9 @@ trustworthy as the extension that reports it.
 
 ### T5 — Compromised renderer / UI process
 * No cryptography in JavaScript; no keys in JavaScript.
-* Strict Tauri command allowlist; no filesystem, shell, HTTP or dialog plugins.
+* Strict Tauri command allowlist; no filesystem, shell or HTTP plugins. The
+  dialog, autostart and single-instance plugins are used from Rust only; the
+  renderer is granted none of their commands.
 * Strict CSP, no remote content, navigation outside the app is blocked.
 * A fully compromised renderer **can** request any secret while the vault is
   unlocked (it is the UI, after all). We limit the blast radius (it cannot read

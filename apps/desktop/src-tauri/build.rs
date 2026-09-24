@@ -32,6 +32,8 @@ const COMMANDS: &[&str] = &[
     "copy_generated_password",
     "get_settings",
     "update_settings",
+    "launch_at_login",
+    "set_launch_at_login",
     "import_1pux",
     "delete_import_file",
 ];

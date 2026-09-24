@@ -89,13 +89,28 @@ function ChangePassword() {
 export function SettingsView({ onImported, online }: { onImported: () => void; online: boolean }) {
   const toast = useToast();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
 
   useEffect(() => {
     api
       .getSettings()
       .then(setSettings)
       .catch(() => toast("Could not load settings.", "error"));
+    // Unknown (null) hides the row: the OS may not support it.
+    api
+      .launchAtLogin()
+      .then(setLaunchAtLogin)
+      .catch(() => setLaunchAtLogin(null));
   }, [toast]);
+
+  async function updateLaunchAtLogin(enabled: boolean) {
+    try {
+      setLaunchAtLogin(await api.setLaunchAtLogin(enabled));
+      toast("Settings saved.");
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Could not save settings.", "error");
+    }
+  }
 
   async function update(patch: Partial<Settings>) {
     if (!settings) return;
@@ -178,6 +193,26 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
           <p className="group-note">
             The vault also locks when the computer sleeps and when you quit HavenKeys, and — on Windows and Linux — when
             the screen locks. Closing the window keeps HavenKeys in the tray, where the timeout above keeps running.
+          </p>
+        </div>
+      )}
+
+      {launchAtLogin !== null && (
+        <div className="settings-block">
+          <h3 className="group-title">Startup</h3>
+          <div className="group">
+            <div className="row">
+              <span className="row-label-inline">Open HavenKeys when you log in</span>
+              <Switch
+                label="Open HavenKeys when you log in to this computer"
+                checked={launchAtLogin}
+                onChange={(checked) => void updateLaunchAtLogin(checked)}
+              />
+            </div>
+          </div>
+          <p className="group-note">
+            HavenKeys starts locked, in the tray, so the browser extension can reach it. This applies to this computer
+            only.
           </p>
         </div>
       )}

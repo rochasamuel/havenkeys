@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 mod account;
+mod autostart;
 mod clipboard;
 mod commands;
 mod device;
@@ -66,7 +67,16 @@ fn vault_path<R: Runtime>(app: &tauri::App<R>) -> Result<PathBuf, &'static str> 
 
 pub fn run() {
     let app = tauri::Builder::default()
+        // First, so a second launch (the app icon while the login launch
+        // sits in the tray) hands over to this process and exits before it
+        // opens the vault or the bridge.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }))
         .plugin(navigation_guard())
+        // Used from Rust only (autostart.rs). The capability grants the
+        // renderer none of the plugin's commands.
+        .plugin(autostart::plugin())
         // Used from Rust only (native file picker for imports). The capability
         // grants the renderer no dialog permissions.
         .plugin(tauri_plugin_dialog::init())
@@ -147,6 +157,12 @@ pub fn run() {
 
             tray::install(app)?;
 
+            // The window starts hidden (tauri.conf.json). A login launch
+            // stays in the tray; any other launch shows it.
+            if !autostart::launched_at_login() {
+                tray::show_main_window(app.handle());
+            }
+
             let handle = app.handle().clone();
             std::thread::Builder::new()
                 .name("auto-lock".into())
@@ -223,6 +239,8 @@ pub fn run() {
             commands::copy_generated_password,
             commands::get_settings,
             commands::update_settings,
+            autostart::launch_at_login,
+            autostart::set_launch_at_login,
             import::import_1pux,
             import::delete_import_file,
         ])

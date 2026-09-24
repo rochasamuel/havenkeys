@@ -124,6 +124,9 @@ export const api = {
 
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),
+  /** Whether this computer opens HavenKeys at login (an OS setting, not a vault one). */
+  launchAtLogin: () => call<boolean>("launch_at_login"),
+  setLaunchAtLogin: (enabled: boolean) => call<boolean>("set_launch_at_login", { enabled }),
 
   onLocked: (handler: (reason: string) => void): Promise<UnlistenFn> =>
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),

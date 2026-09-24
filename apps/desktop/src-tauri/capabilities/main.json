@@ -39,6 +39,8 @@
     "allow-copy-generated-password",
     "allow-get-settings",
     "allow-update-settings",
+    "allow-launch-at-login",
+    "allow-set-launch-at-login",
     "allow-import-1pux",
     "allow-delete-import-file"
   ]

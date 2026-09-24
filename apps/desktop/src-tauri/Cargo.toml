@@ -20,7 +20,8 @@ havenkeys-bridge = { path = "../../../crates/havenkeys-bridge" }
 havenkeys-oslock = { path = "../../../crates/havenkeys-oslock" }
 havenkeys-protocol = { path = "../../../crates/havenkeys-protocol" }
 havenkeys-sync-client = { path = "../../../crates/havenkeys-sync-client" }
-# No Tauri plugins: no fs, shell, http, dialog, opener or clipboard plugin.
+# No fs, shell, http, opener or clipboard plugin. The plugins below are driven
+# from Rust only; the capability grants the renderer none of their commands.
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 # Only for a timer (the unlock fallback); already in the tree through Tauri.
@@ -36,6 +37,8 @@ qrcode = { version = "0.14", default-features = false }
 # The Secret Key lives in the OS keychain (secret_store.rs). keyring-core plus
 # only this platform's native store: no mock, file or keyutils backends.
 keyring-core = "1.0"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }
