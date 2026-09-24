@@ -62,12 +62,34 @@ function choices(candidates: PasskeyCandidate[], userName: string): { el: HTMLEl
   return { el: list, selected: () => radios.find((r) => r.input.checked)?.itemId ?? null };
 }
 
+/** While locked, how often to ask whether the vault has been unlocked. */
+const LOCKED_POLL_MS = 1500;
+let poll: ReturnType<typeof setTimeout> | null = null;
+
+function stopPolling(): void {
+  if (poll !== null) clearTimeout(poll);
+  poll = null;
+}
+
+/** Re-ask for the state until the background has looked the passkeys up again. */
+function pollWhileLocked(t: string): void {
+  stopPolling();
+  poll = setTimeout(async () => {
+    poll = null;
+    const r = await ask<PkView>({ type: "pk_state", token: t });
+    if (!r.ok) showError(r.message);
+    else if (r.value.state === "locked") pollWhileLocked(t);
+    else render(t, r.value);
+  }, LOCKED_POLL_MS);
+}
+
 function render(t: string, view: PkView): void {
   site.textContent = view.site;
   switch (view.state) {
     case "locked":
       question.textContent = "HavenKeys is locked";
-      detail.textContent = "Unlock the HavenKeys app to use a passkey, or use another device.";
+      detail.textContent = "Unlock the HavenKeys app — this card will update.";
+      pollWhileLocked(t);
       return;
     case "chooser":
       question.textContent = "Sign in with a passkey";
@@ -97,6 +119,7 @@ cancelBtn.addEventListener("click", (e) => {
   if (!token || !e.isTrusted) return;
   void ask({ type: "pk_cancel", token });
 });
+addEventListener("pagehide", stopPolling);
 document.addEventListener("keydown", (e) => {
   if (token && e.key === "Escape") void ask({ type: "pk_cancel", token });
 });

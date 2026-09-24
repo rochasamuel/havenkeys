@@ -180,4 +180,126 @@ describe("conditional", () => {
     expect(await h.pickConditional(frame(), ITEM, CRED)).toEqual({ ok: true, value: null });
     expect(sent.at(-1)).toMatchObject({ type: "bg_wa_result", token: T1 });
   });
+
+  it("keeps a session away from a navigated frame that has no documentId", async () => {
+    const { h, requests } = setup(defaults);
+    await h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, conditional: true } });
+    const navigated = frame({ url: "https://evil.example/login", origin: "https://evil.example" });
+    expect(navigated.documentId).toBeUndefined();
+    expect(h.conditionalFor(navigated)).toEqual([]);
+    expect((await h.pickConditional(navigated, ITEM, CRED)).ok).toBe(false);
+    await h.handleContent(navigated, { type: "wa_cancel", token: T1 });
+    expect(h.conditionalFor(frame())).toEqual([match]);
+    expect(requests.some((r) => r.type === "passkey_get")).toBe(false);
+  });
+});
+
+describe("unlock while a card is open", () => {
+  it("turns a locked chooser into the real one", async () => {
+    let locked = true;
+    const { h, requests, sent } = setup((r) => {
+      if (locked) throw new BridgeError("locked", "x");
+      return defaults(r);
+    });
+    await h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    expect((await h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED })).ok).toBe(false);
+    locked = false;
+    await h.refreshLocked();
+    expect(requests.at(-1)).toEqual({ type: "find_passkeys", url: "https://github.com/login", rpId: "github.com", allowCredentials: [] });
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "chooser", site: "github.com", passkeys: [match] } });
+    expect(await h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)).toMatchObject({ type: "bg_wa_result", token: T1, outcome: { outcome: "credential" } });
+  });
+
+  it("turns a locked save card into the real one", async () => {
+    let locked = true;
+    const { h } = setup((r) => {
+      if (locked) throw new BridgeError("locked", "x");
+      return defaults(r);
+    });
+    await h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    locked = false;
+    await h.refreshLocked();
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toMatchObject({ ok: true, value: { state: "create" } });
+  });
+
+  it("falls back when the unlocked vault has no passkeys for the site", async () => {
+    let locked = true;
+    const { h, sent } = setup((r) => {
+      if (locked) throw new BridgeError("locked", "x");
+      return r.type === "find_passkeys" ? { type: "find_passkeys", passkeys: [] } : defaults(r);
+    });
+    await h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    locked = false;
+    await h.refreshLocked();
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "fallback" } });
+    expect((await h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
+  });
+
+  it("keeps waiting while still locked, then reports excluded credentials", async () => {
+    let mode: "locked" | "excluded" = "locked";
+    const { h, sent } = setup((r) => {
+      if (mode === "locked") throw new BridgeError("locked", "x");
+      return r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [] } : defaults(r);
+    });
+    await h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    await h.refreshLocked();
+    expect(sent).toEqual([]);
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "locked", site: "github.com" } });
+    mode = "excluded";
+    await h.refreshLocked();
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "InvalidStateError" } });
+  });
+
+  it("maps a denied lookup to SecurityError", async () => {
+    let mode: "locked" | "denied" = "locked";
+    const { h, sent } = setup(() => {
+      throw new BridgeError(mode, "x");
+    });
+    await h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    mode = "denied";
+    await h.refreshLocked();
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "SecurityError" } });
+  });
+});
+
+describe("one operation at a time", () => {
+  it("refuses a second pick while a signature is in flight", async () => {
+    let release: () => void = () => {};
+    const { h, requests } = setup((r) =>
+      r.type === "passkey_get" ? new Promise((res) => (release = () => res(signed))) : defaults(r),
+    );
+    await h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    const first = h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED });
+    expect(await h.handleFrame(1, { type: "pk_pick", token: T1, itemId: ITEM, credentialId: CRED })).toEqual({ ok: false, message: "Please wait…" });
+    release();
+    expect(await first).toEqual({ ok: true, value: null });
+    expect(requests.filter((r) => r.type === "passkey_get")).toHaveLength(1);
+  });
+
+  it("refuses a second save while one is in flight", async () => {
+    let release: () => void = () => {};
+    const { h, requests } = setup((r) =>
+      r.type === "passkey_create" ? new Promise((res) => (release = () => res(created))) : defaults(r),
+    );
+    await h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    const first = h.handleFrame(1, { type: "pk_save", token: T1, itemId: null });
+    expect(await h.handleFrame(1, { type: "pk_save", token: T1, itemId: ITEM })).toEqual({ ok: false, message: "Please wait…" });
+    release();
+    await first;
+    expect(requests.filter((r) => r.type === "passkey_create")).toHaveLength(1);
+  });
+
+  it("allows a retry after a failed save", async () => {
+    let offline = true;
+    const { h, sent } = setup((r) => {
+      if (r.type === "passkey_create" && offline) throw new BridgeError("offline", "HavenKeys is offline.");
+      return defaults(r);
+    });
+    await h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    expect((await h.handleFrame(1, { type: "pk_save", token: T1, itemId: null })).ok).toBe(false);
+    offline = false;
+    expect(await h.handleFrame(1, { type: "pk_save", token: T1, itemId: null })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)).toMatchObject({ outcome: { outcome: "credential" } });
+  });
 });

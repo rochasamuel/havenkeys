@@ -107,6 +107,18 @@ export function startBridge(): void {
     else void begin(req);
   });
 
+  // Leaving the page (or entering the back/forward cache): end every request
+  // here and in the background, so no session outlives its document. Firefox
+  // has no documentId to tell a navigated frame apart. A page can fire a fake
+  // "pagehide" itself, but that only cancels its own requests, which it can
+  // do anyway.
+  window.addEventListener("pagehide", () => {
+    for (const [id, p] of [...pending]) {
+      if (p.token) void send({ type: "wa_cancel", token: p.token });
+      respond(id, { outcome: "error", name: "AbortError" });
+    }
+  });
+
   chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
     // Only this extension's background worker (no tab).
     if (sender.id !== chrome.runtime.id || sender.tab !== undefined) return false;

@@ -167,4 +167,27 @@ describe("additional security paths", () => {
     await vi.advanceTimersByTimeAsync(MAX_TIMEOUT_MS + 10_000 + 60_000);
     expect(responses).toEqual([]);
   });
+
+  it("cancels every pending request, conditional ones included, when the page goes away", async () => {
+    const modalId = hex(10);
+    const modalToken = hex(11);
+    const condId = hex(12);
+    const condToken = hex(13);
+    reply = () => ({ ok: true, token: modalToken, ui: "chooser" });
+    request({ kind: "get", id: modalId, options: get });
+    await flush();
+    reply = () => ({ ok: true, token: condToken, ui: "none" });
+    request({ kind: "get", id: condId, options: { ...get, conditional: true } });
+    await flush();
+    sent.length = 0;
+    window.dispatchEvent(new Event("pagehide"));
+    expect(sent).toContainEqual({ type: "wa_cancel", token: modalToken });
+    expect(sent).toContainEqual({ type: "wa_cancel", token: condToken });
+    expect(responses).toContainEqual({ id: modalId, outcome: "error", name: "AbortError" });
+    expect(responses).toContainEqual({ id: condId, outcome: "error", name: "AbortError" });
+    expect(document.querySelector("iframe")).toBeNull();
+    responses.length = 0;
+    onMessage?.({ type: "bg_wa_result", token: condToken, outcome: { outcome: "fallback" } }, { id: "ext" });
+    expect(responses).toEqual([]);
+  });
 });

@@ -38,11 +38,17 @@ type Client = {
   request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>>;
 };
 
+/**
+ * `locked`: the vault was locked when the request came in; the card shows
+ * "unlock" until `refreshLocked()` re-runs the lookup after an unlock.
+ * `busy`: a sign or save is in flight; a second one is refused.
+ */
 type Session =
-  | { kind: "get"; token: string; frame: FrameRef; rpId: string; options: GetOptions; locked: boolean; passkeys: PasskeyRow[]; timer: ReturnType<typeof setTimeout> }
-  | { kind: "create"; token: string; frame: FrameRef; rpId: string; options: CreateOptions; locked: boolean; candidates: PasskeyCandidate[]; timer: ReturnType<typeof setTimeout> };
+  | { kind: "get"; token: string; frame: FrameRef; rpId: string; options: GetOptions; locked: boolean; busy: boolean; passkeys: PasskeyRow[]; timer: ReturnType<typeof setTimeout> }
+  | { kind: "create"; token: string; frame: FrameRef; rpId: string; options: CreateOptions; locked: boolean; busy: boolean; candidates: PasskeyCandidate[]; timer: ReturnType<typeof setTimeout> };
 
 const FALLBACK: WaReply = { ok: false, outcome: { outcome: "fallback" } };
+const BUSY = { ok: false as const, message: "Please wait…" };
 
 function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
@@ -53,7 +59,10 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
 
   const frameFields = (f: FrameRef) => (f.topUrl === undefined ? { url: f.url } : { url: f.url, topUrl: f.topUrl });
   const rpIdFor = (f: FrameRef, rpId: string | null) => rpId ?? new URL(f.url).hostname;
-  const sameFrame = (a: FrameRef, b: FrameRef) => a.tabId === b.tabId && a.frameId === b.frameId && a.documentId === b.documentId;
+  // Firefox senders carry no documentId, so a navigated frame would look the
+  // same; the origin check keeps one site's session away from the next site.
+  const sameFrame = (a: FrameRef, b: FrameRef) =>
+    a.tabId === b.tabId && a.frameId === b.frameId && a.documentId === b.documentId && a.origin === b.origin;
 
   /** End a session and tell its bridge. A missing session is a no-op. */
   function finish(tabId: number, token: string, outcome: Outcome): void {
@@ -98,7 +107,7 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     }
     if (!locked && passkeys.length === 0) return FALLBACK;
     const ttl = options.conditional ? CONDITIONAL_TTL_MS : Math.min(options.timeoutMs ?? SESSION_TTL_MS, SESSION_TTL_MS);
-    const token = open(frame.tabId, (token, timer) => ({ kind: "get", token, frame, rpId, options, locked, passkeys, timer }), ttl);
+    const token = open(frame.tabId, (token, timer) => ({ kind: "get", token, frame, rpId, options, locked, busy: false, passkeys, timer }), ttl);
     return { ok: true, token, ui: options.conditional ? "none" : "chooser" };
   }
 
@@ -123,7 +132,7 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
       else return FALLBACK;
     }
     const ttl = Math.min(options.timeoutMs ?? SESSION_TTL_MS, SESSION_TTL_MS);
-    const token = open(frame.tabId, (token, timer) => ({ kind: "create", token, frame, rpId, options, locked, candidates, timer }), ttl);
+    const token = open(frame.tabId, (token, timer) => ({ kind: "create", token, frame, rpId, options, locked, busy: false, candidates, timer }), ttl);
     return { ok: true, token, ui: "create" };
   }
 
@@ -131,6 +140,8 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     if (s.locked || !s.passkeys.some((p) => p.itemId === itemId && p.credentialId === credentialId)) {
       return { ok: false, message: "Unknown passkey." };
     }
+    if (s.busy) return BUSY;
+    s.busy = true;
     try {
       const r = await deps.client.request({
         type: "passkey_get",
@@ -154,6 +165,8 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
       return { ok: true, value: null };
     } catch (e) {
       return fail(e);
+    } finally {
+      s.busy = false;
     }
   }
 
@@ -161,6 +174,8 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     if (s.locked || (itemId !== null && !s.candidates.some((c) => c.itemId === itemId))) {
       return { ok: false, message: "Unknown login." };
     }
+    if (s.busy) return BUSY;
+    s.busy = true;
     try {
       const r = await deps.client.request({
         type: "passkey_create",
@@ -189,6 +204,8 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
       return { ok: true, value: null };
     } catch (e) {
       return fail(e);
+    } finally {
+      s.busy = false;
     }
   }
 
@@ -244,6 +261,55 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     return sign(s, itemId, credentialId);
   }
 
+  /**
+   * The vault was unlocked: sessions that opened while it was locked look
+   * their passkeys (or save targets) up again, with the same frame, rpId and
+   * options they were opened with. Whatever the lookup ends in besides a
+   * usable list finishes the session like the initial request would have.
+   */
+  async function refreshLocked(): Promise<void> {
+    await Promise.all([...sessions.values()].filter((s) => s.locked).map(refresh));
+  }
+
+  async function refresh(s: Session): Promise<void> {
+    const tabId = s.frame.tabId;
+    const current = () => sessions.get(tabId) === s;
+    const failed = (e: unknown) => {
+      if (!current()) return;
+      // Locked again before the lookup ran: keep waiting for the next unlock.
+      if (e instanceof BridgeError && e.code === "locked") return;
+      if (e instanceof BridgeError && e.code === "denied") finish(tabId, s.token, { outcome: "error", name: "SecurityError" });
+      else finish(tabId, s.token, { outcome: "fallback" });
+    };
+    if (s.kind === "get") {
+      try {
+        const r = await deps.client.request({ type: "find_passkeys", ...frameFields(s.frame), rpId: s.rpId, allowCredentials: s.options.allowCredentials });
+        if (!current()) return;
+        if (r.passkeys.length === 0) return finish(tabId, s.token, { outcome: "fallback" });
+        s.passkeys = r.passkeys;
+        s.locked = false;
+      } catch (e) {
+        failed(e);
+      }
+      return;
+    }
+    try {
+      const r = await deps.client.request({
+        type: "check_passkey_create",
+        ...frameFields(s.frame),
+        rpId: s.rpId,
+        userName: s.options.userName,
+        excludeCredentials: s.options.excludeCredentials,
+      });
+      if (!current()) return;
+      if (r.excluded) return finish(tabId, s.token, { outcome: "error", name: "InvalidStateError" });
+      s.candidates = r.candidates;
+      s.locked = false;
+    } catch (e) {
+      failed(e);
+    }
+  }
+
   /** Vault locked or desktop gone: every waiting page gets a refusal. */
   function reset(): void {
     for (const [tabId, s] of [...sessions]) {
@@ -256,7 +322,7 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     drop(tabId);
   }
 
-  return { handleContent, handleFrame, conditionalFor, pickConditional, reset, forgetTab };
+  return { handleContent, handleFrame, conditionalFor, pickConditional, refreshLocked, reset, forgetTab };
 }
 
 export type WebAuthnHandler = ReturnType<typeof createWebAuthnHandler>;
