@@ -18,6 +18,8 @@
     "allow-get-item",
     "allow-reveal-secret",
     "allow-password-history",
+    "allow-list-passkeys",
+    "allow-delete-passkey",
     "allow-device-status",
     "allow-account-status",
     "allow-activate-account",

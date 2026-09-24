@@ -29,8 +29,18 @@ export interface ItemOverview {
   hasPassword: boolean;
   hasTotp: boolean;
   hasNotes: boolean;
+  hasPasskey: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+/** A passkey saved on a login. Public details only. */
+export interface PasskeyInfo {
+  credentialId: string;
+  rpId: string;
+  userName: string;
+  displayName: string | null;
+  createdAt: number;
 }
 
 /** How an edit treats a secret field. `keep` never requires reading it. */

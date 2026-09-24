@@ -18,6 +18,7 @@ import type {
   ImportResult,
   ItemInput,
   ItemOverview,
+  PasskeyInfo,
   SecretField,
   Settings,
   SyncReport,
@@ -77,6 +78,8 @@ export const api = {
   reveal: (id: string, field: SecretField) => call<string>("reveal_secret", { id, field }),
   /** When each previous password was replaced (Unix ms, newest first). */
   passwordHistory: (id: string) => call<number[]>("password_history", { id }),
+  listPasskeys: (id: string) => call<PasskeyInfo[]>("list_passkeys", { id }),
+  deletePasskey: (id: string, credentialId: string) => call<ItemOverview>("delete_passkey", { id, credentialId }),
   revealPreviousPassword: (id: string, index: number) =>
     call<string>("reveal_previous_password", { id, index }),
   totp: (id: string) => call<TotpCode>("get_totp_code", { id }),

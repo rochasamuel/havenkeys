@@ -504,6 +504,40 @@ pub fn password_history(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<i
     Ok(state.vault()?.password_history(&id)?)
 }
 
+/// Public details of a login's passkeys. Never the private key.
+#[tauri::command]
+pub fn list_passkeys(
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> CmdResult<Vec<havenkeys_core::passkey::PasskeyInfo>> {
+    state.touch();
+    Ok(state.vault()?.list_passkeys(&id)?)
+}
+
+/// Remove one passkey from a login. A server write, like any edit.
+#[tauri::command]
+pub async fn delete_passkey(
+    app: AppHandle,
+    id: Uuid,
+    credential_id: String,
+) -> CmdResult<ItemOverview> {
+    let staged = {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_online()?;
+        let staged =
+            state
+                .vault()?
+                .stage_remove_passkey(&id, &credential_id, AppState::now_ms())?;
+        staged
+    };
+    let item = sync::push(&app, staged)
+        .await?
+        .ok_or_else(CmdError::internal)?;
+    let _ = app.emit(crate::state::ITEMS_CHANGED_EVENT, ());
+    Ok(item)
+}
+
 #[tauri::command]
 pub fn reveal_previous_password(
     state: State<'_, AppState>,

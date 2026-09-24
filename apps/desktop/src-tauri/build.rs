@@ -11,6 +11,8 @@ const COMMANDS: &[&str] = &[
     "get_item",
     "reveal_secret",
     "password_history",
+    "list_passkeys",
+    "delete_passkey",
     "device_status",
     "account_status",
     "activate_account",

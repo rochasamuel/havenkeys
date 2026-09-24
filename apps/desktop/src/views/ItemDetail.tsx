@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api";
-import type { CopyField, ItemOverview } from "../lib/types";
+import type { CopyField, ItemOverview, PasskeyInfo } from "../lib/types";
 import { formatDate, groupCode, monogram, primaryHost } from "../lib/format";
 import { useRevealedSecret, useTotp } from "../lib/hooks";
 import { CopyButton } from "../components/CopyButton";
@@ -44,9 +44,19 @@ function Field({ label, children, actions }: { label: string; children: ReactNod
   );
 }
 
-function IconButton({ icon, label, onClick }: { icon: Parameters<typeof Icon>[0]["name"]; label: string; onClick: () => void }) {
+function IconButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: Parameters<typeof Icon>[0]["name"];
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <button className="icon-btn" onClick={onClick} title={label} aria-label={label}>
+    <button className="icon-btn" onClick={onClick} title={label} aria-label={label} disabled={disabled}>
       <Icon name={icon} size={16} />
     </button>
   );
@@ -145,6 +155,65 @@ function PasswordHistory({ itemId }: { itemId: string }) {
   );
 }
 
+/** Passkeys saved on this login. Private keys never leave the core. */
+function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
+  const toast = useToast();
+  const [list, setList] = useState<PasskeyInfo[] | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.listPasskeys(itemId).then(
+      (l) => !cancelled && setList(l),
+      (e) => !cancelled && toast(e instanceof ApiError ? e.message : "Could not load passkeys.", "error"),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId, toast]);
+
+  const remove = async (credentialId: string) => {
+    try {
+      await api.deletePasskey(itemId, credentialId);
+      setList((l) => l?.filter((p) => p.credentialId !== credentialId) ?? null);
+      setConfirming(null);
+      toast("Passkey deleted.");
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Could not delete the passkey.", "error");
+    }
+  };
+
+  if (list === null || list.length === 0) return null;
+  return (
+    <Field label="Passkeys">
+      <ul className="history-list">
+        {list.map((p) => (
+          <li className="history-row" key={p.credentialId}>
+            <Icon name="key" size={15} />
+            <span className="selectable">{p.rpId}</span>
+            <span className="muted">
+              {p.userName || p.displayName || "No account name"} · Saved {formatDate(p.createdAt)}
+            </span>
+            {confirming === p.credentialId ? (
+              <span className="confirm">
+                <span>You may lose access to {p.rpId}.</span>
+                <button className="btn btn-small" onClick={() => setConfirming(null)}>
+                  Keep
+                </button>
+                <button className="btn btn-small btn-danger" onClick={() => void remove(p.credentialId)}>
+                  Delete
+                </button>
+              </span>
+            ) : (
+              <IconButton icon="trash" label="Delete passkey" onClick={() => setConfirming(p.credentialId)} disabled={readOnly} />
+            )}
+          </li>
+        ))}
+      </ul>
+    </Field>
+  );
+}
+
 export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
   const toast = useToast();
   const copy = useCopy(item.id);
@@ -232,6 +301,12 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
             {item.hasTotp && <TotpField item={item} onCopy={() => copy("totp", "One-time code")} />}
           </div>
 
+          {item.hasPasskey && (
+            <div className="group">
+              <Passkeys itemId={item.id} readOnly={readOnly} />
+            </div>
+          )}
+
           {item.urls.length > 0 && (
             <div className="group">
               {item.urls.map((u) => (
@@ -293,7 +368,10 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
         </p>
         {confirmDelete ? (
           <div className="confirm">
-            <span>Delete “{item.title}” permanently?</span>
+            <span>
+              Delete “{item.title}” permanently?
+              {item.hasPasskey && " Its passkeys go with it, and you may lose access to those sites."}
+            </span>
             <button className="btn btn-small" onClick={() => setConfirmDelete(false)}>
               Keep
             </button>

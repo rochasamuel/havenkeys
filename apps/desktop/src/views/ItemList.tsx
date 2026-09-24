@@ -117,6 +117,11 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                       <Icon name="clock" size={13} />
                     </span>
                   )}
+                  {item.hasPasskey && (
+                    <span className="list-item-flag" title="Has passkeys">
+                      <Icon name="key" size={13} />
+                    </span>
+                  )}
                 </button>
               </li>
             );

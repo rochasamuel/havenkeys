@@ -12,6 +12,7 @@ const item = (urls: string[]): ItemOverview => ({
   hasPassword: true,
   hasTotp: false,
   hasNotes: false,
+  hasPasskey: false,
   createdAt: 0,
   updatedAt: 0,
 });

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-passkeys"
+description = "Enables the list_passkeys command without any pre-configured scope."
+commands.allow = ["list_passkeys"]
+
+[[permission]]
+identifier = "deny-list-passkeys"
+description = "Denies the list_passkeys command without any pre-configured scope."
+commands.deny = ["list_passkeys"]

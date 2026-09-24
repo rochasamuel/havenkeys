@@ -218,6 +218,8 @@ pub fn run() {
             commands::get_item,
             commands::reveal_secret,
             commands::password_history,
+            commands::list_passkeys,
+            commands::delete_passkey,
             account::device_status,
             account::account_status,
             account::activate_account,
