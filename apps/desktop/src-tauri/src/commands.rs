@@ -52,18 +52,25 @@ pub async fn unlock_vault(
         .account()?
         .ok_or(havenkeys_core::Error::NoVault)?
         .to_ref()?;
-    let (stored, stored_text) = {
+    let (stored, stored_text, definite) = {
         let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
-        let text = device.secret_key_text(account.id);
+        let (text, definite) = device.secret_key_lookup(account.id);
         let key = text
             .as_ref()
             .and_then(|t| SecretKey::parse(t.expose()).ok());
-        (key, text)
+        (key, text, definite)
     };
     let typed = match secret_key {
         Some(t) if !t.is_empty() => Some(SecretKey::parse(t.expose())?),
         _ => None,
     };
+    // A keychain that failed or did not answer in time may hold the key.
+    // Asking for the Emergency Kit now would be wrong, and the typed key
+    // would land in device.json because that keychain would not take it
+    // either. The vault never left LOCKED, so nothing needs resetting.
+    if typed.is_none() && stored.is_none() && !definite {
+        return Err(keychain_unavailable());
+    }
     // `SecretKey` is deliberately not `Clone`, so both options move into the
     // blocking closure and are borrowed there, as the current code does.
     if typed.is_none() && stored.is_none() {
@@ -161,6 +168,14 @@ pub async fn unlock_vault(
         });
     }
     Ok(status)
+}
+
+/// The keychain did not give a definite answer at unlock.
+fn keychain_unavailable() -> CmdError {
+    CmdError {
+        code: "keychain_unavailable",
+        message: "Your system keychain did not answer. Approve its prompt if one is showing, then try again.".into(),
+    }
 }
 
 /// A Secret Key typed from the Emergency Kit proved correct: remember it.

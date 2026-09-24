@@ -28,6 +28,10 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
   // Bumped on every failure so the shake animation replays.
   const [attempt, setAttempt] = useState(0);
   const [askKey, setAskKey] = useState(needsSecretKey);
+  // The keychain did not answer (busy, a prompt waiting, or failing). The
+  // Secret Key field is not opened for that: the key is probably there, and
+  // one typed now would be saved to a file. Only if the user asks for it.
+  const [keychainStuck, setKeychainStuck] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => inputRef.current?.focus(), []);
@@ -46,6 +50,7 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
       onUnlocked(status);
     } catch (err) {
       if (err instanceof ApiError && err.code === "secret_key_required") setAskKey(true);
+      setKeychainStuck(err instanceof ApiError && err.code === "keychain_unavailable");
       setError(err instanceof ApiError ? err.message : "Could not open the vault.");
       setAttempt((n) => n + 1);
       setPassword("");
@@ -114,6 +119,11 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
         <p className={`unlock-error${error ? " is-visible" : ""}`} role="alert">
           {error}
         </p>
+        {keychainStuck && !askKey && (
+          <button className="btn btn-quiet" type="button" onClick={() => setAskKey(true)} disabled={busy}>
+            Enter the Secret Key from my Emergency Kit instead
+          </button>
+        )}
       </form>
       <p className="unlock-hint">
         <Icon name="shield" size={13} /> Your vault is decrypted on this computer only.

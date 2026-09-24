@@ -135,6 +135,16 @@ impl Device {
         self.resolve(account).0
     }
 
+    /// The key for `account` and whether the answer is definite. `(None,
+    /// false)` means the keychain failed or did not answer in time: it may
+    /// hold the key, so the caller must not ask for the Emergency Kit (a key
+    /// typed now would end up in `device.json`, since that same keychain
+    /// would not take it either).
+    pub fn secret_key_lookup(&mut self, account: Uuid) -> (Option<SecretString>, bool) {
+        let (text, _, definite) = self.resolve(account);
+        (text, definite)
+    }
+
     /// Keep `key` for `account`: in the keychain if it takes the key and
     /// gives the same value back, otherwise in `device.json`. Returns where
     /// it went.
@@ -353,6 +363,35 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut d = Device::load(dir.path(), Box::new(FailingKeyStore));
         assert!(!d.key_status(ACCOUNT).missing);
+    }
+
+    #[test]
+    fn a_keychain_that_times_out_is_not_a_definite_lookup() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut d = Device::load(
+            dir.path(),
+            Box::new(SlowKeyStore::new(std::time::Duration::from_secs(30))),
+        );
+        let (text, definite) = d.secret_key_lookup(ACCOUNT);
+        assert!(text.is_none());
+        assert!(
+            !definite,
+            "a keychain that did not answer is not a missing key"
+        );
+        // Still busy with the abandoned call: also not definite.
+        assert!(!d.secret_key_lookup(ACCOUNT).1);
+    }
+
+    #[test]
+    fn a_lookup_is_definite_when_the_keychain_answers() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut d = Device::load(dir.path(), Box::new(MemoryKeyStore::default()));
+        assert!(d.secret_key_lookup(ACCOUNT).1);
+        let k = key();
+        d.set_secret_key(ACCOUNT, &k).unwrap();
+        let (text, definite) = d.secret_key_lookup(ACCOUNT);
+        assert!(definite);
+        assert_eq!(text.unwrap().expose(), k.to_text().expose());
     }
 
     #[test]
