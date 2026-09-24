@@ -278,6 +278,63 @@ fn two_accounts_and_re_registration() {
 }
 
 #[test]
+fn re_registering_with_no_item_id_finds_the_existing_holder() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+
+    // First registration creates a new login (item_id: None).
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], None), NOW)
+        .unwrap();
+    let (first_login, _) = commit(&mut v, &mut rev, s);
+
+    // Registering again for the same (rpId, user handle) with item_id:
+    // None must find the existing holder rather than creating a second
+    // login for the same account.
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], None), NOW + 1)
+        .unwrap();
+    assert_eq!(s.item_id, first_login);
+    commit(&mut v, &mut rev, s);
+
+    let found = v.find_passkeys("github.com", GH, None, &[]).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].item_id, first_login);
+}
+
+#[test]
+fn re_registering_into_a_different_login_still_finds_the_existing_holder() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+
+    // Login A gets the passkey via item_id: None.
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], None), NOW)
+        .unwrap();
+    let (login_a, _) = commit(&mut v, &mut rev, s);
+
+    // A second, unrelated login is also saved for github.com.
+    let staged = v
+        .stage_create(login("GitHub", "other", "pw", "github.com"), NOW)
+        .unwrap();
+    let login_b = v.commit_write(staged, rev.next()).unwrap().unwrap().id;
+
+    // Registering the same account again, naming login B this time, must
+    // still land on login A (the existing holder), not create a second
+    // passkey for the same account in login B.
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], Some(login_b)), NOW + 1)
+        .unwrap();
+    assert_eq!(s.item_id, login_a);
+    commit(&mut v, &mut rev, s);
+
+    let found = v.find_passkeys("github.com", GH, None, &[]).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].item_id, login_a);
+    assert!(!v.get_item(&login_b).unwrap().has_passkey);
+}
+
+#[test]
 fn per_login_limit() {
     let (mut v, _) = activated_vault();
     let mut rev = Rev(0);

@@ -13,7 +13,9 @@ use super::{
     MIN_CHALLENGE_BYTES,
 };
 use crate::error::{Error, Result};
-use crate::model::{ItemDetails, ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
+use crate::model::{
+    ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule,
+};
 use crate::origin::PageUrl;
 use crate::vault::{build_item, StagedWrite, Suggestion, VaultService};
 use serde::Serialize;
@@ -101,6 +103,51 @@ fn fold(s: &str) -> String {
 }
 
 impl VaultService {
+    /// The login that already holds a passkey for `rp_id` + `user_handle`,
+    /// if any, anywhere in the vault. WebAuthn overwrites a credential
+    /// source that shares an authenticator, rpId and user handle with an
+    /// existing one (WebAuthn Level 3 §5.1.3 step 21.3) rather than
+    /// creating a second one; that has to be checked across every login,
+    /// not just the one the caller named, or a second registration for the
+    /// same account into a different (or brand-new) login would leave the
+    /// old passkey behind and `find_passkeys` would offer two credentials
+    /// for the same account. A login whose details do not open is skipped,
+    /// not fatal, matching `find_passkeys`.
+    fn find_passkey_holder(&self, rp_id: &str, user_handle: &[u8]) -> Result<Option<Uuid>> {
+        let session = self.session()?;
+        let candidates: Vec<Uuid> = session
+            .overviews
+            .values()
+            .filter(|o| o.item_type == ItemType::Login && o.has_passkey)
+            .map(|o| o.id)
+            .collect();
+        for id in candidates {
+            if let Ok(ItemDetails::Login { passkeys, .. }) = self.load_details(&id) {
+                if passkeys
+                    .iter()
+                    .any(|p| p.rp_id == rp_id && p.user_handle.0 == user_handle)
+                {
+                    return Ok(Some(id));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Load a login for editing, stamping `updated_at` and carrying the
+    /// revision this device last saw so the server can detect a
+    /// conflicting edit.
+    fn load_login_for_edit(
+        &self,
+        id: Uuid,
+        now_ms: i64,
+    ) -> Result<(ItemOverview, ItemDetails, Option<i64>)> {
+        let mut overview = self.get_item(&id)?;
+        overview.updated_at = now_ms;
+        let base = self.store.item_revision(&id)?;
+        Ok((overview, self.load_details(&id)?, base))
+    }
+
     /// Passkeys for `rp_id` that the page may use, filtered by the site's
     /// `allowCredentials` when it sent any. A login whose details do not
     /// open is skipped, not fatal.
@@ -205,8 +252,11 @@ impl VaultService {
         })
     }
 
-    /// Create a passkey and seal it into a login (a new one, or `item_id`).
-    /// Nothing is stored until the caller sends `write` and commits it.
+    /// Create a passkey and seal it into a login (a new one, or `item_id`,
+    /// unless a login somewhere in the vault already holds a passkey for
+    /// this rpId + user handle, in which case it replaces that one
+    /// instead — see `find_passkey_holder`). Nothing is stored until the
+    /// caller sends `write` and commits it.
     pub fn stage_passkey_create(
         &self,
         req: PasskeyCreate<'_>,
@@ -231,38 +281,47 @@ impl VaultService {
             now_ms,
         )?;
 
-        let (mut overview, mut details, base) = match req.item_id {
-            Some(id) => {
-                let offered = self
-                    .find_matches(req.page_url, req.top_url)?
-                    .iter()
-                    .any(|s| s.id == id);
-                if !offered {
-                    return Err(Error::Denied);
+        // If some login in the vault already holds a passkey for this rpId
+        // + user handle, the write goes there (see `find_passkey_holder`),
+        // regardless of `req.item_id`. It is already bound to an rpId this
+        // page may use, so the "offered for the page" check below is only
+        // needed for a login named by the caller that is not already the
+        // holder.
+        let holder = self.find_passkey_holder(&ctx.rp_id, req.user_handle)?;
+        let (mut overview, mut details, base) = if let Some(id) = holder {
+            self.load_login_for_edit(id, now_ms)?
+        } else {
+            match req.item_id {
+                Some(id) => {
+                    let offered = self
+                        .find_matches(req.page_url, req.top_url)?
+                        .iter()
+                        .any(|s| s.id == id);
+                    if !offered {
+                        return Err(Error::Denied);
+                    }
+                    self.load_login_for_edit(id, now_ms)?
                 }
-                let mut overview = self.get_item(&id)?;
-                overview.updated_at = now_ms;
-                let base = self.store.item_revision(&id)?;
-                (overview, self.load_details(&id)?, base)
-            }
-            None => {
-                let page = PageUrl::parse(req.page_url).ok_or(Error::Denied)?;
-                let (title, origin) = page.title_and_origin().ok_or(Error::Denied)?;
-                let input = ItemInput {
-                    item_type: ItemType::Login,
-                    title,
-                    username: Some(user_name).filter(|u| !u.is_empty()),
-                    urls: vec![UrlRule {
-                        url: origin,
-                        match_type: MatchType::Domain,
-                    }],
-                    password: SecretUpdate::Keep,
-                    totp: SecretUpdate::Keep,
-                    notes: SecretUpdate::Keep,
-                    content: SecretUpdate::Keep,
-                };
-                let (overview, details) = build_item(Uuid::new_v4(), input, None, now_ms, now_ms)?;
-                (overview, details, None)
+                None => {
+                    let page = PageUrl::parse(req.page_url).ok_or(Error::Denied)?;
+                    let (title, origin) = page.title_and_origin().ok_or(Error::Denied)?;
+                    let input = ItemInput {
+                        item_type: ItemType::Login,
+                        title,
+                        username: Some(user_name).filter(|u| !u.is_empty()),
+                        urls: vec![UrlRule {
+                            url: origin,
+                            match_type: MatchType::Domain,
+                        }],
+                        password: SecretUpdate::Keep,
+                        totp: SecretUpdate::Keep,
+                        notes: SecretUpdate::Keep,
+                        content: SecretUpdate::Keep,
+                    };
+                    let (overview, details) =
+                        build_item(Uuid::new_v4(), input, None, now_ms, now_ms)?;
+                    (overview, details, None)
+                }
             }
         };
         let ItemDetails::Login { passkeys, .. } = &mut details else {
