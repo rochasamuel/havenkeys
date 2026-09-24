@@ -679,3 +679,25 @@ fn passkey_status_sees_only_passkeys_the_page_may_use() {
     v.lock();
     assert_eq!(v.has_passkey_for_page(GH, None).err(), Some(Error::Locked));
 }
+
+#[test]
+fn conditional_create_never_replaces_the_filled_logins_own_passkey() {
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let gh = github_login(&mut v, &mut rev, "octo");
+    // `gh` itself already holds the passkey for user handle [1].
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], Some(gh)), NOW)
+        .unwrap();
+    let (_, old_cred) = commit(&mut v, &mut rev, s);
+    v.fill_for_page(&gh, GH, None, NOW).unwrap();
+    let cond = PasskeyCreate {
+        conditional: true,
+        ..create_req("octo", &[1], Some(gh))
+    };
+    assert_eq!(v.stage_passkey_create(cond, NOW).err(), Some(Error::Denied));
+    let found = v.find_passkeys("github.com", GH, None, &[]).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].item_id, gh);
+    assert_eq!(found[0].credential_id, old_cred);
+}

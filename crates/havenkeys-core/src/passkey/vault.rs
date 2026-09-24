@@ -325,7 +325,8 @@ impl VaultService {
     /// Create a passkey and seal it into a login (a new one, or `item_id`,
     /// unless a login somewhere in the vault already holds a passkey for
     /// this rpId + user handle, in which case it replaces that one
-    /// instead — see `find_passkey_holder`). Nothing is stored until the
+    /// instead — see `find_passkey_holder`; a conditional create is denied
+    /// then, never a replace). Nothing is stored until the
     /// caller sends `write` and commits it.
     pub fn stage_passkey_create(
         &self,
@@ -369,8 +370,10 @@ impl VaultService {
         // needed for a login named by the caller that is not already the
         // holder.
         let holder = self.find_passkey_holder(&ctx.rp_id, req.user_handle)?;
-        // An upgrade adds to the login that was filled, never elsewhere.
-        if req.conditional && holder.is_some_and(|h| Some(h) != req.item_id) {
+        // An upgrade only ever adds a passkey to the login that was filled.
+        // Replacing an existing one (in that login or any other) needs the
+        // card.
+        if req.conditional && holder.is_some() {
             return Err(Error::Denied);
         }
         let (mut overview, mut details, base) = if let Some(id) = holder {
