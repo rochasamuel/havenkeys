@@ -86,11 +86,13 @@ describe("message validation", () => {
 
   it("accepts exact menu/save frame requests only", () => {
     expect(parseInlineRequest({ type: "menu_pick", token: T1, itemId: GH })).not.toBeNull();
+    expect(parseInlineRequest({ type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ" })).not.toBeNull();
     for (const bad of [
       { type: "menu_pick", token: T1, itemId: "x" },
       { type: "menu_pick", token: "nope", itemId: GH },
       { type: "menu_state", token: T1, url: "https://evil.com" },
       { type: "save_confirm", token: T1, password: "x" },
+      { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQ" },
     ]) {
       expect(parseInlineRequest(bad), JSON.stringify(bad)).toBeNull();
     }
@@ -120,7 +122,7 @@ describe("suggestion menus", () => {
     const state = await h.handleInline(1, { type: "menu_state", token: T1 });
     expect(state).toEqual({
       ok: true,
-      value: { state: "ready", kind: "login", site: "github.com", items: [{ id: GH, title: "GitHub", username: "octo" }] },
+      value: { state: "ready", kind: "login", site: "github.com", items: [{ id: GH, title: "GitHub", username: "octo" }], passkeys: [] },
     });
     expect(JSON.stringify(state)).not.toContain("pw");
 
@@ -299,5 +301,48 @@ describe("save prompts", () => {
     });
     await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "pw" });
     expect(sent).toEqual([]);
+  });
+});
+
+describe("passkeys in the field menu", () => {
+  const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
+  const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo" };
+
+  function withPasskeys(rows = [row]) {
+    const picks: unknown[] = [];
+    const h = createInlineHandler({
+      client: { request: (async () => ({ type: "find_matches", matches: [] })) as never },
+      sendToFrame: async () => undefined,
+      now: () => 1,
+      newToken: () => T1,
+      passkeys: {
+        conditionalFor: () => rows,
+        pickConditional: async (...args: unknown[]) => {
+          picks.push(args);
+          return { ok: true as const, value: null };
+        },
+      },
+    });
+    return { h, picks };
+  }
+
+  it("opens a menu for a waiting passkey request even with no password logins", async () => {
+    const { h } = withPasskeys();
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+    const view = await h.handleInline(1, { type: "menu_state", token: T1 });
+    expect(view).toMatchObject({ ok: true, value: { state: "ready", passkeys: [row], items: [] } });
+  });
+
+  it("signs only passkeys the menu offered, for the menu's frame", async () => {
+    const { h, picks } = withPasskeys();
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect((await h.handleInline(1, { type: "menu_pick_passkey", token: T1, itemId: OTHER, credentialId: CRED })).ok).toBe(false);
+    expect(await h.handleInline(1, { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: CRED })).toEqual({ ok: true, value: null });
+    expect(picks).toEqual([[frame(), GH, CRED]]);
+  });
+
+  it("no passkeys without a waiting request", async () => {
+    const { h } = withPasskeys([]);
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
   });
 });

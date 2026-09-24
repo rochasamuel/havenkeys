@@ -11,7 +11,8 @@
 // unguessable session token, and the background checks that the frame
 // asking is in the same tab as the session.
 
-import { isUuid } from "@havenkeys/protocol";
+import { CREDENTIAL_ID_BYTES, isB64Url, isUuid } from "@havenkeys/protocol";
+import type { PasskeyRow } from "../webauthn/messages";
 
 export type MenuKind = "login" | "otp" | "new_password";
 
@@ -52,6 +53,7 @@ export type FillReply = { filled: number };
 export type InlineRequest =
   | { type: "menu_state"; token: string }
   | { type: "menu_pick"; token: string; itemId: string }
+  | { type: "menu_pick_passkey"; token: string; itemId: string; credentialId: string }
   | { type: "menu_generate"; token: string }
   | { type: "menu_close"; token: string }
   | { type: "save_state"; token: string }
@@ -66,7 +68,7 @@ export interface MenuItemView {
 
 export type MenuView =
   | { state: "locked" }
-  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[] };
+  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[] };
 
 export interface SaveView {
   action: "add" | "update";
@@ -133,6 +135,12 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
     case "menu_pick":
       return keysAre(o, ["type", "token", "itemId"]) && isUuid(o.itemId)
         ? { type: "menu_pick", token, itemId: o.itemId }
+        : null;
+    case "menu_pick_passkey":
+      return keysAre(o, ["type", "token", "itemId", "credentialId"]) &&
+        isUuid(o.itemId) &&
+        isB64Url(o.credentialId, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES)
+        ? { type: "menu_pick_passkey", token, itemId: o.itemId, credentialId: o.credentialId }
         : null;
     case "menu_state":
     case "menu_generate":

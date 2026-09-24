@@ -47,8 +47,8 @@ async function sendToFrame(target: Target, msg: BackgroundToContent | BgWaResult
   }
 }
 
-const inline = createInlineHandler({ client, sendToFrame, now: Date.now, newToken });
 const passkeys = createWebAuthnHandler({ client, sendToFrame, now: Date.now, newToken });
+const inline = createInlineHandler({ client, sendToFrame, now: Date.now, newToken, passkeys });
 
 async function activeTab(): Promise<ActiveTab | undefined> {
   // Readable because the user opened the popup on this tab (activeTab).

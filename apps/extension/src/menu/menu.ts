@@ -73,7 +73,12 @@ function render(t: string, view: MenuView): void {
     return;
   }
   const kind = view.kind;
-  main.replaceChildren(...view.items.map((i) => itemRow(t, i, kind)));
+  const passkeyRows = view.passkeys.map((p) =>
+    row(monogram(p.title), p.title, `Passkey · ${p.userName || "account"}`, () =>
+      pick({ type: "menu_pick_passkey", token: t, itemId: p.itemId, credentialId: p.credentialId }),
+    ),
+  );
+  main.replaceChildren(...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)));
 }
 
 /** Arrow keys move between rows; Escape closes. */

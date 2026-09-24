@@ -29,7 +29,7 @@ import type {
   SaveView,
 } from "../messaging/inline";
 import { displayHost } from "../shared/url";
-import type { BgWaResult } from "../webauthn/messages";
+import type { BgWaResult, PasskeyRow } from "../webauthn/messages";
 
 type Client = {
   request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>>;
@@ -55,6 +55,10 @@ export interface InlineDeps {
   sendToFrame(frame: Pick<FrameRef, "tabId" | "frameId" | "documentId">, msg: BackgroundToContent | BgWaResult): Promise<unknown>;
   now(): number;
   newToken(): string;
+  passkeys?: {
+    conditionalFor(frame: FrameRef): PasskeyRow[];
+    pickConditional(frame: FrameRef, itemId: string, credentialId: string): Promise<InlineReply<null>>;
+  };
 }
 
 export const MENU_TTL_MS = 5 * 60_000;
@@ -69,6 +73,7 @@ interface MenuSession {
   kind: MenuKind;
   locked: boolean;
   items: Match[];
+  passkeys: PasskeyRow[];
   expires: number;
 }
 
@@ -153,12 +158,13 @@ export function createInlineHandler(deps: InlineDeps) {
     }
     if (kind === "otp") items = items.filter((m) => m.hasTotp);
     if (kind === "new_password") items = [];
-    if (!locked && kind !== "new_password" && items.length === 0) return { ok: false };
+    const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
+    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0) return { ok: false };
 
     closeMenu(frame.tabId);
     const token = deps.newToken();
-    menus.set(frame.tabId, { token, frame, kind, locked, items, expires: deps.now() + MENU_TTL_MS });
-    const rows = locked || kind === "new_password" ? 1 : Math.min(items.length, MAX_ROWS);
+    menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, expires: deps.now() + MENU_TTL_MS });
+    const rows = locked || kind === "new_password" ? 1 : Math.min(items.length + passkeys.length, MAX_ROWS);
     return { ok: true, token, rows };
   }
 
@@ -240,7 +246,7 @@ export function createInlineHandler(deps: InlineDeps) {
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username }));
-        return { ok: true, value: { state: "ready", kind: m.kind, site, items } };
+        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys } };
       }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
@@ -260,6 +266,15 @@ export function createInlineHandler(deps: InlineDeps) {
           return fail(e);
         }
         return { ok: true, value: null };
+      }
+      case "menu_pick_passkey": {
+        const m = liveMenu(tabId, req.token);
+        if (!m || m.locked || !deps.passkeys) return { ok: false, message: "This menu has expired." };
+        if (!m.passkeys.some((p) => p.itemId === req.itemId && p.credentialId === req.credentialId)) {
+          return { ok: false, message: "Unknown passkey." };
+        }
+        closeMenu(tabId);
+        return deps.passkeys.pickConditional(m.frame, req.itemId, req.credentialId);
       }
       case "menu_generate": {
         const m = liveMenu(tabId, req.token);
