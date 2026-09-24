@@ -108,6 +108,8 @@ export function AccountSection({ online }: { online: boolean }) {
   const [storage, setStorage] = useState<DeviceStatus["secretKeyStorage"] | null>(null);
   const [showKit, setShowKit] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [removing, setRemoving] = useState(false);
 
   const refresh = useCallback(() => {
     api.accountStatus().then(setAccount, () => setAccount(null));
@@ -156,6 +158,18 @@ export function AccountSection({ online }: { online: boolean }) {
       await api.signOut();
     } catch (e) {
       toast(e instanceof ApiError ? e.message : "Could not sign out.", "error");
+    }
+  }
+
+  async function remove() {
+    setRemoving(true);
+    try {
+      await api.removeDevice(confirmText);
+      // The vault reopened empty and the app returns to first run; nothing
+      // left to refresh here.
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Could not remove this device.", "error");
+      setRemoving(false);
     }
   }
 
@@ -224,6 +238,35 @@ export function AccountSection({ online }: { online: boolean }) {
       ) : (
         <EmergencyKit onDone={() => setShowKit(false)} />
       )}
+
+      <h3 className="group-title">Remove this device</h3>
+      <div className="group danger-zone">
+        <p className="group-note group-note-top">
+          Takes this computer off the account and returns HavenKeys to its first-run screen, where you can sign in
+          to any account or server. Your vault stays on the server. A copy of the encrypted file is kept as
+          vault.sqlite3.removed-&hellip; in the app&apos;s data folder; opening it later needs your master password
+          and the Secret Key from your Emergency Kit.
+        </p>
+        <label className="row row-input">
+          <span className="row-label-inline">Type {account?.email} to confirm</span>
+          <input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+      </div>
+      <div className="group-actions">
+        <button
+          className="btn btn-danger"
+          type="button"
+          disabled={!confirmText || removing}
+          onClick={remove}
+        >
+          Remove this device
+        </button>
+      </div>
     </div>
   );
 }

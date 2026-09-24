@@ -13,7 +13,7 @@ use havenkeys_core::vault::VaultService;
 use havenkeys_protocol::Event;
 use havenkeys_sync_client::Session;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -59,6 +59,8 @@ pub struct AppState {
     /// and every command that touches the vault refuses with this.
     storage_error: Option<CmdError>,
     origin: Instant,
+    /// The app's data folder: where `vault.sqlite3` and `device.json` live.
+    data_dir: PathBuf,
 }
 
 /// Error returned to the renderer: a stable code and a fixed message.
@@ -141,6 +143,7 @@ impl AppState {
         bridge: Bridge,
         device: Device,
         storage_error: Option<CmdError>,
+        data_dir: PathBuf,
     ) -> Self {
         Self {
             vault,
@@ -154,6 +157,20 @@ impl AppState {
             last_sync_attempt: Mutex::new(None),
             storage_error,
             origin: Instant::now(),
+            data_dir,
+        }
+    }
+
+    /// The app's data folder: where `vault.sqlite3` and `device.json` live.
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    /// Drop the cached HTTP client, so a stale one for an old server is
+    /// never reused after this device is removed from its account.
+    pub fn forget_sync_client(&self) {
+        if let Ok(mut cached) = self.sync_client.lock() {
+            *cached = None;
         }
     }
 

@@ -25,6 +25,7 @@
     "allow-sign-out",
     "allow-list-devices",
     "allow-revoke-device",
+    "allow-remove-device",
     "allow-sync-now",
     "allow-resync-vault",
     "allow-get-emergency-kit",

@@ -116,6 +116,8 @@ export const api = {
   accountStatus: () => call<AccountStatus | null>("account_status"),
   listDevices: () => call<DeviceEntry[]>("list_devices"),
   revokeDevice: (id: string) => call<void>("revoke_device", { id }),
+  /** Remove this computer from the account; the vault stays on the server. */
+  removeDevice: (confirmation: string) => call<void>("remove_device", { confirmation }),
   syncNow: () => call<SyncReport>("sync_now"),
   /** Re-download the whole vault. For a replica suspected to be stale. */
   resync: () => call<SyncReport>("resync_vault"),
@@ -135,4 +137,6 @@ export const api = {
   /** A pull finished; carries counts only. */
   onSynced: (handler: (report: SyncReport) => void): Promise<UnlistenFn> =>
     listen<SyncReport>("vault://synced", (e) => handler(e.payload)),
+  /** This computer was removed from its account; the vault reopened empty. */
+  onRemoved: (handler: () => void): Promise<UnlistenFn> => listen("vault://removed", () => handler()),
 };

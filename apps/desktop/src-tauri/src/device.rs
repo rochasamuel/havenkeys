@@ -176,10 +176,6 @@ impl Device {
     }
 
     /// Remove the key everywhere and start over with a new device id.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "called by \"remove this device\" (next task)")
-    )]
     pub fn forget(&mut self, account: Uuid) -> std::io::Result<()> {
         let _ = self.store.delete(account);
         self.file_key = None;

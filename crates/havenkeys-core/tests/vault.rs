@@ -511,3 +511,14 @@ fn every_scheme_says_whether_it_needs_the_secret_key() {
     // scheme added later cannot silently stop asking for the Secret Key.
     assert!(KeyScheme::AccountBound.uses_secret_key());
 }
+
+#[test]
+fn replacing_the_store_locks_and_starts_empty() {
+    use havenkeys_core::store::Store;
+    // "Remove this device": the old store is swapped out for an empty one
+    // and the vault must not still claim to be unlocked against it.
+    let (mut vault, _sk) = activated_vault();
+    let _old = vault.replace_store(Store::open_in_memory().unwrap());
+    assert!(!vault.is_unlocked());
+    assert!(!vault.status().unwrap().vault_exists);
+}

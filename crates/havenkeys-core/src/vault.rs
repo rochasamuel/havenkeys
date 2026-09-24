@@ -798,6 +798,14 @@ impl VaultService {
         was_open
     }
 
+    /// Lock and swap the underlying store, returning the old one so the
+    /// caller can drop it and close the file. Used by "remove this device":
+    /// the account's file is set aside and this vault reopens empty.
+    pub fn replace_store(&mut self, store: Store) -> Store {
+        self.lock();
+        std::mem::replace(&mut self.store, store)
+    }
+
     /// Snapshot for a master-password change. The Argon2id derivations then
     /// run in [`RekeyTicket::derive_for_account`] without holding the vault
     /// lock, so a lock request is never delayed by a password change.

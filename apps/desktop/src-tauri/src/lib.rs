@@ -24,7 +24,7 @@ use std::time::Duration;
 use tauri::plugin::TauriPlugin;
 use tauri::{Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
 
-const VAULT_FILE: &str = "vault.sqlite3";
+pub(crate) const VAULT_FILE: &str = "vault.sqlite3";
 const AUTO_LOCK_TICK: Duration = Duration::from_secs(5);
 const PULL_INTERVAL: Duration = Duration::from_secs(sync::PULL_INTERVAL_SECS);
 
@@ -118,7 +118,13 @@ pub fn run() {
                     .map_err(sync::bridge_error)
                 },
             );
-            app.manage(AppState::new(vault, bridge.clone(), device, storage_error));
+            app.manage(AppState::new(
+                vault,
+                bridge.clone(),
+                device,
+                storage_error,
+                dir.clone(),
+            ));
             // A Secret Key an earlier version (or a keychain that was
             // unavailable then) left in device.json moves to the keychain.
             // Off the setup path: it may wait on the keychain.
@@ -203,6 +209,7 @@ pub fn run() {
             account::sign_out,
             account::list_devices,
             account::revoke_device,
+            account::remove_device,
             account::get_emergency_kit,
             commands::sync_now,
             commands::resync_vault,

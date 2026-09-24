@@ -46,6 +46,20 @@ export function App() {
     return () => void unlisten.then((f) => f());
   }, []);
 
+  // This computer was removed from its account: the store reopened empty, so
+  // re-reading status shows the first-run screen (vaultExists: false).
+  useEffect(() => {
+    const unlisten = api.onRemoved(() => {
+      setLockReason(null);
+      setShowKit(false);
+      setSignedOut(false);
+      setSession((s) => s + 1);
+      api.status().then(setStatus, () => undefined);
+      api.deviceStatus().then(setDevice, () => setDevice(null));
+    });
+    return () => void unlisten.then((f) => f());
+  }, []);
+
   const unlocked = status?.state === "unlocked";
   useActivityReporter(unlocked);
 

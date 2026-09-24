@@ -18,6 +18,7 @@ const COMMANDS: &[&str] = &[
     "sign_out",
     "list_devices",
     "revoke_device",
+    "remove_device",
     "get_emergency_kit",
     "sync_now",
     "resync_vault",
