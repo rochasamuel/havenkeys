@@ -1,16 +1,20 @@
 //! Request → core call. The authorization decisions live in the core
 //! (`VaultService::{find_matches, fill_for_page, totp_for_page, check_login,
-//! save_login}`); this layer
+//! save_login, find_passkeys, passkey_assert, check_passkey_create,
+//! stage_passkey_create}`); this layer
 //! adds the integration switch and maps types, and never widens what the core
 //! returns.
 
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::origin::MatchStrength as CoreStrength;
-use havenkeys_core::vault::{SaveAction as CoreSaveAction, StagedSave, VaultService, VaultState};
+use havenkeys_core::passkey::{encode_b64url, B64Url, PasskeyCreate};
+use havenkeys_core::vault::{
+    SaveAction as CoreSaveAction, StagedSave, StagedWrite, VaultService, VaultState,
+};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
-    ErrorCode, LockState, Match, MatchStrength, Request, ResultBody, SaveAction, WireSecret,
-    MAX_MATCHES,
+    ErrorCode, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
+    ResultBody, SaveAction, WireSecret, MAX_MATCHES,
 };
 
 fn code(e: Error) -> ErrorCode {
@@ -68,6 +72,16 @@ fn now_ms(unix_seconds: u64) -> i64 {
     i64::try_from(unix_seconds.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
 
+fn bytes(s: &str) -> Result<Vec<u8>, ErrorCode> {
+    B64Url::decode(s)
+        .map(|b| b.0)
+        .map_err(|_| ErrorCode::InvalidInput)
+}
+
+fn byte_list(v: &[String]) -> Result<Vec<Vec<u8>>, ErrorCode> {
+    v.iter().map(|s| bytes(s)).collect()
+}
+
 /// What answering a request produced.
 ///
 /// Saving a login cannot finish under the vault lock: the server has to
@@ -77,6 +91,12 @@ fn now_ms(unix_seconds: u64) -> i64 {
 pub enum Dispatched {
     Done(ResultBody),
     Save(StagedSave),
+    /// A passkey sealed into its login. `result` is returned only after the
+    /// server accepted `write`.
+    CreatePasskey {
+        write: StagedWrite,
+        result: ResultBody,
+    },
 }
 
 /// Answer a request. `lock` is handled by the caller, which must not hold
@@ -189,6 +209,128 @@ pub fn dispatch(
                 )
                 .map_err(item_code)?;
             Ok(Dispatched::Save(staged))
+        }
+        Request::FindPasskeys {
+            url,
+            top_url,
+            rp_id,
+            allow_credentials,
+        } => {
+            require_enabled(v)?;
+            let allow = byte_list(allow_credentials)?;
+            let passkeys = v
+                .find_passkeys(rp_id, url, top_url.as_deref(), &allow)
+                .map_err(code)?
+                .into_iter()
+                .take(MAX_MATCHES)
+                .map(|m| PasskeyMatch {
+                    item_id: m.item_id,
+                    credential_id: encode_b64url(&m.credential_id),
+                    title: m.title,
+                    user_name: m.user_name,
+                })
+                .collect();
+            Ok(Dispatched::Done(ResultBody::FindPasskeys { passkeys }))
+        }
+        Request::PasskeyGet {
+            item_id,
+            credential_id,
+            url,
+            top_url,
+            rp_id,
+            challenge,
+        } => {
+            require_enabled(v)?;
+            let a = v
+                .passkey_assert(
+                    item_id,
+                    &bytes(credential_id)?,
+                    rp_id,
+                    url,
+                    top_url.as_deref(),
+                    &bytes(challenge)?,
+                )
+                .map_err(item_code)?;
+            Ok(Dispatched::Done(ResultBody::PasskeyGet {
+                credential_id: encode_b64url(&a.credential_id),
+                authenticator_data: encode_b64url(&a.authenticator_data),
+                client_data_json: encode_b64url(&a.client_data_json),
+                signature: encode_b64url(&a.signature),
+                user_handle: encode_b64url(&a.user_handle),
+            }))
+        }
+        Request::CheckPasskeyCreate {
+            url,
+            top_url,
+            rp_id,
+            user_name,
+            exclude_credentials,
+        } => {
+            require_enabled(v)?;
+            let exclude = byte_list(exclude_credentials)?;
+            let check = v
+                .check_passkey_create(rp_id, url, top_url.as_deref(), user_name, &exclude)
+                .map_err(code)?;
+            let candidates = if check.excluded {
+                Vec::new()
+            } else {
+                check
+                    .candidates
+                    .into_iter()
+                    .take(MAX_MATCHES)
+                    .map(|s| PasskeyCandidate {
+                        item_id: s.id,
+                        title: s.title,
+                        username: s.username,
+                    })
+                    .collect()
+            };
+            Ok(Dispatched::Done(ResultBody::CheckPasskeyCreate {
+                excluded: check.excluded,
+                candidates,
+            }))
+        }
+        Request::PasskeyCreate {
+            url,
+            top_url,
+            rp_id,
+            challenge,
+            user_handle,
+            user_name,
+            display_name,
+            item_id,
+        } => {
+            require_enabled(v)?;
+            let challenge = bytes(challenge)?;
+            let user_handle = bytes(user_handle)?;
+            let staged = v
+                .stage_passkey_create(
+                    PasskeyCreate {
+                        rp_id,
+                        page_url: url,
+                        top_url: top_url.as_deref(),
+                        challenge: &challenge,
+                        user_handle: &user_handle,
+                        user_name,
+                        display_name: display_name.as_deref(),
+                        item_id: *item_id,
+                    },
+                    now_ms(unix_seconds),
+                )
+                .map_err(item_code)?;
+            let r = &staged.registration;
+            let result = ResultBody::PasskeyCreate {
+                credential_id: encode_b64url(&r.credential_id),
+                attestation_object: encode_b64url(&r.attestation_object),
+                client_data_json: encode_b64url(&r.client_data_json),
+                authenticator_data: encode_b64url(&r.authenticator_data),
+                public_key: encode_b64url(&r.public_key),
+                public_key_algorithm: havenkeys_protocol::COSE_ES256,
+            };
+            Ok(Dispatched::CreatePasskey {
+                write: staged.write,
+                result,
+            })
         }
     }
 }

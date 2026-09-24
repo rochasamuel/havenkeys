@@ -620,6 +620,117 @@ fn a5_unknown_and_malformed_rejected() {
     }
 }
 
+const CHAL: &str = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc";
+
+fn create_passkey(f: &Fixture, url: &str, item: Option<Uuid>) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({
+            "type": "passkey_create", "url": url, "rpId": "github.com", "challenge": CHAL,
+            "userHandle": "AQ", "userName": "octo", "displayName": null, "itemId": item,
+        }),
+    )
+}
+
+#[test]
+fn passkey_create_then_get_through_the_bridge() {
+    let f = online_fixture();
+    let check = call(
+        &f,
+        serde_json::json!({
+            "type": "check_passkey_create", "url": "https://github.com/", "rpId": "github.com",
+            "userName": "octo", "excludeCredentials": [],
+        }),
+    );
+    assert_eq!(check["result"]["excluded"], false);
+    assert_eq!(
+        check["result"]["candidates"][0]["itemId"],
+        f.github.to_string()
+    );
+
+    let before = f.changes.load(Ordering::SeqCst);
+    let created = create_passkey(&f, "https://github.com/", Some(f.github));
+    let cred = created["result"]["credentialId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(created["result"]["publicKeyAlgorithm"], -7);
+    assert!(created["result"].get("privateKey").is_none());
+    assert_eq!(f.changes.load(Ordering::SeqCst), before + 1);
+
+    let found = call(
+        &f,
+        serde_json::json!({
+            "type": "find_passkeys", "url": "https://github.com/", "rpId": "github.com", "allowCredentials": [],
+        }),
+    );
+    assert_eq!(found["result"]["passkeys"][0]["credentialId"], cred);
+
+    let signed = call(
+        &f,
+        serde_json::json!({
+            "type": "passkey_get", "itemId": f.github, "credentialId": cred,
+            "url": "https://github.com/", "rpId": "github.com", "challenge": CHAL,
+        }),
+    );
+    assert!(signed["result"]["signature"].as_str().unwrap().len() > 60);
+}
+
+#[test]
+fn passkey_attacks_through_the_bridge() {
+    let f = online_fixture();
+    let created = create_passkey(&f, "https://github.com/", Some(f.github));
+    let cred = created["result"]["credentialId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // A1: github.com's passkey requested from evil.com.
+    let r = call(
+        &f,
+        serde_json::json!({
+            "type": "passkey_get", "itemId": f.github, "credentialId": cred,
+            "url": "https://evil.com/", "rpId": "github.com", "challenge": CHAL,
+        }),
+    );
+    assert_eq!(error_code(&r), Some("denied"));
+    // A2: unknown item IDs look exactly like a denial.
+    let r = call(
+        &f,
+        serde_json::json!({
+            "type": "passkey_get", "itemId": Uuid::new_v4(), "credentialId": cred,
+            "url": "https://github.com/", "rpId": "github.com", "challenge": CHAL,
+        }),
+    );
+    assert_eq!(error_code(&r), Some("denied"));
+    // Creating on evil.com for github.com.
+    let r = create_passkey(&f, "https://evil.com/", None);
+    assert_eq!(error_code(&r), Some("denied"));
+    // A3: locked.
+    f.vault.lock().unwrap().lock();
+    let r = call(
+        &f,
+        serde_json::json!({
+            "type": "find_passkeys", "url": "https://github.com/", "rpId": "github.com", "allowCredentials": [],
+        }),
+    );
+    assert_eq!(error_code(&r), Some("locked"));
+}
+
+#[test]
+fn passkey_create_offline_is_refused_and_nothing_is_stored() {
+    let f = fixture();
+    let r = create_passkey(&f, "https://github.com/", Some(f.github));
+    assert_eq!(error_code(&r), Some("offline"));
+    assert!(
+        !f.vault
+            .lock()
+            .unwrap()
+            .get_item(&f.github)
+            .unwrap()
+            .has_passkey
+    );
+}
+
 // ------------------------------------------------------------------ socket
 
 #[cfg(unix)]

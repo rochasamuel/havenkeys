@@ -136,13 +136,16 @@ impl Bridge {
                 (self.inner.on_lock)();
                 return Ok(ResultBody::Lock {});
             }
-            Request::FindMatches { .. } | Request::GeneratePassword {} => {
-                Some(RequestClass::Lookup)
-            }
+            Request::FindMatches { .. }
+            | Request::GeneratePassword {}
+            | Request::FindPasskeys { .. }
+            | Request::CheckPasskeyCreate { .. } => Some(RequestClass::Lookup),
             Request::FillItem { .. }
             | Request::GetTotp { .. }
             | Request::CheckLogin { .. }
-            | Request::SaveLogin { .. } => Some(RequestClass::Secret),
+            | Request::SaveLogin { .. }
+            | Request::PasskeyGet { .. }
+            | Request::PasskeyCreate { .. } => Some(RequestClass::Secret),
         };
         if let Some(class) = class {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
@@ -171,9 +174,16 @@ impl Bridge {
                 let item_id = staged.item_id;
                 (self.inner.save)(staged.write).map(|()| ResultBody::SaveLogin { item_id })
             }
+            Ok(Dispatched::CreatePasskey { write, result }) => {
+                (self.inner.save)(write).map(|()| result)
+            }
             Err(e) => Err(e),
         };
-        if matches!(req, Request::SaveLogin { .. }) && result.is_ok() {
+        if matches!(
+            req,
+            Request::SaveLogin { .. } | Request::PasskeyCreate { .. }
+        ) && result.is_ok()
+        {
             (self.inner.on_items_changed)();
         }
         result
