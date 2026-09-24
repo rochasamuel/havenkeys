@@ -11,14 +11,23 @@
 //   is accepted only from that tab, and only for passkeys or logins the
 //   session offered; the desktop re-checks everything regardless.
 // * Nothing is signed or created without a pick/save from the frame.
+// * Whether HavenKeys holds a passkey the site excluded is shown to the user,
+//   and told to the site only after the user closes that card.
 // * Nothing is persisted.
+//
+// Sessions live in the worker's memory. An MV3 worker can be suspended and
+// restarted, losing them; the bridge pings its session (`wa_ping`) to keep
+// the worker awake and to notice a loss, and a card whose session is gone
+// can still be closed (see `handleFrame`).
 
 import type { PasskeyCandidate, Request, RequestType, ResultFor } from "@havenkeys/protocol";
 import type { InlineReply } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
 import { displayHost } from "../shared/url";
 import {
+  clampTimeout,
   MAX_TIMEOUT_MS,
+  type BgWaResult,
   type CreateOptions,
   type GetOptions,
   type Outcome,
@@ -40,12 +49,24 @@ type Client = {
 
 /**
  * `locked`: the vault was locked when the request came in; the card shows
- * "unlock" until `refreshLocked()` re-runs the lookup after an unlock.
+ * "unlock" until `refresh()` re-runs the lookup after an unlock.
+ * `refreshing`: that lookup, while it runs, so it runs once at a time.
  * `busy`: a sign or save is in flight; a second one is refused.
+ * `exists`: the site's excludeCredentials names a passkey we hold; the card
+ * says so and nothing can be saved.
  */
+type Common = {
+  token: string;
+  frame: FrameRef;
+  rpId: string;
+  locked: boolean;
+  refreshing: Promise<void> | null;
+  busy: boolean;
+  timer: ReturnType<typeof setTimeout>;
+};
 type Session =
-  | { kind: "get"; token: string; frame: FrameRef; rpId: string; options: GetOptions; locked: boolean; busy: boolean; passkeys: PasskeyRow[]; timer: ReturnType<typeof setTimeout> }
-  | { kind: "create"; token: string; frame: FrameRef; rpId: string; options: CreateOptions; locked: boolean; busy: boolean; candidates: PasskeyCandidate[]; timer: ReturnType<typeof setTimeout> };
+  | (Common & { kind: "get"; options: GetOptions; passkeys: PasskeyRow[] })
+  | (Common & { kind: "create"; options: CreateOptions; candidates: PasskeyCandidate[]; exists: boolean });
 
 const FALLBACK: WaReply = { ok: false, outcome: { outcome: "fallback" } };
 const BUSY = { ok: false as const, message: "Please wait…" };
@@ -54,8 +75,17 @@ function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
 }
 
-export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
+export interface WebAuthnDeps extends InlineDeps {
+  client: Client;
+  /** Send to every frame of a tab; only the bridge holding the token acts on it. */
+  sendToTab(tabId: number, msg: BgWaResult): Promise<unknown>;
+}
+
+export function createWebAuthnHandler(deps: WebAuthnDeps) {
   const sessions = new Map<number, Session>(); // by tab
+  // Tabs with a wa_get/wa_create lookup in flight: a page firing requests in
+  // a loop must not drain the desktop's shared lookup budget.
+  const looking = new Set<number>();
 
   const frameFields = (f: FrameRef) => (f.topUrl === undefined ? { url: f.url } : { url: f.url, topUrl: f.topUrl });
   const rpIdFor = (f: FrameRef, rpId: string | null) => rpId ?? new URL(f.url).hostname;
@@ -101,13 +131,15 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     try {
       passkeys = (await deps.client.request({ type: "find_passkeys", ...frameFields(frame), rpId, allowCredentials: options.allowCredentials })).passkeys;
     } catch (e) {
+      // "denied" too: the browser applies the same rpId rule, and paths it
+      // allows that we do not (related origins, permitted cross-site frames)
+      // keep working.
       if (e instanceof BridgeError && e.code === "locked" && !options.conditional) locked = true;
-      else if (e instanceof BridgeError && e.code === "denied") return { ok: false, outcome: { outcome: "error", name: "SecurityError" } };
       else return FALLBACK;
     }
     if (!locked && passkeys.length === 0) return FALLBACK;
-    const ttl = options.conditional ? CONDITIONAL_TTL_MS : Math.min(options.timeoutMs ?? SESSION_TTL_MS, SESSION_TTL_MS);
-    const token = open(frame.tabId, (token, timer) => ({ kind: "get", token, frame, rpId, options, locked, busy: false, passkeys, timer }), ttl);
+    const ttl = options.conditional ? CONDITIONAL_TTL_MS : clampTimeout(options.timeoutMs);
+    const token = open(frame.tabId, (token, timer) => ({ kind: "get", token, frame, rpId, options, locked, refreshing: null, busy: false, passkeys, timer }), ttl);
     return { ok: true, token, ui: options.conditional ? "none" : "chooser" };
   }
 
@@ -116,6 +148,7 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     const rpId = rpIdFor(frame, options.rpId);
     let candidates: PasskeyCandidate[] = [];
     let locked = false;
+    let exists = false;
     try {
       const check = await deps.client.request({
         type: "check_passkey_create",
@@ -124,15 +157,16 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
         userName: options.userName,
         excludeCredentials: options.excludeCredentials,
       });
-      if (check.excluded) return { ok: false, outcome: { outcome: "error", name: "InvalidStateError" } };
+      // Not answered yet: an immediate InvalidStateError would tell any
+      // page, without a click, which accounts HavenKeys holds.
+      exists = check.excluded;
       candidates = check.candidates;
     } catch (e) {
       if (e instanceof BridgeError && e.code === "locked") locked = true;
-      else if (e instanceof BridgeError && e.code === "denied") return { ok: false, outcome: { outcome: "error", name: "SecurityError" } };
       else return FALLBACK;
     }
-    const ttl = Math.min(options.timeoutMs ?? SESSION_TTL_MS, SESSION_TTL_MS);
-    const token = open(frame.tabId, (token, timer) => ({ kind: "create", token, frame, rpId, options, locked, busy: false, candidates, timer }), ttl);
+    const ttl = clampTimeout(options.timeoutMs);
+    const token = open(frame.tabId, (token, timer) => ({ kind: "create", token, frame, rpId, options, locked, refreshing: null, busy: false, candidates, exists, timer }), ttl);
     return { ok: true, token, ui: "create" };
   }
 
@@ -171,7 +205,7 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
   }
 
   async function save(s: Extract<Session, { kind: "create" }>, itemId: string | null): Promise<InlineReply<null>> {
-    if (s.locked || (itemId !== null && !s.candidates.some((c) => c.itemId === itemId))) {
+    if (s.locked || s.exists || (itemId !== null && !s.candidates.some((c) => c.itemId === itemId))) {
       return { ok: false, message: "Unknown login." };
     }
     if (s.busy) return BUSY;
@@ -209,30 +243,67 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     }
   }
 
-  async function handleContent(frame: FrameRef, req: WaRequest): Promise<WaReply | Record<string, never>> {
+  /** One lookup per tab at a time; a second request meanwhile falls back. */
+  async function lookup(tabId: number, begin: () => Promise<WaReply>): Promise<WaReply> {
+    if (looking.has(tabId)) return FALLBACK;
+    looking.add(tabId);
+    try {
+      return await begin();
+    } finally {
+      looking.delete(tabId);
+    }
+  }
+
+  async function handleContent(frame: FrameRef, req: WaRequest): Promise<WaReply | { ok: boolean } | Record<string, never>> {
     switch (req.type) {
       case "wa_get":
-        return beginGet(frame, req.options);
+        return lookup(frame.tabId, () => beginGet(frame, req.options));
       case "wa_create":
-        return beginCreate(frame, req.options);
+        return lookup(frame.tabId, () => beginCreate(frame, req.options));
       case "wa_cancel": {
         const s = sessions.get(frame.tabId);
         if (s && s.token === req.token && sameFrame(s.frame, frame)) drop(frame.tabId);
         return {};
       }
+      case "wa_ping": {
+        const s = sessions.get(frame.tabId);
+        return { ok: !!s && s.token === req.token && sameFrame(s.frame, frame) };
+      }
     }
+  }
+
+  function view(s: Session): PkView {
+    const site = displayHost(s.frame.url) ?? "";
+    if (s.locked) return { state: "locked", site };
+    if (s.kind === "get") return { state: "chooser", site, passkeys: s.passkeys };
+    if (s.exists) return { state: "exists", site };
+    return { state: "create", site, userName: s.options.userName, candidates: s.candidates };
   }
 
   async function handleFrame(tabId: number, req: PkRequest): Promise<InlineReply<PkView | null>> {
     const s = live(tabId, req.token);
-    if (!s) return { ok: false, message: "This prompt has expired." };
-    const site = displayHost(s.frame.url) ?? "";
+    if (!s) {
+      // The session is gone (worker restarted, or already finished) but the
+      // card is still up. Closing it must still work: the answer goes to
+      // every frame of the card's tab, and only the bridge that holds this
+      // token (known to it and to the card) acts on it. A finished request
+      // is no longer pending there, so this is a no-op for it.
+      if (req.type === "pk_cancel" || req.type === "pk_close" || req.type === "pk_fallback") {
+        const outcome: Outcome = req.type === "pk_fallback" ? { outcome: "fallback" } : { outcome: "error", name: "NotAllowedError" };
+        void deps.sendToTab(tabId, { type: "bg_wa_result", token: req.token, outcome });
+        return { ok: true, value: null };
+      }
+      return { ok: false, message: "This prompt has expired." };
+    }
     switch (req.type) {
       case "pk_state":
-        if (s.locked) return { ok: true, value: { state: "locked", site } };
-        return s.kind === "get"
-          ? { ok: true, value: { state: "chooser", site, passkeys: s.passkeys } }
-          : { ok: true, value: { state: "create", site, userName: s.options.userName, candidates: s.candidates } };
+        // The "unlocked" event may never come (the native port closes when
+        // idle), so the card's own polling re-runs the lookup.
+        if (s.locked) {
+          await refresh(s);
+          if (!live(tabId, req.token)) return { ok: false, message: "This prompt has expired." };
+        }
+        return { ok: true, value: view(s) };
       case "pk_pick":
         return s.kind === "get" ? sign(s, req.itemId, req.credentialId) : { ok: false, message: "Unknown passkey." };
       case "pk_save":
@@ -242,6 +313,10 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
         return { ok: true, value: null };
       case "pk_cancel":
         finish(tabId, s.token, { outcome: "error", name: "NotAllowedError" });
+        return { ok: true, value: null };
+      case "pk_close":
+        if (s.kind !== "create" || !s.exists || s.locked) return { ok: false, message: "Unknown request." };
+        finish(tabId, s.token, { outcome: "error", name: "InvalidStateError" });
         return { ok: true, value: null };
     }
   }
@@ -271,15 +346,20 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
     await Promise.all([...sessions.values()].filter((s) => s.locked).map(refresh));
   }
 
-  async function refresh(s: Session): Promise<void> {
+  /** Re-run a locked session's lookup; one at a time per session. */
+  function refresh(s: Session): Promise<void> {
+    s.refreshing ??= lookAgain(s).finally(() => (s.refreshing = null));
+    return s.refreshing;
+  }
+
+  async function lookAgain(s: Session): Promise<void> {
     const tabId = s.frame.tabId;
     const current = () => sessions.get(tabId) === s;
     const failed = (e: unknown) => {
       if (!current()) return;
       // Locked again before the lookup ran: keep waiting for the next unlock.
       if (e instanceof BridgeError && e.code === "locked") return;
-      if (e instanceof BridgeError && e.code === "denied") finish(tabId, s.token, { outcome: "error", name: "SecurityError" });
-      else finish(tabId, s.token, { outcome: "fallback" });
+      finish(tabId, s.token, { outcome: "fallback" });
     };
     if (s.kind === "get") {
       try {
@@ -302,7 +382,7 @@ export function createWebAuthnHandler(deps: InlineDeps & { client: Client }) {
         excludeCredentials: s.options.excludeCredentials,
       });
       if (!current()) return;
-      if (r.excluded) return finish(tabId, s.token, { outcome: "error", name: "InvalidStateError" });
+      s.exists = r.excluded;
       s.candidates = r.candidates;
       s.locked = false;
     } catch (e) {

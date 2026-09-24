@@ -24,6 +24,8 @@ function onClick(button: HTMLButtonElement, action: () => Promise<void>): void {
   });
 }
 
+const UNREACHABLE = "HavenKeys could not be reached.";
+
 function showError(message: string): void {
   question.textContent = message;
   question.className = "error";
@@ -76,8 +78,11 @@ function pollWhileLocked(t: string): void {
   stopPolling();
   poll = setTimeout(async () => {
     poll = null;
+    // `ask` normally turns failures into a reply, but a worker that is
+    // restarting can answer nothing at all: keep polling then.
     const r = await ask<PkView>({ type: "pk_state", token: t });
-    if (!r.ok) showError(r.message);
+    if (r === undefined) pollWhileLocked(t);
+    else if (!r?.ok) showError(r?.message ?? UNREACHABLE);
     else if (r.value.state === "locked") pollWhileLocked(t);
     else render(t, r.value);
   }, LOCKED_POLL_MS);
@@ -109,6 +114,20 @@ function render(t: string, view: PkView): void {
       });
       return;
     }
+    case "exists":
+      // Nothing to save; "Close" is the only way the site learns that the
+      // passkey exists (InvalidStateError), and it takes a click.
+      question.textContent = "A passkey for this account is already saved in HavenKeys";
+      detail.textContent = "";
+      main.replaceChildren();
+      cancelBtn.hidden = true;
+      confirmBtn.textContent = "Close";
+      confirmBtn.hidden = false;
+      onClick(confirmBtn, async () => {
+        const r = await ask<null>({ type: "pk_close", token: t });
+        if (!r?.ok) showError(r?.message ?? UNREACHABLE);
+      });
+      return;
   }
 }
 
@@ -127,8 +146,8 @@ document.addEventListener("keydown", (e) => {
 async function init(): Promise<void> {
   if (!token) return;
   const r = await ask<PkView>({ type: "pk_state", token });
-  if (r.ok) render(token, r.value);
-  else showError(r.message);
+  if (r?.ok) render(token, r.value);
+  else showError(r?.message ?? UNREACHABLE);
 }
 
 void init();

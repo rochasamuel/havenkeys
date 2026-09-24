@@ -3,7 +3,11 @@ import { bufferSourceBytes, fromB64Url, toB64Url } from "./encoding";
 import {
   parseBgWaResult,
   parsePageRequest,
+  clampTimeout,
+  MAX_TIMEOUT_MS,
+  MIN_TIMEOUT_MS,
   parsePageResponse,
+  parsePingReply,
   parsePkRequest,
   parseWaReply,
   parseWaRequest,
@@ -78,6 +82,16 @@ describe("page ↔ bridge", () => {
     expect(parsePageResponse(JSON.stringify({ id: ID, outcome: "error", name: "NotAllowedError" }))).not.toBeNull();
     expect(parsePageResponse(JSON.stringify({ id: ID, outcome: "error", name: "TypeError" }))).toBeNull();
     expect(parsePageResponse(JSON.stringify({ id: ID, outcome: "credential", credential: { ...cred, x: 1 } }))).toBeNull();
+    expect(parsePageResponse(JSON.stringify({ id: ID, outcome: "ack" }))).toEqual({ id: ID, outcome: "ack" });
+    expect(parsePageResponse(JSON.stringify({ id: ID, outcome: "ack", x: 1 }))).toBeNull();
+  });
+
+  it("clamps site timeouts to a usable range", () => {
+    expect(clampTimeout(null)).toBe(MAX_TIMEOUT_MS);
+    expect(clampTimeout(0)).toBe(MIN_TIMEOUT_MS);
+    expect(clampTimeout(1000)).toBe(MIN_TIMEOUT_MS);
+    expect(clampTimeout(60_000)).toBe(60_000);
+    expect(clampTimeout(10 * MAX_TIMEOUT_MS)).toBe(MAX_TIMEOUT_MS);
   });
 });
 
@@ -87,6 +101,14 @@ describe("bridge ↔ background ↔ frames", () => {
     expect(parseWaRequest({ type: "wa_get", options: get })).not.toBeNull();
     expect(parseWaRequest({ type: "wa_cancel", token: TOKEN })).not.toBeNull();
     expect(parseWaRequest({ type: "wa_get", options: get, url: "https://github.com" })).toBeNull();
+    expect(parseWaRequest({ type: "wa_ping", token: TOKEN })).toEqual({ type: "wa_ping", token: TOKEN });
+    expect(parseWaRequest({ type: "wa_ping", token: "x" })).toBeNull();
+    expect(parseWaRequest({ type: "wa_ping", token: TOKEN, x: 1 })).toBeNull();
+    expect(parsePingReply({ ok: true })).toBe(true);
+    expect(parsePingReply({ ok: false })).toBe(false);
+    expect(parsePingReply(undefined)).toBe(false);
+    expect(parsePingReply({ ok: true, x: 1 })).toBe(false);
+    expect(parsePingReply({ ok: false, message: "Something went wrong." })).toBe(false);
     expect(parseWaReply({ ok: true, token: TOKEN, ui: "chooser" })).not.toBeNull();
     expect(parseWaReply({ ok: false, outcome: { outcome: "fallback" } })).not.toBeNull();
     expect(parseWaReply({ ok: false, outcome: { outcome: "credential" } })).toBeNull();
@@ -94,6 +116,7 @@ describe("bridge ↔ background ↔ frames", () => {
     expect(parsePkRequest({ type: "pk_pick", token: TOKEN, itemId: ITEM, credentialId: CRED })).not.toBeNull();
     expect(parsePkRequest({ type: "pk_save", token: TOKEN, itemId: null })).not.toBeNull();
     expect(parsePkRequest({ type: "pk_pick", token: TOKEN, itemId: "../x", credentialId: CRED })).toBeNull();
-    for (const t of ["pk_state", "pk_fallback", "pk_cancel"]) expect(parsePkRequest({ type: t, token: TOKEN })).not.toBeNull();
+    expect(parsePkRequest({ type: "pk_close", token: TOKEN, x: 1 })).toBeNull();
+    for (const t of ["pk_state", "pk_fallback", "pk_cancel", "pk_close"]) expect(parsePkRequest({ type: t, token: TOKEN })).not.toBeNull();
   });
 });

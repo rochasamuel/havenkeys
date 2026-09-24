@@ -4,8 +4,8 @@
 // fake bridge (a listener on the request event). jsdom has no WebAuthn, so
 // the tests provide PublicKeyCredential and navigator.credentials.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MIN_TIMEOUT_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
 import { install } from "./page";
 
 const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
@@ -18,6 +18,8 @@ const nativeCreate = vi.fn(async (_o?: unknown) => ({ native: "create" }) as unk
 const nativeGet = vi.fn(async (_o?: unknown) => ({ native: "get" }) as unknown as Credential);
 let requests: Array<Record<string, unknown>> = [];
 let answer: (req: Record<string, unknown>) => unknown = () => undefined;
+/** False: no bridge in this frame (Firefox unloaded the isolated script). */
+let bridgeLoaded = true;
 
 class FakePKC {}
 class FakeAttestation {}
@@ -39,12 +41,18 @@ beforeEach(() => {
   nativeGet.mockClear();
   requests = [];
   answer = () => undefined;
+  bridgeLoaded = true;
 });
+
+afterEach(() => vi.useRealTimers());
 
 // The fake bridge.
 window.addEventListener(REQUEST_EVENT, (e) => {
+  if (!bridgeLoaded) return;
   const req = JSON.parse((e as CustomEvent).detail as string) as Record<string, unknown>;
   requests.push(req);
+  // Like the real bridge: acknowledged synchronously.
+  if (req.kind !== "cancel") window.dispatchEvent(new RealCustomEvent(RESPONSE_EVENT, { detail: JSON.stringify({ id: req.id, outcome: "ack" }) }));
   const out = answer(req);
   if (out !== undefined) {
     queueMicrotask(() =>
@@ -197,5 +205,109 @@ describe("page wrapper", () => {
     ).rejects.toBe("gone");
     expect(requests).toEqual([]);
     expect(nativeGet).not.toHaveBeenCalled();
+  });
+});
+
+describe("missing or silent bridge", () => {
+  const settled = (p: Promise<unknown>) => {
+    const state = { done: false, value: undefined as unknown, error: undefined as unknown };
+    p.then(
+      (v) => Object.assign(state, { done: true, value: v }),
+      (e: unknown) => Object.assign(state, { done: true, error: e }),
+    );
+    return state;
+  };
+
+  it("uses the browser's own implementation when no bridge acknowledges", async () => {
+    vi.useFakeTimers();
+    const win = fresh();
+    install(win);
+    bridgeLoaded = false;
+    const g = settled(win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4) } }));
+    const c = settled(win.navigator.credentials.create({ publicKey: pk } as CredentialCreationOptions));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(g.done || c.done).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(g.value).toEqual({ native: "get" });
+    expect(c.value).toEqual({ native: "create" });
+  });
+
+  it("stops only our leg of a conditional request when no bridge acknowledges", async () => {
+    vi.useFakeTimers();
+    const win = fresh();
+    let release: (c: Credential) => void = () => {};
+    nativeGet.mockImplementationOnce(() => new Promise<Credential>((res) => (release = res)));
+    install(win);
+    bridgeLoaded = false;
+    const g = settled(win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4) }, mediation: "conditional" }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(g.done).toBe(false);
+    release({ native: "autofill" } as unknown as Credential);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(g.value).toEqual({ native: "autofill" });
+  });
+
+  it("gives up with NotAllowedError when an acknowledged request is never answered", async () => {
+    vi.useFakeTimers();
+    const win = fresh();
+    install(win);
+    const g = settled(win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4), timeout: 60_000 } }));
+    await vi.advanceTimersByTimeAsync(60_000 + 15_000 - 1);
+    expect(g.done).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(g.error).toMatchObject({ name: "NotAllowedError" });
+    expect(requests.map((r) => r.kind)).toEqual(["get", "cancel"]);
+    expect(nativeGet).not.toHaveBeenCalled();
+  });
+
+  it("never clamps below MIN_TIMEOUT_MS", async () => {
+    vi.useFakeTimers();
+    const win = fresh();
+    install(win);
+    const g = settled(win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4), timeout: 0 } }));
+    await vi.advanceTimersByTimeAsync(MIN_TIMEOUT_MS + 15_000 - 1);
+    expect(g.done).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(g.error).toMatchObject({ name: "NotAllowedError" });
+  });
+
+  it("puts no ceiling on an acknowledged conditional request", async () => {
+    vi.useFakeTimers();
+    const win = fresh();
+    nativeGet.mockImplementationOnce(() => new Promise<Credential>(() => {}));
+    install(win);
+    const g = settled(win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4) }, mediation: "conditional" }));
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(g.done).toBe(false);
+  });
+});
+
+describe("conditional aborts", () => {
+  it("leaves the site's promise to the browser when our leg is aborted without the site asking", async () => {
+    const win = fresh();
+    let release: (c: Credential) => void = () => {};
+    nativeGet.mockImplementationOnce(() => new Promise<Credential>((res) => (release = res)));
+    install(win);
+    answer = () => ({ outcome: "error", name: "AbortError" }); // e.g. pagehide, or a newer request replaced ours
+    const p = win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4) }, mediation: "conditional" });
+    await new Promise((r) => setTimeout(r, 0));
+    release({ native: "autofill" } as unknown as Credential);
+    await expect(p).resolves.toEqual({ native: "autofill" });
+  });
+
+  it("rejects and stops both legs when the site aborts", async () => {
+    const win = fresh();
+    let nativeSignal: AbortSignal | undefined;
+    nativeGet.mockImplementationOnce((o?: unknown) => {
+      nativeSignal = (o as { signal: AbortSignal }).signal;
+      return new Promise<Credential>(() => {});
+    });
+    install(win);
+    const ctrl = new AbortController();
+    const p = win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4) }, mediation: "conditional", signal: ctrl.signal });
+    ctrl.abort("gone");
+    await expect(p).rejects.toBe("gone");
+    expect(nativeSignal?.aborted).toBe(true);
+    expect(requests.map((r) => r.kind)).toEqual(["get", "cancel"]);
   });
 });

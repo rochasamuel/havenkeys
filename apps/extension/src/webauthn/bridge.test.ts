@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_TIMEOUT_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
+import { MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, PING_INTERVAL_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
 
 type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }) => boolean | void;
 const sent: unknown[] = [];
 let reply: (m: unknown) => unknown = () => undefined;
+/** The background's answer to `wa_ping`; alive unless a test says otherwise. */
+let ping: (m: unknown) => unknown = () => ({ ok: true });
 let onMessage: Listener | null = null;
 const responses: Array<Record<string, unknown>> = [];
+const acks: string[] = [];
 
 const ID = "0123456789abcdef0123456789abcdef";
 const TOKEN = "a".repeat(32);
@@ -19,7 +22,7 @@ const hex = (n: number): string => n.toString(16).padStart(32, "0");
 let sendMessageImpl: (m: unknown) => unknown = () => undefined;
 const defaultSendMessageImpl = async (m: unknown) => {
   sent.push(m);
-  return reply(m);
+  return (m as { type?: string }).type === "wa_ping" ? ping(m) : reply(m);
 };
 
 beforeAll(async () => {
@@ -31,7 +34,11 @@ beforeAll(async () => {
       onMessage: { addListener: (l: Listener) => (onMessage = l) },
     },
   };
-  window.addEventListener(RESPONSE_EVENT, (e) => responses.push(JSON.parse((e as CustomEvent).detail as string)));
+  window.addEventListener(RESPONSE_EVENT, (e) => {
+    const r = JSON.parse((e as CustomEvent).detail as string) as Record<string, unknown>;
+    if (r.outcome === "ack") acks.push(r.id as string);
+    else responses.push(r);
+  });
   const { startBridge } = await import("./bridge");
   startBridge();
 });
@@ -39,6 +46,8 @@ beforeAll(async () => {
 beforeEach(() => {
   sent.length = 0;
   responses.length = 0;
+  acks.length = 0;
+  ping = () => ({ ok: true });
   vi.useRealTimers();
   sendMessageImpl = defaultSendMessageImpl;
 });
@@ -91,7 +100,95 @@ describe("isolated bridge", () => {
     reply = () => ({ ok: true, token: TOKEN, ui: "chooser" });
     request({ kind: "get", id: ID, options: get });
     await vi.advanceTimersByTimeAsync(1000 + 10_000 + 1);
+    // The site asked for 1 s; the card still gets MIN_TIMEOUT_MS.
+    expect(responses).toEqual([]);
+    await vi.advanceTimersByTimeAsync(MIN_TIMEOUT_MS);
     expect(responses).toEqual([{ id: ID, outcome: "error", name: "NotAllowedError" }]);
+  });
+
+  it("acknowledges every valid request at once", () => {
+    reply = () => new Promise(() => {});
+    const id = hex(20);
+    request({ kind: "get", id, options: get });
+    // Synchronously, before the background has answered.
+    expect(acks).toEqual([id]);
+    request({ kind: "get", id: "short", options: get });
+    expect(acks).toEqual([id]);
+    request({ kind: "cancel", id });
+  });
+});
+
+describe("lost sessions", () => {
+  it("keeps a live session alive with pings", async () => {
+    vi.useFakeTimers();
+    const id = hex(21);
+    const token = hex(22);
+    reply = () => ({ ok: true, token, ui: "none" });
+    request({ kind: "get", id, options: { ...get, conditional: true } });
+    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS * 3);
+    expect(sent.filter((m) => (m as { type: string }).type === "wa_ping")).toEqual([
+      { type: "wa_ping", token },
+      { type: "wa_ping", token },
+      { type: "wa_ping", token },
+    ]);
+    expect(responses).toEqual([]);
+    request({ kind: "cancel", id });
+    await vi.advanceTimersByTimeAsync(0);
+    sent.length = 0;
+    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS * 2);
+    expect(sent).toEqual([]);
+  });
+
+  it("re-sends a conditional request whose session was lost", async () => {
+    vi.useFakeTimers();
+    const id = hex(23);
+    const oldToken = hex(24);
+    const newToken = hex(25);
+    const cond = { ...get, conditional: true };
+    reply = () => ({ ok: true, token: oldToken, ui: "none" });
+    request({ kind: "get", id, options: cond });
+    await vi.advanceTimersByTimeAsync(0);
+    ping = () => ({ ok: false });
+    reply = () => ({ ok: true, token: newToken, ui: "none" });
+    sent.length = 0;
+    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+    expect(sent).toEqual([
+      { type: "wa_ping", token: oldToken },
+      { type: "wa_get", options: cond },
+    ]);
+    expect(responses).toEqual([]);
+    // Answers now arrive for the new token only.
+    onMessage?.({ type: "bg_wa_result", token: oldToken, outcome: { outcome: "error", name: "NotAllowedError" } }, { id: "ext" });
+    expect(responses).toEqual([]);
+    onMessage?.({ type: "bg_wa_result", token: newToken, outcome: { outcome: "error", name: "NotAllowedError" } }, { id: "ext" });
+    expect(responses).toEqual([{ id, outcome: "error", name: "NotAllowedError" }]);
+  });
+
+  it("keeps a conditional request pending when the re-sent one falls back", async () => {
+    vi.useFakeTimers();
+    const id = hex(26);
+    reply = () => ({ ok: true, token: hex(27), ui: "none" });
+    request({ kind: "get", id, options: { ...get, conditional: true } });
+    await vi.advanceTimersByTimeAsync(0);
+    ping = () => ({ ok: false });
+    reply = () => ({ ok: false, outcome: { outcome: "fallback" } });
+    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS * 3);
+    // The browser's own conditional request carries on; ours just stops.
+    expect(responses).toEqual([]);
+    expect(sent.filter((m) => (m as { type: string }).type === "wa_get")).toHaveLength(2);
+  });
+
+  it("falls back and removes the card when a modal session was lost", async () => {
+    vi.useFakeTimers();
+    const id = hex(28);
+    reply = () => ({ ok: true, token: hex(29), ui: "chooser" });
+    request({ kind: "get", id, options: { ...get, timeoutMs: 120_000 } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector("iframe")).not.toBeNull();
+    ping = () => undefined; // the worker restarted and knows nothing, or the extension is gone
+    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+    expect(responses).toEqual([{ id, outcome: "fallback" }]);
+    expect(document.querySelector("iframe")).toBeNull();
   });
 });
 
@@ -121,8 +218,9 @@ describe("extension context invalidation", () => {
     sendMessageImpl = () => {
       throw new Error("Extension context invalidated.");
     };
-    await vi.advanceTimersByTimeAsync(1000 + 10_000 + 1);
-    expect(responses).toEqual([{ id, outcome: "error", name: "NotAllowedError" }]);
+    await vi.advanceTimersByTimeAsync(MIN_TIMEOUT_MS + 10_000 + 1);
+    // The ping on the way may also end it (with a fallback); either way the page is answered once.
+    expect(responses).toHaveLength(1);
   });
 });
 

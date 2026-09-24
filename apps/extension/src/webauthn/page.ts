@@ -5,6 +5,12 @@
 // ends in the browser's own implementation, so the site behaves as if
 // HavenKeys were not installed.
 //
+// The isolated bridge acknowledges each request at once. No acknowledgement
+// within ACK_MS means there is no bridge (Firefox unloads isolated scripts
+// when the extension is disabled or updated, but not this one): the request
+// goes to the browser. An acknowledged modal request that is never answered
+// still ends, after the site's timeout (clamped) plus PAGE_GRACE_MS.
+//
 // Page script shares this world and can call, replace or observe this
 // wrapper. That grants it nothing: it could call WebAuthn itself, and every
 // decision is made by the desktop against the URL the browser reports.
@@ -12,6 +18,7 @@
 import { CREDENTIAL_ID_BYTES, MAX_CHALLENGE_BYTES, MAX_RP_ID_BYTES, MAX_USER_HANDLE_BYTES } from "@havenkeys/protocol";
 import { bufferSourceBytes, toArrayBuffer, toB64Url } from "./encoding";
 import {
+  clampTimeout,
   parsePageResponse,
   REQUEST_EVENT,
   RESPONSE_EVENT,
@@ -23,6 +30,11 @@ import {
   type Outcome,
   type PageRequest,
 } from "./messages";
+
+/** How long to wait for the bridge's acknowledgement. */
+const ACK_MS = 1000;
+/** Slack on top of the bridge's own timer (itself the site's timeout + 10 s). */
+const PAGE_GRACE_MS = 15_000;
 
 const MESSAGES: Record<ErrorName, string> = {
   NotAllowedError: "The operation either timed out or was not allowed.",
@@ -50,6 +62,8 @@ export function install(win: Win): void {
   const Abort = win.AbortController;
   const DOMErr = win.DOMException;
   const random = win.crypto.getRandomValues.bind(win.crypto);
+  const later = win.setTimeout.bind(win);
+  const clear = win.clearTimeout.bind(win);
   const define = Object.defineProperties;
   const create = Object.create;
   const AttProto = typeof win.AuthenticatorAttestationResponse === "function" ? win.AuthenticatorAttestationResponse.prototype : Object.prototype;
@@ -138,30 +152,48 @@ export function install(win: Win): void {
     }
   }
 
-  /** Send one request; resolve with the bridge's outcome or an abort. */
-  function ask(req: PageRequest, signal: AbortSignal | undefined): Promise<Outcome> {
+  /**
+   * Send one request; resolve with the bridge's outcome or an abort. With no
+   * acknowledgement from the bridge, a fallback (for a conditional request
+   * that only ends our leg); acknowledged but unanswered, a modal request
+   * ends in NotAllowedError.
+   */
+  function ask(req: Exclude<PageRequest, { kind: "cancel" }>, signal: AbortSignal | undefined): Promise<Outcome> {
     return new Promise((resolve) => {
       if (signal?.aborted) {
         resolve({ outcome: "error", name: "AbortError" });
         return;
       }
-      const done = () => {
+      const modal = !(req.kind === "get" && req.options.conditional);
+      let acked = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const end = (o: Outcome) => {
         unlisten(RESPONSE_EVENT, onResponse);
         signal?.removeEventListener("abort", onAbort);
+        if (timer !== null) clear(timer);
+        resolve(o);
       };
       const onResponse = (e: Event) => {
         const r = parsePageResponse((e as CustomEvent).detail);
         if (!r || r.id !== req.id) return;
-        done();
-        resolve(r);
+        if (r.outcome !== "ack") return end(r);
+        if (acked) return;
+        acked = true;
+        if (timer !== null) clear(timer);
+        timer = modal
+          ? later(() => {
+              send({ kind: "cancel", id: req.id });
+              end({ outcome: "error", name: "NotAllowedError" });
+            }, clampTimeout(req.options.timeoutMs) + PAGE_GRACE_MS)
+          : null;
       };
       const onAbort = () => {
-        done();
         send({ kind: "cancel", id: req.id });
-        resolve({ outcome: "error", name: "AbortError" });
+        end({ outcome: "error", name: "AbortError" });
       };
       listen(RESPONSE_EVENT, onResponse);
       signal?.addEventListener("abort", onAbort);
+      timer = later(() => end({ outcome: "fallback" }), ACK_MS);
       send(req);
     });
   }
@@ -231,7 +263,7 @@ export function install(win: Win): void {
   }
 
   /** Passkey autofill: ours and the browser's run side by side; the first the user picks wins. */
-  function conditional(req: PageRequest, options: CredentialRequestOptions, signal: AbortSignal | undefined): Promise<Credential | null> {
+  function conditional(req: Exclude<PageRequest, { kind: "cancel" }>, options: CredentialRequestOptions, signal: AbortSignal | undefined): Promise<Credential | null> {
     // An abort listener never fires for a signal that's already aborted, so
     // without this the browser's own conditional request would start and
     // never be told to stop.
@@ -256,10 +288,12 @@ export function install(win: Win): void {
             ctrl.abort();
             resolve(credential(o.credential));
           });
-        } else if (o.outcome === "error" && o.name === "AbortError") {
+        } else if (o.outcome === "error" && o.name === "AbortError" && signal?.aborted) {
           finish(() => reject(rejection("AbortError", signal)));
         }
-        // Fallback or a refusal: the browser's own autofill keeps running.
+        // Fallback, a refusal, or an abort the site did not ask for (the page
+        // is going away, or a newer request replaced ours): the browser's own
+        // autofill keeps running and may still answer the site.
       });
       native.then(
         (c) =>
@@ -300,7 +334,7 @@ export function install(win: Win): void {
     const opts = getOptions(pk, isConditional);
     if (!opts) return fallback();
     const signal = options.signal ?? undefined;
-    const req: PageRequest = { kind: "get", id: newId(), options: opts };
+    const req = { kind: "get" as const, id: newId(), options: opts };
     if (isConditional) return conditional(req, options, signal);
     return ask(req, signal).then((o) => settle(o, fallback, signal));
   }

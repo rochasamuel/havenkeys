@@ -47,7 +47,16 @@ async function sendToFrame(target: Target, msg: BackgroundToContent | BgWaResult
   }
 }
 
-const passkeys = createWebAuthnHandler({ client, sendToFrame, now: Date.now, newToken });
+/** To every frame of a tab (a passkey result whose session was lost; see webauthn-handler.ts). */
+async function sendToTab(tabId: number, msg: BgWaResult): Promise<unknown> {
+  try {
+    return await chrome.tabs.sendMessage(tabId, msg);
+  } catch {
+    return undefined;
+  }
+}
+
+const passkeys = createWebAuthnHandler({ client, sendToFrame, sendToTab, now: Date.now, newToken });
 const inline = createInlineHandler({ client, sendToFrame, now: Date.now, newToken, passkeys });
 
 async function activeTab(): Promise<ActiveTab | undefined> {

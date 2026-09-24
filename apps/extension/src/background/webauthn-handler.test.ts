@@ -21,15 +21,17 @@ function frame(over: Partial<FrameRef> = {}): FrameRef {
 function setup(answer: (r: Request) => unknown) {
   const requests: Request[] = [];
   const sent: unknown[] = [];
+  const broadcast: Array<{ tabId: number; msg: unknown }> = [];
   let n = 0;
   let clock = 0;
   const h = createWebAuthnHandler({
     client: { request: (async (r: Request) => (requests.push(r), answer(r))) as never },
     sendToFrame: async (_to, msg) => void sent.push(msg),
+    sendToTab: async (tabId, msg) => void broadcast.push({ tabId, msg }),
     now: () => clock,
     newToken: () => (++n).toString(16).padStart(32, "0"),
   });
-  return { h, requests, sent, advance: (ms: number) => (clock += ms) };
+  return { h, requests, sent, broadcast, advance: (ms: number) => (clock += ms) };
 }
 
 const defaults = (r: Request): unknown => {
@@ -101,11 +103,30 @@ describe("sign in", () => {
   });
 
   it("times out", async () => {
-    const { h, sent, advance } = setup(defaults);
-    await h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, timeoutMs: 1000 } });
-    advance(1001);
-    await vi.advanceTimersByTimeAsync(1001);
+    const { h, sent } = setup(defaults);
+    await h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, timeoutMs: 60_000 } });
+    await vi.advanceTimersByTimeAsync(60_001);
     expect(sent.at(-1)).toMatchObject({ outcome: { outcome: "error", name: "NotAllowedError" } });
+  });
+
+  it("gives the user at least 10 seconds, whatever the site's timeout", async () => {
+    for (const timeoutMs of [0, 1000]) {
+      const { h, sent } = setup(defaults);
+      await h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, timeoutMs } });
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(sent).toEqual([]);
+      expect((await h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(true);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(sent.at(-1)).toMatchObject({ outcome: { outcome: "error", name: "NotAllowedError" } });
+    }
+  });
+
+  it("falls back instead of raising SecurityError when the desktop denies the rpId", async () => {
+    const denied = () => {
+      throw new BridgeError("denied", "x");
+    };
+    expect(await setup(denied).h.handleContent(frame(), { type: "wa_get", options: getOpts })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
+    expect(await setup(denied).h.handleContent(frame(), { type: "wa_create", options: createOpts })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
   });
 });
 
@@ -139,10 +160,33 @@ describe("create", () => {
     expect(requests.some((r) => r.type === "passkey_create")).toBe(false);
   });
 
-  it("falls back without ES256 and reports excluded credentials", async () => {
+  it("falls back without ES256", async () => {
     expect(await setup(defaults).h.handleContent(frame(), { type: "wa_create", options: { ...createOpts, algs: [-257] } })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
-    const ex = setup((r) => (r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [] } : defaults(r)));
-    expect(await ex.h.handleContent(frame(), { type: "wa_create", options: createOpts })).toEqual({ ok: false, outcome: { outcome: "error", name: "InvalidStateError" } });
+  });
+
+  it("reports an excluded credential only after the user closes the card", async () => {
+    const excluded = (r: Request) => (r.type === "check_passkey_create" ? { type: "check_passkey_create", excluded: true, candidates: [] } : defaults(r));
+    const { h, sent, requests } = setup(excluded);
+    expect(await h.handleContent(frame(), { type: "wa_create", options: createOpts })).toEqual({ ok: true, token: T1, ui: "create" });
+    expect(sent).toEqual([]);
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "exists", site: "github.com" } });
+    expect((await h.handleFrame(1, { type: "pk_save", token: T1, itemId: null })).ok).toBe(false);
+    expect(requests.some((r) => r.type === "passkey_create")).toBe(false);
+    expect(sent).toEqual([]);
+    expect(await h.handleFrame(1, { type: "pk_close", token: T1 })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "InvalidStateError" } });
+
+    const other = setup(excluded);
+    await other.h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    await other.h.handleFrame(1, { type: "pk_fallback", token: T1 });
+    expect(other.sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "fallback" } });
+  });
+
+  it("refuses pk_close on any other card", async () => {
+    const { h, sent } = setup(defaults);
+    await h.handleContent(frame(), { type: "wa_create", options: createOpts });
+    expect((await h.handleFrame(1, { type: "pk_close", token: T1 })).ok).toBe(false);
+    expect(sent).toEqual([]);
   });
 
   it("keeps the card open with the error when the save fails offline", async () => {
@@ -236,7 +280,7 @@ describe("unlock while a card is open", () => {
     expect((await h.handleFrame(1, { type: "pk_state", token: T1 })).ok).toBe(false);
   });
 
-  it("keeps waiting while still locked, then reports excluded credentials", async () => {
+  it("keeps waiting while still locked, then shows the already-saved card", async () => {
     let mode: "locked" | "excluded" = "locked";
     const { h, sent } = setup((r) => {
       if (mode === "locked") throw new BridgeError("locked", "x");
@@ -248,10 +292,24 @@ describe("unlock while a card is open", () => {
     expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "locked", site: "github.com" } });
     mode = "excluded";
     await h.refreshLocked();
-    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "InvalidStateError" } });
+    expect(sent).toEqual([]);
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "exists", site: "github.com" } });
   });
 
-  it("maps a denied lookup to SecurityError", async () => {
+  it("looks the passkeys up again when a locked card asks for its state", async () => {
+    let locked = true;
+    const { h } = setup((r) => {
+      if (locked) throw new BridgeError("locked", "x");
+      return defaults(r);
+    });
+    await h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "locked", site: "github.com" } });
+    // Unlocked, but the "unlocked" event never arrived (the native port had closed).
+    locked = false;
+    expect(await h.handleFrame(1, { type: "pk_state", token: T1 })).toEqual({ ok: true, value: { state: "chooser", site: "github.com", passkeys: [match] } });
+  });
+
+  it("falls back when the lookup after an unlock is denied", async () => {
     let mode: "locked" | "denied" = "locked";
     const { h, sent } = setup(() => {
       throw new BridgeError(mode, "x");
@@ -259,7 +317,7 @@ describe("unlock while a card is open", () => {
     await h.handleContent(frame(), { type: "wa_get", options: getOpts });
     mode = "denied";
     await h.refreshLocked();
-    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "SecurityError" } });
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_result", token: T1, outcome: { outcome: "fallback" } });
   });
 });
 
@@ -301,5 +359,51 @@ describe("one operation at a time", () => {
     offline = false;
     expect(await h.handleFrame(1, { type: "pk_save", token: T1, itemId: null })).toEqual({ ok: true, value: null });
     expect(sent.at(-1)).toMatchObject({ outcome: { outcome: "credential" } });
+  });
+});
+
+describe("worker suspension", () => {
+  it("answers pings for live sessions of the same frame only", async () => {
+    const { h } = setup(defaults);
+    await h.handleContent(frame(), { type: "wa_get", options: { ...getOpts, conditional: true } });
+    expect(await h.handleContent(frame(), { type: "wa_ping", token: T1 })).toEqual({ ok: true });
+    expect(await h.handleContent(frame({ frameId: 3 }), { type: "wa_ping", token: T1 })).toEqual({ ok: false });
+    expect(await h.handleContent(frame(), { type: "wa_ping", token: "f".repeat(32) })).toEqual({ ok: false });
+    // A restarted worker has no sessions.
+    expect(await setup(defaults).h.handleContent(frame(), { type: "wa_ping", token: T1 })).toEqual({ ok: false });
+  });
+
+  it("lets the user close a card whose session was lost", async () => {
+    const { h, broadcast, sent } = setup(defaults);
+    expect(await h.handleFrame(4, { type: "pk_state", token: T1 })).toEqual({ ok: false, message: "This prompt has expired." });
+    expect(await h.handleFrame(4, { type: "pk_cancel", token: T1 })).toEqual({ ok: true, value: null });
+    expect(broadcast.at(-1)).toEqual({ tabId: 4, msg: { type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "NotAllowedError" } } });
+    expect(await h.handleFrame(4, { type: "pk_fallback", token: T1 })).toEqual({ ok: true, value: null });
+    expect(broadcast.at(-1)).toEqual({ tabId: 4, msg: { type: "bg_wa_result", token: T1, outcome: { outcome: "fallback" } } });
+    expect(await h.handleFrame(4, { type: "pk_close", token: T1 })).toEqual({ ok: true, value: null });
+    expect(broadcast.at(-1)).toEqual({ tabId: 4, msg: { type: "bg_wa_result", token: T1, outcome: { outcome: "error", name: "NotAllowedError" } } });
+    expect(sent).toEqual([]);
+  });
+});
+
+describe("lookups per tab", () => {
+  it("allows one wa_get/wa_create lookup in flight per tab", async () => {
+    let release: () => void = () => {};
+    let lookups = 0;
+    const { h, requests } = setup((r) =>
+      r.type === "find_passkeys" && ++lookups === 1
+        ? new Promise((res) => (release = () => res({ type: "find_passkeys", passkeys: [match] })))
+        : defaults(r),
+    );
+    const first = h.handleContent(frame(), { type: "wa_get", options: getOpts });
+    expect(await h.handleContent(frame(), { type: "wa_get", options: getOpts })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
+    expect(await h.handleContent(frame(), { type: "wa_create", options: createOpts })).toEqual({ ok: false, outcome: { outcome: "fallback" } });
+    // Another tab is not affected.
+    expect(await h.handleContent(frame({ tabId: 2 }), { type: "wa_get", options: getOpts })).toMatchObject({ ok: true });
+    release();
+    expect(await first).toMatchObject({ ok: true, ui: "chooser" });
+    expect(requests.filter((r) => r.type === "find_passkeys")).toHaveLength(2);
+    // Once the first lookup is done, the tab may ask again.
+    expect(await h.handleContent(frame(), { type: "wa_get", options: getOpts })).toMatchObject({ ok: true });
   });
 });

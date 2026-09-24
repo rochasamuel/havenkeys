@@ -24,6 +24,14 @@ import { TOKEN } from "../messaging/inline";
 export const REQUEST_EVENT = "havenkeys-webauthn-request";
 export const RESPONSE_EVENT = "havenkeys-webauthn-response";
 export const MAX_TIMEOUT_MS = 5 * 60_000;
+/**
+ * Our cards stay up at least this long, whatever the site asks: a site
+ * timeout of 0 or 1000 ms would otherwise close the chooser before anyone
+ * could read it.
+ */
+export const MIN_TIMEOUT_MS = 10_000;
+/** How often the bridge asks whether its session is still alive. */
+export const PING_INTERVAL_MS = 20_000;
 /** Largest CustomEvent detail accepted from the page. */
 export const MAX_EVENT_CHARS = 16_384;
 const MAX_NAME_CHARS = 512;
@@ -84,12 +92,25 @@ export type Outcome =
 
 export type PageResponse = Outcome & { id: string };
 
+/** The bridge's "request received": sent at once, before any answer. */
+export interface PageAck {
+  id: string;
+  outcome: "ack";
+}
+
+/** The site's timeout, clamped to [MIN_TIMEOUT_MS, MAX_TIMEOUT_MS]; the maximum when unset. */
+export function clampTimeout(ms: number | null): number {
+  return Math.min(Math.max(ms ?? MAX_TIMEOUT_MS, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS);
+}
+
 // ---------------------------------------------------------------- bridge ↔ background
 
 export type WaRequest =
   | { type: "wa_create"; options: CreateOptions }
   | { type: "wa_get"; options: GetOptions }
-  | { type: "wa_cancel"; token: string };
+  | { type: "wa_cancel"; token: string }
+  /** Is this session still alive? Also keeps the worker awake. */
+  | { type: "wa_ping"; token: string };
 
 /** `ui`: which frame the bridge shows; "none" for conditional mediation. */
 export type WaReply =
@@ -109,7 +130,9 @@ export type PkRequest =
   | { type: "pk_pick"; token: string; itemId: string; credentialId: string }
   | { type: "pk_save"; token: string; itemId: string | null }
   | { type: "pk_fallback"; token: string }
-  | { type: "pk_cancel"; token: string };
+  | { type: "pk_cancel"; token: string }
+  /** "Close" on the already-saved card: the site learns InvalidStateError. */
+  | { type: "pk_close"; token: string };
 
 export interface PasskeyRow {
   itemId: string;
@@ -121,7 +144,9 @@ export interface PasskeyRow {
 export type PkView =
   | { state: "locked"; site: string }
   | { state: "chooser"; site: string; passkeys: PasskeyRow[] }
-  | { state: "create"; site: string; userName: string; candidates: PasskeyCandidate[] };
+  | { state: "create"; site: string; userName: string; candidates: PasskeyCandidate[] }
+  /** The site's excludeCredentials names a passkey HavenKeys holds. */
+  | { state: "exists"; site: string };
 
 // ---------------------------------------------------------------- validation
 
@@ -242,12 +267,13 @@ export function parseOutcome(v: unknown): Outcome | null {
 }
 
 /** A response from the bridge, as the page script reads it. */
-export function parsePageResponse(raw: unknown): PageResponse | null {
+export function parsePageResponse(raw: unknown): PageResponse | PageAck | null {
   const o = obj(parseJsonString(raw));
   if (!o || !isReqId(o.id)) return null;
   const id: string = o.id;
   const rest: Obj = { ...o };
   delete rest.id;
+  if (rest.outcome === "ack") return keysAre(rest, ["outcome"]) ? { id, outcome: "ack" } : null;
   const outcome = parseOutcome(rest);
   return outcome && { id, ...outcome };
 }
@@ -267,7 +293,8 @@ export function parseWaRequest(msg: unknown): WaRequest | null {
       return options && { type: "wa_get", options };
     }
     case "wa_cancel":
-      return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: "wa_cancel", token: o.token } : null;
+    case "wa_ping":
+      return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: o.type, token: o.token } : null;
     default:
       return null;
   }
@@ -287,6 +314,12 @@ export function parseWaReply(msg: unknown): WaReply | null {
     return { ok: false, outcome };
   }
   return null;
+}
+
+/** True only for exactly `{ ok: true }`; anything else means the session is gone. */
+export function parsePingReply(msg: unknown): boolean {
+  const o = obj(msg);
+  return !!o && o.ok === true && keysAre(o, ["ok"]);
 }
 
 export function parseBgWaResult(msg: unknown): BgWaResult | null {
@@ -312,6 +345,7 @@ export function parsePkRequest(msg: unknown): PkRequest | null {
     case "pk_state":
     case "pk_fallback":
     case "pk_cancel":
+    case "pk_close":
       return keysAre(o, ["type", "token"]) ? { type: o.type, token } : null;
     default:
       return null;
