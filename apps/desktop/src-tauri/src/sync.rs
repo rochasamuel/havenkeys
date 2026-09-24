@@ -159,23 +159,17 @@ pub async fn sync_now(app: &AppHandle) -> CmdResult<SyncReport> {
     // the server yet must be published. The core checks the attestation and
     // refuses a revision that goes backwards.
     let remote = client.header(&session).await.map_err(|e| failed(app, e))?;
-    let local_revision = {
+    {
         let state = app.state::<AppState>();
         let revision = state.vault()?.header_revision()?.unwrap_or(0);
         if remote.revision as u64 > revision {
             report.header_adopted = state.vault()?.adopt_account_header(&remote.bytes)?;
-            None
         } else if revision > remote.revision as u64 {
-            Some((revision, state.vault()?.encode_account_header()?))
-        } else {
-            None
+            // The header only changes through `change_credentials`, which the
+            // server applies before this device does. Ahead means something
+            // is wrong locally; send nothing.
+            return Err(CmdError::internal());
         }
-    };
-    if let Some((revision, header)) = local_revision {
-        client
-            .put_header(&session, &header, revision as i64)
-            .await
-            .map_err(|e| failed(app, e))?;
     }
 
     let mut cursor = {

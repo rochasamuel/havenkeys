@@ -75,10 +75,12 @@ pub struct LoginBody<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct HeaderBody {
+pub struct CredentialsBody<'a> {
+    pub current_auth_key: &'a str,
+    pub kdf: KdfDto,
+    pub new_auth_key: &'a str,
     pub header: String,
-    pub header_revision: i64,
-    pub key_scheme: i16,
+    pub base_header_revision: i64,
 }
 
 #[derive(Serialize)]
@@ -207,6 +209,12 @@ pub struct HeaderDto {
     pub header: String,
     pub header_revision: i64,
     pub key_scheme: i16,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialsAckDto {
+    pub header_revision: i64,
 }
 
 /// The header as the server serves it, already decoded and bounded. The

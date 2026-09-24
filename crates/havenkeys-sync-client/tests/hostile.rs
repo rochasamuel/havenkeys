@@ -2,8 +2,14 @@
 //! broken server could send. None of them may panic, allocate without bound,
 //! or be mistaken for a valid answer.
 
+use havenkeys_core::account::{AccountRef, NormalizedEmail};
+use havenkeys_core::crypto::kdf::KdfParams;
+use havenkeys_core::crypto::keys::AuthKey;
+use havenkeys_core::crypto::secret_key::SecretKey;
+use havenkeys_core::vault::derive_auth_key;
+use havenkeys_core::SecretString;
 use havenkeys_sync_client::transport::{HttpRequest, HttpResponse, Transport};
-use havenkeys_sync_client::{Result, Session, SyncClient, SyncError};
+use havenkeys_sync_client::{CredentialChange, Result, Session, SyncClient, SyncError};
 use uuid::Uuid;
 
 /// A transport that answers whatever the test tells it to.
@@ -44,6 +50,48 @@ fn session() -> Session {
         Uuid::nil(),
         Uuid::nil(),
     )
+}
+
+/// Real auth keys derived with the cheapest KDF cost the core accepts, so the
+/// tests exercise the actual wire shape rather than a fabricated one.
+fn credential_keys() -> (AuthKey, AuthKey, KdfParams) {
+    let kdf = KdfParams::with_cost(19 * 1024, 2, 1).unwrap();
+    let secret_key = SecretKey::generate().unwrap();
+    let account = AccountRef::new(
+        Uuid::new_v4(),
+        NormalizedEmail::parse("x@example.com").unwrap(),
+    );
+    let current = derive_auth_key(
+        &SecretString::from("old password"),
+        &secret_key,
+        &kdf,
+        &account,
+    )
+    .unwrap();
+    let new = derive_auth_key(
+        &SecretString::from("new password"),
+        &secret_key,
+        &kdf,
+        &account,
+    )
+    .unwrap();
+    (current, new, kdf)
+}
+
+fn change(base: i64) -> CredentialChange<'static> {
+    // Leaked, not dropped: the borrowed `CredentialChange` needs keys that
+    // outlive the call, and these tests never care about zeroization timing.
+    let (current, new, kdf) = credential_keys();
+    let current: &'static AuthKey = Box::leak(Box::new(current));
+    let new: &'static AuthKey = Box::leak(Box::new(new));
+    let kdf: &'static KdfParams = Box::leak(Box::new(kdf));
+    CredentialChange {
+        current_auth_key: current,
+        kdf,
+        new_auth_key: new,
+        header: b"header",
+        base_header_revision: base,
+    }
 }
 
 #[tokio::test]
@@ -269,4 +317,44 @@ async fn kdf_parameters_below_the_floor_are_refused() {
     let client = Stub::ok(good);
     let params = client.auth_params("user@example.com").await.unwrap();
     assert_eq!(params.kdf.memory_kib, 131072);
+}
+
+#[tokio::test]
+async fn a_credential_change_ack_must_be_exactly_one_ahead() {
+    // base 3 → the server must answer 4; anything else is a server lying.
+    for body in [
+        r#"{"headerRevision": 3}"#,
+        r#"{"headerRevision": 9}"#,
+        r#"{"headerRevision": -1}"#,
+        "{}",
+    ] {
+        let client = Stub::ok(body);
+        let err = client
+            .change_credentials(&session(), change(3))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SyncError::Protocol(_)), "{body}: {err:?}");
+    }
+    let client = Stub::ok(r#"{"headerRevision": 4}"#);
+    assert_eq!(
+        client
+            .change_credentials(&session(), change(3))
+            .await
+            .unwrap(),
+        4
+    );
+}
+
+#[tokio::test]
+async fn a_credential_change_conflict_and_rejection_are_mapped() {
+    let err = Stub::status(409, "{}")
+        .change_credentials(&session(), change(0))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Conflict(_)));
+    let err = Stub::status(401, "{}")
+        .change_credentials(&session(), change(0))
+        .await
+        .unwrap_err();
+    assert_eq!(err, SyncError::Unauthorized);
 }

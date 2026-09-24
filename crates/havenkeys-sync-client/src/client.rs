@@ -79,6 +79,19 @@ pub struct Activation<'a> {
     pub header: &'a [u8],
 }
 
+/// A master-password change: the login verifier, the KDF parameters and the
+/// re-wrapped header move together in one request, so the server never sees
+/// a device authenticated with a new key against an old header or vice
+/// versa.
+pub struct CredentialChange<'a> {
+    pub current_auth_key: &'a AuthKey,
+    pub kdf: &'a KdfParams,
+    pub new_auth_key: &'a AuthKey,
+    /// The attested `header.json`, re-wrapped under the new credentials.
+    pub header: &'a [u8],
+    pub base_header_revision: i64,
+}
+
 pub struct SyncClient<T: Transport> {
     transport: T,
 }
@@ -200,27 +213,49 @@ impl<T: Transport> SyncClient<T> {
         Ok(header)
     }
 
-    pub async fn put_header(&self, session: &Session, header: &[u8], revision: i64) -> Result<()> {
-        if header.is_empty() || header.len() > MAX_HEADER_BYTES {
+    /// Change the master password on the server: the header, the login
+    /// verifier and the KDF parameters move together, and every other
+    /// session on the account ends. Nothing local changes here; the caller
+    /// commits the new wrap only once this returns.
+    pub async fn change_credentials(
+        &self,
+        session: &Session,
+        change: CredentialChange<'_>,
+    ) -> Result<i64> {
+        if change.header.is_empty() || change.header.len() > MAX_HEADER_BYTES {
             return Err(SyncError::Refused("header is not valid"));
         }
-        let body = wire::HeaderBody {
-            header: BASE64.encode(header),
-            header_revision: revision,
-            key_scheme: KEY_SCHEME,
+        if change.base_header_revision < 0 {
+            return Err(SyncError::Refused("header revision is not valid"));
+        }
+        // `to_base64` returns `Zeroizing<String>`; bound here so the copies
+        // are wiped when this function returns rather than living for as
+        // long as the caller's `CredentialChange`.
+        let current = change.current_auth_key.to_base64();
+        let new = change.new_auth_key.to_base64();
+        let body = wire::CredentialsBody {
+            current_auth_key: &current,
+            kdf: change.kdf.into(),
+            new_auth_key: &new,
+            header: BASE64.encode(change.header),
+            base_header_revision: change.base_header_revision,
         };
         let response = self
             .send(
-                Method::Put,
-                "/v1/vault/header",
+                Method::Post,
+                "/v1/account/credentials",
                 Some(session),
                 Some(json(&body)?),
             )
             .await?;
-        match response.status {
-            200 | 204 => Ok(()),
-            _ => Err(self.error_for(response)),
+        let dto: wire::CredentialsAckDto = self.expect_ok(response)?;
+        // The server assigns base + 1 and nothing else. Anything different
+        // would leave this device committing a revision the server never
+        // stored.
+        if dto.header_revision != change.base_header_revision + 1 {
+            return Err(SyncError::Protocol("header revision"));
         }
+        Ok(dto.header_revision)
     }
 
     /// One page of changes after `since`. The caller keeps calling while
