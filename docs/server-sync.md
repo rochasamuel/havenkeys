@@ -39,10 +39,10 @@ In code today, and tested:
 * **The browser extension** — unchanged trust boundary; its save-login
   writes through the same staged path.
 
-**Not done, and blocking before a real vault is stored:** the server has not
-been deployed anywhere, and the backup restore drill in `docs/deployment.md`
-§5 has not been run. The local replica follows the server, deletions
-included, so an untested backup means the vault has none.
+**Not done, and blocking before a real vault is stored:** the backup restore
+drill in `docs/deployment.md` §5 has not been run, and nothing has yet
+crossed a real network between two devices. The local replica follows the
+server, deletions included, so an untested backup means the vault has none.
 
 ## 2. Model
 
@@ -83,8 +83,12 @@ check characters — `docs/crypto.md`, "Key hierarchy"). It is generated once,
 at activation, and is not something you can add or remove afterward: every
 vault is account-bound from the moment it exists.
 
-* Each device stores the Secret Key in its own `device.json`, outside the
-  vault database, in plain text (§6 below).
+* Each device keeps the Secret Key in the OS keychain (Windows Credential
+  Manager, macOS Keychain, the Secret Service on Linux), keyed by account ID.
+  `device.json` (same folder, mode 0600) is the fallback when no keychain is
+  available, a call to it errors, or it does not answer within 5 seconds — the
+  file always still holds the device ID. §7 below covers the fallback and its
+  limits.
 * The Emergency Kit is a printable page with the Secret Key and a QR code of
   it. The desktop generates its payload as
   `havenkeys://kit/v1?vault=<vault id>&key=<Secret Key>` today
@@ -200,6 +204,26 @@ revision is strictly newer than both the local header and the durable
 `max_header_rev` floor — which stops a genuine old header from being replayed
 to undo a master-password change.
 
+**Changing the master password** goes through a dedicated route,
+`POST /v1/account/credentials`, rather than through the general header write.
+It replaces the account's KDF parameters, its login verifier and the vault
+header in one server transaction: the caller proves it knows the *current*
+auth key (checked and rate-limited exactly like a login, so a stolen session
+token cannot change the password), `baseHeaderRevision` must match the
+server's, and on success every other session on the account is deleted — a
+password is usually changed because something leaked. The device making the
+change commits its local rewrap only after the server has accepted it, at the
+revision the server returned; nothing local changes on a failure. Every other
+device is now signed out. It picks up the new password the next time it
+unlocks: local unlock with the new password fails, and, if the server is
+reachable, an online fallback derives the login key from the server's current
+KDF, signs in, and verifies the served header (vault ID, scheme, attestation)
+before adopting it — a wrong password still costs only a local Argon2id run
+plus this fallback's own, so it can add a few seconds before "wrong password"
+is shown. A device that unlocks offline with the old password stays usable
+locally but is told, once, that the password changed elsewhere and it needs
+to unlock again online.
+
 ## 7. Security properties and limitations
 
 **Protected:**
@@ -236,24 +260,36 @@ to undo a master-password change.
 * **Availability is now a correctness concern.** A server that is down means
   no login can be saved, no password rotated, no item deleted — not merely
   "changes stop propagating," as under the old folder model.
-* **The Secret Key is stored in plain text** in each device's `device.json`,
-  as before. On a device, the master password alone protects the vault
-  against someone who can read that device's files; the Secret Key protects
-  every copy that is not on one of your devices.
+* **The Secret Key lives in the OS keychain**, with `device.json` as a
+  fallback. On a device, the master password alone protects the vault against
+  someone who can read that device's files; the Secret Key protects every
+  copy that is not on one of your devices — the keychain does not change
+  that, it only moves the fallback file's contents somewhere the OS is
+  supposed to protect better. In practice, any process running as the same
+  user can usually read a Linux Secret Service or Windows Credential Manager
+  entry too; macOS may prompt for access. When no keychain is available, or a
+  call to it fails or does not answer within 5 seconds, the Secret Key is
+  written to `device.json` instead (0600) and the desktop shows this in
+  Settings → Account as `secretKeyStorage: "file"`. A key found in
+  `device.json` at startup is moved to the keychain when one is available and
+  removed from the file once the move is confirmed. A `set` that timed out
+  and completes later could, in principle, re-add a keychain entry that
+  "Remove this device" had just deleted — a narrow race, accepted.
 * **The vault key is never rotated** (`security-review.md` #8). A master
   password change re-wraps the vault key; it does not replace it.
-* **A skipped item stays stale, permanently and silently.**
-  `apply_remote_changes` advances the stored cursor unconditionally, even
-  when `skipped_items > 0` for that batch. If the server ever serves one
-  corrupt or mislabeled blob for an item, that item is never retried: the
-  next pull starts at `since=cursor`, which is already past it. This is
-  worse than failing to update — it is failing to update with no visible
-  error, forever, on that device. `SyncReport.skipped_items` is the only
-  automatic signal that it happened. The way out is manual: Settings →
-  Account → **Re-download everything** (`resync_vault`) sets the cursor back
-  to zero and pulls the whole vault again, tombstones included. Nothing
-  notices the staleness *for* the user, which is the part that remains
-  unsatisfying.
+* **A pulled item that fails to decrypt is retried, not lost.** A change from
+  the server that does not authenticate under the data key, or a non-deleted
+  change with no blob, is recorded in a local `unreadable_items` table
+  instead of only being counted — in the same transaction as the rest of that
+  pull's changes, so the cursor and the retry list never disagree. At the end
+  of every `sync_now`, the app fetches those IDs from `POST /v1/items/fetch`
+  (chunks of up to 500) and applies them through the same path, without
+  moving the cursor; an item that now decrypts, or that the server has since
+  deleted, leaves the table. The vault screen shows a persistent banner while
+  any remain, with a **Re-download** action. Item-level replay is still not
+  addressed by this — a server that keeps re-serving the *same* stale blob at
+  a higher revision is not an unreadable item; it is the "Item replay has no
+  equivalent floor" limitation above.
 * **Metadata visible to the server:** the vault ID, the account's email, the
   KDF parameters and salt, the wrapped vault key, item revisions, and the
   number and rough size of items. It cannot read any of it, but it can see

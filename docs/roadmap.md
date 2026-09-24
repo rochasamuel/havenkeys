@@ -37,9 +37,10 @@ the design. Steps 1–5 of its §13 have landed; what remains is not code.
    staged write path (`stage_create`/`stage_update`/`stage_delete`/
    `stage_save_login`/`stage_import` → `commit_write`), the pull applier and
    `reset_sync_cursor`.
-2. **`havenkeys-server` — code done, not deployed.** Activation, sessions,
-   the header, paged pull, optimistic writes, devices, the admin CLI, and
-   the suites in `scripts/test-server.sh` against a real Postgres.
+2. **`havenkeys-server` — done, and deployed.** Activation, sessions, the
+   header, paged pull, optimistic writes, devices, the admin CLI, the
+   credential-change and item-fetch routes, and the suites in
+   `scripts/test-server.sh` against a real Postgres.
 3. **`havenkeys-sync-client` — done.** The transport, the wire types, the
    hostile-server suite, and a round trip against the real server with real
    core crypto.
@@ -53,8 +54,6 @@ the design. Steps 1–5 of its §13 have landed; what remains is not code.
 
 **Blocking before anyone stores a real vault:**
 
-* **Deploy the server** and confirm the health check and TLS on the deployed
-  host (`docs/deployment.md` §3).
 * **Run the restore drill** (`docs/deployment.md` §5). The local replica
   follows the server, deletions included, so an untested backup means the
   vault has none. This is the mitigation for `security-review.md` S5, and
@@ -66,13 +65,10 @@ Carried forward, true today:
 
 * **A hostile or compromised server can destroy data, and that is inherent,
   not a flaw to fix** (design §9, `threat-model.md` T1c).
-* **Re-pointing a vault** at a different account or server has no path;
-  `Store::set_account` refuses it.
-* The vault key is still never rotated (#8), and the Secret Key is still
-  stored in plain text in `device.json` (`docs/server-sync.md` §7).
-* A pulled item that does not open is skipped and the cursor still advances;
-  the way back is Settings → Account → Re-download everything, which nothing
-  offers automatically (`security-review.md` S9, `server-sync.md` §7).
+* The vault key is still never rotated (#8).
+* **Moving items between accounts has no path.** "Remove this device" plus
+  Activate/Sign in fresh is how a device changes which server or account it
+  points at; there is no path that migrates or merges items between accounts.
 
 ## 4. Missing MVP features
 

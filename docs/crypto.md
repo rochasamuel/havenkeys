@@ -53,6 +53,13 @@ Why this shape:
   *Limitation:* because the vault key does not change, someone holding an old
   copy of the vault file **and** the old password (and Secret Key) can still
   read newer copies. See `security-review.md` #8.
+* **Secret Key storage** is outside this hierarchy's scope but worth stating
+  here: it is kept in the OS keychain (`apps/desktop/src-tauri/src/secret_store.rs`,
+  the `keyring-core` crate; service `app.havenkeys`, user = account ID), with
+  `device.json` (0600) as the fallback when no keychain is available, a call
+  errors, or it does not answer within 5 seconds. Only the `H1-…` text is
+  ever stored; errors from the store never carry the value. See
+  `server-sync.md` §7 for the trade-off this fallback keeps.
 * **HKDF domain separation** (`info` strings) ensures the KEK, the auth key
   and the data key can never collide with each other or with future keys.
 * **The KEK derivation takes the account ID and the normalized email as HKDF
@@ -117,6 +124,19 @@ feeding the KEK derivation.
   choosing. Only the header changes — the vault key is unwrapped and
   re-wrapped, items are untouched, and `header_revision` advances (which
   also raises the rollback floor, `max_header_rev`).
+
+  For an account-bound vault this derivation also produces the *old* and
+  *new* login (auth) keys from the same two Argon2id runs, because the
+  server's verifier has to change with the KEK: `derive_for_account` yields
+  both, the core encodes what the header would be at `local + 1` without
+  writing it, and `change_master_password` sends all of it to
+  `POST /v1/account/credentials` in one request. Only after that request
+  returns a 2xx does `commit_rekey` persist the rewrap locally, at the
+  revision the server assigned — never before. This ordering (server first,
+  local commit only on success) replaced an earlier local-first one that
+  could leave the server's verifier and KDF stale after a change, locking
+  every device out (`security-review.md` S14). See `server-sync.md` §6 for
+  what the other devices then do.
 * **An account-bound vault never exists without its account record.** The
   record holds the durable `max_header_rev` rollback floor, so a vault
   without one would silently fall back to the in-memory `revision` alone.

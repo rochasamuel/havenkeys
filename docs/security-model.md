@@ -35,6 +35,8 @@ This document describes *how* HavenKeys enforces the properties listed in
 | Locked vault refuses secret access | Every secret-returning core function requires an active `Session`; locking drops it |
 | Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `reveal_previous_password` / `copy_secret` / `get_totp_code` |
 | Recoverable password changes | A replaced password is kept, encrypted, in the item's password history (5 entries) |
+| Master-password change is authenticated, not just session-authorized | `POST /v1/account/credentials` requires the *current* auth key, checked against the server's stored verifier under the same rate limiting as login; a stolen session token alone cannot change the password |
+| Master-password change revokes other sessions | On success the server deletes every other session on the account; other devices must unlock again (locally with the old password, or online with the new one) before they can sync |
 
 ## 3. What is NOT protected
 
@@ -65,8 +67,12 @@ There are no tombstones on a device: a deletion the server serves removes the
 row, and the server keeps the tombstone (`server-sync.md` §3).
 
 Outside the vault database, `device.json` (same folder, mode 0600) holds the
-device ID and the **Secret Key in plain text** (`server-sync.md` §7 explains
-why).
+device ID. The Secret Key itself is kept in the OS keychain (Windows
+Credential Manager, macOS Keychain, the Secret Service on Linux); it falls
+back to **plain text in `device.json`** only when no keychain is available or
+a call to it fails or times out, and Settings → Account shows this
+(`secretKeyStorage: "file"`). `server-sync.md` §7 explains both paths and
+their limits.
 
 The server's own database holds, in plaintext: the account's email, its KDF
 parameters and salt, an Argon2id hash of the auth key, device names and
@@ -339,6 +345,32 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
 * The Emergency Kit (Secret Key, account, email, server and a QR code) is
   shown only while unlocked, on request. Right after activation, continuing
   requires confirming it was saved.
+* **The Secret Key lives in the OS keychain** (Windows Credential Manager,
+  macOS Keychain, the Secret Service on Linux; service `app.havenkeys`, user
+  = account ID), with `device.json` as the fallback when no keychain is
+  available or a call to it fails or does not answer within 5 seconds.
+  Moving it there narrows, but does not remove, the same trust boundary as
+  the plaintext file it replaces: any process running as the user can
+  usually read a Linux Secret Service or Windows Credential Manager entry
+  too; macOS may prompt for access. It protects copies of the vault away
+  from this device, not this device from something already running as you.
+* **Changing the master password** (`change_master_password`) is one atomic
+  server operation, not a local-first one: the device proves it knows the
+  *current* auth key (rate-limited like login), and the server updates the
+  KDF parameters, the login verifier and the vault header together, then
+  deletes every other session on the account. The device making the change
+  commits its local rewrap only after the server accepts it. Other devices
+  are signed out and pick up the new password at their next unlock, through
+  an online fallback that independently verifies the served header before
+  adopting it (`server-sync.md` §6).
+* **"Remove this device"** (Settings → Account, typed email required) locks
+  the vault, best-effort revokes the device on the server, and renames the
+  local vault file to `vault.sqlite3.removed-<timestamp>` rather than
+  deleting it — it stays on disk as ciphertext, openable later only with the
+  master password and the Secret Key from the Emergency Kit. It forgets the
+  Secret Key from both stores and issues a fresh device ID, returning the
+  app to first run. It requires an unlocked vault, so it is not reachable
+  when the vault fails to open at startup.
 
 ## 14. Browser bridge
 

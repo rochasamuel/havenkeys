@@ -421,7 +421,7 @@ account.rs, sync.rs}` with its UI. Design: `server-sync.md` (then `sync.md`), `c
 
 | # | Severity | Component | Finding | Status |
 |---|---|---|---|---|
-| K1 | Info | Design | The Secret Key is stored in plain text in `device.json` on each device | Accepted, same model as 1Password: it protects copies away from your devices, not a device someone can already read. The mobile app should use the platform keystore |
+| K1 | Info | Design | The Secret Key is stored in plain text in `device.json` on each device | Superseded by the OS keychain (S17–S20 below); `device.json` remains the fallback when no keychain is available. Same model as 1Password either way: it protects copies away from your devices, not a device someone can already read |
 | K2 | Info | Design | Losing every device that holds the Secret Key, and the Emergency Kit, loses the vault | Accepted; the kit is shown at creation, confirming it was saved is required, and it can be shown again while unlocked |
 | K3 | Low | Sync | Conflicts are decided by device clocks (newest `updatedAt` wins) | Accepted, documented (superseded by `server-sync.md`; the server now orders writes) |
 | K4 | Low | Sync | Anyone with access to the folder can delete files and stop updates | Accepted (denial of service only), documented |
@@ -467,6 +467,13 @@ in this change are not bugs but properties of the design: the server can
 destroy data, and availability now decides whether the vault can be changed
 at all.
 
+**Update, 2026-09-24** (`docs/superpowers/specs/2026-09-23-vault-account-fixes-design.md`):
+S14 and S15 are new findings from that design's implementation, S12 is
+resolved by the same fix as S14, and S16–S25 record the Secret Key keychain
+and "Remove this device" limitations it introduced. Numbering continues in
+this table rather than starting a new one, since this work extends the same
+server/desktop account surface reviewed below.
+
 | # | Severity | Component | Finding | Status |
 |---|---|---|---|---|
 | S1 | Medium | Server | `POST /v1/accounts/activate` hashed the auth key with Argon2id before validating the invite, so a stranger could buy ~20 ms of CPU per request | **Fixed** (invite checked first; per-address rate limit) |
@@ -480,8 +487,20 @@ at all.
 | S9 | Low | Client | Pulled items are bounded by size but not re-checked against the UI's field limits | Accepted, documented (`server-sync.md` §6) |
 | S10 | Low | Server | Every authenticated request updates `devices.last_seen_at`, giving the server per-request activity | Accepted |
 | S11 | Info | Server | TLS is the deployment's responsibility; the server does not terminate it or set HSTS | Accepted, documented (`deployment.md` §1) |
-| S12 | Low | Desktop | A master-password change is local until the next successful sync publishes the header | Accepted, self-healing |
+| S12 | Low | Desktop | A master-password change is local until the next successful sync publishes the header | **Resolved**: the header now changes server-first, in the same transaction as the verifier (S14) |
 | S13 | Info | Bridge | A save from the extension blocks one bridge thread for the round trip (no vault lock held) | Accepted |
+| S14 | High | Server / Desktop | A master-password change updated only the local header; the server's login verifier and KDF parameters stayed at their activation values, so every device — including the one that made the change — failed to log in afterwards. Two such changes made offline in sequence left the local header revision two ahead of the server's, and every later publish conflicted | **Fixed** (`POST /v1/account/credentials`: one atomic server transaction; the device commits locally only after a 2xx) |
+| S15 | Low | Core / Desktop | A pulled item that failed to decrypt was skipped and the cursor still advanced past it unconditionally; it was never retried, and nothing beyond a per-run count said so | **Fixed** (`unreadable_items` table; retried every sync via `POST /v1/items/fetch`; shown in a persistent banner) |
+| S16 | Low | Desktop | Unlocking with the new password while the local header is stale costs up to 3 s before "wrong password" is shown, because a local failure now falls back to an online check | Accepted, documented (`server-sync.md` §6) |
+| S17 | Info | Desktop | A keychain call that does not answer within 5 s falls back to `device.json` for that save; the key is migrated back to the keychain at the next start | Accepted, documented (`server-sync.md` §7) |
+| S18 | Info | Desktop | If installing or connecting to the platform keychain fails at startup, the device is treated as having no keychain for the rest of that run (the Secret Key may be asked for) | Accepted, documented (`server-sync.md` §7) |
+| S19 | Low | Desktop | A keychain `set` that timed out and completes later could re-add an entry after "Remove this device" deleted it — a narrow race between an abandoned write and a delete | Accepted, documented (`server-sync.md` §7) |
+| S20 | Info | Desktop | Any process running as the user can usually read this computer's keychain entry (Linux Secret Service, Windows Credential Manager); macOS may prompt. Same trust boundary as the `device.json` fallback it replaces (K1) | Accepted, documented (`server-sync.md` §7, `security-model.md` §13) |
+| S21 | Info | Desktop | "Remove this device" renames the vault file (`vault.sqlite3.removed-<timestamp>`) instead of deleting it; it stays on disk as ciphertext, recoverable only with the master password and the Secret Key from the Emergency Kit | Accepted, documented (design §6.1) |
+| S22 | Info | Desktop | "Remove this device" requires an unlocked vault, so it is not reachable when the vault fails to open at startup | Accepted, known gap |
+| S23 | Low | Server | A device whose online unlock fallback logs in but then fails locally (for example a header that fails to verify) leaves a server session live until it expires (24 h) | Accepted |
+| S24 | Info | Deployment | The desktop and server must be upgraded together: `PUT /v1/vault/header` is gone, so an old desktop cannot publish a header to a new server | Accepted, operational |
+| S25 | Info | Verification | The Windows and macOS keychain backends (`windows_native_keyring_store`, `apple_native_keyring_store`) were compiled but not exercised in this environment | Open, not yet verified on Windows/macOS |
 
 ## Details
 
@@ -596,13 +615,66 @@ URL that is not HTTPS is refused unless it is localhost, and redirects are
 never followed, so a bearer token cannot be handed to another host.
 `docs/deployment.md` §1 states TLS as a requirement rather than an option.
 
-### S12. A password change is local until it is published (Low, accepted)
-`change_master_password` re-wraps the vault key locally and then publishes
-the header. If publishing fails, this device uses the new password while
-others still accept the old one, until the next sync notices the local header
-revision is ahead and publishes it. The rollback floor (`max_header_rev`)
-means the old header can never be re-adopted afterwards. Self-healing, but
-worth knowing: a password change is not "done" until a sync succeeds.
+### S12. A password change is local until it is published (Low, resolved)
+Originally: `change_master_password` re-wrapped the vault key locally and
+then published the header. If publishing failed, this device used the new
+password while others still accepted the old one, until the next sync
+noticed the local header revision was ahead and published it. This "publish
+later" ordering is what produced S14's stale-server-verifier failure and its
+worse case (two offline changes deadlocking every later publish). The 2026-09-23
+design replaced it: the server change (`POST /v1/account/credentials`) is
+made first, and the local rewrap is committed only after a 2xx, at the
+revision the server returned. A local-ahead state can no longer arise from a
+password change; `sync_now` treats it as an internal error if observed
+anyway rather than trying to publish it. See S14.
+
+### S14. Stale server verifier after a password change (High, fixed)
+**Attack/failure scenario:** as S12 describes, the original
+`change_master_password` rewrapped the vault key and published a new header,
+but never touched the server's login verifier or KDF parameters — those
+stayed at their activation values. The next login by *any* device, including
+the one that had just changed the password, hashed the new password against
+the old verifier and failed: the account was effectively locked out of the
+server by its own password change. Because the local header revision had
+advanced while the server's had not, two such changes made offline in
+sequence left the local revision two ahead of the server's, and every later
+publish attempt conflicted with no way to resolve on its own.
+
+**Fix:** a single route, `POST /v1/account/credentials`, updates the KDF
+parameters, the auth verifier and the vault header together in one server
+transaction. The caller proves it knows the *current* auth key, checked
+against the stored verifier and rate-limited exactly like a login (a stolen
+session token alone cannot change the password); `baseHeaderRevision` must
+match the server's current one or the request is refused with a conflict.
+On success every other session on the account is deleted. The device making
+the change commits its local rewrap only after a 2xx, at the revision the
+server returned — never before. Every other device is now signed out and
+picks up the new password at its next unlock, through an online fallback
+that verifies the served header before adopting it (`server-sync.md` §6).
+Tested in `crates/havenkeys-server/tests`, `havenkeys-sync-client`,
+`havenkeys-core` (the rekey and online-unlock-verification tests), and the
+real-server round trip added for this fix (`654b81f`, "a password change
+reaches a second device and survives a lost response").
+
+### S15. Unreadable pulled items were skipped permanently (Low, fixed)
+**Failure scenario:** `apply_remote_changes` advanced the stored sync cursor
+unconditionally, including past a change whose blob failed to authenticate
+under the data key or was missing entirely. That item was then never pulled
+again: the next sync starts at `since=cursor`, which is already past it.
+Nothing signalled this beyond a per-run `SyncReport.skipped_items` count, and
+the only way back was a full manual re-download.
+
+**Fix:** such a change is now recorded in a local `unreadable_items` table
+(vault schema 5) in the *same transaction* that upserts, deletes and
+advances the cursor for the rest of that pull's changes, so the cursor and
+the retry list can never disagree. At the end of every `sync_now`, if the
+table is not empty, the app fetches those IDs (in chunks of up to 500) from
+the new `POST /v1/items/fetch` and applies the result through the same apply
+path, without moving the cursor; an item that now decrypts, or that the
+server has since deleted, leaves the table. `VaultStatus.unreadableItems`
+drives a persistent banner on the vault screen with a **Re-download** action
+until the count reaches zero. `reset_sync_cursor` clears the table too, since
+a full re-download re-evaluates every item anyway.
 
 ### S13. A bridge thread waits for the network (Info, accepted)
 Saving a login from the browser blocks the bridge thread that is handling

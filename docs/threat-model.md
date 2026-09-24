@@ -113,6 +113,10 @@ stores, and they see every request.
 * They **cannot impersonate a device**: the auth key is stored only as an
   Argon2id hash, and `auth/params` answers identically for addresses that have
   no account, so the server is not an account-enumeration oracle either.
+* They **cannot change the account's password with a stolen session token
+  alone**: `POST /v1/account/credentials` also requires the *current* auth
+  key, checked against the stored verifier under the same rate limiting as
+  login. A successful change deletes every other session on the account.
 * They **can delete or withhold** data — see T1c — and they see metadata: the
   account's email, how many items exist, how large each is, when each changed,
   how many devices there are and what they are called, and each device's IP
@@ -215,6 +219,18 @@ wall-clock vs monotonic clock divergence).
   buffers we control, but copies may remain in allocator free lists, the
   WebView's JS heap, IPC buffers, or swap. See `security-model.md` §Memory.
 * **Rollback attacks** on the vault file.
+* **Reading the OS keychain entry from another process running as the same
+  user.** Any such process can usually read a Linux Secret Service or
+  Windows Credential Manager entry; macOS may prompt for access. This is the
+  same trust boundary as the plaintext `device.json` fallback it protects
+  against instead — it protects copies of the vault that are not on one of
+  your devices, not this device from something already running as you.
+* **The vault file `vault.sqlite3.removed-<timestamp>` left by "Remove this
+  device".** It is kept, deliberately, as ciphertext rather than deleted —
+  it may be the only local copy if the account's server is gone and export
+  does not exist yet — so it remains on disk under the same T1 protection
+  (master password and Secret Key) indefinitely, with no prompt to clean it
+  up later.
 * **Side channels** beyond what the underlying audited libraries protect
   against (RustCrypto `aes-gcm` uses constant-time implementations when AES-NI
   is available).

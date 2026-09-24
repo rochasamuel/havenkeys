@@ -21,7 +21,7 @@ changes need the server.
 | Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
 | Export | Not implemented |
 | Secret Key + Emergency Kit | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
-| Account server (`havenkeys-server`) | Implemented and tested against Postgres; **not deployed anywhere yet** ([docs/deployment.md](docs/deployment.md)) |
+| Account server (`havenkeys-server`) | Implemented and tested against Postgres; deployed ([docs/deployment.md](docs/deployment.md)). The backup restore drill (§5) and real cross-device use are not yet done — see [docs/roadmap.md](docs/roadmap.md) §3 |
 | Marketing/download website (havenkeys.net) | Implemented; static site on Vercel, download page reads GitHub Releases ([docs/website.md](docs/website.md)) |
 | Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
 
