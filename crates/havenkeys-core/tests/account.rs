@@ -435,25 +435,47 @@ fn adopt_and_unlock_refuses_an_old_or_foreign_header() {
     assert!(two.adopt_and_unlock(prepared).is_err());
     assert!(!two.is_unlocked());
 
-    // A different vault, on a different account: refused, even at a higher
-    // revision.
+    // A different vault, on a different account, at revision 1 — above
+    // device two's floor (0), so only the vault-ID check can refuse it.
     let other_account = AccountRef::new(
         Uuid::from_u128(0xbeef),
         havenkeys_core::account::NormalizedEmail::parse("other@example.com").unwrap(),
     );
     let made =
         prepare_new_account_vault(&secret(PASSWORD), &other_account, fast_kdf(), NOW).unwrap();
-    let foreign = havenkeys_core::sync::encode_header_for(&made.prepared).unwrap();
+    let mut other_rec = account_record();
+    other_rec.account_id = other_account.id;
+    other_rec.email = "other@example.com".into();
+    let mut other = VaultService::new(Store::open_in_memory().unwrap());
+    other
+        .create_account_vault(made.prepared, &other_rec)
+        .unwrap();
+    let ticket = other.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &secret(PASSWORD),
+            &secret(NEW_PASSWORD),
+            fast_kdf(),
+            &made.secret_key,
+            &other_account,
+        )
+        .unwrap();
+    let foreign = other.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
     let (prepared, _) = prepare_sign_in(
         &foreign,
-        &secret(PASSWORD),
+        &secret(NEW_PASSWORD),
         &made.secret_key,
         &other_account,
     )
     .unwrap();
-    assert!(two.adopt_and_unlock(prepared).is_err());
+    assert_eq!(prepared.header_revision(), 1);
+    assert_eq!(
+        two.adopt_and_unlock(prepared).err().unwrap().code(),
+        "unlock_failed"
+    );
     assert!(!two.is_unlocked());
     assert_eq!(two.header_revision().unwrap(), Some(0));
+    assert_eq!(two.account().unwrap().unwrap().max_header_rev, 0);
     two.unlock_for_account(&secret(PASSWORD), &sk, &account())
         .unwrap();
 }
@@ -518,5 +540,42 @@ fn a_forged_header_does_not_pass_sign_in_verification() {
         serde_json::from_slice(&one.encode_account_header().unwrap()).unwrap();
     served["header"]["revision"] = 7.into(); // attestation no longer matches
     let bytes = serde_json::to_vec(&served).unwrap();
-    assert!(prepare_sign_in(&bytes, &secret(PASSWORD), &sk, &account()).is_err());
+    let err = prepare_sign_in(&bytes, &secret(PASSWORD), &sk, &account())
+        .err()
+        .unwrap();
+    assert_eq!(err.code(), "corrupted");
+}
+
+#[test]
+fn a_rekey_is_refused_if_the_header_revision_moved_meanwhile() {
+    // The committed revision must be exactly the one encoded and sent to the
+    // server. Here only the revision moves (same wrap, same KDF), so the
+    // revision comparison is the only check that can catch it.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("vault.db");
+    let (mut vault, sk) = common::activated_vault_at(&path);
+    let ticket = vault.begin_rekey().unwrap();
+    let rekeyed = ticket.derive_for_account(
+        &secret(PASSWORD),
+        &secret(NEW_PASSWORD),
+        fast_kdf(),
+        &sk,
+        &account(),
+    );
+    {
+        let mut other = Store::open(&path).unwrap();
+        let h = other.header().unwrap().unwrap();
+        other
+            .update_key_wrap(&h.kdf, &h.wrapped_vault_key, h.key_scheme, 1)
+            .unwrap();
+    }
+    assert_eq!(
+        vault.commit_rekey(ticket, rekeyed, 2),
+        Err(havenkeys_core::Error::Busy)
+    );
+    assert_eq!(vault.header_revision().unwrap(), Some(1));
+    vault.lock();
+    vault
+        .unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
 }

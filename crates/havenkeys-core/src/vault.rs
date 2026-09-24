@@ -813,6 +813,7 @@ impl VaultService {
             || current.kdf != ticket.header.kdf
             || current.wrapped_vault_key != ticket.header.wrapped_vault_key
             || current.key_scheme != ticket.header.key_scheme
+            || current.revision != ticket.header.revision
         {
             return Err(Error::Busy);
         }
