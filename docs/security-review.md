@@ -780,6 +780,15 @@ against a real relying party (see the manual checklist at the end).
 
 > This is an internal review, not an independent security audit.
 
+**Update, 2026-09-24** (`docs/superpowers/plans/2026-09-24-passkey-upgrade.md`,
+design `docs/superpowers/specs/2026-09-24-passkey-upgrade-design.md`): PK22–PK27
+are new findings from the automatic passkey upgrade built on top of this
+review — a conditional `create()` right after a HavenKeys password fill, plus
+the field menu's "you have a passkey" / Passkeys Directory hint
+(`passkey_status`). Branch base `07f2436`, this task's verification at
+`e409c7b`. Numbering continues in this table rather than starting a new one,
+since this work extends the same passkey surface reviewed above.
+
 ## Summary
 
 We found no critical or high-severity issues. Passkey private keys stay in
@@ -813,6 +822,12 @@ versions. All of them are listed below.
 | PK19 | Low | Extension | `excludeCredentials` answered `InvalidStateError` at once, so any page could probe which of its accounts HavenKeys holds without a click | **Fixed** (final review); remaining signals accepted |
 | PK20 | Low | Extension | With the isolated bridge gone (Firefox unloads it on disable/update) the page's promise never settled | **Fixed** (final review) |
 | PK21 | Low | Extension / bridge | A page could drain the desktop's shared lookup rate limit with WebAuthn calls, and a site timeout of 0 closed the card at once | **Fixed** (final review) |
+| PK22 | Medium | Core / extension (automatic upgrade) | A conditional `create()` right after a HavenKeys password fill can save a passkey with no card and no click at all, relaxing rule #6 (explicit user action) for that one case | Accepted, documented: bounded by a 5-minute fill window, same login and site, matching (folded) account name, add-only (never replaces), one silent passkey per fill, and the `auto_passkey_upgrade` off switch. **Not a boundary against a compromised extension**: such an extension could already create a passkey for a site it names through the ordinary clicked `passkey_create` (`conditional: false`), which the core cannot tell from a real click; the automatic-upgrade check narrows what a *hostile page* can trigger unassisted, and adds no new capability to a compromised extension |
+| PK23 | Low | Core (check/create timing gap) | `check_passkey_create` has no `userHandle` (only `passkey_create`'s wire shape carries one), so it can answer `upgrade: auto` for an account whose passkey the vault already holds under that handle; `stage_passkey_create` then denies via its `find_passkey_holder` check | Accepted: fails closed. The extension's `catch` around the `passkey_create` call (`webauthn-handler.ts` `beginUpgrade`) falls back to the browser with no notice and no card. Cost: that one request goes to the browser instead of HavenKeys, silently; nothing is created, replaced, or shown to the user |
+| PK24 | Info | Core (fill consumption) | A recent-fill entry is deleted at `stage_passkey_create` time — before the server confirms the write — "spent even if the write later fails" (code comment, `passkey/vault.rs`) | Accepted, the conservative choice: a script cannot repeat a silent create with a fresh user handle while the first request is still in flight. Residual: if the server write then fails (offline, error), the site gets no passkey and the user must fill the password again to re-arm the window for a second silent attempt |
+| PK25 | Info | Extension (silent-save abort) | If the page aborts, navigates away, or otherwise cancels its request while an `auto` (silent) save is already in flight, the passkey the desktop already created and committed **stays in the vault**, even though the site never receives it and no "saved" notice appears | Accepted, same class as PK13 (orphan passkey after a late abort), but here it can happen with no card ever shown. Visible and deletable in that login's Passkeys list in the desktop app (`autofill.md`, Limitations) |
+| PK26 | Info | Extension (`passkey_status`) | The field menu's "you have a passkey for `<site>`" hint asks a Lookup-class `passkey_status` request once per menu open; the yes/no answer itself never reaches the page, but a page can already see the menu's iframe appear and estimate its height, which changes by one row depending on the answer | Accepted, the same residual signal `threat-model.md` and `autofill.md` already document for menu presence generally; `passkey_status` adds no item ID, credential ID, or account data to what a page can observe |
+| PK27 | Info | Extension (Passkeys Directory data) | The "`<name>` supports passkeys" hint's site names and help links are third-party data from the 2factorauth Passkeys Directory (`apps/extension/src/data/passkey-sites.json`), matched to a page by plain host-suffix comparison with no Public Suffix List | Accepted: this is a UI hint only, never an authorization decision — a wrong match can only show or hide a static help link, and `github.com.evil.com` still never matches `github.com`. The data is a build-time snapshot committed to the repo and reviewed like code (`scripts/update-passkey-directory.mjs`, run by hand, never fetched at runtime); the site name is rendered with `textContent` only, and only `https:` help links are kept, opened only after a trusted click via `chrome.tabs.create` |
 
 ## Details
 
@@ -1033,6 +1048,131 @@ UI or session timers (page ceiling, bridge timer, background session TTL).
 Also in this wave: `list_passkeys` (desktop) no longer resets the auto-lock
 timer, like `list_items`.
 
+### PK22. Automatic upgrade: a relaxed click rule (Medium, accepted)
+**What it does:** right after HavenKeys fills a password and the site calls
+`create()` with `mediation: "conditional"` (its own "upgrade to a passkey"
+offer), HavenKeys can save a passkey with no card and no click in HavenKeys
+UI at all — the *consent* is that recent password fill itself. This is a
+deliberate, narrow exception to Critical Engineering Rule #6 ("never
+autofill — or, here, create a credential — without explicit user
+interaction").
+
+**Why it is bounded:** the decision is made in Rust, never trusted from the
+extension. `VaultService::fill_for_page` records, in the unlocked session's
+memory only, which login was filled on which site and when
+(`Session::recent_fills`, capped at 16, dropped on lock). `upgrade_for`
+allows a silent save only within `UPGRADE_WINDOW_MS` (5 minutes) of that
+fill, for that same login, on that same site (registrable domain), and only
+when the account name the site sent matches (folded) or the login has none.
+`stage_passkey_create` re-derives this itself and refuses (`Denied`) unless
+it still comes out `Auto` for exactly the item named — the extension's claim
+that a request is the automatic upgrade is never taken on trust
+(`conditional_create_needs_auto_for_exactly_that_login`). A silent save only
+ever *adds* a passkey: if any login already holds one for the same account
+(rpId and user handle), the request is denied
+(`conditional_create_never_replaces_the_filled_logins_own_passkey`), so
+replacing a passkey always needs the card. A successful silent save spends
+the fill, so one password fill grants at most one silent passkey
+(`one_fill_grants_one_silent_passkey`). The vault setting
+`auto_passkey_upgrade` (on by default) turns the whole thing into the
+ordinary "Add a passkey?" card instead.
+
+**Residual (accepted):** this is not a boundary against a *compromised
+extension*. Such an extension can already send `passkey_create` with
+`conditional: false` and any `itemId` it names for a site it names — the
+ordinary clicked path — and the core has no way to distinguish that from a
+real user click, because the click happens in extension-controlled UI
+(`threat-model.md`, "Compromised extension"). The automatic-upgrade check
+adds no new capability to a compromised extension; it only keeps the
+*silent* path narrow against hostile *pages* and extension *bugs*, which
+cannot forge a recent HavenKeys fill of a specific login on a specific site.
+This is stated in the shipped docs (`threat-model.md`, "The automatic
+upgrade's relaxed click rule"; `security-model.md` §15, "Automatic upgrade";
+`autofill.md`, "Automatic upgrade").
+
+### PK23. `check_passkey_create` can say `auto` where `stage_passkey_create` denies (Low, accepted)
+`check_passkey_create`'s wire shape (and `CreateQuery`) carries `userName`
+but not `userHandle` — the site does not send a handle until the actual
+`create()` call reaches `passkey_create`. So `upgrade_for`, called from
+`check_passkey_create`, cannot check `find_passkey_holder` (which needs the
+rpId *and* the user handle) and can answer `Upgrade::Auto` for an account
+whose passkey the vault already holds under a handle it has not seen yet.
+`stage_passkey_create` re-derives the same decision but *does* have the
+handle by then, sees `holder.is_some()`, and denies the conditional request
+(`req.conditional && holder.is_some()` → `Error::Denied`).
+
+**Why this is safe:** the extension's `beginUpgrade` (`webauthn-handler.ts`)
+sends the `passkey_create` request only after `check_passkey_create`
+answered `auto`, and wraps that second call in a `catch` that returns
+`FALLBACK` on any error, including `denied` — no card, no notice, silent
+fallback to the browser, exactly as for "no recent fill" or any other
+disqualifying condition. No passkey is created or replaced, and nothing is
+shown to the user beyond what they would see without HavenKeys. **Cost if
+this ever mattered:** that one request goes to the browser instead of
+HavenKeys for that page, which is the same outcome as HavenKeys not being
+installed.
+
+### PK24. The fill is spent at stage time, not at server-confirmation time (Info, accepted)
+`stage_passkey_create` deletes the matching `recent_fills` entry as soon as
+it builds the write, before the caller sends it to the server and commits
+it — the code comment states this explicitly: "Spent even if the write
+later fails: the user can fill again." This was a deliberate final-review
+choice (over spending the fill only after a confirmed commit) because the
+alternative would let a script keep a conditional `create()` in flight and
+repeat it with a fresh user handle before the first write resolves.
+**Residual:** if the server write then fails (offline, a transient error),
+the site receives no passkey and the fill is already gone; the user has to
+fill the password again to re-arm the 5-minute window for a second silent
+attempt. This costs the user one re-fill at worst, never a lost passkey or
+an incorrect grant.
+
+### PK25. Orphan passkey after an abort during a *silent* save (Info, accepted)
+This is PK13 for the automatic-upgrade path specifically, and worth its own
+entry because no card is ever shown here. If the page aborts, navigates
+away, or otherwise cancels its `create()` request after HavenKeys has
+already created the passkey and committed it to the server, the passkey
+**stays in the vault** — the site never receives the credential, and the
+"Passkey saved to HavenKeys" notice does not appear either, because the
+cancellation reaches the extension too late to stop a save already in
+flight. The orphaned passkey is visible in that login's Passkeys list in the
+desktop app and can be deleted there, exactly as for PK13. Documented in
+`autofill.md` ("Automatic upgrade" and "Limitations").
+
+### PK26. `passkey_status`: a one-bit answer with the same residual signal as menu presence (Info, accepted)
+The field menu asks `passkey_status` (core: `has_passkey_for_page`) once
+each time it opens on a page that already lists a saved login, to choose
+between a "you have a passkey for `<site>`" hint and a Passkeys Directory
+help row. It is Lookup-class, like `find_matches`, and its only output is a
+boolean; it names no item, credential ID, or account. The boolean itself
+never reaches the page — only whether *our own* menu shows an extra hint row
+does. A page can already observe that the menu's iframe appeared and
+estimate its rough height (the residual `autofill.md` already documents for
+menu presence in general); `passkey_status` changes that height by at most
+one row and adds no other observable signal. Accepted as no worse than the
+existing menu-presence residual.
+
+### PK27. Passkeys Directory: third-party data used only as a UI hint (Info, accepted)
+The "`<name>` supports passkeys" / "How to add one" row's site names and
+help links come from a snapshot of the [2factorauth Passkeys
+Directory](https://github.com/2factorauth/passkeys)
+(`apps/extension/src/data/passkey-sites.json`, CC-BY-4.0, credited in
+`THIRD-PARTY-NOTICES.md`). It is committed at build time by
+`scripts/update-passkey-directory.mjs`, run by hand and reviewed like any
+other change — never fetched at runtime, so a compromise of the upstream
+repository cannot affect an installed HavenKeys without a maintainer
+committing the resulting diff. `findPasskeySite` matches a page to an entry
+by plain host-suffix comparison (page host equals a domain, or ends with
+`.` + a domain, longest domain wins) with no Public Suffix List. **Why this
+is acceptable despite the weaker matching:** this is a UI hint, never an
+authorization decision — the worst a wrong match can do is show or hide a
+static help link; it grants no credential, fills nothing, and
+`github.com.evil.com` still never matches `github.com` under this scheme
+(no fabricated domain in the dataset ends with a real one as a suffix). The
+site name is rendered with `textContent` only (never `innerHTML`), only
+`https:` documentation links are kept by the generator, and a link opens
+only after the menu's usual trusted-click guard, via `chrome.tabs.create` in
+a new tab, carrying no vault data.
+
 The per-task reviews also deferred some minor items that are not security
 findings. They are tracked in the development ledger, not here. Examples:
 `Host::parse` percent-decodes an rpId such as `github%2Ecom` into
@@ -1066,6 +1206,36 @@ Run on 2026-09-24 at `2e0eb73` (WSL2, Linux 6.6).
 * MIT/Apache-2.0: `ff` 0.14.0 and `group` 0.14.0.
 * Apache-2.0, dev-dependency only: `ciborium` 0.2.2, with `ciborium-io` and
   `ciborium-ll`.
+
+### Re-run for the automatic upgrade (Task 10, `e409c7b`)
+
+Full verification was re-run after the automatic-upgrade feature and its
+final fix wave (WSL2, Linux 6.6). No dependency was added on this branch:
+`git diff 07f2436..HEAD -- Cargo.lock pnpm-lock.yaml` is empty.
+
+| Command | Result |
+|---|---|
+| `cargo test --workspace --exclude havenkeys-server --exclude havenkeys-sync-client` | 348 passed, 0 failed (core 118 unit + 129 integration across `account`/`fuzz`/`no_logging`/`passkeys`(26)/`replica`/`security`/`vault`/`writes`, bridge 31, protocol 25, native-host 8, oslock 5, desktop-lib 34). `havenkeys-server` and `havenkeys-sync-client/tests/round_trip.rs` still need Postgres, not available here — unchanged, environmental |
+| `pnpm -r test` | 265 passed, 0 failed: extension 223, protocol 12, desktop 10, ui 6, web 14 |
+| `pnpm typecheck`, `pnpm build:extension` | Clean; extension bundle builds |
+| `pnpm lint:rust` (the same 7-crate clippy set, `-D warnings`) | Clean |
+| `cargo fmt --all -- --check` | Failed on two test files this branch touched (`havenkeys-bridge/tests/bridge.rs`, `havenkeys-core/tests/passkeys.rs`). Formatted in `e409c7b` (`style: rustfmt`, untouched files left alone); now clean |
+| `cargo audit` | Same 7 allowed warnings as above (`proc-macro-error`, five `unic-*`, `glib` `VariantStrIter`), all through Tauri's Linux GTK stack; **no vulnerabilities** |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok`; the same two `deny.toml`-only warnings as above |
+| `pnpm audit` | No known vulnerabilities found |
+
+**Secret-logging audit of this diff** (`git diff 07f2436..HEAD`): no new
+`console.*`, `eprintln!`, or error string was added in `apps/extension`,
+`apps/desktop`, or the Rust crates; the only new `format!` uses are in test
+fixtures. `RecentFill` (`crates/havenkeys-core/src/vault.rs`) derives no
+`Debug` impl. The new `Upgrade` and `UpgradeHint` types derive `Debug` but
+hold only an item ID (`Uuid`), the same non-secret convention as
+`PasskeyMatch`/`PasskeyCandidate`/`StagedPasskey`; `CreateCheck`'s derived
+`Debug` composes `Suggestion`'s pre-existing redacted `Debug` (title and
+username hidden) with `Upgrade`. `scripts/update-passkey-directory.mjs`
+(a hand-run dev tool, not part of the shipped extension or desktop) logs
+only a public entry count and the upstream commit hash of the Passkeys
+Directory repository — no vault data.
 
 ## Secret-logging and trust-boundary review
 
@@ -1139,6 +1309,24 @@ Each property has a test that fails if it stops holding.
   are bound to the tab, frame, document and origin, and end when the vault
   locks.
 * The passkey script group registers independently of the inline one.
+* A conditional `create()` is only ever the automatic upgrade for the
+  login and site just filled: a different login, a different site (even a
+  look-alike or a subdomain outside the login's own rules), or no fill in
+  the last 5 minutes all deny it and fall back (A1u, A2u;
+  `upgrade_is_per_site_and_never_for_look_alikes`,
+  `a_fill_on_one_site_is_no_upgrade_on_another_site_of_the_same_login`,
+  `conditional_create_needs_auto_for_exactly_that_login`).
+* A silent save never replaces an existing passkey, and one password fill
+  grants at most one (A3u;
+  `conditional_create_never_replaces_the_filled_logins_own_passkey`,
+  `one_fill_grants_one_silent_passkey`). The fill memory is capped at 16
+  entries and dropped on lock (`fill_memory_is_dropped_on_lock`).
+* `has_passkey_for_page` runs the same `authorize_rp` check as every other
+  passkey lookup and returns nothing but a boolean; it never names an item
+  or a credential.
+* The Passkeys Directory match is a plain host-suffix comparison that a
+  look-alike domain (`github.com.evil.com`) never satisfies against
+  `github.com`, and the help link opens only on a trusted click.
 
 ## Manual checklist (verification pending)
 
@@ -1168,3 +1356,5 @@ in-page suggestions (the host grant).
 | M13 | Desktop: the login shows its passkey (site, account, created date) and the list shows the badge. Deleting the passkey asks for confirmation, and afterwards the site no longer accepts it | Not yet run | Not yet run |
 | M14 | Re-registering the same account replaces the passkey (one entry in the desktop), and the site accepts the new one | Not yet run | Not yet run |
 | M15 | On Chromium, a translucent overlay over the passkey card cannot get clicks through | Not yet run | n/a |
+| M18 | google.com: sign in with a saved password, let Google's own "create a passkey" prompt fire as a conditional `create()`. With **Add passkeys automatically** on: no card, a "Passkey saved to HavenKeys" notice, and the login gains a passkey. With the setting off: the "Add a passkey?" card opens instead, that login preselected | Not yet run | Not yet run |
+| M19 | A Passkeys Directory site with a saved password and no passkey (for example github.com): open the field menu and confirm the "`<name>` supports passkeys" / "How to add one" row appears and its link opens the site's own help page in a new tab. After saving a passkey for it, confirm the row is replaced by "You have a passkey for `<site>`" | Not yet run | Not yet run |
