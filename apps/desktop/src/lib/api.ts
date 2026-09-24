@@ -137,6 +137,13 @@ export const api = {
   /** A pull finished; carries counts only. */
   onSynced: (handler: (report: SyncReport) => void): Promise<UnlistenFn> =>
     listen<SyncReport>("vault://synced", (e) => handler(e.payload)),
-  /** This computer was removed from its account; the vault reopened empty. */
-  onRemoved: (handler: () => void): Promise<UnlistenFn> => listen("vault://removed", () => handler()),
+  /**
+   * This computer was removed from its account; the vault reopened empty.
+   * `keychainWarning` is set when the Secret Key may still be in the system
+   * keychain and the user must delete it by hand.
+   */
+  onRemoved: (handler: (removed: { keychainWarning: string | null }) => void): Promise<UnlistenFn> =>
+    listen<{ keychainWarning: string | null }>("vault://removed", (e) =>
+      handler({ keychainWarning: e.payload?.keychainWarning ?? null }),
+    ),
 };

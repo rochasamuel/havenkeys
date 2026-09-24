@@ -593,6 +593,14 @@ button {
 
 /* A banner scoped to a narrower pane (the item list) rather than the whole
    window: it wraps its text and action instead of assuming one line. */
+.banner-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+
 .banner-warn {
   display: flex;
   flex-wrap: wrap;

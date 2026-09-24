@@ -92,12 +92,30 @@ impl TimedKeyStore {
         Self::with_timeout(inner, TIMEOUT)
     }
 
-    fn with_timeout(inner: Box<dyn KeyStore>, timeout: Duration) -> Self {
+    pub(crate) fn with_timeout(inner: Box<dyn KeyStore>, timeout: Duration) -> Self {
         Self {
             inner: Arc::from(inner),
             busy: Arc::new(AtomicBool::new(false)),
             timeout,
         }
+    }
+
+    /// How long one call may take.
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
+    /// Wait, at most `limit`, until no call (an abandoned one included) is
+    /// running. Returns whether the store is idle.
+    pub fn wait_idle(&self, limit: Duration) -> bool {
+        let deadline = std::time::Instant::now() + limit;
+        while self.busy.load(Ordering::Acquire) {
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        true
     }
 
     fn call<T: Send + 'static>(

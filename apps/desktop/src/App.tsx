@@ -27,6 +27,9 @@ export function App() {
   // password was changed on another device). Replaces the offline banner
   // until the next lock or a successful reconnect.
   const [signedOut, setSignedOut] = useState(false);
+  // Set by "Remove this device" when the system keychain would not confirm
+  // that the Secret Key was deleted. Shown until dismissed.
+  const [removedWarning, setRemovedWarning] = useState<string | null>(null);
 
   useEffect(() => {
     api.status().then(setStatus, (err) =>
@@ -49,7 +52,8 @@ export function App() {
   // This computer was removed from its account: the store reopened empty, so
   // re-reading status shows the first-run screen (vaultExists: false).
   useEffect(() => {
-    const unlisten = api.onRemoved(() => {
+    const unlisten = api.onRemoved(({ keychainWarning }) => {
+      setRemovedWarning(keychainWarning);
       setLockReason(null);
       setShowKit(false);
       setSignedOut(false);
@@ -122,13 +126,27 @@ export function App() {
 
   if (!status.vaultExists) {
     return (
-      <WelcomeScreen
-        onActivated={(s) => {
-          setStatus(s);
-          setShowKit(true);
-        }}
-        onSignedIn={setStatus}
-      />
+      <>
+        {removedWarning && (
+          <div className="banner banner-warn banner-fixed" role="alert">
+            <span>{removedWarning}</span>
+            <button className="btn btn-quiet" type="button" onClick={() => setRemovedWarning(null)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+        <WelcomeScreen
+          onActivated={(s) => {
+            setRemovedWarning(null);
+            setStatus(s);
+            setShowKit(true);
+          }}
+          onSignedIn={(s) => {
+            setRemovedWarning(null);
+            setStatus(s);
+          }}
+        />
+      </>
     );
   }
 

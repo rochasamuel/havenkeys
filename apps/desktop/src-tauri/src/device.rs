@@ -48,6 +48,15 @@ pub struct KeyStatus {
     pub storage: Storage,
 }
 
+/// What `forget` did.
+#[must_use]
+pub struct Forgotten {
+    /// The keychain confirmed the entry is gone (or never had one).
+    pub keychain_cleared: bool,
+    /// Writing `device.json` without the key and with the new id.
+    pub saved: std::io::Result<()>,
+}
+
 pub struct Device {
     path: PathBuf,
     pub id: Uuid,
@@ -68,6 +77,10 @@ impl Device {
     /// Secret Key must be entered again from the Emergency Kit, if it was
     /// not in the keychain. Reads nothing from the keychain yet.
     pub fn load(dir: &Path, store: Box<dyn KeyStore>) -> Self {
+        Self::load_with(dir, TimedKeyStore::new(store))
+    }
+
+    fn load_with(dir: &Path, store: TimedKeyStore) -> Self {
         let path = dir.join(FILE);
         let parsed = std::fs::read(&path)
             .ok()
@@ -86,7 +99,7 @@ impl Device {
             id,
             file_key,
             cached: None,
-            store: TimedKeyStore::new(store),
+            store,
         };
         let _ = device.save();
         device
@@ -186,12 +199,25 @@ impl Device {
     }
 
     /// Remove the key everywhere and start over with a new device id.
-    pub fn forget(&mut self, account: Uuid) -> std::io::Result<()> {
-        let _ = self.store.delete(account);
+    ///
+    /// The file and the id are always reset. The keychain entry is deleted
+    /// if the keychain lets it be: a failed or busy keychain (a call still
+    /// waiting on a prompt) is waited for, up to one call's timeout, and
+    /// asked once more. The result says whether the entry is known to be
+    /// gone, so the caller can tell the user to delete it by hand.
+    pub fn forget(&mut self, account: Uuid) -> Forgotten {
+        let mut keychain_cleared = self.store.delete(account).is_ok();
+        if !keychain_cleared {
+            self.store.wait_idle(self.store.timeout());
+            keychain_cleared = self.store.delete(account).is_ok();
+        }
         self.file_key = None;
         self.cached = None;
         self.id = Uuid::new_v4();
-        self.save()
+        Forgotten {
+            keychain_cleared,
+            saved: self.save(),
+        }
     }
 
     /// Write atomically with owner-only permissions.
@@ -236,6 +262,7 @@ mod tests {
     use crate::secret_store::{
         FailingKeyStore, KeyStore, MemoryKeyStore, SlowKeyStore, SlowOnceKeyStore, Storage,
     };
+    use std::time::Duration;
 
     const ACCOUNT: Uuid = Uuid::from_u128(7);
 
@@ -309,11 +336,47 @@ mod tests {
         let mut d = Device::load(dir.path(), Box::new(store.clone()));
         let old_id = d.id;
         d.set_secret_key(ACCOUNT, &key()).unwrap();
-        d.forget(ACCOUNT).unwrap();
+        let forgotten = d.forget(ACCOUNT);
+        assert!(forgotten.keychain_cleared);
+        forgotten.saved.unwrap();
         assert!(store.get(ACCOUNT).unwrap().is_none());
         assert!(d.secret_key(ACCOUNT).is_none());
         assert_ne!(d.id, old_id);
         assert_eq!(d.key_status(ACCOUNT).storage, Storage::None);
+    }
+
+    #[test]
+    fn a_keychain_delete_that_fails_is_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut d = Device::load_with(
+            dir.path(),
+            TimedKeyStore::with_timeout(Box::new(FailingKeyStore), Duration::from_millis(100)),
+        );
+        let old_id = d.id;
+        let forgotten = d.forget(ACCOUNT);
+        assert!(!forgotten.keychain_cleared);
+        // The rest of the removal still happened.
+        forgotten.saved.unwrap();
+        assert_ne!(d.id, old_id);
+    }
+
+    #[test]
+    fn a_busy_keychain_is_waited_for_and_the_delete_retried() {
+        let dir = tempfile::tempdir().unwrap();
+        // The first call hangs 700 ms against a 500 ms timeout.
+        let slow = SlowOnceKeyStore::new(Duration::from_millis(700));
+        let mut d = Device::load_with(
+            dir.path(),
+            TimedKeyStore::with_timeout(Box::new(slow.clone()), Duration::from_millis(500)),
+        );
+        // Times out and leaves the store busy for about 200 ms more.
+        assert!(!d.secret_key_lookup(ACCOUNT).1);
+        assert!(!slow.slow_call_finished());
+        let forgotten = d.forget(ACCOUNT);
+        assert!(forgotten.keychain_cleared);
+        // The first delete failed fast without reaching the store; the
+        // retry, once the store was free, did.
+        assert_eq!(slow.calls(), 2);
     }
 
     /// Fails its first `get`, then behaves like `MemoryKeyStore`.
