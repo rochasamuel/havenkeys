@@ -12,6 +12,15 @@ export const MAX_MATCHES = 50;
 export const MAX_SECRET_BYTES = 4 * 4096;
 export const MAX_USERNAME_BYTES = 4 * 512;
 
+/** Credential IDs HavenKeys creates, and the only length it accepts. */
+export const CREDENTIAL_ID_BYTES = 16;
+export const MAX_CHALLENGE_BYTES = 1024;
+export const MAX_USER_HANDLE_BYTES = 64;
+export const MAX_RP_ID_BYTES = 253;
+export const MAX_CREDENTIAL_LIST = 64;
+/** COSE ES256. */
+export const COSE_ES256 = -7;
+
 // ------------------------------------------------------------------ requests
 
 /**
@@ -32,6 +41,20 @@ export type Request =
       topUrl?: string;
       username: string | null;
       password: string;
+      itemId: string | null;
+    }
+  | { type: "find_passkeys"; url: string; topUrl?: string; rpId: string; allowCredentials: string[] }
+  | { type: "passkey_get"; itemId: string; credentialId: string; url: string; topUrl?: string; rpId: string; challenge: string }
+  | { type: "check_passkey_create"; url: string; topUrl?: string; rpId: string; userName: string; excludeCredentials: string[] }
+  | {
+      type: "passkey_create";
+      url: string;
+      topUrl?: string;
+      rpId: string;
+      challenge: string;
+      userHandle: string;
+      userName: string;
+      displayName: string | null;
       itemId: string | null;
     };
 
@@ -58,6 +81,21 @@ export interface Match {
   strength: MatchStrength;
 }
 
+/** A passkey offered for a page. Never contains a key. */
+export interface PasskeyMatch {
+  itemId: string;
+  credentialId: string;
+  title: string;
+  userName: string;
+}
+
+/** A login that could hold a new passkey. */
+export interface PasskeyCandidate {
+  itemId: string;
+  title: string;
+  username: string | null;
+}
+
 export type Result =
   | { type: "status"; state: LockState; vaultExists: boolean }
   | { type: "lock" }
@@ -66,7 +104,19 @@ export type Result =
   | { type: "get_totp"; code: string; period: number; secondsRemaining: number }
   | { type: "generate_password"; password: string }
   | { type: "check_login"; action: SaveAction; itemId: string | null }
-  | { type: "save_login"; itemId: string };
+  | { type: "save_login"; itemId: string }
+  | { type: "find_passkeys"; passkeys: PasskeyMatch[] }
+  | { type: "passkey_get"; credentialId: string; authenticatorData: string; clientDataJson: string; signature: string; userHandle: string }
+  | { type: "check_passkey_create"; excluded: boolean; candidates: PasskeyCandidate[] }
+  | {
+      type: "passkey_create";
+      credentialId: string;
+      attestationObject: string;
+      clientDataJson: string;
+      authenticatorData: string;
+      publicKey: string;
+      publicKeyAlgorithm: number;
+    };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -139,6 +189,48 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A lowercase hyphenated UUID, the only item ID form the desktop sends. */
 export const isUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
 
+const B64URL = /^[A-Za-z0-9_-]*$/;
+
+/** Decoded length of an unpadded base64url string, or null. */
+export function b64urlLength(v: unknown): number | null {
+  if (typeof v !== "string" || v.length % 4 === 1 || !B64URL.test(v)) return null;
+  return Math.floor(v.length / 4) * 3 + ([0, 0, 1, 2][v.length % 4] as number);
+}
+
+export const isB64Url = (v: unknown, min: number, max: number): v is string => {
+  const n = b64urlLength(v);
+  return n !== null && n >= min && n <= max;
+};
+
+const isCredentialId = (v: unknown): v is string => isB64Url(v, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES);
+/** Any non-empty base64url blob the host returns (bounded by the frame size anyway). */
+const isBlob = (v: unknown): v is string => isB64Url(v, 1, 256 * 1024);
+
+function parsePasskeyMatch(v: unknown): PasskeyMatch | null {
+  if (!isObj(v) || !hasExactKeys(v, ["itemId", "credentialId", "title", "userName"])) return null;
+  const { itemId, credentialId, title, userName } = v;
+  if (!isUuid(itemId) || !isCredentialId(credentialId) || !isStr(title) || !isStr(userName)) return null;
+  return { itemId, credentialId, title, userName };
+}
+
+function parseCandidate(v: unknown): PasskeyCandidate | null {
+  if (!isObj(v) || !hasExactKeys(v, ["itemId", "title", "username"])) return null;
+  const { itemId, title, username } = v;
+  if (!isUuid(itemId) || !isStr(title) || !isNullableStr(username)) return null;
+  return { itemId, title, username };
+}
+
+function parseList<T>(v: unknown, one: (x: unknown) => T | null): T[] | null {
+  if (!Array.isArray(v) || v.length > MAX_MATCHES) return null;
+  const out: T[] = [];
+  for (const x of v) {
+    const p = one(x);
+    if (!p) return null;
+    out.push(p);
+  }
+  return out;
+}
+
 const LOCK_STATES: readonly LockState[] = ["locked", "unlocking", "unlocked", "locking"];
 const STRENGTHS: readonly MatchStrength[] = ["exact_url", "same_host", "same_site"];
 const SAVE_ACTIONS: readonly SaveAction[] = ["add", "update", "unchanged"];
@@ -194,6 +286,31 @@ function parseResult(v: unknown): Result | null {
     case "save_login":
       if (!hasExactKeys(v, ["type", "itemId"]) || !isStr(v.itemId) || !UUID.test(v.itemId)) return null;
       return { type: "save_login", itemId: v.itemId };
+    case "find_passkeys": {
+      if (!hasExactKeys(v, ["type", "passkeys"])) return null;
+      const passkeys = parseList(v.passkeys, parsePasskeyMatch);
+      return passkeys && { type: "find_passkeys", passkeys };
+    }
+    case "passkey_get": {
+      if (!hasExactKeys(v, ["type", "credentialId", "authenticatorData", "clientDataJson", "signature", "userHandle"])) return null;
+      const { credentialId, authenticatorData, clientDataJson, signature, userHandle } = v;
+      if (!isCredentialId(credentialId) || !isBlob(authenticatorData) || !isBlob(clientDataJson) || !isBlob(signature) || !isBlob(userHandle)) return null;
+      return { type: "passkey_get", credentialId, authenticatorData, clientDataJson, signature, userHandle };
+    }
+    case "check_passkey_create": {
+      if (!hasExactKeys(v, ["type", "excluded", "candidates"]) || !isBool(v.excluded)) return null;
+      const candidates = parseList(v.candidates, parseCandidate);
+      if (!candidates || (v.excluded && candidates.length > 0)) return null;
+      return { type: "check_passkey_create", excluded: v.excluded, candidates };
+    }
+    case "passkey_create": {
+      const keys = ["type", "credentialId", "attestationObject", "clientDataJson", "authenticatorData", "publicKey", "publicKeyAlgorithm"];
+      if (!hasExactKeys(v, keys)) return null;
+      const { credentialId, attestationObject, clientDataJson, authenticatorData, publicKey, publicKeyAlgorithm } = v;
+      if (!isCredentialId(credentialId) || !isBlob(attestationObject) || !isBlob(clientDataJson) || !isBlob(authenticatorData) || !isBlob(publicKey)) return null;
+      if (publicKeyAlgorithm !== COSE_ES256) return null;
+      return { type: "passkey_create", credentialId, attestationObject, clientDataJson, authenticatorData, publicKey, publicKeyAlgorithm };
+    }
     default:
       return null;
   }

@@ -16,6 +16,7 @@ function rng(seed: number) {
 }
 
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 const SEEDS: unknown[] = [
   { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true } },
   { v: 1, id: 2, result: { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }] } },
@@ -26,6 +27,11 @@ const SEEDS: unknown[] = [
   { v: 1, id: 7, result: { type: "generate_password", password: "x" } },
   { v: 1, id: 8, error: { code: "denied", message: "m" } },
   { v: 1, event: { type: "locked" } },
+  { v: 1, id: 1, result: { type: "find_passkeys", passkeys: [{ itemId: ID, credentialId: CRED, title: "GitHub", userName: "octo" }] } },
+  { v: 1, id: 2, result: { type: "passkey_get", credentialId: CRED, authenticatorData: "AA", clientDataJson: "e30", signature: "MEU", userHandle: "AQ" } },
+  { v: 1, id: 3, result: { type: "check_passkey_create", excluded: false, candidates: [{ itemId: ID, title: "t", username: null }] } },
+  { v: 1, id: 4, result: { type: "check_passkey_create", excluded: true, candidates: [] } },
+  { v: 1, id: 5, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 } },
 ];
 
 const ATOMS: unknown[] = [null, true, false, 0, -1, 1.5, 2 ** 32, "", "x", ID, "__proto__", "constructor", [], {}, NaN];
