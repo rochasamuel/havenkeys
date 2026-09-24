@@ -68,6 +68,40 @@ describe("page wrapper", () => {
     expect(nativeCreate).toHaveBeenCalledTimes(1);
   });
 
+  it("passes a conditional create straight through, like a silent get", async () => {
+    const win = fresh();
+    install(win);
+    await win.navigator.credentials.create({ publicKey: pk, mediation: "conditional" } as CredentialCreationOptions);
+    expect(requests).toEqual([]);
+    expect(nativeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back instead of sending a request the bridge would silently drop", async () => {
+    const win = fresh();
+    install(win);
+    const bigChallenge = new Uint8Array(1025);
+    const bigUserId = new Uint8Array(65);
+    await win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(0) } });
+    await win.navigator.credentials.get({ publicKey: { challenge: bigChallenge } });
+    await win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4), rpId: "" } });
+    await win.navigator.credentials.create({ publicKey: { ...pk, challenge: new Uint8Array(0) } } as CredentialCreationOptions);
+    await win.navigator.credentials.create({ publicKey: { ...pk, challenge: bigChallenge } } as CredentialCreationOptions);
+    await win.navigator.credentials.create({ publicKey: { ...pk, user: { ...pk.user, id: new Uint8Array(0) } } } as CredentialCreationOptions);
+    await win.navigator.credentials.create({ publicKey: { ...pk, user: { ...pk.user, id: bigUserId } } } as CredentialCreationOptions);
+    await win.navigator.credentials.create({ publicKey: { ...pk, rp: { ...pk.rp, id: "" } } } as CredentialCreationOptions);
+    expect(requests).toEqual([]);
+    expect(nativeGet).toHaveBeenCalledTimes(3);
+    expect(nativeCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it("sends a null timeout instead of a non-finite one the bridge would reject", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "fallback" });
+    await win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4), timeout: Infinity } });
+    expect((requests[0]?.options as { timeoutMs: number | null }).timeoutMs).toBeNull();
+  });
+
   it("returns a credential built from the bridge's answer", async () => {
     const win = fresh();
     install(win);
@@ -151,5 +185,17 @@ describe("page wrapper", () => {
     expect((c as PublicKeyCredential).id).toBe(CRED);
     expect(nativeSignal?.aborted).toBe(true);
     await expect((win.PublicKeyCredential as unknown as { isConditionalMediationAvailable(): Promise<boolean> }).isConditionalMediationAvailable()).resolves.toBe(true);
+  });
+
+  it("rejects a conditional get immediately when the signal is already aborted", async () => {
+    const win = fresh();
+    install(win);
+    const ctrl = new AbortController();
+    ctrl.abort("gone");
+    await expect(
+      win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(4) }, mediation: "conditional", signal: ctrl.signal }),
+    ).rejects.toBe("gone");
+    expect(requests).toEqual([]);
+    expect(nativeGet).not.toHaveBeenCalled();
   });
 });

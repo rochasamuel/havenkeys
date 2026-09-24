@@ -9,7 +9,7 @@
 // wrapper. That grants it nothing: it could call WebAuthn itself, and every
 // decision is made by the desktop against the URL the browser reports.
 
-import { CREDENTIAL_ID_BYTES } from "@havenkeys/protocol";
+import { CREDENTIAL_ID_BYTES, MAX_CHALLENGE_BYTES, MAX_RP_ID_BYTES, MAX_USER_HANDLE_BYTES } from "@havenkeys/protocol";
 import { bufferSourceBytes, toArrayBuffer, toB64Url } from "./encoding";
 import {
   parsePageResponse,
@@ -70,12 +70,30 @@ export function install(win: Win): void {
     return out.slice(0, 64);
   }
 
+  /** `bytes` if its length is within [1, max] — the bridge's own limits; null otherwise. */
+  function withinBridgeLimits(bytes: Uint8Array | null, max: number): Uint8Array | null {
+    return bytes && bytes.length >= 1 && bytes.length <= max ? bytes : null;
+  }
+
+  /** The site's rpId: null when unset, the string when it fits the bridge's limits, else `undefined` for "invalid". */
+  function readRpId(v: unknown): string | null | undefined {
+    if (v === undefined) return null;
+    return typeof v === "string" && v.length > 0 && v.length <= MAX_RP_ID_BYTES ? v : undefined;
+  }
+
+  /** A finite, non-negative timeout, or null — never a value `parsePageRequest` would reject. */
+  function readTimeout(v: unknown): number | null {
+    return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+  }
+
   function createOptions(pk: PublicKeyCredentialCreationOptions): CreateOptions | null {
     try {
-      const challenge = bufferSourceBytes(pk.challenge);
-      const userId = bufferSourceBytes(pk.user?.id);
+      const challenge = withinBridgeLimits(bufferSourceBytes(pk.challenge), MAX_CHALLENGE_BYTES);
+      const userId = withinBridgeLimits(bufferSourceBytes(pk.user?.id), MAX_USER_HANDLE_BYTES);
       if (!challenge || !userId) return null;
       if (pk.authenticatorSelection?.authenticatorAttachment === "cross-platform") return null;
+      const rpId = readRpId(pk.rp?.id);
+      if (rpId === undefined) return null;
       const exclude = ownIds(pk.excludeCredentials);
       if (!exclude) return null;
       const algs = (pk.pubKeyCredParams ?? [])
@@ -84,14 +102,14 @@ export function install(win: Win): void {
         .slice(0, 16);
       const display = pk.user.displayName;
       return {
-        rpId: typeof pk.rp?.id === "string" ? pk.rp.id : null,
+        rpId,
         challenge: toB64Url(challenge),
         userId: toB64Url(userId),
         userName: typeof pk.user.name === "string" ? pk.user.name.slice(0, 512) : "",
         userDisplayName: typeof display === "string" && display ? display.slice(0, 512) : null,
         algs,
         excludeCredentials: exclude,
-        timeoutMs: typeof pk.timeout === "number" && pk.timeout >= 0 ? pk.timeout : null,
+        timeoutMs: readTimeout(pk.timeout),
       };
     } catch {
       return null;
@@ -100,18 +118,20 @@ export function install(win: Win): void {
 
   function getOptions(pk: PublicKeyCredentialRequestOptions, conditional: boolean): GetOptions | null {
     try {
-      const challenge = bufferSourceBytes(pk.challenge);
+      const challenge = withinBridgeLimits(bufferSourceBytes(pk.challenge), MAX_CHALLENGE_BYTES);
       if (!challenge) return null;
       const allow = ownIds(pk.allowCredentials);
       if (!allow) return null;
       // The site named credentials, none of them ours.
       if ((pk.allowCredentials?.length ?? 0) > 0 && allow.length === 0) return null;
+      const rpId = readRpId(pk.rpId);
+      if (rpId === undefined) return null;
       return {
-        rpId: typeof pk.rpId === "string" ? pk.rpId : null,
+        rpId,
         challenge: toB64Url(challenge),
         allowCredentials: allow,
         conditional,
-        timeoutMs: typeof pk.timeout === "number" && pk.timeout >= 0 ? pk.timeout : null,
+        timeoutMs: readTimeout(pk.timeout),
       };
     } catch {
       return null;
@@ -212,6 +232,10 @@ export function install(win: Win): void {
 
   /** Passkey autofill: ours and the browser's run side by side; the first the user picks wins. */
   function conditional(req: PageRequest, options: CredentialRequestOptions, signal: AbortSignal | undefined): Promise<Credential | null> {
+    // An abort listener never fires for a signal that's already aborted, so
+    // without this the browser's own conditional request would start and
+    // never be told to stop.
+    if (signal?.aborted) return Promise.reject(rejection("AbortError", signal));
     const ctrl = new Abort();
     const onSiteAbort = () => ctrl.abort(signal?.reason);
     signal?.addEventListener("abort", onSiteAbort);
@@ -258,7 +282,11 @@ export function install(win: Win): void {
   function wrappedCreate(options?: CredentialCreationOptions): Promise<Credential | null> {
     const fallback = () => origCreate(options as never);
     const pk = options?.publicKey;
-    const opts = pk ? createOptions(pk) : null;
+    // Automatic passkey upgrade (not yet in lib.dom's CredentialCreationOptions):
+    // like a silent get, never our business.
+    const mediation = (options as { mediation?: string } | undefined)?.mediation;
+    if (!pk || mediation === "conditional") return fallback();
+    const opts = createOptions(pk);
     if (!opts) return fallback();
     const signal = options?.signal ?? undefined;
     return ask({ kind: "create", id: newId(), options: opts }, signal).then((o) => settle(o, fallback, signal));
