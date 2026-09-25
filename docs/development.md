@@ -38,7 +38,8 @@ holds a real vault, are in `docs/deployment.md`.
 | Regenerate design tokens after editing them | `pnpm --filter @havenkeys/ui generate` |
 | Rust lint (same crates) | `pnpm lint:rust` |
 | Native host (release) | `pnpm build:host` |
-| Register native host | `scripts/install-native-host.sh` (Windows: `scripts\install-native-host.ps1`) |
+| Register native host (source builds; an installed app registers its own) | `scripts/install-native-host.sh` (Windows: `scripts\install-native-host.ps1`) |
+| Desktop installers, with the native host bundled | `pnpm build` (runs `scripts/build-native-host-sidecar.mjs`, then `tauri build --config src-tauri/tauri.bundle.conf.json`) |
 | Extension build | `pnpm build:extension` → `apps/extension/dist/{chrome,firefox}` |
 | Extension store zips | `pnpm package:extension` → `apps/extension/dist/havenkeys-{chrome,firefox}-<version>.zip` (builds first; fails if `manifest/base.json` and `package.json` versions differ) |
 | Desktop crate lint | `cargo clippy -p havenkeys-desktop -- -D warnings` (needs WebKit libs) |

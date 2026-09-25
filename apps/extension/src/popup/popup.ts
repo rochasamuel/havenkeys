@@ -120,7 +120,10 @@ function render(state: PopupState): void {
     case "host_unavailable":
       setPill(null);
       main.replaceChildren(
-        notice("Not connected", "The HavenKeys native host is not installed. See docs/native-messaging.md."),
+        notice(
+          "Not connected",
+          "Install or update the HavenKeys app on this computer, then open it once. It connects this browser for you.",
+        ),
       );
       return;
     case "desktop_unavailable":

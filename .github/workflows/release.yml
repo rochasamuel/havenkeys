@@ -16,10 +16,13 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
+            target: x86_64-pc-windows-msvc
             args: ""
           - platform: macos-latest
+            target: universal-apple-darwin
             args: "--target universal-apple-darwin"
           - platform: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             args: ""
     runs-on: ${{ matrix.platform }}
     steps:
@@ -53,6 +56,11 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
+      # Shipped next to the app, which registers it with the user's browsers
+      # at start (apps/desktop/src-tauri/src/native_host.rs).
+      - name: Build the native host sidecar
+        run: node scripts/build-native-host-sidecar.mjs --target ${{ matrix.target }}
+
       - name: Build and attach installers
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
@@ -64,4 +72,4 @@ jobs:
           releaseBody: "Installers for this release. Unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first run."
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: --config src-tauri/tauri.bundle.conf.json ${{ matrix.args }}

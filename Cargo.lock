@@ -2232,6 +2232,7 @@ dependencies = [
  "arboard",
  "havenkeys-bridge",
  "havenkeys-core",
+ "havenkeys-native-host",
  "havenkeys-oslock",
  "havenkeys-protocol",
  "havenkeys-sync-client",
@@ -2264,6 +2265,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
+ "winreg 0.55.0",
  "zeroize",
 ]
 

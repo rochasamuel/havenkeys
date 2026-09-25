@@ -35,6 +35,35 @@ crate, not the core.
 
 ## 2. Setup
 
+### Installed app
+
+Install the desktop app, open it once, and install the extension from the
+Chrome Web Store or addons.mozilla.org. Then unlock HavenKeys and turn on
+Settings → *Browser extension* (step 5 below).
+
+The installers ship `havenkeys-native-host` next to the app binary (a Tauri
+`externalBin`, declared only in `apps/desktop/src-tauri/tauri.bundle.conf.json`
+so that tests and `tauri dev` do not need it). At every start the app
+registers it with the user's browsers (`apps/desktop/src-tauri/src/native_host.rs`,
+`crates/havenkeys-native-host/src/register.rs`):
+
+| OS | What the app writes |
+|---|---|
+| Linux | `<profile>/NativeMessagingHosts/com.havenkeys.bridge.json` for each Chromium browser whose profile directory exists under `$XDG_CONFIG_HOME` (Chrome, Chrome Beta, Chromium, Brave, Edge, Vivaldi), and `~/.mozilla/native-messaging-hosts/com.havenkeys.bridge.json` if `~/.mozilla` exists |
+| macOS | The same files under `~/Library/Application Support/<browser>/` (Firefox: `Mozilla/NativeMessagingHosts/`) |
+| Windows | `%LOCALAPPDATA%\HavenKeys\com.havenkeys.bridge.{chrome,firefox}.json`, and `HKCU\Software\<browser>\NativeMessagingHosts\com.havenkeys.bridge` pointing to them for Chrome, Edge, Brave, Chromium, Vivaldi and Firefox |
+
+Only our own manifest files and keys are written, per user, with no
+administrator rights, and a file is rewritten only when its content changed.
+The manifests admit only the published extension IDs (§8). An AppImage, or
+a macOS app Gatekeeper runs from a translocated path, runs from a directory
+that disappears on exit, so there the host is first copied to the app's data
+directory (`native-host/`) and that copy is registered. A build without the
+sidecar (`tauri dev`, `cargo run`) registers nothing and leaves a hand-made
+registration alone.
+
+### From source
+
 1. Build the host: `pnpm build:host` (release build at
    `target/release/havenkeys-native-host`).
 2. Register it with your browsers:
@@ -391,6 +420,15 @@ request, and what the user clicks — is in `autofill.md` §Passkeys.
   run. That includes the owner-only DACL: if HavenKeys runs elevated, the
   pipe's owner is the Administrators group, and a non-elevated host will be
   refused. That failure is closed, not open.
+* **Registration is rewritten at every start, and outlives the app.** An
+  installed app points the manifests at its own bundled host each time it
+  starts, replacing one made by the install scripts. Uninstalling does not
+  remove the manifests or registry keys; they then name a missing file, and
+  the extension shows "Not connected". `scripts/install-native-host.sh
+  --uninstall` (or `.ps1 -Uninstall`) removes them.
+* **Sandboxed browsers are not registered.** Snap and Flatpak browsers on
+  Linux read manifests inside their sandbox and may not be allowed to start
+  a host outside it; the app writes only the standard locations.
 * **Same-user denial of service.** On Windows, a process running as you can
   hold all 8 connection slots indefinitely.
 * **Rate limits are global,** so a noisy caller can exhaust them for the

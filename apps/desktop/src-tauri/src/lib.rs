@@ -9,6 +9,7 @@ mod clipboard;
 mod commands;
 mod device;
 mod import;
+mod native_host;
 mod secret_store;
 mod state;
 mod sync;
@@ -154,6 +155,8 @@ pub fn run() {
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
             let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));
+            // Point the browsers at the bundled native host (native_host.rs).
+            native_host::register_in_background(dir.clone());
 
             tray::install(app)?;
 

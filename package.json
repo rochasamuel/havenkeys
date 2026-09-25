@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "pnpm --filter @havenkeys/desktop tauri dev",
-    "build": "pnpm --filter @havenkeys/desktop tauri build",
+    "build": "node scripts/build-native-host-sidecar.mjs && pnpm --filter @havenkeys/desktop tauri build --config src-tauri/tauri.bundle.conf.json",
     "build:extension": "pnpm --filter @havenkeys/extension build",
     "package:extension": "pnpm --filter @havenkeys/extension package",
     "dev:web": "pnpm --filter @havenkeys/web dev",

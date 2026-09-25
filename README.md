@@ -117,7 +117,9 @@ scripts/test-server.sh     # server + sync client, against a disposable Postgres
 pnpm dev                   # run the desktop app
 ```
 
-Browser extension:
+Browser extension: with an installed desktop app nothing else is needed. The
+app registers its bundled native host with your browsers each time it starts
+([docs/native-messaging.md](docs/native-messaging.md) §2). From source:
 
 ```sh
 pnpm build:host                      # native messaging host (release)

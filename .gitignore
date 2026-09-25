@@ -17,3 +17,5 @@ apps/web/.impeccable/hook.cache.json
 apps/desktop/.impeccable/review/
 apps/desktop/.impeccable/questions/
 apps/desktop/.impeccable/hook.cache.json
+# Native host sidecar, built by scripts/build-native-host-sidecar.mjs.
+apps/desktop/src-tauri/binaries/

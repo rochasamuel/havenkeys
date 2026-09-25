@@ -312,6 +312,16 @@ Not requested: `<all_urls>` as a required permission, `tabs`, `storage`,
 `externally_connectable` is empty, so web pages and other extensions cannot
 message the extension.
 
+**Native host registration (desktop side):** the installers ship
+`havenkeys-native-host` next to the app, and the app registers it with the
+user's browsers at every start (`native-messaging.md` §2): per-user manifest
+files, and on Windows per-user `HKCU` keys. This adds no new caller: the
+manifests admit only our two extension IDs, the host checks the caller
+again, and it remains a relay that cannot open the vault. It also adds no
+new attacker: any program running as the user could already write the same
+files and keys (`threat-model.md` §4). Browser integration still starts off,
+and the bridge refuses page requests until the user turns it on.
+
 **web_accessible_resources:** `menu.html`, `save.html`, `passkey.html`,
 their scripts and styles, the theme, and the bundled fonts (`fonts.css` and three
 Latin-subset `.woff2` files), for `https://*/*` and `http://*/*`. These are

@@ -26,6 +26,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
 
+pub mod register;
+
 /// Extension IDs allowed to launch the host. The browser enforces the same
 /// list through `allowed_origins` / `allowed_extensions` in the host
 /// manifest; this is a second check.
