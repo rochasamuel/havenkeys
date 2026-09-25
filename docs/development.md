@@ -40,6 +40,7 @@ holds a real vault, are in `docs/deployment.md`.
 | Native host (release) | `pnpm build:host` |
 | Register native host | `scripts/install-native-host.sh` (Windows: `scripts\install-native-host.ps1`) |
 | Extension build | `pnpm build:extension` → `apps/extension/dist/{chrome,firefox}` |
+| Extension store zips | `pnpm package:extension` → `apps/extension/dist/havenkeys-{chrome,firefox}-<version>.zip` (builds first; fails if `manifest/base.json` and `package.json` versions differ) |
 | Desktop crate lint | `cargo clippy -p havenkeys-desktop -- -D warnings` (needs WebKit libs) |
 | TS type check (desktop UI, extension, protocol) | `pnpm typecheck` |
 | TS tests | `pnpm -r test` |

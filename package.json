@@ -6,6 +6,7 @@
     "dev": "pnpm --filter @havenkeys/desktop tauri dev",
     "build": "pnpm --filter @havenkeys/desktop tauri build",
     "build:extension": "pnpm --filter @havenkeys/extension build",
+    "package:extension": "pnpm --filter @havenkeys/extension package",
     "dev:web": "pnpm --filter @havenkeys/web dev",
     "build:host": "cargo build --release -p havenkeys-native-host",
     "typecheck": "pnpm -r typecheck",
