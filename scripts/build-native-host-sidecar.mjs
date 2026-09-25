@@ -7,7 +7,8 @@
 //   node scripts/build-native-host-sidecar.mjs [--target <rust target triple>]
 //
 // Without --target it builds for this machine. `universal-apple-darwin`
-// builds both macOS architectures and joins them with lipo, as Tauri's
+// builds both macOS architectures, places each one (Tauri builds the app per
+// architecture first) and joins them with lipo for the universal bundle, as Tauri's
 // universal macOS build expects. Only installer builds need this: the
 // sidecar is declared in a separate config file, so `cargo test`, clippy and
 // `tauri dev` work without it.
@@ -38,8 +39,15 @@ const out = join(outDir, `havenkeys-native-host-${target}${exe}`);
 mkdirSync(outDir, { recursive: true });
 
 if (target === "universal-apple-darwin") {
+  // Tauri compiles the app once per architecture, and each of those builds
+  // looks for its own `-<arch>` sidecar; only bundling uses the universal one.
   const archs = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
-  for (const t of archs) build(t);
+  for (const t of archs) {
+    build(t);
+    const perArch = join(outDir, `havenkeys-native-host-${t}`);
+    copyFileSync(built(t), perArch);
+    chmodSync(perArch, 0o755);
+  }
   run("lipo", ["-create", "-output", out, ...archs.map(built)]);
 } else {
   build(target);
