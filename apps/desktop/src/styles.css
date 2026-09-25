@@ -1210,6 +1210,17 @@ button {
   margin: 0 4px 10px;
 }
 
+/* A note inside a group lines up with the rows under it. */
+.group > .group-note {
+  margin: 0;
+  padding: 12px 12px 12px 16px;
+  max-width: none;
+}
+
+.group > .group-note + .row {
+  border-top: 1px solid var(--group-line);
+}
+
 .group-actions {
   margin-top: 12px;
 }
@@ -1413,6 +1424,8 @@ button {
 
 .note-body {
   white-space: pre-wrap;
+  /* Keys, hashes and URLs have no spaces to wrap at. */
+  overflow-wrap: anywhere;
   line-height: 1.6;
   font-size: 14px;
   color: var(--text-strong);
