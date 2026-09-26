@@ -27,6 +27,8 @@ const codes: Record<ErrorCode, string | null> = {
   rng: "Gerador seguro de números aleatórios indisponível.",
   offline: "O HavenKeys está offline — o cofre fica somente leitura até reconectar.",
   item_changed_elsewhere: "Este item foi alterado em outro dispositivo.",
+  // Varies only between "Internal error." and the IPC wrapper's "Something
+  // went wrong. Try again.", which mean the same; one sentence covers both.
   internal: "Algo deu errado. Tente novamente.",
   file: "Não foi possível ler ou excluir o arquivo.",
   sign_in_failed: "E-mail, senha mestra ou Secret Key incorretos.",
@@ -44,7 +46,9 @@ const codes: Record<ErrorCode, string | null> = {
   signed_out: "O HavenKeys foi desconectado desta conta. Desbloqueie de novo para reconectar.",
   rate_limited: "Tentativas demais. Tente novamente em alguns minutos.",
   invalid_server_url: "Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.",
-  sync_failed: "O servidor não aceitou essa solicitação.",
+  // Two different Rust messages ("did not accept that request", "did not
+  // acknowledge that item" — the write may have been applied), so Rust's own.
+  sync_failed: null,
 };
 
 /** By Rust's InvalidInput detail: the ones a person can cause from the UI. */

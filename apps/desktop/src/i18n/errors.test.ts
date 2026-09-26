@@ -106,6 +106,22 @@ describe("the error table", () => {
     }
   });
 
+  it("defers to Rust in Portuguese wherever the English does", () => {
+    // `null` in English means Rust's text varies in meaning; a fixed
+    // translation would say something Rust did not. The one exception is
+    // "internal", whose variants all mean "something went wrong".
+    const translatedAnyway = new Set(["internal"]);
+    const deferred = Object.entries(en.errors.codes)
+      .filter(([code, text]) => text === null && !translatedAnyway.has(code))
+      .map(([code]) => code);
+    expect(deferred.length).toBeGreaterThan(0);
+    for (const code of deferred) {
+      expect(ptBR.errors.codes[code as keyof typeof ptBR.errors.codes], code).toBeNull();
+    }
+    const e = new ApiError("sync_failed", "The server did not acknowledge that item.");
+    expect(errorMessage(e, ptBR)).toBe(e.message);
+  });
+
   it("translates only invalid-input details Rust actually has", () => {
     const sources = [...rustFiles("crates"), ...rustFiles("apps/desktop/src-tauri/src")].join("\n");
     const details = new Set(Array.from(sources.matchAll(/InvalidInput\("([^"]*)"\)/g), (m) => m[1]));
