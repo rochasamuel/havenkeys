@@ -85,6 +85,7 @@ describe("watchNext", () => {
     document.body.innerHTML = "";
     await vi.advanceTimersByTimeAsync(CHECK_DEBOUNCE_MS * 3);
     expect(w.results).toEqual([]);
+    w.cancel();
   });
 
   it("stops on came_back, on a challenge, and after the timeout", async () => {

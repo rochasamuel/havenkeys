@@ -42,15 +42,24 @@ describe("message validators", () => {
     { type: "cs_close_menu", token: TOKEN },
     { type: "menu_pick", token: TOKEN, itemId: ID },
     { type: "save_confirm", token: TOKEN },
-    { type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "login", username: "u", password: "p" } },
-    { type: "bg_fill", origin: "https://a.com", token: TOKEN, fill: { kind: "otp", code: "123456" } },
+    { type: "cs_run_step", kind: "password" },
+    { type: "cs_run_step", kind: "otp" },
+    { type: "cs_run_stop" },
+    { type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "login", username: "u", password: "p" }, submit: true, totp: true },
+    { type: "bg_fill", origin: "https://a.com", token: TOKEN, fill: { kind: "otp", code: "123456" }, submit: false, totp: false },
+    { type: "bg_run_end" },
     { type: "popup_fill", itemId: ID },
   ];
   const atoms: unknown[] = [null, 0, -1, "", "x".repeat(5000), ID, TOKEN, [], {}, true, "https://evil.com", "__proto__"];
 
+  const parsers = [parseContentRequest, parseInlineRequest, parseBackgroundMessage, parsePopupRequest];
+
+  it("every seed is a valid message for some parser (the corpus is not stale)", () => {
+    for (const seed of seeds) expect(parsers.some((parse) => parse(seed) !== null)).toBe(true);
+  });
+
   it("never throw, and accept only messages with exactly the expected keys", () => {
     const r = rng(0xbeef);
-    const parsers = [parseContentRequest, parseInlineRequest, parseBackgroundMessage, parsePopupRequest];
     for (let i = 0; i < 20_000; i++) {
       const msg: Record<string, unknown> = { ...r.pick(seeds) };
       const keys = Object.keys(msg);

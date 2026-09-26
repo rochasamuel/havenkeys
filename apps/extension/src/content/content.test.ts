@@ -6,6 +6,7 @@
 // cannot open menus or trigger fills.
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { OTP_SETTLE_MS } from "../autofill/submit";
 
 type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }, reply: (r: unknown) => void) => boolean | void;
 
@@ -208,6 +209,33 @@ describe("automatic sign-in", () => {
     document.body.innerHTML = `<form><input name="pw" type="password"></form>`;
     await vi.advanceTimersByTimeAsync(1000);
     expect(sent).not.toContainEqual({ type: "cs_run_step", kind: "password" });
+    vi.useRealTimers();
+  });
+
+  it("presses Verify after an OTP fill once the settle wait is over", async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<form><label for="c">Authentication code</label>
+      <input id="c" name="code" autocomplete="one-time-code" inputmode="numeric"><button type="submit">Verify</button></form>`;
+    const submitted = vi.fn((e: Event) => e.preventDefault());
+    document.querySelector("form")?.addEventListener("submit", submitted);
+    expect(deliver(autoFill({ fill: { kind: "otp", code: "123456" }, totp: true }))).toEqual({ filled: 1, pressing: "otp" });
+    await vi.advanceTimersByTimeAsync(OTP_SETTLE_MS - 1);
+    expect(submitted).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(submitted).toHaveBeenCalledOnce();
+    expect(sent).not.toContainEqual({ type: "cs_run_stop" });
+    vi.useRealTimers();
+  });
+
+  it("ends the run when the press itself throws", async () => {
+    vi.useFakeTimers();
+    const form = document.querySelector("form") as HTMLFormElement;
+    form.requestSubmit = () => {
+      throw new Error("page broke requestSubmit");
+    };
+    expect(deliver(autoFill({ totp: true }))).toEqual({ filled: 2, pressing: "password" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toContainEqual({ type: "cs_run_stop" });
     vi.useRealTimers();
   });
 

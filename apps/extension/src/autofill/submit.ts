@@ -128,8 +128,9 @@ export function hasChallenge(doc: Document, env: Env): boolean {
     .some((el) => el.getAttribute("data-size") !== "invisible" && !el.matches(CANDIDATES) && env.isVisible(el));
 }
 
+/** Disabled itself, inside a `<fieldset disabled>` (both match `:disabled`), or `aria-disabled`. */
 function isDisabled(b: HTMLElement): boolean {
-  return (b as HTMLButtonElement).disabled === true || b.getAttribute("aria-disabled") === "true";
+  return b.matches(":disabled") || b.getAttribute("aria-disabled") === "true";
 }
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

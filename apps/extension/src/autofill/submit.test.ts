@@ -121,8 +121,11 @@ describe("pressWhenReady", () => {
     expect(await pressWhenReady({ button: go, field: $("[name=p]"), step: "password", env, sleep })).toBe("pressed");
 
     go.disabled = true;
+    const click = vi.fn();
+    go.addEventListener("click", click);
     const never = async () => undefined;
     expect(await pressWhenReady({ button: go, field: $("[name=p]"), step: "password", env, sleep: never })).toBe("gave_up");
+    expect(click).not.toHaveBeenCalled();
   });
 
   it("gives up without pressing once cancelled during the disabled-button wait", async () => {
@@ -151,7 +154,21 @@ describe("pressWhenReady", () => {
 
   it("treats aria-disabled like disabled", async () => {
     document.body.innerHTML = `<div><input name="p" type="password"><button id="go" aria-disabled="true">Sign in</button></div>`;
+    const click = vi.fn();
+    $("#go").addEventListener("click", click);
     expect(await pressWhenReady({ button: $("#go"), field: $("[name=p]"), step: "password", env, sleep: noSleep })).toBe("gave_up");
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it("treats a button inside a disabled fieldset as disabled", async () => {
+    document.body.innerHTML = `<form><fieldset disabled><input name="p" type="password"><button id="go">Sign in</button></fieldset></form>`;
+    const submitted = vi.fn((e: Event) => e.preventDefault());
+    const click = vi.fn();
+    $("form").addEventListener("submit", submitted);
+    $("#go").addEventListener("click", click);
+    expect(await pressWhenReady({ button: $("#go"), field: $("[name=p]"), step: "password", env, sleep: noSleep })).toBe("gave_up");
+    expect(submitted).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
   });
 
   it("does not press when the site submitted the code by itself", async () => {

@@ -387,16 +387,19 @@ flickers in and out is not reported. The watch gives up after 30 s
 ### Pressing the button (`autofill/submit.ts`)
 
 Candidates are `button`, `input[type=submit]`, `input[type=image]` and
-`[role=button]`, at most 30, visible. Disabled and `aria-disabled="true"`
-buttons are still candidates and can still be chosen — many sites enable
+`[role=button]`, at most 30, visible. Disabled buttons (the `disabled`
+attribute, inside a `<fieldset disabled>`, or `aria-disabled="true"`) are
+still candidates and can still be chosen — many sites enable
 their submit button only once the input validates — but a disabled one is
 never pressed until it enables (see below). Candidates are drawn first from
 the filled group's own root (its `<form>`, or the container `groupRoot`
-picked). When nothing there reaches the minimum score and the group has no
-`<form>`, the search climbs up to 3 further ancestors looking for a button
-beside the fields' own container, which is common in SPAs; a container that
-has candidates but none clear enough stops the climb with no press, rather
-than looking further up.
+picked). For a form-less group, when no candidate in a scope reaches score
+60 (or the scope has no visible candidate), the search continues to the next
+ancestor, up to 3 of them, looking for a button beside the fields' own
+container, which is common in SPAs. It stops and refuses (no press) on a
+tie: a scope whose best candidate reaches 60 but beats the runner-up by less
+than 20 ends the search there, rather than looking further up. A group
+inside a `<form>` is searched only within that form.
 
 | Signal | Score |
 |---|---|
@@ -427,6 +430,15 @@ the frame's `pagehide` cancels it before it presses. The background also
 re-checks the run's identity after each request to the desktop during a
 continuation, so a lock, a stop, or a new pick that lands while that request
 is in flight keeps the stale response from being filled.
+
+Ending a run after its last step (the OTP step, or the password step of a
+login without TOTP) does not cancel that step's press. When the content
+script reports it is pressing that last step, the background drops its run
+without sending `bg_run_end`, because the press may still be pending in the
+frame (the 500 ms OTP wait, a button that enables late); the content script
+ends its own run once the press completes. If the press itself throws (for
+example a page that broke `requestSubmit`), the content script ends the run
+and tells the background.
 
 ### Stopping
 

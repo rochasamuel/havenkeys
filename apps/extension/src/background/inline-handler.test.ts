@@ -616,6 +616,51 @@ describe("automatic sign-in", () => {
     expect(await c.h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
   });
 
+  it("does not end the frame's run after a pressed last step (its press is still pending there)", async () => {
+    // Final OTP step, pressed by the content script.
+    const a = setup(auto, {}, pressWhenSubmit);
+    await pick(a.h); // username pressed
+    await a.h.handleContent(frame(), { type: "cs_run_step", kind: "password" }); // password pressed
+    await a.h.handleContent(frame(), { type: "cs_run_step", kind: "otp" }); // otp pressed: last step
+    expect(a.sent.some((s) => s.msg.type === "bg_run_end")).toBe(false);
+    const beforeA = a.requests.length;
+    await a.h.handleContent(frame(), { type: "cs_run_step", kind: "otp" });
+    expect(a.requests.length).toBe(beforeA);
+    expect(await a.h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
+
+    // Final password step of a login without TOTP, pressed by the content script.
+    const noTotp = (r: Request): unknown =>
+      r.type === "find_matches" ? { type: "find_matches", matches: [{ ...ghMatch, hasTotp: false }] } : auto(r);
+    const b = setup(noTotp, {}, pressWhenSubmit);
+    await pick(b.h); // username pressed
+    await b.h.handleContent(frame(), { type: "cs_run_step", kind: "password" }); // last step
+    expect(b.sent.some((s) => s.msg.type === "bg_run_end")).toBe(false);
+    const beforeB = b.requests.length;
+    await b.h.handleContent(frame(), { type: "cs_run_step", kind: "password" });
+    await b.h.handleContent(frame(), { type: "cs_run_step", kind: "otp" });
+    expect(b.requests.length).toBe(beforeB);
+  });
+
+  it("tells the frame the run ended when a continuation was not pressed", async () => {
+    let pressNull = false;
+    const { h, sent, requests } = setup(auto, {}, (msg) => (pressNull ? null : pressWhenSubmit(msg)));
+    await pick(h); // username pressed
+    pressNull = true;
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "password" });
+    expect(sent.filter((s) => s.msg.type === "bg_run_end")).toEqual([{ to: { tabId: 1, frameId: 0 }, msg: { type: "bg_run_end" } }]);
+    const before = requests.length;
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "otp" });
+    expect(requests.length).toBe(before);
+  });
+
+  it("ignores a step from another frame of the same tab and origin", async () => {
+    const { h, requests } = setup(auto, {}, pressWhenSubmit);
+    await pick(h); // run bound to frame 0
+    const before = requests.length;
+    await h.handleContent(frame({ frameId: 3 }), { type: "cs_run_step", kind: "password" });
+    expect(requests.length).toBe(before);
+  });
+
   it("fills without pressing and ends when autoSubmit turns off mid-run", async () => {
     let on = true;
     const answer = (r: Request): unknown => {

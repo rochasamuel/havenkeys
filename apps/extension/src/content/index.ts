@@ -331,14 +331,19 @@ function start(): void {
     runActive = true;
     runSeq++;
     const mine = runSeq;
-    void pressWhenReady({ button, field: done.last, step: done.step, env, cancelled: () => mine !== runSeq }).then((outcome) => {
-      // A later event (user takeover, bg_run_end, a new pick) already ended
-      // this run or started another one: do not act on this stale press.
-      if (mine !== runSeq) return;
-      if (outcome === "gave_up") return endLocalRun(true);
-      if (next) startWatch(next, done.last);
-      else endLocalRun(false);
-    });
+    void pressWhenReady({ button, field: done.last, step: done.step, env, cancelled: () => mine !== runSeq })
+      .then((outcome) => {
+        // A later event (user takeover, bg_run_end, a new pick) already ended
+        // this run or started another one: do not act on this stale press.
+        if (mine !== runSeq) return;
+        if (outcome === "gave_up") return endLocalRun(true);
+        if (next) startWatch(next, done.last);
+        else endLocalRun(false);
+      })
+      .catch(() => {
+        // The press threw (e.g. the page broke requestSubmit): stop this run.
+        if (mine === runSeq) endLocalRun(true);
+      });
     return done.step;
   }
 

@@ -304,7 +304,12 @@ export function createInlineHandler(deps: InlineDeps) {
     }
     const r = await sendFill(frame, null, payload, auto, run.hasTotp);
     if (runs.get(frame.tabId) !== run) return; // superseded while the content script replied
-    if (!auto || r.pressing !== kind || nextStep(kind, run.hasTotp) === null) endRun(frame.tabId);
+    if (!auto || r.pressing !== kind) return endRun(frame.tabId);
+    // The last step was pressed: drop the run here without bg_run_end. The
+    // frame's press may still be pending (OTP settle wait, a button that
+    // enables late), and bg_run_end would cancel it; the content script
+    // ends its own run once that press completes.
+    if (nextStep(kind, run.hasTotp) === null) runs.end(frame.tabId);
   }
 
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
