@@ -194,6 +194,20 @@ calls deliberately do not: TOTP refresh, the periodic pull, and the list
 refreshes that follow a sync or a browser-extension save all leave the timer
 alone, so neither a timer nor a hostile server can hold the vault open.
 
+## Localization
+
+Both apps speak English and Brazilian Portuguese (`pt-BR`), from a message
+file per app (`apps/desktop/src/i18n/`, `apps/extension/src/i18n/`) typed
+against the English one, so a key missing from the other locale fails the
+typecheck rather than shipping half-translated. The extension has no
+switcher — it follows `chrome.i18n.getUILanguage()`; the desktop app follows
+the OS language by default, or a choice in Settings kept in
+`localStorage["hk-locale"]`, which also asks Rust to relabel the tray menu
+(`set_ui_language`). Rust itself is not translated: errors reach the UI as
+`{ code, message }`, and the UI shows its own text for a code it recognizes,
+Rust's English `message` otherwise. Details: `docs/development.md` §"Adding
+a translated string".
+
 ## Browser integration
 
 ```text

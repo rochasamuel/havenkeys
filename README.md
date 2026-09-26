@@ -31,6 +31,9 @@ What the desktop app does today:
 * Create a vault, unlock and lock it; auto-lock (never / 5 / 15 / 30 / 60 min), lock on sleep and on quit
 * Lives in the system tray: closing the window hides it; the tray menu opens, locks or quits
 * Dark theme by default, with light and match-system options
+* English and Brazilian Portuguese, in both the desktop app and the browser
+  extension. The desktop app follows the OS language by default, or a choice
+  in Settings; the extension follows the browser's language
 * Logins (username, password, websites with match rules, TOTP, notes)
 * Secure notes
 * In-memory search over titles, usernames and websites

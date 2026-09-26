@@ -280,6 +280,17 @@ user clicked in. Picks are accepted only from a menu frame in the same tab,
 only for items the menu offered, once, and within 5 minutes. Locking the
 vault drops every session.
 
+Both frames start at an estimated size (the menu from its row count, the
+save prompt fixed) and then report their real content height once rendered
+— `menu_resize` / `save_resize` to the background, which relays it to the
+content script as `bg_resize_menu` / `bg_resize_save` — so a wrapped row or a
+long (for example, Portuguese) error message is never clipped. The reported
+height is validated on both hops: an integer within a fixed range (90–420px
+for the menu, 100–320px for the save prompt — enough for the header, one row
+and several wrapped rows, or a one-line question and a longer wrapped error)
+and bound to the live session's token; anything else is dropped and the
+frame keeps its estimated size.
+
 The token is **not** a secret the page cannot see. It is passed in the menu
 frame's URL fragment, and the frame is attached to the page's own
 `documentElement`, so page script can read it off the iframe's `src` and can

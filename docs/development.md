@@ -45,6 +45,7 @@ holds a real vault, are in `docs/deployment.md`.
 | Desktop crate lint | `cargo clippy -p havenkeys-desktop -- -D warnings` (needs WebKit libs) |
 | TS type check (desktop UI, extension, protocol) | `pnpm typecheck` |
 | TS tests | `pnpm -r test` |
+| Layout check, both languages (dev-only, not shipped) | `pnpm ui:check` |
 | KDF benchmark | `cargo run --release -p havenkeys-core --example kdf_bench` |
 | Rust advisories | `cargo audit` |
 | Rust policy (advisories, licences, sources) | `cargo deny check` |
@@ -145,6 +146,76 @@ pnpm 10 runs no dependency install scripts unless they are approved. The
 warning about esbuild's install script is expected: esbuild works without it,
 because its platform binary comes from an optional dependency. Leave it
 unapproved.
+
+## Adding a translated string
+
+HavenKeys speaks English and Brazilian Portuguese (`pt-BR`). Each app keeps
+every string it shows in `src/i18n/en.ts`, typed as `Messages`, and
+`src/i18n/pt-BR.ts` typed as that same `Messages` — a string added to one and
+forgotten in the other fails `pnpm typecheck` instead of shipping
+half-translated. Parameterised strings are functions
+(`(n: number) => string`), never template interpolation of raw values into a
+stored string.
+
+1. Add the English string to `apps/<app>/src/i18n/en.ts` (nested under the
+   view/component it belongs to) and the Portuguese one at the same path in
+   `pt-BR.ts`. Keep terminology consistent: *senha* (password), *cofre*
+   (vault), *login*, *código de verificação* (one-time code), *chave de
+   acesso* (passkey). Never translate product names (HavenKeys, Secret Key,
+   Emergency Kit, havenkeys-server), URLs, or key names, and never use `tu` —
+   Brazilian Portuguese here is *você*.
+2. Use it from `t.<path>` — `useI18n().t` in the desktop React tree
+   (`apps/desktop/src/i18n/context.tsx`), or the module-level `t` in the
+   extension (`apps/extension/src/i18n/index.ts`, resolved once per page:
+   popup, options, background, content script, and each inline frame). Insert
+   it as React text or with `textContent`; never `innerHTML` or
+   `dangerouslySetInnerHTML`.
+3. An error surfaced from Rust arrives as `{ code, message }`. Add a case to
+   `t.errors.codes` (desktop: `apps/desktop/src/i18n/en.ts`, matched in
+   `errors.ts`) or `t.errors.bridge` (extension:
+   `apps/extension/src/i18n/en.ts`) only if the UI needs its own wording for
+   that code — an unrecognised code falls back to Rust's English `message`,
+   which is intentional (Rust itself is never translated).
+4. Never let a longer Portuguese string clip: prefer `min-width` and wrapping
+   over fixed widths, and do not pair `white-space: nowrap` with `overflow:
+   hidden` on a label. Ellipsis truncation is reserved for user data (titles,
+   usernames, URLs), marked `data-truncate`; it must never apply to UI copy.
+5. Run `pnpm --filter @havenkeys/<app> typecheck` (key parity) and
+   `pnpm --filter @havenkeys/<app> test` (locale-resolution and any logic
+   tests force `en`, so they keep passing). Then run `pnpm ui:check` (below)
+   to confirm nothing clips in either language.
+
+The extension has no language switcher: it follows
+`chrome.i18n.getUILanguage()` (any `pt*` tag → `pt-BR`, else `en`). The
+manifest's own `name`/`description` come from `manifest/_locales/{en,pt_BR}`
+instead, because the browser reads them before any script runs. The desktop
+app follows the OS language by default; Settings → Language offers Automatic
+/ English / Português (Brasil), stored as `"auto" | "en" | "pt-BR"` in
+`localStorage["hk-locale"]` (a non-sensitive UI preference, guarded so a
+missing, invalid, or throwing read just means Automatic). Changing it also
+asks Rust to relabel the tray menu (`set_ui_language`, added the same way as
+any other Tauri command, above — it accepts only `"en"` and `"pt-BR"`).
+
+### `pnpm ui:check`
+
+A Playwright layout check (`tools/ui-check/`, dev dependency only — nothing
+here ships) renders every extension page state (popup, inline menu variants,
+save prompt, passkey prompt, options) and every desktop screen (welcome,
+unlock, vault list/detail/editor, generator, settings) with `chrome.*` and
+Tauri's `invoke` stubbed, in English and Portuguese, in light and dark
+theme, at real sizes (the desktop window's minimum and default size from
+`tauri.conf.json`). It fails when a visible element that hides overflow has
+clipped text (`scrollWidth`/`scrollHeight` past its box, unless the text is
+marked `data-truncate` as user data) or spills out of the viewport
+horizontally, and saves screenshots to the git-ignored
+`ui-check-output/` for a look by eye.
+
+```sh
+pnpm ui:check                 # builds both apps, then checks
+pnpm ui:check --no-build      # reuse the existing builds
+pnpm ui:check --only=menu     # only scenarios whose name contains "menu"
+pnpm ui:check --app=desktop   # one app: extension | desktop
+```
 
 ## Rules for contributors
 
