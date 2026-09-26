@@ -2,10 +2,34 @@
 // from the toolbar popup) and reading what the user submitted.
 
 import { valueSource } from "./fill";
-import { fieldsOf, groupFor, isFillable, type Env, type LoginGroup } from "./group";
+import { classifyGroup, fieldsOf, groupRoot, isFillable, type Env, type LoginGroup } from "./group";
+import type { FieldClassification } from "./classify";
 
 /** Candidates examined when looking for a login form on the whole page. */
 const MAX_PAGE_CANDIDATES = 200;
+
+/**
+ * `groupFor`, but reusing one classification per distinct group root across
+ * the whole scan. Without this, a page with no small containing element
+ * (thousands of unrelated inputs directly under <body>) makes every
+ * candidate resolve to the same page-wide root, and re-classifying it from
+ * scratch per candidate turns a bounded 200-candidate scan into hundreds of
+ * full-document passes (threat-model attack 7).
+ */
+function groupForCached(
+  field: HTMLInputElement,
+  env: Env,
+  cache: Map<ParentNode, LoginGroup>,
+): { group: LoginGroup; kind: FieldClassification } {
+  const root = groupRoot(field);
+  let group = cache.get(root);
+  if (!group) {
+    group = classifyGroup(root, env);
+    cache.set(root, group);
+  }
+  const kind = group.fields.find((f) => f.el === field)?.kind ?? "unknown";
+  return { group, kind };
+}
 
 /**
  * The login group to fill when the user picked a login in the toolbar
@@ -13,13 +37,14 @@ const MAX_PAGE_CANDIDATES = 200;
  * username-only group. Bounded like everything else.
  */
 export function findLoginGroup(doc: Document, env: Env): LoginGroup | null {
+  const cache = new Map<ParentNode, LoginGroup>();
   const passwords = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="password"]')).slice(
     0,
     MAX_PAGE_CANDIDATES,
   );
   for (const pw of passwords) {
     if (!isFillable(pw, env)) continue;
-    const { group, kind } = groupFor(pw, env);
+    const { group, kind } = groupForCached(pw, env, cache);
     if (kind === "password" || kind === "current-password") return group;
   }
   const texts = Array.from(
@@ -27,7 +52,7 @@ export function findLoginGroup(doc: Document, env: Env): LoginGroup | null {
   ).slice(0, MAX_PAGE_CANDIDATES);
   for (const el of texts) {
     if (!isFillable(el, env)) continue;
-    const { group, kind } = groupFor(el, env);
+    const { group, kind } = groupForCached(el, env, cache);
     if (kind === "username") return group;
   }
   return null;
@@ -35,10 +60,11 @@ export function findLoginGroup(doc: Document, env: Env): LoginGroup | null {
 
 /** The first visible one-time-code group on the page. */
 export function findOtpGroup(doc: Document, env: Env): LoginGroup | null {
+  const cache = new Map<ParentNode, LoginGroup>();
   const texts = Array.from(doc.querySelectorAll<HTMLInputElement>("input")).slice(0, MAX_PAGE_CANDIDATES);
   for (const el of texts) {
     if (el.type === "password" || !isFillable(el, env)) continue;
-    const { group, kind } = groupFor(el, env);
+    const { group, kind } = groupForCached(el, env, cache);
     if (kind === "otp") return group;
   }
   return null;
