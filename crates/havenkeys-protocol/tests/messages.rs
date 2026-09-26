@@ -286,6 +286,7 @@ fn outgoing_round_trip_and_validation() {
         ResultBody::FillItem {
             username: Some("octo".into()),
             password: Some(WireSecret::new("pw".into())),
+            auto_submit: false,
         },
     ))
     .to_bytes()
@@ -348,6 +349,7 @@ fn debug_output_hides_urls_and_secrets() {
     let fill = ResultBody::FillItem {
         username: Some("alice@example.com".into()),
         password: Some(WireSecret::new("pw".into())),
+        auto_submit: false,
     };
     let printed = format!("{:?}", Response::ok(1, fill));
     assert!(
@@ -358,6 +360,7 @@ fn debug_output_hides_urls_and_secrets() {
         code: WireSecret::new("123456".into()),
         period: 30,
         seconds_remaining: 5,
+        auto_submit: false,
     };
     assert!(!format!("{r:?}").contains("123456"));
 }

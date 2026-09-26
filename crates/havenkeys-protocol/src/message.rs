@@ -428,11 +428,14 @@ pub enum ResultBody {
     FillItem {
         username: Option<String>,
         password: Option<WireSecret>,
+        /// Rust's decision that the extension may press the sign-in button.
+        auto_submit: bool,
     },
     GetTotp {
         code: WireSecret,
         period: u32,
         seconds_remaining: u32,
+        auto_submit: bool,
     },
     GeneratePassword {
         password: WireSecret,

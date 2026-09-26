@@ -141,12 +141,14 @@ pub fn dispatch(
             let creds = v
                 .fill_for_page(item_id, url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(item_code)?;
+            let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::FillItem {
                 username: creds.username.clone(),
                 password: creds
                     .password
                     .as_ref()
                     .map(|p| WireSecret::new(p.expose().to_owned())),
+                auto_submit,
             }))
         }
         Request::GetTotp {
@@ -158,10 +160,12 @@ pub fn dispatch(
             let totp = v
                 .totp_for_page(item_id, url, top_url.as_deref(), unix_seconds)
                 .map_err(item_code)?;
+            let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::GetTotp {
                 code: WireSecret::new(totp.code.expose().to_owned()),
                 period: totp.period,
                 seconds_remaining: totp.seconds_remaining,
+                auto_submit,
             }))
         }
         Request::GeneratePassword {} => {

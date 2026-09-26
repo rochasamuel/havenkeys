@@ -975,4 +975,29 @@ mod socket {
             std::io::ErrorKind::PermissionDenied
         );
     }
+
+    /// autoSubmit comes from the core: the vault setting AND the login's switch.
+    #[test]
+    fn fills_carry_auto_submit_from_the_core() {
+        let f = fixture();
+        let url = "https://github.com/login";
+        assert_eq!(fill(&f, f.github, url)["result"]["autoSubmit"], true);
+        assert_eq!(totp(&f, f.github, url)["result"]["autoSubmit"], true);
+        {
+            let mut v = f.vault.lock().unwrap();
+            let s = v.settings().unwrap();
+            v.update_settings(Settings {
+                auto_sign_in: false,
+                ..s
+            })
+            .unwrap();
+        }
+        assert_eq!(fill(&f, f.github, url)["result"]["autoSubmit"], false);
+        assert_eq!(totp(&f, f.github, url)["result"]["autoSubmit"], false);
+        // A wrong origin is still denied before anything else.
+        assert_eq!(
+            error_code(&fill(&f, f.github, "https://evil.com/")),
+            Some("denied")
+        );
+    }
 }
