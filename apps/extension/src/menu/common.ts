@@ -73,6 +73,16 @@ export function createClickGuard(target: Element): { armed(): boolean } {
   };
 }
 
+/**
+ * Marks an element that shows user data (a title, username or site) and may
+ * cut it with an ellipsis. Our own copy never truncates; the layout check
+ * (tools/ui-check) holds everything unmarked to that.
+ */
+export function userData<T extends HTMLElement>(el: T): T {
+  el.dataset.truncate = "";
+  return el;
+}
+
 export function monogram(title: string): string {
   return (title.trim()[0] ?? "?").toUpperCase();
 }

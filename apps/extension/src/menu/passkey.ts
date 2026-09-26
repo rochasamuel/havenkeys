@@ -5,7 +5,7 @@
 import type { PasskeyCandidate } from "@havenkeys/protocol";
 import { PASSKEY_MAX_HEIGHT, PASSKEY_MIN_HEIGHT, type PasskeyRow, type PkView } from "../webauthn/messages";
 import { applyDocumentLang, t as msg } from "../i18n";
-import { ask, createClickGuard, h, monogram, tokenFromHash } from "./common";
+import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
 
 const question = document.getElementById("question") as HTMLElement;
 const detail = document.getElementById("detail") as HTMLElement;
@@ -45,7 +45,12 @@ function row(p: PasskeyRow, t: string): HTMLButtonElement {
     "button",
     { className: "row" },
     h("span", { className: "avatar", text: monogram(p.title) }),
-    h("span", { className: "who" }, h("span", { className: "title", text: p.title }), h("span", { className: "user", text: p.userName || msg.common.passkey })),
+    h(
+      "span",
+      { className: "who" },
+      userData(h("span", { className: "title", text: p.title })),
+      p.userName ? userData(h("span", { className: "user", text: p.userName })) : h("span", { className: "user copy", text: msg.common.passkey }),
+    ),
   );
   b.type = "button";
   onClick(b, async () => {
@@ -61,21 +66,36 @@ function choices(candidates: PasskeyCandidate[], userName: string, preselect: st
   list.setAttribute("role", "radiogroup");
   list.setAttribute("aria-label", msg.passkey.saveTo);
   const radios: Array<{ input: HTMLInputElement; itemId: string | null }> = [];
-  const add = (title: string, sub: string, itemId: string | null, checked: boolean) => {
+  // `copy`: our own text (wraps) rather than the login's title and username (truncate).
+  const add = (title: string, sub: string | null, itemId: string | null, checked: boolean, copy = false) => {
     const input = h("input");
     input.type = "radio";
     input.name = "target";
     input.checked = checked;
     radios.push({ input, itemId });
     list.append(
-      h("label", { className: "choice" }, input, h("span", { className: "who" }, h("span", { className: "title", text: title }), h("span", { className: "user", text: sub }))),
+      h(
+        "label",
+        { className: "choice" },
+        input,
+        h(
+          "span",
+          { className: "who" },
+          copy ? h("span", { className: "title copy", text: title }) : userData(h("span", { className: "title", text: title })),
+          sub === null
+            ? h("span", { className: "user copy", text: copy ? msg.passkey.newLoginDetail : msg.common.noUsername })
+            : copy
+              ? h("span", { className: "user copy", text: sub })
+              : userData(h("span", { className: "user", text: sub })),
+        ),
+      ),
     );
   };
   const preferred = preselect
     ? candidates.find((c) => c.itemId === preselect)
     : candidates.find((c) => (c.username ?? "").toLowerCase() === userName.toLowerCase());
-  for (const c of candidates) add(c.title, c.username ?? msg.common.noUsername, c.itemId, c === preferred);
-  add(msg.passkey.newLogin, msg.passkey.newLoginDetail, null, preferred === undefined);
+  for (const c of candidates) add(c.title, c.username, c.itemId, c === preferred);
+  add(msg.passkey.newLogin, msg.passkey.newLoginDetail, null, preferred === undefined, true);
   return { el: h("div", {}, h("p", { className: "pk-label", text: msg.passkey.saveTo }), list), selected: () => radios.find((r) => r.input.checked)?.itemId ?? null };
 }
 

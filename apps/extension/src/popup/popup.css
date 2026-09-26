@@ -186,6 +186,7 @@ main {
 
 .item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 11px;
   padding: 8px 8px;
@@ -361,8 +362,18 @@ button.code:hover {
   color: var(--danger);
 }
 
+.user.copy {
+  white-space: normal;
+}
+
+/* A fill or code error under the row, lined up with the title: our copy, so it wraps. */
 .row-status {
+  flex-basis: 100%;
+  margin-top: -4px;
+  padding-left: 43px;
+  color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .row-status:empty {

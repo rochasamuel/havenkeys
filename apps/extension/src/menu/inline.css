@@ -254,6 +254,14 @@ main {
   white-space: nowrap;
 }
 
+.prompt .detail.copy {
+  white-space: normal;
+}
+
+#question {
+  overflow-wrap: anywhere;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;

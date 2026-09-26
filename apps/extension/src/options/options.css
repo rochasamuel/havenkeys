@@ -116,9 +116,10 @@ h1 {
   color: var(--muted);
 }
 
+/* The dot sits on the first line when the status wraps. */
 .status {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
   margin: 2px 0 0;
   font-size: 13px;
@@ -127,6 +128,8 @@ h1 {
 
 .status::before {
   content: "";
+  flex: none;
+  margin-top: 6.5px;
   width: 7px;
   height: 7px;
   border-radius: 50%;

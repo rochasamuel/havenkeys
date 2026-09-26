@@ -4,7 +4,7 @@
 
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type MenuItemView, type MenuView } from "../messaging/inline";
-import { ask, createClickGuard, h, monogram, tokenFromHash } from "./common";
+import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -21,7 +21,7 @@ function message(title: string, detail: string, error = false): HTMLElement {
 
 /** A row's text line: user data truncates with an ellipsis, our own copy wraps. */
 function line(className: "title" | "user", text: string, copy: boolean): HTMLElement {
-  return h("span", { className: copy ? `${className} copy` : className, text });
+  return copy ? h("span", { className: `${className} copy`, text }) : userData(h("span", { className, text }));
 }
 
 /** The generate row's glyph: a sparkle drawn in the app's 1.6-stroke icon set. */

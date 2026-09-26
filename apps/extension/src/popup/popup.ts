@@ -41,6 +41,12 @@ async function send<T>(req: PopupRequest): Promise<PopupReply<T>> {
   }
 }
 
+/** User data (titles, usernames, sites) may be cut with an ellipsis; our own copy never is. */
+function truncates<T extends HTMLElement>(el: T): T {
+  el.dataset.truncate = "";
+  return el;
+}
+
 function notice(title: string, body: string): HTMLElement {
   return h("div", { className: "notice" }, h("strong", { text: title }), h("p", { text: body }));
 }
@@ -77,7 +83,7 @@ async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: 
 
 function matchRow(m: Match): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
-  const status = h("div", { className: "user row-status" });
+  const status = h("div", { className: "row-status" });
   const row = h(
     "li",
     { className: "item" },
@@ -85,9 +91,8 @@ function matchRow(m: Match): HTMLElement {
     h(
       "div",
       { className: "who" },
-      h("div", { className: "title", text: m.title }),
-      h("div", { className: "user", text: m.username ?? t.common.noUsername }),
-      status,
+      truncates(h("div", { className: "title", text: m.title })),
+      m.username !== null ? truncates(h("div", { className: "user", text: m.username })) : h("div", { className: "user copy", text: t.common.noUsername }),
     ),
   );
   const actions = h("div", { className: "actions" });
@@ -118,7 +123,9 @@ function matchRow(m: Match): HTMLElement {
     slot.append(show);
     actions.append(slot);
   }
-  row.append(actions);
+  // The status line (a fill or code error) goes under the whole row, so a
+  // long message gets the popup's full width instead of the text column's.
+  row.append(actions, status);
   return row;
 }
 
@@ -154,7 +161,7 @@ function render(state: PopupState): void {
     case "unlocked": {
       setPill(t.popup.pill.unlocked, "unlocked");
       const parts: Node[] = [];
-      if (state.site) parts.push(h("div", { className: "site", text: state.site }));
+      if (state.site) parts.push(truncates(h("div", { className: "site", text: state.site })));
       if (!state.site) {
         parts.push(notice(t.popup.noPage.title, t.popup.noPage.body));
       } else if (state.matches.length === 0) {

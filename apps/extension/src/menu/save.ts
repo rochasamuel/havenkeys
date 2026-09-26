@@ -30,13 +30,18 @@ function show(view: SaveView): void {
     question.textContent = t.save.addQuestion;
     confirmBtn.textContent = t.save.save;
   }
+  // The username may be cut with an ellipsis; "No username" is our copy and wraps.
   detail.textContent = view.username ?? t.common.noUsername;
+  detail.classList.toggle("copy", view.username === null);
+  if (view.username === null) delete detail.dataset.truncate;
+  else detail.dataset.truncate = "";
   confirmBtn.disabled = false;
 }
 
 function fail(message: string): void {
   // The error takes the question's place; the prompt grows to fit it (save_resize).
   detail.textContent = "";
+  delete detail.dataset.truncate;
   question.textContent = message;
   question.className = "error";
   confirmBtn.disabled = true;
