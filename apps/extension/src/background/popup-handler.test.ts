@@ -77,7 +77,7 @@ describe("popup handler", () => {
   });
 
   it("uses the tab URL, not anything from the popup, for TOTP", async () => {
-    const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9 }));
+    const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9, autoSubmit: false }));
     const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/" }));
     const r = await h.handle({ type: "popup_totp", itemId: ID });
     expect(r).toEqual({ ok: true, value: { code: "123456", secondsRemaining: 9 } });
@@ -108,7 +108,7 @@ describe("popup handler", () => {
   });
 
   it("fills the active tab using the tab's own URL", async () => {
-    const c = fakeClient(() => ({ type: "fill_item", username: "octo", password: "pw" }));
+    const c = fakeClient(() => ({ type: "fill_item", username: "octo", password: "pw", autoSubmit: false }));
     const fills: unknown[] = [];
     const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login?x=1" }), async (...a) => {
       fills.push(a);
@@ -120,7 +120,7 @@ describe("popup handler", () => {
   });
 
   it("reports pages without a login form, and refuses non-web pages", async () => {
-    const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9 }));
+    const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9, autoSubmit: false }));
     const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/" }), async () => 0);
     expect(await h.handle({ type: "popup_fill_totp", itemId: ID })).toEqual({
       ok: false,

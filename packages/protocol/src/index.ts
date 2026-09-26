@@ -103,8 +103,8 @@ export type Result =
   | { type: "status"; state: LockState; vaultExists: boolean }
   | { type: "lock" }
   | { type: "find_matches"; matches: Match[] }
-  | { type: "fill_item"; username: string | null; password: string | null }
-  | { type: "get_totp"; code: string; period: number; secondsRemaining: number }
+  | { type: "fill_item"; username: string | null; password: string | null; autoSubmit: boolean }
+  | { type: "get_totp"; code: string; period: number; secondsRemaining: number; autoSubmit: boolean }
   | { type: "generate_password"; password: string }
   | { type: "check_login"; action: SaveAction; itemId: string | null }
   | { type: "save_login"; itemId: string }
@@ -277,13 +277,14 @@ function parseResult(v: unknown): Result | null {
       return { type: "find_matches", matches };
     }
     case "fill_item":
-      if (!hasExactKeys(v, ["type", "username", "password"])) return null;
-      if (!isNullableStr(v.username) || !isNullableStr(v.password)) return null;
-      return { type: "fill_item", username: v.username, password: v.password };
+      if (!hasExactKeys(v, ["type", "username", "password", "autoSubmit"])) return null;
+      if (!isNullableStr(v.username) || !isNullableStr(v.password) || !isBool(v.autoSubmit)) return null;
+      return { type: "fill_item", username: v.username, password: v.password, autoSubmit: v.autoSubmit };
     case "get_totp":
-      if (!hasExactKeys(v, ["type", "code", "period", "secondsRemaining"])) return null;
+      if (!hasExactKeys(v, ["type", "code", "period", "secondsRemaining", "autoSubmit"])) return null;
       if (!isStr(v.code) || !/^[0-9]{6,8}$/.test(v.code) || !isU32(v.period) || !isU32(v.secondsRemaining)) return null;
-      return { type: "get_totp", code: v.code, period: v.period, secondsRemaining: v.secondsRemaining };
+      if (!isBool(v.autoSubmit)) return null;
+      return { type: "get_totp", code: v.code, period: v.period, secondsRemaining: v.secondsRemaining, autoSubmit: v.autoSubmit };
     case "generate_password":
       if (!hasExactKeys(v, ["type", "password"]) || !isStr(v.password) || v.password.length === 0) return null;
       return { type: "generate_password", password: v.password };

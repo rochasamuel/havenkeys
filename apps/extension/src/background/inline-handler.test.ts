@@ -49,9 +49,9 @@ function defaultAnswer(r: Request): unknown {
     case "find_matches":
       return { type: "find_matches", matches: r.url.startsWith("https://github.com") ? [ghMatch] : [] };
     case "fill_item":
-      return { type: "fill_item", username: "octo", password: "pw" };
+      return { type: "fill_item", username: "octo", password: "pw", autoSubmit: false };
     case "get_totp":
-      return { type: "get_totp", code: "123456", period: 30, secondsRemaining: 10 };
+      return { type: "get_totp", code: "123456", period: 30, secondsRemaining: 10, autoSubmit: false };
     case "generate_password":
       return { type: "generate_password", password: "Gen!" };
     case "check_login":

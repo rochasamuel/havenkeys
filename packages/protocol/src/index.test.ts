@@ -10,9 +10,9 @@ describe("parseIncoming", () => {
       { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true } },
       { v: 1, id: 2, result: { type: "lock" } },
       { v: 1, id: 3, result: { type: "find_matches", matches: [match] } },
-      { v: 1, id: 4, result: { type: "fill_item", username: "octo", password: "pw" } },
-      { v: 1, id: 5, result: { type: "fill_item", username: null, password: null } },
-      { v: 1, id: 6, result: { type: "get_totp", code: "123456", period: 30, secondsRemaining: 12 } },
+      { v: 1, id: 4, result: { type: "fill_item", username: "octo", password: "pw", autoSubmit: false } },
+      { v: 1, id: 5, result: { type: "fill_item", username: null, password: null, autoSubmit: true } },
+      { v: 1, id: 6, result: { type: "get_totp", code: "123456", period: 30, secondsRemaining: 12, autoSubmit: false } },
       { v: 1, id: 7, error: { code: "denied", message: "x" } },
       { v: 1, id: null, error: { code: "malformed", message: "x" } },
       { v: 1, event: { type: "locked" } },
@@ -59,6 +59,19 @@ describe("parseIncoming", () => {
     const proto = { type: "lock" };
     const result = Object.create(proto) as object;
     expect(parseIncoming({ v: 1, id: 1, result })).toBeNull();
+  });
+
+  it("requires a boolean autoSubmit on fills", () => {
+    const ok = parseIncoming({ v: 1, id: 1, result: { type: "fill_item", username: "u", password: "p", autoSubmit: true } });
+    expect(ok && "result" in ok && ok.result).toEqual({ type: "fill_item", username: "u", password: "p", autoSubmit: true });
+    for (const result of [
+      { type: "fill_item", username: "u", password: "p" },
+      { type: "fill_item", username: "u", password: "p", autoSubmit: "yes" },
+      { type: "get_totp", code: "123456", period: 30, secondsRemaining: 1 },
+      { type: "get_totp", code: "123456", period: 30, secondsRemaining: 1, autoSubmit: 1 },
+    ]) {
+      expect(parseIncoming({ v: 1, id: 1, result })).toBeNull();
+    }
   });
 });
 

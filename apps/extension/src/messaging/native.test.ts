@@ -78,7 +78,7 @@ describe("NativeClient", () => {
     // Unknown IDs are dropped.
     port.deliver({ v: 1, id: id + 100, result: { type: "find_matches", matches: [] } });
     // A result of the wrong type fails the request.
-    port.deliver({ v: 1, id, result: { type: "fill_item", username: "u", password: "p" } });
+    port.deliver({ v: 1, id, result: { type: "fill_item", username: "u", password: "p", autoSubmit: false } });
     await expect(p).rejects.toMatchObject({ code: "malformed" });
   });
 
