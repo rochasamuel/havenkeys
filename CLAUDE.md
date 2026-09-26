@@ -934,6 +934,13 @@ Credential is returned
 Extension fills fields
 ```
 
+> Amended on 2026-09-26 by
+> `docs/superpowers/specs/2026-09-26-auto-sign-in-design.md`: after the user
+> picks a login, HavenKeys may finish that one sign-in (press the button,
+> fill a following password step and the TOTP code) on the same origin
+> within 2 minutes, when the vault setting and the login's switch allow it.
+> Nothing is ever filled or submitted without that pick.
+
 Do not autofill automatically on page load.
 
 ---

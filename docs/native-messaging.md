@@ -151,8 +151,8 @@ kept in the item's history. `passkey_create` adds a passkey (see
 
 ```json
 {"v":1,"id":7,"result":{"type":"find_matches","matches":[{"id":"…","title":"GitHub","username":"octo","hasTotp":true,"strength":"same_host"}]}}
-{"v":1,"id":8,"result":{"type":"fill_item","username":"octo","password":"…"}}
-{"v":1,"id":9,"result":{"type":"get_totp","code":"123456","period":30,"secondsRemaining":12}}
+{"v":1,"id":8,"result":{"type":"fill_item","username":"octo","password":"…","autoSubmit":true}}
+{"v":1,"id":9,"result":{"type":"get_totp","code":"123456","period":30,"secondsRemaining":12,"autoSubmit":true}}
 {"v":1,"id":11,"result":{"type":"generate_password","password":"…"}}
 {"v":1,"id":12,"result":{"type":"check_login","action":"update","itemId":"…"}}
 {"v":1,"id":13,"result":{"type":"save_login","itemId":"…"}}
@@ -167,6 +167,14 @@ kept in the item's history. `passkey_create` adds a passkey (see
 `upgrade.kind` is `"none"`, `"ask"` or `"auto"`. `itemId` is present only
 when `kind` is `"ask"` or `"auto"`; `kind` is `"none"` whenever `conditional`
 was false (and whenever `excluded` is true).
+
+`fill_item` and `get_totp` results also carry `autoSubmit`: a boolean,
+`settings.auto_sign_in && item.auto_sign_in`, computed by
+`VaultService::auto_sign_in_for` after the origin check that already gates
+the rest of the result. It tells the extension whether it may press the
+site's sign-in button after filling this value (`autofill.md`, Automatic
+sign-in). The parser on both ends requires it to be present and boolean;
+anything else is rejected like any other malformed result.
 
 `id` is `null` only when a request was so broken that its ID could not be
 read.

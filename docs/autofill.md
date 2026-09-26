@@ -241,6 +241,9 @@ User clicks a login field (trusted event)
   → content script checks it is still on the matched origin, fills the group
 ```
 
+With automatic sign-in on, the content script then presses the form's
+button (see [Automatic sign-in](#automatic-sign-in)).
+
 The TOTP flow is the same, with `get_totp`. Nothing is ever filled on page
 load, on programmatic focus, or on events a page synthesizes: every trigger
 checks `isTrusted`.
@@ -322,6 +325,147 @@ to the login's password history (5 entries, shown in the desktop app), and
 the bridge allows one browser-initiated change per item every 10 minutes. A
 new login is saved with the page's origin as a whole-site rule and the host
 (without `www.`) as its title.
+
+## Automatic sign-in
+
+After the user picks a login (the in-page menu, or **Fill** in the popup)
+and Rust says the pick may auto-submit, HavenKeys keeps going: it presses
+the site's sign-in button, and if the flow continues to a password step or a
+one-time-code step, it fills and presses those too.
+
+```text
+pick → fill → press
+         → (page navigates or re-renders) fill password → press
+         → (OTP step) fill code → press
+```
+
+### Switches
+
+* Vault setting `auto_sign_in` (Settings → *Browser extension* → "Sign in
+  automatically after filling"), **default on**.
+* Per-login switch `auto_sign_in` (login editor → "Sign in automatically on
+  this site"), **default on**; disabled with "Turned off in Settings" when
+  the global setting is off.
+* `autoSubmit = settings.auto_sign_in && item.auto_sign_in`, computed only
+  in Rust (`VaultService::auto_sign_in_for`, called after the origin check)
+  and returned alongside every `fill_item` / `get_totp` result
+  (`native-messaging.md`). The extension never decides this itself.
+
+### The run
+
+A pick whose fill comes back `autoSubmit: true` starts a **sign-in run** in
+the background worker's memory (`background/signin-run.ts`): the tab, the
+frame and the exact origin (scheme + host + port) of the page the user
+picked in, the item ID, whether it has TOTP, and an expiry 2 minutes out
+(`RUN_TTL_MS`). One run per tab; a new pick replaces it. Steps move forward
+only, `username → password → otp`, each at most once, never retried.
+Continuing a step still re-requests the value from Rust for the frame's
+current URL, so the origin check runs again on every step. Nothing about a
+run is persisted, and it holds no secrets — only the item ID, origin, frame,
+step and timestamps.
+
+### Detecting the next step
+
+Two ways a next step can appear:
+
+* **Navigation.** Every frame's content script sends `cs_ready` on load; the
+  background replies with `watch: "password" | "otp"` only when the tab has
+  a live run, the frame is the run's frame, and its origin is `run.origin`.
+* **Re-render (SPAs).** After pressing, the content script starts watching
+  at once for the step named in the `bg_fill` that carried `submit: true`.
+
+Watching (`autofill/watch.ts`) checks once immediately with the same bounded
+page lookup the popup fill uses (`findLoginGroup` / `findOtpGroup`, at most
+200 candidates), then observes `document` with one `MutationObserver`
+(`childList` + `subtree`, plus `class`/`style`/`hidden`/`disabled`/`type`
+attributes), debounced to at most one check per 150 ms. A field counts only
+once the same connected, visible, enabled element is found on two
+consecutive checks (about 300 ms apart), so a field that flickers in and out
+is not reported. The watch gives up after 30 s (`WATCH_TIMEOUT_MS`) and ends
+the run.
+
+### Pressing the button (`autofill/submit.ts`)
+
+Candidates are `button`, `input[type=submit]`, `input[type=image]` and
+`[role=button]`, at most 30, visible, not `disabled` and not
+`aria-disabled="true"`. They are drawn first from the filled group's own
+root (its `<form>`, or the container `groupRoot` picked). When nothing there
+reaches the minimum score and the group has no `<form>`, the search climbs
+up to 3 further ancestors looking for a button beside the fields' own
+container, which is common in SPAs; a container that has candidates but none
+clear enough stops the climb with no press, rather than looking further up.
+
+| Signal | Score |
+|---|---|
+| The submit button of the filled field's own form (`type=submit`, or `button` with no type, inside `field.form`) | +60 |
+| Label fits the step. `username`: continue, next, proximo, continuar, avancar, seguinte. `password`: sign in, log in, login, signin, entrar, acessar, iniciar sesion. `otp`: verify, confirm, submit, verificar, confirmar, enviar | +50 |
+| Any existing submit word | +20 |
+| After the last filled field in document order | +10 |
+| Negative words: forgot, reset, create account, sign up, register, cadastrar, cancel, cancelar, back, voltar, resend, reenviar, show, mostrar, another, outra, passkey, "with google/apple/facebook/microsoft/github", "com google/apple/…" | disqualifies |
+
+**Ambiguity rule:** press only if the best candidate scores at least 60 and
+beats the runner-up by at least 20 in that same scope. Otherwise the fields
+stay filled and the user presses, exactly like today's behaviour, and the
+run ends.
+
+Once a button is chosen: wait for it to become enabled (re-checked every
+100 ms, up to 1 s — many sites enable a submit button only once the input
+validates; still disabled after 1 s → no press, run ends); re-check the stop
+conditions below; then `form.requestSubmit(button)` for a form's own submit
+button, or `button.click()` otherwise, so the site's own validation and
+`submit` handlers run as they would for a real click. Before pressing an OTP
+step, wait 500 ms first — if the field is gone or hidden by then, the site
+already submitted on its own and nothing is pressed. Never a synthetic key
+event, never Enter.
+
+A press in flight is cancellable: it is tied to the run that started it, and
+a user taking over, a `bg_run_end` (the vault locking, or a new pick), or
+the frame's `pagehide` cancels it before it presses. The background also
+re-checks the run's identity after each request to the desktop during a
+continuation, so a lock, a stop, or a new pick that lands while that request
+is in flight keeps the stale response from being filled.
+
+### Stopping
+
+Checked while watching, and again right before a press. Any of these ends
+the run; nothing more is filled or pressed.
+
+| Condition | Detected by | Effect |
+|---|---|---|
+| The user takes over | A trusted `keydown`, `input` or `pointerdown` on the page during the run | End (so Esc ends it) |
+| A step comes back | The field of an already-submitted step is found again (password after its submit: wrong password; OTP after its submit: wrong code) | End, no fill |
+| Challenge on the page | A visible iframe whose parsed URL host is `www.google.com`/`www.recaptcha.net` with a `/recaptcha/` path, `*.hcaptcha.com`, or `challenges.cloudflare.com`; or a visible `.g-recaptcha`, `.h-captcha`, `.cf-turnstile` element in the group's root | Fill the current step, do not press, end |
+| OTP without TOTP | `watch: "otp"` is never requested when `hasTotp` is false; an OTP field appearing then simply ends the run at the password step | End |
+| Nothing appears | 30 s per step, 2 min overall | End |
+| Context gone | Origin change, lock, tab closed, new pick | End |
+
+Invisible reCAPTCHA badges do not count as a challenge, so they never
+silently disable auto sign-in on the very common pages that carry one: a
+challenge iframe with `size=invisible` is excluded, and so is a
+`.g-recaptcha` / `.h-captcha` / `.cf-turnstile` element that is itself the
+page's sign-in button (Google's documented button-bound invisible/v3
+pattern, `<button class="g-recaptcha" data-callback=...>`) or that carries
+`data-size="invisible"`.
+
+### Popup-only mode
+
+Without the in-page-suggestions host permission, the popup injects the
+content script through `activeTab`, which the browser revokes once the tab
+navigates. A run started that way covers only the current page: single-page
+forms and SPA steps, not a step on a page the site navigates to.
+
+### Limitations
+
+* **Host-hopping flows stop at the hop.** A run is bound to one exact
+  origin; a step that lands on a different origin (a separate login
+  subdomain, an SSO redirect) ends the run there, and the menu still works
+  manually on the new page.
+* **Sites that check `isTrusted` reject the scripted click** and simply do
+  not react; the run then times out, or the user presses by hand.
+* **CAPTCHAs stop the press.** The current step's fields stay filled; the
+  CAPTCHA itself is never solved for the user.
+* **Heuristics can pick no button.** When no candidate clearly wins, the
+  fields are filled and the user presses, exactly like today's behaviour.
 
 ## Passkeys
 

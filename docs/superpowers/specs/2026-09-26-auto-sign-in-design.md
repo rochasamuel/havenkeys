@@ -233,18 +233,32 @@ fire and is ignored by the same rule.
   rejected like every other malformed result.
 * No new native requests.
 
-### 6.3 Extension messages (`messaging/inline.ts`)
+### 6.3 Extension messages (`messaging/inline.ts`), as implemented
 
 All validated by the existing strict parsers; unknown or malformed messages
 are dropped.
 
 | Message | Direction | Content |
 |---|---|---|
-| `cs_ready` (reply) | background → content | adds optional `watch: "password" \| "otp"` |
+| `cs_ready` (reply, `ReadyReply`) | background → content | adds `watch: "password" \| "otp" \| null` |
+| `bg_fill` | background → content | adds `submit: boolean` and `totp: boolean` (an OTP step follows the password step) |
+| `bg_fill` reply (`FillReply`) | content → background | `{ filled: number; pressing: "username" \| "password" \| "otp" \| null }` |
 | `cs_run_step` | content → background | `{ kind: "password" \| "otp" }` |
 | `cs_run_stop` | content → background | `{}` (stop condition or timeout) |
-| `bg_fill` | background → content | adds `submit: boolean`, `next: "password" \| "otp" \| null` |
 | `bg_run_end` | background → content | `{}` |
+
+The design above had `bg_fill` carry `next: "password" | "otp" | null`, computed
+by the background. The implementation instead has `bg_fill`'s reply
+(`FillReply.pressing`) tell the background which step it just pressed
+(`"username" | "password" | "otp"`, or `null` when nothing was pressed): the
+background does not itself know which step a picked group turned out to be
+until the content script classifies and fills it (a group with only a
+username field is a `username` step; one with a password field is a
+`password` step, even when a username field is also present). The background
+then derives the next step itself (`signin-run.ts` `nextStep`) from the
+step just pressed and `hasTotp`, and starts or continues the run from there;
+`totp` on `bg_fill` still tells the content script whether an OTP step
+should be watched for after a password press.
 
 ### 6.4 Desktop UI
 

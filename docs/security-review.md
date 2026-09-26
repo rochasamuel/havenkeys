@@ -789,6 +789,16 @@ the field menu's "you have a passkey" / Passkeys Directory hint
 `e409c7b`. Numbering continues in this table rather than starting a new one,
 since this work extends the same passkey surface reviewed above.
 
+**Update, 2026-09-26** (`docs/superpowers/sdd/2026-09-26-auto-sign-in/`,
+design `docs/superpowers/specs/2026-09-26-auto-sign-in-design.md`): AS1 and
+AS2 are new findings from automatic sign-in — after a pick whose fill Rust
+marks `autoSubmit`, HavenKeys presses the site's button and, unattended,
+carries a multi-step or TOTP sign-in through to the end. It shares the same
+background-worker and content-script surface as the passkey work above
+(sessions, sender-derived origins, guarded picks), so its findings continue
+the same table rather than starting a new one. Branch base `f1c1b69`, this
+task's verification below.
+
 ## Summary
 
 We found no critical or high-severity issues. Passkey private keys stay in
@@ -828,6 +838,8 @@ versions. All of them are listed below.
 | PK25 | Info | Extension (silent-save abort) | If the page aborts, navigates away, or otherwise cancels its request while an `auto` (silent) save is already in flight, the passkey the desktop already created and committed **stays in the vault**, even though the site never receives it and no "saved" notice appears | Accepted, same class as PK13 (orphan passkey after a late abort), but here it can happen with no card ever shown. Visible and deletable in that login's Passkeys list in the desktop app (`autofill.md`, Limitations) |
 | PK26 | Info | Extension (`passkey_status`) | The field menu's "you have a passkey for `<site>`" hint asks a Lookup-class `passkey_status` request once per menu open; the yes/no answer itself never reaches the page, but a page can already see the menu's iframe appear and estimate its height, which changes by one row depending on the answer | Accepted, the same residual signal `threat-model.md` and `autofill.md` already document for menu presence generally; `passkey_status` adds no item ID, credential ID, or account data to what a page can observe |
 | PK27 | Info | Extension (Passkeys Directory data) | The "`<name>` supports passkeys" hint's site names and help links are third-party data from the 2factorauth Passkeys Directory (`apps/extension/src/data/passkey-sites.json`), matched to a page by plain host-suffix comparison with no Public Suffix List | Accepted: this is a UI hint only, never an authorization decision — a wrong match can only show or hide a static help link, and `github.com.evil.com` still never matches `github.com`. The data is a build-time snapshot committed to the repo and reviewed like code (`scripts/update-passkey-directory.mjs`, run by hand, never fetched at runtime); the site name is rendered with `textContent` only, and only `https:` help links are kept, opened only after a trusted click via `chrome.tabs.create` |
+| AS1 | Medium | Extension / core (automatic sign-in) | For up to 2 minutes after a pick, a page on the same origin receives the password and the current TOTP code without further clicks, relaxing rule #6 for the rest of that one sign-in | Accepted, documented: starts only from a trusted pick; bound to tab, frame and exact origin; forward-only single-use steps; every value re-requested from Rust with the origin check; global and per-login off switches (`auto_sign_in`). Script on that origin could already obtain the password after the single manual pick; the new part is that the OTP no longer needs its own click. Not a boundary against a compromised extension, which can call fill_item / get_totp directly |
+| AS2 | Low | Extension (automatic sign-in) | `cs_run_step` messages carry no run identity, so in a narrow race a leftover step confirmation from a replaced run in the same tab/frame/origin can advance the newly picked login's run one step early | Accepted: bounded because every value is re-requested from Rust for the frame's URL, and the login was just picked by the user on that origin |
 
 ## Details
 
@@ -1173,6 +1185,74 @@ site name is rendered with `textContent` only (never `innerHTML`), only
 only after the menu's usual trusted-click guard, via `chrome.tabs.create` in
 a new tab, carrying no vault data.
 
+### AS1. Automatic sign-in: a relaxed click rule (Medium, accepted)
+**What it does:** after a pick whose fill Rust marks `autoSubmit`, HavenKeys
+presses the site's sign-in button on its own, and, unattended, follows a
+multi-step or TOTP sign-in to the end: fill password → press → (page
+navigates or re-renders) fill the next step → press, up to and including the
+one-time code. This relaxes Critical Engineering Rule #6 for the rest of
+that one sign-in, for up to 2 minutes after the pick.
+
+**Why it is bounded:** the decision is made in Rust, never trusted from the
+extension — `VaultService::auto_sign_in_for` computes
+`settings.auto_sign_in && item.auto_sign_in` after the same origin check
+that already gates `fill_item`/`get_totp`. The run
+(`background/signin-run.ts`) is bound to the exact tab, frame and origin of
+the pick, moves forward only (`username → password → otp`), accepts each
+step once, never retries, and expires 2 minutes after the pick
+(`RUN_TTL_MS`). A page cannot start or extend a run: `cs_run_step` is
+accepted only from that same tab, frame and origin, and only for the step
+that comes next (`signin-run.ts` `accept`). Every step's value is still
+fetched from Rust for the frame's *current* URL, so the origin check runs
+again on each step, not just once at the pick. Global (`auto_sign_in`) and
+per-login (`auto_sign_in`) switches, both on by default, let the user turn
+this off entirely or per site.
+
+**Residual (accepted):** a page on the picked login's own origin already
+gains nothing new here that a manual pick did not already give it — the
+password was already handed to that page's own script the moment the user
+picked the login, with or without this feature. What automatic sign-in adds
+is that a TOTP code, which previously needed its own click, can now reach
+the page without one, for up to 2 minutes. This is the same class of
+relaxation as the automatic passkey upgrade (PK22): **not a boundary against
+a compromised extension**, which can already call `fill_item` and
+`get_totp` directly for any item and origin it names, within the rate
+limit — a run only changes what a hostile *page* can obtain unassisted, not
+what a compromised extension can already do.
+
+### AS2. A late step confirmation from a replaced run (Low, accepted)
+**What it does:** `cs_run_step` (content script → background) carries only
+`{ kind }`; the background matches it to the live run by the sender's tab,
+frame and origin (from the browser's own sender data), not by a per-run
+token. If the user picks a new login in the same tab while an older run's
+watcher is still mid-flight — for instance, a stale `cs_run_step` message
+already queued in the runtime message pipe when the new pick replaces the
+run — the background could, in a narrow timing window, treat that leftover
+confirmation as belonging to the new run and step it forward one stage
+early.
+
+**Why it is bounded:** the content script itself guards the common case —
+each watch and pending press is tied to a local run sequence number
+(`runSeq` in `content/index.ts`) that a new pick, `bg_run_end`, or the
+user taking over increments, so a superseded watcher's own result is
+suppressed before it is even sent. What remains is the residual background
+race described above. Even there, nothing is filled or pressed on
+mistaken trust alone: the background still calls `fill_item` or `get_totp`
+for the frame's *current* URL and receives Rust's own origin-checked answer
+before filling anything, and the new run was itself started by the user
+picking that same login on that same origin moments earlier. The worst
+outcome is a step of the *user's own, just-picked* login being pressed one
+step ahead of schedule on the origin they just interacted with — not a
+credential reaching an unrelated item or site.
+
+**Fix considered and deferred:** binding `cs_run_step` to a per-run token
+(as menu and save sessions already are) would close this race outright. It
+was left as an accepted limitation for this MVP because the residual is
+already narrow — same user, same login, same origin, no secret exposure
+beyond what a normal continuation would produce moments later — and the
+fix would add a token to thread through every watch and press call for a
+race that has not been observed to occur in practice.
+
 The per-task reviews also deferred some minor items that are not security
 findings. They are tracked in the development ledger, not here. Examples:
 `Host::parse` percent-decodes an rpId such as `github%2Ecom` into
@@ -1236,6 +1316,27 @@ username hidden) with `Upgrade`. `scripts/update-passkey-directory.mjs`
 (a hand-run dev tool, not part of the shipped extension or desktop) logs
 only a public entry count and the upstream commit hash of the Passkeys
 Directory repository — no vault data.
+
+### Re-run for automatic sign-in (Task 11, `b30e7b9`)
+
+Full verification was run for the automatic-sign-in feature (WSL2, Linux
+6.6.87.2-microsoft-standard-WSL2). No dependency was added on this branch:
+`git diff f1c1b69..HEAD -- Cargo.lock pnpm-lock.yaml` is empty.
+
+| Command | Result |
+|---|---|
+| `pnpm -r typecheck` | Clean: protocol, ui, desktop, extension, web |
+| `pnpm -r test` | 328 passed, 0 failed: extension 285, protocol 13, ui 6, desktop 10, web 14 |
+| `cargo test --workspace` | Stops at the first failing binary: `havenkeys-server`'s `admin.rs` (4 tests), unrelated to this branch — every one panics with `Postgres is not reachable — run scripts/test-server.sh: … ConnectionRefused` |
+| `cargo test --workspace --exclude havenkeys-server --exclude havenkeys-sync-client` | 359 passed, 0 failed, across every other workspace crate (core, bridge, protocol, native-host, oslock, desktop-lib) |
+| `cargo test -p havenkeys-sync-client --test round_trip` | 6 failed, all `Postgres is not reachable — run scripts/test-server.sh: Error { kind: Connect, cause: Some(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }) }`. **Environmental, pre-existing:** no Postgres is running here, and this branch does not touch the sync client; the same failure mode as the `havenkeys-server` tests above |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
+| `pnpm audit --prod` | No known vulnerabilities found |
+| `cargo audit` | Same 7 allowed warnings as the previous re-run (`proc-macro-error`, five `unic-*`, `glib` `VariantStrIter`), all through Tauri's Linux GTK stack, none from this feature; **no vulnerabilities** |
+
+This task changed only Markdown documentation and `CLAUDE.md`; no source file
+in `apps/` or `crates/` was touched, so the secret-logging and trust-boundary
+review above still applies unchanged.
 
 ## Secret-logging and trust-boundary review
 

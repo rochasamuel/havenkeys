@@ -172,6 +172,8 @@ to message the extension. Mitigations (detailed in `security-model.md` and
 * A save is offered only for passwords the user typed, so a page cannot use
   save prompts as a password oracle.
 * No secret data goes into the DOM beyond the filled input values.
+* A page cannot start or extend an automatic sign-in run: it starts only
+  from a trusted pick, and continuation never crosses origins (T9).
 
 ### T4 — Compromised or buggy extension or native host
 The Rust side re-validates every request: it must be a known request type,
@@ -333,6 +335,53 @@ public data and the user's click. New or changed threats:
   like code (`scripts/update-passkey-directory.mjs`), never fetched at
   runtime; the extension renders the name with `textContent` only, keeps
   only `https:` help links, and opens one only on a trusted click.
+
+### T9 — Automatic sign-in
+After the user picks a login, HavenKeys may finish that one sign-in — press
+the button, fill a following password step and the TOTP code — without
+further clicks
+(`docs/superpowers/specs/2026-09-26-auto-sign-in-design.md`). This amends
+rule #6 for one bounded case.
+
+* **Only a trusted pick starts a run.** The pick is the existing guarded
+  click in the extension's menu frame or the popup. A page cannot start,
+  extend or re-target a run: `cs_run_step` is accepted only from the run's
+  own tab, frame and origin, only for the step that comes next, once.
+* **`autoSubmit` is decided in Rust.** `VaultService::auto_sign_in_for`
+  computes `settings.auto_sign_in && item.auto_sign_in` after the existing
+  origin check, so the extension cannot turn it on for a login the user
+  switched off, and a page cannot turn it on at all.
+* **Origin binding.** Continuation never crosses origins, even under a
+  whole-site rule: a redirect to another subdomain gets no no-click fill,
+  though the menu still works there manually. Every step's value is
+  re-requested from Rust for the frame's current URL, so the origin check
+  runs again each time, not just once at the pick.
+* **No secrets in run state.** The run (`signin-run.ts`) holds only an item
+  ID, the origin, the tab and frame ID, the current step and an expiry, in
+  the background worker's memory only. It is never persisted and is dropped
+  on lock, on the tab closing, on a new pick, on an origin change, and after
+  2 minutes.
+* **Accepted risk.** For up to 2 minutes after a pick, a page on that same
+  origin receives the password and the current TOTP code without further
+  clicks, the same class of relaxation as the automatic passkey upgrade
+  (T8, "The automatic upgrade's relaxed click rule"). Script on that origin
+  could already obtain the password after the single manual pick; the new
+  part is that the OTP no longer needs its own click. Bounded by the origin
+  binding, the forward-only single-use steps, the 2-minute window, and the
+  global and per-login off switches. *Residual:* not a boundary against a
+  compromised extension, which can call `fill_item` / `get_totp` directly
+  regardless (`security-review.md` AS1).
+* **A late step confirmation from a replaced run.** `cs_run_step` carries no
+  run identity of its own — only the sender's tab, frame and origin, which
+  the background compares against the live run. In a narrow race, a leftover
+  step confirmation from a run the user has already replaced with a new pick
+  in the same tab, frame and origin could advance the new run one step
+  early. *Mitigation:* every value the step would fill is still re-requested
+  from Rust for the frame's current URL, and the login was just picked by
+  the user on that same origin (`security-review.md` AS2).
+* **Wrong button.** The ambiguity rule and negative-word list make a
+  mis-press unlikely; a mis-press can only act on the matched origin, so it
+  cannot leak credentials elsewhere.
 
 ## 4. Out of scope (not defended)
 

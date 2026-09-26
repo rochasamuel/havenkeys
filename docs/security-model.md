@@ -564,6 +564,31 @@ in `autofill.md` §Passkeys, and the threats in `threat-model.md` T8.
 * **What the extension sees:** titles, account names, credential IDs, and
   the public outputs of WebAuthn. Never a private key.
 
-## 16. Known limitations
+## 16. Automatic sign-in
+
+See `autofill.md`, Automatic sign-in, for the full flow. In summary:
+
+* **`autoSubmit` is decided in Rust, never by the extension.** It is
+  `settings.auto_sign_in && item.auto_sign_in`, computed by
+  `VaultService::auto_sign_in_for` and returned only after the existing
+  origin check on `fill_item` / `get_totp`. Both switches default to on and
+  read as on when absent from an older settings or item blob.
+* **The run lives only in the background worker's memory**
+  (`apps/extension/src/background/signin-run.ts`), never persisted, and
+  holds no secrets: an item ID, an exact origin, a tab and frame ID, the
+  current step and an expiry. It is bound to the exact origin (scheme, host,
+  port) and frame of the pick that started it, moves forward only
+  (`username → password → otp`), accepts each step once, and expires after
+  2 minutes. A page cannot start or extend it — a `cs_run_step` message is
+  accepted only from that same tab, frame and origin, only for the step that
+  comes next — and every step's value is still fetched from Rust for the
+  frame's current URL, so the origin check runs again each time.
+* **Accepted risk.** For up to 2 minutes after a pick, a page on that same
+  origin receives the password and the current TOTP code without further
+  clicks — the same class of relaxation to rule #6 ("never autofill without
+  explicit user interaction") as the automatic passkey upgrade. See
+  `security-review.md` AS1 and AS2, and `threat-model.md` T9.
+
+## 17. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.
