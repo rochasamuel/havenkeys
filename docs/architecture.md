@@ -205,7 +205,11 @@ the OS language by default, or a choice in Settings kept in
 `localStorage["hk-locale"]`, which also asks Rust to relabel the tray menu
 (`set_ui_language`). Rust itself is not translated: errors reach the UI as
 `{ code, message }`, and the UI shows its own text for a code it recognizes,
-Rust's English `message` otherwise. Details: `docs/development.md` §"Adding
+Rust's English `message` otherwise. Following the OS or browser means: the
+first English or Portuguese tag in its language list decides (any Portuguese
+gets `pt-BR`); with neither, English. On macOS the webview only reports
+languages the app bundle declares, so `apps/desktop/src-tauri/Info.plist`
+lists `en` and `pt-BR` (`CFBundleLocalizations`). Details: `docs/development.md` §"Adding
 a translated string".
 
 ## Browser integration

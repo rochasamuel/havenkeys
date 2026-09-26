@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged by Tauri into the macOS bundle's Info.plist (Tauri v2 picks up an
+  Info.plist next to tauri.conf.json). WKWebView reports only the languages
+  the bundle declares in navigator.languages, so without Portuguese here a
+  Portuguese macOS would show the app in English under "Automatic".
+  Keep in step with apps/desktop/src/i18n/locale.ts.
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>pt-BR</string>
+  </array>
+</dict>
+</plist>
