@@ -147,3 +147,67 @@ describe("content script", () => {
     expect(sent.filter((m) => (m as { type: string }).type === "cs_submit")).toEqual([]);
   });
 });
+
+describe("automatic sign-in", () => {
+  // A valid email format: the beforeEach form's username field is type="email",
+  // and a real press goes through the page's own form.requestSubmit(), which
+  // (like a real browser) withholds the submit event for a value that fails
+  // the field's own HTML validation ("octo" is not a valid email address).
+  const autoFill = (over: Record<string, unknown> = {}) => ({
+    ...loginFill(location.origin),
+    fill: { kind: "login", username: "octo@example.com", password: "pw-from-vault" },
+    submit: true,
+    totp: false,
+    ...over,
+  });
+
+  it("fills, reports the step it presses, then submits the form", async () => {
+    vi.useFakeTimers();
+    const submitted = vi.fn((e: Event) => e.preventDefault());
+    document.querySelector("form")?.addEventListener("submit", submitted);
+    expect(deliver(autoFill())).toEqual({ filled: 2, pressing: "password" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(submitted).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it("does not press without submit, or when two buttons tie", async () => {
+    vi.useFakeTimers();
+    const submitted = vi.fn((e: Event) => e.preventDefault());
+    document.querySelector("form")?.addEventListener("submit", submitted);
+    expect(deliver({ ...autoFill(), submit: false })).toEqual({ filled: 2, pressing: null });
+
+    document.body.innerHTML = `<div><input name="user" type="email" autocomplete="username"><input name="pw" type="password">
+      <button>Log in</button><button>Sign in</button></div>`;
+    expect(deliver(autoFill())).toEqual({ filled: 2, pressing: null });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(submitted).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("reports a username step and then asks to continue when the password field appears", async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<form><h1>Sign in</h1><input name="user" type="email" autocomplete="username"><button type="submit">Continue</button></form>`;
+    document.querySelector("form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      document.body.innerHTML = `<form><input name="pw" type="password"><button type="submit">Sign in</button></form>`;
+    });
+    expect(deliver(autoFill())).toEqual({ filled: 1, pressing: "username" });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sent).toContainEqual({ type: "cs_run_step", kind: "password" });
+    vi.useRealTimers();
+  });
+
+  it("stops watching on bg_run_end", async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<form><input name="user" type="email" autocomplete="username"><button type="submit">Continue</button></form>`;
+    document.querySelector("form")?.addEventListener("submit", (e) => e.preventDefault());
+    deliver(autoFill());
+    await vi.advanceTimersByTimeAsync(0);
+    deliver({ type: "bg_run_end" });
+    document.body.innerHTML = `<form><input name="pw" type="password"></form>`;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sent).not.toContainEqual({ type: "cs_run_step", kind: "password" });
+    vi.useRealTimers();
+  });
+});

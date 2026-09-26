@@ -14,19 +14,27 @@
 // * Fills are accepted only from the background, only for the menu the
 //   user picked from (or a popup fill), and only if this frame is still on
 //   the origin the desktop matched.
+// * Automatic sign-in: after a fill the background marked `submit` (Rust's
+//   autoSubmit), press the page's button once, then watch for the next step
+//   and ask the background to continue. Any trusted key, input or pointer
+//   event from the user ends the run.
 // * Nothing is logged, stored, or written anywhere but field values.
 
 import { isLoginRole, isNewPasswordRole } from "../autofill/classify";
-import { fillLogin, fillNewPassword, fillOtp, markUserEdit } from "../autofill/fill";
-import { classifyGroup, defaultEnv, groupFor, groupRoot, isFillable } from "../autofill/group";
+import { fillLogin, fillNewPassword, fillOtp, markUserEdit, valueSource } from "../autofill/fill";
+import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
+import { findSubmitButton, hasChallenge, pressWhenReady, type PressStep } from "../autofill/submit";
 import { hasAny, normalize, SUBMIT_WORDS } from "../autofill/text";
+import { watchNext, type WatchKind } from "../autofill/watch";
 import {
   parseBackgroundMessage,
   TOKEN,
   type BackgroundToContent,
   type ContentRequest,
+  type FillReply,
   type MenuKind,
+  type NextStep,
 } from "../messaging/inline";
 import { InlineFrame, menuBox, saveBox, type Box } from "./frames";
 import { FieldIcon, iconBox } from "./icon";
@@ -90,6 +98,9 @@ function start(): void {
   const dismissed = new WeakSet<HTMLInputElement>();
   /** Fields with nothing to offer: typing there does not ask again. */
   const empty = new WeakSet<HTMLInputElement>();
+  /** A sign-in run is active in this frame (we pressed, or the background said to watch). */
+  let runActive = false;
+  let stopWatch: (() => void) | null = null;
 
   // ------------------------------------------------------------ menu
 
@@ -252,31 +263,100 @@ function start(): void {
     return hasAny(label, SUBMIT_WORDS);
   }
 
+  // ------------------------------------------------------------ automatic sign-in
+
+  function cancelWatch(): void {
+    stopWatch?.();
+    stopWatch = null;
+  }
+
+  /** End the run here; `tell`: let the background know (not for bg_run_end). */
+  function endLocalRun(tell: boolean): void {
+    cancelWatch();
+    if (runActive && tell) void send({ type: "cs_run_stop" });
+    runActive = false;
+  }
+
+  function startWatch(want: WatchKind, filled: HTMLInputElement | null): void {
+    cancelWatch();
+    runActive = true;
+    stopWatch = watchNext({
+      want,
+      filled,
+      env: defaultEnv,
+      onResult: (r) => {
+        stopWatch = null;
+        if ("found" in r) void send({ type: "cs_run_step", kind: r.found });
+        else endLocalRun(true);
+      },
+    });
+  }
+
+  /** The step a fill just completed, and the field it ended in. */
+  function filledStep(
+    group: ReturnType<typeof groupFor>["group"],
+    kind: "login" | "otp",
+  ): { step: PressStep; last: HTMLInputElement } | null {
+    if (kind === "otp") {
+      const boxes = fieldsOf(group, "otp");
+      const last = boxes[boxes.length - 1];
+      return last && valueSource(last) === "vault" ? { step: "otp", last } : null;
+    }
+    const [pw] = fieldsOf(group, "current-password", "password");
+    if (pw) return valueSource(pw) === "vault" ? { step: "password", last: pw } : null;
+    const [user] = fieldsOf(group, "username");
+    return user && valueSource(user) === "vault" ? { step: "username", last: user } : null;
+  }
+
+  /** Press after a fill, then watch for the next step. Returns the step being pressed, or null. */
+  function pressAfterFill(group: ReturnType<typeof groupFor>["group"], kind: "login" | "otp", totp: boolean): PressStep | null {
+    const done = filledStep(group, kind);
+    if (!done) return null;
+    const env = defaultEnv();
+    const button = findSubmitButton(group.root, done.last, done.step, env);
+    if (!button || hasChallenge(document, env)) return null;
+    const next: NextStep | null = done.step === "username" ? "password" : done.step === "password" && totp ? "otp" : null;
+    runActive = true;
+    cancelWatch();
+    void pressWhenReady({ button, field: done.last, step: done.step, env }).then((outcome) => {
+      if (!runActive) return;
+      if (outcome === "gave_up") return endLocalRun(true);
+      if (next) startWatch(next, done.last);
+      else runActive = false;
+    });
+    return done.step;
+  }
+
   // ------------------------------------------------------------ fills
 
-  function handleFill(m: Extract<BackgroundToContent, { type: "bg_fill" }>): number {
+  function handleFill(m: Extract<BackgroundToContent, { type: "bg_fill" }>): FillReply {
+    const none: FillReply = { filled: 0, pressing: null };
     // The frame may have navigated since the desktop matched its URL.
-    if (m.origin !== location.origin) return 0;
+    if (m.origin !== location.origin) return none;
     const env = defaultEnv();
     let group;
     if (m.token !== null) {
       const target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
       picked = null;
-      if (!target || !target.field.isConnected) return 0;
+      if (!target || !target.field.isConnected) return none;
       group = groupFor(target.field, env).group;
     } else {
       group = m.fill.kind === "otp" ? findOtpGroup(document, env) : findLoginGroup(document, env);
     }
-    if (!group) return 0;
+    if (!group) return none;
     switch (m.fill.kind) {
-      case "login":
-        return fillLogin(group, m.fill, env);
-      case "otp":
-        return fillOtp(group, m.fill.code, env);
+      case "login": {
+        const filled = fillLogin(group, m.fill, env);
+        return { filled, pressing: filled > 0 && m.submit ? pressAfterFill(group, "login", m.totp) : null };
+      }
+      case "otp": {
+        const filled = fillOtp(group, m.fill.code, env);
+        return { filled, pressing: filled > 0 && m.submit ? pressAfterFill(group, "otp", m.totp) : null };
+      }
       case "generated": {
         const n = fillNewPassword(group, m.fill.password, env);
         if (n > 0) generatedIn = group.root;
-        return n;
+        return { filled: n, pressing: null };
       }
     }
   }
@@ -289,6 +369,7 @@ function start(): void {
     "pointerdown",
     (e) => {
       if (!e.isTrusted) return;
+      if (runActive) endLocalRun(true); // the user took over
       // The icon's own click handler toggles the menu.
       if (icon && e.composedPath()[0] === icon.view.el) return;
       const input = inputFrom(e);
@@ -307,6 +388,7 @@ function start(): void {
     "keydown",
     (e) => {
       if (!e.isTrusted) return;
+      if (runActive) endLocalRun(true); // the user took over
       const input = inputFrom(e);
       switch (e.key) {
         case "Tab":
@@ -359,6 +441,7 @@ function start(): void {
     (e) => {
       const input = inputFrom(e);
       if (!e.isTrusted || !input) return;
+      if (runActive) endLocalRun(true); // the user took over
       markUserEdit(input);
       // Typing in a login field (e.g. one the page focused on load) opens
       // the menu, unless the user closed it there or there is nothing to offer.
@@ -411,6 +494,9 @@ function start(): void {
     // (e.g. a script-driven signup): offer it as the page goes away.
     // readSubmission only reports it if the field still holds our value.
     if (generatedIn) captureFrom(generatedIn, true);
+    // Navigation is expected mid-run; the next page asks with cs_ready.
+    cancelWatch();
+    runActive = false;
   });
 
   // ------------------------------------------------------------ background
@@ -422,8 +508,7 @@ function start(): void {
     if (!m) return false;
     switch (m.type) {
       case "bg_fill":
-        // Task 10 replaces this with the sign-in run's press outcome.
-        sendResponse({ filled: handleFill(m), pressing: null });
+        sendResponse(handleFill(m));
         return false;
       case "bg_close_menu":
         // Escape in the menu, or a pick: either way the user is done with it here.
@@ -438,6 +523,9 @@ function start(): void {
       case "bg_close_save":
         if (saveFrame?.token === m.token) closeSave();
         return false;
+      case "bg_run_end":
+        endLocalRun(false);
+        return false;
     }
   });
 
@@ -445,13 +533,13 @@ function start(): void {
   const focused = deepActiveElement();
   if (focused instanceof HTMLInputElement) showIcon(focused);
 
-  // A save prompt for a login submitted just before this page loaded.
-  if (window.top === window) {
-    void send({ type: "cs_ready" }).then((r) => {
-      const token = (r as { saveToken?: unknown } | undefined)?.saveToken;
-      if (typeof token === "string" && TOKEN.test(token)) showSave(token);
-    });
-  }
+  // A save prompt for a login submitted just before this page loaded (top
+  // frame only), and the next step of a sign-in run in progress.
+  void send({ type: "cs_ready" }).then((r) => {
+    const reply = r as { saveToken?: unknown; watch?: unknown } | undefined;
+    if (window.top === window && typeof reply?.saveToken === "string" && TOKEN.test(reply.saveToken)) showSave(reply.saveToken);
+    if (reply?.watch === "password" || reply?.watch === "otp") startWatch(reply.watch, null);
+  });
 }
 
 if (!globalThis.__havenkeysContent) {
