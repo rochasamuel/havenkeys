@@ -89,8 +89,6 @@ function start(): void {
   /** The last menu the user could pick from, kept briefly for its fill. */
   let picked: { token: string; field: HTMLInputElement; until: number } | null = null;
   let saveFrame: InlineFrame | null = null;
-  /** The height the save prompt reported (bg_resize_save), once it has. */
-  let saveHeight: number | undefined;
   /** A group we filled a generated password into and have not seen submitted. */
   let generatedIn: ParentNode | null = null;
   let opening = false;
@@ -225,7 +223,6 @@ function start(): void {
   function closeSave(): void {
     saveFrame?.remove();
     saveFrame = null;
-    saveHeight = undefined;
   }
 
   function showSave(token: string): void {
@@ -553,10 +550,7 @@ function start(): void {
         return false;
       case "bg_resize_save":
         // A long message wraps: grow or shrink to what the prompt laid out.
-        if (saveFrame?.token === m.token) {
-          saveHeight = m.height;
-          saveFrame.place(saveBox(viewport(), saveHeight));
-        }
+        if (saveFrame?.token === m.token) saveFrame.place(saveBox(viewport(), m.height));
         return false;
       case "bg_close_save":
         if (saveFrame?.token === m.token) closeSave();
