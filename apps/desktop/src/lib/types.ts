@@ -30,6 +30,7 @@ export interface ItemOverview {
   hasTotp: boolean;
   hasNotes: boolean;
   hasPasskey: boolean;
+  autoSignIn: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -58,6 +59,7 @@ export interface ItemInput {
   totp?: SecretUpdate;
   notes?: SecretUpdate;
   content?: SecretUpdate;
+  autoSignIn?: boolean;
 }
 
 export type SecretField = "password" | "notes" | "content";
@@ -91,6 +93,7 @@ export interface Settings {
   theme: Theme;
   browserIntegration: boolean;
   autoPasskeyUpgrade: boolean;
+  autoSignIn: boolean;
 }
 
 export interface CopyResult {

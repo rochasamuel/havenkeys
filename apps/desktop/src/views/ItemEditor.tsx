@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../lib/api";
 import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Switch } from "../components/Switch";
 
 interface Props {
   itemType: ItemType;
@@ -48,6 +49,19 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autoSignIn, setAutoSignIn] = useState(existing?.autoSignIn ?? true);
+  const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .getSettings()
+      .then((s) => live && setGlobalAutoSignIn(s.autoSignIn))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!existing || !loadingText) return;
@@ -105,6 +119,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
             password: toUpdate(password),
             totp: toUpdate(totp),
             notes: textUpdate,
+            autoSignIn,
           }
         : { itemType, title, content: textUpdate };
 
@@ -313,6 +328,20 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
               )}
             </div>
           </div>
+
+          <h3 className="group-title">Browser</h3>
+          <div className="group">
+            <div className="row">
+              <span className="row-label-inline">Sign in automatically on this site</span>
+              <Switch
+                label="Sign in automatically on this site"
+                checked={autoSignIn && globalAutoSignIn}
+                disabled={!globalAutoSignIn || readOnly}
+                onChange={setAutoSignIn}
+              />
+            </div>
+          </div>
+          {!globalAutoSignIn && <p className="group-note">Turned off in Settings.</p>}
         </>
       )}
 

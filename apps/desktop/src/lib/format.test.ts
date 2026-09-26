@@ -13,6 +13,7 @@ const item = (urls: string[]): ItemOverview => ({
   hasTotp: false,
   hasNotes: false,
   hasPasskey: false,
+  autoSignIn: true,
   createdAt: 0,
   updatedAt: 0,
 });

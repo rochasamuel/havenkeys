@@ -237,6 +237,14 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
                 onChange={(checked) => void update({ autoPasskeyUpgrade: checked })}
               />
             </div>
+            <div className="row">
+              <span className="row-label-inline">Sign in automatically after filling</span>
+              <Switch
+                label="Sign in automatically after filling"
+                checked={settings.autoSignIn}
+                onChange={(checked) => void update({ autoSignIn: checked })}
+              />
+            </div>
           </div>
           <p className="group-note">
             The extension only receives a login when you choose it on a website that login is saved for, and only while
@@ -246,6 +254,11 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
           <p className="group-note">
             When a website offers to add a passkey right after HavenKeys fills your password there, HavenKeys saves it to
             that login. When off, HavenKeys asks first.
+          </p>
+          <p className="group-note">
+            After you choose a login, HavenKeys presses the sign-in button and continues through email, password and
+            two-factor steps on the same site. Sign-ins that span several pages need in-page suggestions. Each login
+            can turn this off.
           </p>
         </div>
       )}
