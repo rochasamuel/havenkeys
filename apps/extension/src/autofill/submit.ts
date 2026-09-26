@@ -73,6 +73,12 @@ function scopes(root: ParentNode): ParentNode[] {
  * The button that submits `field`'s step, or null when none clearly wins.
  * Disabled buttons are candidates: many sites enable theirs only once the
  * input validates, and pressWhenReady waits for that.
+ *
+ * A scope with no candidate reaching PRESS_MIN_SCORE is skipped and the
+ * climb continues (e.g. a "Show password" toggle alone in the field's own
+ * container); a scope whose best candidate qualifies but does not clear
+ * PRESS_MIN_MARGIN over the runner-up stops the search with null, since
+ * that ambiguity would not be resolved by climbing further.
  */
 export function findSubmitButton(root: ParentNode, field: HTMLInputElement, step: PressStep, env: Env): HTMLElement | null {
   for (const scope of scopes(root)) {
@@ -82,7 +88,7 @@ export function findSubmitButton(root: ParentNode, field: HTMLInputElement, step
     if (buttons.length === 0) continue;
     const ranked = buttons.map((b) => ({ b, s: score(b, field, step) })).sort((x, y) => y.s - x.s);
     const [best, second] = ranked;
-    if (!best || best.s < PRESS_MIN_SCORE) return null;
+    if (!best || best.s < PRESS_MIN_SCORE) continue;
     if (second && best.s - second.s < PRESS_MIN_MARGIN) return null;
     return best.b;
   }
@@ -106,14 +112,20 @@ function isChallengeFrame(src: string, base: string): boolean {
   );
 }
 
-/** A visible CAPTCHA or bot challenge. Invisible reCAPTCHA badges do not count. */
+/**
+ * A visible CAPTCHA or bot challenge. Invisible reCAPTCHA badges do not
+ * count, including Google's documented button-bound invisible/v3 pattern
+ * (`<button class="g-recaptcha" data-sitekey=... data-callback=...>`): the
+ * class marks the sign-in button itself as the reCAPTCHA anchor, it is not
+ * a separate widget blocking the page, so such elements are excluded here.
+ */
 export function hasChallenge(doc: Document, env: Env): boolean {
   for (const f of Array.from(doc.querySelectorAll("iframe")).slice(0, 50)) {
     if (env.isVisible(f) && isChallengeFrame(f.getAttribute("src") ?? "", doc.baseURI)) return true;
   }
   return Array.from(doc.querySelectorAll<HTMLElement>(".g-recaptcha, .h-captcha, .cf-turnstile"))
     .slice(0, 10)
-    .some((el) => el.getAttribute("data-size") !== "invisible" && env.isVisible(el));
+    .some((el) => el.getAttribute("data-size") !== "invisible" && !el.matches(CANDIDATES) && env.isVisible(el));
 }
 
 function isDisabled(b: HTMLElement): boolean {
