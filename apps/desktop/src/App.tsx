@@ -8,8 +8,10 @@ import { Seal } from "./components/Seal";
 import { UnlockScreen } from "./views/UnlockScreen";
 import { VaultScreen } from "./views/VaultScreen";
 import { WelcomeScreen } from "./views/WelcomeScreen";
+import { useI18n } from "./i18n/context";
 
 export function App() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<VaultStatus | null>(null);
   const [lockReason, setLockReason] = useState<string | null>(null);
   // Bumped on every lock so the whole vault tree (and any secret held in
@@ -18,7 +20,7 @@ export function App() {
   // Why the vault could not be opened at all, in the core's own words: an
   // old vault file this build cannot read is the case that matters, and the
   // message names the folder it is in.
-  const [fatal, setFatal] = useState<string | null>(null);
+  const [fatal, setFatal] = useState<{ message: string | null } | null>(null);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   // Shown once, right after activation: the kit is the only copy of the
   // Secret Key, so the vault waits behind an explicit confirmation.
@@ -33,11 +35,9 @@ export function App() {
 
   useEffect(() => {
     api.status().then(setStatus, (err) =>
-      setFatal(
-        err instanceof ApiError
-          ? err.message
-          : "HavenKeys could not reach its vault storage. Restart the app.",
-      ),
+      // Rust's own message when there is one: the vault_unreadable one
+      // names the folder the file is in, and only Rust knows it.
+      setFatal({ message: err instanceof ApiError ? err.message : null }),
     );
     const unlisten = api.onLocked((reason) => {
       setLockReason(reason);
@@ -115,9 +115,9 @@ export function App() {
         <div className="welcome-card">
           <header className="welcome-head">
             <Seal />
-            <h1>HavenKeys cannot open this vault</h1>
+            <h1>{t.app.fatalTitle}</h1>
           </header>
-          <p className="fatal-message">{fatal}</p>
+          <p className="fatal-message">{fatal.message ?? t.app.fatalFallback}</p>
         </div>
       </main>
     );
@@ -131,7 +131,7 @@ export function App() {
           <div className="banner banner-warn banner-fixed" role="alert">
             <span>{removedWarning}</span>
             <button className="btn btn-quiet" type="button" onClick={() => setRemovedWarning(null)}>
-              Dismiss
+              {t.common.dismiss}
             </button>
           </div>
         )}
@@ -155,11 +155,8 @@ export function App() {
       <main className="kit-screen">
         <header className="kit-screen-head" data-tauri-drag-region>
           <Seal size={48} />
-          <h1>Save your Emergency Kit</h1>
-          <p>
-            This is the only copy of your Secret Key. Without it — and your master password — nobody can open this
-            vault, including us.
-          </p>
+          <h1>{t.app.kitTitle}</h1>
+          <p>{t.app.kitBody}</p>
         </header>
         <EmergencyKit onDone={() => setShowKit(false)} />
       </main>
@@ -184,13 +181,12 @@ export function App() {
     <div className="app-shell">
       {signedOut ? (
         <div className="banner" role="status">
-          The server did not accept this computer&apos;s sign-in. If your master password was changed on another
-          device, lock and unlock with the new one.
+          {t.app.signedOut}
         </div>
       ) : (
         device?.online === false && (
           <div className="banner" role="status">
-            Offline — the vault is read-only until it reconnects.
+            {t.common.offlineReadOnly}
           </div>
         )
       )}

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { GeneratedPassword, GeneratorOptions } from "../lib/types";
-import { strengthLabel } from "../lib/format";
+import { strengthLevel } from "../lib/format";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
+import { useI18n } from "../i18n/context";
 
 const initial: GeneratorOptions = {
   length: 24,
@@ -15,12 +16,13 @@ const initial: GeneratorOptions = {
   avoidAmbiguous: false,
 };
 
-const toggles: Array<{ key: keyof Omit<GeneratorOptions, "length">; label: string; hint: string }> = [
-  { key: "uppercase", label: "Uppercase", hint: "A–Z" },
-  { key: "lowercase", label: "Lowercase", hint: "a–z" },
-  { key: "digits", label: "Numbers", hint: "0–9" },
-  { key: "symbols", label: "Symbols", hint: "!@#…" },
-  { key: "avoidAmbiguous", label: "Avoid look-alikes", hint: "l, 1, O, 0" },
+/** The label for each comes from the messages, under the same key. */
+const toggles: Array<{ key: keyof Omit<GeneratorOptions, "length">; hint: string }> = [
+  { key: "uppercase", hint: "A–Z" },
+  { key: "lowercase", hint: "a–z" },
+  { key: "digits", hint: "0–9" },
+  { key: "symbols", hint: "!@#…" },
+  { key: "avoidAmbiguous", hint: "l, 1, O, 0" },
 ];
 
 /** Colour digits and symbols differently so a password is easier to read out. */
@@ -38,9 +40,11 @@ function Characters({ value }: { value: string }) {
 
 export function GeneratorView() {
   const toast = useToast();
+  const { t } = useI18n();
   const [options, setOptions] = useState(initial);
   const [result, setResult] = useState<GeneratedPassword | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The failure itself, so its text follows a language change.
+  const [error, setError] = useState<{ cause: unknown } | null>(null);
 
   const regenerate = useCallback(async (opts: GeneratorOptions) => {
     try {
@@ -48,7 +52,7 @@ export function GeneratorView() {
       setError(null);
     } catch (e) {
       setResult(null);
-      setError(e instanceof ApiError ? e.message : "Could not generate a password.");
+      setError({ cause: e });
     }
   }, []);
 
@@ -63,23 +67,21 @@ export function GeneratorView() {
     if (!result) return;
     try {
       const r = await api.copyGenerated(result.password);
-      toast(`Password copied. The clipboard clears in ${r.clearAfterSeconds} s.`);
+      toast(t.generator.copied(r.clearAfterSeconds));
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Could not copy.", "error");
+      toast(e instanceof ApiError ? e.message : t.common.couldNotCopy, "error");
     }
   }
 
-  const label = result ? strengthLabel(result.entropyBits) : null;
+  const level = result ? strengthLevel(result.entropyBits) : null;
 
   const bits = result ? Math.round(result.entropyBits) : 0;
 
   return (
     <section className="tool" aria-labelledby="gen-title">
       <header className="tool-head" data-tauri-drag-region>
-        <h2 id="gen-title">Password generator</h2>
-        <p className="tool-lede">
-          Made on this computer from the operating system’s secure random source. Nothing is saved until you use it.
-        </p>
+        <h2 id="gen-title">{t.generator.title}</h2>
+        <p className="tool-lede">{t.generator.lede}</p>
       </header>
 
       <div className="gen-output">
@@ -89,17 +91,19 @@ export function GeneratorView() {
               <Characters value={result.password} />
             </span>
           ) : (
-            <span className="muted">{error}</span>
+            <span className="muted">
+              {error && (error.cause instanceof ApiError ? error.cause.message : t.generator.failed)}
+            </span>
           )}
         </p>
         <div className="gen-foot">
-          {result && label ? (
-            <div className={`strength strength-${label.toLowerCase()}`}>
+          {result && level ? (
+            <div className={`strength strength-${level}`}>
               <div className="strength-bar">
                 <span style={{ transform: `scaleX(${Math.min(1, result.entropyBits / 128)})` }} />
               </div>
               <span>
-                <strong>{label}</strong> · about {bits} bits
+                <strong>{t.generator.strength[level]}</strong> · {t.generator.aboutBits(bits)}
               </span>
             </div>
           ) : (
@@ -107,19 +111,19 @@ export function GeneratorView() {
           )}
           <div className="gen-actions">
             <button className="btn" onClick={() => void regenerate(options)}>
-              <Icon name="refresh" size={16} /> Regenerate
+              <Icon name="refresh" size={16} /> {t.generator.regenerate}
             </button>
             <button className="btn btn-primary" onClick={() => void copy()} disabled={!result}>
-              <Icon name="copy" size={16} /> Copy
+              <Icon name="copy" size={16} /> {t.generator.copy}
             </button>
           </div>
         </div>
       </div>
 
-      <h3 className="group-title">Length</h3>
+      <h3 className="group-title">{t.generator.length}</h3>
       <div className="group">
         <label className="row row-slider">
-          <span className="sr-only">Length</span>
+          <span className="sr-only">{t.generator.length}</span>
           <input
             type="range"
             min={8}
@@ -132,17 +136,17 @@ export function GeneratorView() {
         </label>
       </div>
 
-      <h3 className="group-title">Characters</h3>
+      <h3 className="group-title">{t.generator.characters}</h3>
       <div className="group">
-        {toggles.map((t) => (
-          <div key={t.key} className="row">
+        {toggles.map((toggle) => (
+          <div key={toggle.key} className="row">
             <span className="row-label-inline">
-              {t.label} <span className="muted">{t.hint}</span>
+              {t.generator[toggle.key]} <span className="muted">{toggle.hint}</span>
             </span>
             <Switch
-              label={t.label}
-              checked={options[t.key]}
-              onChange={(checked) => setOptions((o) => ({ ...o, [t.key]: checked }))}
+              label={t.generator[toggle.key]}
+              checked={options[toggle.key]}
+              onChange={(checked) => setOptions((o) => ({ ...o, [toggle.key]: checked }))}
             />
           </div>
         ))}

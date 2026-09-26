@@ -4,6 +4,7 @@ import type { VaultStatus } from "../lib/types";
 import { Guilloche } from "../components/Guilloche";
 import { Icon } from "../components/Icon";
 import { Seal } from "../components/Seal";
+import { useI18n } from "../i18n/context";
 
 interface Props {
   lockReason: string | null;
@@ -12,15 +13,8 @@ interface Props {
   onUnlocked: (status: VaultStatus) => void;
 }
 
-const reasonText: Record<string, string> = {
-  idle: "Locked after a period of inactivity.",
-  suspend: "Locked because the computer went to sleep.",
-  screen_lock: "Locked because the screen was locked.",
-  user: "Locked.",
-  extension: "Locked from the browser extension.",
-};
-
 export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) {
+  const { t } = useI18n();
   const [password, setPassword] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -51,7 +45,7 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
     } catch (err) {
       if (err instanceof ApiError && err.code === "secret_key_required") setAskKey(true);
       setKeychainStuck(err instanceof ApiError && err.code === "keychain_unavailable");
-      setError(err instanceof ApiError ? err.message : "Could not open the vault.");
+      setError(err instanceof ApiError ? err.message : t.unlock.failed);
       setAttempt((n) => n + 1);
       setPassword("");
       setBusy(false);
@@ -65,17 +59,19 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
       <form className="unlock-panel" onSubmit={submit} aria-busy={busy}>
         <Seal open={busy} size={72} />
         <h1 className="unlock-title">
-          HavenKeys is <em>locked</em>.
+          {t.unlock.titleBefore}
+          <em>{t.unlock.titleLocked}</em>
+          {t.unlock.titleAfter}
         </h1>
         <p className="unlock-lede">
           {askKey
-            ? "Enter your master password and the Secret Key from your Emergency Kit. This computer remembers the Secret Key after you unlock."
-            : ((lockReason && reasonText[lockReason]) ?? "Enter your master password to unlock.")}
+            ? t.unlock.enterPasswordAndKey
+            : ((lockReason && t.unlock.reasons[lockReason]) ?? t.unlock.enterPassword)}
         </p>
 
         <div key={attempt} className={`unlock-fields${attempt > 0 ? " is-shaking" : ""}`}>
           <label className="unlock-field">
-            <span className="sr-only">Master password</span>
+            <span className="sr-only">{t.common.masterPassword}</span>
             <input
               ref={inputRef}
               type="password"
@@ -84,12 +80,12 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
               autoComplete="off"
               spellCheck={false}
               autoCapitalize="off"
-              placeholder="Master password"
+              placeholder={t.common.masterPassword}
               disabled={busy}
               aria-invalid={!!error}
             />
             {!askKey && (
-              <button className="unlock-go" type="submit" disabled={busy || !ready} aria-label="Unlock">
+              <button className="unlock-go" type="submit" disabled={busy || !ready} aria-label={t.unlock.unlock}>
                 {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="arrowRight" size={18} />}
               </button>
             )}
@@ -97,7 +93,7 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
 
           {askKey && (
             <label className="unlock-field unlock-field-key">
-              <span className="sr-only">Secret Key</span>
+              <span className="sr-only">{t.common.secretKey}</span>
               <input
                 className="mono"
                 type="text"
@@ -106,10 +102,10 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
                 autoComplete="off"
                 spellCheck={false}
                 autoCapitalize="off"
-                placeholder="Secret Key  H1-XXXX-XXXX-…"
+                placeholder={t.unlock.secretKeyPlaceholder}
                 disabled={busy}
               />
-              <button className="unlock-go" type="submit" disabled={busy || !ready} aria-label="Unlock">
+              <button className="unlock-go" type="submit" disabled={busy || !ready} aria-label={t.unlock.unlock}>
                 {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="arrowRight" size={18} />}
               </button>
             </label>
@@ -121,12 +117,12 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
         </p>
         {keychainStuck && !askKey && (
           <button className="btn btn-quiet" type="button" onClick={() => setAskKey(true)} disabled={busy}>
-            Enter the Secret Key from my Emergency Kit instead
+            {t.unlock.useKitInstead}
           </button>
         )}
       </form>
       <p className="unlock-hint">
-        <Icon name="shield" size={13} /> Your vault is decrypted on this computer only.
+        <Icon name="shield" size={13} /> {t.unlock.hint}
       </p>
     </main>
   );

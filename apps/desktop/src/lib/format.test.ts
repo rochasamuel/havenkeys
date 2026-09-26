@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupCode, monogram, primaryHost, strengthLabel } from "./format";
+import { formatDate, groupCode, monogram, primaryHost, strengthLevel } from "./format";
 import { toApiError } from "./api";
 import type { ItemOverview } from "./types";
 
@@ -40,8 +40,16 @@ describe("format", () => {
   });
 
   it("labels strength", () => {
-    expect(strengthLabel(40)).toBe("Weak");
-    expect(strengthLabel(150)).toBe("Excellent");
+    expect(strengthLevel(40)).toBe("weak");
+    expect(strengthLevel(60)).toBe("fair");
+    expect(strengthLevel(100)).toBe("strong");
+    expect(strengthLevel(150)).toBe("excellent");
+  });
+
+  it("formats dates in the UI's language", () => {
+    const at = Date.UTC(2026, 8, 26, 12, 0);
+    expect(formatDate(at, "en")).toContain("2026");
+    expect(formatDate(at, "pt-BR")).toContain("de set. de 2026");
   });
 });
 

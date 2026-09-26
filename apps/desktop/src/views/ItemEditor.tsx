@@ -3,6 +3,7 @@ import { api, ApiError } from "../lib/api";
 import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
+import { useI18n } from "../i18n/context";
 
 interface Props {
   itemType: ItemType;
@@ -23,13 +24,15 @@ function toUpdate(edit: SecretEdit): SecretUpdate {
   return { op: edit.mode };
 }
 
-const matchLabels: Record<MatchType, string> = {
-  domain: "Whole site, any subdomain",
-  origin: "This exact site",
-  exact: "This exact page",
-};
+const matchTypes: MatchType[] = ["domain", "origin", "exact"];
 
 export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: Props) {
+  const { t } = useI18n();
+  const matchLabels: Record<MatchType, string> = {
+    domain: t.editor.matchDomain,
+    origin: t.editor.matchOrigin,
+    exact: t.editor.matchExact,
+  };
   const isNew = !existing;
   const [title, setTitle] = useState(existing?.title ?? "");
   const [username, setUsername] = useState(existing?.username ?? "");
@@ -69,19 +72,20 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
     const field = itemType === "secure_note" ? "content" : "notes";
     api
       .reveal(existing.id, field)
-      .then((t) => {
+      .then((text) => {
         if (cancelled) return;
-        setNotesText(t);
+        setNotesText(text);
         setLoadingText(false);
       })
       .catch(() => {
         if (cancelled) return;
-        setError("Could not load the existing text.");
+        setError(t.editor.loadTextFailed);
         setLoadingText(false);
       });
     return () => {
       cancelled = true;
     };
+    // `t` is left out: a language change must not decrypt the text again.
   }, [existing, itemType, loadingText]);
 
   async function generate() {
@@ -97,7 +101,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
       setPassword({ mode: "set", value: g.password });
       setShowPassword(true);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not generate a password.");
+      setError(e instanceof ApiError ? e.message : t.editor.generateFailed);
     }
   }
 
@@ -127,12 +131,19 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
       const saved = existing ? await api.updateItem(existing.id, input) : await api.createItem(input);
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the item.");
+      setError(err instanceof ApiError ? err.message : t.editor.saveFailed);
       setSaving(false);
     }
   }
 
-  const heading = `${isNew ? "New" : "Edit"} ${itemType === "login" ? "login" : "secure note"}`;
+  const heading =
+    itemType === "login"
+      ? isNew
+        ? t.editor.newLogin
+        : t.editor.editLogin
+      : isNew
+        ? t.editor.newNote
+        : t.editor.editNote;
 
   const saveDisabled = saving || loadingText || !title.trim() || readOnly;
 
@@ -142,22 +153,22 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
         <h2>{heading}</h2>
         <div className="editor-actions">
           <button type="button" className="btn btn-small" onClick={onCancel} disabled={saving}>
-            Cancel
+            {t.common.cancel}
           </button>
           <button type="submit" className="btn btn-small btn-primary" disabled={saveDisabled}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? t.common.saving : t.common.save}
           </button>
         </div>
       </header>
 
       <div className="group">
         <label className="row edit-row">
-          <span className="edit-label">Title</span>
+          <span className="edit-label">{t.editor.title}</span>
           <input
             className="edit-input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={itemType === "login" ? "e.g. GitHub" : "e.g. Wi-Fi at home"}
+            placeholder={itemType === "login" ? t.editor.titlePlaceholderLogin : t.editor.titlePlaceholderNote}
             maxLength={256}
             autoFocus
             required
@@ -167,12 +178,12 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
         {itemType === "login" && (
           <>
             <label className="row edit-row">
-              <span className="edit-label">Username</span>
+              <span className="edit-label">{t.common.username}</span>
               <input
                 className="edit-input"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username or email"
+                placeholder={t.editor.usernamePlaceholder}
                 autoComplete="off"
                 spellCheck={false}
                 autoCapitalize="off"
@@ -181,22 +192,22 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
             </label>
 
             <div className="row edit-row">
-              <span className="edit-label">Password</span>
+              <span className="edit-label">{t.common.password}</span>
               {password.mode === "keep" ? (
                 <div className="edit-secret">
                   <span className="mono masked">••••••••••••</span>
                   <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
-                    Change
+                    {t.editor.change}
                   </button>
                   <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
-                    Remove
+                    {t.common.remove}
                   </button>
                 </div>
               ) : password.mode === "clear" ? (
                 <div className="edit-secret">
-                  <span className="muted">The password will be removed.</span>
+                  <span className="muted">{t.editor.passwordRemoved}</span>
                   <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
-                    Undo
+                    {t.common.undo}
                   </button>
                 </div>
               ) : (
@@ -206,27 +217,27 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                     type={showPassword ? "text" : "password"}
                     value={password.value}
                     onChange={(e) => setPassword({ mode: "set", value: e.target.value })}
-                    placeholder="Password"
+                    placeholder={t.common.password}
                     autoComplete="new-password"
                     spellCheck={false}
                     autoCapitalize="off"
-                    aria-label="Password"
+                    aria-label={t.common.password}
                   />
                   <button
                     type="button"
                     className="icon-btn"
                     onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    title={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t.common.hidePassword : t.common.showPassword}
+                    title={showPassword ? t.common.hidePassword : t.common.showPassword}
                   >
                     <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
                   </button>
                   <button type="button" className="btn btn-small" onClick={() => void generate()}>
-                    <Icon name="dice" size={15} /> Generate
+                    <Icon name="dice" size={15} /> {t.editor.generate}
                   </button>
                   {!isNew && existing.hasPassword && (
                     <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
-                      Cancel
+                      {t.common.cancel}
                     </button>
                   )}
                 </div>
@@ -238,7 +249,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
 
       {itemType === "login" && (
         <>
-          <h3 className="group-title">Websites</h3>
+          <h3 className="group-title">{t.editor.websites}</h3>
           <div className="group">
             {urls.map((rule, i) => (
               <div className="row edit-row url-edit" key={i}>
@@ -252,7 +263,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                   spellCheck={false}
                   autoCapitalize="off"
                   inputMode="url"
-                  aria-label={`Website ${i + 1}`}
+                  aria-label={t.editor.websiteN(i + 1)}
                 />
                 <span className="select-wrap">
                   <select
@@ -262,9 +273,9 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                         list.map((r, j) => (j === i ? { ...r, matchType: e.target.value as MatchType } : r)),
                       )
                     }
-                    aria-label={`How website ${i + 1} is matched`}
+                    aria-label={t.editor.matchHow(i + 1)}
                   >
-                    {(Object.keys(matchLabels) as MatchType[]).map((m) => (
+                    {matchTypes.map((m) => (
                       <option key={m} value={m}>
                         {matchLabels[m]}
                       </option>
@@ -276,8 +287,8 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                   type="button"
                   className="icon-btn"
                   onClick={() => setUrls((list) => list.filter((_, j) => j !== i))}
-                  aria-label={`Remove website ${i + 1}`}
-                  title="Remove website"
+                  aria-label={t.editor.removeWebsiteN(i + 1)}
+                  title={t.editor.removeWebsite}
                 >
                   <Icon name="x" size={16} />
                 </button>
@@ -289,28 +300,28 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
               onClick={() => setUrls((list) => [...list, { url: "", matchType: "domain" }])}
               disabled={urls.length >= 32}
             >
-              <Icon name="plus" size={15} /> Add website
+              <Icon name="plus" size={15} /> {t.editor.addWebsite}
             </button>
           </div>
 
-          <h3 className="group-title">One-time codes</h3>
+          <h3 className="group-title">{t.editor.oneTimeCodes}</h3>
           <div className="group">
             <div className="row edit-row">
               {totp.mode === "keep" ? (
                 <div className="edit-secret">
-                  <span className="muted">Set up.</span>
+                  <span className="muted">{t.editor.setUp}</span>
                   <button type="button" className="btn btn-small" onClick={() => setTotp({ mode: "set", value: "" })}>
-                    Replace
+                    {t.editor.replace}
                   </button>
                   <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setTotp({ mode: "clear" })}>
-                    Remove
+                    {t.common.remove}
                   </button>
                 </div>
               ) : totp.mode === "clear" ? (
                 <div className="edit-secret">
-                  <span className="muted">One-time codes will be removed.</span>
+                  <span className="muted">{t.editor.codesRemoved}</span>
                   <button type="button" className="btn btn-small" onClick={() => setTotp(KEEP)}>
-                    Undo
+                    {t.common.undo}
                   </button>
                 </div>
               ) : (
@@ -319,40 +330,40 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                   type="password"
                   value={totp.value}
                   onChange={(e) => setTotp({ mode: "set", value: e.target.value })}
-                  placeholder="Setup key or otpauth:// link"
+                  placeholder={t.editor.totpPlaceholder}
                   autoComplete="off"
                   spellCheck={false}
                   autoCapitalize="off"
-                  aria-label="One-time code setup key"
+                  aria-label={t.editor.totpLabel}
                 />
               )}
             </div>
           </div>
 
-          <h3 className="group-title">Browser</h3>
+          <h3 className="group-title">{t.editor.browser}</h3>
           <div className="group">
             <div className="row">
-              <span className="row-label-inline">Sign in automatically on this site</span>
+              <span className="row-label-inline">{t.editor.autoSignIn}</span>
               <Switch
-                label="Sign in automatically on this site"
+                label={t.editor.autoSignIn}
                 checked={autoSignIn && globalAutoSignIn}
                 disabled={!globalAutoSignIn || readOnly}
                 onChange={setAutoSignIn}
               />
             </div>
           </div>
-          {!globalAutoSignIn && <p className="group-note">Turned off in Settings.</p>}
+          {!globalAutoSignIn && <p className="group-note">{t.editor.offInSettings}</p>}
         </>
       )}
 
-      <h3 className="group-title">{itemType === "login" ? "Notes" : "Note"}</h3>
+      <h3 className="group-title">{itemType === "login" ? t.editor.notes : t.editor.note}</h3>
       <div className="group">
         <textarea
           className={`edit-area${itemType === "secure_note" ? " note-input" : ""}`}
           value={notesText}
           disabled={loadingText}
-          placeholder={loadingText ? "Decrypting…" : itemType === "login" ? "Anything else worth keeping with this login" : undefined}
-          aria-label={itemType === "login" ? "Notes" : "Note"}
+          placeholder={loadingText ? t.common.decrypting : itemType === "login" ? t.editor.notesPlaceholder : undefined}
+          aria-label={itemType === "login" ? t.editor.notes : t.editor.note}
           onChange={(e) => {
             setNotesText(e.target.value);
             setNotes({ mode: "set", value: e.target.value });
@@ -370,7 +381,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
 
       {readOnly && (
         <p className="form-error" role="status">
-          Offline — the vault is read-only until it reconnects.
+          {t.common.offlineReadOnly}
         </p>
       )}
     </form>

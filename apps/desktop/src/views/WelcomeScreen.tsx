@@ -3,6 +3,7 @@ import { api, ApiError } from "../lib/api";
 import type { VaultStatus } from "../lib/types";
 import { Guilloche } from "../components/Guilloche";
 import { Seal } from "../components/Seal";
+import { useI18n } from "../i18n/context";
 
 /**
  * First run on a computer that has no vault.
@@ -56,6 +57,7 @@ function Field(props: {
 }
 
 function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void }) {
+  const { t } = useI18n();
   const [invite, setInvite] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -77,7 +79,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
     try {
       onActivated(await api.activate(invite, password));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not set up this vault.");
+      setError(err instanceof ApiError ? err.message : t.welcome.createFailed);
     } finally {
       setBusy(false);
       // Nothing keeps the typed password: React drops it with the state
@@ -90,7 +92,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
   return (
     <form className="welcome-form" onSubmit={submit} noValidate>
       <label className="wf">
-        <span className="wf-label">Invite</span>
+        <span className="wf-label">{t.welcome.invite}</span>
         <textarea
           className="wf-input mono wf-area"
           value={invite}
@@ -103,29 +105,27 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
           autoCorrect="off"
           ref={first as unknown as React.Ref<HTMLTextAreaElement>}
         />
-        <span className="wf-hint">
-          One line, from whoever runs your HavenKeys server. It works once and expires after seven days.
-        </span>
+        <span className="wf-hint">{t.welcome.inviteHint}</span>
       </label>
 
       <Field
-        label="Master password"
+        label={t.common.masterPassword}
         type="password"
         value={password}
         onChange={setPassword}
         disabled={busy}
-        hint="At least 10 characters. Nobody can reset it for you — not the server, not us."
+        hint={t.welcome.passwordHint}
       />
       <Field
-        label="Repeat master password"
+        label={t.welcome.repeatPassword}
         type="password"
         value={confirm}
         onChange={setConfirm}
         disabled={busy}
       />
 
-      {tooShort && <p className="form-error">Use at least 10 characters.</p>}
-      {mismatch && <p className="form-error">The two passwords don’t match.</p>}
+      {tooShort && <p className="form-error">{t.welcome.tooShort}</p>}
+      {mismatch && <p className="form-error">{t.welcome.mismatch}</p>}
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -133,16 +133,15 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
       )}
 
       <button className="btn btn-primary btn-lg" type="submit" disabled={busy || !ready}>
-        {busy ? "Setting up…" : "Create my vault"}
+        {busy ? t.welcome.creating : t.welcome.create}
       </button>
-      <p className="welcome-note">
-        Your master password and Secret Key never leave this computer. The server stores only encrypted data.
-      </p>
+      <p className="welcome-note">{t.welcome.createNote}</p>
     </form>
   );
 }
 
 function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
+  const { t } = useI18n();
   const [server, setServer] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -165,7 +164,7 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
     try {
       onSignedIn(await api.signIn(server, email, password, secretKey));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not sign in.");
+      setError(err instanceof ApiError ? err.message : t.welcome.signInFailed);
     } finally {
       setBusy(false);
       setPassword("");
@@ -176,31 +175,31 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
   return (
     <form className="welcome-form" onSubmit={submit} noValidate>
       <Field
-        label="Server"
+        label={t.common.server}
         value={server}
         onChange={setServer}
         placeholder="https://vault.example.com"
         disabled={busy}
         inputRef={first}
-        hint="From your Emergency Kit."
+        hint={t.welcome.serverHint}
       />
       <Field
-        label="Email"
+        label={t.common.email}
         type="email"
         value={email}
         onChange={setEmail}
-        placeholder="you@example.com"
+        placeholder={t.welcome.emailPlaceholder}
         disabled={busy}
       />
-      <Field label="Master password" type="password" value={password} onChange={setPassword} disabled={busy} />
+      <Field label={t.common.masterPassword} type="password" value={password} onChange={setPassword} disabled={busy} />
       <Field
-        label="Secret Key"
+        label={t.common.secretKey}
         value={secretKey}
         onChange={setSecretKey}
         placeholder="H1-XXXXXX-XXXXXX-XXXXXX-XXXXXX"
         disabled={busy}
         mono
-        hint="The long code on your Emergency Kit. Leave it empty if this computer already has it."
+        hint={t.welcome.secretKeyHint}
       />
 
       {error && (
@@ -210,16 +209,15 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
       )}
 
       <button className="btn btn-primary btn-lg" type="submit" disabled={busy || !ready}>
-        {busy ? "Signing in…" : "Sign in"}
+        {busy ? t.welcome.signingIn : t.welcome.signIn}
       </button>
-      <p className="welcome-note">
-        Signing in downloads your vault and decrypts it here. The server never sees your password or your Secret Key.
-      </p>
+      <p className="welcome-note">{t.welcome.signInNote}</p>
     </form>
   );
 }
 
 export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
+  const { t } = useI18n();
   const [path, setPath] = useState<Path>("invite");
 
   return (
@@ -228,15 +226,13 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
       <div className="welcome-card">
         <header className="welcome-head">
           <Seal size={60} />
-          <h1>Welcome to HavenKeys</h1>
+          <h1>{t.welcome.title}</h1>
           <p className="welcome-sub">
-            {path === "invite"
-              ? "Set up this computer with your invite."
-              : "Add this computer to an account you already have."}
+            {path === "invite" ? t.welcome.subInvite : t.welcome.subSignIn}
           </p>
         </header>
 
-        <div className="segmented" role="tablist" aria-label="How to set up">
+        <div className="segmented" role="tablist" aria-label={t.welcome.howToSetUp}>
           <button
             type="button"
             role="tab"
@@ -244,7 +240,7 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
             className={path === "invite" ? "segmented-item is-active" : "segmented-item"}
             onClick={() => setPath("invite")}
           >
-            I have an invite
+            {t.welcome.tabInvite}
           </button>
           <button
             type="button"
@@ -253,7 +249,7 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
             className={path === "signin" ? "segmented-item is-active" : "segmented-item"}
             onClick={() => setPath("signin")}
           >
-            I already have an account
+            {t.welcome.tabSignIn}
           </button>
         </div>
 

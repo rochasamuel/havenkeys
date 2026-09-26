@@ -3,9 +3,11 @@ import { api, ApiError } from "../lib/api";
 import type { EmergencyKit as Kit } from "../lib/types";
 import { formatDate } from "../lib/format";
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n/context";
 
 /** The QR code as one SVG path (one square per dark module). */
 function QrCode({ size, modules }: { size: number; modules: boolean[] }) {
+  const { t } = useI18n();
   const d = useMemo(() => {
     const parts: string[] = [];
     modules.forEach((dark, i) => {
@@ -15,7 +17,7 @@ function QrCode({ size, modules }: { size: number; modules: boolean[] }) {
   }, [size, modules]);
   const box = size + 8; // 4-module quiet zone on each side
   return (
-    <svg className="kit-qr" viewBox={`0 0 ${box} ${box}`} role="img" aria-label="Secret Key QR code" shapeRendering="crispEdges">
+    <svg className="kit-qr" viewBox={`0 0 ${box} ${box}`} role="img" aria-label={t.kit.qrLabel} shapeRendering="crispEdges">
       <rect width={box} height={box} fill="#fff" />
       <path d={d} fill="#000" />
     </svg>
@@ -33,6 +35,7 @@ interface Props {
  * dropped from memory when this component unmounts (for example on lock).
  */
 export function EmergencyKit({ onDone }: Props) {
+  const { t, locale } = useI18n();
   const [kit, setKit] = useState<Kit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -41,75 +44,73 @@ export function EmergencyKit({ onDone }: Props) {
     let cancelled = false;
     api.emergencyKit().then(
       (k) => !cancelled && setKit(k),
-      (e) => !cancelled && setError(e instanceof ApiError ? e.message : "Could not load the Emergency Kit."),
+      (e) => !cancelled && setError(e instanceof ApiError ? e.message : t.kit.loadFailed),
     );
     return () => {
       cancelled = true;
       setKit(null);
     };
+    // `t` is left out: a language change must not fetch the Secret Key again.
   }, []);
 
   if (error) return <p className="form-error">{error}</p>;
-  if (!kit) return <p className="muted">Preparing your Emergency Kit…</p>;
+  if (!kit) return <p className="muted">{t.kit.preparing}</p>;
 
   return (
     <div className="kit">
-      <article className="kit-sheet" aria-label="Emergency Kit">
+      <article className="kit-sheet" aria-label={t.kit.sheetLabel}>
         <header className="kit-head">
-          <h2>HavenKeys Emergency Kit</h2>
-          <p>Created {formatDate(kit.createdAt)}</p>
+          <h2>{t.kit.heading}</h2>
+          <p>{t.kit.created(formatDate(kit.createdAt, locale))}</p>
         </header>
         <p className="kit-lede">
-          To open your vault on a new computer or phone you need <strong>both</strong> your master password and this Secret
-          Key, plus the email and server below. Print this page or save it somewhere safe and offline. Anyone who has
-          the Secret Key and your master password can open your vault.
+          {t.kit.ledeBefore}
+          <strong>{t.kit.ledeBoth}</strong>
+          {t.kit.ledeAfter}
         </p>
         <div className="kit-body">
           <div className="kit-fields">
             <div className="kit-field">
-              <span>Secret Key</span>
+              <span>{t.common.secretKey}</span>
               <code className="kit-key">{kit.secretKey}</code>
             </div>
             <div className="kit-field">
-              <span>Master password</span>
-              <div className="kit-blank" aria-label="Blank line to write your master password, if you choose" />
+              <span>{t.common.masterPassword}</span>
+              <div className="kit-blank" aria-label={t.kit.blankLine} />
             </div>
             <div className="kit-field kit-small">
-              <span>Email</span>
+              <span>{t.common.email}</span>
               <code>{kit.email}</code>
             </div>
             <div className="kit-field kit-small">
-              <span>Server</span>
+              <span>{t.common.server}</span>
               <code>{kit.serverUrl}</code>
             </div>
             <div className="kit-field kit-small">
-              <span>Account ID</span>
+              <span>{t.kit.accountId}</span>
               <code>{kit.accountId}</code>
             </div>
           </div>
           <figure className="kit-figure">
             <QrCode size={kit.qrSize} modules={kit.qrModules} />
-            <figcaption>Scan to set up another device: the account, the address, the server and the Secret Key.</figcaption>
+            <figcaption>{t.kit.qrCaption}</figcaption>
           </figure>
         </div>
-        <p className="kit-foot">
-          HavenKeys cannot recover your master password or Secret Key. If you lose this kit, you can view it again on any
-          device where your vault is unlocked (Settings → Account).
-        </p>
+        <p className="kit-foot">{t.kit.foot}</p>
       </article>
 
       <div className="kit-actions">
         <button className="btn" type="button" onClick={() => window.print()}>
-          <Icon name="printer" size={16} /> Print or save as PDF
+          <Icon name="printer" size={16} /> {t.kit.print}
         </button>
         {onDone && (
           <>
             <label className="check">
               <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
-              <span>I have saved my Emergency Kit</span>
+              <span>{t.kit.savedCheck}</span>
             </label>
             <button className="btn btn-brass" type="button" disabled={!saved} onClick={onDone}>
-              Continue
+              {t.common.continue}
             </button>
           </>
         )}

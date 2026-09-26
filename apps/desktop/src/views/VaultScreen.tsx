@@ -9,6 +9,8 @@ import { ItemDetail } from "./ItemDetail";
 import { ItemEditor } from "./ItemEditor";
 import { GeneratorView } from "./GeneratorView";
 import { SettingsView } from "./SettingsView";
+import { useI18n } from "../i18n/context";
+import type { Messages } from "../i18n/en";
 
 export type Section = "all" | "login" | "secure_note" | "generator" | "settings";
 
@@ -26,14 +28,15 @@ interface Props {
   onLock: () => void;
 }
 
-const sections: Array<{ id: Section; label: string; icon: IconName }> = [
-  { id: "all", label: "All items", icon: "grid" },
-  { id: "login", label: "Logins", icon: "key" },
-  { id: "secure_note", label: "Secure notes", icon: "note" },
+const sections: Array<{ id: Section; label: (t: Messages) => string; icon: IconName }> = [
+  { id: "all", label: (t) => t.vault.allItems, icon: "grid" },
+  { id: "login", label: (t) => t.vault.logins, icon: "key" },
+  { id: "secure_note", label: (t) => t.vault.secureNotes, icon: "note" },
 ];
 
 export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }: Props) {
   const toast = useToast();
+  const { t } = useI18n();
   const [section, setSection] = useState<Section>("all");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemOverview[]>([]);
@@ -50,8 +53,8 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   }, [query, toast]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => void refresh(), 120);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => void refresh(), 120);
+    return () => window.clearTimeout(timer);
   }, [refresh]);
 
   // Logins saved from the browser extension.
@@ -80,10 +83,10 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     return () => void unlisten.then((f) => f());
   }, [refresh, refreshUnreadable]);
 
+  // Once per unlock: `t` is left out of the dependencies so that changing
+  // the language does not show it again.
   useEffect(() => {
-    if (damagedItems > 0) {
-      toast(`${damagedItems} item(s) could not be decrypted and are hidden.`, "error");
-    }
+    if (damagedItems > 0) toast(t.vault.damaged(damagedItems), "error");
   }, [damagedItems, toast]);
 
   async function redownload() {
@@ -93,7 +96,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
       await refreshUnreadable();
       await refresh();
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Could not re-download the vault.", "error");
+      toast(e instanceof ApiError ? e.message : t.vault.redownloadFailed, "error");
     } finally {
       setBusyResync(false);
     }
@@ -127,7 +130,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   function onSaved(item: ItemOverview) {
     void refresh();
     setPane({ kind: "view", id: item.id });
-    toast("Saved.");
+    toast(t.vault.saved);
   }
 
   async function onDelete(item: ItemOverview) {
@@ -135,9 +138,9 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
       await api.deleteItem(item.id);
       setPane({ kind: "empty" });
       await refresh();
-      toast(`Deleted “${item.title}”.`);
+      toast(t.vault.deleted(item.title));
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Could not delete the item.", "error");
+      toast(e instanceof ApiError ? e.message : t.vault.deleteFailed, "error");
     }
   }
 
@@ -162,7 +165,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
           <Icon name="search" size={15} />
           <input
             type="search"
-            placeholder="Search"
+            placeholder={t.vault.search}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -170,12 +173,12 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
             }}
             spellCheck={false}
             autoComplete="off"
-            aria-label="Search vault"
+            aria-label={t.vault.searchLabel}
           />
         </label>
 
-        <nav className="nav" aria-label="Vault sections">
-          <p className="nav-heading">Vault</p>
+        <nav className="nav" aria-label={t.vault.sectionsLabel}>
+          <p className="nav-heading">{t.vault.vaultHeading}</p>
           {sections.map((s) => (
             <button
               key={s.id}
@@ -184,18 +187,18 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               onClick={() => setSection(s.id)}
             >
               <Icon name={s.icon} size={17} />
-              <span>{s.label}</span>
+              <span>{s.label(t)}</span>
               <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note"]}</span>
             </button>
           ))}
-          <p className="nav-heading">Tools</p>
+          <p className="nav-heading">{t.vault.toolsHeading}</p>
           <button
             className="nav-item"
             aria-current={section === "generator" ? "page" : undefined}
             onClick={() => setSection("generator")}
           >
             <Icon name="dice" size={17} />
-            <span>Password generator</span>
+            <span>{t.vault.generator}</span>
           </button>
           <button
             className="nav-item"
@@ -203,22 +206,22 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
             onClick={() => setSection("settings")}
           >
             <Icon name="gear" size={17} />
-            <span>Settings</span>
+            <span>{t.vault.settings}</span>
           </button>
         </nav>
 
         <footer className="sidebar-foot">
           <div className={`conn${readOnly ? " is-offline" : ""}`} role="status">
             <Icon name={readOnly ? "cloudOff" : "cloud"} size={15} />
-            <span>{readOnly ? "Offline, read-only" : "Connected"}</span>
+            <span>{readOnly ? t.vault.offline : t.vault.connected}</span>
           </div>
-          <button className="lock-btn" onClick={() => void lock()} title={`Lock now (${isMac ? "⌘L" : "Ctrl+L"})`}>
+          <button className="lock-btn" onClick={() => void lock()} title={t.vault.lockTitle(isMac ? "⌘L" : "Ctrl+L")}>
             <span className="lock-btn-icon" aria-hidden="true">
               <Icon name="unlock" size={16} />
             </span>
             <span className="lock-btn-text">
-              <strong>Unlocked</strong>
-              <small>Lock now</small>
+              <strong>{t.vault.unlocked}</strong>
+              <small>{t.vault.lockNow}</small>
             </span>
             <kbd>{isMac ? "⌘L" : "Ctrl L"}</kbd>
           </button>
@@ -233,16 +236,14 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
           <div className="list-col">
             {unreadable > 0 && (
               <div className="banner banner-warn" role="status">
-                {unreadable === 1
-                  ? "1 item couldn't be read from the server."
-                  : `${unreadable} items couldn't be read from the server.`}{" "}
+                {t.vault.unreadable(unreadable)}{" "}
                 <button
                   className="btn btn-quiet"
                   type="button"
                   disabled={readOnly || busyResync}
                   onClick={() => void redownload()}
                 >
-                  Re-download
+                  {t.vault.redownload}
                 </button>
               </div>
             )}
@@ -256,26 +257,24 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               newDisabled={readOnly}
             />
           </div>
-          <section className="detail" aria-label="Item details">
+          <section className="detail" aria-label={t.vault.details}>
             {pane.kind === "empty" && (
               <div className="detail-empty">
                 <Seal size={44} />
-                <p className="detail-empty-title">{items.length === 0 ? "Your vault is empty" : "Nothing selected"}</p>
+                <p className="detail-empty-title">{items.length === 0 ? t.vault.emptyTitle : t.vault.nothingSelected}</p>
                 <p className="muted">
-                  {items.length === 0
-                    ? "Add a login or a note, or bring everything over from 1Password."
-                    : "Choose an item to see its details."}
+                  {items.length === 0 ? t.vault.emptyBody : t.vault.chooseItem}
                 </p>
                 {items.length === 0 && (
                   <div className="detail-empty-actions">
                     <button className="btn btn-primary" onClick={() => newItem("login")} disabled={readOnly}>
-                      <Icon name="key" size={16} /> Add a login
+                      <Icon name="key" size={16} /> {t.vault.addLogin}
                     </button>
                     <button className="btn" onClick={() => newItem("secure_note")} disabled={readOnly}>
-                      <Icon name="note" size={16} /> Add a secure note
+                      <Icon name="note" size={16} /> {t.vault.addNote}
                     </button>
                     <button className="btn" onClick={() => setSection("settings")} disabled={readOnly}>
-                      Import from 1Password
+                      {t.vault.import1Password}
                     </button>
                   </div>
                 )}

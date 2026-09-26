@@ -23,14 +23,17 @@ export function groupCode(code: string): string {
   return `${code.slice(0, half)} ${code.slice(half)}`;
 }
 
-export function formatDate(ms: number): string {
-  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+/** A date and time in the UI's language. */
+export function formatDate(ms: number, locale: string): string {
+  return new Date(ms).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** Rough strength label for a generator entropy estimate. */
-export function strengthLabel(bits: number): "Weak" | "Fair" | "Strong" | "Excellent" {
-  if (bits < 50) return "Weak";
-  if (bits < 75) return "Fair";
-  if (bits < 110) return "Strong";
-  return "Excellent";
+export type Strength = "weak" | "fair" | "strong" | "excellent";
+
+/** Rough strength level for a generator entropy estimate. */
+export function strengthLevel(bits: number): Strength {
+  if (bits < 50) return "weak";
+  if (bits < 75) return "fair";
+  if (bits < 110) return "strong";
+  return "excellent";
 }

@@ -6,6 +6,7 @@ import { useRevealedSecret, useTotp } from "../lib/hooks";
 import { CopyButton } from "../components/CopyButton";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
+import { useI18n } from "../i18n/context";
 
 interface Props {
   item: ItemOverview;
@@ -17,18 +18,19 @@ interface Props {
 
 function useCopy(itemId: string) {
   const toast = useToast();
+  const { t } = useI18n();
   return useCallback(
-    async (field: CopyField, label: string) => {
+    async (field: CopyField) => {
       try {
         const r = await api.copy(itemId, field);
-        toast(`${label} copied. The clipboard clears in ${r.clearAfterSeconds} s.`);
+        toast(t.detail.copied[field](r.clearAfterSeconds));
         return true;
       } catch (e) {
-        toast(e instanceof ApiError ? e.message : "Could not copy.", "error");
+        toast(e instanceof ApiError ? e.message : t.common.couldNotCopy, "error");
         return false;
       }
     },
-    [itemId, toast],
+    [itemId, toast, t],
   );
 }
 
@@ -63,13 +65,14 @@ function IconButton({
 }
 
 function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise<boolean> }) {
+  const { t } = useI18n();
   const { code, remaining, failed } = useTotp(item.id, true);
   const period = code?.period ?? 30;
   const progress = code ? remaining / period : 0;
   return (
-    <Field label="One-time code" actions={<CopyButton label="Copy one-time code" onCopy={onCopy} />}>
+    <Field label={t.detail.oneTimeCode} actions={<CopyButton label={t.detail.copyOneTimeCode} onCopy={onCopy} />}>
       {failed ? (
-        <span className="muted">Could not generate a code.</span>
+        <span className="muted">{t.detail.codeFailed}</span>
       ) : (
         <span className="totp">
           <span className="mono totp-code">{code ? groupCode(code.code) : "••• •••"}</span>
@@ -84,7 +87,7 @@ function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise
               strokeDashoffset={50.27 * (1 - progress)}
             />
           </svg>
-          <span className="totp-seconds" aria-label={`${remaining} seconds remaining`}>
+          <span className="totp-seconds" aria-label={t.detail.secondsRemaining(remaining)}>
             {remaining}s
           </span>
         </span>
@@ -96,24 +99,25 @@ function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise
 /** One previous password, hidden until asked for. */
 function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index: number; replacedAt: number }) {
   const toast = useToast();
+  const { t, locale } = useI18n();
   const secret = useRevealedSecret(useCallback(() => api.revealPreviousPassword(itemId, index), [itemId, index]));
   const toggle = () =>
     secret.value === null
-      ? void secret.reveal().catch((e) => toast(e instanceof ApiError ? e.message : "Could not reveal.", "error"))
+      ? void secret.reveal().catch((e) => toast(e instanceof ApiError ? e.message : t.common.couldNotReveal, "error"))
       : secret.hide();
   return (
     <li className="history-row">
       {secret.value === null ? (
-        <span className="mono masked" aria-label="Hidden password">
+        <span className="mono masked" aria-label={t.common.hiddenPassword}>
           ••••••••••••
         </span>
       ) : (
         <span className="mono selectable revealed">{secret.value}</span>
       )}
-      <span className="muted">Replaced {formatDate(replacedAt)}</span>
+      <span className="muted">{t.detail.replaced(formatDate(replacedAt, locale))}</span>
       <IconButton
         icon={secret.value === null ? "eye" : "eyeOff"}
-        label={secret.value === null ? "Show previous password" : "Hide previous password"}
+        label={secret.value === null ? t.detail.showPrevious : t.detail.hidePrevious}
         onClick={toggle}
       />
     </li>
@@ -123,15 +127,16 @@ function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index
 /** Passwords this login used before. Loaded only when the user asks. */
 function PasswordHistory({ itemId }: { itemId: string }) {
   const toast = useToast();
+  const { t } = useI18n();
   const [dates, setDates] = useState<number[] | null>(null);
   const load = () =>
     api.passwordHistory(itemId).then(setDates, (e) =>
-      toast(e instanceof ApiError ? e.message : "Could not load the history.", "error"),
+      toast(e instanceof ApiError ? e.message : t.detail.historyFailed, "error"),
     );
   if (dates === null) {
     return (
       <button className="row row-button" onClick={() => void load()}>
-        <span className="row-label-inline">Password history</span>
+        <span className="row-label-inline">{t.detail.passwordHistory}</span>
         <Icon name="chevronDown" size={15} className="row-chevron" />
       </button>
     );
@@ -139,13 +144,13 @@ function PasswordHistory({ itemId }: { itemId: string }) {
   if (dates.length === 0) {
     return (
       <div className="row">
-        <span className="row-label-inline">Password history</span>
-        <span className="muted">No previous passwords</span>
+        <span className="row-label-inline">{t.detail.passwordHistory}</span>
+        <span className="muted">{t.detail.noPrevious}</span>
       </div>
     );
   }
   return (
-    <Field label="Previous passwords">
+    <Field label={t.detail.previousPasswords}>
       <ul className="history-list">
         {dates.map((d, i) => (
           <PreviousPassword key={`${i}-${d}`} itemId={itemId} index={i} replacedAt={d} />
@@ -158,6 +163,7 @@ function PasswordHistory({ itemId }: { itemId: string }) {
 /** Passkeys saved on this login. Private keys never leave the core. */
 function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
   const toast = useToast();
+  const { t, locale } = useI18n();
   const [list, setList] = useState<PasskeyInfo[] | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -165,11 +171,12 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
     let cancelled = false;
     api.listPasskeys(itemId).then(
       (l) => !cancelled && setList(l),
-      (e) => !cancelled && toast(e instanceof ApiError ? e.message : "Could not load passkeys.", "error"),
+      (e) => !cancelled && toast(e instanceof ApiError ? e.message : t.detail.passkeysFailed, "error"),
     );
     return () => {
       cancelled = true;
     };
+    // `t` is left out: a language change must not reload the list.
   }, [itemId, toast]);
 
   const remove = async (credentialId: string) => {
@@ -177,35 +184,35 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
       await api.deletePasskey(itemId, credentialId);
       setList((l) => l?.filter((p) => p.credentialId !== credentialId) ?? null);
       setConfirming(null);
-      toast("Passkey deleted.");
+      toast(t.detail.passkeyDeleted);
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Could not delete the passkey.", "error");
+      toast(e instanceof ApiError ? e.message : t.detail.passkeyDeleteFailed, "error");
     }
   };
 
   if (list === null || list.length === 0) return null;
   return (
-    <Field label="Passkeys">
+    <Field label={t.detail.passkeys}>
       <ul className="history-list">
         {list.map((p) => (
           <li className="history-row" key={p.credentialId}>
             <Icon name="key" size={15} />
             <span className="selectable">{p.rpId}</span>
             <span className="muted">
-              {p.userName || p.displayName || "No account name"} · Saved {formatDate(p.createdAt)}
+              {p.userName || p.displayName || t.detail.noAccountName} · {t.detail.passkeySaved(formatDate(p.createdAt, locale))}
             </span>
             {confirming === p.credentialId ? (
               <span className="confirm">
-                <span>You may lose access to {p.rpId}.</span>
+                <span>{t.detail.loseAccess(p.rpId)}</span>
                 <button className="btn btn-small" onClick={() => setConfirming(null)}>
-                  Keep
+                  {t.common.keep}
                 </button>
                 <button className="btn btn-small btn-danger" onClick={() => void remove(p.credentialId)}>
-                  Delete
+                  {t.common.delete}
                 </button>
               </span>
             ) : (
-              <IconButton icon="trash" label="Delete passkey" onClick={() => setConfirming(p.credentialId)} disabled={readOnly} />
+              <IconButton icon="trash" label={t.detail.deletePasskey} onClick={() => setConfirming(p.credentialId)} disabled={readOnly} />
             )}
           </li>
         ))}
@@ -216,6 +223,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
 
 export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
   const toast = useToast();
+  const { t, locale } = useI18n();
   const copy = useCopy(item.id);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -230,14 +238,15 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
     api
       .reveal(item.id, "content")
       .then((c) => !cancelled && setContent(c))
-      .catch((e) => !cancelled && toast(e instanceof ApiError ? e.message : "Could not open the note.", "error"));
+      .catch((e) => !cancelled && toast(e instanceof ApiError ? e.message : t.detail.noteFailed, "error"));
     return () => {
       cancelled = true;
       setContent(null);
     };
+    // `t` is left out: a language change must not decrypt the note again.
   }, [item.id, item.itemType, toast]);
 
-  const onRevealError = (e: unknown) => toast(e instanceof ApiError ? e.message : "Could not reveal.", "error");
+  const onRevealError = (e: unknown) => toast(e instanceof ApiError ? e.message : t.common.couldNotReveal, "error");
 
   const host = primaryHost(item);
 
@@ -249,11 +258,11 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
         </span>
         <div className="item-head-text">
           <h2 className="item-title">{item.title}</h2>
-          <p className="item-kind">{item.itemType === "login" ? (host ?? "Login") : "Secure note"}</p>
+          <p className="item-kind">{item.itemType === "login" ? (host ?? t.common.login) : t.common.secureNote}</p>
         </div>
         <div className="item-head-actions">
           <button className="btn btn-small" onClick={onEdit} disabled={readOnly}>
-            <Icon name="edit" size={15} /> Edit
+            <Icon name="edit" size={15} /> {t.common.edit}
           </button>
         </div>
       </header>
@@ -263,8 +272,8 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
           <div className="group">
             {item.username && (
               <Field
-                label="Username"
-                actions={<CopyButton label="Copy username" onCopy={() => copy("username", "Username")} />}
+                label={t.common.username}
+                actions={<CopyButton label={t.detail.copyUsername} onCopy={() => copy("username")} />}
               >
                 <span className="selectable">{item.username}</span>
               </Field>
@@ -272,23 +281,23 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
 
             {item.hasPassword && (
               <Field
-                label="Password"
+                label={t.common.password}
                 actions={
                   <>
                     <IconButton
                       icon={password.value === null ? "eye" : "eyeOff"}
-                      label={password.value === null ? "Show password" : "Hide password"}
+                      label={password.value === null ? t.common.showPassword : t.common.hidePassword}
                       onClick={() =>
                         password.value === null ? void password.reveal().catch(onRevealError) : password.hide()
                       }
                     />
-                    <CopyButton label="Copy password" onCopy={() => copy("password", "Password")} />
+                    <CopyButton label={t.detail.copyPassword} onCopy={() => copy("password")} />
                   </>
                 }
               >
                 <span className="secret" data-revealed={password.value !== null}>
                   {password.value === null ? (
-                    <span className="mono masked" aria-label="Hidden password">
+                    <span className="mono masked" aria-label={t.common.hiddenPassword}>
                       ••••••••••••
                     </span>
                   ) : (
@@ -298,7 +307,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
               </Field>
             )}
 
-            {item.hasTotp && <TotpField item={item} onCopy={() => copy("totp", "One-time code")} />}
+            {item.hasTotp && <TotpField item={item} onCopy={() => copy("totp")} />}
           </div>
 
           {item.hasPasskey && (
@@ -312,13 +321,17 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
               {item.urls.map((u) => (
                 <div className="row" key={u.url}>
                   <div className="row-main">
-                    <div className="row-label">Website</div>
+                    <div className="row-label">{t.detail.website}</div>
                     <div className="row-value url-value">
                       <span className="selectable">{u.url}</span>
                     </div>
                   </div>
                   <span className="url-match">
-                    {u.matchType === "domain" ? "Whole site" : u.matchType === "origin" ? "Exact site" : "Exact page"}
+                    {u.matchType === "domain"
+                      ? t.detail.matchDomain
+                      : u.matchType === "origin"
+                        ? t.detail.matchOrigin
+                        : t.detail.matchExact}
                   </span>
                 </div>
               ))}
@@ -328,17 +341,17 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
           {item.hasNotes && (
             <div className="group">
               <Field
-                label="Notes"
+                label={t.detail.notes}
                 actions={
                   <IconButton
                     icon={notes.value === null ? "eye" : "eyeOff"}
-                    label={notes.value === null ? "Show notes" : "Hide notes"}
+                    label={notes.value === null ? t.detail.showNotes : t.detail.hideNotes}
                     onClick={() => (notes.value === null ? void notes.reveal().catch(onRevealError) : notes.hide())}
                   />
                 }
               >
                 {notes.value === null ? (
-                  <span className="muted">Hidden</span>
+                  <span className="muted">{t.detail.hidden}</span>
                 ) : (
                   <p className="note-body selectable">{notes.value}</p>
                 )}
@@ -355,7 +368,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
       {item.itemType === "secure_note" && (
         <div className="note-sheet">
           {content === null ? (
-            <p className="muted">Decrypting…</p>
+            <p className="muted">{t.common.decrypting}</p>
           ) : (
             <p className="note-body selectable">{content}</p>
           )}
@@ -364,19 +377,19 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
 
       <footer className="item-foot">
         <p className="muted">
-          Created {formatDate(item.createdAt)} · Changed {formatDate(item.updatedAt)}
+          {t.detail.dates(formatDate(item.createdAt, locale), formatDate(item.updatedAt, locale))}
         </p>
         {confirmDelete ? (
           <div className="confirm">
             <span>
-              Delete “{item.title}” permanently?
-              {item.hasPasskey && " Its passkeys go with it, and you may lose access to those sites."}
+              {t.detail.confirmDelete(item.title)}
+              {item.hasPasskey && t.detail.passkeyWarning}
             </span>
             <button className="btn btn-small" onClick={() => setConfirmDelete(false)}>
-              Keep
+              {t.common.keep}
             </button>
             <button className="btn btn-small btn-danger" onClick={onDelete}>
-              Delete
+              {t.common.delete}
             </button>
           </div>
         ) : (
@@ -385,7 +398,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
             onClick={() => setConfirmDelete(true)}
             disabled={readOnly}
           >
-            <Icon name="trash" size={15} /> Delete
+            <Icon name="trash" size={15} /> {t.common.delete}
           </button>
         )}
       </footer>

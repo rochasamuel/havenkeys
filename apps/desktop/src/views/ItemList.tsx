@@ -3,6 +3,7 @@ import type { ItemOverview, ItemType } from "../lib/types";
 import { monogram, primaryHost } from "../lib/format";
 import { Icon } from "../components/Icon";
 import type { Section } from "./VaultScreen";
+import { useI18n } from "../i18n/context";
 
 interface Props {
   items: ItemOverview[];
@@ -15,14 +16,14 @@ interface Props {
   newDisabled?: boolean;
 }
 
-const headings: Partial<Record<Section, string>> = {
-  all: "All items",
-  login: "Logins",
-  secure_note: "Secure notes",
-};
-
 export function ItemList({ items, query, section, selectedId, onSelect, onNew, newDisabled }: Props) {
+  const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
+  const headings: Partial<Record<Section, string>> = {
+    all: t.vault.allItems,
+    login: t.vault.logins,
+    secure_note: t.vault.secureNotes,
+  };
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close the New menu on Escape or a click anywhere else.
@@ -41,10 +42,10 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
   }, [menuOpen]);
 
   return (
-    <section className="list" aria-label="Items">
+    <section className="list" aria-label={t.list.items}>
       <header className="list-head" data-tauri-drag-region>
         <div className="list-title" data-tauri-drag-region>
-          <h2>{query.trim() ? "Results" : headings[section]}</h2>
+          <h2>{query.trim() ? t.list.results : headings[section]}</h2>
           <span className="list-count">{items.length}</span>
         </div>
         <div className="new-menu" ref={menuRef}>
@@ -52,8 +53,8 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
             className="icon-btn icon-btn-solid"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            aria-label="New item"
-            title="New item"
+            aria-label={t.list.newItem}
+            title={t.list.newItem}
             onClick={() => setMenuOpen((o) => !o)}
             disabled={newDisabled}
           >
@@ -61,7 +62,7 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
           </button>
           {menuOpen && !newDisabled && (
             <div className="menu" role="menu">
-              <p className="menu-heading">New item</p>
+              <p className="menu-heading">{t.list.newItem}</p>
               <button
                 role="menuitem"
                 onClick={() => {
@@ -69,7 +70,7 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                   onNew("login");
                 }}
               >
-                <Icon name="key" size={16} /> Login
+                <Icon name="key" size={16} /> {t.common.login}
               </button>
               <button
                 role="menuitem"
@@ -78,7 +79,7 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                   onNew("secure_note");
                 }}
               >
-                <Icon name="note" size={16} /> Secure note
+                <Icon name="note" size={16} /> {t.common.secureNote}
               </button>
             </div>
           )}
@@ -88,16 +89,16 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
       {items.length === 0 ? (
         <div className="list-empty">
           <Icon name={query.trim() ? "search" : "grid"} size={22} />
-          <p>{query.trim() ? "No matches" : "Nothing here yet"}</p>
+          <p>{query.trim() ? t.list.noMatches : t.list.nothingYet}</p>
           <span>
-            {query.trim() ? "Search looks at titles, usernames and websites." : "New items you add appear here."}
+            {query.trim() ? t.list.searchHint : t.list.emptyHint}
           </span>
         </div>
       ) : (
         <ul className="list-items">
           {items.map((item) => {
             const sub =
-              item.itemType === "login" ? (item.username ?? primaryHost(item) ?? "Login") : "Secure note";
+              item.itemType === "login" ? (item.username ?? primaryHost(item) ?? t.common.login) : t.common.secureNote;
             return (
               <li key={item.id}>
                 <button
@@ -113,12 +114,12 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                     <span className="list-item-sub">{sub}</span>
                   </span>
                   {item.hasTotp && (
-                    <span className="list-item-flag" title="Has one-time codes">
+                    <span className="list-item-flag" title={t.list.hasTotp}>
                       <Icon name="clock" size={13} />
                     </span>
                   )}
                   {item.hasPasskey && (
-                    <span className="list-item-flag" title="Has passkeys">
+                    <span className="list-item-flag" title={t.list.hasPasskeys}>
                       <Icon name="key" size={13} />
                     </span>
                   )}
