@@ -22,6 +22,7 @@
 import { InlineFrame, noticeBox, passkeyBox } from "../content/frames";
 import {
   clampTimeout,
+  parseBgWaResize,
   parseBgWaResult,
   parsePageRequest,
   parsePingReply,
@@ -62,7 +63,7 @@ function send(msg: WaRequest): Promise<unknown> {
 }
 
 function viewport() {
-  return { width: document.documentElement.clientWidth || innerWidth };
+  return { width: document.documentElement.clientWidth || innerWidth, height: innerHeight };
 }
 
 export function startBridge(): void {
@@ -191,6 +192,11 @@ export function startBridge(): void {
   chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
     // Only this extension's background worker (no tab).
     if (sender.id !== chrome.runtime.id || sender.tab !== undefined) return false;
+    const size = parseBgWaResize(raw);
+    if (size) {
+      for (const p of pending.values()) if (p.token === size.token) p.frame?.place(passkeyBox(viewport(), size.height));
+      return false;
+    }
     const m = parseBgWaResult(raw);
     if (!m) return false;
     for (const [id, p] of pending) {

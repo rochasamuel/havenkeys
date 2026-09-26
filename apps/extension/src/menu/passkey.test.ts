@@ -10,6 +10,7 @@ const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 let replies: unknown[] = [];
 const asked: unknown[] = [];
+const resized: unknown[] = [];
 
 function page(): void {
   document.body.replaceChildren();
@@ -45,9 +46,15 @@ beforeEach(() => {
   vi.useFakeTimers();
   replies = [];
   asked.length = 0;
+  resized.length = 0;
   (globalThis as { chrome?: unknown }).chrome = {
     runtime: {
       sendMessage: async (m: unknown) => {
+        // Size reports are fire-and-forget; keep them out of the request log.
+        if ((m as { type?: string }).type === "pk_resize") {
+          resized.push(m);
+          return { ok: true, value: null };
+        }
         asked.push(m);
         return replies.length > 0 ? replies.shift() : undefined;
       },
@@ -81,7 +88,7 @@ describe("passkey card", () => {
   it("shows the already-saved card with a Close button and no Cancel", async () => {
     replies = [{ ok: true, value: { state: "exists", site: "github.com" } }];
     await load();
-    expect(text("question")).toBe("A passkey for this account is already saved in HavenKeys");
+    expect(text("question")).toBe("This account already has a passkey in HavenKeys");
     const confirm = document.getElementById("confirm") as HTMLButtonElement;
     expect(confirm.hidden).toBe(false);
     expect(confirm.textContent).toBe("Close");

@@ -9,6 +9,7 @@ import {
   parsePageResponse,
   parsePingReply,
   parsePkRequest,
+  parseBgWaResize,
   parseWaReply,
   parseWaRequest,
   type CreateOptions,
@@ -123,6 +124,11 @@ describe("bridge ↔ background ↔ frames", () => {
     expect(parsePkRequest({ type: "pk_pick", token: TOKEN, itemId: "../x", credentialId: CRED })).toBeNull();
     expect(parsePkRequest({ type: "pk_close", token: TOKEN, x: 1 })).toBeNull();
     for (const t of ["pk_state", "pk_fallback", "pk_cancel", "pk_close"]) expect(parsePkRequest({ type: t, token: TOKEN })).not.toBeNull();
+    expect(parsePkRequest({ type: "pk_resize", token: TOKEN, height: 240 })).toEqual({ type: "pk_resize", token: TOKEN, height: 240 });
+    for (const height of [0, 95, 481, 200.5, "240", null]) expect(parsePkRequest({ type: "pk_resize", token: TOKEN, height })).toBeNull();
+    expect(parseBgWaResize({ type: "bg_wa_resize", token: TOKEN, height: 240 })).not.toBeNull();
+    expect(parseBgWaResize({ type: "bg_wa_resize", token: TOKEN, height: 5000 })).toBeNull();
+    expect(parseBgWaResize({ type: "bg_wa_resize", token: "short", height: 240 })).toBeNull();
   });
 
   it("accepts a silent-save reply only with a create credential and nothing else", () => {

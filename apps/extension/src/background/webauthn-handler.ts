@@ -362,6 +362,8 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
   async function handleFrame(tabId: number, req: PkRequest): Promise<InlineReply<PkView | null>> {
     const s = live(tabId, req.token);
     if (!s) {
+      // The "passkey saved" notice has a fixed size and no session to relay through.
+      if (req.type === "pk_resize") return { ok: true, value: null };
       const n = notices.get(tabId);
       if (req.type === "pk_state" && n && n.token === req.token) return { ok: true, value: { state: "saved", site: n.site } };
       // The session is gone (worker restarted, or already finished) but the
@@ -394,6 +396,10 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         return { ok: true, value: null };
       case "pk_cancel":
         finish(tabId, s.token, { outcome: "error", name: "NotAllowedError" });
+        return { ok: true, value: null };
+      case "pk_resize":
+        // Only to the frame whose bridge shows this session's card.
+        void deps.sendToFrame(s.frame, { type: "bg_wa_resize", token: s.token, height: req.height });
         return { ok: true, value: null };
       case "pk_close":
         if (s.kind !== "create" || !s.exists || s.locked) return { ok: false, message: "Unknown request." };

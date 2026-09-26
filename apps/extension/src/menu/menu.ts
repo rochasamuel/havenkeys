@@ -93,7 +93,17 @@ function render(t: string, view: MenuView): void {
     hint?.kind === "add_passkey"
       ? [row(sparkle(), `${hint.name} supports passkeys`, "How to add one", () => pick({ type: "menu_open_help", token: t }))]
       : [];
-  main.replaceChildren(...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...tail);
+  const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...tail];
+  // Opened from the field's icon with nothing saved for this site.
+  if (rows.length === 0) {
+    main.replaceChildren(
+      kind === "otp"
+        ? message("No one-time codes here", "No login for this site has a one-time code.")
+        : message("No logins for this site", "Save one in the HavenKeys app."),
+    );
+    return;
+  }
+  main.replaceChildren(...rows);
 }
 
 /** Arrow keys move between rows; Escape closes. */

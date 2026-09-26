@@ -3,7 +3,7 @@
 // a click here; this page never sees a key or a signature.
 
 import type { PasskeyCandidate } from "@havenkeys/protocol";
-import type { PasskeyRow, PkView } from "../webauthn/messages";
+import { PASSKEY_MAX_HEIGHT, PASSKEY_MIN_HEIGHT, type PasskeyRow, type PkView } from "../webauthn/messages";
 import { ask, createClickGuard, h, monogram, tokenFromHash } from "./common";
 
 const question = document.getElementById("question") as HTMLElement;
@@ -14,7 +14,8 @@ const cancelBtn = document.getElementById("cancel") as HTMLButtonElement;
 const fallbackBtn = document.getElementById("fallback") as HTMLButtonElement;
 const confirmBtn = document.getElementById("confirm") as HTMLButtonElement;
 const token = tokenFromHash();
-const guard = createClickGuard(document.querySelector(".card") as HTMLElement);
+const card = document.querySelector(".card") as HTMLElement;
+const guard = createClickGuard(card);
 
 function onClick(button: HTMLButtonElement, action: () => Promise<void>): void {
   button.addEventListener("click", (e) => {
@@ -28,7 +29,7 @@ const UNREACHABLE = "HavenKeys could not be reached.";
 
 function showError(message: string): void {
   question.textContent = message;
-  question.className = "error";
+  question.className = "pk-title error";
 }
 
 function row(p: PasskeyRow, t: string): HTMLButtonElement {
@@ -49,21 +50,25 @@ function row(p: PasskeyRow, t: string): HTMLButtonElement {
 /** "Add to <login>" radios plus "New login"; `preselect` (the login just filled) wins over a username match. */
 function choices(candidates: PasskeyCandidate[], userName: string, preselect: string | null): { el: HTMLElement; selected(): string | null } {
   const list = h("div", { className: "choices" });
+  list.setAttribute("role", "radiogroup");
+  list.setAttribute("aria-label", "Save to");
   const radios: Array<{ input: HTMLInputElement; itemId: string | null }> = [];
-  const add = (label: string, itemId: string | null, checked: boolean) => {
+  const add = (title: string, sub: string, itemId: string | null, checked: boolean) => {
     const input = h("input");
     input.type = "radio";
     input.name = "target";
     input.checked = checked;
     radios.push({ input, itemId });
-    list.append(h("label", { className: "choice" }, input, h("span", { text: label })));
+    list.append(
+      h("label", { className: "choice" }, input, h("span", { className: "who" }, h("span", { className: "title", text: title }), h("span", { className: "user", text: sub }))),
+    );
   };
   const preferred = preselect
     ? candidates.find((c) => c.itemId === preselect)
     : candidates.find((c) => (c.username ?? "").toLowerCase() === userName.toLowerCase());
-  for (const c of candidates) add(`Add to “${c.title}”`, c.itemId, c === preferred);
-  add("New login", null, preferred === undefined);
-  return { el: list, selected: () => radios.find((r) => r.input.checked)?.itemId ?? null };
+  for (const c of candidates) add(c.title, c.username ?? "No username", c.itemId, c === preferred);
+  add("New login", "Create a login for this site", null, preferred === undefined);
+  return { el: h("div", {}, h("p", { className: "pk-label", text: "Save to" }), list), selected: () => radios.find((r) => r.input.checked)?.itemId ?? null };
 }
 
 /** While locked, how often to ask whether the vault has been unlocked. */
@@ -100,14 +105,18 @@ function render(t: string, view: PkView): void {
       return;
     case "chooser":
       question.textContent = "Sign in with a passkey";
-      detail.textContent = "";
+      detail.textContent = view.passkeys.length > 1 ? "Choose an account" : "";
       main.replaceChildren(...view.passkeys.map((p) => row(p, t)));
       return;
     case "create": {
       question.textContent = view.upgradeItemId ? "Add a passkey?" : "Save a passkey to HavenKeys?";
-      detail.textContent = view.userName || "No account name";
+      detail.textContent = view.userName ? `Account: ${view.userName}` : "No account name";
       const c = choices(view.candidates, view.userName, view.upgradeItemId);
       main.replaceChildren(c.el);
+      // The preselected login may be below the fold. Not scrollIntoView: from
+      // inside a frame that can scroll the page too.
+      const checked = main.querySelector<HTMLElement>(".choice:has(input:checked)");
+      if (checked && checked.offsetTop + checked.offsetHeight > main.clientHeight) main.scrollTop = checked.offsetTop - 8;
       confirmBtn.hidden = false;
       onClick(confirmBtn, async () => {
         const r = await ask<null>({ type: "pk_save", token: t, itemId: c.selected() });
@@ -119,7 +128,7 @@ function render(t: string, view: PkView): void {
     case "exists":
       // Nothing to save; "Close" is the only way the site learns that the
       // passkey exists (InvalidStateError), and it takes a click.
-      question.textContent = "A passkey for this account is already saved in HavenKeys";
+      question.textContent = "This account already has a passkey in HavenKeys";
       detail.textContent = "";
       main.replaceChildren();
       cancelBtn.hidden = true;
@@ -152,6 +161,52 @@ addEventListener("pagehide", stopPolling);
 document.addEventListener("keydown", (e) => {
   if (token && e.key === "Escape") void ask({ type: "pk_cancel", token });
 });
+
+// ------------------------------------------------------------ size
+// The bridge sizes our iframe from the height we report. Until then the card
+// may be clipped, which also keeps the click guard disarmed.
+
+let reported = 0;
+
+/** The card's natural height: the list up to its own cap, everything else as laid out. */
+function naturalHeight(): number {
+  let total = card.offsetHeight - card.clientHeight; // borders
+  for (const el of Array.from(card.children) as HTMLElement[]) {
+    if (el === main) {
+      const cap = parseFloat(getComputedStyle(main).maxHeight) || Infinity;
+      total += getComputedStyle(main).display === "none" ? 0 : Math.min(main.scrollHeight, cap);
+    } else {
+      total += el.getBoundingClientRect().height;
+    }
+  }
+  return Math.ceil(total);
+}
+
+function reportSize(): void {
+  if (!token) return;
+  const height = Math.min(PASSKEY_MAX_HEIGHT, Math.max(PASSKEY_MIN_HEIGHT, naturalHeight()));
+  if (height === reported) return;
+  reported = height;
+  void ask({ type: "pk_resize", token, height });
+}
+
+let sizePending = false;
+function scheduleSize(): void {
+  if (sizePending) return;
+  sizePending = true;
+  requestAnimationFrame(() => {
+    sizePending = false;
+    reportSize();
+  });
+}
+
+if (typeof ResizeObserver === "function") {
+  const ro = new ResizeObserver(scheduleSize);
+  for (const el of Array.from(card.children)) ro.observe(el);
+}
+new MutationObserver(scheduleSize).observe(card, { childList: true, subtree: true, attributes: true, characterData: true });
+// Web fonts change line heights once loaded.
+void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
   if (!token) return;

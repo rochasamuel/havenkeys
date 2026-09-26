@@ -69,10 +69,17 @@ afterEach(() => vi.useRealTimers());
 describe("message validation", () => {
   it("accepts exact content requests only", () => {
     expect(parseContentRequest({ type: "cs_open_menu", kind: "login" })).toEqual({ type: "cs_open_menu", kind: "login" });
+    expect(parseContentRequest({ type: "cs_open_menu", kind: "login", explicit: true })).toEqual({
+      type: "cs_open_menu",
+      kind: "login",
+      explicit: true,
+    });
     expect(parseContentRequest({ type: "cs_submit", username: null, password: "x" })).not.toBeNull();
     for (const bad of [
       { type: "cs_open_menu", kind: "login", url: "https://github.com" },
       { type: "cs_open_menu", kind: "everything" },
+      { type: "cs_open_menu", kind: "login", explicit: false },
+      { type: "cs_open_menu", kind: "login", explicit: "yes" },
       { type: "cs_submit", username: null, password: null },
       { type: "cs_submit", username: "", password: "x" },
       { type: "cs_submit", username: null, password: "x".repeat(4097) },
@@ -165,6 +172,16 @@ describe("suggestion menus", () => {
       });
       expect(await h2.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
     }
+  });
+
+  it("opens an empty menu when the user asked for it from the field icon", async () => {
+    const { h } = setup();
+    const evil = frame({ url: "https://evil.com/" });
+    expect(await h.handleContent(evil, { type: "cs_open_menu", kind: "login", explicit: true })).toEqual({ ok: true, token: T1, rows: 1 });
+    const view = await h.handleInline(1, { type: "menu_state", token: T1 });
+    expect(view).toMatchObject({ ok: true, value: { state: "ready", items: [], passkeys: [] } });
+    // Still nothing to pick.
+    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
   });
 
   it("shows a locked menu that cannot fill", async () => {

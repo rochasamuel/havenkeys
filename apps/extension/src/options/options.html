@@ -18,11 +18,11 @@
         </div>
       </header>
 
-      <h2 class="group-title">Suggestions in login fields</h2>
+      <h2 class="group-title">Suggestions and passkeys</h2>
       <section class="group">
         <div class="row">
           <div class="row-main">
-            <strong>Show my logins under login fields</strong>
+            <strong>Show my logins under login fields, and save passkeys to HavenKeys</strong>
             <p id="status" class="status" aria-live="polite"></p>
           </div>
           <button id="toggle" class="btn primary" type="button" hidden></button>
@@ -32,6 +32,10 @@
         When this is on, clicking a username, password or one-time-code field on a website shows your matching
         HavenKeys logins right under the field. Nothing is filled until you pick a login, and logins are only offered
         on the websites they are saved for.
+      </p>
+      <p class="note">
+        The same switch lets HavenKeys answer when a website creates or asks for a passkey, instead of your
+        browser or operating system. Without it, websites get the browser's own passkey dialog.
       </p>
       <p class="note">
         It needs permission to run on the websites you visit. The extension reads login fields when you interact with

@@ -164,6 +164,20 @@ main {
   color: var(--muted);
 }
 
+.notice.offer {
+  margin: 10px 12px 4px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.notice.offer strong {
+  font-size: 14px;
+}
+
+.notice.offer .btn {
+  margin-top: 10px;
+}
+
 .list {
   list-style: none;
   margin: 0;

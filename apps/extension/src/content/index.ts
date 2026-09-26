@@ -7,8 +7,9 @@
 // submitted logins so the user can be asked whether to save them.
 //
 // Rules:
-// * Menus open only on trusted user input (click, Tab, ArrowDown), never on
-//   page load or programmatic focus.
+// * Menus open only on trusted user input (click, typing, Tab, ArrowDown,
+//   or the field's HavenKeys icon), never on page load or programmatic focus.
+//   The icon (content/icon.ts) appears in the focused login field.
 // * The page is never scanned up front; see autofill/group.ts.
 // * Fills are accepted only from the background, only for the menu the
 //   user picked from (or a popup fill), and only if this frame is still on
@@ -27,7 +28,8 @@ import {
   type ContentRequest,
   type MenuKind,
 } from "../messaging/inline";
-import { InlineFrame, menuBox, saveBox } from "./frames";
+import { InlineFrame, menuBox, saveBox, type Box } from "./frames";
+import { FieldIcon, iconBox } from "./icon";
 
 declare global {
   // Set in this content script's isolated world; page script cannot see it.
@@ -38,6 +40,8 @@ declare global {
 const PICK_WINDOW_MS = 30_000;
 /** Focus within this long of a Tab key press counts as keyboard navigation. */
 const TAB_FOCUS_MS = 500;
+/** How often a shown field icon follows its field (layout shifts, removal). */
+const ICON_TRACK_MS = 500;
 /** Submissions closer together than this are the same submission. */
 const SUBMIT_DEBOUNCE_MS = 1000;
 /** Labels of form-less buttons that submit a login. */
@@ -104,6 +108,11 @@ function start(): void {
   let lastTab = 0;
   let lastSubmit = 0;
   let rafPending = false;
+  let icon: { view: FieldIcon; field: HTMLInputElement; timer: ReturnType<typeof setInterval> } | null = null;
+  /** Fields where the user closed the menu: typing there does not reopen it. */
+  const dismissed = new WeakSet<HTMLInputElement>();
+  /** Fields with nothing to offer: typing there does not ask again. */
+  const empty = new WeakSet<HTMLInputElement>();
 
   // ------------------------------------------------------------ menu
 
@@ -114,6 +123,7 @@ function start(): void {
     frame.remove();
     picked = { token: frame.token, field, until: Date.now() + PICK_WINDOW_MS };
     if (tellBackground) void send({ type: "cs_close_menu", token: frame.token });
+    if (icon && deepActiveElement() !== icon.field) hideIcon();
   }
 
   function viewport() {
@@ -129,14 +139,20 @@ function start(): void {
     menu.frame.place(menuBox(menu.field.getBoundingClientRect(), menu.rows, viewport()));
   }
 
-  async function maybeOpen(field: HTMLInputElement): Promise<void> {
+  /** `explicit`: from the field icon, so show the menu even with nothing to offer. */
+  async function maybeOpen(field: HTMLInputElement, explicit = false): Promise<void> {
     if (opening || menu?.field === field || !isFillable(field, defaultEnv())) return;
     const kind = menuKindFor(field);
     if (!kind) return;
     opening = true;
-    const reply = (await send({ type: "cs_open_menu", kind })) as { ok?: unknown; token?: unknown; rows?: unknown } | undefined;
+    const req: ContentRequest = explicit ? { type: "cs_open_menu", kind, explicit: true } : { type: "cs_open_menu", kind };
+    const reply = (await send(req)) as { ok?: unknown; token?: unknown; rows?: unknown } | undefined;
     opening = false;
-    if (!reply || reply.ok !== true || typeof reply.token !== "string" || !TOKEN.test(reply.token)) return;
+    if (!reply || reply.ok !== true || typeof reply.token !== "string" || !TOKEN.test(reply.token)) {
+      if (!explicit) empty.add(field);
+      return;
+    }
+    empty.delete(field);
     const rows = typeof reply.rows === "number" && reply.rows >= 1 && reply.rows <= 5 ? reply.rows : 1;
     // The user moved on while we asked.
     if (deepActiveElement() !== field) {
@@ -149,6 +165,63 @@ function start(): void {
       if (menu?.frame.token === token) closeMenu(true);
     });
     menu = { frame, field, rows };
+  }
+
+  // ------------------------------------------------------------ field icon
+
+  /**
+   * Where the icon goes in `field`: the first spot, from the right edge
+   * leftwards, where the field itself is on top (not the page's own
+   * show-password or clear button). Null when there is no free spot.
+   */
+  function iconSpot(field: HTMLInputElement): Box | null {
+    const rect = field.getBoundingClientRect();
+    for (let shift = 0; shift < 3; shift++) {
+      const box = iconBox(rect, shift);
+      if (!box) return null;
+      // No hit testing (jsdom), or a field in a shadow root, whose host is what we would hit.
+      if (typeof document.elementsFromPoint !== "function" || field.getRootNode() !== document) return box;
+      const hit = document
+        .elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+        .find((el) => el !== icon?.view.el);
+      if (!hit || hit === field) return box;
+    }
+    return null;
+  }
+
+  function hideIcon(): void {
+    if (!icon) return;
+    clearInterval(icon.timer);
+    icon.view.remove();
+    icon = null;
+  }
+
+  function placeIcon(): void {
+    if (!icon) return;
+    const box = icon.field.isConnected && isFillable(icon.field, defaultEnv()) ? iconSpot(icon.field) : null;
+    if (box) icon.view.place(box);
+    else hideIcon();
+  }
+
+  function showIcon(field: HTMLInputElement): void {
+    if (icon?.field === field) return placeIcon();
+    hideIcon();
+    if (!isFillable(field, defaultEnv()) || !menuKindFor(field)) return;
+    const box = iconSpot(field);
+    if (!box) return;
+    const view = new FieldIcon(box, () => toggleFromIcon(field));
+    icon = { view, field, timer: setInterval(placeIcon, ICON_TRACK_MS) };
+  }
+
+  function toggleFromIcon(field: HTMLInputElement): void {
+    if (menu?.field === field) {
+      dismissed.add(field);
+      closeMenu(true);
+      return;
+    }
+    dismissed.delete(field);
+    if (deepActiveElement() !== field) field.focus();
+    void maybeOpen(field, true);
   }
 
   // ------------------------------------------------------------ save prompt
@@ -239,6 +312,8 @@ function start(): void {
     "pointerdown",
     (e) => {
       if (!e.isTrusted) return;
+      // The icon's own click handler toggles the menu.
+      if (icon && e.composedPath()[0] === icon.view.el) return;
       const input = inputFrom(e);
       if (!input) {
         closeMenu(true);
@@ -261,6 +336,7 @@ function start(): void {
           lastTab = Date.now();
           return;
         case "Escape":
+          if (menu) dismissed.add(menu.field);
           closeMenu(true);
           return;
         case "ArrowDown":
@@ -282,7 +358,21 @@ function start(): void {
       if (menu && e.composedPath()[0] === menu.frame.el) return;
       const input = inputFrom(e);
       if (menu && input !== menu.field) closeMenu(true);
+      if (input) showIcon(input);
+      else hideIcon();
       if (input && Date.now() - lastTab < TAB_FOCUS_MS) void maybeOpen(input);
+    },
+    opts,
+  );
+
+  window.addEventListener(
+    "focusout",
+    (e) => {
+      if (!icon || inputFrom(e) !== icon.field) return;
+      // Wait for focus to land; our menu frame keeps the icon.
+      setTimeout(() => {
+        if (icon && deepActiveElement() !== icon.field && menu?.field !== icon.field) hideIcon();
+      }, 0);
     },
     opts,
   );
@@ -291,7 +381,11 @@ function start(): void {
     "input",
     (e) => {
       const input = inputFrom(e);
-      if (e.isTrusted && input) markUserEdit(input);
+      if (!e.isTrusted || !input) return;
+      markUserEdit(input);
+      // Typing in a login field (e.g. one the page focused on load) opens
+      // the menu, unless the user closed it there or there is nothing to offer.
+      if (!menu && !dismissed.has(input) && !empty.has(input) && deepActiveElement() === input) void maybeOpen(input);
     },
     opts,
   );
@@ -309,6 +403,7 @@ function start(): void {
     "click",
     (e) => {
       if (!e.isTrusted) return;
+      if (icon && e.composedPath()[0] === icon.view.el) return;
       const el = (e.composedPath()[0] as Element | undefined)?.closest?.('button, input[type="submit"], input[type="image"], [role="button"]');
       if (!el || !isSubmitLike(el)) return;
       const root = rootForButton(el);
@@ -318,11 +413,12 @@ function start(): void {
   );
 
   const reposition = () => {
-    if (!menu || rafPending) return;
+    if ((!menu && !icon) || rafPending) return;
     rafPending = true;
     requestAnimationFrame(() => {
       rafPending = false;
       placeMenu();
+      placeIcon();
     });
   };
   window.addEventListener("scroll", reposition, opts);
@@ -332,6 +428,7 @@ function start(): void {
   window.addEventListener("hashchange", () => closeMenu(true), opts);
   window.addEventListener("pagehide", () => {
     closeMenu(true);
+    hideIcon();
     closeSave();
     // A generated password must not be lost because we missed the submit
     // (e.g. a script-driven signup): offer it as the page goes away.
@@ -351,7 +448,11 @@ function start(): void {
         sendResponse({ filled: handleFill(m) });
         return false;
       case "bg_close_menu":
-        if (menu?.frame.token === m.token) closeMenu(false);
+        // Escape in the menu, or a pick: either way the user is done with it here.
+        if (menu?.frame.token === m.token) {
+          dismissed.add(menu.field);
+          closeMenu(false);
+        }
         return false;
       case "bg_show_save":
         showSave(m.token);
@@ -361,6 +462,10 @@ function start(): void {
         return false;
     }
   });
+
+  // A field the page focused before we loaded gets its icon (not a menu).
+  const focused = deepActiveElement();
+  if (focused instanceof HTMLInputElement) showIcon(focused);
 
   // A save prompt for a login submitted just before this page loaded.
   if (window.top === window) {

@@ -132,6 +132,20 @@ export interface BgWaResult {
   outcome: Outcome;
 }
 
+/** The passkey card's content height, relayed from the card to the bridge that shows it. */
+export interface BgWaResize {
+  type: "bg_wa_resize";
+  token: string;
+  height: number;
+}
+
+/** Bounds on a card height; the bridge also keeps the card inside the viewport. */
+export const PASSKEY_MIN_HEIGHT = 96;
+export const PASSKEY_MAX_HEIGHT = 480;
+
+const isHeight = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= PASSKEY_MIN_HEIGHT && v <= PASSKEY_MAX_HEIGHT;
+
 // ---------------------------------------------------------------- passkey frame ↔ background
 
 export type PkRequest =
@@ -141,7 +155,9 @@ export type PkRequest =
   | { type: "pk_fallback"; token: string }
   | { type: "pk_cancel"; token: string }
   /** "Close" on the already-saved card: the site learns InvalidStateError. */
-  | { type: "pk_close"; token: string };
+  | { type: "pk_close"; token: string }
+  /** The card's content height; the card cannot size its own iframe. */
+  | { type: "pk_resize"; token: string; height: number };
 
 export interface PasskeyRow {
   itemId: string;
@@ -347,6 +363,12 @@ export function parseBgWaResult(msg: unknown): BgWaResult | null {
   return outcome && { type: "bg_wa_result", token: o.token, outcome };
 }
 
+export function parseBgWaResize(msg: unknown): BgWaResize | null {
+  const o = obj(msg);
+  if (!o || o.type !== "bg_wa_resize" || !keysAre(o, ["type", "token", "height"]) || !isToken(o.token) || !isHeight(o.height)) return null;
+  return { type: "bg_wa_resize", token: o.token, height: o.height };
+}
+
 export function parsePkRequest(msg: unknown): PkRequest | null {
   const o = obj(msg);
   if (!o || !isToken(o.token)) return null;
@@ -360,6 +382,8 @@ export function parsePkRequest(msg: unknown): PkRequest | null {
       return keysAre(o, ["type", "token", "itemId"]) && (o.itemId === null || isUuid(o.itemId))
         ? { type: "pk_save", token, itemId: o.itemId }
         : null;
+    case "pk_resize":
+      return keysAre(o, ["type", "token", "height"]) && isHeight(o.height) ? { type: "pk_resize", token, height: o.height } : null;
     case "pk_state":
     case "pk_fallback":
     case "pk_cancel":

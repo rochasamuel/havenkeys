@@ -7,6 +7,7 @@
 
 import type { Match } from "@havenkeys/protocol";
 import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
+import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
@@ -160,9 +161,36 @@ function render(state: PopupState): void {
         parts.push(h("ul", { className: "list" }, ...state.matches.map(matchRow)));
       }
       main.replaceChildren(...parts);
+      void offerSuggestions();
       return;
     }
   }
+}
+
+/**
+ * In-page suggestions are opt-in (background/registration.ts). Until they
+ * are on, say so here: otherwise logins only ever show up in this popup.
+ */
+async function offerSuggestions(): Promise<void> {
+  if ((await grantedOrigins()).length > 0) return;
+  const turnOn = smallButton("Turn on", "Show your logins under login fields on websites");
+  turnOn.addEventListener("click", () => {
+    // permissions.request must run directly in the click handler.
+    void chrome.permissions
+      .request({ origins: [...INLINE_ORIGINS] })
+      .catch(() => false)
+      .then((granted) => {
+        if (granted) box.replaceChildren(h("strong", { text: "Suggestions are on" }), h("p", { text: "Reload open tabs to use them there." }));
+      });
+  });
+  const box = h(
+    "div",
+    { className: "notice offer" },
+    h("strong", { text: "Suggestions in login fields are off" }),
+    h("p", { text: "Turn them on to pick logins right under the field and to save and use passkeys with HavenKeys." }),
+    turnOn,
+  );
+  main.append(box);
 }
 
 async function refresh(): Promise<void> {

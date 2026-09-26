@@ -106,6 +106,28 @@ describe("content script", () => {
     expect(document.querySelector("iframe")).toBeNull();
   });
 
+  it("shows the HavenKeys icon in a focused login field, and page script cannot click it", async () => {
+    const pw = field("pw");
+    pw.focus();
+    const icon = document.documentElement.querySelector(":scope > div[title='HavenKeys']") as HTMLElement | null;
+    expect(icon).not.toBeNull();
+    icon?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true })); // untrusted
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent.filter((m) => (m as { type: string }).type === "cs_open_menu")).toEqual([]);
+    pw.blur();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(document.documentElement.querySelector(":scope > div[title='HavenKeys']")).toBeNull();
+  });
+
+  it("page script cannot open menus by synthesizing typing", async () => {
+    const pw = field("pw");
+    pw.focus();
+    pw.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, data: "x" }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent.filter((m) => (m as { type: string }).type === "cs_open_menu")).toEqual([]);
+    pw.blur();
+  });
+
   it("page script cannot plant a password and forge a submit (no save-prompt oracle)", () => {
     field("user").value = "me@example.com";
     field("pw").value = "guess";

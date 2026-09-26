@@ -95,7 +95,8 @@ export class InlineFrame {
 
 export const MENU_HEADER = 34;
 export const MENU_ROW = 46;
-export const MENU_PADDING = 8;
+/** The list's 4px top and bottom padding, plus the card's 1px borders. */
+export const MENU_PADDING = 10;
 export const MENU_MIN_WIDTH = 260;
 export const MENU_MAX_WIDTH = 360;
 export const SAVE_WIDTH = 340;
@@ -115,12 +116,14 @@ export function saveBox(viewport: { width: number }): Box {
   return { top: 12, left: Math.max(4, viewport.width - SAVE_WIDTH - 16), width: SAVE_WIDTH, height: SAVE_HEIGHT };
 }
 
-export const PASSKEY_WIDTH = 360;
-export const PASSKEY_HEIGHT = 300;
+export const PASSKEY_WIDTH = 380;
+/** Until the card reports its content height (pk_resize). */
+export const PASSKEY_HEIGHT = 180;
 
-/** Top right of the viewport, like the save prompt. */
-export function passkeyBox(viewport: { width: number }): Box {
-  return { top: 12, left: Math.max(4, viewport.width - PASSKEY_WIDTH - 16), width: PASSKEY_WIDTH, height: PASSKEY_HEIGHT };
+/** Top right of the viewport, like the save prompt; never taller than the viewport allows. */
+export function passkeyBox(viewport: { width: number; height?: number }, height = PASSKEY_HEIGHT): Box {
+  const room = viewport.height !== undefined && viewport.height > 0 ? Math.max(96, viewport.height - 24) : height;
+  return { top: 12, left: Math.max(4, viewport.width - PASSKEY_WIDTH - 16), width: PASSKEY_WIDTH, height: Math.min(height, room) };
 }
 
 export const NOTICE_HEIGHT = 112;

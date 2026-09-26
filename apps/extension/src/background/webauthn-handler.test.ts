@@ -53,6 +53,18 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe("sign in", () => {
+  it("relays the card's height to the session's own frame only", async () => {
+    const { h, sent } = setup(defaults);
+    await h.handleContent(frame({ frameId: 3 }), { type: "wa_get", options: getOpts });
+    expect(await h.handleFrame(1, { type: "pk_resize", token: T1, height: 220 })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)).toEqual({ type: "bg_wa_resize", token: T1, height: 220 });
+    // Another tab, or a stale token: nothing is relayed.
+    const before = sent.length;
+    await h.handleFrame(2, { type: "pk_resize", token: T1, height: 220 });
+    await h.handleFrame(1, { type: "pk_resize", token: "f".repeat(32), height: 220 });
+    expect(sent).toHaveLength(before);
+  });
+
   it("offers matches, signs only after a pick, and never trusts the page for the URL", async () => {
     const { h, requests, sent } = setup(defaults);
     const reply = await h.handleContent(frame(), { type: "wa_get", options: getOpts });

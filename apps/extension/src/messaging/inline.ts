@@ -19,7 +19,8 @@ export type MenuKind = "login" | "otp" | "new_password";
 // ---------------------------------------------------------------- content → background
 
 export type ContentRequest =
-  | { type: "cs_open_menu"; kind: MenuKind }
+  /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
+  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null }
   | { type: "cs_ready" };
@@ -117,8 +118,10 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
   if (!o) return null;
   switch (o.type) {
     case "cs_open_menu":
-      return keysAre(o, ["type", "kind"]) && MENU_KINDS.includes(o.kind as MenuKind)
-        ? { type: "cs_open_menu", kind: o.kind as MenuKind }
+      if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
+      if (keysAre(o, ["type", "kind"])) return { type: "cs_open_menu", kind: o.kind as MenuKind };
+      return keysAre(o, ["type", "kind", "explicit"]) && o.explicit === true
+        ? { type: "cs_open_menu", kind: o.kind as MenuKind, explicit: true }
         : null;
     case "cs_close_menu":
       return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: "cs_close_menu", token: o.token } : null;

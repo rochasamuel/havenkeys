@@ -30,7 +30,7 @@ import type {
   SaveView,
 } from "../messaging/inline";
 import { displayHost } from "../shared/url";
-import type { BgWaResult, PasskeyRow } from "../webauthn/messages";
+import type { BgWaResize, BgWaResult, PasskeyRow } from "../webauthn/messages";
 import type { PasskeySite } from "./passkey-sites";
 
 type Client = {
@@ -54,7 +54,7 @@ export interface FrameRef {
 export interface InlineDeps {
   client: Client;
   /** Send to one frame's content script; resolves to its reply or undefined. */
-  sendToFrame(frame: Pick<FrameRef, "tabId" | "frameId" | "documentId">, msg: BackgroundToContent | BgWaResult): Promise<unknown>;
+  sendToFrame(frame: Pick<FrameRef, "tabId" | "frameId" | "documentId">, msg: BackgroundToContent | BgWaResult | BgWaResize): Promise<unknown>;
   now(): number;
   newToken(): string;
   passkeys?: {
@@ -153,7 +153,7 @@ export function createInlineHandler(deps: InlineDeps) {
 
   // ------------------------------------------------------------ content script
 
-  async function openMenu(frame: FrameRef, kind: MenuKind): Promise<OpenMenuReply> {
+  async function openMenu(frame: FrameRef, kind: MenuKind, explicit: boolean): Promise<OpenMenuReply> {
     let locked = false;
     let items: Match[] = [];
     try {
@@ -167,14 +167,16 @@ export function createInlineHandler(deps: InlineDeps) {
     if (kind === "otp") items = items.filter((m) => m.hasTotp);
     if (kind === "new_password") items = [];
     const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
-    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0) return { ok: false };
+    // Nothing to offer: stay out of the page, unless the user asked for the menu.
+    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !explicit) return { ok: false };
     const { hint, help } =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
 
     closeMenu(frame.tabId);
     const token = deps.newToken();
     menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, expires: deps.now() + MENU_TTL_MS });
-    const rows = locked || kind === "new_password" ? 1 : Math.min(items.length + passkeys.length + (hint ? 1 : 0), MAX_ROWS);
+    const offered = items.length + passkeys.length + (hint ? 1 : 0);
+    const rows = locked || kind === "new_password" ? 1 : Math.max(1, Math.min(offered, MAX_ROWS));
     return { ok: true, token, rows };
   }
 
@@ -251,7 +253,7 @@ export function createInlineHandler(deps: InlineDeps) {
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
     switch (req.type) {
       case "cs_open_menu":
-        return openMenu(frame, req.kind);
+        return openMenu(frame, req.kind, req.explicit === true);
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
         if (m && m.token === req.token && m.frame.frameId === frame.frameId) menus.delete(frame.tabId);

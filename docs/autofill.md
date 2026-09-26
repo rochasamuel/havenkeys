@@ -107,7 +107,10 @@ features; `group.ts` extracts features from the DOM.
 ### When it runs
 
 Nothing scans the page on load. Fields are classified **when the user
-interacts with them**: a trusted click, Tab focus, or ArrowDown in an input.
+interacts with them**: a trusted click, Tab focus, ArrowDown or typing in an
+input, or a click on the field's HavenKeys icon. Focus alone (including a
+field the page autofocused) classifies only the focused field, to decide
+whether it gets the icon; it never opens a menu.
 At that point the content script builds the field's **login group**:
 
 1. The field's `<form>`, unless that form has more than 40 inputs (a page
@@ -126,6 +129,22 @@ whatever the framework has rendered is what gets classified. A
 interactions: it watches the suggestion frame, and closes the menu if the
 page removes or restyles it, and scroll, resize and SPA route changes
 (`popstate`, `hashchange`) reposition or close the menu.
+
+### Field icon
+
+A focused login, new-password or one-time-code field shows a small HavenKeys
+icon at its right edge (`content/icon.ts`). Clicking it toggles the menu; on
+a site with nothing saved it opens a "no logins for this site" menu instead
+of doing nothing (`cs_open_menu` with `explicit: true`). The icon moves left
+past the page's own button in the field (show password, clear), and is left
+out when the field is too small or no spot is free. It lives in a closed
+shadow root with `!important` inline styles, holds no vault data, and
+ignores untrusted clicks. It follows its field every 500 ms and on scroll
+and resize, and goes away when the field loses focus.
+
+Typing in a login field opens the menu too, once per field: not after the
+user closed the menu there (Escape, the icon, or a pick), and not again when
+the desktop had nothing to offer.
 
 ### Usable inputs
 
@@ -555,8 +574,9 @@ See `security-model.md` §12.
 * **Page-controlled URL paths.** A page can change its own path with
   `history.pushState`. That only matters for "exact page" rules, and only
   within the same origin, which can already do anything to itself.
-* **Signals visible to the page.** A page can see that an iframe appeared
-  after a click, and its height. That tells it the user has 1–5 logins for
+* **Signals visible to the page.** A page can see the field icon's host
+  element when a login field is focused (so, that HavenKeys is installed and
+  active here), and that an iframe appeared after a click, and its height. That tells it the user has 1–5 logins for
   this site, or that HavenKeys is locked. On Chromium the extension ID is
   fixed, so any page can detect that HavenKeys is installed by loading
   `menu.html`. Firefox uses a random per-install ID.

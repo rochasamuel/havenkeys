@@ -21,7 +21,7 @@ import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
 import { createWebAuthnHandler } from "./webauthn-handler";
-import { parsePkRequest, parseWaRequest, type BgWaResult } from "../webauthn/messages";
+import { parsePkRequest, parseWaRequest, type BgWaResize, type BgWaResult } from "../webauthn/messages";
 
 const client = new NativeClient(() => chrome.runtime.connectNative(NATIVE_HOST_NAME) as NativePort, {
   onEvent: (event) => {
@@ -38,7 +38,7 @@ const client = new NativeClient(() => chrome.runtime.connectNative(NATIVE_HOST_N
 
 type Target = Pick<FrameRef, "tabId" | "frameId" | "documentId">;
 
-async function sendToFrame(target: Target, msg: BackgroundToContent | BgWaResult): Promise<unknown> {
+async function sendToFrame(target: Target, msg: BackgroundToContent | BgWaResult | BgWaResize): Promise<unknown> {
   const options: { frameId: number; documentId?: string } = { frameId: target.frameId };
   if (target.documentId !== undefined) options.documentId = target.documentId;
   try {
