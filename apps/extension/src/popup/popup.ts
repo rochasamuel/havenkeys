@@ -8,11 +8,18 @@
 import type { Match } from "@havenkeys/protocol";
 import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
+import { applyDocumentLang, t } from "../i18n";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
 const lockBtn = document.getElementById("lock") as HTMLButtonElement;
 const optionsBtn = document.getElementById("options") as HTMLButtonElement;
+const lockLabel = document.getElementById("lock-label") as HTMLElement;
+
+applyDocumentLang();
+optionsBtn.title = t.popup.settings;
+optionsBtn.setAttribute("aria-label", t.popup.settings);
+lockLabel.textContent = t.popup.lock;
 
 function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -30,7 +37,7 @@ async function send<T>(req: PopupRequest): Promise<PopupReply<T>> {
   try {
     return (await chrome.runtime.sendMessage(req)) as PopupReply<T>;
   } catch {
-    return { ok: false, message: "The extension could not be reached." };
+    return { ok: false, message: t.popup.unreachable };
   }
 }
 
@@ -79,19 +86,19 @@ function matchRow(m: Match): HTMLElement {
       "div",
       { className: "who" },
       h("div", { className: "title", text: m.title }),
-      h("div", { className: "user", text: m.username ?? "No username" }),
+      h("div", { className: "user", text: m.username ?? t.popup.noUsername }),
       status,
     ),
   );
   const actions = h("div", { className: "actions" });
 
-  const fill = smallButton("Fill", "Fill this login into the page");
+  const fill = smallButton(t.popup.fill, t.popup.fillTitle);
   fill.addEventListener("click", () => void fillFromPopup(fill, { type: "popup_fill", itemId: m.id }, status));
   actions.append(fill);
 
   if (m.hasTotp) {
     const slot = h("span");
-    const show = smallButton("Code", "Show the one-time code");
+    const show = smallButton(t.popup.code, t.popup.codeTitle);
     show.addEventListener("click", async () => {
       show.disabled = true;
       const r = await send<TotpView>({ type: "popup_totp", itemId: m.id });
@@ -102,7 +109,7 @@ function matchRow(m: Match): HTMLElement {
       }
       const code = h("button", { className: "code", text: formatCode(r.value.code) });
       code.type = "button";
-      code.title = "Fill this code into the page";
+      code.title = t.popup.fillCodeTitle;
       code.addEventListener("click", () => void fillFromPopup(code, { type: "popup_fill_totp", itemId: m.id }, status));
       slot.replaceChildren(code);
       // Remove the code when it stops being valid.
@@ -121,42 +128,37 @@ function render(state: PopupState): void {
     case "host_unavailable":
       setPill(null);
       main.replaceChildren(
-        notice(
-          "Not connected",
-          "Install or update the HavenKeys app on this computer, then open it once. It connects this browser for you.",
-        ),
+        notice(t.popup.hostUnavailable.title, t.popup.hostUnavailable.body),
       );
       return;
     case "desktop_unavailable":
-      setPill("Offline");
-      main.replaceChildren(notice("HavenKeys is not running", "Open the HavenKeys app on this computer."));
+      setPill(t.popup.pill.offline);
+      main.replaceChildren(notice(t.popup.desktopUnavailable.title, t.popup.desktopUnavailable.body));
       return;
     case "no_vault":
       setPill(null);
-      main.replaceChildren(notice("No vault yet", "Create your vault in the HavenKeys app."));
+      main.replaceChildren(notice(t.popup.noVault.title, t.popup.noVault.body));
       return;
     case "locked":
-      setPill("Locked", "locked");
-      main.replaceChildren(notice("HavenKeys is locked", "Unlock it in the HavenKeys app to use your logins."));
+      setPill(t.popup.pill.locked, "locked");
+      main.replaceChildren(notice(t.popup.locked.title, t.popup.locked.body));
       return;
     case "disabled":
-      setPill("Off");
-      main.replaceChildren(
-        notice("Browser integration is off", "Turn it on in HavenKeys → Settings → Browser extension."),
-      );
+      setPill(t.popup.pill.off);
+      main.replaceChildren(notice(t.popup.disabled.title, t.popup.disabled.body));
       return;
     case "error":
       setPill(null);
-      main.replaceChildren(notice("Something went wrong", state.message));
+      main.replaceChildren(notice(t.popup.error.title, state.message));
       return;
     case "unlocked": {
-      setPill("Unlocked", "unlocked");
+      setPill(t.popup.pill.unlocked, "unlocked");
       const parts: Node[] = [];
       if (state.site) parts.push(h("div", { className: "site", text: state.site }));
       if (!state.site) {
-        parts.push(notice("No saved logins here", "This page can't use saved logins."));
+        parts.push(notice(t.popup.noPage.title, t.popup.noPage.body));
       } else if (state.matches.length === 0) {
-        parts.push(notice("No saved logins for this site", "Logins saved in HavenKeys for this website appear here."));
+        parts.push(notice(t.popup.noMatches.title, t.popup.noMatches.body));
       } else {
         parts.push(h("ul", { className: "list" }, ...state.matches.map(matchRow)));
       }
@@ -173,21 +175,21 @@ function render(state: PopupState): void {
  */
 async function offerSuggestions(): Promise<void> {
   if ((await grantedOrigins()).length > 0) return;
-  const turnOn = smallButton("Turn on", "Show your logins under login fields on websites");
+  const turnOn = smallButton(t.popup.offer.turnOn, t.popup.offer.turnOnTitle);
   turnOn.addEventListener("click", () => {
     // permissions.request must run directly in the click handler.
     void chrome.permissions
       .request({ origins: [...INLINE_ORIGINS] })
       .catch(() => false)
       .then((granted) => {
-        if (granted) box.replaceChildren(h("strong", { text: "Suggestions are on" }), h("p", { text: "Reload open tabs to use them there." }));
+        if (granted) box.replaceChildren(h("strong", { text: t.popup.offer.doneTitle }), h("p", { text: t.popup.offer.doneBody }));
       });
   });
   const box = h(
     "div",
     { className: "notice offer" },
-    h("strong", { text: "Suggestions in login fields are off" }),
-    h("p", { text: "Turn them on to pick logins right under the field and to save and use passkeys with HavenKeys." }),
+    h("strong", { text: t.popup.offer.title }),
+    h("p", { text: t.popup.offer.body }),
     turnOn,
   );
   main.append(box);
