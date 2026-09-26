@@ -118,14 +118,19 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                       {sub}
                     </span>
                   </span>
-                  {item.hasTotp && (
-                    <span className="list-item-flag" title={t.list.hasTotp}>
-                      <Icon name="clock" size={13} />
-                    </span>
-                  )}
-                  {item.hasPasskey && (
-                    <span className="list-item-flag" title={t.list.hasPasskeys}>
-                      <Icon name="key" size={13} />
+                  {(item.hasTotp || item.hasPasskey) && (
+                    // One element, so both flags share the grid's last column.
+                    <span className="list-item-flags">
+                      {item.hasTotp && (
+                        <span className="list-item-flag" title={t.list.hasTotp}>
+                          <Icon name="clock" size={13} />
+                        </span>
+                      )}
+                      {item.hasPasskey && (
+                        <span className="list-item-flag" title={t.list.hasPasskeys}>
+                          <Icon name="key" size={13} />
+                        </span>
+                      )}
                     </span>
                   )}
                 </button>
