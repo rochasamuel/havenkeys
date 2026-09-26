@@ -35,3 +35,27 @@ export function hasPhrase(text: string, phrase: string): boolean {
 export function hasAny(text: string, phrases: readonly string[]): boolean {
   return phrases.some((p) => hasPhrase(text, p));
 }
+
+/** Labels of form-less buttons that submit a login. */
+export const SUBMIT_WORDS = [
+  "sign in",
+  "log in",
+  "login",
+  "signin",
+  "continue",
+  "next",
+  "submit",
+  "sign up",
+  "register",
+  "create account",
+  "save",
+  "update",
+  "change password",
+  "entrar",
+  "acessar",
+  "continuar",
+  "proximo",
+  "avancar",
+  "cadastrar",
+  "salvar",
+];

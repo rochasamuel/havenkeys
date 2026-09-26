@@ -20,7 +20,7 @@ import { isLoginRole, isNewPasswordRole } from "../autofill/classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit } from "../autofill/fill";
 import { classifyGroup, defaultEnv, groupFor, groupRoot, isFillable } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
-import { hasAny, normalize } from "../autofill/text";
+import { hasAny, normalize, SUBMIT_WORDS } from "../autofill/text";
 import {
   parseBackgroundMessage,
   TOKEN,
@@ -44,29 +44,6 @@ const TAB_FOCUS_MS = 500;
 const ICON_TRACK_MS = 500;
 /** Submissions closer together than this are the same submission. */
 const SUBMIT_DEBOUNCE_MS = 1000;
-/** Labels of form-less buttons that submit a login. */
-const SUBMIT_WORDS = [
-  "sign in",
-  "log in",
-  "login",
-  "signin",
-  "continue",
-  "next",
-  "submit",
-  "sign up",
-  "register",
-  "create account",
-  "save",
-  "update",
-  "change password",
-  "entrar",
-  "acessar",
-  "continuar",
-  "proximo",
-  "avancar",
-  "cadastrar",
-  "salvar",
-];
 
 interface OpenMenu {
   frame: InlineFrame;
