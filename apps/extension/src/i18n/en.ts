@@ -168,7 +168,7 @@ export const en = {
     chooseAccount: "Choose an account",
     addTitle: "Add a passkey?",
     saveTitle: "Save a passkey to HavenKeys?",
-    account: (name: string) => `Account: ${name}`,
+    accountLabel: "Account:",
     noAccountName: "No account name",
     existsTitle: "This account already has a passkey in HavenKeys",
     savedTitle: "Passkey saved to HavenKeys",

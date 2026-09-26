@@ -123,7 +123,27 @@ function pollWhileLocked(t: string): void {
   }, LOCKED_POLL_MS);
 }
 
+/**
+ * "Account: <name>". The name is the site's (WebAuthn user.name, up to 512
+ * characters it chose), so it stays on one line and truncates: a hostile site
+ * must not fill our card with its own text. Our label may wrap.
+ */
+function showAccount(userName: string): void {
+  if (!userName) {
+    detail.className = "pk-detail";
+    detail.textContent = msg.passkey.noAccountName;
+    return;
+  }
+  detail.className = "pk-detail pk-account";
+  detail.replaceChildren(
+    h("span", { className: "pk-account-label", text: msg.passkey.accountLabel }),
+    document.createTextNode(" "),
+    userData(h("span", { className: "pk-account-name", text: userName })),
+  );
+}
+
 function render(t: string, view: PkView): void {
+  detail.className = "pk-detail";
   site.textContent = view.site;
   switch (view.state) {
     case "locked":
@@ -138,7 +158,7 @@ function render(t: string, view: PkView): void {
       return;
     case "create": {
       question.textContent = view.upgradeItemId ? msg.passkey.addTitle : msg.passkey.saveTitle;
-      detail.textContent = view.userName ? msg.passkey.account(view.userName) : msg.passkey.noAccountName;
+      showAccount(view.userName);
       const c = choices(view.candidates, view.userName, view.upgradeItemId);
       main.replaceChildren(c.el);
       // The preselected login may be below the fold. Not scrollIntoView: from

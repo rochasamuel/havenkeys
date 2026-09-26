@@ -112,6 +112,30 @@ describe("passkey card", () => {
     expect(checked).toEqual([true, false]);
   });
 
+  it("puts the site's account name in a truncating element of its own", async () => {
+    const name = "x".repeat(512);
+    replies = [{ ok: true, value: { state: "create", site: "github.com", userName: name, upgradeItemId: null, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }] } }];
+    await load();
+    const detail = document.getElementById("detail") as HTMLElement;
+    expect(detail.hasAttribute("data-truncate")).toBe(false);
+    const label = detail.querySelector(".pk-account-label") as HTMLElement;
+    const value = detail.querySelector(".pk-account-name") as HTMLElement;
+    expect(label.textContent).toBe("Account:");
+    expect(label.hasAttribute("data-truncate")).toBe(false);
+    expect(value.textContent).toBe(name);
+    expect(value.hasAttribute("data-truncate")).toBe(true);
+    expect(detail.textContent).toBe(`Account: ${name}`);
+  });
+
+  it("drops the account markup for later plain copy", async () => {
+    replies = [{ ok: true, value: { state: "create", site: "github.com", userName: "", upgradeItemId: null, candidates: [{ itemId: ITEM, title: "GitHub", username: "octo" }] } }];
+    await load();
+    const detail = document.getElementById("detail") as HTMLElement;
+    expect(detail.textContent).toBe("No account name");
+    expect(detail.querySelector("[data-truncate]")).toBeNull();
+    expect(detail.classList.contains("pk-account")).toBe(false);
+  });
+
   it("shows the saved notice without buttons", async () => {
     replies = [{ ok: true, value: { state: "saved", site: "github.com" } }];
     await load();

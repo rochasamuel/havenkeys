@@ -135,7 +135,7 @@ export const ptBR: Messages = {
     chooseAccount: "Escolha uma conta",
     addTitle: "Adicionar uma chave de acesso?",
     saveTitle: "Salvar uma chave de acesso no HavenKeys?",
-    account: (name: string) => `Conta: ${name}`,
+    accountLabel: "Conta:",
     noAccountName: "Sem nome de conta",
     existsTitle: "Esta conta já tem uma chave de acesso no HavenKeys",
     savedTitle: "Chave de acesso salva no HavenKeys",

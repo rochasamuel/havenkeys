@@ -295,6 +295,21 @@ export const extensionScenarios = [
     }),
   },
   {
+    // WebAuthn user.name is the site's (up to 512 characters): one line, cut.
+    name: "passkey-create-long-name",
+    page: "passkey.html",
+    frame: { kind: "passkey" },
+    replies: () => ({
+      pk_state: ok({
+        state: "create",
+        site: "github.com",
+        userName: "a-very-long-account-name-chosen-by-the-site ".repeat(12).trim(),
+        candidates: [{ itemId: ID1, title: "GitHub", username: "octocat" }],
+        upgradeItemId: null,
+      }),
+    }),
+  },
+  {
     name: "passkey-upgrade-no-name",
     page: "passkey.html",
     frame: { kind: "passkey" },

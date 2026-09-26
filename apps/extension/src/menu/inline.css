@@ -338,12 +338,33 @@ main {
   color: var(--danger);
 }
 
-/* Our copy or "Account: <name>": wraps (the card grows to fit), never cut. */
+/* Our copy: wraps (the card grows to fit), never cut. */
 .pk-detail {
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+/* "Account: <name>": the name is the site's, so it gets one line and an
+   ellipsis however long it is; the card never grows with it. */
+.pk-detail.pk-account {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+  min-width: 0;
+}
+
+.pk-account-label {
+  flex: 0 1 auto;
+}
+
+.pk-account-name {
+  flex: 1 1 0;
+  min-width: 4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pk-detail:empty {
