@@ -380,20 +380,23 @@ page lookup the popup fill uses (`findLoginGroup` / `findOtpGroup`, at most
 (`childList` + `subtree`, plus `class`/`style`/`hidden`/`disabled`/`type`
 attributes), debounced to at most one check per 150 ms. A field counts only
 once the same connected, visible, enabled element is found on two
-consecutive checks (about 300 ms apart), so a field that flickers in and out
-is not reported. The watch gives up after 30 s (`WATCH_TIMEOUT_MS`) and ends
-the run.
+consecutive checks, one debounce (about 150 ms) apart, so a field that
+flickers in and out is not reported. The watch gives up after 30 s
+(`WATCH_TIMEOUT_MS`) and ends the run.
 
 ### Pressing the button (`autofill/submit.ts`)
 
 Candidates are `button`, `input[type=submit]`, `input[type=image]` and
-`[role=button]`, at most 30, visible, not `disabled` and not
-`aria-disabled="true"`. They are drawn first from the filled group's own
-root (its `<form>`, or the container `groupRoot` picked). When nothing there
-reaches the minimum score and the group has no `<form>`, the search climbs
-up to 3 further ancestors looking for a button beside the fields' own
-container, which is common in SPAs; a container that has candidates but none
-clear enough stops the climb with no press, rather than looking further up.
+`[role=button]`, at most 30, visible. Disabled and `aria-disabled="true"`
+buttons are still candidates and can still be chosen — many sites enable
+their submit button only once the input validates — but a disabled one is
+never pressed until it enables (see below). Candidates are drawn first from
+the filled group's own root (its `<form>`, or the container `groupRoot`
+picked). When nothing there reaches the minimum score and the group has no
+`<form>`, the search climbs up to 3 further ancestors looking for a button
+beside the fields' own container, which is common in SPAs; a container that
+has candidates but none clear enough stops the climb with no press, rather
+than looking further up.
 
 | Signal | Score |
 |---|---|
@@ -434,7 +437,7 @@ the run; nothing more is filled or pressed.
 |---|---|---|
 | The user takes over | A trusted `keydown`, `input` or `pointerdown` on the page during the run | End (so Esc ends it) |
 | A step comes back | The field of an already-submitted step is found again (password after its submit: wrong password; OTP after its submit: wrong code) | End, no fill |
-| Challenge on the page | A visible iframe whose parsed URL host is `www.google.com`/`www.recaptcha.net` with a `/recaptcha/` path, `*.hcaptcha.com`, or `challenges.cloudflare.com`; or a visible `.g-recaptcha`, `.h-captcha`, `.cf-turnstile` element in the group's root | Fill the current step, do not press, end |
+| Challenge on the page | A visible iframe whose parsed URL host is `www.google.com`/`www.recaptcha.net` with a `/recaptcha/` path, `*.hcaptcha.com`, or `challenges.cloudflare.com`; or a visible `.g-recaptcha`, `.h-captcha`, `.cf-turnstile` element, anywhere in the document | Fill the current step, do not press, end |
 | OTP without TOTP | `watch: "otp"` is never requested when `hasTotp` is false; an OTP field appearing then simply ends the run at the password step | End |
 | Nothing appears | 30 s per step, 2 min overall | End |
 | Context gone | Origin change, lock, tab closed, new pick | End |
