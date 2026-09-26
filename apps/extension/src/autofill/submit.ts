@@ -141,6 +141,10 @@ const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * * Never with a challenge on the page.
  * * `form.requestSubmit(button)` for a form's submit button, so the site's
  *   validation and submit handlers run; `click()` otherwise.
+ *
+ * `cancelled`, when given, is checked after every wait and again immediately
+ * before pressing; once it reports true the run has ended (user takeover,
+ * `bg_run_end`, or a newer run superseding this one) and nothing is pressed.
  */
 export async function pressWhenReady(o: {
   button: HTMLElement;
@@ -149,17 +153,21 @@ export async function pressWhenReady(o: {
   env: Env;
   doc?: Document;
   sleep?: (ms: number) => Promise<void>;
+  cancelled?: () => boolean;
 }): Promise<"pressed" | "site_submitted" | "gave_up"> {
   const sleep = o.sleep ?? realSleep;
   const doc = o.doc ?? document;
   if (o.step === "otp") {
     await sleep(OTP_SETTLE_MS);
+    if (o.cancelled?.()) return "gave_up";
     if (!o.field.isConnected || !o.env.isVisible(o.field)) return "site_submitted";
   }
   for (let waited = 0; isDisabled(o.button); waited += ENABLE_POLL_MS) {
     if (waited >= ENABLE_WAIT_MS) return "gave_up";
     await sleep(ENABLE_POLL_MS);
+    if (o.cancelled?.()) return "gave_up";
   }
+  if (o.cancelled?.()) return "gave_up";
   if (!o.button.isConnected || !o.env.isVisible(o.button) || hasChallenge(doc, o.env)) return "gave_up";
   const form = isSubmitter(o.button) ? o.button.form : null;
   if (form && typeof form.requestSubmit === "function") form.requestSubmit(o.button);

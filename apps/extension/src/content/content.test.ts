@@ -210,4 +210,22 @@ describe("automatic sign-in", () => {
     expect(sent).not.toContainEqual({ type: "cs_run_step", kind: "password" });
     vi.useRealTimers();
   });
+
+  it("does not press a button that only enables after bg_run_end ended the run", async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<form><input name="user" type="email" autocomplete="username"><input name="pw" type="password">
+      <button type="submit" disabled>Sign in</button></form>`;
+    const submitted = vi.fn((e: Event) => e.preventDefault());
+    document.querySelector("form")?.addEventListener("submit", submitted);
+    expect(deliver(autoFill())).toEqual({ filled: 2, pressing: "password" });
+    // The run ends while the press is still waiting for the button to enable...
+    deliver({ type: "bg_run_end" });
+    sent.length = 0;
+    // ...and only then (as on a real page reacting late) does it enable.
+    (document.querySelector("button") as HTMLButtonElement).disabled = false;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(submitted).not.toHaveBeenCalled();
+    expect(sent).not.toContainEqual({ type: "cs_run_stop" });
+    vi.useRealTimers();
+  });
 });

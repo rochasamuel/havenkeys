@@ -100,6 +100,10 @@ function start(): void {
   const empty = new WeakSet<HTMLInputElement>();
   /** A sign-in run is active in this frame (we pressed, or the background said to watch). */
   let runActive = false;
+  /** Bumped whenever a run locally starts or ends, so a stale async press or
+   * watch (from a run since ended or superseded) can tell it is no longer
+   * current and do nothing. */
+  let runSeq = 0;
   let stopWatch: (() => void) | null = null;
 
   // ------------------------------------------------------------ menu
@@ -275,17 +279,24 @@ function start(): void {
     cancelWatch();
     if (runActive && tell) void send({ type: "cs_run_stop" });
     runActive = false;
+    runSeq++;
   }
 
   function startWatch(want: WatchKind, filled: HTMLInputElement | null): void {
     cancelWatch();
     runActive = true;
+    runSeq++;
+    const mine = runSeq;
     stopWatch = watchNext({
       want,
       filled,
       env: defaultEnv,
       onResult: (r) => {
         stopWatch = null;
+        // Superseded by a newer run while waiting (watchNext's own cancel
+        // already guarantees this for a watch we replaced ourselves, but a
+        // stale continuation could still reach here defensively).
+        if (mine !== runSeq) return;
         if ("found" in r) void send({ type: "cs_run_step", kind: r.found });
         else endLocalRun(true);
       },
@@ -316,13 +327,17 @@ function start(): void {
     const button = findSubmitButton(group.root, done.last, done.step, env);
     if (!button || hasChallenge(document, env)) return null;
     const next: NextStep | null = done.step === "username" ? "password" : done.step === "password" && totp ? "otp" : null;
-    runActive = true;
     cancelWatch();
-    void pressWhenReady({ button, field: done.last, step: done.step, env }).then((outcome) => {
-      if (!runActive) return;
+    runActive = true;
+    runSeq++;
+    const mine = runSeq;
+    void pressWhenReady({ button, field: done.last, step: done.step, env, cancelled: () => mine !== runSeq }).then((outcome) => {
+      // A later event (user takeover, bg_run_end, a new pick) already ended
+      // this run or started another one: do not act on this stale press.
+      if (mine !== runSeq) return;
       if (outcome === "gave_up") return endLocalRun(true);
       if (next) startWatch(next, done.last);
-      else runActive = false;
+      else endLocalRun(false);
     });
     return done.step;
   }
@@ -495,8 +510,7 @@ function start(): void {
     // readSubmission only reports it if the field still holds our value.
     if (generatedIn) captureFrom(generatedIn, true);
     // Navigation is expected mid-run; the next page asks with cs_ready.
-    cancelWatch();
-    runActive = false;
+    endLocalRun(false);
   });
 
   // ------------------------------------------------------------ background

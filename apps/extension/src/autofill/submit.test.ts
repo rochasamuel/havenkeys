@@ -125,6 +125,30 @@ describe("pressWhenReady", () => {
     expect(await pressWhenReady({ button: go, field: $("[name=p]"), step: "password", env, sleep: never })).toBe("gave_up");
   });
 
+  it("gives up without pressing once cancelled during the disabled-button wait", async () => {
+    document.body.innerHTML = `<div><input name="p" type="password"><button id="go" disabled>Sign in</button></div>`;
+    const go = $<HTMLButtonElement>("#go");
+    const click = vi.fn();
+    go.addEventListener("click", click);
+    let cancelled = false;
+    const sleep = async () => {
+      // The run ends, and only then (as on a real page) the button enables:
+      // without the cancelled check this would proceed to press it.
+      cancelled = true;
+      go.disabled = false;
+    };
+    const out = await pressWhenReady({
+      button: go,
+      field: $("[name=p]"),
+      step: "password",
+      env,
+      sleep,
+      cancelled: () => cancelled,
+    });
+    expect(out).toBe("gave_up");
+    expect(click).not.toHaveBeenCalled();
+  });
+
   it("treats aria-disabled like disabled", async () => {
     document.body.innerHTML = `<div><input name="p" type="password"><button id="go" aria-disabled="true">Sign in</button></div>`;
     expect(await pressWhenReady({ button: $("#go"), field: $("[name=p]"), step: "password", env, sleep: noSleep })).toBe("gave_up");
