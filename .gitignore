@@ -19,3 +19,5 @@ apps/desktop/.impeccable/questions/
 apps/desktop/.impeccable/hook.cache.json
 # Native host sidecar, built by scripts/build-native-host-sidecar.mjs.
 apps/desktop/src-tauri/binaries/
+# Screenshots from pnpm ui:check.
+ui-check-output/
