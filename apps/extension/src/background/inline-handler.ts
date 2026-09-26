@@ -286,18 +286,24 @@ export function createInlineHandler(deps: InlineDeps) {
     try {
       if (kind === "password") {
         const c = await deps.client.request({ type: "fill_item", itemId: run.itemId, ...frameFields(frame) });
+        // The vault may have locked, or another pick/stop may have replaced
+        // this run, while that request was in flight.
+        if (runs.get(frame.tabId) !== run) return;
         if (c.password === null) return endRun(frame.tabId);
         payload = { kind: "login", username: null, password: c.password };
         auto = c.autoSubmit;
       } else {
         const t = await deps.client.request({ type: "get_totp", itemId: run.itemId, ...frameFields(frame) });
+        if (runs.get(frame.tabId) !== run) return;
         payload = { kind: "otp", code: t.code };
         auto = t.autoSubmit;
       }
     } catch {
+      if (runs.get(frame.tabId) !== run) return;
       return endRun(frame.tabId); // locked, denied, gone: stop quietly
     }
     const r = await sendFill(frame, null, payload, auto, run.hasTotp);
+    if (runs.get(frame.tabId) !== run) return; // superseded while the content script replied
     if (!auto || r.pressing !== kind || nextStep(kind, run.hasTotp) === null) endRun(frame.tabId);
   }
 

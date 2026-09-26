@@ -547,6 +547,56 @@ describe("automatic sign-in", () => {
     const before = requests.length;
     await h.handleContent(frame(), { type: "cs_run_step", kind: "password" });
     expect(requests.length).toBe(before);
+
+    // A second pick in the same tab replaces the run, even when that pick
+    // itself does not start a new one (the content script did not press).
+    let pressNull = false;
+    const { h: h2, requests: requests2 } = setup(auto, {}, (msg) => (pressNull ? null : pressWhenSubmit(msg)));
+    await pick(h2); // run starts at username
+    pressNull = true;
+    await pick(h2); // ends the first run; starts none
+    const before2 = requests2.length;
+    await h2.handleContent(frame(), { type: "cs_run_step", kind: "password" });
+    expect(requests2.length).toBe(before2);
+  });
+
+  it("ignores a continuation reply once its run is gone (lock or cs_run_stop mid-flight)", async () => {
+    // Case 1: the vault locks (h.reset()) while the continuation's fill_item
+    // request is outstanding. The reply must not fill the page, and must not
+    // end whatever the tab is doing next.
+    let hRef: ReturnType<typeof setup>["h"] | undefined;
+    let fillCalls = 0;
+    const lockMidFlight = (r: Request): unknown => {
+      if (r.type === "fill_item") {
+        fillCalls++;
+        if (fillCalls === 2) hRef?.reset();
+      }
+      return auto(r);
+    };
+    const a = setup(lockMidFlight, {}, pressWhenSubmit);
+    hRef = a.h;
+    await pick(a.h); // fillCalls === 1
+    const beforeA = a.sent.filter((s) => s.msg.type === "bg_fill").length;
+    await a.h.handleContent(frame({ url: "https://github.com/login/password" }), { type: "cs_run_step", kind: "password" });
+    expect(a.sent.filter((s) => s.msg.type === "bg_fill").length).toBe(beforeA);
+
+    // Case 2: cs_run_stop arrives (from the run's own frame) while that same
+    // request is outstanding.
+    let hRef2: ReturnType<typeof setup>["h"] | undefined;
+    let fillCalls2 = 0;
+    const stopMidFlight = (r: Request): unknown => {
+      if (r.type === "fill_item") {
+        fillCalls2++;
+        if (fillCalls2 === 2) void hRef2?.handleContent(frame(), { type: "cs_run_stop" });
+      }
+      return auto(r);
+    };
+    const b = setup(stopMidFlight, {}, pressWhenSubmit);
+    hRef2 = b.h;
+    await pick(b.h);
+    const beforeB = b.sent.filter((s) => s.msg.type === "bg_fill").length;
+    await b.h.handleContent(frame({ url: "https://github.com/login/password" }), { type: "cs_run_step", kind: "password" });
+    expect(b.sent.filter((s) => s.msg.type === "bg_fill").length).toBe(beforeB);
   });
 
   it("stops on cs_run_stop, on lock, and when the content script did not press", async () => {
