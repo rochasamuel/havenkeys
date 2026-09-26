@@ -503,6 +503,7 @@ mod tests {
             totp: SecretUpdate::Keep,
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
+            auto_sign_in: None,
         }
     }
 

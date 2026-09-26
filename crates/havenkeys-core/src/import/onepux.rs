@@ -451,6 +451,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 totp: totp.map_or(SecretUpdate::Keep, SecretUpdate::Set),
                 notes: join_notes(extras.render()).map_or(SecretUpdate::Keep, SecretUpdate::Set),
                 content: SecretUpdate::Keep,
+                auto_sign_in: None,
             }
         }
         "003" => {
@@ -464,6 +465,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 totp: SecretUpdate::Keep,
                 notes: SecretUpdate::Keep,
                 content: SecretUpdate::Set(join_notes(extras.render()).unwrap_or_default()),
+                auto_sign_in: None,
             }
         }
         other => {
@@ -497,6 +499,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 totp: SecretUpdate::Keep,
                 notes: SecretUpdate::Keep,
                 content: SecretUpdate::Set(content),
+                auto_sign_in: None,
             }
         }
     };

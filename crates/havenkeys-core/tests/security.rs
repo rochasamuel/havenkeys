@@ -709,6 +709,7 @@ fn password_history_is_bounded_and_skips_unchanged() {
             totp: SecretUpdate::Keep,
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
+            auto_sign_in: None,
         };
         let staged = v.stage_update(&gh, input, now).unwrap();
         v.commit_write(staged, now).unwrap();
@@ -794,4 +795,50 @@ fn a_staged_save_touches_nothing_until_it_is_committed() {
     v.lock();
     assert_eq!(v.commit_write(created.write, 1).err(), Some(Error::Locked));
     assert_eq!(v.commit_write(updated.write, 2).err(), Some(Error::Locked));
+}
+
+/// Automatic sign-in needs both the vault setting and the login's switch;
+/// an edit that does not mention the switch keeps it.
+#[test]
+fn auto_sign_in_needs_the_setting_and_the_login_switch() {
+    let (mut v, gh) = github_vault();
+    assert!(v.auto_sign_in_for(&gh).unwrap(), "both default on");
+
+    let edit = |title: &str, switch: Option<bool>| {
+        let mut input = login(title, "octo", "gh-secret", "github.com");
+        input.password = SecretUpdate::Keep;
+        input.auto_sign_in = switch;
+        input
+    };
+    let staged = v
+        .stage_update(&gh, edit("GitHub", Some(false)), NOW)
+        .unwrap();
+    v.commit_write(staged, 3).unwrap();
+    assert!(!v.auto_sign_in_for(&gh).unwrap());
+
+    let staged = v
+        .stage_update(&gh, edit("GitHub (work)", None), NOW)
+        .unwrap();
+    v.commit_write(staged, 4).unwrap();
+    assert!(!v.auto_sign_in_for(&gh).unwrap(), "None keeps the switch");
+
+    let staged = v
+        .stage_update(&gh, edit("GitHub", Some(true)), NOW)
+        .unwrap();
+    v.commit_write(staged, 5).unwrap();
+    assert!(v.auto_sign_in_for(&gh).unwrap());
+
+    v.update_settings(Settings {
+        auto_sign_in: false,
+        ..v.settings().unwrap()
+    })
+    .unwrap();
+    assert!(!v.auto_sign_in_for(&gh).unwrap(), "global off wins");
+
+    assert_eq!(
+        v.auto_sign_in_for(&Uuid::new_v4()).err(),
+        Some(Error::NotFound)
+    );
+    v.lock();
+    assert_eq!(v.auto_sign_in_for(&gh).err(), Some(Error::Locked));
 }

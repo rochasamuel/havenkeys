@@ -405,6 +405,7 @@ impl VaultService {
                         totp: SecretUpdate::Keep,
                         notes: SecretUpdate::Keep,
                         content: SecretUpdate::Keep,
+                        auto_sign_in: None,
                     };
                     let (overview, details) =
                         build_item(Uuid::new_v4(), input, None, now_ms, now_ms)?;

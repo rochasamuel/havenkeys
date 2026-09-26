@@ -39,6 +39,7 @@ pub fn login(title: &str, username: &str, password: &str, url: &str) -> ItemInpu
         totp: SecretUpdate::Keep,
         notes: SecretUpdate::Keep,
         content: SecretUpdate::Keep,
+        auto_sign_in: None,
     }
 }
 
@@ -116,5 +117,6 @@ pub fn note(title: &str, content: &str) -> ItemInput {
         totp: SecretUpdate::Keep,
         notes: SecretUpdate::Keep,
         content: SecretUpdate::Set(secret(content)),
+        auto_sign_in: None,
     }
 }

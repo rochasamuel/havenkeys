@@ -389,6 +389,7 @@ mod tests {
             has_totp: false,
             has_notes: false,
             has_passkey: false,
+            auto_sign_in: true,
             created_at: 0,
             updated_at: 0,
         };

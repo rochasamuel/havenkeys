@@ -73,6 +73,7 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
         }),
         notes: SecretUpdate::Set(SecretString::from("login notes stay home")),
         content: SecretUpdate::Keep,
+        auto_sign_in: None,
     }
 }
 
@@ -121,6 +122,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 totp: SecretUpdate::Keep,
                 notes: SecretUpdate::Keep,
                 content: SecretUpdate::Set(SecretString::from("note body")),
+                auto_sign_in: None,
             },
             NOW,
         )

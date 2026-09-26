@@ -147,6 +147,7 @@ fn login_item(title: &str, password: &str) -> ItemInput {
         totp: SecretUpdate::Keep,
         notes: SecretUpdate::Keep,
         content: SecretUpdate::Keep,
+        auto_sign_in: None,
     }
 }
 

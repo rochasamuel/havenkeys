@@ -1152,6 +1152,15 @@ impl VaultService {
         self.totp_code(id, unix_seconds)
     }
 
+    /// Whether a fill of this login may press the page's sign-in button: the
+    /// vault's `auto_sign_in` setting and the login's own switch. Asked only
+    /// after `fill_for_page` / `totp_for_page` authorized the item.
+    pub fn auto_sign_in_for(&self, id: &Uuid) -> Result<bool> {
+        let session = self.session()?;
+        let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
+        Ok(session.settings.auto_sign_in && overview.auto_sign_in)
+    }
+
     /// What saving a login the user just submitted on the page would do.
     ///
     /// * `Unchanged`: a login for this page already has this username and
@@ -1238,6 +1247,7 @@ impl VaultService {
                 totp: SecretUpdate::Keep,
                 notes: SecretUpdate::Keep,
                 content: SecretUpdate::Keep,
+                auto_sign_in: None,
             };
             return Ok(StagedSave {
                 item_id: *id,
@@ -1259,6 +1269,7 @@ impl VaultService {
             totp: SecretUpdate::Keep,
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
+            auto_sign_in: None,
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1300,11 +1311,17 @@ impl VaultService {
 
     /// Seal an updated item's blobs, carrying the revision this device last
     /// saw for it so the server can detect a conflicting edit.
-    pub fn stage_update(&self, id: &Uuid, input: ItemInput, now_ms: i64) -> Result<StagedWrite> {
+    pub fn stage_update(
+        &self,
+        id: &Uuid,
+        mut input: ItemInput,
+        now_ms: i64,
+    ) -> Result<StagedWrite> {
         let existing = self.get_item(id)?;
         if existing.item_type != input.item_type {
             return Err(Error::InvalidInput("item type cannot change"));
         }
+        input.auto_sign_in.get_or_insert(existing.auto_sign_in);
         let current = self.load_details(id)?;
         let (overview, details) =
             build_item(*id, input, Some(current), existing.created_at, now_ms)?;
@@ -1524,6 +1541,7 @@ pub(crate) fn build_item(
         totp,
         notes,
         content,
+        auto_sign_in,
         ..
     } = input;
 
@@ -1619,6 +1637,7 @@ pub(crate) fn build_item(
         has_totp,
         has_notes,
         has_passkey,
+        auto_sign_in: auto_sign_in.unwrap_or(true),
         created_at,
         updated_at: now_ms,
     };

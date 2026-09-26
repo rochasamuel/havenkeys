@@ -66,6 +66,11 @@ pub struct ItemOverview {
     /// before passkeys existed.
     #[serde(default)]
     pub has_passkey: bool,
+    /// Whether automatic sign-in may press this login's sign-in button and
+    /// continue to later steps. `default`: logins saved before this field
+    /// existed are on.
+    #[serde(default = "default_true")]
+    pub auto_sign_in: bool,
     /// Unix milliseconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -202,6 +207,10 @@ pub struct ItemInput {
     /// Secure-note body.
     #[serde(default)]
     pub content: SecretUpdate,
+    /// Automatic sign-in switch for a login. `None` keeps the current value
+    /// on update and means on for a new item.
+    #[serde(default)]
+    pub auto_sign_in: Option<bool>,
 }
 
 impl fmt::Debug for ItemInput {
@@ -250,6 +259,12 @@ pub struct Settings {
     /// before this field existed; when off, the save card asks instead.
     #[serde(default = "default_true")]
     pub auto_passkey_upgrade: bool,
+    /// Whether HavenKeys may press a site's sign-in button after filling and
+    /// continue through later steps (password page, one-time code). On by
+    /// default, including for settings saved before this field existed. Each
+    /// login has its own switch too (`ItemOverview::auto_sign_in`).
+    #[serde(default = "default_true")]
+    pub auto_sign_in: bool,
 }
 
 fn default_true() -> bool {
@@ -266,6 +281,7 @@ impl Default for Settings {
             theme: Theme::Dark,
             browser_integration: false,
             auto_passkey_upgrade: true,
+            auto_sign_in: true,
         }
     }
 }
@@ -475,6 +491,27 @@ mod tests {
         )
         .unwrap();
         assert!(!off.auto_passkey_upgrade);
+    }
+
+    #[test]
+    fn auto_sign_in_defaults_on() {
+        assert!(Settings::default().auto_sign_in);
+        let old: Settings =
+            serde_json::from_str(r#"{"autoLockMinutes":5,"clipboardClearSeconds":30}"#).unwrap();
+        assert!(old.auto_sign_in);
+        let off: Settings = serde_json::from_str(
+            r#"{"autoLockMinutes":5,"clipboardClearSeconds":30,"autoSignIn":false}"#,
+        )
+        .unwrap();
+        assert!(!off.auto_sign_in);
+    }
+
+    #[test]
+    fn overviews_saved_before_auto_sign_in_are_on() {
+        let json = r#"{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","itemType":"login","title":"t",
+            "hasPassword":true,"hasTotp":false,"hasNotes":false,"createdAt":1,"updatedAt":1}"#;
+        let o: ItemOverview = serde_json::from_str(json).unwrap();
+        assert!(o.auto_sign_in);
     }
 
     #[test]
