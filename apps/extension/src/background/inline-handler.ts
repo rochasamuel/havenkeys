@@ -12,6 +12,9 @@
 // * Nothing here is persisted. Pending save prompts hold the submitted
 //   password in memory only, for at most SAVE_TTL_MS, and are dropped when
 //   the vault locks.
+// * A sign-in run (signin-run.ts) starts only from a pick whose fill Rust
+//   marked autoSubmit, is bound to that tab, frame and origin, and every
+//   continuation fill is re-requested from the desktop for the frame's URL.
 
 import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
@@ -25,6 +28,7 @@ import {
   type MenuHint,
   type MenuKind,
   type MenuView,
+  type NextStep,
   type OpenMenuReply,
   type ReadyReply,
   type SaveView,
@@ -32,6 +36,7 @@ import {
 import { displayHost } from "../shared/url";
 import type { BgWaResize, BgWaResult, PasskeyRow } from "../webauthn/messages";
 import type { PasskeySite } from "./passkey-sites";
+import { createRuns, nextStep } from "./signin-run";
 
 type Client = {
   request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>>;
@@ -49,6 +54,12 @@ export interface FrameRef {
   topUrl?: string;
   /** The frame's origin; the content script checks it before filling. */
   origin: string;
+}
+
+/** A pick whose fill Rust marked autoSubmit: the run it may start. */
+export interface AutoRun {
+  itemId: string;
+  hasTotp: boolean;
 }
 
 export interface InlineDeps {
@@ -103,6 +114,12 @@ export function createInlineHandler(deps: InlineDeps) {
   const menus = new Map<number, MenuSession>(); // by tab
   const saves = new Map<number, PendingSave>(); // by tab
   const recentUsernames = new Map<number, { origin: string; username: string; expires: number }>();
+  const runs = createRuns(deps.now);
+
+  function endRun(tabId: number): void {
+    const r = runs.end(tabId);
+    if (r) void deps.sendToFrame({ tabId, frameId: r.frameId }, { type: "bg_run_end" });
+  }
 
   const top = (f: FrameRef) => ({ tabId: f.tabId, frameId: 0 });
   const frameFields = (f: FrameRef) => (f.topUrl === undefined ? { url: f.url } : { url: f.url, topUrl: f.topUrl });
@@ -144,10 +161,29 @@ export function createInlineHandler(deps: InlineDeps) {
     return s;
   }
 
-  async function fill(frame: FrameRef, token: string | null, payload: FillPayload): Promise<number> {
-    // Task 9 wires submit/totp through from the caller; for now every fill is a one-shot menu pick.
-    const reply = await deps.sendToFrame(frame, { type: "bg_fill", origin: frame.origin, token, fill: payload, submit: false, totp: false });
-    return parseFillReply(reply).filled;
+  async function sendFill(frame: FrameRef, token: string | null, payload: FillPayload, submit: boolean, totp: boolean) {
+    const reply = await deps.sendToFrame(frame, { type: "bg_fill", origin: frame.origin, token, fill: payload, submit, totp });
+    return parseFillReply(reply);
+  }
+
+  /**
+   * A fill the user picked (menu or popup). Ends any run in the tab; with
+   * `auto`, asks the content script to press, and starts a run if it did.
+   * `totpHint` tells the content script whether the item has TOTP, so it can
+   * be forwarded even when this particular fill is not auto-submitted;
+   * defaulting to `auto`'s flag keeps popup/generated fills unchanged.
+   */
+  async function pickFill(
+    frame: FrameRef,
+    token: string | null,
+    payload: FillPayload,
+    auto: AutoRun | null,
+    totpHint: boolean = auto?.hasTotp ?? false,
+  ): Promise<number> {
+    endRun(frame.tabId);
+    const r = await sendFill(frame, token, payload, auto !== null, totpHint);
+    if (auto && r.pressing) runs.start(frame, auto.itemId, r.pressing, auto.hasTotp);
+    return r.filled;
   }
 
   // ------------------------------------------------------------ content script
@@ -240,13 +276,38 @@ export function createInlineHandler(deps: InlineDeps) {
   }
 
   function ready(frame: FrameRef): ReadyReply {
-    if (frame.frameId !== 0) return { saveToken: null, watch: null };
+    const watch = runs.watchFor(frame);
+    if (frame.frameId !== 0) return { saveToken: null, watch };
     const s = saves.get(frame.tabId);
     if (!s || s.expires <= deps.now()) {
       dropSave(frame.tabId, false);
-      return { saveToken: null, watch: null };
+      return { saveToken: null, watch };
     }
-    return { saveToken: s.token, watch: null };
+    return { saveToken: s.token, watch };
+  }
+
+  /** cs_run_step: the next step's field appeared in the run's frame. */
+  async function continueRun(frame: FrameRef, kind: NextStep): Promise<void> {
+    const run = runs.accept(frame, kind);
+    if (!run) return;
+    let payload: FillPayload;
+    let auto: boolean;
+    try {
+      if (kind === "password") {
+        const c = await deps.client.request({ type: "fill_item", itemId: run.itemId, ...frameFields(frame) });
+        if (c.password === null) return endRun(frame.tabId);
+        payload = { kind: "login", username: null, password: c.password };
+        auto = c.autoSubmit;
+      } else {
+        const t = await deps.client.request({ type: "get_totp", itemId: run.itemId, ...frameFields(frame) });
+        payload = { kind: "otp", code: t.code };
+        auto = t.autoSubmit;
+      }
+    } catch {
+      return endRun(frame.tabId); // locked, denied, gone: stop quietly
+    }
+    const r = await sendFill(frame, null, payload, auto, run.hasTotp);
+    if (!auto || r.pressing !== kind || nextStep(kind, run.hasTotp) === null) endRun(frame.tabId);
   }
 
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
@@ -263,6 +324,12 @@ export function createInlineHandler(deps: InlineDeps) {
         return {};
       case "cs_ready":
         return ready(frame);
+      case "cs_run_step":
+        await continueRun(frame, req.kind);
+        return {};
+      case "cs_run_stop":
+        runs.stop(frame);
+        return {};
     }
   }
 
@@ -285,12 +352,15 @@ export function createInlineHandler(deps: InlineDeps) {
         if (!m.items.some((i) => i.id === req.itemId)) return { ok: false, message: "Unknown item." };
         closeMenu(tabId);
         try {
+          const offered = m.items.find((i) => i.id === req.itemId);
+          const hasTotp = offered?.hasTotp ?? false;
           if (m.kind === "otp") {
             const t = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
-            await fill(m.frame, m.token, { kind: "otp", code: t.code });
+            await pickFill(m.frame, m.token, { kind: "otp", code: t.code }, t.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null, hasTotp);
           } else {
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
-            await fill(m.frame, m.token, { kind: "login", username: c.username, password: c.password });
+            const auto = c.autoSubmit ? { itemId: req.itemId, hasTotp } : null;
+            await pickFill(m.frame, m.token, { kind: "login", username: c.username, password: c.password }, auto, hasTotp);
           }
         } catch (e) {
           return fail(e);
@@ -312,7 +382,7 @@ export function createInlineHandler(deps: InlineDeps) {
         closeMenu(tabId);
         try {
           const g = await deps.client.request({ type: "generate_password" });
-          await fill(m.frame, m.token, { kind: "generated", password: g.password });
+          await pickFill(m.frame, m.token, { kind: "generated", password: g.password }, null);
         } catch (e) {
           return fail(e);
         }
@@ -364,6 +434,7 @@ export function createInlineHandler(deps: InlineDeps) {
     for (const tabId of [...menus.keys()]) closeMenu(tabId);
     for (const tabId of [...saves.keys()]) dropSave(tabId, true);
     recentUsernames.clear();
+    for (const r of runs.clear()) void deps.sendToFrame({ tabId: r.tabId, frameId: r.frameId }, { type: "bg_run_end" });
   }
 
   /** A tab closed. */
@@ -371,9 +442,10 @@ export function createInlineHandler(deps: InlineDeps) {
     menus.delete(tabId);
     dropSave(tabId, false);
     recentUsernames.delete(tabId);
+    runs.end(tabId);
   }
 
-  return { handleContent, handleInline, fill, reset, forgetTab };
+  return { handleContent, handleInline, pickFill, reset, forgetTab };
 }
 
 export type InlineHandler = ReturnType<typeof createInlineHandler>;

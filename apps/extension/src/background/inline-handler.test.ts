@@ -21,7 +21,11 @@ function frame(over: Partial<FrameRef> = {}): FrameRef {
   return { tabId: 1, frameId: 0, url: "https://github.com/login", origin: "https://github.com", ...over };
 }
 
-function setup(answer: (r: Request) => unknown = defaultAnswer, extra: Partial<InlineDeps> = {}) {
+function setup(
+  answer: (r: Request) => unknown = defaultAnswer,
+  extra: Partial<InlineDeps> = {},
+  pressing: (msg: BackgroundToContent) => string | null = () => null,
+) {
   const requests: Request[] = [];
   const sent: Array<{ to: { tabId: number; frameId: number }; msg: BackgroundToContent }> = [];
   let n = 0;
@@ -36,7 +40,7 @@ function setup(answer: (r: Request) => unknown = defaultAnswer, extra: Partial<I
     sendToFrame: async (to, msg) => {
       // The inline handler only sends BackgroundToContent; BgWaResult is the passkey handler's.
       sent.push({ to: { tabId: to.tabId, frameId: to.frameId }, msg: msg as BackgroundToContent });
-      return msg.type === "bg_fill" ? { filled: 2 } : undefined;
+      return msg.type === "bg_fill" ? { filled: 2, pressing: pressing(msg as BackgroundToContent) } : undefined;
     },
     now: () => clock,
     newToken: () => (++n).toString(16).padStart(32, "0"),
@@ -191,7 +195,7 @@ describe("suggestion menus", () => {
         token: T1,
         fill: { kind: "login", username: "octo", password: "pw" },
         submit: false,
-        totp: false,
+        totp: true,
       },
     });
     // Single use.
@@ -473,5 +477,106 @@ describe("passkey hints in the login menu", () => {
     await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
     expect(requests.some((r) => r.type === "passkey_status")).toBe(false);
     expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ value: { hint: null } });
+  });
+});
+
+describe("automatic sign-in", () => {
+  const auto = (r: Request): unknown => {
+    const base = defaultAnswer(r) as Record<string, unknown>;
+    return r.type === "fill_item" || r.type === "get_totp" ? { ...base, autoSubmit: true } : base;
+  };
+  const pressWhenSubmit = (msg: BackgroundToContent) =>
+    msg.type === "bg_fill" && msg.submit
+      ? msg.fill.kind === "otp"
+        ? "otp"
+        : msg.fill.kind === "login" && msg.fill.username !== null
+          ? "username"
+          : "password"
+      : null;
+
+  async function pick(h: ReturnType<typeof setup>["h"]) {
+    const open = (await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })) as { token: string };
+    await h.handleInline(1, { type: "menu_pick", token: open.token, itemId: GH });
+  }
+
+  it("asks the content script to press only when Rust says autoSubmit", async () => {
+    const off = setup();
+    await pick(off.h);
+    expect(off.sent.find((s) => s.msg.type === "bg_fill")?.msg).toMatchObject({ submit: false, totp: true });
+
+    const on = setup(auto);
+    await pick(on.h);
+    expect(on.sent.find((s) => s.msg.type === "bg_fill")?.msg).toMatchObject({ submit: true, totp: true });
+  });
+
+  it("continues username → password → otp on the same origin, with Rust checks each step", async () => {
+    const { h, requests, sent } = setup(auto, {}, pressWhenSubmit);
+    await pick(h); // username-only page: content reports pressing "username"
+    expect(await h.handleContent(frame({ url: "https://github.com/login/password" }), { type: "cs_ready" })).toEqual({
+      saveToken: null,
+      watch: "password",
+    });
+    await h.handleContent(frame({ url: "https://github.com/login/password" }), { type: "cs_run_step", kind: "password" });
+    const pwFill = sent.filter((s) => s.msg.type === "bg_fill").at(-1)?.msg;
+    expect(pwFill).toMatchObject({ token: null, submit: true, fill: { kind: "login", username: null, password: "pw" } });
+    expect(requests.filter((r) => r.type === "fill_item").at(-1)).toMatchObject({ url: "https://github.com/login/password" });
+
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "otp" });
+    expect(requests.at(-1)).toMatchObject({ type: "get_totp", itemId: GH });
+    expect(sent.filter((s) => s.msg.type === "bg_fill").at(-1)?.msg).toMatchObject({ fill: { kind: "otp", code: "123456" }, submit: true });
+    // The run is over: a repeat is ignored without asking the desktop.
+    const before = requests.length;
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "otp" });
+    expect(requests.length).toBe(before);
+  });
+
+  it("ignores steps from another origin, another tab, or with no run", async () => {
+    const { h, requests } = setup(auto, {}, pressWhenSubmit);
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "password" }); // no pick yet
+    await pick(h);
+    const before = requests.length;
+    await h.handleContent(frame({ url: "https://gist.github.com/", origin: "https://gist.github.com" }), { type: "cs_run_step", kind: "password" });
+    await h.handleContent(frame({ tabId: 2 }), { type: "cs_run_step", kind: "password" });
+    expect(requests.length).toBe(before);
+  });
+
+  it("drops a late step after expiry or after another pick in the tab", async () => {
+    const { h, requests, advance } = setup(auto, {}, pressWhenSubmit);
+    await pick(h);
+    advance(2 * 60_000);
+    const before = requests.length;
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "password" });
+    expect(requests.length).toBe(before);
+  });
+
+  it("stops on cs_run_stop, on lock, and when the content script did not press", async () => {
+    const a = setup(auto, {}, pressWhenSubmit);
+    await pick(a.h);
+    await a.h.handleContent(frame(), { type: "cs_run_stop" });
+    expect(await a.h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
+
+    const b = setup(auto, {}, pressWhenSubmit);
+    await pick(b.h);
+    b.h.reset();
+    expect(await b.h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
+    expect(b.sent.some((s) => s.msg.type === "bg_run_end")).toBe(true);
+
+    const c = setup(auto); // content never presses
+    await pick(c.h);
+    expect(await c.h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
+  });
+
+  it("fills without pressing and ends when autoSubmit turns off mid-run", async () => {
+    let on = true;
+    const answer = (r: Request): unknown => {
+      const base = defaultAnswer(r) as Record<string, unknown>;
+      return r.type === "fill_item" || r.type === "get_totp" ? { ...base, autoSubmit: on } : base;
+    };
+    const { h, sent } = setup(answer, {}, pressWhenSubmit);
+    await pick(h);
+    on = false;
+    await h.handleContent(frame(), { type: "cs_run_step", kind: "password" });
+    expect(sent.filter((s) => s.msg.type === "bg_fill").at(-1)?.msg).toMatchObject({ submit: false });
+    expect(await h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
   });
 });

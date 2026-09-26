@@ -116,7 +116,34 @@ describe("popup handler", () => {
     });
     expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
     expect(c.seen[0]).toEqual({ type: "fill_item", itemId: ID, url: "https://github.com/login" });
-    expect(fills).toEqual([[7, "https://github.com/login", { kind: "login", username: "octo", password: "pw" }]]);
+    expect(fills).toEqual([[7, "https://github.com/login", { kind: "login", username: "octo", password: "pw" }, null]]);
+  });
+
+  it("passes a run to the tab filler when Rust says autoSubmit, with the item's TOTP flag", async () => {
+    const c = fakeClient((r) =>
+      r.type === "fill_item"
+        ? { type: "fill_item", username: "octo", password: "pw", autoSubmit: true }
+        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" }] },
+    );
+    const fills: unknown[][] = [];
+    const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login" }), async (...a) => {
+      fills.push(a);
+      return 2;
+    });
+    await h.handle({ type: "popup_fill", itemId: ID });
+    expect(fills[0]?.[3]).toEqual({ itemId: ID, hasTotp: true });
+    expect(c.seen.map((r) => r.type)).toEqual(["fill_item", "find_matches"]);
+  });
+
+  it("passes a code-only run for a popup TOTP fill", async () => {
+    const c = fakeClient(() => ({ type: "get_totp", code: "123456", period: 30, secondsRemaining: 9, autoSubmit: true }));
+    const fills: unknown[][] = [];
+    const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login" }), async (...a) => {
+      fills.push(a);
+      return 1;
+    });
+    await h.handle({ type: "popup_fill_totp", itemId: ID });
+    expect(fills[0]?.[3]).toEqual({ itemId: ID, hasTotp: true });
   });
 
   it("reports pages without a login form, and refuses non-web pages", async () => {

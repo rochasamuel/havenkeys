@@ -5,6 +5,7 @@ import type { FillPayload } from "../messaging/inline";
 import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
 import { displayHost, pageUrlForRequest } from "../shared/url";
+import type { AutoRun } from "./inline-handler";
 
 type Client = Pick<NativeClient, "request">;
 
@@ -18,7 +19,7 @@ export interface ActiveTab {
  * Put a fill into the tab's top frame (injecting the content script if
  * needed). Resolves to the number of fields filled.
  */
-export type TabFiller = (tabId: number, pageUrl: string, payload: FillPayload) => Promise<number>;
+export type TabFiller = (tabId: number, pageUrl: string, payload: FillPayload, auto?: AutoRun | null) => Promise<number>;
 
 function stateForError(e: unknown): PopupState {
   if (!(e instanceof BridgeError)) return { kind: "error", message: "Something went wrong." };
@@ -61,14 +62,25 @@ export function createPopupHandler(
       let filled: number;
       if (totp) {
         const t = await client.request({ type: "get_totp", itemId, url });
-        filled = await fillTab(tab.id, url, { kind: "otp", code: t.code });
+        filled = await fillTab(tab.id, url, { kind: "otp", code: t.code }, t.autoSubmit ? { itemId, hasTotp: true } : null);
       } else {
         const c = await client.request({ type: "fill_item", itemId, url });
-        filled = await fillTab(tab.id, url, { kind: "login", username: c.username, password: c.password });
+        const auto = c.autoSubmit ? { itemId, hasTotp: await hasTotp(itemId, url) } : null;
+        filled = await fillTab(tab.id, url, { kind: "login", username: c.username, password: c.password }, auto);
       }
       return filled > 0 ? { ok: true, value: null } : { ok: false, message: "No login form found on this page." };
     } catch (e) {
       return fail(e);
+    }
+  }
+
+  /** Whether a login has TOTP, for the run's OTP step. A lookup, no secrets. */
+  async function hasTotp(itemId: string, url: string): Promise<boolean> {
+    try {
+      const { matches } = await client.request({ type: "find_matches", url });
+      return matches.find((m) => m.id === itemId)?.hasTotp ?? false;
+    } catch {
+      return false;
     }
   }
 

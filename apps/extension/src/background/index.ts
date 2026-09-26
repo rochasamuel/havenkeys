@@ -12,11 +12,11 @@
 // script has no extension APIs.
 
 import { NativeClient, type NativePort } from "../messaging/native";
-import { newToken, parseContentRequest, parseInlineRequest, type BackgroundToContent } from "../messaging/inline";
+import { newToken, parseContentRequest, parseInlineRequest, type BackgroundToContent, type FillPayload } from "../messaging/inline";
 import { parsePopupRequest } from "../messaging/popup";
 import { NATIVE_HOST_NAME } from "../shared/constants";
 import { pageUrlForRequest } from "../shared/url";
-import { createInlineHandler, type FrameRef } from "./inline-handler";
+import { createInlineHandler, type AutoRun, type FrameRef } from "./inline-handler";
 import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
@@ -75,14 +75,14 @@ async function activeTab(): Promise<ActiveTab | undefined> {
 }
 
 /** Popup fill: make sure the content script is in the top frame, then hand it the values. */
-async function fillTab(tabId: number, pageUrl: string, payload: Parameters<typeof inline.fill>[2]): Promise<number> {
+async function fillTab(tabId: number, pageUrl: string, payload: FillPayload, auto: AutoRun | null = null): Promise<number> {
   try {
     await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ["content.js"] });
   } catch {
     return 0;
   }
   const frame: FrameRef = { tabId, frameId: 0, url: pageUrl, origin: new URL(pageUrl).origin };
-  return inline.fill(frame, null, payload);
+  return inline.pickFill(frame, null, payload, auto);
 }
 
 const popup = createPopupHandler(client, activeTab, fillTab);
