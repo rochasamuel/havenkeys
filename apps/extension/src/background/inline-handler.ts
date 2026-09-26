@@ -15,19 +15,19 @@
 
 import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
-import type {
-  BackgroundToContent,
-  ContentRequest,
-  FillPayload,
-  FillReply,
-  InlineReply,
-  InlineRequest,
-  MenuHint,
-  MenuKind,
-  MenuView,
-  OpenMenuReply,
-  ReadyReply,
-  SaveView,
+import {
+  parseFillReply,
+  type BackgroundToContent,
+  type ContentRequest,
+  type FillPayload,
+  type InlineReply,
+  type InlineRequest,
+  type MenuHint,
+  type MenuKind,
+  type MenuView,
+  type OpenMenuReply,
+  type ReadyReply,
+  type SaveView,
 } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 import type { BgWaResize, BgWaResult, PasskeyRow } from "../webauthn/messages";
@@ -145,10 +145,9 @@ export function createInlineHandler(deps: InlineDeps) {
   }
 
   async function fill(frame: FrameRef, token: string | null, payload: FillPayload): Promise<number> {
-    const reply = (await deps.sendToFrame(frame, { type: "bg_fill", origin: frame.origin, token, fill: payload })) as
-      | FillReply
-      | undefined;
-    return typeof reply?.filled === "number" ? reply.filled : 0;
+    // Task 9 wires submit/totp through from the caller; for now every fill is a one-shot menu pick.
+    const reply = await deps.sendToFrame(frame, { type: "bg_fill", origin: frame.origin, token, fill: payload, submit: false, totp: false });
+    return parseFillReply(reply).filled;
   }
 
   // ------------------------------------------------------------ content script
@@ -241,13 +240,13 @@ export function createInlineHandler(deps: InlineDeps) {
   }
 
   function ready(frame: FrameRef): ReadyReply {
-    if (frame.frameId !== 0) return { saveToken: null };
+    if (frame.frameId !== 0) return { saveToken: null, watch: null };
     const s = saves.get(frame.tabId);
     if (!s || s.expires <= deps.now()) {
       dropSave(frame.tabId, false);
-      return { saveToken: null };
+      return { saveToken: null, watch: null };
     }
-    return { saveToken: s.token };
+    return { saveToken: s.token, watch: null };
   }
 
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {

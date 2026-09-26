@@ -16,6 +16,13 @@ import type { PasskeyRow } from "../webauthn/messages";
 
 export type MenuKind = "login" | "otp" | "new_password";
 
+/** Steps of an automatic sign-in, in order. */
+export type RunStep = "username" | "password" | "otp";
+/** Steps a run can continue to. */
+export type NextStep = "password" | "otp";
+const NEXT_STEPS: readonly NextStep[] = ["password", "otp"];
+const RUN_STEPS: readonly RunStep[] = ["username", "password", "otp"];
+
 // ---------------------------------------------------------------- content → background
 
 export type ContentRequest =
@@ -23,10 +30,14 @@ export type ContentRequest =
   | { type: "cs_open_menu"; kind: MenuKind; explicit?: true }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null }
-  | { type: "cs_ready" };
+  | { type: "cs_ready" }
+  /** The next step's field appeared in this frame during a sign-in run. */
+  | { type: "cs_run_step"; kind: NextStep }
+  /** The run should end here: the user took over, a stop condition, or nothing appeared. */
+  | { type: "cs_run_stop" };
 
 export type OpenMenuReply = { ok: true; token: string; rows: number } | { ok: false };
-export type ReadyReply = { saveToken: string | null };
+export type ReadyReply = { saveToken: string | null; watch: NextStep | null };
 
 // ---------------------------------------------------------------- background → content
 
@@ -40,14 +51,17 @@ export type BackgroundToContent =
    * `origin` is the page origin the desktop matched; the content script
    * refuses to fill if its own origin differs (the frame navigated). `token`
    * names the menu the user picked from; null for a fill from the toolbar
-   * popup, which targets the page's login form.
+   * popup, which targets the page's login form. `submit`: press the page's
+   * button after filling (Rust's autoSubmit). `totp`: after a password step,
+   * watch for a one-time-code step.
    */
-  | { type: "bg_fill"; origin: string; token: string | null; fill: FillPayload }
+  | { type: "bg_fill"; origin: string; token: string | null; fill: FillPayload; submit: boolean; totp: boolean }
   | { type: "bg_close_menu"; token: string }
   | { type: "bg_show_save"; token: string }
-  | { type: "bg_close_save"; token: string };
+  | { type: "bg_close_save"; token: string }
+  | { type: "bg_run_end" };
 
-export type FillReply = { filled: number };
+export type FillReply = { filled: number; pressing: RunStep | null };
 
 // ---------------------------------------------------------------- menu / save frames → background
 
@@ -134,6 +148,12 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
     }
     case "cs_ready":
       return keysAre(o, ["type"]) ? { type: "cs_ready" } : null;
+    case "cs_run_step":
+      return keysAre(o, ["type", "kind"]) && NEXT_STEPS.includes(o.kind as NextStep)
+        ? { type: "cs_run_step", kind: o.kind as NextStep }
+        : null;
+    case "cs_run_stop":
+      return keysAre(o, ["type"]) ? { type: "cs_run_stop" } : null;
     default:
       return null;
   }
@@ -195,18 +215,29 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
   if (!o) return null;
   switch (o.type) {
     case "bg_fill": {
-      if (!keysAre(o, ["type", "origin", "token", "fill"]) || typeof o.origin !== "string") return null;
+      if (!keysAre(o, ["type", "origin", "token", "fill", "submit", "totp"]) || typeof o.origin !== "string") return null;
       if (o.token !== null && !isToken(o.token)) return null;
+      if (typeof o.submit !== "boolean" || typeof o.totp !== "boolean") return null;
       const fill = parseFill(o.fill);
-      return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill };
+      return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill, submit: o.submit, totp: o.totp };
     }
     case "bg_close_menu":
     case "bg_show_save":
     case "bg_close_save":
       return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: o.type, token: o.token } : null;
+    case "bg_run_end":
+      return keysAre(o, ["type"]) ? { type: "bg_run_end" } : null;
     default:
       return null;
   }
+}
+
+/** A content script's reply to bg_fill; anything malformed reads as "nothing filled". */
+export function parseFillReply(v: unknown): FillReply {
+  const o = obj(v);
+  if (!o || typeof o.filled !== "number" || !Number.isInteger(o.filled) || o.filled < 0) return { filled: 0, pressing: null };
+  if (o.pressing !== null && !RUN_STEPS.includes(o.pressing as RunStep)) return { filled: 0, pressing: null };
+  return { filled: o.filled, pressing: o.pressing as RunStep | null };
 }
 
 /** A fresh 128-bit token from the CSPRNG. */

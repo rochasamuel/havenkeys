@@ -4,6 +4,7 @@ import { BridgeError } from "../messaging/native";
 import {
   parseBackgroundMessage,
   parseContentRequest,
+  parseFillReply,
   parseInlineRequest,
   type BackgroundToContent,
 } from "../messaging/inline";
@@ -111,16 +112,51 @@ describe("message validation", () => {
 
   it("content script only accepts well-formed background messages", () => {
     expect(
-      parseBackgroundMessage({ type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "otp", code: "123456" } }),
+      parseBackgroundMessage({
+        type: "bg_fill",
+        origin: "https://a.com",
+        token: null,
+        fill: { kind: "otp", code: "123456" },
+        submit: false,
+        totp: false,
+      }),
     ).not.toBeNull();
     for (const bad of [
-      { type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "otp", code: "12ab56" } },
-      { type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "login", username: "a" } },
-      { type: "bg_fill", origin: "https://a.com", token: "x", fill: { kind: "generated", password: "p" } },
-      { type: "bg_fill", token: null, fill: { kind: "generated", password: "p" } },
+      { type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "otp", code: "12ab56" }, submit: false, totp: false },
+      { type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "login", username: "a" }, submit: false, totp: false },
+      { type: "bg_fill", origin: "https://a.com", token: "x", fill: { kind: "generated", password: "p" }, submit: false, totp: false },
+      { type: "bg_fill", token: null, fill: { kind: "generated", password: "p" }, submit: false, totp: false },
       { type: "bg_eval", code: "alert(1)" },
     ]) {
       expect(parseBackgroundMessage(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("validates run messages", () => {
+    expect(parseContentRequest({ type: "cs_run_step", kind: "password" })).toEqual({ type: "cs_run_step", kind: "password" });
+    expect(parseContentRequest({ type: "cs_run_step", kind: "otp" })).toEqual({ type: "cs_run_step", kind: "otp" });
+    expect(parseContentRequest({ type: "cs_run_stop" })).toEqual({ type: "cs_run_stop" });
+    for (const bad of [
+      { type: "cs_run_step", kind: "username" },
+      { type: "cs_run_step", kind: "password", itemId: GH },
+      { type: "cs_run_step" },
+      { type: "cs_run_stop", reason: "x" },
+    ]) {
+      expect(parseContentRequest(bad)).toBeNull();
+    }
+    const fillMsg = { type: "bg_fill", origin: "https://github.com", token: null, fill: { kind: "otp", code: "123456" }, submit: true, totp: false };
+    expect(parseBackgroundMessage(fillMsg)).toEqual(fillMsg);
+    expect(parseBackgroundMessage({ ...fillMsg, submit: "yes" })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_fill", origin: "https://github.com", token: null, fill: fillMsg.fill })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_run_end" })).toEqual({ type: "bg_run_end" });
+    expect(parseBackgroundMessage({ type: "bg_run_end", token: T1 })).toBeNull();
+  });
+
+  it("reads fill replies defensively", () => {
+    expect(parseFillReply({ filled: 2, pressing: "password" })).toEqual({ filled: 2, pressing: "password" });
+    expect(parseFillReply({ filled: 1, pressing: null })).toEqual({ filled: 1, pressing: null });
+    for (const bad of [undefined, null, { filled: "2" }, { filled: 2, pressing: "everything" }, { filled: -1, pressing: null }]) {
+      expect(parseFillReply(bad)).toEqual({ filled: 0, pressing: null });
     }
   });
 });
@@ -149,7 +185,14 @@ describe("suggestion menus", () => {
     expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu", "bg_fill"]);
     expect(sent[1]).toEqual({
       to: { tabId: 1, frameId: 0 },
-      msg: { type: "bg_fill", origin: "https://github.com", token: T1, fill: { kind: "login", username: "octo", password: "pw" } },
+      msg: {
+        type: "bg_fill",
+        origin: "https://github.com",
+        token: T1,
+        fill: { kind: "login", username: "octo", password: "pw" },
+        submit: false,
+        totp: false,
+      },
     });
     // Single use.
     expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
@@ -298,9 +341,11 @@ describe("save prompts", () => {
     await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "pw" });
     expect(await h.handleContent(frame({ frameId: 2, topUrl: "https://github.com/" }), { type: "cs_ready" })).toEqual({
       saveToken: null,
+      watch: null,
     });
     expect(await h.handleContent(frame({ url: "https://github.com/dashboard" }), { type: "cs_ready" })).toEqual({
       saveToken: T1,
+      watch: null,
     });
   });
 

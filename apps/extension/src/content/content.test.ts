@@ -57,6 +57,8 @@ const loginFill = (origin: string) => ({
   origin,
   token: null,
   fill: { kind: "login", username: "octo", password: "pw-from-vault" },
+  submit: false,
+  totp: false,
 });
 
 describe("content script", () => {
@@ -68,14 +70,14 @@ describe("content script", () => {
   });
 
   it("fills the page's login form for a popup fill on the matched origin", () => {
-    expect(deliver(loginFill(location.origin))).toEqual({ filled: 2 });
+    expect(deliver(loginFill(location.origin))).toEqual({ filled: 2, pressing: null });
     expect(field("user").value).toBe("octo");
     expect(field("pw").value).toBe("pw-from-vault");
     expect(document.documentElement.outerHTML).not.toContain("pw-from-vault");
   });
 
   it("refuses to fill if the frame is on another origin than the desktop matched", () => {
-    expect(deliver(loginFill("https://github.com"))).toEqual({ filled: 0 });
+    expect(deliver(loginFill("https://github.com"))).toEqual({ filled: 0, pressing: null });
     expect(field("pw").value).toBe("");
   });
 
@@ -85,13 +87,15 @@ describe("content script", () => {
     // From another extension.
     expect(deliver(loginFill(location.origin), { id: "other" })).toBeUndefined();
     // Malformed.
-    expect(deliver({ type: "bg_fill", origin: location.origin, token: null, fill: { kind: "script" } })).toBeUndefined();
+    expect(
+      deliver({ type: "bg_fill", origin: location.origin, token: null, fill: { kind: "script" }, submit: false, totp: false }),
+    ).toBeUndefined();
     expect(field("pw").value).toBe("");
   });
 
   it("refuses a menu fill for a menu it never opened", () => {
     const msg = { ...loginFill(location.origin), token: "a".repeat(32) };
-    expect(deliver(msg)).toEqual({ filled: 0 });
+    expect(deliver(msg)).toEqual({ filled: 0, pressing: null });
     expect(field("pw").value).toBe("");
   });
 

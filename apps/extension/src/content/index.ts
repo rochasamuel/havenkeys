@@ -422,7 +422,8 @@ function start(): void {
     if (!m) return false;
     switch (m.type) {
       case "bg_fill":
-        sendResponse({ filled: handleFill(m) });
+        // Task 10 replaces this with the sign-in run's press outcome.
+        sendResponse({ filled: handleFill(m), pressing: null });
         return false;
       case "bg_close_menu":
         // Escape in the menu, or a pick: either way the user is done with it here.
