@@ -70,6 +70,8 @@ for (const [browser, t] of Object.entries(targets)) {
     join(out, "theme.css"),
   );
   await cp(join(root, "icons"), join(out, "icons"), { recursive: true });
+  // Localized name and description (manifest __MSG_*__ placeholders).
+  await cp(join(root, "manifest/_locales"), join(out, "_locales"), { recursive: true });
 
   // Brand fonts, Latin subsets only, next to the stylesheet that names them.
   await cp(join(root, "src/fonts/fonts.css"), join(out, "fonts.css"));

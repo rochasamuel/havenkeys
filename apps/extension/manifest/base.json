@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "HavenKeys",
+  "name": "__MSG_extName__",
+  "default_locale": "en",
   "version": "0.5.0",
-  "description": "Use logins from the HavenKeys desktop password manager.",
+  "description": "__MSG_extDescription__",
   "permissions": [
     "nativeMessaging",
     "activeTab",

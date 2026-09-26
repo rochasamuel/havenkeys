@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "HavenKeys",
+    "description": "Extension name. A product name: do not translate."
+  },
+  "extDescription": {
+    "message": "Use os logins do HavenKeys, o gerenciador de senhas do seu computador.",
+    "description": "Short description shown in the browser's extension list and store."
+  }
+}
