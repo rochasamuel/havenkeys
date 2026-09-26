@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "./lib/api";
+import { api } from "./lib/api";
 import type { DeviceStatus, VaultStatus } from "./lib/types";
 import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
@@ -9,6 +9,7 @@ import { UnlockScreen } from "./views/UnlockScreen";
 import { VaultScreen } from "./views/VaultScreen";
 import { WelcomeScreen } from "./views/WelcomeScreen";
 import { useI18n } from "./i18n/context";
+import { errorMessage } from "./i18n/errors";
 
 export function App() {
   const { t } = useI18n();
@@ -20,7 +21,7 @@ export function App() {
   // Why the vault could not be opened at all, in the core's own words: an
   // old vault file this build cannot read is the case that matters, and the
   // message names the folder it is in.
-  const [fatal, setFatal] = useState<{ message: string | null } | null>(null);
+  const [fatal, setFatal] = useState<{ cause: unknown } | null>(null);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   // Shown once, right after activation: the kit is the only copy of the
   // Secret Key, so the vault waits behind an explicit confirmation.
@@ -30,14 +31,16 @@ export function App() {
   // until the next lock or a successful reconnect.
   const [signedOut, setSignedOut] = useState(false);
   // Set by "Remove this device" when the system keychain would not confirm
-  // that the Secret Key was deleted. Shown until dismissed.
-  const [removedWarning, setRemovedWarning] = useState<string | null>(null);
+  // that the Secret Key was deleted. Shown until dismissed. Rust's text is
+  // fixed, so the UI shows its own translation of it.
+  const [removedWarning, setRemovedWarning] = useState(false);
 
   useEffect(() => {
     api.status().then(setStatus, (err) =>
-      // Rust's own message when there is one: the vault_unreadable one
-      // names the folder the file is in, and only Rust knows it.
-      setFatal({ message: err instanceof ApiError ? err.message : null }),
+      // Kept as the error itself so its text follows the language. The
+      // vault_unreadable message is Rust's own: it names the folder the file
+      // is in, and only Rust knows it.
+      setFatal({ cause: err }),
     );
     const unlisten = api.onLocked((reason) => {
       setLockReason(reason);
@@ -53,7 +56,7 @@ export function App() {
   // re-reading status shows the first-run screen (vaultExists: false).
   useEffect(() => {
     const unlisten = api.onRemoved(({ keychainWarning }) => {
-      setRemovedWarning(keychainWarning);
+      setRemovedWarning(keychainWarning !== null);
       setLockReason(null);
       setShowKit(false);
       setSignedOut(false);
@@ -117,7 +120,7 @@ export function App() {
             <Seal />
             <h1>{t.app.fatalTitle}</h1>
           </header>
-          <p className="fatal-message">{fatal.message ?? t.app.fatalFallback}</p>
+          <p className="fatal-message">{errorMessage(fatal.cause, t, t.app.fatalFallback)}</p>
         </div>
       </main>
     );
@@ -129,20 +132,20 @@ export function App() {
       <>
         {removedWarning && (
           <div className="banner banner-warn banner-fixed" role="alert">
-            <span>{removedWarning}</span>
-            <button className="btn btn-quiet" type="button" onClick={() => setRemovedWarning(null)}>
+            <span>{t.app.keychainNotCleared}</span>
+            <button className="btn btn-quiet" type="button" onClick={() => setRemovedWarning(false)}>
               {t.common.dismiss}
             </button>
           </div>
         )}
         <WelcomeScreen
           onActivated={(s) => {
-            setRemovedWarning(null);
+            setRemovedWarning(false);
             setStatus(s);
             setShowKit(true);
           }}
           onSignedIn={(s) => {
-            setRemovedWarning(null);
+            setRemovedWarning(false);
             setStatus(s);
           }}
         />

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api } from "../lib/api";
 import type { GeneratedPassword, GeneratorOptions } from "../lib/types";
 import { strengthLevel } from "../lib/format";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 
 const initial: GeneratorOptions = {
   length: 24,
@@ -69,7 +70,7 @@ export function GeneratorView() {
       const r = await api.copyGenerated(result.password);
       toast(t.generator.copied(r.clearAfterSeconds));
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : t.common.couldNotCopy, "error");
+      toast(errorMessage(e, t, t.common.couldNotCopy), "error");
     }
   }
 
@@ -92,7 +93,7 @@ export function GeneratorView() {
             </span>
           ) : (
             <span className="muted">
-              {error && (error.cause instanceof ApiError ? error.cause.message : t.generator.failed)}
+              {error && errorMessage(error.cause, t, t.generator.failed)}
             </span>
           )}
         </p>

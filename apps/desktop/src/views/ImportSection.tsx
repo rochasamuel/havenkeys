@@ -1,27 +1,27 @@
 import { useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api } from "../lib/api";
 import type { ImportResult } from "../lib/types";
 import { useToast } from "../components/Toast";
-
-function plural(n: number, one: string, many: string) {
-  return `${n} ${n === 1 ? one : many}`;
-}
+import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
+import type { Messages } from "../i18n/en";
 
 /** Lines describing what was left out or changed; empty when nothing was. */
-function caveats(r: ImportResult["report"]): string[] {
+function caveats(r: ImportResult["report"], t: Messages): string[] {
   const out: string[] = [];
-  if (r.convertedToNotes) out.push(`${plural(r.convertedToNotes, "item", "items")} of other kinds (cards, identities, keys…) became secure notes with all their fields.`);
-  if (r.skippedDuplicates) out.push(`${plural(r.skippedDuplicates, "item was", "items were")} already in your vault and skipped.`);
-  if (r.skippedArchived) out.push(`${plural(r.skippedArchived, "archived item was", "archived items were")} left out.`);
-  if (r.attachmentsSkipped) out.push(`${plural(r.attachmentsSkipped, "file attachment was", "file attachments were")} left out (not supported yet).`);
-  if (r.passwordHistorySkipped) out.push(`${plural(r.passwordHistorySkipped, "old password", "old passwords")} from password history ${r.passwordHistorySkipped === 1 ? "was" : "were"} left out.`);
-  if (r.urlsMovedToNotes) out.push(`${plural(r.urlsMovedToNotes, "website entry wasn’t", "website entries weren’t")} a web address and ${r.urlsMovedToNotes === 1 ? "was" : "were"} kept in the item’s notes.`);
-  if (r.failed) out.push(`${plural(r.failed, "item", "items")} couldn’t be imported (a field was over the size limits).`);
+  if (r.convertedToNotes) out.push(t.import.convertedToNotes(r.convertedToNotes));
+  if (r.skippedDuplicates) out.push(t.import.skippedDuplicates(r.skippedDuplicates));
+  if (r.skippedArchived) out.push(t.import.skippedArchived(r.skippedArchived));
+  if (r.attachmentsSkipped) out.push(t.import.attachmentsSkipped(r.attachmentsSkipped));
+  if (r.passwordHistorySkipped) out.push(t.import.passwordHistorySkipped(r.passwordHistorySkipped));
+  if (r.urlsMovedToNotes) out.push(t.import.urlsMovedToNotes(r.urlsMovedToNotes));
+  if (r.failed) out.push(t.import.failedItems(r.failed));
   return out;
 }
 
 export function ImportSection({ onImported }: { onImported: () => void }) {
   const toast = useToast();
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [deleted, setDeleted] = useState(false);
@@ -38,7 +38,7 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
         onImported();
       }
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Import failed.", "error");
+      toast(errorMessage(e, t, t.import.failed), "error");
     } finally {
       setBusy(false);
     }
@@ -49,57 +49,51 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
       await api.deleteImportFile();
       setDeleted(true);
       setConfirmDelete(false);
-      toast("Export file deleted.");
+      toast(t.import.fileDeleted);
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Could not delete the file.", "error");
+      toast(errorMessage(e, t, t.import.deleteFailed), "error");
     }
   }
 
   return (
     <div className="settings-block">
-      <h3 className="group-title">Import from 1Password</h3>
-      <p className="group-note group-note-top">
-        In 1Password, choose File › Export and the 1PUX format, then pick that file here. The export contains all of your
-        passwords unencrypted, so delete it once the import is done.
-      </p>
+      <h3 className="group-title">{t.import.title}</h3>
+      <p className="group-note group-note-top">{t.import.note}</p>
       <div className="group-actions">
         <button className="btn" onClick={() => void runImport()} disabled={busy}>
-          {busy ? "Importing…" : "Choose .1pux file…"}
+          {busy ? t.import.importing : t.import.choose}
         </button>
       </div>
 
       {result && (
         <div className="import-result" role="status">
           <p>
-            <strong>
-              Imported {plural(result.report.imported, "item", "items")}
-            </strong>{" "}
-            from {result.fileName}: {plural(result.report.logins, "login", "logins")} and{" "}
-            {plural(result.report.secureNotes, "secure note", "secure notes")}.
+            <strong>{t.import.imported(result.report.imported)}</strong>
+            {t.import.summary(result.fileName, result.report.logins, result.report.secureNotes)}
           </p>
-          {caveats(result.report).length > 0 && (
+          {caveats(result.report, t).length > 0 && (
             <ul>
-              {caveats(result.report).map((c) => (
+              {caveats(result.report, t).map((c) => (
                 <li key={c}>{c}</li>
               ))}
             </ul>
           )}
           {deleted ? (
-            <p className="muted">The export file was deleted.</p>
+            <p className="muted">{t.import.wasDeleted}</p>
           ) : confirmDelete ? (
             <div className="confirm">
-              <span>Delete {result.fileName}?</span>
+              <span>{t.import.confirmDelete(result.fileName)}</span>
               <button className="btn btn-small btn-danger" onClick={() => void deleteFile()}>
-                Delete file
+                {t.import.deleteFile}
               </button>
               <button className="btn btn-small" onClick={() => setConfirmDelete(false)}>
-                Keep it
+                {t.import.keepFile}
               </button>
             </div>
           ) : (
             <div>
               <button className="btn btn-small" onClick={() => setConfirmDelete(true)}>
-                Delete the export file
+                {t.import.deleteExport}
               </button>
             </div>
           )}

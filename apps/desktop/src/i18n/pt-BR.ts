@@ -5,7 +5,82 @@
  * (passkey). Product names (HavenKeys, Secret Key, Emergency Kit,
  * havenkeys-server) stay in English: "a Secret Key", "o Emergency Kit".
  */
-import type { Messages } from "./en";
+import type { ErrorCode, Messages } from "./en";
+
+const codes: Record<ErrorCode, string | null> = {
+  locked: "O cofre está bloqueado.",
+  busy: "O cofre está ocupado. Tente novamente em instantes.",
+  unlock_failed: "Senha mestra incorreta ou cofre danificado.",
+  secret_key_required: "Este cofre precisa da sua Secret Key.",
+  decryption: "Falha ao descriptografar o item do cofre.",
+  encryption: "Falha ao criptografar o item do cofre.",
+  corrupted: "O arquivo do cofre está corrompido.",
+  unsupported_version: "Este cofre foi criado por uma versão não suportada.",
+  vault_exists: "Já existe um cofre.",
+  no_vault: "Ainda não existe um cofre.",
+  not_found: "Item não encontrado.",
+  denied: "Este item não está salvo para este site.",
+  // A sentence per detail in `invalidInput` below; others show Rust's.
+  invalid_input: null,
+  storage: "Erro no armazenamento do cofre.",
+  kdf: "Falha na derivação de chave.",
+  rng: "Gerador seguro de números aleatórios indisponível.",
+  offline: "O HavenKeys está offline — o cofre fica somente leitura até reconectar.",
+  item_changed_elsewhere: "Este item foi alterado em outro dispositivo.",
+  internal: "Algo deu errado. Tente novamente.",
+  file: "Não foi possível ler ou excluir o arquivo.",
+  sign_in_failed: "E-mail, senha mestra ou Secret Key incorretos.",
+  // Names the folder the file is in, which only Rust knows.
+  vault_unreadable: null,
+  clipboard: "Não foi possível acessar a área de transferência.",
+  autostart: "Não foi possível alterar se o HavenKeys abre ao iniciar a sessão.",
+  unsupported_language: "Idioma não suportado.",
+  keychain_unavailable:
+    "O chaveiro do sistema não respondeu. Aprove a solicitação dele, se houver uma aberta, e tente novamente.",
+  password_change_unknown:
+    "O HavenKeys não conseguiu confirmar se o servidor aplicou a nova senha mestra. Se a sua senha atual parar de funcionar, use a nova.",
+  password_changed_elsewhere:
+    "Sua senha mestra foi alterada em outro dispositivo. Bloqueie e desbloqueie com a nova senha.",
+  signed_out: "O HavenKeys foi desconectado desta conta. Desbloqueie de novo para reconectar.",
+  rate_limited: "Tentativas demais. Tente novamente em alguns minutos.",
+  invalid_server_url: "Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.",
+  sync_failed: "O servidor não aceitou essa solicitação.",
+};
+
+/** By Rust's InvalidInput detail: the ones a person can cause from the UI. */
+const invalidInput: Record<string, string> = {
+  "title is required": "O título é obrigatório.",
+  "password is required": "A senha é obrigatória.",
+  "invalid website address": "Endereço de site inválido.",
+  "too many websites": "Sites demais.",
+  "email address is not valid": "O endereço de e-mail não é válido.",
+  "type this account's email to confirm": "Digite o e-mail desta conta para confirmar.",
+  "that Secret Key is not valid": "Essa Secret Key não é válida.",
+  "master password is too long": "A senha mestra é longa demais.",
+  "password is too long": "A senha é longa demais.",
+  "notes are too long": "As notas são longas demais.",
+  "note is too long": "A nota é longa demais.",
+  "item too large": "O item é grande demais.",
+  "search query too long": "A busca é longa demais.",
+  "vault is already unlocked": "O cofre já está desbloqueado.",
+  "unsupported auto-lock interval": "Intervalo de bloqueio automático não suportado.",
+  "select at least one character type": "Selecione pelo menos um tipo de caractere.",
+  "password length out of range": "Tamanho de senha fora do intervalo permitido.",
+  "invalid otpauth URI": "Link otpauth:// inválido.",
+  "otpauth URI has no secret": "O link otpauth:// não contém a chave de configuração.",
+  "unsupported TOTP algorithm": "Algoritmo de código de verificação não suportado.",
+  "invalid TOTP period": "Período do código de verificação inválido.",
+  "TOTP period out of range": "Período do código de verificação fora do intervalo permitido.",
+  "invalid TOTP digits": "Número de dígitos do código de verificação inválido.",
+  "TOTP digits must be 6 or 8": "O código de verificação precisa ter 6 ou 8 dígitos.",
+  "TOTP secret is not valid Base32": "A chave de configuração não está em Base32 válido.",
+  "TOTP secret has an invalid length": "A chave de configuração tem um tamanho inválido.",
+  "TOTP input too long": "A chave de configuração é longa demais.",
+  "HOTP is not supported": "HOTP não é suportado.",
+  "not a valid 1Password export (.1pux) file": "Não é um arquivo de exportação do 1Password (.1pux) válido.",
+  "export file is too large": "O arquivo de exportação é grande demais.",
+  "export contains too many items": "A exportação tem itens demais.",
+};
 
 export const ptBR: Messages = {
   common: {
@@ -43,6 +118,8 @@ export const ptBR: Messages = {
     kitTitle: "Salve seu Emergency Kit",
     kitBody:
       "Esta é a única cópia da sua Secret Key. Sem ela — e sem a sua senha mestra — ninguém consegue abrir este cofre, nem mesmo nós.",
+    keychainNotCleared:
+      "Este computador foi removido, mas o HavenKeys não conseguiu excluir a Secret Key do chaveiro do sistema. Exclua você mesmo a entrada “app.havenkeys”.",
     signedOut:
       "O servidor não aceitou o login deste computador. Se a sua senha mestra foi alterada em outro dispositivo, bloqueie e desbloqueie com a nova.",
   },
@@ -267,7 +344,157 @@ export const ptBR: Messages = {
   },
 
   settings: {
+    title: "Configurações",
+    saved: "Configurações salvas.",
+    loadFailed: "Não foi possível carregar as configurações.",
+    saveFailed: "Não foi possível salvar as configurações.",
+    appearance: "Aparência",
     language: "Idioma",
     languageAuto: "Automático",
+    theme: "Tema",
+    themes: { dark: "Escuro", light: "Claro", system: "Sistema" },
+    security: "Segurança",
+    autoLock: "Bloquear automaticamente",
+    autoLockAfter: (minutes: number) => (minutes === 60 ? "Após 1 hora" : `Após ${minutes} minutos`),
+    never: "Nunca",
+    clipboardClear: "Limpar itens copiados",
+    afterSeconds: (seconds: number) => `Após ${seconds} segundos`,
+    securityNote:
+      "O cofre também é bloqueado quando o computador entra em suspensão e quando você sai do HavenKeys e — no Windows e no Linux — quando a tela é bloqueada. Fechar a janela mantém o HavenKeys na bandeja, onde o tempo acima continua contando.",
+    startup: "Inicialização",
+    launchAtLogin: "Abrir o HavenKeys ao iniciar a sessão",
+    launchAtLoginLabel: "Abrir o HavenKeys ao iniciar a sessão neste computador",
+    startupNote:
+      "O HavenKeys inicia bloqueado, na bandeja, para que a extensão do navegador possa acessá-lo. Vale só para este computador.",
+    browserExtension: "Extensão do navegador",
+    browserIntegration: "Sugerir e preencher logins no navegador",
+    browserIntegrationLabel: "Permitir que a extensão do HavenKeys sugira e preencha logins",
+    autoPasskey: "Adicionar chaves de acesso automaticamente depois que eu entrar",
+    autoSignIn: "Entrar automaticamente após preencher",
+    extensionNote:
+      "A extensão só recebe um login quando você o escolhe em um site para o qual ele está salvo, e só enquanto o HavenKeys está desbloqueado. Ela nunca recebe a sua senha mestra. Desativado por padrão: enquanto estiver ativado, outros programas rodando na sua conta podem fazer as mesmas solicitações que a extensão.",
+    passkeyNote:
+      "Quando um site oferece adicionar uma chave de acesso logo depois que o HavenKeys preenche a sua senha nele, o HavenKeys a salva nesse login. Com isto desativado, o HavenKeys pergunta antes.",
+    autoSignInNote:
+      "Depois que você escolhe um login, o HavenKeys aperta o botão de entrar e segue pelas etapas de e-mail, senha e verificação em duas etapas no mesmo site. Logins que passam por várias páginas precisam das sugestões na página. Cada login pode desativar isso.",
+    about: "Sobre",
+    aboutText: (version: string) =>
+      `HavenKeys ${version}. Seu cofre é criptografado com AES-256-GCM sob uma chave derivada da sua senha mestra (com Argon2id) e da sua Secret Key. Ele fica neste computador, a menos que você ative a sincronização. Este software não passou por uma auditoria de segurança independente.`,
+  },
+
+  changePassword: {
+    title: "Senha mestra",
+    current: "Atual",
+    new: "Nova",
+    confirm: "Confirme a nova",
+    note: "Seus itens não são criptografados de novo; só muda a chave que os protege. Os outros computadores conectados a esta conta serão desconectados.",
+    mismatch: "As novas senhas não coincidem.",
+    submit: "Alterar senha mestra",
+    submitting: "Alterando…",
+    done: "Senha mestra alterada.",
+    failed: "Não foi possível alterar a senha mestra.",
+  },
+
+  account: {
+    title: "Conta",
+    never: "nunca",
+    unknown: "desconhecido",
+    justNow: "agora mesmo",
+    minutesAgo: (n: number) => `há ${n} min`,
+    hoursAgo: (n: number) => `há ${n} h`,
+    daysAgo: (n: number) => `há ${n} dias`,
+    devicesFailed: "Não foi possível ler a lista de dispositivos.",
+    thisSignedOut: "Este computador foi desconectado.",
+    deviceSignedOut: (name: string) => `${name} foi desconectado.`,
+    revokeFailed: "Não foi possível revogar esse dispositivo.",
+    devicesOffline: "Seus dispositivos aparecem quando este computador está conectado ao servidor.",
+    thisComputer: "Este computador",
+    lastSeen: (when: string) => `Visto por último: ${when}`,
+    confirmSignOutThis: "Desconectar este computador?",
+    confirmSignOutOther: "Desconectá-lo e encerrar a sessão dele?",
+    revoke: "Revogar",
+    upToDate: "Já está atualizado.",
+    synced: (n: number) =>
+      n === 1 ? "Sincronizado: 1 item atualizado." : `Sincronizado: ${n} itens atualizados.`,
+    skipped: (n: number) =>
+      n === 1
+        ? "1 item do servidor não pôde ser lido e foi deixado como estava."
+        : `${n} itens do servidor não puderam ser lidos e foram deixados como estavam.`,
+    syncFailed: "Não foi possível sincronizar.",
+    redownloaded: (n: number) => (n === 1 ? "Cofre baixado de novo: 1 item." : `Cofre baixado de novo: ${n} itens.`),
+    stillSkipped: (n: number) =>
+      n === 1 ? "1 item ainda não pôde ser lido." : `${n} itens ainda não puderam ser lidos.`,
+    redownloadFailed: "Não foi possível baixar o cofre de novo.",
+    signOutFailed: "Não foi possível sair.",
+    removeFailed: "Não foi possível remover este dispositivo.",
+    status: "Status",
+    connected: "Conectado",
+    offline: "Offline — somente leitura",
+    lastSync: "Última sincronização",
+    notLinked: "Este cofre não está vinculado a uma conta.",
+    syncNow: "Sincronizar agora",
+    syncing: "Sincronizando…",
+    redownloadAll: "Baixar tudo de novo",
+    signOut: "Sair e bloquear",
+    devices: "Dispositivos",
+    kitTitle: "Emergency Kit",
+    keyInFile:
+      "Sua Secret Key está guardada em um arquivo neste computador porque não há um chaveiro do sistema disponível.",
+    kitTeaser:
+      "Sua Secret Key, a conta e o servidor — tudo o que outro computador precisa, além da sua senha mestra.",
+    showKit: "Mostrar Emergency Kit",
+    removeTitle: "Remover este dispositivo",
+    removeNote:
+      "Tira este computador da conta e volta o HavenKeys para a tela inicial, onde você pode entrar em qualquer conta ou servidor. Seu cofre continua no servidor. Uma cópia do arquivo criptografado fica guardada como vault.sqlite3.removed-… na pasta de dados do app; para abri-la depois, você precisa da sua senha mestra e da Secret Key do seu Emergency Kit.",
+    typeToConfirm: (email: string) => `Digite ${email} para confirmar`,
+    remove: "Remover este dispositivo",
+  },
+
+  import: {
+    title: "Importar do 1Password",
+    note: "No 1Password, escolha Arquivo › Exportar e o formato 1PUX, depois selecione esse arquivo aqui. A exportação contém todas as suas senhas sem criptografia, então exclua-a quando a importação terminar.",
+    choose: "Escolher arquivo .1pux…",
+    importing: "Importando…",
+    failed: "A importação falhou.",
+    fileDeleted: "Arquivo de exportação excluído.",
+    deleteFailed: "Não foi possível excluir o arquivo.",
+    imported: (n: number) => (n === 1 ? "1 item importado" : `${n} itens importados`),
+    summary: (fileName: string, logins: number, notes: number) =>
+      ` de ${fileName}: ${logins === 1 ? "1 login" : `${logins} logins`} e ${notes === 1 ? "1 nota segura" : `${notes} notas seguras`}.`,
+    convertedToNotes: (n: number) =>
+      n === 1
+        ? "1 item de outro tipo (cartões, identidades, chaves…) virou nota segura com todos os campos."
+        : `${n} itens de outros tipos (cartões, identidades, chaves…) viraram notas seguras com todos os campos.`,
+    skippedDuplicates: (n: number) =>
+      n === 1 ? "1 item já estava no seu cofre e foi ignorado." : `${n} itens já estavam no seu cofre e foram ignorados.`,
+    skippedArchived: (n: number) =>
+      n === 1 ? "1 item arquivado ficou de fora." : `${n} itens arquivados ficaram de fora.`,
+    attachmentsSkipped: (n: number) =>
+      n === 1
+        ? "1 anexo ficou de fora (ainda não suportado)."
+        : `${n} anexos ficaram de fora (ainda não suportados).`,
+    passwordHistorySkipped: (n: number) =>
+      n === 1
+        ? "1 senha antiga do histórico de senhas ficou de fora."
+        : `${n} senhas antigas do histórico de senhas ficaram de fora.`,
+    urlsMovedToNotes: (n: number) =>
+      n === 1
+        ? "1 entrada de site não era um endereço web e foi mantida nas notas do item."
+        : `${n} entradas de site não eram endereços web e foram mantidas nas notas do item.`,
+    failedItems: (n: number) =>
+      n === 1
+        ? "1 item não pôde ser importado (um campo passou dos limites de tamanho)."
+        : `${n} itens não puderam ser importados (um campo passou dos limites de tamanho).`,
+    wasDeleted: "O arquivo de exportação foi excluído.",
+    confirmDelete: (fileName: string) => `Excluir ${fileName}?`,
+    deleteFile: "Excluir arquivo",
+    keepFile: "Manter",
+    deleteExport: "Excluir o arquivo de exportação",
+  },
+
+  errors: {
+    generic: "Algo deu errado. Tente novamente.",
+    codes,
+    invalidInput,
   },
 };

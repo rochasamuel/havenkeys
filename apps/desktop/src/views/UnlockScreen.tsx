@@ -5,6 +5,7 @@ import { Guilloche } from "../components/Guilloche";
 import { Icon } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 
 interface Props {
   lockReason: string | null;
@@ -45,7 +46,7 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
     } catch (err) {
       if (err instanceof ApiError && err.code === "secret_key_required") setAskKey(true);
       setKeychainStuck(err instanceof ApiError && err.code === "keychain_unavailable");
-      setError(err instanceof ApiError ? err.message : t.unlock.failed);
+      setError(errorMessage(err, t, t.unlock.failed));
       setAttempt((n) => n + 1);
       setPassword("");
       setBusy(false);

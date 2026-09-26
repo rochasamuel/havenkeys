@@ -10,6 +10,7 @@ import { ItemEditor } from "./ItemEditor";
 import { GeneratorView } from "./GeneratorView";
 import { SettingsView } from "./SettingsView";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
 export type Section = "all" | "login" | "secure_note" | "generator" | "settings";
@@ -48,7 +49,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     try {
       setItems(await api.listItems(query));
     } catch (e) {
-      if (e instanceof ApiError && e.code !== "locked") toast(e.message, "error");
+      if (e instanceof ApiError && e.code !== "locked") toast(errorMessage(e, t), "error");
     }
   }, [query, toast]);
 
@@ -96,7 +97,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
       await refreshUnreadable();
       await refresh();
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : t.vault.redownloadFailed, "error");
+      toast(errorMessage(e, t, t.vault.redownloadFailed), "error");
     } finally {
       setBusyResync(false);
     }
@@ -140,7 +141,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
       await refresh();
       toast(t.vault.deleted(item.title));
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : t.vault.deleteFailed, "error");
+      toast(errorMessage(e, t, t.vault.deleteFailed), "error");
     }
   }
 

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api } from "../lib/api";
 import type { EmergencyKit as Kit } from "../lib/types";
 import { formatDate } from "../lib/format";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 
 /** The QR code as one SVG path (one square per dark module). */
 function QrCode({ size, modules }: { size: number; modules: boolean[] }) {
@@ -44,7 +45,7 @@ export function EmergencyKit({ onDone }: Props) {
     let cancelled = false;
     api.emergencyKit().then(
       (k) => !cancelled && setKit(k),
-      (e) => !cancelled && setError(e instanceof ApiError ? e.message : t.kit.loadFailed),
+      (e) => !cancelled && setError(errorMessage(e, t, t.kit.loadFailed)),
     );
     return () => {
       cancelled = true;

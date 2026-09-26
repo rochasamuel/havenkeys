@@ -182,10 +182,13 @@ a keystroke through `record_activity`, not through the search command.
   it beyond the navigation guard and the CSP.
 * No `eval`, `new Function`, `dangerouslySetInnerHTML`, or `innerHTML` in the UI.
 * Devtools are disabled in release builds (Tauri default).
+* The renderer's only use of web storage is the UI language picked in
+  Settings (`localStorage["hk-locale"]`: `en` or `pt-BR`, absent for
+  Automatic). It is read before any vault is open and is not sensitive.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 36 of them, which is the whole
+Every command the renderer can call — all 37 of them, which is the whole
 surface. `build.rs` declares this list, the capability file grants exactly it,
 and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
 means a live server session, which a locked vault does not have.

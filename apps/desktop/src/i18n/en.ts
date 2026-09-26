@@ -8,6 +8,91 @@
  * are rendered as React text only; parameterised strings are functions.
  */
 
+/** Every error code the desktop core returns (see errors.ts). */
+export type ErrorCode =
+  | "locked"
+  | "busy"
+  | "unlock_failed"
+  | "secret_key_required"
+  | "decryption"
+  | "encryption"
+  | "corrupted"
+  | "unsupported_version"
+  | "vault_exists"
+  | "no_vault"
+  | "not_found"
+  | "denied"
+  | "invalid_input"
+  | "storage"
+  | "kdf"
+  | "rng"
+  | "offline"
+  | "item_changed_elsewhere"
+  | "internal"
+  | "file"
+  | "sign_in_failed"
+  | "vault_unreadable"
+  | "clipboard"
+  | "autostart"
+  | "unsupported_language"
+  | "keychain_unavailable"
+  | "password_change_unknown"
+  | "password_changed_elsewhere"
+  | "signed_out"
+  | "rate_limited"
+  | "invalid_server_url"
+  | "sync_failed";
+
+/**
+ * The core's errors, by code (havenkeys-core Error::code and the
+ * desktop's CmdError codes). The English is Rust's message word for word.
+ * `null` shows Rust's own message: it varies (a detail, a folder path),
+ * so a fixed text would lose it.
+ */
+const codes: Record<ErrorCode, string | null> = {
+  locked: "The vault is locked.",
+  busy: "The vault is busy. Try again in a moment.",
+  unlock_failed: "Incorrect master password or damaged vault.",
+  secret_key_required: "This vault needs your Secret Key.",
+  decryption: "Failed to decrypt vault item.",
+  encryption: "Failed to encrypt vault item.",
+  corrupted: "The vault file is corrupted.",
+  unsupported_version: "This vault was created by an unsupported version.",
+  vault_exists: "A vault already exists.",
+  no_vault: "No vault exists yet.",
+  not_found: "Item not found.",
+  denied: "This item is not saved for this website.",
+  invalid_input: null,
+  storage: "Vault storage error.",
+  kdf: "Key derivation failed.",
+  rng: "Secure random number generator unavailable.",
+  offline: "HavenKeys is offline — the vault is read-only until it reconnects.",
+  item_changed_elsewhere: "This item changed on another device.",
+  internal: null,
+  file: "Could not read or delete the file.",
+  sign_in_failed: "Email, master password or Secret Key is incorrect.",
+  vault_unreadable: null,
+  clipboard: "Could not access the clipboard.",
+  autostart: "Could not change whether HavenKeys opens at login.",
+  unsupported_language: "Unsupported language.",
+  keychain_unavailable:
+    "Your system keychain did not answer. Approve its prompt if one is showing, then try again.",
+  password_change_unknown:
+    "HavenKeys could not confirm whether the server applied the new master password. If your current password stops working, use the new one.",
+  password_changed_elsewhere:
+    "Your master password was changed on another device. Lock and unlock with the new password.",
+  signed_out: "HavenKeys is signed out of this account. Unlock again to reconnect.",
+  rate_limited: "Too many attempts. Try again in a few minutes.",
+  invalid_server_url: "That server address cannot be used. It must start with https://.",
+  sync_failed: null,
+};
+
+/**
+ * "Invalid input: <detail>." rewritten per Rust detail text. English needs
+ * none: Rust's message is already English.
+ */
+const noDetails: Record<string, string> = {};
+
 export const en = {
   common: {
     cancel: "Cancel",
@@ -44,6 +129,9 @@ export const en = {
     kitTitle: "Save your Emergency Kit",
     kitBody:
       "This is the only copy of your Secret Key. Without it — and your master password — nobody can open this vault, including us.",
+    /** Rust's KEYCHAIN_NOT_CLEARED (account.rs), word for word. */
+    keychainNotCleared:
+      "This computer was removed, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry “app.havenkeys” yourself.",
     signedOut:
       "The server did not accept this computer's sign-in. If your master password was changed on another device, lock and unlock with the new one.",
   },
@@ -268,8 +356,152 @@ export const en = {
   },
 
   settings: {
+    title: "Settings",
+    saved: "Settings saved.",
+    loadFailed: "Could not load settings.",
+    saveFailed: "Could not save settings.",
+    appearance: "Appearance",
     language: "Language",
     languageAuto: "Automatic",
+    theme: "Theme",
+    themes: { dark: "Dark", light: "Light", system: "System" },
+    security: "Security",
+    autoLock: "Lock automatically",
+    autoLockAfter: (minutes: number) => (minutes === 60 ? "After 1 hour" : `After ${minutes} minutes`),
+    never: "Never",
+    clipboardClear: "Clear copied items",
+    afterSeconds: (seconds: number) => `After ${seconds} seconds`,
+    securityNote:
+      "The vault also locks when the computer sleeps and when you quit HavenKeys, and — on Windows and Linux — when the screen locks. Closing the window keeps HavenKeys in the tray, where the timeout above keeps running.",
+    startup: "Startup",
+    launchAtLogin: "Open HavenKeys when you log in",
+    launchAtLoginLabel: "Open HavenKeys when you log in to this computer",
+    startupNote:
+      "HavenKeys starts locked, in the tray, so the browser extension can reach it. This applies to this computer only.",
+    browserExtension: "Browser extension",
+    browserIntegration: "Suggest and fill logins in the browser",
+    browserIntegrationLabel: "Allow the HavenKeys browser extension to suggest and fill logins",
+    autoPasskey: "Add passkeys automatically after I sign in",
+    autoSignIn: "Sign in automatically after filling",
+    extensionNote:
+      "The extension only receives a login when you choose it on a website that login is saved for, and only while HavenKeys is unlocked. It never receives your master password. Off by default: while it is on, other programs running under your account can make the same requests as the extension.",
+    passkeyNote:
+      "When a website offers to add a passkey right after HavenKeys fills your password there, HavenKeys saves it to that login. When off, HavenKeys asks first.",
+    autoSignInNote:
+      "After you choose a login, HavenKeys presses the sign-in button and continues through email, password and two-factor steps on the same site. Sign-ins that span several pages need in-page suggestions. Each login can turn this off.",
+    about: "About",
+    aboutText: (version: string) =>
+      `HavenKeys ${version}. Your vault is encrypted with AES-256-GCM under a key derived from your master password (with Argon2id) and your Secret Key. It stays on this computer unless you turn on sync. This software has not undergone an independent security audit.`,
+  },
+
+  changePassword: {
+    title: "Master password",
+    current: "Current",
+    new: "New",
+    confirm: "Confirm new",
+    note: "Your items are not re-encrypted; only the key that protects them changes. Other computers signed in to this account will be signed out.",
+    mismatch: "The new passwords don’t match.",
+    submit: "Change master password",
+    submitting: "Changing…",
+    done: "Master password changed.",
+    failed: "Could not change the master password.",
+  },
+
+  account: {
+    title: "Account",
+    never: "never",
+    unknown: "unknown",
+    justNow: "just now",
+    minutesAgo: (n: number) => `${n} min ago`,
+    hoursAgo: (n: number) => `${n} h ago`,
+    daysAgo: (n: number) => `${n} days ago`,
+    devicesFailed: "Could not read the device list.",
+    thisSignedOut: "This computer was signed out.",
+    deviceSignedOut: (name: string) => `${name} was signed out.`,
+    revokeFailed: "Could not revoke that device.",
+    devicesOffline: "Your devices are listed when this computer is connected to the server.",
+    thisComputer: "This computer",
+    lastSeen: (when: string) => `Last seen ${when}`,
+    confirmSignOutThis: "Sign this computer out?",
+    confirmSignOutOther: "Sign it out and end its session?",
+    revoke: "Revoke",
+    upToDate: "Already up to date.",
+    synced: (n: number) => (n === 1 ? "Synced: 1 item updated." : `Synced: ${n} items updated.`),
+    skipped: (n: number) =>
+      n === 1
+        ? "1 item from the server could not be read and was left alone."
+        : `${n} items from the server could not be read and were left alone.`,
+    syncFailed: "Could not sync.",
+    redownloaded: (n: number) =>
+      n === 1 ? "Re-downloaded the vault: 1 item." : `Re-downloaded the vault: ${n} items.`,
+    stillSkipped: (n: number) =>
+      n === 1 ? "1 item still could not be read." : `${n} items still could not be read.`,
+    redownloadFailed: "Could not re-download the vault.",
+    signOutFailed: "Could not sign out.",
+    removeFailed: "Could not remove this device.",
+    status: "Status",
+    connected: "Connected",
+    offline: "Offline — read-only",
+    lastSync: "Last sync",
+    notLinked: "This vault is not linked to an account.",
+    syncNow: "Sync now",
+    syncing: "Syncing…",
+    redownloadAll: "Re-download everything",
+    signOut: "Sign out and lock",
+    devices: "Devices",
+    kitTitle: "Emergency Kit",
+    keyInFile: "Your Secret Key is stored in a file on this computer because no system keychain is available.",
+    kitTeaser:
+      "Your Secret Key, the account and the server — everything another computer needs, besides your master password.",
+    showKit: "Show Emergency Kit",
+    removeTitle: "Remove this device",
+    removeNote:
+      "Takes this computer off the account and returns HavenKeys to its first-run screen, where you can sign in to any account or server. Your vault stays on the server. A copy of the encrypted file is kept as vault.sqlite3.removed-… in the app's data folder; opening it later needs your master password and the Secret Key from your Emergency Kit.",
+    typeToConfirm: (email: string) => `Type ${email} to confirm`,
+    remove: "Remove this device",
+  },
+
+  import: {
+    title: "Import from 1Password",
+    note: "In 1Password, choose File › Export and the 1PUX format, then pick that file here. The export contains all of your passwords unencrypted, so delete it once the import is done.",
+    choose: "Choose .1pux file…",
+    importing: "Importing…",
+    failed: "Import failed.",
+    fileDeleted: "Export file deleted.",
+    deleteFailed: "Could not delete the file.",
+    /** "<strong>Imported 3 items</strong> from file: 2 logins and 1 secure note." */
+    imported: (n: number) => (n === 1 ? "Imported 1 item" : `Imported ${n} items`),
+    summary: (fileName: string, logins: number, notes: number) =>
+      ` from ${fileName}: ${logins === 1 ? "1 login" : `${logins} logins`} and ${notes === 1 ? "1 secure note" : `${notes} secure notes`}.`,
+    convertedToNotes: (n: number) =>
+      `${n} ${n === 1 ? "item" : "items"} of other kinds (cards, identities, keys…) became secure notes with all their fields.`,
+    skippedDuplicates: (n: number) => `${n} ${n === 1 ? "item was" : "items were"} already in your vault and skipped.`,
+    skippedArchived: (n: number) => `${n} ${n === 1 ? "archived item was" : "archived items were"} left out.`,
+    attachmentsSkipped: (n: number) =>
+      `${n} ${n === 1 ? "file attachment was" : "file attachments were"} left out (not supported yet).`,
+    passwordHistorySkipped: (n: number) =>
+      `${n} ${n === 1 ? "old password" : "old passwords"} from password history ${n === 1 ? "was" : "were"} left out.`,
+    urlsMovedToNotes: (n: number) =>
+      `${n} ${n === 1 ? "website entry wasn’t" : "website entries weren’t"} a web address and ${n === 1 ? "was" : "were"} kept in the item’s notes.`,
+    failedItems: (n: number) =>
+      `${n} ${n === 1 ? "item" : "items"} couldn’t be imported (a field was over the size limits).`,
+    wasDeleted: "The export file was deleted.",
+    confirmDelete: (fileName: string) => `Delete ${fileName}?`,
+    deleteFile: "Delete file",
+    keepFile: "Keep it",
+    deleteExport: "Delete the export file",
+  },
+
+  errors: {
+    /** Anything that is not an error from the core. */
+    generic: "Something went wrong. Try again.",
+    codes,
+    /**
+     * Full sentences for "Invalid input: <detail>.", keyed by Rust's detail
+     * text. Only details a person can cause from the UI; any other detail
+     * shows Rust's message.
+     */
+    invalidInput: noDetails,
   },
 };
 

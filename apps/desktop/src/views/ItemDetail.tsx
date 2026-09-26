@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { api, ApiError } from "../lib/api";
+import { api } from "../lib/api";
 import type { CopyField, ItemOverview, PasskeyInfo } from "../lib/types";
 import { formatDate, groupCode, monogram, primaryHost } from "../lib/format";
 import { useRevealedSecret, useTotp } from "../lib/hooks";
@@ -7,6 +7,7 @@ import { CopyButton } from "../components/CopyButton";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 
 interface Props {
   item: ItemOverview;
@@ -26,7 +27,7 @@ function useCopy(itemId: string) {
         toast(t.detail.copied[field](r.clearAfterSeconds));
         return true;
       } catch (e) {
-        toast(e instanceof ApiError ? e.message : t.common.couldNotCopy, "error");
+        toast(errorMessage(e, t, t.common.couldNotCopy), "error");
         return false;
       }
     },
@@ -103,7 +104,7 @@ function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index
   const secret = useRevealedSecret(useCallback(() => api.revealPreviousPassword(itemId, index), [itemId, index]));
   const toggle = () =>
     secret.value === null
-      ? void secret.reveal().catch((e) => toast(e instanceof ApiError ? e.message : t.common.couldNotReveal, "error"))
+      ? void secret.reveal().catch((e) => toast(errorMessage(e, t, t.common.couldNotReveal), "error"))
       : secret.hide();
   return (
     <li className="history-row">
@@ -131,7 +132,7 @@ function PasswordHistory({ itemId }: { itemId: string }) {
   const [dates, setDates] = useState<number[] | null>(null);
   const load = () =>
     api.passwordHistory(itemId).then(setDates, (e) =>
-      toast(e instanceof ApiError ? e.message : t.detail.historyFailed, "error"),
+      toast(errorMessage(e, t, t.detail.historyFailed), "error"),
     );
   if (dates === null) {
     return (
@@ -171,7 +172,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
     let cancelled = false;
     api.listPasskeys(itemId).then(
       (l) => !cancelled && setList(l),
-      (e) => !cancelled && toast(e instanceof ApiError ? e.message : t.detail.passkeysFailed, "error"),
+      (e) => !cancelled && toast(errorMessage(e, t, t.detail.passkeysFailed), "error"),
     );
     return () => {
       cancelled = true;
@@ -186,7 +187,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
       setConfirming(null);
       toast(t.detail.passkeyDeleted);
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : t.detail.passkeyDeleteFailed, "error");
+      toast(errorMessage(e, t, t.detail.passkeyDeleteFailed), "error");
     }
   };
 
@@ -238,7 +239,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
     api
       .reveal(item.id, "content")
       .then((c) => !cancelled && setContent(c))
-      .catch((e) => !cancelled && toast(e instanceof ApiError ? e.message : t.detail.noteFailed, "error"));
+      .catch((e) => !cancelled && toast(errorMessage(e, t, t.detail.noteFailed), "error"));
     return () => {
       cancelled = true;
       setContent(null);
@@ -246,7 +247,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
     // `t` is left out: a language change must not decrypt the note again.
   }, [item.id, item.itemType, toast]);
 
-  const onRevealError = (e: unknown) => toast(e instanceof ApiError ? e.message : t.common.couldNotReveal, "error");
+  const onRevealError = (e: unknown) => toast(errorMessage(e, t, t.common.couldNotReveal), "error");
 
   const host = primaryHost(item);
 

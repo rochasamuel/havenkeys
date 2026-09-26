@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, ApiError } from "../lib/api";
+import { api } from "../lib/api";
 import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 
 interface Props {
   itemType: ItemType;
@@ -101,7 +102,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
       setPassword({ mode: "set", value: g.password });
       setShowPassword(true);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t.editor.generateFailed);
+      setError(errorMessage(e, t, t.editor.generateFailed));
     }
   }
 
@@ -131,7 +132,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
       const saved = existing ? await api.updateItem(existing.id, input) : await api.createItem(input);
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t.editor.saveFailed);
+      setError(errorMessage(err, t, t.editor.saveFailed));
       setSaving(false);
     }
   }

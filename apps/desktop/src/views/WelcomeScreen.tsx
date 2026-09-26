@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { api, ApiError } from "../lib/api";
+import { api } from "../lib/api";
 import type { VaultStatus } from "../lib/types";
 import { Guilloche } from "../components/Guilloche";
 import { Seal } from "../components/Seal";
 import { useI18n } from "../i18n/context";
+import { errorMessage } from "../i18n/errors";
 
 /**
  * First run on a computer that has no vault.
@@ -79,7 +80,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
     try {
       onActivated(await api.activate(invite, password));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t.welcome.createFailed);
+      setError(errorMessage(err, t, t.welcome.createFailed));
     } finally {
       setBusy(false);
       // Nothing keeps the typed password: React drops it with the state
@@ -164,7 +165,7 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
     try {
       onSignedIn(await api.signIn(server, email, password, secretKey));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t.welcome.signInFailed);
+      setError(errorMessage(err, t, t.welcome.signInFailed));
     } finally {
       setBusy(false);
       setPassword("");
