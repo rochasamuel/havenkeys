@@ -169,19 +169,10 @@ export function createInlineHandler(deps: InlineDeps) {
   /**
    * A fill the user picked (menu or popup). Ends any run in the tab; with
    * `auto`, asks the content script to press, and starts a run if it did.
-   * `totpHint` tells the content script whether the item has TOTP, so it can
-   * be forwarded even when this particular fill is not auto-submitted;
-   * defaulting to `auto`'s flag keeps popup/generated fills unchanged.
    */
-  async function pickFill(
-    frame: FrameRef,
-    token: string | null,
-    payload: FillPayload,
-    auto: AutoRun | null,
-    totpHint: boolean = auto?.hasTotp ?? false,
-  ): Promise<number> {
+  async function pickFill(frame: FrameRef, token: string | null, payload: FillPayload, auto: AutoRun | null): Promise<number> {
     endRun(frame.tabId);
-    const r = await sendFill(frame, token, payload, auto !== null, totpHint);
+    const r = await sendFill(frame, token, payload, auto !== null, auto?.hasTotp ?? false);
     if (auto && r.pressing) runs.start(frame, auto.itemId, r.pressing, auto.hasTotp);
     return r.filled;
   }
@@ -353,14 +344,13 @@ export function createInlineHandler(deps: InlineDeps) {
         closeMenu(tabId);
         try {
           const offered = m.items.find((i) => i.id === req.itemId);
-          const hasTotp = offered?.hasTotp ?? false;
           if (m.kind === "otp") {
             const t = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
-            await pickFill(m.frame, m.token, { kind: "otp", code: t.code }, t.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null, hasTotp);
+            await pickFill(m.frame, m.token, { kind: "otp", code: t.code }, t.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null);
           } else {
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
-            const auto = c.autoSubmit ? { itemId: req.itemId, hasTotp } : null;
-            await pickFill(m.frame, m.token, { kind: "login", username: c.username, password: c.password }, auto, hasTotp);
+            const auto = c.autoSubmit ? { itemId: req.itemId, hasTotp: offered?.hasTotp ?? false } : null;
+            await pickFill(m.frame, m.token, { kind: "login", username: c.username, password: c.password }, auto);
           }
         } catch (e) {
           return fail(e);

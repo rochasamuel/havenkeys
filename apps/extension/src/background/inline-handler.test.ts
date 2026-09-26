@@ -195,7 +195,7 @@ describe("suggestion menus", () => {
         token: T1,
         fill: { kind: "login", username: "octo", password: "pw" },
         submit: false,
-        totp: true,
+        totp: false,
       },
     });
     // Single use.
@@ -502,7 +502,7 @@ describe("automatic sign-in", () => {
   it("asks the content script to press only when Rust says autoSubmit", async () => {
     const off = setup();
     await pick(off.h);
-    expect(off.sent.find((s) => s.msg.type === "bg_fill")?.msg).toMatchObject({ submit: false, totp: true });
+    expect(off.sent.find((s) => s.msg.type === "bg_fill")?.msg).toMatchObject({ submit: false, totp: false });
 
     const on = setup(auto);
     await pick(on.h);
