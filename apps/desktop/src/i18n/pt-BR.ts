@@ -15,7 +15,7 @@ const codes: Record<ErrorCode, string | null> = {
   decryption: "Falha ao descriptografar o item do cofre.",
   encryption: "Falha ao criptografar o item do cofre.",
   corrupted: "O arquivo do cofre está corrompido.",
-  unsupported_version: "Este cofre foi criado por uma versão não suportada.",
+  unsupported_version: "Este cofre foi criado por uma versão sem suporte.",
   vault_exists: "Já existe um cofre.",
   no_vault: "Ainda não existe um cofre.",
   not_found: "Item não encontrado.",
@@ -125,7 +125,7 @@ export const ptBR: Messages = {
     keychainNotCleared:
       "Este computador foi removido, mas o HavenKeys não conseguiu excluir a Secret Key do chaveiro do sistema. Exclua você mesmo a entrada “app.havenkeys”.",
     signedOut:
-      "O servidor não aceitou o login deste computador. Se a sua senha mestra foi alterada em outro dispositivo, bloqueie e desbloqueie com a nova.",
+      "O servidor não aceitou a conexão deste computador. Se a sua senha mestra foi alterada em outro dispositivo, bloqueie e desbloqueie com a nova.",
   },
 
   welcome: {
@@ -172,7 +172,7 @@ export const ptBR: Messages = {
       "Digite sua senha mestra e a Secret Key do seu Emergency Kit. Este computador guarda a Secret Key depois que você desbloquear.",
     unlock: "Desbloquear",
     secretKeyPlaceholder: "Secret Key  H1-XXXX-XXXX-…",
-    useKitInstead: "Digitar a Secret Key do meu Emergency Kit",
+    useKitInstead: "Digitar a Secret Key do meu Emergency Kit em vez disso",
     failed: "Não foi possível abrir o cofre.",
     hint: "Seu cofre é descriptografado somente neste computador.",
   },
@@ -261,7 +261,7 @@ export const ptBR: Messages = {
     notes: "Notas",
     showNotes: "Mostrar notas",
     hideNotes: "Ocultar notas",
-    hidden: "Oculto",
+    hidden: "Ocultas",
     dates: (created: string, changed: string) => `Criado em ${created} · Alterado em ${changed}`,
     confirmDelete: (title: string) => `Excluir “${title}” permanentemente?`,
     passkeyWarning: " As chaves de acesso dele também serão excluídas, e você pode perder o acesso a esses sites.",
@@ -378,7 +378,7 @@ export const ptBR: Messages = {
     extensionNote:
       "A extensão só recebe um login quando você o escolhe em um site para o qual ele está salvo, e só enquanto o HavenKeys está desbloqueado. Ela nunca recebe a sua senha mestra. Desativado por padrão: enquanto estiver ativado, outros programas rodando na sua conta podem fazer as mesmas solicitações que a extensão.",
     passkeyNote:
-      "Quando um site oferece adicionar uma chave de acesso logo depois que o HavenKeys preenche a sua senha nele, o HavenKeys a salva nesse login. Com isto desativado, o HavenKeys pergunta antes.",
+      "Quando um site oferece adicionar uma chave de acesso logo depois que o HavenKeys preenche a sua senha nele, o HavenKeys a salva nesse login. Se estiver desativado, o HavenKeys pergunta antes.",
     autoSignInNote:
       "Depois que você escolhe um login, o HavenKeys aperta o botão de entrar e segue pelas etapas de e-mail, senha e verificação em duas etapas no mesmo site. Logins que passam por várias páginas precisam das sugestões na página. Cada login pode desativar isso.",
     about: "Sobre",
@@ -390,7 +390,7 @@ export const ptBR: Messages = {
     title: "Senha mestra",
     current: "Atual",
     new: "Nova",
-    confirm: "Confirme a nova",
+    confirm: "Confirmar nova",
     note: "Seus itens não são criptografados de novo; só muda a chave que os protege. Os outros computadores conectados a esta conta serão desconectados.",
     mismatch: "As novas senhas não coincidem.",
     submit: "Alterar senha mestra",

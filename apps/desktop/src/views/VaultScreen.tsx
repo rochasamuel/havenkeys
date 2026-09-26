@@ -51,7 +51,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     } catch (e) {
       if (e instanceof ApiError && e.code !== "locked") toast(errorMessage(e, t), "error");
     }
-  }, [query, toast]);
+  }, [query, toast, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 120);
