@@ -64,8 +64,41 @@ const USERNAME_STRONG = [
   "usuario",
   "nome de usuario",
   "correo",
-  "cpf",
 ];
+/**
+ * National ID and document numbers that sites use as the login (gov.br's
+ * CPF, Spain's DNI, Chile's RUT…). Counted like the strong words above.
+ * Ambiguous short tokens (`id`, `ci`, `cc`: card fields) are left out.
+ */
+const USERNAME_DOCUMENT = [
+  // Brazil
+  "cpf",
+  "cnpj",
+  "rg",
+  "documento",
+  "numero do documento",
+  "matricula",
+  // Portugal, Spain, Latin America
+  "nif",
+  "nie",
+  "dni",
+  "cif",
+  "rut",
+  "cuit",
+  "cuil",
+  "curp",
+  "rfc",
+  "cedula",
+  "documento de identidad",
+  // Elsewhere
+  "document number",
+  "passport",
+  "passaporte",
+  "pasaporte",
+  "national id",
+  "codice fiscale",
+];
+const USERNAME_STRONG_ALL = [...USERNAME_STRONG, ...USERNAME_DOCUMENT];
 const USERNAME_WEAK = ["user", "mail", "phone", "mobile", "telefone", "celular"];
 const USERNAME_NEGATIVE = [
   "search",
@@ -217,6 +250,11 @@ export const USERNAME_THRESHOLD = 50;
 /** Without a password field in the group, demand more (username-only step). */
 export const USERNAME_ALONE_THRESHOLD = 70;
 export const OTP_THRESHOLD = 60;
+/**
+ * A username-only step on a form that says it signs in, for a field whose
+ * own wording names a username or document ("CPF" label, generic name).
+ */
+export const USERNAME_LOGIN_INTENT_BONUS = 30;
 
 function isCardField(f: FieldFeatures): boolean {
   return f.autocomplete.some((t) => t.startsWith("cc-")) || hasAny(f.attrs, ["cc", "card", "cvv", "cvc"]);
@@ -227,12 +265,16 @@ export interface UsernameContext {
   hasPassword: boolean;
   /** This is the last text field before the first password field. */
   lastBeforePassword: boolean;
+  /** The group's intent is login. */
+  loginIntent?: boolean;
 }
 
 export function usernameScore(f: FieldFeatures, ctx: UsernameContext): number {
   if (!TEXT_TYPES.has(f.type) || f.type === "search" || isCardField(f)) return 0;
   const ac = f.autocomplete;
-  if (ac.includes("one-time-code") || ac.includes("current-password") || ac.includes("new-password")) return 0;
+  // `new-password` is not ruled out: sites put it on every field (gov.br's
+  // CPF box, for one) to keep browsers' own autofill away.
+  if (ac.includes("one-time-code") || ac.includes("current-password")) return 0;
   if (ac.some((t) => AC_NOT_LOGIN.includes(t))) return 0;
 
   let s = 0;
@@ -240,12 +282,20 @@ export function usernameScore(f: FieldFeatures, ctx: UsernameContext): number {
   if (ac.includes("email")) s += 90;
   if (ac.includes("tel")) s += 30;
   if (f.type === "email") s += 80;
-  if (hasAny(f.attrs, USERNAME_STRONG)) s += 50;
+  let worded = true;
+  if (hasAny(f.attrs, USERNAME_STRONG_ALL)) s += 50;
   else if (hasAny(f.attrs, USERNAME_WEAK)) s += 25;
-  if (hasAny(f.text, USERNAME_STRONG)) s += 40;
-  else if (hasAny(f.text, USERNAME_WEAK)) s += 20;
+  else worded = false;
+  if (hasAny(f.text, USERNAME_STRONG_ALL)) {
+    s += 40;
+    worded = true;
+  } else if (hasAny(f.text, USERNAME_WEAK)) {
+    s += 20;
+    worded = true;
+  }
   if (hasAny(f.attrs, USERNAME_NEGATIVE) || hasAny(f.text, USERNAME_NEGATIVE)) s -= 80;
   if (ctx.lastBeforePassword) s += 40;
+  if (!ctx.hasPassword && ctx.loginIntent && worded) s += USERNAME_LOGIN_INTENT_BONUS;
   return s;
 }
 
@@ -295,9 +345,11 @@ export function classifyPasswords(fields: readonly FieldFeatures[], intent: Grou
     const ac = f.autocomplete;
     if (ac.includes("current-password")) return { kind: "current-password", confidence: 1 };
     if (ac.includes("new-password")) {
-      return hasAny(words, PW_CONFIRM)
-        ? { kind: "confirmation-password", confidence: 0.9 }
-        : { kind: "new-password", confidence: 0.95 };
+      if (hasAny(words, PW_CONFIRM)) return { kind: "confirmation-password", confidence: 0.9 };
+      // Sites use `new-password` to switch off browser autofill; a field
+      // that says it wants the current password ("senha atual") is one.
+      if (hasAny(words, PW_CURRENT)) return { kind: "current-password", confidence: 0.8 };
+      return { kind: "new-password", confidence: 0.95 };
     }
     if (hasAny(words, PW_CONFIRM)) return { kind: "confirmation-password", confidence: 0.8 };
     if (hasAny(words, PW_CURRENT)) return { kind: "current-password", confidence: 0.8 };

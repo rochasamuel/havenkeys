@@ -224,6 +224,7 @@ export function classifyGroup(root: ParentNode, env: Env): LoginGroup {
     const score = usernameScore(feats.get(el) as FieldFeatures, {
       hasPassword: firstPw !== undefined,
       lastBeforePassword: firstPw !== undefined && el === last,
+      loginIntent: intent === "login",
     });
     if (score >= threshold && (!best || score > best.score)) best = { el, score };
   }

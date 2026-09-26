@@ -142,6 +142,80 @@ describe("login groups", () => {
     expect(kinds('[name="comment"]')).toEqual({ comment: "unknown" });
   });
 
+  // gov.br marks every field autocomplete="new-password" to keep browsers'
+  // own autofill away; the markup below is the real page's.
+  it("gov.br: CPF step despite autocomplete=new-password", () => {
+    page(`<form id="loginData" action="/login" method="post">
+      <p>Digite seu CPF para <strong>criar</strong> ou <strong>acessar</strong> sua conta gov.br</p>
+      <label for="cpf">CPF</label>
+      <input id="accountId" name="accountId" autocomplete="new-password" tabindex="1" type="tel" inputmode="numeric" value="" placeholder="Digite seu CPF" aria-invalid="false">
+      <div class="button-panel" id="login-button-panel">
+        <button id="enter-account-id" type="submit" name="operation" value="enter-account-id" class="button-continuar" tabindex="2">Continuar</button>
+      </div></form>`);
+    expect(kinds("#accountId", "/login")).toEqual({ accountId: "username" });
+  });
+
+  it("gov.br: password step marked new-password but worded current", () => {
+    page(`<form id="loginData" action="/login" method="post">
+      <h3>Digite sua senha</h3><label>CPF</label><h4>000.000.000-00</h4>
+      <label for="password">Senha</label>
+      <div class="password-eye">
+        <input tabindex="1" name="password" id="password" type="password" value="" placeholder="Digite sua senha atual" autocomplete="new-password">
+        <span tabindex="2" toggle="#password" class="fa fa-fw fa-eye toggle-password"></span>
+      </div>
+      <div class="actions"><div class="button-panel">
+        <button type="button" value="cancel" class="button-cancel" tabindex="4">Cancelar</button>
+        <button id="submit-button" type="submit" name="operation" value="enter-password" class="button-ok" aria-label="Botão Entrar. Aperte a tecla enter para entrar." tabindex="3">Entrar</button>
+      </div>
+      <button id="password-recovery" type="button" name="operation" value="call-account-recovery" class="button-href-mimic" tabindex="5">Esqueci minha senha</button>
+      </div></form>`);
+    expect(kinds("#password", "/login")).toEqual({ password: "current-password" });
+  });
+
+  it("document-number logins, Brazilian and international", () => {
+    const cases: Array<[string, string]> = [
+      [`<label for="d">CNPJ</label><input id="d" name="f1">`, "CNPJ"],
+      [`<label for="d">RG</label><input id="d" name="f1">`, "RG"],
+      [`<input id="d" name="f1" placeholder="Número do documento">`, "documento"],
+      [`<label for="d">DNI / NIE</label><input id="d" name="f1">`, "DNI"],
+      [`<label for="d">RUT</label><input id="d" name="f1">`, "RUT (Chile)"],
+      [`<label for="d">Cédula de ciudadanía</label><input id="d" name="f1">`, "cédula"],
+      [`<label for="d">CURP</label><input id="d" name="f1">`, "CURP (Mexico)"],
+      [`<label for="d">CUIT / CUIL</label><input id="d" name="f1">`, "CUIT"],
+      [`<label for="d">NIF</label><input id="d" name="f1">`, "NIF (Portugal/Spain)"],
+      [`<label for="d">Codice fiscale</label><input id="d" name="f1">`, "codice fiscale"],
+      [`<label for="d">Passport number</label><input id="d" name="f1">`, "passport"],
+      [`<label for="d">Matrícula</label><input id="d" name="f1">`, "matrícula"],
+      [`<input id="d" name="numeroDocumento">`, "name attribute"],
+    ];
+    for (const [field, what] of cases) {
+      page(`<form><h1>Entrar</h1>${field}<input name="pw" type="password"><button type="submit">Entrar</button></form>`);
+      expect(kinds("#d")["f1"] ?? kinds("#d")["numeroDocumento"], what).toBe("username");
+    }
+  });
+
+  it("username-only step: a document label is enough on a sign-in form, not elsewhere", () => {
+    page(`<form><h1>Entrar</h1><label for="d">CPF</label><input id="d" name="field1" type="tel">
+      <button type="submit">Continuar</button></form>`);
+    expect(kinds("#d", "/")).toEqual({ field1: "username" });
+
+    // The same box on a checkout form stays unknown: no login intent.
+    page(`<form><h1>Finalizar compra</h1><label for="d">CPF</label><input id="d" name="field1" type="tel">
+      <button type="submit">Pagar</button></form>`);
+    expect(kinds("#d", "/checkout")).toEqual({ field1: "unknown" });
+
+    // A sign-in form's stray box with no username wording stays unknown.
+    page(`<form><h1>Sign in</h1><input id="d" name="field1"><button type="submit">Next</button></form>`);
+    expect(kinds("#d", "/login")).toEqual({ field1: "unknown" });
+  });
+
+  it("a signup password shown as text (show-password toggle) is not a username", () => {
+    page(`<form><h1>Sign up</h1><input name="email" type="email">
+      <input name="password" type="text" autocomplete="new-password"><input name="password2" type="password" autocomplete="new-password">
+      <button type="submit">Sign up</button></form>`);
+    expect(kinds('[name="email"]', "/signup")).toMatchObject({ email: "username", password: "unknown" });
+  });
+
   it("does not treat search or newsletter boxes as usernames", () => {
     page(`<form role="search"><input name="q" type="search" placeholder="Search"></form>
       <form><input name="newsletter_email" type="email" placeholder="Subscribe to our newsletter"></form>`);

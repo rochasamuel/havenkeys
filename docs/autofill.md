@@ -162,14 +162,17 @@ Each field gets a score per role. No single heuristic decides.
 |---|---|---|
 | `autocomplete=username` / `email` / `tel` | +100 / +90 / +30 | |
 | `autocomplete=one-time-code` | disqualifies | +120 |
+| `autocomplete=current-password` | disqualifies | |
+| `autocomplete=new-password` | ignored: sites set it on every field to switch off browser autofill (gov.br's CPF box) | |
 | `type=email` | +80 | |
-| Strong keyword in `name`/`id` (username, login, email, account, usuario, cpf…) | +50 | |
+| Strong keyword in `name`/`id` (username, login, email, account, usuario…) or a document-number word (CPF, CNPJ, RG, documento, matrícula, NIF, NIE, DNI, CIF, RUT, CUIT/CUIL, CURP, RFC, cédula, passport, national id, codice fiscale) | +50 | |
 | Strong keyword in placeholder, aria-label, title, `<label>`, `aria-labelledby` | +40 | |
 | Weak keyword (user, mail, phone…) | +25 / +20 | |
 | OTP keyword (otp, 2fa, verification code, token…) / weak (code, pin) | | +70 / +30 |
 | `maxlength` 4–8, numeric input mode | | +15, +10 |
 | 4–8 adjacent single-character boxes (split code) | | +65 |
 | Last text field before the first password field | +40 | |
+| Username-only step on a form whose intent is login, for a field with any username or document word | +30 | |
 | Negative words (search, coupon, newsletter, address, name…) | −80 | 0 for postal/zip/promo/CVV… |
 | Card or address `autocomplete` tokens | disqualifies | disqualifies |
 
@@ -179,13 +182,19 @@ English, Portuguese and Spanish are covered.
 
 Thresholds: a username needs 50 when the group has a password field. Without
 one (a username-only step) it needs 70, so a stray text box does not qualify.
+A box labelled only "CPF" with a generic `name` reaches 70 on a sign-in form
+(heading, submit button, action or path says sign in / entrar / login) but
+not on a checkout form. Short ambiguous tokens (`id`, `ci`, `cc`, `run`) are
+deliberately not document words.
 An OTP field needs 60. Each group has at most one username: the best-scoring
 text field before the first password field.
 
 **Password roles** are resolved for the group as a whole, in this order:
 
 1. `autocomplete`: `current-password`; `new-password` (a second one, or one
-   with confirm wording, is the confirmation).
+   with confirm wording, is the confirmation; one worded current, such as
+   gov.br's "Digite sua senha atual", is the current password, because sites
+   use `new-password` to switch off browser autofill).
 2. Wording: confirm / repeat / again → confirmation; current / old →
    current; new / create / choose → new.
 3. Position and **group intent**. Intent comes from headings, submit buttons,

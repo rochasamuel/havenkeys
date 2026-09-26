@@ -18,6 +18,21 @@ const noSleep = async () => undefined;
 beforeEach(() => (document.body.innerHTML = ""));
 
 describe("findSubmitButton", () => {
+  it("gov.br: Continuar on the CPF step, Entrar (not Cancelar / Esqueci minha senha) on the password step", () => {
+    document.body.innerHTML = `<form><input id="accountId" name="accountId" autocomplete="new-password" type="tel" inputmode="numeric" placeholder="Digite seu CPF">
+      <div class="button-panel"><button id="enter-account-id" type="submit" name="operation" value="enter-account-id">Continuar</button></div></form>`;
+    expect(findSubmitButton($("form"), $("#accountId"), "username", env)?.id).toBe("enter-account-id");
+
+    document.body.innerHTML = `<form><h3>Digite sua senha</h3>
+      <div class="password-eye"><input name="password" id="password" type="password" placeholder="Digite sua senha atual" autocomplete="new-password">
+      <span tabindex="2" class="fa fa-fw fa-eye toggle-password"></span></div>
+      <div class="actions"><div class="button-panel">
+        <button type="button" value="cancel">Cancelar</button>
+        <button id="submit-button" type="submit" name="operation" value="enter-password" aria-label="Botão Entrar. Aperte a tecla enter para entrar.">Entrar</button>
+      </div><button id="password-recovery" type="button" name="operation" value="call-account-recovery">Esqueci minha senha</button></div></form>`;
+    expect(findSubmitButton($("form"), $("#password"), "password", env)?.id).toBe("submit-button");
+  });
+
   it("prefers the form's sign-in button over social and recovery buttons", () => {
     document.body.innerHTML = `<form><input name="u"><input name="p" type="password">
       <button type="button">Sign in with Google</button><a role="button">Forgot password?</a>
