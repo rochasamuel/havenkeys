@@ -100,7 +100,7 @@ function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise
 /** One previous password, hidden until asked for. */
 function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index: number; replacedAt: number }) {
   const toast = useToast();
-  const { t, locale } = useI18n();
+  const { t, dateLocale } = useI18n();
   const secret = useRevealedSecret(useCallback(() => api.revealPreviousPassword(itemId, index), [itemId, index]));
   const toggle = () =>
     secret.value === null
@@ -115,7 +115,7 @@ function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index
       ) : (
         <span className="mono selectable revealed">{secret.value}</span>
       )}
-      <span className="muted">{t.detail.replaced(formatDate(replacedAt, locale))}</span>
+      <span className="muted">{t.detail.replaced(formatDate(replacedAt, dateLocale))}</span>
       <IconButton
         icon={secret.value === null ? "eye" : "eyeOff"}
         label={secret.value === null ? t.detail.showPrevious : t.detail.hidePrevious}
@@ -164,7 +164,7 @@ function PasswordHistory({ itemId }: { itemId: string }) {
 /** Passkeys saved on this login. Private keys never leave the core. */
 function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
   const toast = useToast();
-  const { t, locale } = useI18n();
+  const { t, dateLocale } = useI18n();
   const [list, setList] = useState<PasskeyInfo[] | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -200,7 +200,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
             <Icon name="key" size={15} />
             <span className="selectable">{p.rpId}</span>
             <span className="muted">
-              {p.userName || p.displayName || t.detail.noAccountName} · {t.detail.passkeySaved(formatDate(p.createdAt, locale))}
+              {p.userName || p.displayName || t.detail.noAccountName} · {t.detail.passkeySaved(formatDate(p.createdAt, dateLocale))}
             </span>
             {confirming === p.credentialId ? (
               <span className="confirm">
@@ -224,7 +224,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
 
 export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
   const toast = useToast();
-  const { t, locale } = useI18n();
+  const { t, dateLocale } = useI18n();
   const copy = useCopy(item.id);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -378,7 +378,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
 
       <footer className="item-foot">
         <p className="muted">
-          {t.detail.dates(formatDate(item.createdAt, locale), formatDate(item.updatedAt, locale))}
+          {t.detail.dates(formatDate(item.createdAt, dateLocale), formatDate(item.updatedAt, dateLocale))}
         </p>
         {confirmDelete ? (
           <div className="confirm">

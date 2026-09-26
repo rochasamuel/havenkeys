@@ -36,7 +36,7 @@ interface Props {
  * dropped from memory when this component unmounts (for example on lock).
  */
 export function EmergencyKit({ onDone }: Props) {
-  const { t, locale } = useI18n();
+  const { t, dateLocale } = useI18n();
   const [kit, setKit] = useState<Kit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -62,7 +62,7 @@ export function EmergencyKit({ onDone }: Props) {
       <article className="kit-sheet" aria-label={t.kit.sheetLabel}>
         <header className="kit-head">
           <h2>{t.kit.heading}</h2>
-          <p>{t.kit.created(formatDate(kit.createdAt, locale))}</p>
+          <p>{t.kit.created(formatDate(kit.createdAt, dateLocale))}</p>
         </header>
         <p className="kit-lede">
           {t.kit.ledeBefore}

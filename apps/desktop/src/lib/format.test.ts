@@ -50,6 +50,9 @@ describe("format", () => {
     const at = Date.UTC(2026, 8, 26, 12, 0);
     expect(formatDate(at, "en")).toContain("2026");
     expect(formatDate(at, "pt-BR")).toContain("de set. de 2026");
+    // A regional tag keeps its own order: day before month in en-GB.
+    expect(formatDate(at, "en-GB")).toMatch(/^26 Sept? 2026/);
+    expect(formatDate(at, "en-US")).toMatch(/^Sep 26, 2026/);
   });
 });
 

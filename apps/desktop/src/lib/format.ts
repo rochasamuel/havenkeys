@@ -23,7 +23,10 @@ export function groupCode(code: string): string {
   return `${code.slice(0, half)} ${code.slice(half)}`;
 }
 
-/** A date and time in the UI's language. */
+/**
+ * A date and time in the UI's language. `locale` is the context's
+ * `dateLocale`: the UI locale, or the OS's regional variant of it.
+ */
 export function formatDate(ms: number, locale: string): string {
   return new Date(ms).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }

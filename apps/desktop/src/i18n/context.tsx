@@ -2,13 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api } from "../lib/api";
 import { en, type Messages } from "./en";
 import { ptBR } from "./pt-BR";
-import { effectiveLocale, type Locale, type Preference } from "./locale";
+import { dateLocale, effectiveLocale, type Locale, type Preference } from "./locale";
 import { readPreference, writePreference } from "./preference";
 
 const MESSAGES: Record<Locale, Messages> = { en, "pt-BR": ptBR };
 
 interface I18n {
   locale: Locale;
+  /** For formatDate: the UI locale, or the OS's regional variant of it (en-GB). */
+  dateLocale: string;
   t: Messages;
   /** What the user picked in Settings ("auto" follows the OS). */
   preference: Preference;
@@ -17,6 +19,7 @@ interface I18n {
 
 const I18nContext = createContext<I18n>({
   locale: "en",
+  dateLocale: "en",
   t: en,
   preference: "auto",
   setPreference: () => undefined,
@@ -51,8 +54,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ locale, t: MESSAGES[locale], preference, setPreference }),
-    [locale, preference, setPreference],
+    () => ({ locale, dateLocale: dateLocale(locale, languages), t: MESSAGES[locale], preference, setPreference }),
+    [locale, languages, preference, setPreference],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
