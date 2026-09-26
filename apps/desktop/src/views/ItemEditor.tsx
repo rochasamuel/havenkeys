@@ -196,20 +196,27 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
               <span className="edit-label">{t.common.password}</span>
               {password.mode === "keep" ? (
                 <div className="edit-secret">
-                  <span className="mono masked">••••••••••••</span>
-                  <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
-                    {t.editor.change}
-                  </button>
-                  <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
-                    {t.common.remove}
-                  </button>
+                  {/* Stands in for the password: may be cut short in a narrow pane. */}
+                  <span className="mono masked" data-truncate="">
+                    ••••••••••••
+                  </span>
+                  <span className="edit-secret-actions">
+                    <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
+                      {t.editor.change}
+                    </button>
+                    <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
+                      {t.common.remove}
+                    </button>
+                  </span>
                 </div>
               ) : password.mode === "clear" ? (
                 <div className="edit-secret">
                   <span className="muted">{t.editor.passwordRemoved}</span>
-                  <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
-                    {t.common.undo}
-                  </button>
+                  <span className="edit-secret-actions">
+                    <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
+                      {t.common.undo}
+                    </button>
+                  </span>
                 </div>
               ) : (
                 <div className="edit-secret">
@@ -224,23 +231,25 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                     autoCapitalize="off"
                     aria-label={t.common.password}
                   />
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={() => setShowPassword((s) => !s)}
-                    aria-label={showPassword ? t.common.hidePassword : t.common.showPassword}
-                    title={showPassword ? t.common.hidePassword : t.common.showPassword}
-                  >
-                    <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
-                  </button>
-                  <button type="button" className="btn btn-small" onClick={() => void generate()}>
-                    <Icon name="dice" size={15} /> {t.editor.generate}
-                  </button>
-                  {!isNew && existing.hasPassword && (
-                    <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
-                      {t.common.cancel}
+                  <span className="edit-secret-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => setShowPassword((s) => !s)}
+                      aria-label={showPassword ? t.common.hidePassword : t.common.showPassword}
+                      title={showPassword ? t.common.hidePassword : t.common.showPassword}
+                    >
+                      <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
                     </button>
-                  )}
+                    <button type="button" className="btn btn-small" onClick={() => void generate()}>
+                      <Icon name="dice" size={15} /> {t.editor.generate}
+                    </button>
+                    {!isNew && existing.hasPassword && (
+                      <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
+                        {t.common.cancel}
+                      </button>
+                    )}
+                  </span>
                 </div>
               )}
             </div>
@@ -266,33 +275,35 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                   inputMode="url"
                   aria-label={t.editor.websiteN(i + 1)}
                 />
-                <span className="select-wrap">
-                  <select
-                    value={rule.matchType}
-                    onChange={(e) =>
-                      setUrls((list) =>
-                        list.map((r, j) => (j === i ? { ...r, matchType: e.target.value as MatchType } : r)),
-                      )
-                    }
-                    aria-label={t.editor.matchHow(i + 1)}
+                <span className="url-edit-controls">
+                  <span className="select-wrap">
+                    <select
+                      value={rule.matchType}
+                      onChange={(e) =>
+                        setUrls((list) =>
+                          list.map((r, j) => (j === i ? { ...r, matchType: e.target.value as MatchType } : r)),
+                        )
+                      }
+                      aria-label={t.editor.matchHow(i + 1)}
+                    >
+                      {matchTypes.map((m) => (
+                        <option key={m} value={m}>
+                          {matchLabels[m]}
+                        </option>
+                      ))}
+                    </select>
+                    <Icon name="chevronDown" size={14} className="select-chevron" />
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setUrls((list) => list.filter((_, j) => j !== i))}
+                    aria-label={t.editor.removeWebsiteN(i + 1)}
+                    title={t.editor.removeWebsite}
                   >
-                    {matchTypes.map((m) => (
-                      <option key={m} value={m}>
-                        {matchLabels[m]}
-                      </option>
-                    ))}
-                  </select>
-                  <Icon name="chevronDown" size={14} className="select-chevron" />
+                    <Icon name="x" size={16} />
+                  </button>
                 </span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => setUrls((list) => list.filter((_, j) => j !== i))}
-                  aria-label={t.editor.removeWebsiteN(i + 1)}
-                  title={t.editor.removeWebsite}
-                >
-                  <Icon name="x" size={16} />
-                </button>
               </div>
             ))}
             <button
@@ -311,19 +322,23 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
               {totp.mode === "keep" ? (
                 <div className="edit-secret">
                   <span className="muted">{t.editor.setUp}</span>
-                  <button type="button" className="btn btn-small" onClick={() => setTotp({ mode: "set", value: "" })}>
-                    {t.editor.replace}
-                  </button>
-                  <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setTotp({ mode: "clear" })}>
-                    {t.common.remove}
-                  </button>
+                  <span className="edit-secret-actions">
+                    <button type="button" className="btn btn-small" onClick={() => setTotp({ mode: "set", value: "" })}>
+                      {t.editor.replace}
+                    </button>
+                    <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setTotp({ mode: "clear" })}>
+                      {t.common.remove}
+                    </button>
+                  </span>
                 </div>
               ) : totp.mode === "clear" ? (
                 <div className="edit-secret">
                   <span className="muted">{t.editor.codesRemoved}</span>
-                  <button type="button" className="btn btn-small" onClick={() => setTotp(KEEP)}>
-                    {t.common.undo}
-                  </button>
+                  <span className="edit-secret-actions">
+                    <button type="button" className="btn btn-small" onClick={() => setTotp(KEEP)}>
+                      {t.common.undo}
+                    </button>
+                  </span>
                 </div>
               ) : (
                 <input

@@ -109,7 +109,7 @@ function PreviousPassword({ itemId, index, replacedAt }: { itemId: string; index
   return (
     <li className="history-row">
       {secret.value === null ? (
-        <span className="mono masked" aria-label={t.common.hiddenPassword}>
+        <span className="mono masked" aria-label={t.common.hiddenPassword} data-truncate="">
           ••••••••••••
         </span>
       ) : (

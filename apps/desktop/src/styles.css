@@ -593,12 +593,17 @@ button {
 
 /* A banner scoped to a narrower pane (the item list) rather than the whole
    window: it wraps its text and action instead of assuming one line. */
-.banner-fixed {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
+/* First run: an optional banner above the welcome screen, in the flow so a
+   longer (wrapped) banner pushes the screen down instead of covering it. */
+.first-run {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.first-run > .welcome {
+  flex: 1;
+  min-height: 0;
 }
 
 .banner-warn {
@@ -834,6 +839,7 @@ button {
 
 .lock-btn-text {
   display: grid;
+  min-width: 0;
   line-height: 1.25;
 }
 
@@ -849,7 +855,9 @@ button {
 }
 
 .lock-btn kbd {
+  flex: none;
   margin-left: auto;
+  white-space: nowrap;
   padding: 1px 6px;
   border: 1px solid rgba(226, 234, 230, 0.16);
   background: rgba(226, 234, 230, 0.05);
@@ -900,10 +908,9 @@ button {
   font-size: 22px;
   font-weight: 480;
   letter-spacing: -0.012em;
+  line-height: 1.15;
   color: var(--text-strong);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .list-count {
@@ -1137,14 +1144,21 @@ button {
 
 .item-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 12px 16px;
   margin-bottom: 24px;
 }
 
+/* In a narrow pane the Edit button moves under the title rather than
+   squeezing it to a word per line. */
 .item-head-text {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.item-head-actions {
+  margin-left: auto;
 }
 
 .item-title {
@@ -1446,9 +1460,33 @@ button {
 
 .history-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 4px 0;
+}
+
+/* In a narrow pane: the site or password keeps its words whole, the date
+   line wraps (or moves under it), and a delete confirmation takes its own line. */
+.history-row > .selectable {
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.history-row > .masked {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.history-row > .confirm {
+  flex-basis: 100%;
+}
+
+.history-row > .icon-btn {
+  margin-left: auto;
 }
 
 .history-row .revealed {
@@ -1456,6 +1494,7 @@ button {
 }
 
 .history-row .muted {
+  flex: 1 1 9em;
   margin-left: auto;
   font-size: 12px;
 }
@@ -1493,19 +1532,25 @@ button {
 
 .editor-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 16px;
   margin-bottom: 22px;
 }
 
+/* In a narrow pane the buttons go under the heading rather than breaking it. */
 .editor-actions {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
+/* Rows wrap in a narrow pane: a secret's buttons or a website's match
+   select move to their own line instead of being cut off. */
 .edit-row {
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   min-height: 48px;
   cursor: text;
   transition: background-color var(--t-fast);
@@ -1558,16 +1603,50 @@ button {
 }
 
 .edit-secret {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+/* The value or status line; the buttons wrap under it as one group when
+   the two do not fit side by side. */
+.edit-secret > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.edit-secret > input {
+  flex-basis: 5em;
+}
+
+/* Stands in for the password, so it may be cut short rather than push the buttons down. */
+.edit-secret > .masked {
+  flex-basis: 3em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.edit-secret-actions {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-left: auto;
 }
 
-.edit-secret > :first-child {
-  flex: 1;
-  min-width: 0;
+.url-edit .edit-input {
+  flex: 1 1 12em;
+}
+
+/* The match select and its remove button wrap under the address together. */
+.url-edit-controls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .url-edit select {
@@ -1974,7 +2053,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 }
 
 .device-main {
-  flex: 1;
+  flex: 1 1 12em;
   display: grid;
   min-width: 0;
 }
@@ -1992,10 +2071,14 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   color: var(--muted);
 }
 
+/* The question and its buttons keep the device's name readable: they move
+   under it when both do not fit on one line. */
 .device-confirm {
+  flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   animation: rise var(--t-med) var(--ease) both;
 }
@@ -2380,6 +2463,31 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 @media (max-width: 960px) {
   .vault {
     grid-template-columns: 200px 260px minmax(0, 1fr);
+  }
+
+  /* A website row: address and remove button on one line, the match
+     select under them (the pair cannot share a line in a pane this narrow). */
+  .url-edit-controls {
+    display: contents;
+  }
+
+  .url-edit .edit-input {
+    flex-basis: calc(100% - 44px);
+  }
+
+  .url-edit .icon-btn {
+    order: 1;
+    margin-left: auto;
+  }
+
+  .url-edit .select-wrap {
+    order: 2;
+  }
+
+  /* No room beside a longer "Unlocked" (Desbloqueado); the button's
+     tooltip still names the shortcut. */
+  .lock-btn kbd {
+    display: none;
   }
 
   .item,

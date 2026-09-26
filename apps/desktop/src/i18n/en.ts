@@ -235,9 +235,9 @@ export const en = {
   detail: {
     /** By copied field; each language agrees the word with its own noun. */
     copied: {
-      username: (seconds: number) => `Username copied. The clipboard clears in ${seconds} s.`,
-      password: (seconds: number) => `Password copied. The clipboard clears in ${seconds} s.`,
-      totp: (seconds: number) => `One-time code copied. The clipboard clears in ${seconds} s.`,
+      username: (seconds: number) => `Username copied. The clipboard clears in ${seconds}\u00a0s.`,
+      password: (seconds: number) => `Password copied. The clipboard clears in ${seconds}\u00a0s.`,
+      totp: (seconds: number) => `One-time code copied. The clipboard clears in ${seconds}\u00a0s.`,
     },
     oneTimeCode: "One-time code",
     copyOneTimeCode: "Copy one-time code",
@@ -324,7 +324,7 @@ export const en = {
     aboutBits: (n: number) => `about ${n} bits`,
     regenerate: "Regenerate",
     copy: "Copy",
-    copied: (seconds: number) => `Password copied. The clipboard clears in ${seconds} s.`,
+    copied: (seconds: number) => `Password copied. The clipboard clears in ${seconds}\u00a0s.`,
     failed: "Could not generate a password.",
     length: "Length",
     characters: "Characters",

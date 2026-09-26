@@ -228,9 +228,9 @@ export const ptBR: Messages = {
 
   detail: {
     copied: {
-      username: (seconds: number) => `Usuário copiado. A área de transferência é limpa em ${seconds} s.`,
-      password: (seconds: number) => `Senha copiada. A área de transferência é limpa em ${seconds} s.`,
-      totp: (seconds: number) => `Código de verificação copiado. A área de transferência é limpa em ${seconds} s.`,
+      username: (seconds: number) => `Usuário copiado. A área de transferência é limpa em ${seconds}\u00a0s.`,
+      password: (seconds: number) => `Senha copiada. A área de transferência é limpa em ${seconds}\u00a0s.`,
+      totp: (seconds: number) => `Código de verificação copiado. A área de transferência é limpa em ${seconds}\u00a0s.`,
     },
     oneTimeCode: "Código de verificação",
     copyOneTimeCode: "Copiar código de verificação",
@@ -317,7 +317,7 @@ export const ptBR: Messages = {
     aboutBits: (n: number) => `cerca de ${n} bits`,
     regenerate: "Gerar outra",
     copy: "Copiar",
-    copied: (seconds: number) => `Senha copiada. A área de transferência é limpa em ${seconds} s.`,
+    copied: (seconds: number) => `Senha copiada. A área de transferência é limpa em ${seconds}\u00a0s.`,
     failed: "Não foi possível gerar uma senha.",
     length: "Tamanho",
     characters: "Caracteres",

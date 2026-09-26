@@ -97,8 +97,8 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
       ) : (
         <ul className="list-items">
           {items.map((item) => {
-            const sub =
-              item.itemType === "login" ? (item.username ?? primaryHost(item) ?? t.common.login) : t.common.secureNote;
+            const data = item.itemType === "login" ? (item.username ?? primaryHost(item)) : null;
+            const sub = data ?? (item.itemType === "login" ? t.common.login : t.common.secureNote);
             return (
               <li key={item.id}>
                 <button
@@ -110,8 +110,13 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
                     {item.itemType === "secure_note" ? <Icon name="note" size={15} /> : monogram(item.title)}
                   </span>
                   <span className="list-item-text">
-                    <span className="list-item-title">{item.title}</span>
-                    <span className="list-item-sub">{sub}</span>
+                    {/* User data may be cut with an ellipsis (data-truncate); our own words never are. */}
+                    <span className="list-item-title" data-truncate="">
+                      {item.title}
+                    </span>
+                    <span className="list-item-sub" data-truncate={data !== null ? "" : undefined}>
+                      {sub}
+                    </span>
                   </span>
                   {item.hasTotp && (
                     <span className="list-item-flag" title={t.list.hasTotp}>

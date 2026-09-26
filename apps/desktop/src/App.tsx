@@ -129,9 +129,9 @@ export function App() {
 
   if (!status.vaultExists) {
     return (
-      <>
+      <div className="first-run">
         {removedWarning && (
-          <div className="banner banner-warn banner-fixed" role="alert">
+          <div className="banner banner-warn" role="alert">
             <span>{t.app.keychainNotCleared}</span>
             <button className="btn btn-quiet" type="button" onClick={() => setRemovedWarning(false)}>
               {t.common.dismiss}
@@ -149,7 +149,7 @@ export function App() {
             setStatus(s);
           }}
         />
-      </>
+      </div>
     );
   }
 
