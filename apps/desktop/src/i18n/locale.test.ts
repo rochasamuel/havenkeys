@@ -1,13 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { effectiveLocale, resolveLocale } from "./locale";
+import { dateLocale, effectiveLocale, resolveLocale } from "./locale";
 import { readPreference, writePreference } from "./preference";
 
 describe("resolveLocale", () => {
+  it("lets the first tag in English or Portuguese decide", () => {
+    expect(resolveLocale(["en-US", "pt-BR"])).toBe("en");
+    expect(resolveLocale(["pt-BR", "en"])).toBe("pt-BR");
+    expect(resolveLocale(["es", "pt-BR"])).toBe("pt-BR");
+    expect(resolveLocale(["fr", "en-GB", "pt"])).toBe("en");
+    expect(resolveLocale(["fr"])).toBe("en");
+  });
+
+  it("matches the language subtag, not a prefix", () => {
+    expect(resolveLocale(["ptx", "pt-BR"])).toBe("pt-BR");
+    expect(resolveLocale(["eng", "pt"])).toBe("pt-BR");
+  });
+
   it("picks Brazilian Portuguese for any Portuguese tag", () => {
     expect(resolveLocale(["pt-BR"])).toBe("pt-BR");
     expect(resolveLocale(["pt"])).toBe("pt-BR");
     expect(resolveLocale(["PT-pt"])).toBe("pt-BR");
-    expect(resolveLocale(["en-US", "pt-BR"])).toBe("pt-BR");
   });
 
   it("falls back to English", () => {
@@ -21,6 +33,22 @@ describe("resolveLocale", () => {
     expect(effectiveLocale("auto", ["en-US"])).toBe("en");
     expect(effectiveLocale("en", ["pt-BR"])).toBe("en");
     expect(effectiveLocale("pt-BR", ["en-US"])).toBe("pt-BR");
+  });
+});
+
+describe("dateLocale", () => {
+  it("keeps the OS's regional format when it speaks the UI's language", () => {
+    expect(dateLocale("en", ["en-GB", "pt-BR"])).toBe("en-GB");
+    expect(dateLocale("pt-BR", ["pt-PT"])).toBe("pt-PT");
+    expect(dateLocale("en", ["EN_au"])).toBe("en-AU");
+  });
+
+  it("uses the UI locale otherwise", () => {
+    // Only the first OS tag counts: the one the OS formats dates with.
+    expect(dateLocale("en", ["fr-FR", "en-GB"])).toBe("en");
+    expect(dateLocale("pt-BR", ["en-US"])).toBe("pt-BR");
+    expect(dateLocale("en", [])).toBe("en");
+    expect(dateLocale("en", ["en-!!"])).toBe("en");
   });
 });
 
