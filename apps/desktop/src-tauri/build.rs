@@ -38,6 +38,7 @@ const COMMANDS: &[&str] = &[
     "set_launch_at_login",
     "import_1pux",
     "delete_import_file",
+    "set_ui_language",
 ];
 
 fn main() {

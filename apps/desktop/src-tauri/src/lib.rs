@@ -248,6 +248,7 @@ pub fn run() {
             autostart::set_launch_at_login,
             import::import_1pux,
             import::delete_import_file,
+            tray::set_ui_language,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the HavenKeys application");

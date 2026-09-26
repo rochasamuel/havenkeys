@@ -130,6 +130,8 @@ export const api = {
   /** Whether this computer opens HavenKeys at login (an OS setting, not a vault one). */
   launchAtLogin: () => call<boolean>("launch_at_login"),
   setLaunchAtLogin: (enabled: boolean) => call<boolean>("set_launch_at_login", { enabled }),
+  /** Relabel the tray menu. Rust accepts only "en" and "pt-BR". */
+  setUiLanguage: (lang: "en" | "pt-BR") => call<void>("set_ui_language", { lang }),
 
   onLocked: (handler: (reason: string) => void): Promise<UnlistenFn> =>
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),

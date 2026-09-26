@@ -44,6 +44,7 @@
     "allow-launch-at-login",
     "allow-set-launch-at-login",
     "allow-import-1pux",
-    "allow-delete-import-file"
+    "allow-delete-import-file",
+    "allow-set-ui-language"
   ]
 }

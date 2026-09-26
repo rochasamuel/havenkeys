@@ -11,6 +11,7 @@ import "@havenkeys/ui/tokens.css";
 import "./styles.css";
 import { App } from "./App";
 import { ToastProvider } from "./components/Toast";
+import { I18nProvider } from "./i18n/context";
 import { applyTheme } from "./lib/theme";
 
 applyTheme("dark");
@@ -22,9 +23,11 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
+      <I18nProvider>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </I18nProvider>
     </StrictMode>,
   );
 }

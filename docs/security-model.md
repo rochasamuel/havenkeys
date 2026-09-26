@@ -222,6 +222,7 @@ means a live server session, which a locked vault does not have.
 | `remove_device` | yes | no. See §13 |
 | `launch_at_login`, `set_launch_at_login` | no | no |
 | `sync_now`, `resync_vault` | yes (online) | no |
+| `set_ui_language` | no | no. Accepts only `en` or `pt-BR` and relabels the tray menu from a fixed table |
 | `get_emergency_kit` | yes | **the Secret Key**, plus a QR encoding it. The only command that returns long-term key material, on explicit request, with its own unlocked check because the Secret Key lives outside the vault (`server-sync.md` §7) |
 
 All inputs are length-limited and validated in Rust; the UI's validation is

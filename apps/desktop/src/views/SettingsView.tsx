@@ -7,6 +7,8 @@ import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
 import { ImportSection } from "./ImportSection";
 import { AccountSection } from "./AccountSection";
+import { useI18n } from "../i18n/context";
+import { isPreference, LANGUAGE_NAMES, PREFERENCES } from "../i18n/locale";
 
 const autoLockChoices = [
   { value: 5, label: "After 5 minutes" },
@@ -88,6 +90,7 @@ function ChangePassword() {
 
 export function SettingsView({ onImported, online }: { onImported: () => void; online: boolean }) {
   const toast = useToast();
+  const { t, preference, setPreference } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
 
@@ -130,28 +133,46 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
         <h2 id="settings-title">Settings</h2>
       </header>
 
-      {settings && (
-        <div className="settings-block">
-          <h3 className="group-title">Appearance</h3>
-          <div className="group">
+      <div className="settings-block">
+        <h3 className="group-title">Appearance</h3>
+        <div className="group">
+          <label className="row">
+            <span className="row-label-inline">{t.settings.language}</span>
+            <span className="select-wrap">
+              <select
+                value={preference}
+                onChange={(e) => {
+                  if (isPreference(e.target.value)) setPreference(e.target.value);
+                }}
+              >
+                {PREFERENCES.map((p) => (
+                  <option key={p} value={p}>
+                    {p === "auto" ? t.settings.languageAuto : LANGUAGE_NAMES[p]}
+                  </option>
+                ))}
+              </select>
+              <Icon name="chevronDown" size={14} className="select-chevron" />
+            </span>
+          </label>
+          {settings && (
             <div className="row">
               <span className="row-label-inline">Theme</span>
               <div className="segmented" role="radiogroup" aria-label="Theme">
-                {(["dark", "light", "system"] as Theme[]).map((t) => (
+                {(["dark", "light", "system"] as Theme[]).map((theme) => (
                   <button
-                    key={t}
+                    key={theme}
                     role="radio"
-                    aria-checked={settings.theme === t}
-                    onClick={() => void update({ theme: t })}
+                    aria-checked={settings.theme === theme}
+                    onClick={() => void update({ theme })}
                   >
-                    {t === "dark" ? "Dark" : t === "light" ? "Light" : "System"}
+                    {theme === "dark" ? "Dark" : theme === "light" ? "Light" : "System"}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {settings && (
         <div className="settings-block">
