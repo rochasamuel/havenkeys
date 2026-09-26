@@ -67,6 +67,13 @@ describe("NativeClient", () => {
     await expect(p).rejects.toMatchObject({ code: "denied" });
   });
 
+  it("shows the message for the code from the message table, not the wire text", async () => {
+    const c = client();
+    const p = c.request({ type: "fill_item", itemId: ID, url: "https://evil.com/" });
+    port.deliver({ v: 1, id: port.lastId(), error: { code: "denied", message: "anything the host said" } });
+    await expect(p).rejects.toMatchObject({ code: "denied", message: "This item is not saved for this website." });
+  });
+
   it("ignores invalid, unknown-id and mismatched messages", async () => {
     vi.useFakeTimers();
     const c = client({ timeoutMs: 1000 });

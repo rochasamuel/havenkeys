@@ -15,6 +15,7 @@ import {
   type Result,
   type ResultFor,
 } from "@havenkeys/protocol";
+import { t } from "../i18n";
 
 /** Protocol error codes plus the two the client produces itself. */
 export type ClientErrorCode = ErrorCode | "host_unavailable" | "timeout";
@@ -29,9 +30,11 @@ export class BridgeError extends Error {
   }
 }
 
-const HOST_UNAVAILABLE = "The HavenKeys native messaging host is not installed or failed to start.";
-const DESKTOP_UNAVAILABLE = "The HavenKeys app is not running.";
-const TIMEOUT = "HavenKeys did not respond.";
+// In the browser's language. Messages from the host are shown by code from
+// the same table (i18n/en.ts `errors.bridge`), not as the wire text.
+const HOST_UNAVAILABLE = t.errors.hostUnavailable;
+const DESKTOP_UNAVAILABLE = t.errors.bridge.desktop_unavailable;
+const TIMEOUT = t.errors.timeout;
 
 /** The subset of `chrome.runtime.Port` the client uses. */
 export interface NativePort {
@@ -144,13 +147,13 @@ export class NativeClient {
       case "error":
         // An error without an ID cannot be matched to a request; the
         // request will time out instead.
-        if (msg.id !== null) this.#settle(msg.id, new BridgeError(msg.error.code, msg.error.message));
+        if (msg.id !== null) this.#settle(msg.id, new BridgeError(msg.error.code, t.errors.bridge[msg.error.code]));
         return;
       case "result": {
         const pending = this.#pending.get(msg.id);
         if (!pending) return;
         if (msg.result.type !== pending.type) {
-          this.#settle(msg.id, new BridgeError("malformed", "Unexpected response."));
+          this.#settle(msg.id, new BridgeError("malformed", t.errors.unexpectedResponse));
           return;
         }
         this.#settle(msg.id, msg.result);

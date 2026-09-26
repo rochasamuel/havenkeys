@@ -2,7 +2,8 @@
 // codes go from the background straight to the content script and never
 // pass through this page.
 
-import type { MenuItemView, MenuView } from "../messaging/inline";
+import { applyDocumentLang, t as msg } from "../i18n";
+import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash } from "./common";
 
 const main = document.getElementById("main") as HTMLElement;
@@ -11,8 +12,16 @@ const card = document.querySelector(".card") as HTMLElement;
 const token = tokenFromHash();
 const guard = createClickGuard(card);
 
+applyDocumentLang();
+document.title = msg.menu.pageTitle;
+
 function message(title: string, detail: string, error = false): HTMLElement {
   return h("div", { className: "message" }, h("strong", { text: title, ...(error ? { className: "error" } : {}) }), h("span", { text: detail }));
+}
+
+/** A row's text line: user data truncates with an ellipsis, our own copy wraps. */
+function line(className: "title" | "user", text: string, copy: boolean): HTMLElement {
+  return h("span", { className: copy ? `${className} copy` : className, text });
 }
 
 /** The generate row's glyph: a sparkle drawn in the app's 1.6-stroke icon set. */
@@ -33,12 +42,16 @@ function sparkle(): SVGSVGElement {
   return svg;
 }
 
-function row(avatar: string | Node, title: string, detail: string, onPick: () => Promise<void>): HTMLButtonElement {
+/** `copy`: which lines are UI copy (wrap) rather than user data (truncate). */
+type Copy = { title: boolean; detail: boolean };
+const DATA: Copy = { title: false, detail: false };
+
+function row(avatar: string | Node, title: string, detail: string, onPick: () => Promise<void>, copy: Copy = DATA): HTMLButtonElement {
   const b = h(
     "button",
     { className: "row" },
     typeof avatar === "string" ? h("span", { className: "avatar", text: avatar }) : h("span", { className: "avatar avatar-icon" }, avatar),
-    h("span", { className: "who" }, h("span", { className: "title", text: title }), h("span", { className: "user", text: detail })),
+    h("span", { className: "who" }, line("title", title, copy.title), line("user", detail, copy.detail)),
   );
   b.type = "button";
   b.addEventListener("click", (e) => {
@@ -52,12 +65,13 @@ function row(avatar: string | Node, title: string, detail: string, onPick: () =>
 async function pick(req: Parameters<typeof ask>[0]): Promise<void> {
   const r = await ask<null>(req);
   // On success the background closes this frame.
-  if (!r.ok) main.replaceChildren(message("Could not fill", r.message, true));
+  if (!r.ok) main.replaceChildren(message(msg.menu.couldNotFill, r.message, true));
 }
 
 function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButtonElement {
-  const detail = kind === "otp" ? "Fill one-time code" : (item.username ?? "No username");
-  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }));
+  const detail = kind === "otp" ? msg.menu.fillCode : (item.username ?? msg.common.noUsername);
+  const copy = { title: false, detail: kind === "otp" || item.username === null };
+  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy);
 }
 
 /** A row that only informs: no button, not in the arrow-key order. */
@@ -65,41 +79,41 @@ function hintNote(title: string, detail: string): HTMLElement {
   return h(
     "div",
     { className: "row hint" },
-    h("span", { className: "who" }, h("span", { className: "title", text: title }), h("span", { className: "user", text: detail })),
+    h("span", { className: "who" }, line("title", title, true), line("user", detail, true)),
   );
 }
 
 function render(t: string, view: MenuView): void {
   if (view.state === "locked") {
-    main.replaceChildren(message("HavenKeys is locked", "Unlock the HavenKeys app to fill."));
+    main.replaceChildren(message(msg.menu.lockedTitle, msg.menu.lockedBody));
     return;
   }
   site.textContent = view.site;
   if (view.kind === "new_password") {
     main.replaceChildren(
-      row(sparkle(), "Generate strong password", "Fills the new password fields", () => pick({ type: "menu_generate", token: t })),
+      row(sparkle(), msg.menu.generateTitle, msg.menu.generateBody, () => pick({ type: "menu_generate", token: t }), { title: true, detail: true }),
     );
     return;
   }
   const kind = view.kind;
   const passkeyRows = view.passkeys.map((p) =>
-    row(monogram(p.title), p.title, `Passkey · ${p.userName || "account"}`, () =>
+    row(monogram(p.title), p.title, msg.menu.passkeyRow(p.userName || msg.menu.passkeyAccountFallback), () =>
       pick({ type: "menu_pick_passkey", token: t, itemId: p.itemId, credentialId: p.credentialId }),
     ),
   );
   const hint = view.hint;
-  const lead = hint?.kind === "use_passkey" ? [hintNote(`You have a passkey for ${view.site}`, "Use the site’s “Sign in with a passkey” option")] : [];
+  const lead = hint?.kind === "use_passkey" ? [hintNote(msg.menu.usePasskeyTitle(view.site), msg.menu.usePasskeyBody)] : [];
   const tail =
     hint?.kind === "add_passkey"
-      ? [row(sparkle(), `${hint.name} supports passkeys`, "How to add one", () => pick({ type: "menu_open_help", token: t }))]
+      ? [row(sparkle(), msg.menu.addPasskeyTitle(hint.name), msg.menu.addPasskeyBody, () => pick({ type: "menu_open_help", token: t }), { title: true, detail: true })]
       : [];
   const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...tail];
   // Opened from the field's icon with nothing saved for this site.
   if (rows.length === 0) {
     main.replaceChildren(
       kind === "otp"
-        ? message("No one-time codes here", "No login for this site has a one-time code.")
-        : message("No logins for this site", "Save one in the HavenKeys app."),
+        ? message(msg.menu.noCodesTitle, msg.menu.noCodesBody)
+        : message(msg.menu.noLoginsTitle, msg.menu.noLoginsBody),
     );
     return;
   }
@@ -127,11 +141,57 @@ window.addEventListener("focus", () => {
   if (!main.contains(document.activeElement)) main.querySelector<HTMLButtonElement>("button.row")?.focus();
 });
 
+// ------------------------------------------------------------ size
+// The content script first sizes our iframe from the row count (46px rows).
+// Rows whose copy wraps (longer languages, narrow fields) are taller, so we
+// report the height the first MENU_MAX_ROWS rows need and it resizes the
+// frame (menu_resize → bg_resize_menu). Past that many rows the list scrolls.
+
+let reported = 0;
+
+function naturalHeight(): number {
+  const head = card.firstElementChild as HTMLElement | null;
+  const style = getComputedStyle(main);
+  let total = card.offsetHeight - card.clientHeight; // borders
+  total += head?.getBoundingClientRect().height ?? 0;
+  total += (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+  const rows = Array.from(main.children).slice(0, MENU_MAX_ROWS) as HTMLElement[];
+  for (const el of rows) total += el.getBoundingClientRect().height;
+  return Math.ceil(total);
+}
+
+function reportSize(): void {
+  if (!token || main.childElementCount === 0) return;
+  const height = Math.min(MENU_MAX_HEIGHT, Math.max(MENU_MIN_HEIGHT, naturalHeight()));
+  if (height === reported) return;
+  reported = height;
+  void ask({ type: "menu_resize", token, height });
+}
+
+let sizePending = false;
+function scheduleSize(): void {
+  if (sizePending) return;
+  sizePending = true;
+  requestAnimationFrame(() => {
+    sizePending = false;
+    reportSize();
+  });
+}
+
+const rowObserver = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleSize) : null;
+new MutationObserver(() => {
+  rowObserver?.disconnect();
+  for (const el of Array.from(main.children)) rowObserver?.observe(el);
+  scheduleSize();
+}).observe(main, { childList: true });
+// Web fonts change line heights once loaded.
+void document.fonts?.ready.then(scheduleSize);
+
 async function init(): Promise<void> {
   if (!token) return;
   const r = await ask<MenuView>({ type: "menu_state", token });
   if (!r.ok) {
-    main.replaceChildren(message("Unavailable", r.message, true));
+    main.replaceChildren(message(msg.menu.unavailable, r.message, true));
     return;
   }
   render(token, r.value);

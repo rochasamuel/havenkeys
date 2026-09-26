@@ -9,6 +9,7 @@
 // ignores untrusted clicks, and opening the menu grants nothing by itself
 // (picks inside the menu frame are guarded separately, see menu/common.ts).
 
+import { t } from "../i18n";
 import type { Box } from "./frames";
 
 export const ICON_SIZE = 20;
@@ -87,7 +88,7 @@ export class FieldIcon {
     const el = document.createElement("div");
     el.title = "HavenKeys";
     el.setAttribute("role", "button");
-    el.setAttribute("aria-label", "HavenKeys: show logins");
+    el.setAttribute("aria-label", t.content.iconLabel);
     const root = el.attachShadow({ mode: "closed" });
     root.append(mark());
     // Keep focus in the field: the menu belongs to it.

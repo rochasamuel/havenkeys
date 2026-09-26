@@ -11,6 +11,7 @@
 // Web pages cannot reach it: `externally_connectable` is empty, and page
 // script has no extension APIs.
 
+import { t } from "../i18n";
 import { NativeClient, type NativePort } from "../messaging/native";
 import { newToken, parseContentRequest, parseInlineRequest, type BackgroundToContent, type FillPayload } from "../messaging/inline";
 import { parsePopupRequest } from "../messaging/popup";
@@ -138,7 +139,7 @@ function contentFrame(sender: chrome.runtime.MessageSender): FrameRef | null {
   return frame;
 }
 
-const GENERIC_ERROR = { ok: false, message: "Something went wrong." };
+const GENERIC_ERROR = { ok: false, message: t.errors.generic };
 
 chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
   const reply = (p: Promise<unknown>) => {
@@ -149,7 +150,7 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
   if (isFromPopup(sender)) {
     const req = parsePopupRequest(msg);
     if (!req) {
-      sendResponse({ ok: false, message: "Invalid request." });
+      sendResponse({ ok: false, message: t.errors.invalidRequest });
       return false;
     }
     return reply(popup.handle(req));
@@ -160,14 +161,14 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
     if (embedded.page === "/passkey.html") {
       const req = parsePkRequest(msg);
       if (!req) {
-        sendResponse({ ok: false, message: "Invalid request." });
+        sendResponse({ ok: false, message: t.errors.invalidRequest });
         return false;
       }
       return reply(passkeys.handleFrame(embedded.tabId, req));
     }
     const req = parseInlineRequest(msg);
     if (!req) {
-      sendResponse({ ok: false, message: "Invalid request." });
+      sendResponse({ ok: false, message: t.errors.invalidRequest });
       return false;
     }
     return reply(inline.handleInline(embedded.tabId, req));

@@ -5,6 +5,7 @@ import type { FillPayload } from "../messaging/inline";
 import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
 import { displayHost, pageUrlForRequest } from "../shared/url";
+import { t } from "../i18n";
 import type { AutoRun } from "./inline-handler";
 
 type Client = Pick<NativeClient, "request">;
@@ -22,7 +23,7 @@ export interface ActiveTab {
 export type TabFiller = (tabId: number, pageUrl: string, payload: FillPayload, auto?: AutoRun | null) => Promise<number>;
 
 function stateForError(e: unknown): PopupState {
-  if (!(e instanceof BridgeError)) return { kind: "error", message: "Something went wrong." };
+  if (!(e instanceof BridgeError)) return { kind: "error", message: t.errors.generic };
   switch (e.code) {
     case "host_unavailable":
       return { kind: "host_unavailable" };
@@ -41,7 +42,7 @@ function stateForError(e: unknown): PopupState {
 }
 
 function fail(e: unknown): { ok: false; message: string } {
-  return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
+  return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
 }
 
 export function createPopupHandler(
@@ -57,18 +58,18 @@ export function createPopupHandler(
     // the page is still on that origin before writing anything.
     const tab = await activeTab();
     const url = pageUrlForRequest(tab?.url);
-    if (!tab || !url) return { ok: false, message: "This page can't use saved logins." };
+    if (!tab || !url) return { ok: false, message: t.errors.pageNotSupported };
     try {
       let filled: number;
       if (totp) {
-        const t = await client.request({ type: "get_totp", itemId, url });
-        filled = await fillTab(tab.id, url, { kind: "otp", code: t.code }, t.autoSubmit ? { itemId, hasTotp: true } : null);
+        const otp = await client.request({ type: "get_totp", itemId, url });
+        filled = await fillTab(tab.id, url, { kind: "otp", code: otp.code }, otp.autoSubmit ? { itemId, hasTotp: true } : null);
       } else {
         const c = await client.request({ type: "fill_item", itemId, url });
         const auto = c.autoSubmit ? { itemId, hasTotp: await hasTotp(itemId, url) } : null;
         filled = await fillTab(tab.id, url, { kind: "login", username: c.username, password: c.password }, auto);
       }
-      return filled > 0 ? { ok: true, value: null } : { ok: false, message: "No login form found on this page." };
+      return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.errors.noLoginForm };
     } catch (e) {
       return fail(e);
     }
@@ -113,10 +114,10 @@ export function createPopupHandler(
         // The URL is re-read here, never taken from the popup, and the
         // desktop checks the item is saved for it.
         const url = pageUrlForRequest(await activeTabUrl());
-        if (!url) return { ok: false, message: "This page can't use saved logins." };
+        if (!url) return { ok: false, message: t.errors.pageNotSupported };
         try {
-          const t = await client.request({ type: "get_totp", itemId: req.itemId, url });
-          return { ok: true, value: { code: t.code, secondsRemaining: t.secondsRemaining } };
+          const totp = await client.request({ type: "get_totp", itemId: req.itemId, url });
+          return { ok: true, value: { code: totp.code, secondsRemaining: totp.secondsRemaining } };
         } catch (e) {
           return fail(e);
         }

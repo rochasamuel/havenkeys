@@ -92,3 +92,46 @@ describe("field menu passkey hints", () => {
     expect(main.querySelectorAll(".row.hint")).toHaveLength(0);
   });
 });
+
+describe("field menu copy and size", () => {
+  it("lets its own copy wrap but truncates user data", async () => {
+    replies = [
+      {
+        ok: true,
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null }], passkeys: [], hint: null },
+      },
+    ];
+    await load();
+    const row = document.querySelector("button.row")!;
+    expect(row.querySelector(".title")?.classList.contains("copy")).toBe(false);
+    expect(row.querySelector(".user")?.textContent).toBe("No username");
+    expect(row.querySelector(".user")?.classList.contains("copy")).toBe(true);
+  });
+
+  it("reports the height its rows need so the frame can grow for wrapped rows", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const height = this.tagName === "HEADER" ? 34 : this.classList.contains("row") ? 64 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    });
+    replies = [
+      {
+        ok: true,
+        value: {
+          state: "ready",
+          kind: "login",
+          site: "github.com",
+          items: [
+            { id: ITEM, title: "GitHub", username: "octo" },
+            { id: "11111111-2222-4333-8444-555555555555", title: "GitHub work", username: "work" },
+          ],
+          passkeys: [],
+          hint: null,
+        },
+      },
+    ];
+    await load();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(asked).toContainEqual({ type: "menu_resize", token: TOKEN, height: 34 + 2 * 64 });
+    vi.restoreAllMocks();
+  });
+});

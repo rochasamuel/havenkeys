@@ -6,6 +6,8 @@ import {
   parseContentRequest,
   parseFillReply,
   parseInlineRequest,
+  MENU_MAX_HEIGHT,
+  MENU_MIN_HEIGHT,
   type BackgroundToContent,
 } from "../messaging/inline";
 import { createInlineHandler, MENU_TTL_MS, SAVE_TTL_MS, type FrameRef, type InlineDeps } from "./inline-handler";
@@ -112,6 +114,17 @@ describe("message validation", () => {
     ]) {
       expect(parseInlineRequest(bad), JSON.stringify(bad)).toBeNull();
     }
+  });
+
+  it("bounds the height a menu frame may report", () => {
+    expect(parseInlineRequest({ type: "menu_resize", token: T1, height: 120 })).toEqual({ type: "menu_resize", token: T1, height: 120 });
+    expect(parseBackgroundMessage({ type: "bg_resize_menu", token: T1, height: 120 })).toEqual({ type: "bg_resize_menu", token: T1, height: 120 });
+    for (const height of [MENU_MIN_HEIGHT - 1, MENU_MAX_HEIGHT + 1, 100.5, "120", null, Infinity]) {
+      expect(parseInlineRequest({ type: "menu_resize", token: T1, height }), String(height)).toBeNull();
+      expect(parseBackgroundMessage({ type: "bg_resize_menu", token: T1, height }), String(height)).toBeNull();
+    }
+    expect(parseInlineRequest({ type: "menu_resize", token: T1, height: 120, width: 900 })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_resize_menu", token: "x", height: 120 })).toBeNull();
   });
 
   it("content script only accepts well-formed background messages", () => {
@@ -251,6 +264,19 @@ describe("suggestion menus", () => {
     expect((await h.handleInline(2, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
     expect((await h.handleInline(1, { type: "menu_pick", token: "f".repeat(32), itemId: GH })).ok).toBe(false);
     expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status"]);
+  });
+
+  it("passes the menu's measured height to the frame that opened it, for a live menu only", async () => {
+    const { h, sent, advance } = setup();
+    await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_resize", token: T1, height: 140 })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)).toEqual({ to: { tabId: 1, frameId: 3 }, msg: { type: "bg_resize_menu", token: T1, height: 140 } });
+    const before = sent.length;
+    expect((await h.handleInline(2, { type: "menu_resize", token: T1, height: 140 })).ok).toBe(false);
+    expect((await h.handleInline(1, { type: "menu_resize", token: "f".repeat(32), height: 140 })).ok).toBe(false);
+    advance(MENU_TTL_MS + 1);
+    expect((await h.handleInline(1, { type: "menu_resize", token: T1, height: 140 })).ok).toBe(false);
+    expect(sent.slice(before).map((x) => x.msg.type)).toEqual(["bg_close_menu"]);
   });
 
   it("menus expire", async () => {

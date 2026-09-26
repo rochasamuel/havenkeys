@@ -11,6 +11,8 @@
 //   moment, and on Chromium only while IntersectionObserver v2 reports it
 //   unobscured (see menu.ts).
 
+import { t } from "../i18n";
+
 const Z_TOP = "2147483647";
 
 const BASE_STYLE: Record<string, string> = {
@@ -51,7 +53,7 @@ export class InlineFrame {
     this.token = token;
     const el = document.createElement("iframe");
     el.src = `${chrome.runtime.getURL(page)}#${token}`;
-    el.title = page === "menu.html" ? "HavenKeys suggestions" : page === "passkey.html" ? "HavenKeys passkeys" : "HavenKeys";
+    el.title = page === "menu.html" ? t.menu.pageTitle : page === "passkey.html" ? t.passkey.pageTitle : "HavenKeys";
     el.setAttribute("referrerpolicy", "no-referrer");
     el.setAttribute("allow", "");
     this.el = el;
@@ -91,7 +93,9 @@ export class InlineFrame {
 }
 
 // ---------------------------------------------------------------- layout
-// Must agree with menu.css / save.css.
+// Must agree with inline.css. The menu starts at MENU_ROW per row; rows whose
+// copy wraps are taller, and the menu page then reports its real height
+// (menu_resize), which replaces the estimate.
 
 export const MENU_HEADER = 34;
 export const MENU_ROW = 46;
@@ -102,10 +106,10 @@ export const MENU_MAX_WIDTH = 360;
 export const SAVE_WIDTH = 340;
 export const SAVE_HEIGHT = 138;
 
-/** Below the field, or above it when there is no room. */
-export function menuBox(field: DOMRect, rows: number, viewport: { width: number; height: number }): Box {
+/** Below the field, or above it when there is no room. `reported`: the height the menu page measured. */
+export function menuBox(field: DOMRect, rows: number, viewport: { width: number; height: number }, reported: number | null = null): Box {
   const width = Math.min(MENU_MAX_WIDTH, Math.max(MENU_MIN_WIDTH, field.width));
-  const height = MENU_HEADER + rows * MENU_ROW + MENU_PADDING;
+  const height = reported ?? MENU_HEADER + rows * MENU_ROW + MENU_PADDING;
   let top = field.bottom + 4;
   if (top + height > viewport.height && field.top - height - 4 >= 0) top = field.top - height - 4;
   const left = Math.max(4, Math.min(field.left, viewport.width - width - 4));

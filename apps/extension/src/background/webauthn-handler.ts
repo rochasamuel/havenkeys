@@ -26,6 +26,7 @@
 import type { PasskeyCandidate, Request, RequestType, ResultFor } from "@havenkeys/protocol";
 import type { InlineReply } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
+import { t } from "../i18n";
 import { displayHost } from "../shared/url";
 import {
   clampTimeout,
@@ -78,10 +79,10 @@ type Session =
   | (Common & { kind: "create"; options: CreateOptions; candidates: PasskeyCandidate[]; exists: boolean; upgradeItemId: string | null });
 
 const FALLBACK: WaReply = { ok: false, outcome: { outcome: "fallback" } };
-const BUSY = { ok: false as const, message: "Please wait…" };
+const BUSY = { ok: false as const, message: t.errors.pleaseWait };
 
 function fail(e: unknown): { ok: false; message: string } {
-  return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
+  return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
 }
 
 function created(r: ResultFor<"passkey_create">): CreatedCredential {
@@ -260,7 +261,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
 
   async function sign(s: Extract<Session, { kind: "get" }>, itemId: string, credentialId: string): Promise<InlineReply<null>> {
     if (s.locked || !s.passkeys.some((p) => p.itemId === itemId && p.credentialId === credentialId)) {
-      return { ok: false, message: "Unknown passkey." };
+      return { ok: false, message: t.errors.unknownPasskey };
     }
     if (s.busy) return BUSY;
     s.busy = true;
@@ -294,7 +295,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
 
   async function save(s: Extract<Session, { kind: "create" }>, itemId: string | null): Promise<InlineReply<null>> {
     if (s.locked || s.exists || (itemId !== null && !s.candidates.some((c) => c.itemId === itemId))) {
-      return { ok: false, message: "Unknown login." };
+      return { ok: false, message: t.errors.unknownLogin };
     }
     if (s.busy) return BUSY;
     s.busy = true;
@@ -376,7 +377,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         void deps.sendToTab(tabId, { type: "bg_wa_result", token: req.token, outcome });
         return { ok: true, value: null };
       }
-      return { ok: false, message: "This prompt has expired." };
+      return { ok: false, message: t.errors.promptExpired };
     }
     switch (req.type) {
       case "pk_state":
@@ -384,13 +385,13 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         // idle), so the card's own polling re-runs the lookup.
         if (s.locked) {
           await refresh(s);
-          if (!live(tabId, req.token)) return { ok: false, message: "This prompt has expired." };
+          if (!live(tabId, req.token)) return { ok: false, message: t.errors.promptExpired };
         }
         return { ok: true, value: view(s) };
       case "pk_pick":
-        return s.kind === "get" ? sign(s, req.itemId, req.credentialId) : { ok: false, message: "Unknown passkey." };
+        return s.kind === "get" ? sign(s, req.itemId, req.credentialId) : { ok: false, message: t.errors.unknownPasskey };
       case "pk_save":
-        return s.kind === "create" ? save(s, req.itemId) : { ok: false, message: "Unknown login." };
+        return s.kind === "create" ? save(s, req.itemId) : { ok: false, message: t.errors.unknownLogin };
       case "pk_fallback":
         finish(tabId, s.token, { outcome: "fallback" });
         return { ok: true, value: null };
@@ -402,7 +403,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
         void deps.sendToFrame(s.frame, { type: "bg_wa_resize", token: s.token, height: req.height });
         return { ok: true, value: null };
       case "pk_close":
-        if (s.kind !== "create" || !s.exists || s.locked) return { ok: false, message: "Unknown request." };
+        if (s.kind !== "create" || !s.exists || s.locked) return { ok: false, message: t.errors.unknownRequest };
         finish(tabId, s.token, { outcome: "error", name: "InvalidStateError" });
         return { ok: true, value: null };
     }
@@ -418,7 +419,7 @@ export function createWebAuthnHandler(deps: WebAuthnDeps) {
   async function pickConditional(frame: FrameRef, itemId: string, credentialId: string): Promise<InlineReply<null>> {
     const s = sessions.get(frame.tabId);
     if (!s || s.kind !== "get" || !s.options.conditional || !sameFrame(s.frame, frame)) {
-      return { ok: false, message: "This menu has expired." };
+      return { ok: false, message: t.errors.menuExpired };
     }
     return sign(s, itemId, credentialId);
   }

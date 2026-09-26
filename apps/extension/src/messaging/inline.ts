@@ -57,6 +57,8 @@ export type BackgroundToContent =
    */
   | { type: "bg_fill"; origin: string; token: string | null; fill: FillPayload; submit: boolean; totp: boolean }
   | { type: "bg_close_menu"; token: string }
+  /** Resize the menu frame to the height its page reported (menu_resize). */
+  | { type: "bg_resize_menu"; token: string; height: number }
   | { type: "bg_show_save"; token: string }
   | { type: "bg_close_save"; token: string }
   | { type: "bg_run_end" };
@@ -72,6 +74,8 @@ export type InlineRequest =
   | { type: "menu_generate"; token: string }
   | { type: "menu_open_help"; token: string }
   | { type: "menu_close"; token: string }
+  /** The menu's content height, so wrapped rows are not clipped. */
+  | { type: "menu_resize"; token: string; height: number }
   | { type: "save_state"; token: string }
   | { type: "save_confirm"; token: string }
   | { type: "save_dismiss"; token: string };
@@ -108,6 +112,14 @@ export type InlineReply<T> = { ok: true; value: T } | { ok: false; message: stri
 export const TOKEN = /^[0-9a-f]{32}$/;
 export const MAX_USERNAME_CHARS = 512;
 export const MAX_PASSWORD_CHARS = 4096;
+/** Rows the menu shows before its list scrolls. */
+export const MENU_MAX_ROWS = 5;
+/** Bounds on the menu height a menu page may report (header, one row, padding … five wrapped rows). */
+export const MENU_MIN_HEIGHT = 90;
+export const MENU_MAX_HEIGHT = 420;
+
+const isMenuHeight = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= MENU_MIN_HEIGHT && v <= MENU_MAX_HEIGHT;
 
 type Obj = Record<string, unknown>;
 
@@ -174,6 +186,8 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
         isB64Url(o.credentialId, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES)
         ? { type: "menu_pick_passkey", token, itemId: o.itemId, credentialId: o.credentialId }
         : null;
+    case "menu_resize":
+      return keysAre(o, ["type", "token", "height"]) && isMenuHeight(o.height) ? { type: "menu_resize", token, height: o.height } : null;
     case "menu_state":
     case "menu_generate":
     case "menu_open_help":
@@ -221,6 +235,10 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       const fill = parseFill(o.fill);
       return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill, submit: o.submit, totp: o.totp };
     }
+    case "bg_resize_menu":
+      return keysAre(o, ["type", "token", "height"]) && isToken(o.token) && isMenuHeight(o.height)
+        ? { type: "bg_resize_menu", token: o.token, height: o.height }
+        : null;
     case "bg_close_menu":
     case "bg_show_save":
     case "bg_close_save":

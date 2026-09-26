@@ -4,18 +4,19 @@
 import type { InlineReply, InlineRequest } from "../messaging/inline";
 import { TOKEN } from "../messaging/inline";
 import type { PkRequest } from "../webauthn/messages";
+import { t } from "../i18n";
 
 /** The session token from our own URL fragment, or null. */
 export function tokenFromHash(): string | null {
-  const t = location.hash.slice(1);
-  return TOKEN.test(t) ? t : null;
+  const fragment = location.hash.slice(1);
+  return TOKEN.test(fragment) ? fragment : null;
 }
 
 export async function ask<T>(req: InlineRequest | PkRequest): Promise<InlineReply<T>> {
   try {
     return (await chrome.runtime.sendMessage(req)) as InlineReply<T>;
   } catch {
-    return { ok: false, message: "HavenKeys could not be reached." };
+    return { ok: false, message: t.errors.unreachable };
   }
 }
 

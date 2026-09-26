@@ -10,12 +10,43 @@
  * The manifest's name and description live in manifest/_locales instead,
  * because the browser reads them before any script runs.
  */
+import type { ErrorCode } from "@havenkeys/protocol";
+
+/**
+ * The desktop's error messages, by protocol code. The native host sends a
+ * fixed English message per code (havenkeys-protocol ErrorCode::message);
+ * the English here matches it word for word, and the extension shows the
+ * entry for the code instead of the wire text.
+ */
+const bridge = {
+  locked: "HavenKeys is locked.",
+  busy: "HavenKeys is busy. Try again in a moment.",
+  no_vault: "No vault has been created yet.",
+  not_found: "Item not found.",
+  denied: "This item is not saved for this website.",
+  invalid_input: "Invalid request.",
+  decryption: "Failed to decrypt vault item.",
+  corrupted: "The vault item is damaged.",
+  malformed: "Malformed message.",
+  too_large: "Message too large.",
+  unsupported_version: "Unsupported protocol version.",
+  rate_limited: "Too many requests. Try again shortly.",
+  integration_disabled: "Browser integration is turned off in HavenKeys settings.",
+  desktop_unavailable: "The HavenKeys app is not running.",
+  offline: "HavenKeys is offline. The vault is read-only until it reconnects.",
+  internal: "Internal error.",
+} satisfies Record<ErrorCode, string>;
+
 export const en = {
+  common: {
+    noUsername: "No username",
+    passkey: "Passkey",
+  },
+
   popup: {
     settings: "Settings",
     lock: "Lock HavenKeys",
     unreachable: "The extension could not be reached.",
-    noUsername: "No username",
     fill: "Fill",
     fillTitle: "Fill this login into the page",
     code: "Code",
@@ -88,6 +119,84 @@ export const en = {
     statusOn: "On. Reload open tabs to see suggestions there.",
     turnOn: "Turn on",
     turnOff: "Turn off",
+  },
+
+  menu: {
+    pageTitle: "HavenKeys suggestions",
+    lockedTitle: "HavenKeys is locked",
+    lockedBody: "Unlock the HavenKeys app to fill.",
+    unavailable: "Unavailable",
+    couldNotFill: "Could not fill",
+    fillCode: "Fill one-time code",
+    generateTitle: "Generate strong password",
+    generateBody: "Fills the new password fields",
+    passkeyRow: (account: string) => `Passkey · ${account}`,
+    passkeyAccountFallback: "account",
+    usePasskeyTitle: (site: string) => `You have a passkey for ${site}`,
+    usePasskeyBody: "Use the site’s “Sign in with a passkey” option",
+    addPasskeyTitle: (name: string) => `${name} supports passkeys`,
+    addPasskeyBody: "How to add one",
+    noCodesTitle: "No one-time codes here",
+    noCodesBody: "No login for this site has a one-time code.",
+    noLoginsTitle: "No logins for this site",
+    noLoginsBody: "Save one in the HavenKeys app.",
+  },
+
+  save: {
+    pageTitle: "Save to HavenKeys",
+    loading: "Save this login?",
+    addQuestion: "Save this login to HavenKeys?",
+    updateQuestion: "Update the saved password?",
+    save: "Save",
+    update: "Update",
+    notNow: "Not now",
+  },
+
+  passkey: {
+    pageTitle: "HavenKeys passkeys",
+    loading: "Loading…",
+    useAnotherDevice: "Use another device",
+    cancel: "Cancel",
+    save: "Save",
+    close: "Close",
+    saveTo: "Save to",
+    newLogin: "New login",
+    newLoginDetail: "Create a login for this site",
+    lockedTitle: "HavenKeys is locked",
+    lockedBody: "Unlock the HavenKeys app — this card will update.",
+    chooserTitle: "Sign in with a passkey",
+    chooseAccount: "Choose an account",
+    addTitle: "Add a passkey?",
+    saveTitle: "Save a passkey to HavenKeys?",
+    account: (name: string) => `Account: ${name}`,
+    noAccountName: "No account name",
+    existsTitle: "This account already has a passkey in HavenKeys",
+    savedTitle: "Passkey saved to HavenKeys",
+    savedBody: "Manage it in the HavenKeys app",
+  },
+
+  content: {
+    iconLabel: "HavenKeys: show logins",
+  },
+
+  /** Messages the background and the frames send to the UI. */
+  errors: {
+    unreachable: "HavenKeys could not be reached.",
+    generic: "Something went wrong.",
+    invalidRequest: "Invalid request.",
+    menuExpired: "This menu has expired.",
+    promptExpired: "This prompt has expired.",
+    unknownItem: "Unknown item.",
+    unknownPasskey: "Unknown passkey.",
+    unknownLogin: "Unknown login.",
+    unknownRequest: "Unknown request.",
+    pleaseWait: "Please wait…",
+    pageNotSupported: "This page can't use saved logins.",
+    noLoginForm: "No login form found on this page.",
+    hostUnavailable: "The HavenKeys native messaging host is not installed or failed to start.",
+    timeout: "HavenKeys did not respond.",
+    unexpectedResponse: "Unexpected response.",
+    bridge,
   },
 };
 

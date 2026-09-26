@@ -57,6 +57,8 @@ interface OpenMenu {
   frame: InlineFrame;
   field: HTMLInputElement;
   rows: number;
+  /** The height the menu page reported for its content (bg_resize_menu), once it has. */
+  height: number | null;
 }
 
 function send(msg: ContentRequest): Promise<unknown> {
@@ -128,7 +130,7 @@ function start(): void {
       closeMenu(true);
       return;
     }
-    menu.frame.place(menuBox(menu.field.getBoundingClientRect(), menu.rows, viewport()));
+    menu.frame.place(menuBox(menu.field.getBoundingClientRect(), menu.rows, viewport(), menu.height));
   }
 
   /** `explicit`: from the field icon, so show the menu even with nothing to offer. */
@@ -156,7 +158,7 @@ function start(): void {
     const frame = new InlineFrame("menu.html", token, menuBox(field.getBoundingClientRect(), rows, viewport()), () => {
       if (menu?.frame.token === token) closeMenu(true);
     });
-    menu = { frame, field, rows };
+    menu = { frame, field, rows, height: null };
   }
 
   // ------------------------------------------------------------ field icon
@@ -534,6 +536,13 @@ function start(): void {
         if (menu?.frame.token === m.token) {
           dismissed.add(menu.field);
           closeMenu(false);
+        }
+        return false;
+      case "bg_resize_menu":
+        // Wrapped rows: grow or shrink to what the menu page laid out.
+        if (menu?.frame.token === m.token) {
+          menu.height = m.height;
+          placeMenu();
         }
         return false;
       case "bg_show_save":

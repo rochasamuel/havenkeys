@@ -86,7 +86,7 @@ function matchRow(m: Match): HTMLElement {
       "div",
       { className: "who" },
       h("div", { className: "title", text: m.title }),
-      h("div", { className: "user", text: m.username ?? t.popup.noUsername }),
+      h("div", { className: "user", text: m.username ?? t.common.noUsername }),
       status,
     ),
   );

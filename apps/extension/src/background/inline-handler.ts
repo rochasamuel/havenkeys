@@ -18,7 +18,9 @@
 
 import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
+import { t } from "../i18n";
 import {
+  MENU_MAX_ROWS,
   parseFillReply,
   type BackgroundToContent,
   type ContentRequest,
@@ -81,8 +83,6 @@ export interface InlineDeps {
 export const MENU_TTL_MS = 5 * 60_000;
 export const SAVE_TTL_MS = 3 * 60_000;
 export const USERNAME_TTL_MS = 5 * 60_000;
-/** Rows shown before the menu scrolls. */
-const MAX_ROWS = 5;
 
 interface MenuSession {
   token: string;
@@ -107,7 +107,7 @@ interface PendingSave {
 }
 
 function fail(e: unknown): { ok: false; message: string } {
-  return { ok: false, message: e instanceof BridgeError ? e.message : "Something went wrong." };
+  return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
 }
 
 export function createInlineHandler(deps: InlineDeps) {
@@ -202,7 +202,7 @@ export function createInlineHandler(deps: InlineDeps) {
     const token = deps.newToken();
     menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, expires: deps.now() + MENU_TTL_MS });
     const offered = items.length + passkeys.length + (hint ? 1 : 0);
-    const rows = locked || kind === "new_password" ? 1 : Math.max(1, Math.min(offered, MAX_ROWS));
+    const rows = locked || kind === "new_password" ? 1 : Math.max(1, Math.min(offered, MENU_MAX_ROWS));
     return { ok: true, token, rows };
   }
 
@@ -293,10 +293,10 @@ export function createInlineHandler(deps: InlineDeps) {
         payload = { kind: "login", username: null, password: c.password };
         auto = c.autoSubmit;
       } else {
-        const t = await deps.client.request({ type: "get_totp", itemId: run.itemId, ...frameFields(frame) });
+        const totp = await deps.client.request({ type: "get_totp", itemId: run.itemId, ...frameFields(frame) });
         if (runs.get(frame.tabId) !== run) return;
-        payload = { kind: "otp", code: t.code };
-        auto = t.autoSubmit;
+        payload = { kind: "otp", code: totp.code };
+        auto = totp.autoSubmit;
       }
     } catch {
       if (runs.get(frame.tabId) !== run) return;
@@ -341,7 +341,7 @@ export function createInlineHandler(deps: InlineDeps) {
     switch (req.type) {
       case "menu_state": {
         const m = liveMenu(tabId, req.token);
-        if (!m) return { ok: false, message: "This menu has expired." };
+        if (!m) return { ok: false, message: t.errors.menuExpired };
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username }));
@@ -349,15 +349,15 @@ export function createInlineHandler(deps: InlineDeps) {
       }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
-        if (!m || m.locked) return { ok: false, message: "This menu has expired." };
+        if (!m || m.locked) return { ok: false, message: t.errors.menuExpired };
         // Only items this menu offered; the desktop re-checks the origin anyway.
-        if (!m.items.some((i) => i.id === req.itemId)) return { ok: false, message: "Unknown item." };
+        if (!m.items.some((i) => i.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
         closeMenu(tabId);
         try {
           const offered = m.items.find((i) => i.id === req.itemId);
           if (m.kind === "otp") {
-            const t = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
-            await pickFill(m.frame, m.token, { kind: "otp", code: t.code }, t.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null);
+            const totp = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
+            await pickFill(m.frame, m.token, { kind: "otp", code: totp.code }, totp.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null);
           } else {
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
             const auto = c.autoSubmit ? { itemId: req.itemId, hasTotp: offered?.hasTotp ?? false } : null;
@@ -370,16 +370,16 @@ export function createInlineHandler(deps: InlineDeps) {
       }
       case "menu_pick_passkey": {
         const m = liveMenu(tabId, req.token);
-        if (!m || m.locked || !deps.passkeys) return { ok: false, message: "This menu has expired." };
+        if (!m || m.locked || !deps.passkeys) return { ok: false, message: t.errors.menuExpired };
         if (!m.passkeys.some((p) => p.itemId === req.itemId && p.credentialId === req.credentialId)) {
-          return { ok: false, message: "Unknown passkey." };
+          return { ok: false, message: t.errors.unknownPasskey };
         }
         closeMenu(tabId);
         return deps.passkeys.pickConditional(m.frame, req.itemId, req.credentialId);
       }
       case "menu_generate": {
         const m = liveMenu(tabId, req.token);
-        if (!m || m.locked || m.kind !== "new_password") return { ok: false, message: "This menu has expired." };
+        if (!m || m.locked || m.kind !== "new_password") return { ok: false, message: t.errors.menuExpired };
         closeMenu(tabId);
         try {
           const g = await deps.client.request({ type: "generate_password" });
@@ -391,7 +391,7 @@ export function createInlineHandler(deps: InlineDeps) {
       }
       case "menu_open_help": {
         const m = liveMenu(tabId, req.token);
-        if (!m || m.locked || !m.help || !deps.openTab) return { ok: false, message: "This menu has expired." };
+        if (!m || m.locked || !m.help || !deps.openTab) return { ok: false, message: t.errors.menuExpired };
         closeMenu(tabId);
         deps.openTab(m.help);
         return { ok: true, value: null };
@@ -399,14 +399,20 @@ export function createInlineHandler(deps: InlineDeps) {
       case "menu_close":
         if (liveMenu(tabId, req.token)) closeMenu(tabId);
         return { ok: true, value: null };
+      case "menu_resize": {
+        const m = liveMenu(tabId, req.token);
+        if (!m) return { ok: false, message: t.errors.menuExpired };
+        void deps.sendToFrame(m.frame, { type: "bg_resize_menu", token: m.token, height: req.height });
+        return { ok: true, value: null };
+      }
       case "save_state": {
         const s = liveSave(tabId, req.token);
-        if (!s) return { ok: false, message: "This prompt has expired." };
+        if (!s) return { ok: false, message: t.errors.promptExpired };
         return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.username } };
       }
       case "save_confirm": {
         const s = liveSave(tabId, req.token);
-        if (!s) return { ok: false, message: "This prompt has expired." };
+        if (!s) return { ok: false, message: t.errors.promptExpired };
         try {
           await deps.client.request({
             type: "save_login",
