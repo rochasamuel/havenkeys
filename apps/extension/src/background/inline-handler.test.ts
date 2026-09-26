@@ -8,6 +8,8 @@ import {
   parseInlineRequest,
   MENU_MAX_HEIGHT,
   MENU_MIN_HEIGHT,
+  SAVE_MAX_HEIGHT,
+  SAVE_MIN_HEIGHT,
   type BackgroundToContent,
 } from "../messaging/inline";
 import { createInlineHandler, MENU_TTL_MS, SAVE_TTL_MS, type FrameRef, type InlineDeps } from "./inline-handler";
@@ -125,6 +127,18 @@ describe("message validation", () => {
     }
     expect(parseInlineRequest({ type: "menu_resize", token: T1, height: 120, width: 900 })).toBeNull();
     expect(parseBackgroundMessage({ type: "bg_resize_menu", token: "x", height: 120 })).toBeNull();
+  });
+
+  it("bounds the height a save prompt may report", () => {
+    expect(parseInlineRequest({ type: "save_resize", token: T1, height: 160 })).toEqual({ type: "save_resize", token: T1, height: 160 });
+    expect(parseBackgroundMessage({ type: "bg_resize_save", token: T1, height: 160 })).toEqual({ type: "bg_resize_save", token: T1, height: 160 });
+    for (const height of [SAVE_MIN_HEIGHT - 1, SAVE_MAX_HEIGHT + 1, 160.5, "160", null, Infinity]) {
+      expect(parseInlineRequest({ type: "save_resize", token: T1, height }), String(height)).toBeNull();
+      expect(parseBackgroundMessage({ type: "bg_resize_save", token: T1, height }), String(height)).toBeNull();
+    }
+    expect(parseInlineRequest({ type: "save_resize", token: T1, height: 160, width: 900 })).toBeNull();
+    expect(parseInlineRequest({ type: "save_resize", token: "x", height: 160 })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_resize_save", token: "x", height: 160 })).toBeNull();
   });
 
   it("content script only accepts well-formed background messages", () => {
@@ -389,6 +403,19 @@ describe("save prompts", () => {
       expect((await h.handleInline(1, { type: "save_confirm", token: T1 })).ok, end).toBe(false);
       expect(requests.filter((r) => r.type === "save_login"), end).toEqual([]);
     }
+  });
+
+  it("passes the save prompt's measured height to the top frame, for a live prompt only", async () => {
+    const { h, sent } = setup();
+    await h.handleContent(frame({ frameId: 3, topUrl: "https://github.com/" }), { type: "cs_submit", username: "octo", password: "pw" });
+    expect(await h.handleInline(1, { type: "save_resize", token: T1, height: 170 })).toEqual({ ok: true, value: null });
+    expect(sent.at(-1)).toEqual({ to: { tabId: 1, frameId: 0 }, msg: { type: "bg_resize_save", token: T1, height: 170 } });
+    const before = sent.length;
+    expect((await h.handleInline(2, { type: "save_resize", token: T1, height: 170 })).ok).toBe(false);
+    expect((await h.handleInline(1, { type: "save_resize", token: "f".repeat(32), height: 170 })).ok).toBe(false);
+    vi.advanceTimersByTime(SAVE_TTL_MS + 1);
+    expect((await h.handleInline(1, { type: "save_resize", token: T1, height: 170 })).ok).toBe(false);
+    expect(sent.slice(before).map((x) => x.msg.type)).not.toContain("bg_resize_save");
   });
 
   it("a save prompt in another tab cannot confirm this tab's save", async () => {

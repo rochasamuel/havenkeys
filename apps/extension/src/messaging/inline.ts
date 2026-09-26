@@ -60,6 +60,8 @@ export type BackgroundToContent =
   /** Resize the menu frame to the height its page reported (menu_resize). */
   | { type: "bg_resize_menu"; token: string; height: number }
   | { type: "bg_show_save"; token: string }
+  /** Resize the save prompt to the height its page reported (save_resize). */
+  | { type: "bg_resize_save"; token: string; height: number }
   | { type: "bg_close_save"; token: string }
   | { type: "bg_run_end" };
 
@@ -78,7 +80,9 @@ export type InlineRequest =
   | { type: "menu_resize"; token: string; height: number }
   | { type: "save_state"; token: string }
   | { type: "save_confirm"; token: string }
-  | { type: "save_dismiss"; token: string };
+  | { type: "save_dismiss"; token: string }
+  /** The save prompt's content height, so a long message is not clipped. */
+  | { type: "save_resize"; token: string; height: number };
 
 export interface MenuItemView {
   id: string;
@@ -117,6 +121,13 @@ export const MENU_MAX_ROWS = 5;
 /** Bounds on the menu height a menu page may report (header, one row, padding … five wrapped rows). */
 export const MENU_MIN_HEIGHT = 90;
 export const MENU_MAX_HEIGHT = 420;
+
+/** Bounds on the save prompt height its page may report (one-line question … a long wrapped error). */
+export const SAVE_MIN_HEIGHT = 100;
+export const SAVE_MAX_HEIGHT = 320;
+
+const isSaveHeight = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= SAVE_MIN_HEIGHT && v <= SAVE_MAX_HEIGHT;
 
 const isMenuHeight = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= MENU_MIN_HEIGHT && v <= MENU_MAX_HEIGHT;
@@ -188,6 +199,8 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
         : null;
     case "menu_resize":
       return keysAre(o, ["type", "token", "height"]) && isMenuHeight(o.height) ? { type: "menu_resize", token, height: o.height } : null;
+    case "save_resize":
+      return keysAre(o, ["type", "token", "height"]) && isSaveHeight(o.height) ? { type: "save_resize", token, height: o.height } : null;
     case "menu_state":
     case "menu_generate":
     case "menu_open_help":
@@ -238,6 +251,10 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
     case "bg_resize_menu":
       return keysAre(o, ["type", "token", "height"]) && isToken(o.token) && isMenuHeight(o.height)
         ? { type: "bg_resize_menu", token: o.token, height: o.height }
+        : null;
+    case "bg_resize_save":
+      return keysAre(o, ["type", "token", "height"]) && isToken(o.token) && isSaveHeight(o.height)
+        ? { type: "bg_resize_save", token: o.token, height: o.height }
         : null;
     case "bg_close_menu":
     case "bg_show_save":

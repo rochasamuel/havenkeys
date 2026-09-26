@@ -1,7 +1,8 @@
 /* Shared by the in-page menu and save prompt. Sizes must agree with
    content/frames.ts: header 34px, rows at least 46px, 8px of padding plus the card's 2px of border,
-   save prompt 340 x 138. A row whose copy wraps grows; the menu page then reports its height
-   (menu.ts) and the frame follows.
+   save prompt 340 wide, 138 tall until it reports its own height. A row whose copy wraps grows;
+   the menu page then reports its height (menu.ts) and the frame follows. The save prompt does
+   the same (save.ts), so a long question or error wraps instead of being cut.
 
    User data (titles, usernames, sites) truncates with an ellipsis; our own copy (.copy, messages)
    wraps instead, so no language ever loses words.
@@ -214,13 +215,19 @@ main {
   color: var(--danger);
 }
 
-/* Save prompt */
+/* Save prompt. As tall as its content: the page reports that height
+   (save_resize) and the content script sizes the frame. */
+
+.card.save {
+  height: auto;
+  max-height: 100%;
+}
 
 .prompt {
-  flex: 1;
+  flex: none;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 12px;
   padding: 11px 12px 12px;
   animation: row-in 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }

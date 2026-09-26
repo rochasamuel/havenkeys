@@ -2,7 +2,7 @@
 // stays in the background until the user confirms, and is dropped if they
 // don't.
 
-import type { SaveView } from "../messaging/inline";
+import { SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type SaveView } from "../messaging/inline";
 import { applyDocumentLang, t } from "../i18n";
 import { ask, createClickGuard, tokenFromHash } from "./common";
 
@@ -12,7 +12,8 @@ const site = document.getElementById("site") as HTMLElement;
 const confirmBtn = document.getElementById("confirm") as HTMLButtonElement;
 const dismissBtn = document.getElementById("dismiss") as HTMLButtonElement;
 const token = tokenFromHash();
-const guard = createClickGuard(document.querySelector(".card") as HTMLElement);
+const card = document.querySelector(".card") as HTMLElement;
+const guard = createClickGuard(card);
 
 applyDocumentLang();
 document.title = t.save.pageTitle;
@@ -34,8 +35,7 @@ function show(view: SaveView): void {
 }
 
 function fail(message: string): void {
-  // The error takes the username's line: the prompt has a fixed height
-  // (content/frames.ts SAVE_HEIGHT) and room for a two-line message only.
+  // The error takes the question's place; the prompt grows to fit it (save_resize).
   detail.textContent = "";
   question.textContent = message;
   question.className = "error";
@@ -54,6 +54,45 @@ dismissBtn.addEventListener("click", (e) => {
   if (!token || !e.isTrusted) return;
   void ask({ type: "save_dismiss", token });
 });
+
+// ------------------------------------------------------------ size
+// The content script opens our iframe at SAVE_HEIGHT. A longer question or
+// error (other languages, long messages) wraps, so we report the height the
+// card's content needs and it resizes the frame (save_resize → bg_resize_save).
+
+let reported = 0;
+
+function naturalHeight(): number {
+  let total = card.offsetHeight - card.clientHeight; // borders
+  for (const el of Array.from(card.children) as HTMLElement[]) total += el.getBoundingClientRect().height;
+  return Math.ceil(total);
+}
+
+function reportSize(): void {
+  if (!token) return;
+  const height = Math.min(SAVE_MAX_HEIGHT, Math.max(SAVE_MIN_HEIGHT, naturalHeight()));
+  if (height === reported) return;
+  reported = height;
+  void ask({ type: "save_resize", token, height });
+}
+
+let sizePending = false;
+function scheduleSize(): void {
+  if (sizePending) return;
+  sizePending = true;
+  requestAnimationFrame(() => {
+    sizePending = false;
+    reportSize();
+  });
+}
+
+if (typeof ResizeObserver === "function") {
+  const ro = new ResizeObserver(scheduleSize);
+  for (const el of Array.from(card.children)) ro.observe(el);
+}
+new MutationObserver(scheduleSize).observe(card, { childList: true, subtree: true, attributes: true, characterData: true });
+// Web fonts change line heights once loaded.
+void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
   if (!token) return;

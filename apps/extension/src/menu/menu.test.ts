@@ -47,7 +47,10 @@ beforeEach(() => {
   page();
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("field menu passkey hints", () => {
   it("renders the use-passkey hint first as plain text and the help row last as a button", async () => {
@@ -132,6 +135,5 @@ describe("field menu copy and size", () => {
     await load();
     await vi.advanceTimersByTimeAsync(50);
     expect(asked).toContainEqual({ type: "menu_resize", token: TOKEN, height: 34 + 2 * 64 });
-    vi.restoreAllMocks();
   });
 });

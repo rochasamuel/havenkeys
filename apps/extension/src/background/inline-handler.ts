@@ -431,6 +431,12 @@ export function createInlineHandler(deps: InlineDeps) {
       case "save_dismiss":
         if (liveSave(tabId, req.token)) dropSave(tabId, true);
         return { ok: true, value: null };
+      case "save_resize": {
+        const s = liveSave(tabId, req.token);
+        if (!s) return { ok: false, message: t.errors.promptExpired };
+        void deps.sendToFrame(top(s.frame), { type: "bg_resize_save", token: s.token, height: req.height });
+        return { ok: true, value: null };
+      }
     }
   }
 

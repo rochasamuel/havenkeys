@@ -104,6 +104,7 @@ export const MENU_PADDING = 10;
 export const MENU_MIN_WIDTH = 260;
 export const MENU_MAX_WIDTH = 360;
 export const SAVE_WIDTH = 340;
+/** Until the prompt reports its content height (save_resize). */
 export const SAVE_HEIGHT = 138;
 
 /** Below the field, or above it when there is no room. `reported`: the height the menu page measured. */
@@ -116,8 +117,10 @@ export function menuBox(field: DOMRect, rows: number, viewport: { width: number;
   return { top, left, width, height };
 }
 
-export function saveBox(viewport: { width: number }): Box {
-  return { top: 12, left: Math.max(4, viewport.width - SAVE_WIDTH - 16), width: SAVE_WIDTH, height: SAVE_HEIGHT };
+/** Top right of the viewport. `height`: what the prompt measured (save_resize); never taller than the viewport allows. */
+export function saveBox(viewport: { width: number; height?: number }, height = SAVE_HEIGHT): Box {
+  const room = viewport.height !== undefined && viewport.height > 0 ? Math.max(96, viewport.height - 24) : height;
+  return { top: 12, left: Math.max(4, viewport.width - SAVE_WIDTH - 16), width: SAVE_WIDTH, height: Math.min(height, room) };
 }
 
 export const PASSKEY_WIDTH = 380;
