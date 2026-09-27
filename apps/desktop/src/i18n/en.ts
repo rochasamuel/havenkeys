@@ -34,6 +34,11 @@ export type ErrorCode =
   | "vault_unreadable"
   | "clipboard"
   | "open_website"
+  | "qr_not_found"
+  | "qr_not_found_macos"
+  | "qr_not_totp"
+  | "screen_capture"
+  | "scan_expired"
   | "autostart"
   | "unsupported_language"
   | "keychain_unavailable"
@@ -75,6 +80,12 @@ const codes: Record<ErrorCode, string | null> = {
   vault_unreadable: null,
   clipboard: "Could not access the clipboard.",
   open_website: "Could not open the website.",
+  qr_not_found: "No QR code found. Make sure it's fully visible on screen.",
+  qr_not_found_macos:
+    "No QR code found. Make sure it's fully visible on screen. If this is the first scan, allow HavenKeys in System Settings → Privacy & Security → Screen Recording.",
+  qr_not_totp: "The QR code isn't a one-time code setup.",
+  screen_capture: "Could not capture the screen.",
+  scan_expired: "The scanned code expired. Scan it again.",
   autostart: "Could not change whether HavenKeys opens at login.",
   unsupported_language: "Unsupported language.",
   keychain_unavailable:

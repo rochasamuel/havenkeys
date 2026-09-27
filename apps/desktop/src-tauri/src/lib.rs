@@ -241,6 +241,7 @@ pub fn run() {
             commands::get_totp_code,
             commands::copy_secret,
             commands::open_website,
+            commands::scan_totp_qr,
             commands::create_item,
             commands::update_item,
             commands::delete_item,

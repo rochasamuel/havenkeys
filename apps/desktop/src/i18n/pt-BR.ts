@@ -36,6 +36,12 @@ const codes: Record<ErrorCode, string | null> = {
   vault_unreadable: null,
   clipboard: "Não foi possível acessar a área de transferência.",
   open_website: "Não foi possível abrir o site.",
+  qr_not_found: "Nenhum QR code encontrado. Verifique se ele está inteiro na tela.",
+  qr_not_found_macos:
+    "Nenhum QR code encontrado. Verifique se ele está inteiro na tela. Se esta é a primeira leitura, permita o HavenKeys em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela.",
+  qr_not_totp: "O QR code não é de configuração de códigos de verificação.",
+  screen_capture: "Não foi possível capturar a tela.",
+  scan_expired: "O código lido expirou. Leia o QR code de novo.",
   autostart: "Não foi possível alterar se o HavenKeys abre ao iniciar a sessão.",
   unsupported_language: "Idioma não suportado.",
   keychain_unavailable:

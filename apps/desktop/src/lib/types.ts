@@ -48,7 +48,9 @@ export interface PasskeyInfo {
 export type SecretUpdate =
   | { op: "keep" }
   | { op: "set"; value: string }
-  | { op: "clear" };
+  | { op: "clear" }
+  /** A token from `scan_totp_qr`; TOTP only. */
+  | { op: "scanned"; value: string };
 
 export interface ItemInput {
   itemType: ItemType;
@@ -69,6 +71,13 @@ export interface TotpCode {
   code: string;
   period: number;
   secondsRemaining: number;
+}
+
+/** One code a QR scan found. The secret stays in Rust under `token`. */
+export interface ScannedTotp {
+  token: string;
+  issuer: string | null;
+  account: string | null;
 }
 
 export interface GeneratorOptions {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-scan-totp-qr"
+description = "Enables the scan_totp_qr command without any pre-configured scope."
+commands.allow = ["scan_totp_qr"]
+
+[[permission]]
+identifier = "deny-scan-totp-qr"
+description = "Denies the scan_totp_qr command without any pre-configured scope."
+commands.deny = ["scan_totp_qr"]
