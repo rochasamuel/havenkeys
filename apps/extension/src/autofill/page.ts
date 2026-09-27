@@ -47,8 +47,12 @@ export function findLoginGroup(doc: Document, env: Env): LoginGroup | null {
     const { group, kind } = groupForCached(pw, env, cache);
     if (kind === "password" || kind === "current-password") return group;
   }
+  // `tel` and `number` too: CPF, phone and account-number logins (gov.br's
+  // CPF box is type=tel).
   const texts = Array.from(
-    doc.querySelectorAll<HTMLInputElement>('input[type="email"], input[type="text"], input:not([type])'),
+    doc.querySelectorAll<HTMLInputElement>(
+      'input[type="email"], input[type="text"], input[type="tel"], input[type="number"], input:not([type])',
+    ),
   ).slice(0, MAX_PAGE_CANDIDATES);
   for (const el of texts) {
     if (!isFillable(el, env)) continue;

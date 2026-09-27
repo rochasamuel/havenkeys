@@ -105,7 +105,7 @@ describe("hasChallenge", () => {
 });
 
 describe("pressWhenReady", () => {
-  it("submits the form through requestSubmit with the button as submitter", async () => {
+  it("submits the form with the button as submitter", async () => {
     document.body.innerHTML = `<form><input name="p" type="password"><button id="go">Sign in</button></form>`;
     let submitter: unknown = null;
     $("form").addEventListener("submit", (e) => {
@@ -115,6 +115,19 @@ describe("pressWhenReady", () => {
     const out = await pressWhenReady({ button: $("#go"), field: $("[name=p]"), step: "password", env, sleep: noSleep });
     expect(out).toBe("pressed");
     expect(submitter).toBe($("#go"));
+  });
+
+  // gov.br starts its (invisible hCaptcha) submit from the button's click
+  // listener and cancels the native submit; requestSubmit alone skips it.
+  it("runs the button's own click handler for a form's submit button", async () => {
+    document.body.innerHTML = `<form><input name="u" type="tel"><button id="go" type="submit">Continuar</button></form>`;
+    const click = vi.fn((e: Event) => e.preventDefault());
+    const submit = vi.fn((e: Event) => e.preventDefault());
+    $("#go").addEventListener("click", click);
+    $("form").addEventListener("submit", submit);
+    await pressWhenReady({ button: $("#go"), field: $("[name=u]"), step: "username", env, sleep: noSleep });
+    expect(click).toHaveBeenCalledOnce();
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it("clicks a form-less button", async () => {

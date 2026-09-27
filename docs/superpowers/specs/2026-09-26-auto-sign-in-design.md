@@ -192,9 +192,10 @@ presses, which is today's behaviour. The run then ends.
    (many sites enable it only once the input validates). Still disabled →
    do not press, end the run.
 2. Re-check the stop conditions (§4.3).
-3. If the button belongs to a form (`button.form`), call
-   `form.requestSubmit(button)`, so the site's validation and `submit`
-   handlers run as for a click. Otherwise `button.click()`.
+3. Call `button.click()`, so the site's click, validation and `submit`
+   handlers run as for a user's click. (Amended 2026-09-27: this was
+   `form.requestSubmit(button)` for a form's button, which skips the
+   button's click handlers; gov.br starts its submit from one.)
 4. **OTP auto-submit:** before pressing in the `otp` step, wait 500 ms. If
    the OTP field is gone (disconnected or hidden) or the page is unloading,
    skip the press. The site submitted on its own.
@@ -336,7 +337,7 @@ Steps on a new page need in-page suggestions. Documented in `autofill.md`.
   Google* and *Forgot password?*.
 * Ambiguous (two equal candidates) → no press.
 * Disabled button that enables within 1 s → pressed; never enables → not.
-* Form button → `requestSubmit` called; form-less → `click` called.
+* Form button and form-less button → `click` called; a form button's click handler runs.
 * OTP field removed within 500 ms → no press.
 
 **`watch.ts`**

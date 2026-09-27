@@ -381,6 +381,15 @@ describe("filling", () => {
     expect(Array.from(document.querySelectorAll("input"), (i) => i.value).join("")).toBe("987654");
   });
 
+  it("gov.br: finds the CPF step (type=tel) for a popup fill", () => {
+    page(`<form id="loginData" action="/login" method="post">
+      <label for="cpf">CPF</label>
+      <input id="accountId" name="accountId" autocomplete="new-password" type="tel" inputmode="numeric" placeholder="Digite seu CPF">
+      <button id="enter-account-id" type="submit" name="operation" value="enter-account-id">Continuar</button></form>`);
+    const group = findLoginGroup(document, env("/login"));
+    expect(group && fieldsOf(group, "username").map((e) => e.id)).toEqual(["accountId"]);
+  });
+
   it("finds the login form on the page for a popup fill", () => {
     page(`<form role="search"><input name="q" type="search"></form>
       <form><input name="user" type="text" autocomplete="username"><input name="pw" type="password"></form>`);

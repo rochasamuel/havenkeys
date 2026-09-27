@@ -151,9 +151,9 @@ describe("content script", () => {
 
 describe("automatic sign-in", () => {
   // A valid email format: the beforeEach form's username field is type="email",
-  // and a real press goes through the page's own form.requestSubmit(), which
-  // (like a real browser) withholds the submit event for a value that fails
-  // the field's own HTML validation ("octo" is not a valid email address).
+  // and a real press clicks the form's button, which (like a real browser)
+  // withholds the submit event for a value that fails the field's own HTML
+  // validation ("octo" is not a valid email address).
   const autoFill = (over: Record<string, unknown> = {}) => ({
     ...loginFill(location.origin),
     fill: { kind: "login", username: "octo@example.com", password: "pw-from-vault" },
@@ -229,9 +229,9 @@ describe("automatic sign-in", () => {
 
   it("ends the run when the press itself throws", async () => {
     vi.useFakeTimers();
-    const form = document.querySelector("form") as HTMLFormElement;
-    form.requestSubmit = () => {
-      throw new Error("page broke requestSubmit");
+    const button = document.querySelector("form button") as HTMLButtonElement;
+    button.click = () => {
+      throw new Error("press failed");
     };
     expect(deliver(autoFill({ totp: true }))).toEqual({ filled: 2, pressing: "password" });
     await vi.advanceTimersByTimeAsync(0);

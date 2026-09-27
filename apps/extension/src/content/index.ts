@@ -343,7 +343,7 @@ function start(): void {
         else endLocalRun(false);
       })
       .catch(() => {
-        // The press threw (e.g. the page broke requestSubmit): stop this run.
+        // The press threw: stop this run.
         if (mine === runSeq) endLocalRun(true);
       });
     return done.step;

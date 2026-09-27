@@ -437,9 +437,10 @@ run ends.
 Once a button is chosen: wait for it to become enabled (re-checked every
 100 ms, up to 1 s — many sites enable a submit button only once the input
 validates; still disabled after 1 s → no press, run ends); re-check the stop
-conditions below; then `form.requestSubmit(button)` for a form's own submit
-button, or `button.click()` otherwise, so the site's own validation and
-`submit` handlers run as they would for a real click. Before pressing an OTP
+conditions below; then `button.click()`, so the site's own click handlers,
+validation and `submit` handlers run as they would for a real click. (Not
+`form.requestSubmit(button)`: it skips the button's click handlers, where
+sites like gov.br start their submit.) Before pressing an OTP
 step, wait 500 ms first — if the field is gone or hidden by then, the site
 already submitted on its own and nothing is pressed. Never a synthetic key
 event, never Enter.
@@ -456,9 +457,8 @@ login without TOTP) does not cancel that step's press. When the content
 script reports it is pressing that last step, the background drops its run
 without sending `bg_run_end`, because the press may still be pending in the
 frame (the 500 ms OTP wait, a button that enables late); the content script
-ends its own run once the press completes. If the press itself throws (for
-example a page that broke `requestSubmit`), the content script ends the run
-and tells the background.
+ends its own run once the press completes. If the press itself throws, the
+content script ends the run and tells the background.
 
 ### Stopping
 

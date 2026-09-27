@@ -140,8 +140,11 @@ const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * * OTP step: first give the site OTP_SETTLE_MS to submit on its own.
  * * Wait up to ENABLE_WAIT_MS for the button to enable.
  * * Never with a challenge on the page.
- * * `form.requestSubmit(button)` for a form's submit button, so the site's
- *   validation and submit handlers run; `click()` otherwise.
+ * * `button.click()`, as a user's click: the button's own click handlers
+ *   run, then (unless one cancels it) the form submits with the button as
+ *   submitter, running validation and submit handlers. `requestSubmit`
+ *   would skip the click handlers, where sites like gov.br start their
+ *   submit (an invisible hCaptcha).
  *
  * `cancelled`, when given, is checked after every wait and again immediately
  * before pressing; once it reports true the run has ended (user takeover,
@@ -170,8 +173,6 @@ export async function pressWhenReady(o: {
   }
   if (o.cancelled?.()) return "gave_up";
   if (!o.button.isConnected || !o.env.isVisible(o.button) || hasChallenge(doc, o.env)) return "gave_up";
-  const form = isSubmitter(o.button) ? o.button.form : null;
-  if (form && typeof form.requestSubmit === "function") form.requestSubmit(o.button);
-  else o.button.click();
+  o.button.click();
   return "pressed";
 }
