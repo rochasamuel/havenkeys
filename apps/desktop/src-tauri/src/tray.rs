@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use crate::state::{AppState, CmdError, CmdResult};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{AppHandle, Emitter, Manager, Wry};
 
 const MAIN_WINDOW: &str = "main";
 
@@ -133,7 +133,10 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
                 }
                 app.exit(0);
             }
-            "update" => show_main_window(app),
+            "update" => {
+                show_main_window(app);
+                let _ = app.emit(crate::updater::SHOW_EVENT, ());
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

@@ -38,6 +38,12 @@ export function App() {
   // The update version the user chose "Later" for, until the app restarts.
   const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
 
+  // Choosing "Update available" in the tray undoes "Later".
+  useEffect(() => {
+    const unlisten = api.onUpdateShow(() => setDismissedUpdate(null));
+    return () => void unlisten.then((f) => f());
+  }, []);
+
   useEffect(() => {
     api.status().then(setStatus, (err) =>
       // Kept as the error itself so its text follows the language. The

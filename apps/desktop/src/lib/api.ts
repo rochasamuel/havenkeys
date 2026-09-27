@@ -173,4 +173,6 @@ export const api = {
     ),
   onUpdateStatus: (handler: (status: UpdateStatus) => void): Promise<UnlistenFn> =>
     listen<UpdateStatus>("updates://status", (e) => handler(e.payload)),
+  /** The tray's "Update available" was chosen: show the offer again. */
+  onUpdateShow: (handler: () => void): Promise<UnlistenFn> => listen("updates://show", () => handler()),
 };

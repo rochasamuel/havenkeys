@@ -17,6 +17,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 pub const STATUS_EVENT: &str = "updates://status";
+/// The tray's "Update available" was chosen: the UI shows the offer again,
+/// even for a version the user chose "Later" for.
+pub const SHOW_EVENT: &str = "updates://show";
 /// Where a `.deb`/`.rpm` install sends the user. Fixed here, never taken
 /// from the downloaded manifest.
 pub const RELEASES_URL: &str = "https://github.com/rochasamuel/havenkeys/releases/latest";

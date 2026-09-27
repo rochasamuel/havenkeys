@@ -5,8 +5,12 @@ import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
+import { bannerFor } from "../lib/updates";
 
-/** Settings → Updates: this computer's automatic check, and "Check now". */
+/**
+ * Settings → Updates: this computer's automatic check, "Check now", and the
+ * update on offer — shown here even after "Later" hid the banner.
+ */
 export function UpdatesSection() {
   const { t } = useI18n();
   const toast = useToast();
@@ -29,6 +33,9 @@ export function UpdatesSection() {
     setAsked(true);
     await api.checkForUpdate().catch(() => undefined);
   }
+
+  // No dismissed version: Settings always shows what is on offer.
+  const offer = bannerFor(status, null);
 
   const result = !asked
     ? null
@@ -63,6 +70,21 @@ export function UpdatesSection() {
             {t.updates.checkNow}
           </button>
         </div>
+        {offer.kind === "available" && (
+          <div className="row">
+            <span className="row-label-inline">{t.updates.available(offer.version)}</span>
+            <button className="btn" type="button" onClick={() => void api.installUpdate().catch(() => undefined)}>
+              {offer.action === "update" ? t.updates.update : t.updates.download}
+            </button>
+          </div>
+        )}
+        {(offer.kind === "downloading" || offer.kind === "installing") && (
+          <div className="row" role="status">
+            <span className="row-label-inline">
+              {offer.kind === "downloading" ? t.updates.downloading(offer.version, offer.percent) : t.updates.installing}
+            </span>
+          </div>
+        )}
       </div>
       {result && (
         <p className="group-note" role="status">
