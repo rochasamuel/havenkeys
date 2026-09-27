@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useUpdateStatus } from "../lib/hooks";
 import { bannerFor } from "../lib/updates";
+import type { UpdateStatus } from "../lib/types";
 import { useI18n } from "../i18n/context";
 
 /**
@@ -20,6 +21,9 @@ export function UpdateBanner({
   const { t } = useI18n();
   const status = useUpdateStatus();
   const [showNotes, setShowNotes] = useState(false);
+  // The failed status the user chose "Later" for. Every status event is a
+  // new object, so the next change (a new failure included) shows again.
+  const [hiddenFailure, setHiddenFailure] = useState<UpdateStatus | null>(null);
   const banner = bannerFor(status, dismissed);
 
   switch (banner.kind) {
@@ -58,9 +62,13 @@ export function UpdateBanner({
         </div>
       );
     case "failed":
+      if (status === hiddenFailure) return null;
       return (
         <div className="banner banner-warn update-banner" role="alert">
           <span>{t.updates.failed}</span>
+          <button className="btn btn-quiet" type="button" onClick={() => setHiddenFailure(status)}>
+            {t.updates.later}
+          </button>
           <button className="btn btn-quiet" type="button" onClick={() => void api.checkForUpdate().catch(() => undefined)}>
             {t.updates.tryAgain}
           </button>
