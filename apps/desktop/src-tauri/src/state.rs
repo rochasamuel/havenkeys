@@ -6,9 +6,13 @@
 
 use crate::clipboard::ClipboardGuard;
 use crate::device::Device;
+use crate::item_input::ItemInputWire;
+use crate::qr_scan::ScannedCode;
+use crate::scan_slot::{ScanSlot, ScannedTotp};
 use crate::sync::Client;
 use havenkeys_bridge::Bridge;
 use havenkeys_core::lock::LockManager;
+use havenkeys_core::model::ItemInput;
 use havenkeys_core::vault::VaultService;
 use havenkeys_protocol::Event;
 use havenkeys_sync_client::Session;
@@ -42,6 +46,8 @@ pub struct AppState {
     /// The export file the user picked for the last import, so the UI can
     /// offer to delete it without ever supplying a path itself.
     pub last_import: Mutex<Option<PathBuf>>,
+    /// The last QR scan's codes, waiting to be saved (scan_slot.rs).
+    totp_scan: Mutex<ScanSlot>,
     /// This computer's ID and Secret Key (`device.json`).
     pub device: Mutex<Device>,
     /// Whether this device currently has a server session.
@@ -158,6 +164,7 @@ impl AppState {
             lock_manager: Mutex::new(LockManager::new(None)),
             clipboard: ClipboardGuard::default(),
             last_import: Mutex::new(None),
+            totp_scan: Mutex::new(ScanSlot::default()),
             device: Mutex::new(device),
             connectivity: Mutex::new(Connectivity::Offline),
             sync_client: Mutex::new(None),
@@ -171,6 +178,31 @@ impl AppState {
     /// The app's data folder: where `vault.sqlite3` and `device.json` live.
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
+    }
+
+    /// Hold a scan's codes. The vault guard is held throughout so this is
+    /// ordered against `lock()`, which clears the slot after it has locked
+    /// the vault and released that guard: a scan that finishes as the vault
+    /// locks leaves nothing behind.
+    pub fn store_totp_scan(&self, codes: Vec<ScannedCode>) -> CmdResult<Vec<ScannedTotp>> {
+        let vault = self.vault()?;
+        if !vault.is_unlocked() {
+            return Err(havenkeys_core::Error::Locked.into());
+        }
+        let mut slot = self.totp_scan.lock().map_err(|_| CmdError::internal())?;
+        Ok(slot.replace(codes, Instant::now())?)
+    }
+
+    /// The core's `ItemInput` for a renderer request, with a scanned token
+    /// replaced by its URI.
+    pub fn resolve_item_input(&self, input: ItemInputWire) -> CmdResult<ItemInput> {
+        let slot = self.totp_scan.lock().map_err(|_| CmdError::internal())?;
+        input.resolve(&slot, Instant::now())
+    }
+
+    pub fn clear_totp_scan(&self) {
+        let mut slot = self.totp_scan.lock().unwrap_or_else(|p| p.into_inner());
+        slot.clear();
     }
 
     /// Drop the cached HTTP client, so a stale one for an old server is
@@ -331,6 +363,8 @@ impl AppState {
         if let Ok(mut last) = self.last_import.lock() {
             *last = None;
         }
+        // Scanned TOTP codes waiting to be saved are vault secrets too.
+        self.clear_totp_scan();
         if was_open {
             self.bridge.notify(Event::Locked {});
             let _ = app.emit(LOCKED_EVENT, LockedPayload { reason });

@@ -1453,6 +1453,23 @@ button {
   text-decoration-color: var(--brass);
 }
 
+.scanned-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+.scanned-code svg {
+  color: var(--brass);
+}
+
+.scan-choices {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .url-match {
   flex: none;
   padding: 2px 9px;

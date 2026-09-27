@@ -5,7 +5,12 @@
 * Rust ≥ 1.88 (`rustup`)
 * Node.js ≥ 20 and pnpm 10
 * Tauri system dependencies:
-  * **Debian/Ubuntu:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config`
+  * **Debian/Ubuntu:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config libpipewire-0.3-dev libclang-dev libgbm-dev`
+    `libpipewire-0.3-dev`, `libclang-dev` and `libgbm-dev` are for screen
+    capture (the one-time code QR scan); the built app needs
+    `libpipewire-0.3` at runtime, which current desktop distributions ship.
+    The AppImage build likewise relies on the host's `libpipewire-0.3` and
+    `libgbm` already being present; it does not bundle them.
   * **macOS:** Xcode command-line tools
   * **Windows:** Microsoft C++ Build Tools and WebView2 (preinstalled on Windows 11)
 

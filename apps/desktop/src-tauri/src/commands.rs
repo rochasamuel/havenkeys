@@ -9,12 +9,15 @@
 //!   only one field per call. Copying happens in Rust.
 //! * All validation happens in the core; nothing here trusts the renderer.
 
+use crate::item_input::ItemInputWire;
+use crate::qr_scan;
+use crate::scan_slot::ScannedTotp;
 use crate::state::{AppState, CmdError, CmdResult};
 use crate::sync;
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
-use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings};
+use havenkeys_core::model::{ItemOverview, SecretField, Settings};
 use havenkeys_core::sync::prepare_sign_in;
 use havenkeys_core::totp::TotpCode;
 use havenkeys_core::vault::{self, VaultStatus};
@@ -620,37 +623,75 @@ pub fn open_website(state: State<'_, AppState>, id: Uuid, url: String) -> CmdRes
     tauri_plugin_opener::open_url(target, None::<&str>).map_err(|_| CmdError::open_website())
 }
 
+/// Look for a TOTP setup QR code: the clipboard image first, then every
+/// monitor. Returns a token and labels per code; the URI stays in Rust
+/// (scan_slot.rs) until an item is saved with the token.
+#[tauri::command]
+pub async fn scan_totp_qr(app: AppHandle) -> CmdResult<Vec<ScannedTotp>> {
+    {
+        let state = app.state::<AppState>();
+        state.touch();
+        if !state.vault()?.is_unlocked() {
+            return Err(havenkeys_core::Error::Locked.into());
+        }
+    }
+    // Capture and decoding take a moment, and a Wayland portal waits for
+    // the user: keep them off the main thread.
+    let codes = tauri::async_runtime::spawn_blocking(|| {
+        qr_scan::scan(qr_scan::clipboard_frame, qr_scan::screen_frames)
+    })
+    .await
+    .map_err(|_| CmdError::internal())??;
+    app.state::<AppState>().store_totp_scan(codes)
+}
+
 /// Create an item: seal it under the vault lock, let the server assign its
 /// revision, then record it locally. Nothing is stored until the server has
 /// accepted it, so the replica is never ahead of the authority.
 #[tauri::command]
-pub async fn create_item(app: AppHandle, input: ItemInput) -> CmdResult<ItemOverview> {
+pub async fn create_item(app: AppHandle, input: ItemInputWire) -> CmdResult<ItemOverview> {
+    let uses_scan = input.uses_scan();
     let staged = {
         let state = app.state::<AppState>();
         state.touch();
         state.require_online()?;
+        let input = state.resolve_item_input(input)?;
         let staged = state.vault()?.stage_create(input, AppState::now_ms())?;
         staged
     };
-    sync::push(&app, staged)
+    let saved = sync::push(&app, staged)
         .await?
-        .ok_or_else(CmdError::internal)
+        .ok_or_else(CmdError::internal)?;
+    if uses_scan {
+        app.state::<AppState>().clear_totp_scan();
+    }
+    Ok(saved)
 }
 
 #[tauri::command]
-pub async fn update_item(app: AppHandle, id: Uuid, input: ItemInput) -> CmdResult<ItemOverview> {
+pub async fn update_item(
+    app: AppHandle,
+    id: Uuid,
+    input: ItemInputWire,
+) -> CmdResult<ItemOverview> {
+    let uses_scan = input.uses_scan();
     let staged = {
         let state = app.state::<AppState>();
         state.touch();
         state.require_online()?;
+        let input = state.resolve_item_input(input)?;
         let staged = state
             .vault()?
             .stage_update(&id, input, AppState::now_ms())?;
         staged
     };
-    sync::push(&app, staged)
+    let saved = sync::push(&app, staged)
         .await?
-        .ok_or_else(CmdError::internal)
+        .ok_or_else(CmdError::internal)?;
+    if uses_scan {
+        app.state::<AppState>().clear_totp_scan();
+    }
+    Ok(saved)
 }
 
 #[tauri::command]

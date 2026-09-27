@@ -174,6 +174,12 @@ a keystroke through `record_activity`, not through the search command.
   a dependency only for its free `open_url` function, called from
   `open_website`; the plugin is never registered, so the renderer has no
   opener commands.
+* **Screen capture (TOTP QR scan).** `scan_totp_qr` reads the clipboard
+  image and, only if that holds no TOTP code, captures every monitor
+  (`xcap`). It runs only on the user's click in the unlocked app; pixels
+  stay in memory for that one call and are never written, logged or sent.
+  Only text that parses as `otpauth://totp` survives decoding. macOS asks
+  for Screen Recording once; Wayland's portal asks every time.
 * **CSP** (production):
   `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'`.
   The dev CSP additionally allows inline styles for Vite HMR only.
@@ -191,7 +197,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 38 of them, which is the whole
+Every command the renderer can call — all 39 of them, which is the whole
 surface. `build.rs` declares this list, the capability file grants exactly it,
 and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
 means a live server session, which a locked vault does not have.
@@ -213,6 +219,7 @@ means a live server session, which a locked vault does not have.
 | `get_totp_code` | yes | current code only, never the seed |
 | `copy_secret` | yes | no, the value is copied to the clipboard inside Rust |
 | `open_website` | yes | no. Opens a website in the default browser only if it is one of that item's saved URLs and passes the http(s) check again; the renderer cannot open an arbitrary URL or scheme |
+| `scan_totp_qr` | yes | no. Returns a token and issuer/account per code found; the `otpauth://` URI stays in Rust for 5 minutes, one scan at a time, cleared on lock. `create_item`/`update_item` accept `totp: { op: "scanned", value: token }` |
 | `create_item`, `update_item` | yes (online) | no. Edits send `keep`/`set`/`clear` per secret, so editing never requires reading the password or TOTP secret |
 | `delete_item` | yes (online) | no |
 | `generate_password` | no | a fresh password (not stored) |
@@ -256,6 +263,14 @@ requests), all origin-bound and rate-limited. See `native-messaging.md`.
   the login's details are sealed or opened); the WebView keeps JavaScript strings until garbage
   collection; the OS may swap pages to disk (we do not `mlock`). Zeroization
   reduces, but does not eliminate, the window in which secrets are in memory.
+* **QR scan buffers.** The screen and clipboard pixel buffers decoded by
+  `scan_totp_qr` are freed right after decoding but not zeroized, and
+  further copies of them live in `xcap`, `arboard` and `rqrr` internals and
+  the OS beyond our control. The clipboard image is fully decoded by
+  `arboard` before the pixel budget applies to it. A crafted QR code that
+  triggered a panic in the `rqrr` decoder would end the app (release builds
+  abort on panic) — an availability issue only, no secret would be exposed.
+  No fuzz target exists yet for the QR decoder.
 
 ## 9. Clipboard
 

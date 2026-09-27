@@ -34,6 +34,7 @@ WebView.
 | Libraries | `xcap` (capture) + `rqrr` (decode) + existing `arboard` (clipboard image) | `rxing` (far larger than needed); per-OS native APIs (three implementations) |
 | Several QR codes | List them as "Issuer · account", user picks; exactly one is selected immediately | Refuse; take the first |
 | Core changes | None: the new variant exists only in the desktop's input type | `SecretUpdate::Scanned` in havenkeys-core |
+| Linux capture dependency | Accept xcap's libpipewire-0.3 (build: libpipewire-0.3-dev, libclang-dev, libgbm-dev) | Own X11-only capture; clipboard only on Linux |
 
 Out of scope: Google Authenticator export QRs (`otpauth-migration://`),
 HOTP, scanning from a camera or an image file.
@@ -61,8 +62,8 @@ Editor, new or existing login (TOTP field empty, or after "Replace")
   field shows "✓ GitHub · you@example.com (scanned)" [Undo]
                           ▼
   create_item / update_item with totp: { op: "scanned", value: token }
-       desktop maps it: take slot entry → SecretUpdate::Set(uri form)
-       unknown / expired / used token → invalid_input, nothing saved
+       desktop maps it: look up slot entry (non-consuming) → SecretUpdate::Set(uri form)
+       unknown / expired token → scan_expired, nothing saved
 ```
 
 ## 4. Components
@@ -86,13 +87,15 @@ Editor, new or existing login (TOTP field empty, or after "Replace")
 
 ### 4.2 Scan slot (in `AppState`)
 
-`Mutex<Option<ScanSlot>>` where `ScanSlot { created: Instant, entries:
+`Mutex<ScanSlot>` where `ScanSlot { created: Instant, entries:
 Vec<(Token, TotpConfig)> }`.
 
 * A scan replaces the whole slot.
-* `take(token)` removes and returns that entry if the slot is less than 5
-  minutes old; the whole slot is dropped after one successful take.
-* Cleared on lock (same place the other decrypted state is dropped).
+* `get(token)` returns that entry's URI if the slot is less than 5 minutes
+  old, without consuming it, so a save that fails (e.g. offline) can be
+  retried with the same token.
+* Cleared after a successful save that used it, on lock (same place the
+  other decrypted state is dropped), on a new scan, or after 5 minutes.
 * Tokens are 16 bytes from the OS CSPRNG, hex in the IPC.
 * `TotpConfig.secret` is a `SecretString`, zeroized on drop.
 
@@ -139,7 +142,7 @@ Fixed messages from Rust; never containing decoded text.
 
 A clipboard without an image is not an error; the scan just continues to
 the screen.
-| `invalid_input` | Save with unknown, expired or used token | "The scanned code expired. Scan it again." |
+| `scan_expired` | Save with unknown or expired token | "The scanned code expired. Scan it again." |
 
 macOS silently returns only the wallpaper when Screen Recording is denied,
 so a denial is indistinguishable from "no QR code"; hence the hint.
@@ -153,11 +156,15 @@ so a denial is indistinguishable from "no QR code"; hence the hint.
   parse as `otpauth://totp` survive decoding.
 * **The secret stays in Rust.** The renderer receives a token and the
   issuer/account labels (already non-secret item metadata elsewhere). A
-  compromised renderer can trigger a scan, but a scan returns no secret
-  and a token only lets it save the scanned code into an item, which it
-  could already do by typing one.
-* **Slot lifetime:** one scan at a time, 5 minutes, one use, cleared on
-  lock.
+  compromised renderer can trigger a scan while the vault is unlocked, save
+  a TOTP QR that is on screen but not yet in the vault into an item (while
+  online), and then read live codes for it through `get_totp_code` — as it
+  already can for every item it can see. It never receives pixels, other
+  decoded text, or the TOTP seed (`reveal_secret` refuses TOTP). On X11,
+  Windows and macOS (after the one-time permission) the capture is silent;
+  Wayland's portal prompts every time.
+* **Slot lifetime:** one scan at a time, 5 minutes, cleared after a
+  successful save, on a new scan, or on lock.
 * **Decoded strings** are held in `Zeroizing<String>` until parsed.
 * **Clipboard first** means a screenshot on the clipboard avoids capturing
   the screen at all. The clipboard is only read, never changed.
@@ -165,7 +172,8 @@ so a denial is indistinguishable from "no QR code"; hence the hint.
   scan that reaches the screen). No new Tauri plugin; no renderer permission besides
   `allow-scan-totp-qr`.
 * **Dependencies:** `xcap`, `rqrr` must pass `cargo deny` (licenses,
-  advisories, bans) before the feature lands.
+  advisories, bans) before the feature lands. On Linux, `xcap` links
+  `libpipewire-0.3` and `libgbm`; the .deb declares them.
 * Docs: `security-model.md` §6 and §7 (command table, count),
   `threat-model.md` (screen capture as a deliberate, bounded capability).
 
@@ -183,9 +191,9 @@ crate:
   non-TOTP QR on the clipboard and nothing on screen → `qr_not_totp`;
 * oversized input → refused.
 
-**Rust unit (slot)**: token takes once; unknown token refused; expired
-token refused (injected clock); lock empties the slot; a new scan
-invalidates the old tokens.
+**Rust unit (slot)**: a token finds its code until cleared (non-consuming
+lookup); unknown token refused; expired token refused (injected clock);
+lock empties the slot; a new scan invalidates the old tokens.
 
 **Rust unit (edit input)**: `scanned` resolves to `Set` with the same
 secret; invalid token → error before anything is staged.

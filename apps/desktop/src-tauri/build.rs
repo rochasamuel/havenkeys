@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "get_totp_code",
     "copy_secret",
     "open_website",
+    "scan_totp_qr",
     "create_item",
     "update_item",
     "delete_item",
