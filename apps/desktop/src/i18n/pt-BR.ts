@@ -35,6 +35,7 @@ const codes: Record<ErrorCode, string | null> = {
   // Names the folder the file is in, which only Rust knows.
   vault_unreadable: null,
   clipboard: "Não foi possível acessar a área de transferência.",
+  open_website: "Não foi possível abrir o site.",
   autostart: "Não foi possível alterar se o HavenKeys abre ao iniciar a sessão.",
   unsupported_language: "Idioma não suportado.",
   keychain_unavailable:
@@ -255,6 +256,8 @@ export const ptBR: Messages = {
     copyUsername: "Copiar usuário",
     copyPassword: "Copiar senha",
     website: "Site",
+    openWebsite: "Abrir no navegador",
+    openWebsiteFailed: "Não foi possível abrir o site.",
     matchDomain: "Site inteiro",
     matchOrigin: "Site exato",
     matchExact: "Página exata",

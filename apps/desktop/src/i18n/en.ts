@@ -33,6 +33,7 @@ export type ErrorCode =
   | "sign_in_failed"
   | "vault_unreadable"
   | "clipboard"
+  | "open_website"
   | "autostart"
   | "unsupported_language"
   | "keychain_unavailable"
@@ -73,6 +74,7 @@ const codes: Record<ErrorCode, string | null> = {
   sign_in_failed: "Email, master password or Secret Key is incorrect.",
   vault_unreadable: null,
   clipboard: "Could not access the clipboard.",
+  open_website: "Could not open the website.",
   autostart: "Could not change whether HavenKeys opens at login.",
   unsupported_language: "Unsupported language.",
   keychain_unavailable:
@@ -262,6 +264,8 @@ export const en = {
     copyUsername: "Copy username",
     copyPassword: "Copy password",
     website: "Website",
+    openWebsite: "Open in browser",
+    openWebsiteFailed: "Could not open the website.",
     matchDomain: "Whole site",
     matchOrigin: "Exact site",
     matchExact: "Exact page",

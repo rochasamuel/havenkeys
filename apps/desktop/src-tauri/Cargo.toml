@@ -22,8 +22,8 @@ havenkeys-native-host = { path = "../../../crates/havenkeys-native-host" }
 havenkeys-oslock = { path = "../../../crates/havenkeys-oslock" }
 havenkeys-protocol = { path = "../../../crates/havenkeys-protocol" }
 havenkeys-sync-client = { path = "../../../crates/havenkeys-sync-client" }
-# No fs, shell, http, opener or clipboard plugin. The plugins below are driven
-# from Rust only; the capability grants the renderer none of their commands.
+# No fs, shell, http or clipboard plugin. The plugins below are driven from
+# Rust only; the capability grants the renderer none of their commands.
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 # Only for a timer (the unlock fallback); already in the tree through Tauri.
@@ -41,6 +41,9 @@ qrcode = { version = "0.14", default-features = false }
 keyring-core = "1.0"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
+# Only its free `open_url` function (commands::open_website); the plugin is
+# never registered, so the renderer has no opener commands at all.
+tauri-plugin-opener = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }

@@ -170,7 +170,10 @@ a keystroke through `record_activity`, not through the search command.
   its own title-bar areas now that macOS uses an overlay title bar. It moves
   the window and nothing else.
   No `fs`, `shell`, `http`, `dialog`, `opener`, or `clipboard` plugins are
-  installed (clipboard is handled in Rust).
+  installed (clipboard is handled in Rust). The `tauri-plugin-opener` crate is
+  a dependency only for its free `open_url` function, called from
+  `open_website`; the plugin is never registered, so the renderer has no
+  opener commands.
 * **CSP** (production):
   `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'`.
   The dev CSP additionally allows inline styles for Vite HMR only.
@@ -188,7 +191,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 37 of them, which is the whole
+Every command the renderer can call — all 38 of them, which is the whole
 surface. `build.rs` declares this list, the capability file grants exactly it,
 and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
 means a live server session, which a locked vault does not have.
@@ -209,6 +212,7 @@ means a live server session, which a locked vault does not have.
 | `delete_passkey` | yes (online) | no. Removes one passkey from a login; passkeys cannot be created or edited from the desktop |
 | `get_totp_code` | yes | current code only, never the seed |
 | `copy_secret` | yes | no, the value is copied to the clipboard inside Rust |
+| `open_website` | yes | no. Opens a website in the default browser only if it is one of that item's saved URLs and passes the http(s) check again; the renderer cannot open an arbitrary URL or scheme |
 | `create_item`, `update_item` | yes (online) | no. Edits send `keep`/`set`/`clear` per secret, so editing never requires reading the password or TOTP secret |
 | `delete_item` | yes (online) | no |
 | `generate_password` | no | a fresh password (not stored) |

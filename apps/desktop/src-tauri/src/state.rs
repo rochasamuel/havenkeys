@@ -125,6 +125,13 @@ impl CmdError {
             message: "Could not access the clipboard.".into(),
         }
     }
+
+    pub fn open_website() -> Self {
+        Self {
+            code: "open_website",
+            message: "Could not open the website.".into(),
+        }
+    }
 }
 
 pub type CmdResult<T> = Result<T, CmdError>;

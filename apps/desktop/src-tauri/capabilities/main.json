@@ -34,6 +34,7 @@
     "allow-reveal-previous-password",
     "allow-get-totp-code",
     "allow-copy-secret",
+    "allow-open-website",
     "allow-create-item",
     "allow-update-item",
     "allow-delete-item",

@@ -324,7 +324,18 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
                   <div className="row-main">
                     <div className="row-label">{t.detail.website}</div>
                     <div className="row-value url-value">
-                      <span className="selectable">{u.url}</span>
+                      <button
+                        type="button"
+                        className="url-link"
+                        title={t.detail.openWebsite}
+                        onClick={() =>
+                          void api
+                            .openWebsite(item.id, u.url)
+                            .catch((e) => toast(errorMessage(e, t, t.detail.openWebsiteFailed), "error"))
+                        }
+                      >
+                        {u.url}
+                      </button>
                     </div>
                   </div>
                   <span className="url-match">

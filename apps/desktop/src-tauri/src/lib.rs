@@ -237,6 +237,7 @@ pub fn run() {
             commands::reveal_previous_password,
             commands::get_totp_code,
             commands::copy_secret,
+            commands::open_website,
             commands::create_item,
             commands::update_item,
             commands::delete_item,

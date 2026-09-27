@@ -600,6 +600,26 @@ pub fn copy_secret(
     })
 }
 
+/// Open one of an item's saved websites in the default browser. The renderer
+/// names the website, but only an address already saved on that item opens,
+/// and only after it passes the same http(s) check as saving; a compromised
+/// renderer cannot hand the OS an arbitrary URL or scheme.
+#[tauri::command]
+pub fn open_website(state: State<'_, AppState>, id: Uuid, url: String) -> CmdResult<()> {
+    state.touch();
+    let target = {
+        let v = state.vault()?;
+        let item = v.get_item(&id)?;
+        let saved = item
+            .urls
+            .iter()
+            .find(|rule| rule.url == url)
+            .ok_or(havenkeys_core::Error::NotFound)?;
+        havenkeys_core::model::normalize_url(&saved.url)?
+    };
+    tauri_plugin_opener::open_url(target, None::<&str>).map_err(|_| CmdError::open_website())
+}
+
 /// Create an item: seal it under the vault lock, let the server assign its
 /// revision, then record it locally. Nothing is stored until the server has
 /// accepted it, so the replica is never ahead of the authority.

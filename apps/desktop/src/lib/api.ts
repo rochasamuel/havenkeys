@@ -84,6 +84,8 @@ export const api = {
     call<string>("reveal_previous_password", { id, index }),
   totp: (id: string) => call<TotpCode>("get_totp_code", { id }),
   copy: (id: string, field: CopyField) => call<CopyResult>("copy_secret", { id, field }),
+  /** Rust opens it only if `url` is one of the item's saved websites. */
+  openWebsite: (id: string, url: string) => call<void>("open_website", { id, url }),
   createItem: (input: ItemInput) => call<ItemOverview>("create_item", { input }),
   updateItem: (id: string, input: ItemInput) => call<ItemOverview>("update_item", { id, input }),
   deleteItem: (id: string) => call<void>("delete_item", { id }),

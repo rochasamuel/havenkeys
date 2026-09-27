@@ -1434,6 +1434,25 @@ button {
   font-size: 13.5px;
 }
 
+.url-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color var(--t-fast) var(--ease);
+}
+
+.url-link:hover {
+  text-decoration-color: var(--brass);
+}
+
 .url-match {
   flex: none;
   padding: 2px 9px;
