@@ -38,9 +38,11 @@ zeroize = "1.8"
 tauri-plugin-dialog = "2"
 qrcode = { version = "0.14", default-features = false }
 # TOTP QR scan (qr_scan.rs): screen capture and a pure-Rust QR decoder. On
-# Linux xcap links the system libpipewire-0.3.
+# Linux xcap links the system libpipewire-0.3. rxing without its `image`
+# feature (which pins an exact `image` version); it does not build without
+# `encoding_rs`.
 xcap = "0.9"
-rqrr = { version = "0.11", default-features = false }
+rxing = { version = "0.8", default-features = false, features = ["encoding_rs"] }
 # The Secret Key lives in the OS keychain (secret_store.rs). keyring-core plus
 # only this platform's native store: no mock, file or keyutils backends.
 keyring-core = "1.0"

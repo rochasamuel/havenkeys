@@ -196,8 +196,10 @@ trustworthy as the extension that reports it.
   the vault file, derive keys, or keep access after lock) but do not claim to
   prevent this.
 * **QR scan as a screen reader.** A compromised renderer can call
-  `scan_totp_qr` while the vault is unlocked, which captures the screen. It
-  can then save into an item a TOTP QR code that is on screen but not yet
+  `scan_totp_qr` while the vault is unlocked, which captures every monitor
+  and every open window, including windows hidden behind others (not
+  minimized ones, not HavenKeys' own). It can then save into an item a TOTP
+  QR code shown in any of them but not yet
   in the vault (while online, since saving writes to the server), and read
   live codes for it through `get_totp_code` — as it already can for every
   item it can see. It never receives pixels, other decoded text, or the

@@ -78,6 +78,26 @@ fn luma(px: &[u8]) -> u8 {
     ((y * a + 255 * (255 - a)) / 255) as u8
 }
 
+/// The text of every QR code in a greyscale image. rxing (a port of ZXing)
+/// rather than rqrr: on screenshots of a browser page, where the code is
+/// scaled by a fractional factor and blurred, rqrr missed about four codes
+/// in ten that rxing reads, and rqrr's result also depended on what else
+/// was on the screen.
+fn qr_texts(grey: Vec<u8>, width: u32, height: u32) -> Vec<Zeroizing<String>> {
+    let mut hints = rxing::DecodeHints {
+        PossibleFormats: Some([rxing::BarcodeFormat::QR_CODE].into_iter().collect()),
+        TryHarder: Some(true),
+        ..Default::default()
+    };
+    match rxing::helpers::detect_multiple_in_luma_with_hints(grey, width, height, &mut hints) {
+        Ok(results) => results
+            .iter()
+            .map(|r| Zeroizing::new(r.getText().to_owned()))
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 /// Every TOTP setup in `frames`, without repeats. Frames that are malformed
 /// or would take the total past `max_pixels` are skipped.
 fn decode_frames(frames: &[Frame], max_pixels: u64) -> Decoded {
@@ -97,16 +117,9 @@ fn decode_frames(frames: &[Frame], max_pixels: u64) -> Decoded {
             continue;
         }
         budget -= pixels;
-        let mut image = rqrr::PreparedImage::prepare_from_greyscale(w, h, |x, y| {
-            let i = (y * w + x) * 4;
-            luma(&frame.rgba[i..i + 4])
-        });
-        for grid in image.detect_grids() {
-            let Ok((_, text)) = grid.decode() else {
-                continue;
-            };
+        let grey: Vec<u8> = frame.rgba.chunks_exact(4).map(luma).collect();
+        for mut text in qr_texts(grey, frame.width, frame.height) {
             out.saw_qr = true;
-            let mut text = Zeroizing::new(text);
             let is_totp_uri = text
                 .get(.."otpauth://totp".len())
                 .is_some_and(|p| p.eq_ignore_ascii_case("otpauth://totp"));
@@ -174,19 +187,38 @@ pub fn clipboard_frame() -> Option<Frame> {
     })
 }
 
-/// One capture per monitor. A monitor that fails is skipped; none at all is
-/// an error.
+/// Windows smaller than this on either side hold no readable QR code.
+const MIN_WINDOW_SIDE: u32 = 50;
+
+/// One capture per monitor, then one per window: a window covered by
+/// another (HavenKeys itself, usually, since its button started the scan)
+/// is still captured whole, and any app's window counts, not only a
+/// browser's. HavenKeys' own windows and minimized ones are skipped. A
+/// capture that fails is skipped, and where windows can't be listed
+/// (Wayland) only the monitors are used; nothing captured at all is an
+/// error.
 pub fn screen_frames() -> Result<Vec<Frame>, ScanError> {
-    let monitors = xcap::Monitor::all().map_err(|_| ScanError::Capture)?;
-    let frames: Vec<Frame> = monitors
+    let to_frame = |image: xcap::image::RgbaImage| Frame {
+        width: image.width(),
+        height: image.height(),
+        rgba: image.into_raw(),
+    };
+    let mut frames: Vec<Frame> = xcap::Monitor::all()
+        .unwrap_or_default()
         .iter()
         .filter_map(|m| m.capture_image().ok())
-        .map(|image| Frame {
-            width: image.width(),
-            height: image.height(),
-            rgba: image.into_raw(),
-        })
+        .map(to_frame)
         .collect();
+    let own = std::process::id();
+    for window in xcap::Window::all().unwrap_or_default() {
+        let wanted = window.pid().is_ok_and(|pid| pid != own)
+            && window.is_minimized().is_ok_and(|m| !m)
+            && window.width().is_ok_and(|w| w >= MIN_WINDOW_SIDE)
+            && window.height().is_ok_and(|h| h >= MIN_WINDOW_SIDE);
+        if let Some(image) = wanted.then(|| window.capture_image().ok()).flatten() {
+            frames.push(to_frame(image));
+        }
+    }
     if frames.is_empty() {
         Err(ScanError::Capture)
     } else {
@@ -247,6 +279,43 @@ mod tests {
             width: width as u32,
             height: height as u32,
             rgba,
+        }
+    }
+
+    /// A 1920x1080 screen with a QR code for `text` on a white card, scaled
+    /// by a fractional `scale` and area-averaged (blurred), as a browser
+    /// draws a setup page at 125-150% scaling. `bg` is the page around it.
+    fn screen_with_scaled_qr(text: &str, scale: f32, bg: u8) -> Frame {
+        let code = qrcode::QrCode::new(text.as_bytes()).unwrap();
+        let (n, colors, quiet) = (code.width(), code.to_colors(), 4);
+        let size = ((n + 2 * quiet) as f32 * scale).round() as usize;
+        let (w, h, left, top) = (1920usize, 1080usize, 1200usize, 400usize);
+        let mut grey = vec![bg; w * h];
+        for y in top - 40..top + size + 40 {
+            grey[y * w + left - 40..y * w + left + size + 40].fill(255);
+        }
+        let samples = 4;
+        for y in 0..size {
+            for x in 0..size {
+                let mut sum = 0u32;
+                for sy in 0..samples {
+                    for sx in 0..samples {
+                        let fx = (x as f32 + (sx as f32 + 0.5) / samples as f32) / scale;
+                        let fy = (y as f32 + (sy as f32 + 0.5) / samples as f32) / scale;
+                        let (mx, my) = (fx as usize, fy as usize);
+                        let inside = mx >= quiet && my >= quiet && mx < quiet + n && my < quiet + n;
+                        let dark = inside
+                            && colors[(my - quiet) * n + (mx - quiet)] == qrcode::Color::Dark;
+                        sum += if dark { 0 } else { 255 };
+                    }
+                }
+                grey[(top + y) * w + left + x] = (sum / (samples * samples) as u32) as u8;
+            }
+        }
+        Frame {
+            width: w as u32,
+            height: h as u32,
+            rgba: grey.iter().flat_map(|&g| [g, g, g, 255]).collect(),
         }
     }
 
@@ -312,6 +381,64 @@ mod tests {
             assert!(found.saw_qr, "{text}");
             assert!(found.codes.is_empty(), "{text}");
         }
+    }
+
+    // Regression (Windows, 2026-09-27): a setup QR in a browser beside the
+    // app was not found on the full-screen capture, though a cropped
+    // screenshot of it was. These screens are ones the previous decoder
+    // (rqrr) missed.
+    #[test]
+    fn a_scaled_blurred_code_on_a_full_screen_is_found() {
+        const LONG: &str = "otpauth://totp/GitHub:alice.example%40example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30";
+        for (text, scale, bg) in [
+            (GITHUB, 2.5, 240),
+            (LONG, 2.5, 240),
+            (LONG, 2.2, 240),
+            (GITHUB, 2.7, 30),
+            (LONG, 2.7, 128),
+            (GITHUB, 1.8, 128),
+        ] {
+            let found = decode_frames(&[screen_with_scaled_qr(text, scale, bg)], MAX_PIXELS);
+            assert_eq!(found.codes.len(), 1, "scale {scale}, background {bg}");
+        }
+    }
+
+    /// The decoder reads pixels any window can draw, and a panic aborts the
+    /// app: noise and QR-like patterns must just find nothing.
+    #[test]
+    fn noise_and_partial_codes_find_nothing_without_panicking() {
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for size in [1u32, 2, 7, 33, 257] {
+            let rgba = (0..size * size)
+                .flat_map(|_| [next() as u8, next() as u8, next() as u8, 255])
+                .collect();
+            let frame = Frame {
+                width: size,
+                height: size,
+                rgba,
+            };
+            assert!(
+                decode_frames(&[frame], MAX_PIXELS).codes.is_empty(),
+                "noise {size}"
+            );
+        }
+        let wide = Frame {
+            width: 4000,
+            height: 1,
+            rgba: vec![0; 16_000],
+        };
+        assert!(decode_frames(&[wide], MAX_PIXELS).codes.is_empty());
+        // Half a code: the finder patterns are there, the data is not.
+        let mut half = qr_frame(GITHUB, 4);
+        let cut = half.rgba.len() / 2;
+        half.rgba[cut..].fill(255);
+        assert!(decode_frames(&[half], MAX_PIXELS).codes.is_empty());
     }
 
     #[test]

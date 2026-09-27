@@ -28,10 +28,10 @@ WebView.
 | Question | Decision | Rejected alternatives |
 |---|---|---|
 | Buttons | One QR-icon button: clipboard image first, then screen | Separate "screen" and "clipboard" buttons |
-| Screen mode | Capture all monitors, auto-find QR codes | Clipboard only; drag-a-region overlay |
+| Screen mode | Capture all monitors and every open window, auto-find QR codes (amended 2026-09-27: windows added, so a code behind HavenKeys' own window is found, as in 1Password) | Clipboard only; drag-a-region overlay; monitors only |
 | Where it appears | Editor, for new logins and when editing | Edit only |
 | Where the secret goes | Stays in Rust in a one-time slot; the UI gets a token and a preview | Return the URI to the renderer to fill the field |
-| Libraries | `xcap` (capture) + `rqrr` (decode) + existing `arboard` (clipboard image) | `rxing` (far larger than needed); per-OS native APIs (three implementations) |
+| Libraries | `xcap` (capture) + `rxing` (decode, without its `image` feature) + existing `arboard` (clipboard image). Amended 2026-09-27: `rqrr` was the first choice, but on Windows it missed setup codes a browser draws at fractional scale (25 of 60 synthetic screens, against 3 for `rxing`, at the same speed) | `rqrr` (misses scaled codes); per-OS native APIs (three implementations) |
 | Several QR codes | List them as "Issuer · account", user picks; exactly one is selected immediately | Refuse; take the first |
 | Core changes | None: the new variant exists only in the desktop's input type | `SecretUpdate::Scanned` in havenkeys-core |
 | Linux capture dependency | Accept xcap's libpipewire-0.3 (build: libpipewire-0.3-dev, libclang-dev, libgbm-dev) | Own X11-only capture; clipboard only on Linux |
@@ -48,13 +48,14 @@ Editor, new or existing login (TOTP field empty, or after "Replace")
      scan_totp_qr                                             (Rust)
        1. vault must be unlocked
        2. clipboard holds an image? decode it (steps a–d)
-            a. rqrr: find and decode every QR grid
+            a. rxing: find and decode every QR code
             b. keep strings that parse via totp::parse_totp_input and
                start with otpauth://totp ; zeroize the decoded strings
             c. drop the pixel buffer
             d. dedupe by (secret, algorithm, digits, period)
        3. no TOTP found in the clipboard (no image, no QR, or no TOTP QR):
-          capture every monitor and run a–d on each capture
+          capture every monitor and every open window (not minimized, not
+          HavenKeys' own) and run a–d on each capture
        4. replace the slot: token (128-bit random) → TotpConfig, 5 min TTL
        ← [{ token, issuer, account }]
                           ▼
@@ -71,10 +72,12 @@ Editor, new or existing login (TOTP field empty, or after "Replace")
 ### 4.1 `qr_scan.rs` (desktop, new)
 
 * `fn decode_totp_qrs(images: &[RgbaImage]) -> Vec<TotpConfig>` — pure,
-  unit-tested. Converts to luma, runs `rqrr::PreparedImage::detect_grids`,
-  decodes each grid, keeps only valid TOTP configs, dedupes.
+  unit-tested. Converts to luma, runs rxing's multi-code QR reader, keeps
+  only valid TOTP configs, dedupes.
 * `fn capture_screens() -> Result<Vec<RgbaImage>, ScanError>` — `xcap`
-  `Monitor::all()` then `capture_image()` for each.
+  `Monitor::all()` then `capture_image()` for each, then `Window::all()`
+  and `capture_image()` for each window that is not minimized, not ours and
+  at least 50 px on each side (Wayland lists no windows: monitors only).
 * `fn clipboard_image() -> Option<RgbaImage>` — `arboard` `get_image()`;
   no image, or an unreadable clipboard, is `None` and the scan moves on to
   the screen.
@@ -171,7 +174,7 @@ so a denial is indistinguishable from "no QR code"; hence the hint.
 * **OS prompts:** macOS Screen Recording (once), Wayland portal (each
   scan that reaches the screen). No new Tauri plugin; no renderer permission besides
   `allow-scan-totp-qr`.
-* **Dependencies:** `xcap`, `rqrr` must pass `cargo deny` (licenses,
+* **Dependencies:** `xcap`, `rxing` must pass `cargo deny` (licenses,
   advisories, bans) before the feature lands. On Linux, `xcap` links
   `libpipewire-0.3` and `libgbm`; the .deb declares them.
 * Docs: `security-model.md` §6 and §7 (command table, count),
