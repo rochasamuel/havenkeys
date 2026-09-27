@@ -70,7 +70,7 @@ it.
 
 * `server.rs`: `OpenItem` → `RequestClass::Secret`.
 * New hook `on_open_item: Box<dyn Fn(Uuid) + Send + Sync>` beside
-  `on_lock` / `on_items_changed`, taken by the `Bridge` constructors.
+  `on_lock` / `on_items_changed`, set via `Bridge::set_open_item_hook`.
 * `dispatch.rs`: `require_enabled`, unlocked, then the item must be one of
   `find_matches(url, top_url)`'s results (the same origin-bound check
   `fill_item` relies on). Only then call the hook and return `OpenItem {}`.
@@ -79,7 +79,8 @@ it.
 
 * Rust: the hook passed to the bridge runs on the bridge's thread; it
   calls `tray::show_main_window(&app)` and
-  `app.emit("vault://open-item", OpenItemPayload { id })`.
+  `app.emit("vault://open-item", id.to_string())` (the payload is the bare
+  item UUID as a string, not a wrapper object).
 * `VaultScreen.tsx`: listens for `vault://open-item`; asks a pure,
   tested `decideOpen(...)` what to do; shows the existing confirm dialog
   style for the dirty case.
@@ -135,9 +136,12 @@ once; a refused request never calls it; `OpenItem` is in the Secret class.
 
 **Extension:** the popup's DOM has no test harness, so the button's
 placement (last in the row, after Fill and Code) is checked manually;
-`popup_open_item` parsing and handling are unit-tested — rejected from a
-content-script sender, the URL taken from the tab and not the message, and
-a malformed `itemId` rejected.
+`popup_open_item` parsing and handling are unit-tested — the URL is taken
+from the tab and not the message, and a malformed `itemId` is rejected.
+Rejecting a content-script sender is not covered by a new test; it relies
+on the existing, unchanged `isFromPopup` routing in
+`apps/extension/src/background/index.ts`, which only `popup-handler.ts`'s
+own request types reach.
 
 **Desktop:** `decideOpen` unit tests (same item, other item dirty, other
 item clean, nothing open); `ItemEditor` dirty detection helper tested as a
