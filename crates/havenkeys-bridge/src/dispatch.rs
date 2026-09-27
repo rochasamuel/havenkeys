@@ -16,6 +16,7 @@ use havenkeys_protocol::{
     ErrorCode, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
     ResultBody, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
 };
+use uuid::Uuid;
 
 fn code(e: Error) -> ErrorCode {
     match e {
@@ -97,6 +98,9 @@ pub enum Dispatched {
         write: StagedWrite,
         result: ResultBody,
     },
+    /// The item may be opened in the desktop editor; the caller runs the
+    /// hook once the vault lock is released.
+    OpenItem(Uuid),
 }
 
 /// Answer a request. `lock` is handled by the caller, which must not hold
@@ -361,6 +365,26 @@ pub fn dispatch(
                 .has_passkey_for_page(url, top_url.as_deref())
                 .map_err(code)?;
             Ok(Dispatched::Done(ResultBody::PasskeyStatus { has_passkey }))
+        }
+        Request::OpenItem {
+            item_id,
+            url,
+            top_url,
+        } => {
+            require_enabled(v)?;
+            // The same origin binding as fill_item, without decrypting a
+            // secret: the item must be one of this page's matches. An unknown
+            // ID answers exactly like another site's item.
+            let saved_here = v
+                .find_matches(url, top_url.as_deref())
+                .map_err(code)?
+                .iter()
+                .any(|s| s.id == *item_id);
+            if saved_here {
+                Ok(Dispatched::OpenItem(*item_id))
+            } else {
+                Err(ErrorCode::Denied)
+            }
         }
     }
 }

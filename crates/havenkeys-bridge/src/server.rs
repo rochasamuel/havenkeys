@@ -19,6 +19,7 @@ use std::io;
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 /// Concurrent native-host connections (one per browser profile is typical).
@@ -36,6 +37,9 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 
 type Frame = Zeroizing<Vec<u8>>;
 
+/// Hook run once `open_item` is allowed; see `Bridge::set_open_item_hook`.
+type OpenItemHook = Arc<dyn Fn(Uuid) + Send + Sync>;
+
 struct Inner {
     vault: Arc<Mutex<VaultService>>,
     on_lock: Box<dyn Fn() + Send + Sync>,
@@ -46,6 +50,8 @@ struct Inner {
     limiter: Mutex<RateLimiter>,
     connections: Mutex<Vec<(u64, SyncSender<Frame>)>>,
     next_conn: Mutex<u64>,
+    /// What `open_item` does once allowed; see `set_open_item_hook`.
+    on_open_item: Mutex<Option<OpenItemHook>>,
 }
 
 /// Cheap to clone; all clones share state.
@@ -112,8 +118,17 @@ impl Bridge {
                 limiter: Mutex::new(RateLimiter::default()),
                 connections: Mutex::new(Vec::new()),
                 next_conn: Mutex::new(0),
+                on_open_item: Mutex::new(None),
             }),
         }
+    }
+
+    /// What `open_item` does once the bridge has allowed it: the desktop
+    /// shows its window on that item's editor. Called on the bridge's
+    /// thread, without the vault lock held. Without a hook, `open_item`
+    /// answers `internal`: a bridge with no UI has nothing to open.
+    pub fn set_open_item_hook(&self, hook: impl Fn(Uuid) + Send + Sync + 'static) {
+        *guard(&self.inner.on_open_item) = Some(Arc::new(hook));
     }
 
     /// Handle one raw request frame and produce the reply. Never panics on
@@ -146,7 +161,8 @@ impl Bridge {
             | Request::CheckLogin { .. }
             | Request::SaveLogin { .. }
             | Request::PasskeyGet { .. }
-            | Request::PasskeyCreate { .. } => Some(RequestClass::Secret),
+            | Request::PasskeyCreate { .. }
+            | Request::OpenItem { .. } => Some(RequestClass::Secret),
         };
         if let Some(class) = class {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
@@ -177,6 +193,16 @@ impl Bridge {
             }
             Ok(Dispatched::CreatePasskey { write, result }) => {
                 (self.inner.save)(write).map(|()| result)
+            }
+            Ok(Dispatched::OpenItem(id)) => {
+                let hook = guard(&self.inner.on_open_item).clone();
+                match hook {
+                    Some(hook) => {
+                        hook(id);
+                        Ok(ResultBody::OpenItem {})
+                    }
+                    None => Err(ErrorCode::Internal),
+                }
             }
             Err(e) => Err(e),
         };
