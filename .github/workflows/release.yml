@@ -73,8 +73,10 @@ jobs:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: "HavenKeys ${{ github.ref_name }}"
-          # Also the "What's new" text in the app (latest.json `notes`).
-          releaseBody: "Installers for this release. Unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first run."
+          # Also the "What's new" text every installed app shows (latest.json
+          # `notes`), so it stays neutral; installer warnings live on the
+          # website's download page.
+          releaseBody: "HavenKeys ${{ github.ref_name }}. See https://github.com/rochasamuel/havenkeys/releases for details."
           releaseDraft: true
           prerelease: false
           # One latest.json for all three platforms; Windows updates through

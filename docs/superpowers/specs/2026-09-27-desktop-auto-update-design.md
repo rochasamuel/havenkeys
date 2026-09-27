@@ -65,8 +65,9 @@ Owns everything about updates. The webview never calls the plugin.
 | `install_update` | From `Available` only: download → verify → lock → install → restart |
 | `set_update_auto_check` | Saves `autoCheck` and reschedules |
 
-State changes are pushed with an `update-status` event so the UI does not
-poll. No updater plugin permission is added to the capability file.
+State changes are pushed with an `updates://status` event so the UI does not
+poll. Choosing the tray's "Update available" emits `updates://show`, which
+brings back a banner dismissed with "Later". No updater plugin permission is added to the capability file.
 
 ### 3.3 Desktop UI
 
@@ -74,7 +75,12 @@ poll. No updater plugin permission is added to the capability file.
   screens: "HavenKeys 0.9.0 is available · What's new · Update". "What's new"
   expands the notes as text (never HTML). While downloading it shows a
   progress bar; on error, a fixed message ("Update failed. Try again later.").
-  It can be dismissed until the next launch.
+  "Later" dismisses that version until the next launch; the tray's "Update
+  available" brings it back, and Settings → Updates always shows the offer
+  with its own Update/Download button. A failure banner can be dismissed
+  until the status next changes. Checks time out after 30 s and downloads
+  after 10 minutes; a background check that fails keeps an offer already
+  on screen.
 - When `canInstallInPlace` is false the button reads "Download" and opens
   the release page through the existing `open_url` path. That URL is a
   constant in Rust (`https://github.com/rochasamuel/havenkeys/releases/latest`),

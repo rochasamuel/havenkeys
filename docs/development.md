@@ -273,15 +273,25 @@ the security side.
   5. Click **Publish release**. Publishing is what makes `/releases/latest`
      (and so the update check) see it — a draft is invisible to both.
 * **The in-app "What's new"** comes from the release's `releaseBody` at
-  **build** time, baked into `latest.json`'s `notes` field. Editing the
+  **build** time, baked into `latest.json`'s `notes` field. The workflow's
+  text is neutral ("HavenKeys desktop-vX.Y.Z. See … for details.") because
+  every installed app shows it; installer warnings (SmartScreen, Gatekeeper)
+  belong on the website's download page and the release page, not there. Editing the
   release page's description afterward does not change what installed apps
   show; to correct it after publishing, edit and re-upload the `latest.json`
   asset itself before anyone updates.
-* **Key rotation:** if the signing key is ever lost or suspected compromised,
-  ship one release signed with the *old* key whose `tauri.conf.json` already
-  trusts the *new* public key, so every existing install can still verify and
-  accept that one transitional release; sign every release after that with
-  the new key only.
+* **Key rotation, while the old key is still held** (planned, or suspected
+  compromise): generate the new key, ship one release signed with the *old*
+  key whose `tauri.conf.json` already trusts the *new* public key, so every
+  existing install can still verify and accept that one transitional
+  release; sign every release after that with the new key only. After a
+  suspected compromise do this at once — until installs have moved to the
+  transitional release, the thief can still sign updates they accept.
+* **Lost key** (no copy of the private key or its passphrase): there is no
+  in-app path. No installation can verify anything signed with a new key, so
+  users must install the next version by hand from the release page (as they
+  did the first updater-enabled release); from that version on, updates are
+  in-app again under the new key. See `threat-model.md` T10.
 
 ## Fuzzing
 
