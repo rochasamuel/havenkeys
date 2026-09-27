@@ -369,6 +369,39 @@ const CRED: &str = "AQEBAQEBAQEBAQEBAQEBAQ"; // 16 bytes
 const CHAL: &str = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"; // 32 bytes
 
 #[test]
+fn open_item_parses_and_reencodes() {
+    let s = format!(
+        r#"{{"v":1,"id":3,"request":{{"type":"open_item","itemId":"{ITEM}","url":"https://github.com/","topUrl":"https://github.com/"}}}}"#
+    );
+    let env = parse(&s).unwrap();
+    assert_eq!(
+        env.request,
+        Request::OpenItem {
+            item_id: Uuid::parse_str(ITEM).unwrap(),
+            url: "https://github.com/".into(),
+            top_url: Some("https://github.com/".into()),
+        }
+    );
+    assert_eq!(env.request.kind(), "open_item");
+    let again = serde_json::to_vec(&env).unwrap();
+    assert_eq!(parse_request(&again).unwrap(), env);
+}
+
+#[test]
+fn malformed_open_item_is_rejected() {
+    let long = "a".repeat(MAX_URL_BYTES + 1);
+    for s in [
+        r#"{"v":1,"id":1,"request":{"type":"open_item","itemId":"not-a-uuid","url":"https://a.com/"}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"open_item","itemId":"{ITEM}"}}}}"#),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"open_item","itemId":"{ITEM}","url":"https://a.com/","extra":1}}}}"#),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"open_item","itemId":"{ITEM}","url":""}}}}"#),
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"open_item","itemId":"{ITEM}","url":"https://a.com/{long}"}}}}"#),
+    ] {
+        assert!(parse(&s).is_err(), "{s}");
+    }
+}
+
+#[test]
 fn passkey_requests_parse() {
     let ok = [
         format!(r#"{{"v":1,"id":1,"request":{{"type":"find_passkeys","url":"https://github.com/","rpId":"github.com","allowCredentials":["{CRED}"]}}}}"#),

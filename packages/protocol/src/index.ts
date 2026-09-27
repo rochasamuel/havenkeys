@@ -32,6 +32,7 @@ export type Request =
   | { type: "lock" }
   | { type: "find_matches"; url: string; topUrl?: string }
   | { type: "fill_item"; itemId: string; url: string; topUrl?: string }
+  | { type: "open_item"; itemId: string; url: string; topUrl?: string }
   | { type: "get_totp"; itemId: string; url: string; topUrl?: string }
   | { type: "generate_password" }
   | { type: "check_login"; url: string; topUrl?: string; username: string | null; password: string }
@@ -120,7 +121,8 @@ export type Result =
       publicKey: string;
       publicKeyAlgorithm: number;
     }
-  | { type: "passkey_status"; hasPasskey: boolean };
+  | { type: "passkey_status"; hasPasskey: boolean }
+  | { type: "open_item" };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -329,6 +331,8 @@ function parseResult(v: unknown): Result | null {
     case "passkey_status":
       if (!hasExactKeys(v, ["type", "hasPasskey"]) || !isBool(v.hasPasskey)) return null;
       return { type: "passkey_status", hasPasskey: v.hasPasskey };
+    case "open_item":
+      return hasExactKeys(v, ["type"]) ? { type: "open_item" } : null;
     default:
       return null;
   }

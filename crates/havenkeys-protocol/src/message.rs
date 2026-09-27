@@ -136,6 +136,14 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top_url: Option<String>,
     },
+    /// Bring the desktop window forward on `item_id`'s editor, only if it is
+    /// a login saved for `url`. Returns nothing.
+    OpenItem {
+        item_id: Uuid,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
 }
 
 /// Decoded length of an unpadded base64url string, or `None`.
@@ -186,6 +194,7 @@ impl Request {
             Request::CheckPasskeyCreate { .. } => "check_passkey_create",
             Request::PasskeyCreate { .. } => "passkey_create",
             Request::PasskeyStatus { .. } => "passkey_status",
+            Request::OpenItem { .. } => "open_item",
         }
     }
 
@@ -201,7 +210,8 @@ impl Request {
             | Request::PasskeyGet { url, top_url, .. }
             | Request::CheckPasskeyCreate { url, top_url, .. }
             | Request::PasskeyCreate { url, top_url, .. }
-            | Request::PasskeyStatus { url, top_url } => [Some(url), top_url.as_deref()],
+            | Request::PasskeyStatus { url, top_url }
+            | Request::OpenItem { url, top_url, .. } => [Some(url), top_url.as_deref()],
         }
     }
 
@@ -475,6 +485,7 @@ pub enum ResultBody {
     PasskeyStatus {
         has_passkey: bool,
     },
+    OpenItem {},
 }
 
 /// What saving a submitted login would do.
@@ -504,6 +515,7 @@ impl fmt::Debug for ResultBody {
             ResultBody::CheckPasskeyCreate { .. } => "check_passkey_create",
             ResultBody::PasskeyCreate { .. } => "passkey_create",
             ResultBody::PasskeyStatus { .. } => "passkey_status",
+            ResultBody::OpenItem {} => "open_item",
         };
         write!(f, "ResultBody({kind})")
     }
