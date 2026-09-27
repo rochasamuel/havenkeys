@@ -155,8 +155,15 @@ releases (e.g. 0.9.0 → 0.9.1) is tested on each OS.
 - **Integrity comes from the signature, not TLS.** A compromised GitHub
   account, repository, CDN or network cannot install code without the
   private key.
-- **No downgrade:** the plugin's default comparator installs only versions
-  greater than the running one, so an old signed release cannot be replayed.
+- **No downgrade:** `latest.json` itself is not signed; only the artifacts
+  are. So downgrade protection rests on `requireSignedVersion: true` in the
+  updater config: the signature's trusted comment binds the app version it
+  was signed for, and a manifest announcing any other version than the one
+  signed is rejected (as is a signature carrying no version). The plugin's
+  default comparator then refuses any version not greater than the running
+  one. Together, an old signed release cannot be replayed under a new
+  version number. Releases must be built with `@tauri-apps/cli` 2.12.0 or
+  later, which writes the version into the signature.
 - **Residual trust:** whoever holds the private key and passphrase can ship
   code to every install, including the Rust core that holds the vault key.
   Documented as a trust assumption in `docs/threat-model.md`.

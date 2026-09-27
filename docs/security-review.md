@@ -1494,7 +1494,7 @@ holds the signing key can ship code to every installation.
 |---|---|---|---|---|
 | UP1 | Info | Updater | Malicious update from a compromised GitHub account, repository, CDN or network path | **Mitigated**: `Update::download` verifies the minisign signature against the public key in `tauri.conf.json` before returning bytes; a bad or missing signature aborts with nothing installed and the vault untouched |
 | UP2 | High | Updater (key custody) | Theft of the updater's private key and its passphrase lets the holder ship code to every installation, including the Rust core that holds the vault key | Accepted, inherent to any signed-updater design; mitigated operationally (key + passphrase only in repository secrets and an offline backup, never committed; releases stay drafts until reviewed and published; rotation procedure documented) |
-| UP3 | Info | Updater | Downgrade / replay of an old, still validly signed release | **Mitigated**: the plugin's default comparator installs only a version strictly greater than the one running |
+| UP3 | Info | Updater | Downgrade / replay of an old, still validly signed release, including a crafted (unsigned) `latest.json` pairing a high version with an old release's URL and signature | **Mitigated**: `requireSignedVersion: true` rejects any artifact whose signed version (in the signature's trusted comment) differs from the announced one or is missing; the default comparator then installs only a strictly greater version. Releases must be built with CLI ≥ 2.12.0 (UM6) |
 | UP4 | Info | Updater / UI | Release notes from `latest.json` rendered where a script tag or event handler could execute if treated as markup | **Mitigated by design**: notes are truncated to 4,000 characters and rendered as a text node, never HTML; `updates.rs` has a unit test asserting an `<img onerror=...>` payload survives truncation as literal text |
 | UP5 | Medium | Windows install / native host | Browsers keep `havenkeys-native-host.exe` running (it retries `connectNative` while the desktop app is gone); Windows cannot overwrite a running executable, so an in-place update could fail while a browser holds the file open | **Mitigated**: an NSIS `NSIS_HOOK_PREINSTALL` hook (`windows/hooks.nsh`) runs `taskkill /F /IM havenkeys-native-host.exe` before files are copied, so the installer never meets a locked file; this also fixes today's manual in-place installs. **Unverified**: whether the extension's next `connectNative` successfully restarts the host after the update (M20 below) |
 | UP6 | Info | Renderer exposure | The renderer could be given more updater surface than it needs | **Mitigated by design**: no `tauri-plugin-updater` permission is granted; the capability file allows only the four named commands (`update_status`, `check_for_update`, `install_update`, `set_update_auto_check`); the webview never calls the plugin |
@@ -1545,10 +1545,22 @@ see `threat-model.md` T10.
 ### UP3. Downgrade / replay (Info, mitigated)
 **Attack scenario:** an attacker replays an old, genuinely signed release
 (one with a known vulnerability) hoping to push an installation backwards.
-**Mitigation:** the plugin's default version comparator only reports an
-update, and only installs, when the candidate's version is strictly greater
-than `app.package_info().version`. An old signed release is indistinguishable
-from "no update" to a newer install.
+`latest.json` is not signed — only the artifacts are — so the attacker can
+serve a manifest that announces `99.0.0` but points at an old release's URL
+and its still-valid signature.
+**Mitigation:** the updater config sets `requireSignedVersion: true`. The
+Tauri CLI (2.12.0 and later) writes the app version into each signature's
+trusted comment, which the signature covers; `Update::download` rejects an
+artifact whose signed version differs from the version the manifest announced,
+or that carries no version at all (plugin source, `verify_signed_version`).
+The default comparator then only reports an update when the announced (and
+now proven) version is strictly greater than `app.package_info().version`.
+`updater::tests::the_updater_refuses_downgrades_and_unsigned_versions` reads
+the shipped `tauri.conf.json` through the plugin's own `Config` and asserts
+the flag is on and downgrades are not allowed.
+**Residual:** a release built with an older CLI would carry no version and be
+refused by every install, not accepted; the pre-publish check (UM6,
+`development.md`) catches that before publishing.
 
 ### UP4. Notes injection (Info, mitigated by design)
 **Attack scenario:** a release's notes (`latest.json`'s `notes` field, taken
@@ -1688,3 +1700,4 @@ implementation plan).
 | UM3 | Settings → Updates: "Check for updates automatically" off stops the daily timer; "Check now" still works and reports "You're up to date" / offers the update / shows the error message correctly | Not yet run | Not yet run | Not yet run |
 | UM4 | Windows only: with a browser open and `havenkeys-native-host.exe` running (extension installed and connected), install an update; the installer completes without a file-in-use error, and the extension's next request successfully starts a new host process (UP5) | Not yet run | n/a | n/a |
 | UM5 | `.deb`/`.rpm` installs show the "Download" banner/button instead of "Update", and it opens the release page at the fixed `RELEASES_URL` rather than any URL taken from `latest.json` | n/a | n/a | Not yet run (`.deb`/`.rpm` path) |
+| UM6 | Before publishing each release: every `.sig` asset's trusted comment (`base64 -d <file>.sig`, third line) contains `version:<the release version>` (UP3); an install refuses a manifest whose version does not match | Not yet run | Not yet run | Not yet run |

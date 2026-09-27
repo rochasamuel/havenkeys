@@ -262,3 +262,26 @@ pub fn set_update_auto_check(
     }
     Ok(publish(&app))
 }
+
+#[cfg(test)]
+mod tests {
+    /// The shipped updater config, read the way the plugin reads it.
+    fn shipped_config() -> tauri_plugin_updater::Config {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        serde_json::from_value(conf["plugins"]["updater"].clone()).unwrap()
+    }
+
+    #[test]
+    fn the_updater_refuses_downgrades_and_unsigned_versions() {
+        let config = shipped_config();
+        // latest.json is not signed; only the signature binds the version.
+        assert!(config.require_signed_version);
+        assert!(!config.allow_downgrades);
+        assert!(!config.dangerous_insecure_transport_protocol);
+        assert!(!config.dangerous_accept_invalid_certs);
+        assert!(!config.dangerous_accept_invalid_hostnames);
+        assert!(!config.endpoints.is_empty());
+        assert!(config.endpoints.iter().all(|url| url.scheme() == "https"));
+    }
+}

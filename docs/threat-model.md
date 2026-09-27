@@ -427,9 +427,15 @@ redirect host on its own.
   the new one). *Residual:* accepted as a trust assumption — see
   `security-review.md` for its severity.
 * **Replay of an old signed release** to push a device backwards to a version
-  with a known flaw. *Mitigation:* the plugin's comparator installs only a
-  version strictly greater than the one running, so an old, still validly
-  signed release cannot be served as "the update" to a newer install.
+  with a known flaw, including a crafted `latest.json` (which is not signed)
+  that pairs a high version number with an old release's URL and signature.
+  *Mitigation:* `requireSignedVersion: true` — each signature's trusted
+  comment binds the version it was signed for, and an artifact whose signed
+  version differs from the announced one (or that has none) is rejected;
+  the plugin's comparator then installs only a version strictly greater than
+  the one running. *Residual:* depends on every release being built with
+  `@tauri-apps/cli` 2.12.0 or later (checked before publishing, see
+  `development.md`).
 * **Loss of the private key** (not an attack — a lost secret, a departed
   operator with no backup). *Consequence:* no further release can be signed,
   so no installation will ever be offered another automatic update again;

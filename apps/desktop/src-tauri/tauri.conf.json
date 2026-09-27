@@ -73,6 +73,7 @@
       "endpoints": [
         "https://github.com/rochasamuel/havenkeys/releases/latest/download/latest.json"
       ],
+      "requireSignedVersion": true,
       "windows": {
         "installMode": "passive"
       }

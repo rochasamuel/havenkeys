@@ -265,7 +265,12 @@ the security side.
   3. Wait for the workflow to finish, then check the draft's `latest.json`
      asset lists all four platform keys: `windows-x86_64`, `darwin-aarch64`,
      `darwin-x86_64`, `linux-x86_64`.
-  4. Click **Publish release**. Publishing is what makes `/releases/latest`
+  4. Check that every `.sig` asset binds the version: `base64 -d
+     <asset>.sig | sed -n 3p` must show `trusted comment: … version:<the
+     release version>`. The app sets `requireSignedVersion`, so a signature
+     without it (built by a CLI older than 2.12.0) is refused by every
+     install. Keep `@tauri-apps/cli` at 2.12.0 or later.
+  5. Click **Publish release**. Publishing is what makes `/releases/latest`
      (and so the update check) see it — a draft is invisible to both.
 * **The in-app "What's new"** comes from the release's `releaseBody` at
   **build** time, baked into `latest.json`'s `notes` field. Editing the

@@ -640,9 +640,18 @@ release and key-rotation steps.
   returns any bytes — a compromised GitHub account, repository, CDN or
   network path can serve whatever it likes, but cannot make an install accept
   it without the private key.
-* **No downgrade.** The plugin's comparator installs only a version greater
-  than the one running, so a captured old (still validly signed) release
-  cannot be replayed to push a device backwards.
+* **No downgrade.** `latest.json` is fetched over TLS but is not itself
+  signed; only the artifacts are. On its own, the comparator (install only a
+  version greater than the one running) would trust the manifest's `version`
+  field, so a crafted manifest could pair "99.0.0" with an older release's
+  URL and still-valid signature. The updater config therefore sets
+  `requireSignedVersion: true`: the signature's trusted comment (covered by
+  the signature) records the app version it was signed for, and `download`
+  rejects an artifact whose signed version differs from the announced one or
+  that carries no version at all. With both checks, a captured old release
+  cannot be replayed to push a device backwards. Releases must be built with
+  `@tauri-apps/cli` 2.12.0 or later, which writes `version:` into every
+  `.sig`; `development.md` has the pre-publish check.
 * **Order:** download → verify the signature (inside `download`, before any
   bytes are returned) → lock the vault (`state.lock(app, "update")`, the same
   path as quitting) → install → restart. A bad or missing signature aborts
