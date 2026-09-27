@@ -65,11 +65,20 @@ jobs:
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update artifacts (`.sig`) that the app verifies before
+          # installing. The public half is in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: "HavenKeys ${{ github.ref_name }}"
+          # Also the "What's new" text in the app (latest.json `notes`).
           releaseBody: "Installers for this release. Unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first run."
           releaseDraft: true
           prerelease: false
+          # One latest.json for all three platforms; Windows updates through
+          # the NSIS installer, not the MSI.
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.bundle.conf.json ${{ matrix.args }}

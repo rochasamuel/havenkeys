@@ -91,6 +91,11 @@
         "depends": ["pipewire-libs", "mesa-libgbm"]
       }
     },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    },
     "resources": {
       "../../../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
       "../../../LICENSE-MIT": "LICENSE-MIT",
