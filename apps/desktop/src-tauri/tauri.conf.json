@@ -72,6 +72,11 @@
     "targets": "all",
     "category": "Utility",
     "shortDescription": "Local-first password manager",
+    "linux": {
+      "deb": {
+        "depends": ["libpipewire-0.3-0t64 | libpipewire-0.3-0"]
+      }
+    },
     "resources": {
       "../../../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
       "../../../LICENSE-MIT": "LICENSE-MIT",

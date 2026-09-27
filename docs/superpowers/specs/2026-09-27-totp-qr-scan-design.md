@@ -34,6 +34,7 @@ WebView.
 | Libraries | `xcap` (capture) + `rqrr` (decode) + existing `arboard` (clipboard image) | `rxing` (far larger than needed); per-OS native APIs (three implementations) |
 | Several QR codes | List them as "Issuer · account", user picks; exactly one is selected immediately | Refuse; take the first |
 | Core changes | None: the new variant exists only in the desktop's input type | `SecretUpdate::Scanned` in havenkeys-core |
+| Linux capture dependency | Accept xcap's libpipewire-0.3 (build: libpipewire-0.3-dev, libclang-dev) | Own X11-only capture; clipboard only on Linux |
 
 Out of scope: Google Authenticator export QRs (`otpauth-migration://`),
 HOTP, scanning from a camera or an image file.
@@ -165,7 +166,8 @@ so a denial is indistinguishable from "no QR code"; hence the hint.
   scan that reaches the screen). No new Tauri plugin; no renderer permission besides
   `allow-scan-totp-qr`.
 * **Dependencies:** `xcap`, `rqrr` must pass `cargo deny` (licenses,
-  advisories, bans) before the feature lands.
+  advisories, bans) before the feature lands. On Linux, `xcap` links the
+  system `libpipewire-0.3`; the .deb declares it.
 * Docs: `security-model.md` §6 and §7 (command table, count),
   `threat-model.md` (screen capture as a deliberate, bounded capability).
 
