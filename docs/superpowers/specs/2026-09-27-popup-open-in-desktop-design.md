@@ -73,7 +73,7 @@ it.
   `on_lock` / `on_items_changed`, taken by the `Bridge` constructors.
 * `dispatch.rs`: `require_enabled`, unlocked, then the item must be one of
   `find_matches(url, top_url)`'s results (the same origin-bound check
-  `fill_item` relies on). Only then call the hook and return `Opened {}`.
+  `fill_item` relies on). Only then call the hook and return `OpenItem {}`.
 
 ### 4.3 Desktop (`apps/desktop`)
 
