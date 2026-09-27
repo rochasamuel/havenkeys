@@ -103,11 +103,17 @@ pub struct NotAvailable;
 
 pub struct Machine {
     phase: Phase,
+    /// The phase a running check replaced, so a background failure can put
+    /// back an offer it would otherwise hide.
+    before_check: Phase,
 }
 
 impl Machine {
     pub fn new() -> Self {
-        Self { phase: Phase::Idle }
+        Self {
+            phase: Phase::Idle,
+            before_check: Phase::Idle,
+        }
     }
 
     pub fn phase(&self) -> &Phase {
@@ -120,15 +126,17 @@ impl Machine {
         match self.phase {
             Phase::Checking | Phase::Downloading { .. } | Phase::Installing => false,
             _ => {
-                self.phase = Phase::Checking;
+                self.before_check = std::mem::replace(&mut self.phase, Phase::Checking);
                 true
             }
         }
     }
 
     /// A background check that fails is not worth interrupting anyone for;
-    /// only a check the user asked for reports failure.
+    /// only a check the user asked for reports failure. A background failure
+    /// keeps an update already on offer (the found `Update` is kept too).
     pub fn finish_check(&mut self, outcome: CheckOutcome, manual: bool) {
+        let before = std::mem::replace(&mut self.before_check, Phase::Idle);
         self.phase = match outcome {
             CheckOutcome::Found { version, notes } => Phase::Available {
                 version,
@@ -136,7 +144,10 @@ impl Machine {
             },
             CheckOutcome::UpToDate => Phase::Idle,
             CheckOutcome::Failed if manual => Phase::Failed { during: Stage::Check },
-            CheckOutcome::Failed => Phase::Idle,
+            CheckOutcome::Failed => match before {
+                offer @ Phase::Available { .. } => offer,
+                _ => Phase::Idle,
+            },
         };
     }
 
@@ -303,6 +314,41 @@ mod tests {
         assert_eq!(m.phase(), &Phase::Failed { during: Stage::Check });
         // A failure does not block the next check.
         assert!(m.begin_check());
+    }
+
+    #[test]
+    fn a_failed_background_check_keeps_the_offer() {
+        let mut m = Machine::new();
+        m.begin_check();
+        m.finish_check(found("0.9.0"), false);
+        assert!(m.begin_check());
+        m.finish_check(CheckOutcome::Failed, false);
+        assert_eq!(
+            m.phase(),
+            &Phase::Available { version: "0.9.0".into(), notes: "Fixes.".into() }
+        );
+        // The offer can still be installed.
+        assert_eq!(m.begin_install(), Ok("0.9.0".into()));
+    }
+
+    #[test]
+    fn a_failed_manual_check_is_reported_even_with_an_offer() {
+        let mut m = Machine::new();
+        m.begin_check();
+        m.finish_check(found("0.9.0"), false);
+        m.begin_check();
+        m.finish_check(CheckOutcome::Failed, true);
+        assert_eq!(m.phase(), &Phase::Failed { during: Stage::Check });
+    }
+
+    #[test]
+    fn a_failed_background_check_after_a_failure_goes_idle() {
+        let mut m = Machine::new();
+        m.begin_check();
+        m.finish_check(CheckOutcome::Failed, true);
+        m.begin_check();
+        m.finish_check(CheckOutcome::Failed, false);
+        assert_eq!(m.phase(), &Phase::Idle);
     }
 
     #[test]
