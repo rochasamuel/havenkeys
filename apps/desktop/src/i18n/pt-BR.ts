@@ -518,6 +518,30 @@ export const ptBR: Messages = {
     deleteExport: "Excluir o arquivo de exportação",
   },
 
+  updates: {
+    available: (version: string) => `O HavenKeys ${version} está disponível.`,
+    whatsNew: "Novidades",
+    hideNotes: "Ocultar novidades",
+    update: "Atualizar",
+    download: "Baixar",
+    later: "Depois",
+    restartNote: "Atualizar bloqueia o HavenKeys e o reinicia.",
+    downloading: (version: string, percent: number | null) =>
+      percent === null ? `Baixando o HavenKeys ${version}…` : `Baixando o HavenKeys ${version}… ${percent}%`,
+    installing: "Instalando a atualização…",
+    failed: "A atualização falhou. Tente novamente mais tarde.",
+    tryAgain: "Tentar novamente",
+    title: "Atualizações",
+    autoCheck: "Procurar atualizações automaticamente",
+    checkNow: "Procurar agora",
+    checking: "Procurando…",
+    upToDate: "O HavenKeys está atualizado.",
+    checkFailed: "Não foi possível procurar atualizações.",
+    version: (version: string) => `Versão ${version}`,
+    note: "O HavenKeys pergunta ao GitHub, onde suas versões são publicadas, se existe uma versão mais nova. As atualizações são assinadas, e nada é instalado até você escolher Atualizar.",
+    manualNote: "Esta cópia foi instalada por um pacote .deb ou .rpm. Novas versões são baixadas pela página de versões.",
+  },
+
   errors: {
     generic: "Algo deu errado. Tente novamente.",
     codes,

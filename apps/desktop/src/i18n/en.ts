@@ -523,6 +523,30 @@ export const en = {
     deleteExport: "Delete the export file",
   },
 
+  updates: {
+    available: (version: string) => `HavenKeys ${version} is available.`,
+    whatsNew: "What’s new",
+    hideNotes: "Hide notes",
+    update: "Update",
+    download: "Download",
+    later: "Later",
+    restartNote: "Updating locks HavenKeys and restarts it.",
+    downloading: (version: string, percent: number | null) =>
+      percent === null ? `Downloading HavenKeys ${version}…` : `Downloading HavenKeys ${version}… ${percent}%`,
+    installing: "Installing the update…",
+    failed: "The update failed. Try again later.",
+    tryAgain: "Try again",
+    title: "Updates",
+    autoCheck: "Check for updates automatically",
+    checkNow: "Check now",
+    checking: "Checking…",
+    upToDate: "HavenKeys is up to date.",
+    checkFailed: "Could not check for updates.",
+    version: (version: string) => `Version ${version}`,
+    note: "HavenKeys asks GitHub, where its releases are published, whether a newer version exists. Updates are signed, and nothing is installed until you choose Update.",
+    manualNote: "This copy was installed from a .deb or .rpm package. New versions are downloaded from the release page.",
+  },
+
   errors: {
     /** Anything that is not an error from the core. */
     generic: "Something went wrong. Try again.",
