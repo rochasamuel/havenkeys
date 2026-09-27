@@ -181,8 +181,9 @@ impl AppState {
     }
 
     /// Hold a scan's codes. The vault guard is held throughout so this is
-    /// ordered against `lock()`, which clears the slot after taking that
-    /// guard: a scan that finishes as the vault locks leaves nothing behind.
+    /// ordered against `lock()`, which clears the slot after it has locked
+    /// the vault and released that guard: a scan that finishes as the vault
+    /// locks leaves nothing behind.
     pub fn store_totp_scan(&self, codes: Vec<ScannedCode>) -> CmdResult<Vec<ScannedTotp>> {
         let vault = self.vault()?;
         if !vault.is_unlocked() {
@@ -200,9 +201,8 @@ impl AppState {
     }
 
     pub fn clear_totp_scan(&self) {
-        if let Ok(mut slot) = self.totp_scan.lock() {
-            slot.clear();
-        }
+        let mut slot = self.totp_scan.lock().unwrap_or_else(|p| p.into_inner());
+        slot.clear();
     }
 
     /// Drop the cached HTTP client, so a stale one for an old server is

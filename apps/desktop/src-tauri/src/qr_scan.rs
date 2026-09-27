@@ -87,7 +87,13 @@ fn decode_frames(frames: &[Frame], max_pixels: u64) -> Decoded {
     for frame in frames {
         let (w, h) = (frame.width as usize, frame.height as usize);
         let pixels = u64::from(frame.width) * u64::from(frame.height);
-        if w == 0 || h == 0 || frame.rgba.len() != w * h * 4 || pixels > budget {
+        if w == 0 || h == 0 || pixels > budget {
+            continue;
+        }
+        let Some(len) = w.checked_mul(h).and_then(|n| n.checked_mul(4)) else {
+            continue;
+        };
+        if frame.rgba.len() != len {
             continue;
         }
         budget -= pixels;
@@ -265,6 +271,13 @@ mod tests {
         assert!(found.saw_qr);
         assert_eq!(labels(&found.codes), [(Some("GitHub"), Some("alice"))]);
         assert_eq!(found.codes[0].uri.expose(), GITHUB);
+    }
+
+    #[test]
+    fn upper_case_scheme_is_accepted() {
+        let upper = GITHUB.replace("otpauth://totp", "OTPAUTH://TOTP");
+        let found = decode_frames(&[qr_frame(&upper, 4)], MAX_PIXELS);
+        assert_eq!(found.codes.len(), 1);
     }
 
     #[test]

@@ -263,6 +263,14 @@ requests), all origin-bound and rate-limited. See `native-messaging.md`.
   the login's details are sealed or opened); the WebView keeps JavaScript strings until garbage
   collection; the OS may swap pages to disk (we do not `mlock`). Zeroization
   reduces, but does not eliminate, the window in which secrets are in memory.
+* **QR scan buffers.** The screen and clipboard pixel buffers decoded by
+  `scan_totp_qr` are freed right after decoding but not zeroized, and
+  further copies of them live in `xcap`, `arboard` and `rqrr` internals and
+  the OS beyond our control. The clipboard image is fully decoded by
+  `arboard` before the pixel budget applies to it. A crafted QR code that
+  triggered a panic in the `rqrr` decoder would end the app (release builds
+  abort on panic) — an availability issue only, no secret would be exposed.
+  No fuzz target exists yet for the QR decoder.
 
 ## 9. Clipboard
 

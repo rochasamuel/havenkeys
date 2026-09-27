@@ -384,7 +384,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
                         type="button"
                         className="icon-btn"
                         onClick={() => void scanQr()}
-                        disabled={scanning || readOnly}
+                        disabled={scanning || saving || readOnly}
                         aria-label={scanning ? t.editor.scanning : t.editor.scanQr}
                         title={scanning ? t.editor.scanning : t.editor.scanQr}
                       >

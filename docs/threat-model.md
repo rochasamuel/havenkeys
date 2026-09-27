@@ -196,10 +196,14 @@ trustworthy as the extension that reports it.
   the vault file, derive keys, or keep access after lock) but do not claim to
   prevent this.
 * **QR scan as a screen reader.** A compromised renderer can call
-  `scan_totp_qr` while the vault is unlocked, which captures the screen.
-  It receives only tokens and issuer/account labels of TOTP QR codes, never
-  pixels or other text, and a token only lets it save that code into an
-  item, which it could already do by typing one.
+  `scan_totp_qr` while the vault is unlocked, which captures the screen. It
+  can then save into an item a TOTP QR code that is on screen but not yet
+  in the vault (while online, since saving writes to the server), and read
+  live codes for it through `get_totp_code` — as it already can for every
+  item it can see. It never receives pixels, other decoded text, or the
+  TOTP seed itself (`reveal_secret` refuses TOTP). On X11, Windows and
+  macOS (after the one-time permission) the capture is silent; Wayland's
+  portal prompts every time.
 
 ### T6 — Accidental disclosure
 Secrets must not end up in logs, error messages, panic messages, `Debug`
