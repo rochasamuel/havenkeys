@@ -1587,6 +1587,18 @@ button {
   box-shadow: inset 0 0 0 1.5px var(--brass);
 }
 
+/* The group clips to its rounded corners; the end rows round their ring to
+   match (the group's 12px less its 1px border) so it isn't shaved off. */
+.group > .edit-row:first-child {
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+}
+
+.group > .edit-row:last-child {
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
+}
+
 /* The Notes area is the group itself; its ring goes on the group. */
 .group:has(> .edit-area:focus-visible) {
   border-color: var(--brass);
