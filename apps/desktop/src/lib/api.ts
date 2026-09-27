@@ -24,6 +24,7 @@ import type {
   Settings,
   SyncReport,
   TotpCode,
+  UpdateStatus,
   VaultStatus,
 } from "./types";
 
@@ -138,6 +139,14 @@ export const api = {
   /** Relabel the tray menu. Rust accepts only "en" and "pt-BR". */
   setUiLanguage: (lang: "en" | "pt-BR") => call<void>("set_ui_language", { lang }),
 
+  /** In-app updates. Rust talks to GitHub; the UI only sees this status. */
+  updateStatus: () => call<UpdateStatus>("update_status"),
+  /** "Check now". A failed check shows in the status (`failed`/`check`), not as a rejection. */
+  checkForUpdate: () => call<UpdateStatus>("check_for_update"),
+  /** Download, verify, lock, install and restart — or, for a .deb/.rpm install, open the release page. */
+  installUpdate: () => call<void>("install_update"),
+  setUpdateAutoCheck: (enabled: boolean) => call<UpdateStatus>("set_update_auto_check", { enabled }),
+
   onLocked: (handler: (reason: string) => void): Promise<UnlistenFn> =>
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),
   /** A login was saved from the browser extension. Carries no data. */
@@ -162,4 +171,6 @@ export const api = {
     listen<{ keychainWarning: string | null }>("vault://removed", (e) =>
       handler({ keychainWarning: e.payload?.keychainWarning ?? null }),
     ),
+  onUpdateStatus: (handler: (status: UpdateStatus) => void): Promise<UnlistenFn> =>
+    listen<UpdateStatus>("updates://status", (e) => handler(e.payload)),
 };

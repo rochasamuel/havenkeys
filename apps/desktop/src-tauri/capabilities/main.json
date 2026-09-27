@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "The only capability: the main window may call exactly these commands, listen for events, and start a window drag from its own title-bar areas (macOS overlay title bar). No plugins, no filesystem, no shell, no network.",
+  "description": "The only capability: the main window may call exactly these commands, listen for events, and start a window drag from its own title-bar areas (macOS overlay title bar). No plugin commands, no filesystem, no shell, no network. (Rust itself checks GitHub for signed updates; see updater.rs.)",
   "windows": [
     "main"
   ],
@@ -47,6 +47,10 @@
     "allow-set-launch-at-login",
     "allow-import-1pux",
     "allow-delete-import-file",
-    "allow-set-ui-language"
+    "allow-set-ui-language",
+    "allow-update-status",
+    "allow-check-for-update",
+    "allow-install-update",
+    "allow-set-update-auto-check"
   ]
 }

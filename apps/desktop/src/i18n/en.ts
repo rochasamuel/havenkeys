@@ -47,7 +47,10 @@ export type ErrorCode =
   | "signed_out"
   | "rate_limited"
   | "invalid_server_url"
-  | "sync_failed";
+  | "sync_failed"
+  | "update_unavailable"
+  | "update_failed"
+  | "update_settings";
 
 /**
  * The core's errors, by code (havenkeys-core Error::code and the
@@ -87,6 +90,9 @@ const codes: Record<ErrorCode, string | null> = {
   screen_capture: "Could not capture the screen.",
   scan_expired: "The scanned code expired. Scan it again.",
   autostart: "Could not change whether HavenKeys opens at login.",
+  update_unavailable: "There is no update to install.",
+  update_failed: "The update could not be installed. Try again later.",
+  update_settings: "Could not save the update setting.",
   unsupported_language: "Unsupported language.",
   keychain_unavailable:
     "Your system keychain did not answer. Approve its prompt if one is showing, then try again.",

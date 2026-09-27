@@ -64,6 +64,9 @@ pub fn set_ui_language(app: AppHandle, lang: String) -> CmdResult<()> {
     Ok(())
 }
 
+/// Show or hide the tray's "Update available" item. (Task 3.)
+pub fn set_update_available(_app: &AppHandle, _available: bool) {}
+
 /// Bring the main window back (from the tray or a minimized state).
 pub fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {

@@ -43,6 +43,9 @@ const codes: Record<ErrorCode, string | null> = {
   screen_capture: "Não foi possível capturar a tela.",
   scan_expired: "O código lido expirou. Leia o QR code de novo.",
   autostart: "Não foi possível alterar se o HavenKeys abre ao iniciar a sessão.",
+  update_unavailable: "Não há atualização para instalar.",
+  update_failed: "Não foi possível instalar a atualização. Tente novamente mais tarde.",
+  update_settings: "Não foi possível salvar a configuração de atualizações.",
   unsupported_language: "Idioma não suportado.",
   keychain_unavailable:
     "O chaveiro do sistema não respondeu. Aprove a solicitação dele, se houver uma aberta, e tente novamente.",

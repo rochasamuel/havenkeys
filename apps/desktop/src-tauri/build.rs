@@ -41,6 +41,10 @@ const COMMANDS: &[&str] = &[
     "import_1pux",
     "delete_import_file",
     "set_ui_language",
+    "update_status",
+    "check_for_update",
+    "install_update",
+    "set_update_auto_check",
 ];
 
 fn main() {
