@@ -3,6 +3,8 @@
 //! The tray never shows item data; the tooltip and menu are static text,
 //! taken from a fixed table in the UI's language.
 
+use std::sync::Mutex;
+
 use crate::state::{AppState, CmdError, CmdResult};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -30,11 +32,11 @@ impl UiLanguage {
         }
     }
 
-    /// Labels for the menu items `open`, `lock` and `quit`, in that order.
-    pub fn labels(self) -> [&'static str; 3] {
+    /// Labels for the menu items `open`, `lock`, `quit` and `update`, in that order.
+    pub fn labels(self) -> [&'static str; 4] {
         match self {
-            Self::En => ["Open HavenKeys", "Lock", "Quit HavenKeys"],
-            Self::PtBr => ["Abrir HavenKeys", "Bloquear", "Sair do HavenKeys"],
+            Self::En => ["Open HavenKeys", "Lock", "Quit HavenKeys", "Update available"],
+            Self::PtBr => ["Abrir HavenKeys", "Bloquear", "Sair do HavenKeys", "Atualização disponível"],
         }
     }
 }
@@ -45,18 +47,23 @@ struct TrayItems {
     open: MenuItem<Wry>,
     lock: MenuItem<Wry>,
     quit: MenuItem<Wry>,
+    /// Put at the top of the menu only while an update is on offer.
+    update: MenuItem<Wry>,
+    menu: Menu<Wry>,
+    update_shown: Mutex<bool>,
 }
 
 /// Relabel the tray menu in the UI's language. Only `"en"` and `"pt-BR"`
 /// are accepted.
 #[tauri::command]
 pub fn set_ui_language(app: AppHandle, lang: String) -> CmdResult<()> {
-    let [open, lock, quit] = UiLanguage::parse(&lang)?.labels();
+    let [open, lock, quit, update] = UiLanguage::parse(&lang)?.labels();
     if let Some(items) = app.try_state::<TrayItems>() {
         for (item, label) in [
             (&items.open, open),
             (&items.lock, lock),
             (&items.quit, quit),
+            (&items.update, update),
         ] {
             item.set_text(label).map_err(|_| CmdError::internal())?;
         }
@@ -64,8 +71,27 @@ pub fn set_ui_language(app: AppHandle, lang: String) -> CmdResult<()> {
     Ok(())
 }
 
-/// Show or hide the tray's "Update available" item. (Task 3.)
-pub fn set_update_available(_app: &AppHandle, _available: bool) {}
+/// Show or hide the tray's "Update available" item. It carries no version
+/// or notes: choosing it only opens the window, where the banner is.
+pub fn set_update_available(app: &AppHandle, available: bool) {
+    let Some(items) = app.try_state::<TrayItems>() else {
+        return;
+    };
+    let Ok(mut shown) = items.update_shown.lock() else {
+        return;
+    };
+    if *shown == available {
+        return;
+    }
+    let changed = if available {
+        items.menu.insert(&items.update, 0)
+    } else {
+        items.menu.remove(&items.update)
+    };
+    if changed.is_ok() {
+        *shown = available;
+    }
+}
 
 /// Bring the main window back (from the tray or a minimized state).
 pub fn show_main_window(app: &AppHandle) {
@@ -78,10 +104,11 @@ pub fn show_main_window(app: &AppHandle) {
 
 pub fn install(app: &tauri::App) -> tauri::Result<()> {
     // English until the UI reports its language (`set_ui_language`).
-    let [open_label, lock_label, quit_label] = UiLanguage::En.labels();
+    let [open_label, lock_label, quit_label, update_label] = UiLanguage::En.labels();
     let open = MenuItem::with_id(app, "open", open_label, true, None::<&str>)?;
     let lock = MenuItem::with_id(app, "lock", lock_label, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", update_label, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&open, &lock, &PredefinedMenuItem::separator(app)?, &quit],
@@ -106,6 +133,7 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
                 }
                 app.exit(0);
             }
+            "update" => show_main_window(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -122,7 +150,14 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
         builder = builder.icon(icon.clone());
     }
     builder.build(app)?;
-    app.manage(TrayItems { open, lock, quit });
+    app.manage(TrayItems {
+        open,
+        lock,
+        quit,
+        update,
+        menu,
+        update_shown: Mutex::new(false),
+    });
     Ok(())
 }
 
@@ -147,11 +182,11 @@ mod tests {
     fn the_tray_labels_come_from_the_fixed_table() {
         assert_eq!(
             UiLanguage::En.labels(),
-            ["Open HavenKeys", "Lock", "Quit HavenKeys"]
+            ["Open HavenKeys", "Lock", "Quit HavenKeys", "Update available"]
         );
         assert_eq!(
             UiLanguage::PtBr.labels(),
-            ["Abrir HavenKeys", "Bloquear", "Sair do HavenKeys"]
+            ["Abrir HavenKeys", "Bloquear", "Sair do HavenKeys", "Atualização disponível"]
         );
     }
 }
