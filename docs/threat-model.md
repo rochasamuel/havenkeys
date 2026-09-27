@@ -380,6 +380,12 @@ rule #6 for one bounded case.
   global and per-login off switches. *Residual:* not a boundary against a
   compromised extension, which can call `fill_item` / `get_totp` directly
   regardless (`security-review.md` AS1).
+* **Raising the desktop window.** A compromised extension can send
+  `open_item` for a login saved for the page it reports, which brings the
+  desktop window forward on that login's editor. It receives nothing, the
+  editor saves nothing without the user, an unsaved edit elsewhere is
+  protected by a discard prompt, and the request shares the `secret` rate
+  limit.
 * **A late step confirmation from a replaced run.** `cs_run_step` carries no
   run identity of its own — only the sender's tab, frame and origin, which
   the background compares against the live run. In a narrow race, a leftover

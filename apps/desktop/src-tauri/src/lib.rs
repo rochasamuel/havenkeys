@@ -132,6 +132,14 @@ pub fn run() {
                     .map_err(sync::bridge_error)
                 },
             );
+            // "Edit in HavenKeys" from the extension popup. The bridge has
+            // already checked the item is saved for the page the popup was
+            // opened on; this only raises the window and tells the UI.
+            let open_handle = app.handle().clone();
+            bridge.set_open_item_hook(move |id| {
+                tray::show_main_window(&open_handle);
+                let _ = open_handle.emit(state::OPEN_ITEM_EVENT, id.to_string());
+            });
             app.manage(AppState::new(
                 vault,
                 bridge.clone(),

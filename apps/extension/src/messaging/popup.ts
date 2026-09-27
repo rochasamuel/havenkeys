@@ -12,7 +12,9 @@ export type PopupRequest =
   /** Fill this login into the active tab's login form. */
   | { type: "popup_fill"; itemId: string }
   /** Fill this login's current one-time code into the active tab. */
-  | { type: "popup_fill_totp"; itemId: string };
+  | { type: "popup_fill_totp"; itemId: string }
+  /** Show this login in the desktop app's editor. */
+  | { type: "popup_open_item"; itemId: string };
 
 export type PopupState =
   | { kind: "host_unavailable" }
@@ -44,6 +46,7 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
     case "popup_totp":
     case "popup_fill":
     case "popup_fill_totp":
+    case "popup_open_item":
       return keys.length === 2 && typeof o.itemId === "string" && UUID.test(o.itemId)
         ? { type: o.type, itemId: o.itemId }
         : null;

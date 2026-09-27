@@ -125,10 +125,14 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `check_passkey_create` | `url`, `topUrl`?, `rpId`, `userName`, `excludeCredentials` (list), `conditional` (bool) | yes | lookup |
 | `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null), `conditional` (bool) | yes | secret; a server write |
 | `passkey_status` | `url`, `topUrl`? | yes | lookup |
+| `open_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
 be omitted, which means null.
+
+`open_item` shows the desktop window with that login open in the editor; the
+item must be saved for `url`, like `fill_item`. Nothing is returned.
 
 `conditional` on `check_passkey_create` and `passkey_create` marks the
 site's automatic passkey upgrade (`create()` with `mediation:
@@ -161,6 +165,7 @@ kept in the item's history. `passkey_create` adds a passkey (see
 {"v":1,"id":16,"result":{"type":"check_passkey_create","excluded":false,"candidates":[{"itemId":"…","title":"GitHub","username":"octo"}],"upgrade":{"kind":"auto","itemId":"…"}}}
 {"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
 {"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
+{"v":1,"id":10,"result":{"type":"open_item"}}
 {"v":1,"id":10,"error":{"code":"denied","message":"This item is not saved for this website."}}
 ```
 

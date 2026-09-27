@@ -39,6 +39,7 @@ describe("parsePopupRequest", () => {
     expect(parsePopupRequest({ type: "popup_state" })).toEqual({ type: "popup_state" });
     expect(parsePopupRequest({ type: "popup_lock" })).toEqual({ type: "popup_lock" });
     expect(parsePopupRequest({ type: "popup_totp", itemId: ID })).toEqual({ type: "popup_totp", itemId: ID });
+    expect(parsePopupRequest({ type: "popup_open_item", itemId: ID })).toEqual({ type: "popup_open_item", itemId: ID });
   });
   it("rejects everything else, including a popup-supplied URL", () => {
     for (const m of [
@@ -50,6 +51,9 @@ describe("parsePopupRequest", () => {
       { type: "fill_item", itemId: ID, url: "https://github.com" },
       { type: "popup_fill", itemId: ID, url: "https://github.com" },
       { type: "popup_fill", itemId: ID, tabId: 3 },
+      { type: "popup_open_item", itemId: ID, url: "https://github.com" },
+      { type: "popup_open_item", itemId: "x" },
+      { type: "open_item", itemId: ID, url: "https://github.com" },
     ]) {
       expect(parsePopupRequest(m)).toBeNull();
     }
@@ -156,5 +160,30 @@ describe("popup handler", () => {
     const h2 = createPopupHandler(c, async () => ({ id: 7, url: "about:blank" }), async () => 1);
     expect((await h2.handle({ type: "popup_fill", itemId: ID })).ok).toBe(false);
     expect(c.seen).toHaveLength(1);
+  });
+
+  it("asks the desktop to open the login, using the tab's URL", async () => {
+    const c = fakeClient(() => ({ type: "open_item" }));
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login?next=x#y" }));
+    expect(await h.handle({ type: "popup_open_item", itemId: ID })).toEqual({ ok: true, value: null });
+    expect(c.seen).toEqual([{ type: "open_item", itemId: ID, url: "https://github.com/login" }]);
+  });
+
+  it("refuses to open on non-web pages without contacting the host", async () => {
+    const c = fakeClient(() => ({}));
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "chrome://newtab/" }));
+    expect((await h.handle({ type: "popup_open_item", itemId: ID })).ok).toBe(false);
+    expect(c.seen).toHaveLength(0);
+  });
+
+  it("passes the desktop's refusal to the popup", async () => {
+    const c = fakeClient(() => {
+      throw new BridgeError("denied", "This item is not saved for this website.");
+    });
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://evil.com/" }));
+    expect(await h.handle({ type: "popup_open_item", itemId: ID })).toEqual({
+      ok: false,
+      message: "This item is not saved for this website.",
+    });
   });
 });

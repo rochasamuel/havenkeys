@@ -16,7 +16,8 @@ pub enum RequestClass {
     Lookup,
     /// `fill_item`, `get_totp`, `passkey_get`, `passkey_create`: return a
     /// secret (a password, TOTP code, WebAuthn assertion, or a new
-    /// passkey's registration).
+    /// passkey's registration); `open_item`, which has a visible effect (it
+    /// raises the desktop window).
     Secret,
 }
 

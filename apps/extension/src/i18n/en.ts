@@ -52,6 +52,7 @@ export const en = {
     code: "Code",
     codeTitle: "Show the one-time code",
     fillCodeTitle: "Fill this code into the page",
+    edit: "Edit in HavenKeys",
     pill: {
       offline: "Offline",
       locked: "Locked",

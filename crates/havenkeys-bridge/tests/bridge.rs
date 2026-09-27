@@ -24,6 +24,7 @@ struct Fixture {
     bridge: Bridge,
     locks: Arc<AtomicUsize>,
     changes: Arc<AtomicUsize>,
+    opened: Arc<Mutex<Vec<Uuid>>>,
     github: Uuid,
     bank: Uuid,
     note: Uuid,
@@ -158,11 +159,16 @@ fn build_fixture(writer: Option<()>) -> Fixture {
             })
         }
     };
+    let opened = Arc::new(Mutex::new(Vec::new()));
+    let o2 = opened.clone();
+    bridge.set_open_item_hook(move |id| o2.lock().unwrap().push(id));
+
     Fixture {
         vault,
         bridge,
         locks,
         changes,
+        opened,
         github,
         bank,
         note,
@@ -431,6 +437,115 @@ fn a1_frame_needs_matching_top_page() {
         serde_json::json!({"type": "get_totp", "itemId": f.github, "url": url, "topUrl": "https://evil.com/"}),
     );
     assert_eq!(error_code(&r), Some("denied"));
+}
+
+fn open(f: &Fixture, id: Uuid, url: &str) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({"type": "open_item", "itemId": id, "url": url}),
+    )
+}
+
+#[test]
+fn open_item_opens_a_login_saved_for_the_page() {
+    let f = fixture();
+    let r = open(&f, f.github, "https://github.com/login");
+    assert_eq!(r["result"], serde_json::json!({"type": "open_item"}));
+    assert_eq!(*f.opened.lock().unwrap(), vec![f.github]);
+}
+
+#[test]
+fn open_item_is_origin_bound() {
+    for url in [
+        "https://evil.com/",
+        "https://github.com.evil.com/",
+        "https://evilgithub.com/",
+        "not a url",
+    ] {
+        let f = fixture();
+        assert_eq!(
+            error_code(&open(&f, f.github, url)),
+            Some("denied"),
+            "{url}"
+        );
+        assert!(f.opened.lock().unwrap().is_empty(), "{url}");
+    }
+    let f = fixture();
+    assert_eq!(
+        error_code(&open(&f, f.bank, "https://github.com/")),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&open(&f, f.note, "https://github.com/")),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&open(&f, Uuid::new_v4(), "https://github.com/")),
+        Some("denied")
+    );
+    assert!(f.opened.lock().unwrap().is_empty());
+}
+
+#[test]
+fn open_item_refuses_when_locked_or_disabled() {
+    let f = fixture();
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&open(&f, f.github, "https://github.com/")),
+        Some("locked")
+    );
+
+    let f = fixture();
+    {
+        let mut v = f.vault.lock().unwrap();
+        let s = v.settings().unwrap();
+        v.update_settings(Settings {
+            browser_integration: false,
+            ..s
+        })
+        .unwrap();
+    }
+    assert_eq!(
+        error_code(&open(&f, f.github, "https://github.com/")),
+        Some("integration_disabled")
+    );
+    assert!(f.opened.lock().unwrap().is_empty());
+}
+
+#[test]
+fn open_item_is_rate_limited_as_a_secret_request() {
+    let f = fixture();
+    let mut limited = false;
+    for _ in 0..20 {
+        if error_code(&open(&f, f.github, "https://github.com/")) == Some("rate_limited") {
+            limited = true;
+            break;
+        }
+    }
+    assert!(limited);
+    // It shares the Secret bucket with fill_item.
+    let f = fixture();
+    for _ in 0..10 {
+        open(&f, Uuid::new_v4(), "https://github.com/");
+    }
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+}
+
+#[test]
+fn open_item_without_a_hook_is_an_internal_error() {
+    let f = fixture();
+    let bare = Bridge::new(f.vault.clone(), || {});
+    let r = bare.handle_frame(&request(
+        1,
+        serde_json::json!({
+            "type": "open_item", "itemId": f.github, "url": "https://github.com/"
+        }),
+    ));
+    let r: serde_json::Value = serde_json::from_slice(&r.to_bytes().unwrap()).unwrap();
+    assert_eq!(error_code(&r), Some("internal"));
 }
 
 #[test]

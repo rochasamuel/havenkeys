@@ -25,6 +25,8 @@ use tauri::{AppHandle, Emitter};
 pub const LOCKED_EVENT: &str = "vault://locked";
 /// Items were added or changed from outside the UI (the browser extension).
 pub const ITEMS_CHANGED_EVENT: &str = "vault://items-changed";
+/// The browser extension asked to edit this item (payload: its UUID).
+pub const OPEN_ITEM_EVENT: &str = "vault://open-item";
 
 /// Whether this device has a server session. Independent of the lock state:
 /// a locked vault is never online, and an unlocked one may be offline

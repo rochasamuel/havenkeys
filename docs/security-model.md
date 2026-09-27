@@ -244,9 +244,13 @@ convenience only.
 
 The browser extension does not use these commands. It reaches the core
 through the native-messaging bridge, which has its own much narrower request
-set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`,
+set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`, `open_item`,
 `generate_password`, `check_login`, `save_login`, and the four passkey
 requests), all origin-bound and rate-limited. See `native-messaging.md`.
+
+`open_item` returns nothing: when the item is a login saved for the page,
+the desktop shows its window with that login's editor open. It is in the
+`secret` rate class because it has a visible effect.
 
 ## 8. Memory handling
 

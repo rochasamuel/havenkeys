@@ -1562,6 +1562,14 @@ button {
   animation: rise var(--t-med) var(--ease) both;
 }
 
+.open-confirm {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--brass);
+  border-radius: 12px;
+  background: var(--sel);
+}
+
 /* --------------------------------------------------------------- editor */
 
 .editor-head h2,

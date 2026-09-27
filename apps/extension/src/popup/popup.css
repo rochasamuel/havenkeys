@@ -309,6 +309,11 @@ main {
   border-color: var(--brass-hi);
 }
 
+.actions .row-icon {
+  width: 28px;
+  height: 28px;
+}
+
 .code {
   font: 500 15px/1 "JetBrains Mono", ui-monospace, monospace;
   letter-spacing: 0.06em;
