@@ -17,6 +17,8 @@ mod secret_store;
 mod state;
 mod sync;
 mod tray;
+#[allow(dead_code)]
+mod updates;
 
 use havenkeys_bridge::Bridge;
 use havenkeys_core::store::Store;
