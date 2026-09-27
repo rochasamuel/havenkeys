@@ -10,6 +10,7 @@ mod commands;
 mod device;
 mod import;
 mod native_host;
+mod qr_scan;
 mod secret_store;
 mod state;
 mod sync;
