@@ -69,6 +69,26 @@ function smallButton(text: string, title: string): HTMLButtonElement {
   return b;
 }
 
+const SVG = "http://www.w3.org/2000/svg";
+
+/** A square icon button; the icon is built with createElementNS, never parsed from markup. */
+function iconButton(pathData: string, label: string): HTMLButtonElement {
+  const b = h("button", { className: "icon-btn row-icon" });
+  b.type = "button";
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG, "path");
+  path.setAttribute("d", pathData);
+  svg.append(path);
+  b.append(svg);
+  return b;
+}
+
+const PENCIL = "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10v3zM14 8l3 3";
+
 /** Fill into the page; the popup closes on success. */
 async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: HTMLElement): Promise<void> {
   btn.disabled = true;
@@ -123,6 +143,11 @@ function matchRow(m: Match): HTMLElement {
     slot.append(show);
     actions.append(slot);
   }
+  // Last in the row: open this login in the desktop app. Closes the popup
+  // on success, like a fill, since focus moves to the app.
+  const edit = iconButton(PENCIL, t.popup.edit);
+  edit.addEventListener("click", () => void fillFromPopup(edit, { type: "popup_open_item", itemId: m.id }, status));
+  actions.append(edit);
   // The status line (a fill or code error) goes under the whole row, so a
   // long message gets the popup's full width instead of the text column's.
   row.append(actions, status);

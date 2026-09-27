@@ -126,6 +126,18 @@ export function createPopupHandler(
         return fillFromPopup(req.itemId, false);
       case "popup_fill_totp":
         return fillFromPopup(req.itemId, true);
+      case "popup_open_item": {
+        // Same rule as fill: the URL is the tab's, and the desktop opens
+        // only a login saved for it.
+        const url = pageUrlForRequest(await activeTabUrl());
+        if (!url) return { ok: false, message: t.errors.pageNotSupported };
+        try {
+          await client.request({ type: "open_item", itemId: req.itemId, url });
+          return { ok: true, value: null };
+        } catch (e) {
+          return fail(e);
+        }
+      }
     }
   }
 

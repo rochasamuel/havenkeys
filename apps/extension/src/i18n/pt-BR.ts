@@ -20,6 +20,7 @@ export const ptBR: Messages = {
     code: "Código",
     codeTitle: "Mostrar o código de verificação",
     fillCodeTitle: "Preencher a página com este código",
+    edit: "Editar no HavenKeys",
     pill: {
       offline: "Offline",
       locked: "Bloqueado",
