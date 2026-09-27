@@ -52,7 +52,10 @@ impl ScanSlot {
             });
             entries.push((token, code.uri));
         }
-        self.batch = Some(Batch { created: now, entries });
+        self.batch = Some(Batch {
+            created: now,
+            entries,
+        });
         Ok(previews)
     }
 
@@ -92,7 +95,9 @@ mod tests {
     fn a_token_finds_its_code_until_cleared() {
         let t0 = Instant::now();
         let mut slot = ScanSlot::default();
-        let out = slot.replace(vec![code("A", "uri-a"), code("B", "uri-b")], t0).unwrap();
+        let out = slot
+            .replace(vec![code("A", "uri-a"), code("B", "uri-b")], t0)
+            .unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[1].issuer.as_deref(), Some("B"));
         assert_eq!(out[0].token.len(), 32);
@@ -111,7 +116,9 @@ mod tests {
         assert!(slot.get("00", t0).is_none());
         let out = slot.replace(vec![code("A", "uri-a")], t0).unwrap();
         assert!(slot.get("not-a-token", t0).is_none());
-        assert!(slot.get(&out[0].token, t0 + SCAN_TTL - Duration::from_secs(1)).is_some());
+        assert!(slot
+            .get(&out[0].token, t0 + SCAN_TTL - Duration::from_secs(1))
+            .is_some());
         assert!(slot.get(&out[0].token, t0 + SCAN_TTL).is_none());
     }
 
@@ -128,7 +135,9 @@ mod tests {
     #[test]
     fn the_preview_never_carries_the_uri() {
         let mut slot = ScanSlot::default();
-        let out = slot.replace(vec![code("A", "otpauth://totp/x?secret=S")], Instant::now()).unwrap();
+        let out = slot
+            .replace(vec![code("A", "otpauth://totp/x?secret=S")], Instant::now())
+            .unwrap();
         let json = serde_json::to_string(&out).unwrap();
         assert!(!json.contains("otpauth"));
         assert!(json.contains("\"token\""));

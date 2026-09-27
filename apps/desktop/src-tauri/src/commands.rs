@@ -669,7 +669,11 @@ pub async fn create_item(app: AppHandle, input: ItemInputWire) -> CmdResult<Item
 }
 
 #[tauri::command]
-pub async fn update_item(app: AppHandle, id: Uuid, input: ItemInputWire) -> CmdResult<ItemOverview> {
+pub async fn update_item(
+    app: AppHandle,
+    id: Uuid,
+    input: ItemInputWire,
+) -> CmdResult<ItemOverview> {
     let uses_scan = input.uses_scan();
     let staged = {
         let state = app.state::<AppState>();

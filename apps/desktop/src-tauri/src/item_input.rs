@@ -105,7 +105,11 @@ mod tests {
         let mut slot = ScanSlot::default();
         let token = slot
             .replace(
-                vec![ScannedCode { uri: SecretString::new(uri.into()), issuer: None, account: None }],
+                vec![ScannedCode {
+                    uri: SecretString::new(uri.into()),
+                    issuer: None,
+                    account: None,
+                }],
                 now,
             )
             .unwrap()
@@ -122,7 +126,9 @@ mod tests {
         assert!(input.uses_scan());
         let input = input.resolve(&slot, now).unwrap();
         match input.totp {
-            SecretUpdate::Set(v) => assert_eq!(v.expose(), "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP"),
+            SecretUpdate::Set(v) => {
+                assert_eq!(v.expose(), "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP")
+            }
             _ => panic!("expected Set"),
         }
         assert_eq!(input.title, "GitHub");
@@ -136,10 +142,15 @@ mod tests {
     fn an_unknown_or_expired_token_is_refused() {
         let now = Instant::now();
         let (slot, token) = slot_with("otpauth://totp/x?secret=JBSWY3DPEHPK3PXP", now);
-        let err = wire(json!({ "op": "scanned", "value": "feed" })).resolve(&slot, now).err().unwrap();
+        let err = wire(json!({ "op": "scanned", "value": "feed" }))
+            .resolve(&slot, now)
+            .err()
+            .unwrap();
         assert_eq!(err.code, "scan_expired");
         let late = now + crate::scan_slot::SCAN_TTL;
-        assert!(wire(json!({ "op": "scanned", "value": token })).resolve(&slot, late).is_err());
+        assert!(wire(json!({ "op": "scanned", "value": token }))
+            .resolve(&slot, late)
+            .is_err());
     }
 
     #[test]
@@ -148,9 +159,22 @@ mod tests {
         let now = Instant::now();
         let keep = wire(json!({ "op": "keep" }));
         assert!(!keep.uses_scan());
-        assert!(matches!(keep.resolve(&slot, now).unwrap().totp, SecretUpdate::Keep));
-        assert!(matches!(wire(json!({ "op": "clear" })).resolve(&slot, now).unwrap().totp, SecretUpdate::Clear));
-        match wire(json!({ "op": "set", "value": "JBSWY3DPEHPK3PXP" })).resolve(&slot, now).unwrap().totp {
+        assert!(matches!(
+            keep.resolve(&slot, now).unwrap().totp,
+            SecretUpdate::Keep
+        ));
+        assert!(matches!(
+            wire(json!({ "op": "clear" }))
+                .resolve(&slot, now)
+                .unwrap()
+                .totp,
+            SecretUpdate::Clear
+        ));
+        match wire(json!({ "op": "set", "value": "JBSWY3DPEHPK3PXP" }))
+            .resolve(&slot, now)
+            .unwrap()
+            .totp
+        {
             SecretUpdate::Set(v) => assert_eq!(v.expose(), "JBSWY3DPEHPK3PXP"),
             _ => panic!("expected Set"),
         }

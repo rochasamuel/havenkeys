@@ -217,7 +217,11 @@ mod tests {
                 }
             }
         }
-        Frame { width: size as u32, height: size as u32, rgba }
+        Frame {
+            width: size as u32,
+            height: size as u32,
+            rgba,
+        }
     }
 
     /// Two frames next to each other on one white canvas.
@@ -233,15 +237,26 @@ mod tests {
                 rgba[dst..dst + w * 4].copy_from_slice(src);
             }
         }
-        Frame { width: width as u32, height: height as u32, rgba }
+        Frame {
+            width: width as u32,
+            height: height as u32,
+            rgba,
+        }
     }
 
     fn blank(size: u32) -> Frame {
-        Frame { width: size, height: size, rgba: vec![255u8; (size * size * 4) as usize] }
+        Frame {
+            width: size,
+            height: size,
+            rgba: vec![255u8; (size * size * 4) as usize],
+        }
     }
 
     fn labels(codes: &[ScannedCode]) -> Vec<(Option<&str>, Option<&str>)> {
-        codes.iter().map(|c| (c.issuer.as_deref(), c.account.as_deref())).collect()
+        codes
+            .iter()
+            .map(|c| (c.issuer.as_deref(), c.account.as_deref()))
+            .collect()
     }
 
     #[test]
@@ -258,7 +273,13 @@ mod tests {
         let found = decode_frames(&[two], MAX_PIXELS);
         let mut got = labels(&found.codes);
         got.sort();
-        assert_eq!(got, [(Some("GitHub"), Some("alice")), (Some("GitLab"), Some("bob"))]);
+        assert_eq!(
+            got,
+            [
+                (Some("GitHub"), Some("alice")),
+                (Some("GitLab"), Some("bob"))
+            ]
+        );
 
         let same_twice = side_by_side(&qr_frame(GITHUB, 4), &qr_frame(GITHUB, 4));
         assert_eq!(decode_frames(&[same_twice], MAX_PIXELS).codes.len(), 1);
@@ -291,13 +312,19 @@ mod tests {
     fn frames_past_the_pixel_budget_or_malformed_are_skipped() {
         let qr = qr_frame(GITHUB, 4);
         let pixels = u64::from(qr.width) * u64::from(qr.height);
-        assert!(decode_frames(&[qr_frame(GITHUB, 4)], pixels - 1).codes.is_empty());
+        assert!(decode_frames(&[qr_frame(GITHUB, 4)], pixels - 1)
+            .codes
+            .is_empty());
         assert_eq!(decode_frames(&[qr_frame(GITHUB, 4)], pixels).codes.len(), 1);
 
         let mut short = qr_frame(GITHUB, 4);
         short.rgba.truncate(short.rgba.len() - 1);
         assert!(decode_frames(&[short], MAX_PIXELS).codes.is_empty());
-        let empty = Frame { width: 0, height: 0, rgba: vec![] };
+        let empty = Frame {
+            width: 0,
+            height: 0,
+            rgba: vec![],
+        };
         assert!(decode_frames(&[empty], MAX_PIXELS).codes.is_empty());
     }
 
@@ -334,7 +361,10 @@ mod tests {
         let from_screen = || Ok(vec![blank(50), qr_frame(GITLAB, 4)]);
         let bob = [(Some("GitLab"), Some("bob"))];
         assert_eq!(labels(&scan(|| None, from_screen).unwrap()), bob);
-        assert_eq!(labels(&scan(|| Some(blank(100)), from_screen).unwrap()), bob);
+        assert_eq!(
+            labels(&scan(|| Some(blank(100)), from_screen).unwrap()),
+            bob
+        );
         let url = || Some(qr_frame("https://example.com", 4));
         assert_eq!(labels(&scan(url, from_screen).unwrap()), bob);
     }
