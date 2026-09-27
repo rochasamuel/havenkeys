@@ -231,6 +231,10 @@ export const en = {
     addLogin: "Add a login",
     addNote: "Add a secure note",
     import1Password: "Import from 1Password",
+    discardChanges: (title: string) => `Discard your changes to “${title}”?`,
+    discardNewItem: "Discard the new item?",
+    keepEditing: "Keep editing",
+    discard: "Discard",
   },
 
   list: {

@@ -219,6 +219,10 @@ export const ptBR: Messages = {
     addLogin: "Adicionar login",
     addNote: "Adicionar nota segura",
     import1Password: "Importar do 1Password",
+    discardChanges: (title: string) => `Descartar suas alterações em “${title}”?`,
+    discardNewItem: "Descartar o novo item?",
+    keepEditing: "Continuar editando",
+    discard: "Descartar",
   },
 
   list: {

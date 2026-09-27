@@ -142,6 +142,9 @@ export const api = {
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),
   /** A login was saved from the browser extension. Carries no data. */
   onItemsChanged: (handler: () => void): Promise<UnlistenFn> => listen("vault://items-changed", () => handler()),
+  /** The browser extension asked to edit this item (already checked against the page in Rust). */
+  onOpenItem: (handler: (id: string) => void): Promise<UnlistenFn> =>
+    listen<string>("vault://open-item", (e) => handler(e.payload)),
   /** The server session was opened or lost. */
   onConnectivity: (handler: (online: boolean) => void): Promise<UnlistenFn> =>
     listen<boolean>("vault://connectivity", (e) => handler(e.payload)),

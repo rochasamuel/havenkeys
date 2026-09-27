@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { ItemOverview, ItemType } from "../lib/types";
+import { decideOpen } from "../lib/openItem";
 import { Icon, type IconName } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import { useToast } from "../components/Toast";
@@ -44,6 +45,8 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   const [pane, setPane] = useState<Pane>({ kind: "empty" });
   const [unreadable, setUnreadable] = useState(unreadableItems);
   const [busyResync, setBusyResync] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -63,6 +66,30 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     const unlisten = api.onItemsChanged(() => void refresh());
     return () => void unlisten.then((f) => f());
   }, [refresh]);
+
+  const openForEdit = useCallback((id: string) => {
+    setPendingOpen(null);
+    setSection("login");
+    setQuery("");
+    setPane({ kind: "edit", id });
+  }, []);
+
+  // "Edit in HavenKeys" from the browser extension's popup.
+  useEffect(() => {
+    const unlisten = api.onOpenItem((id) => {
+      const ref = pane.kind === "new" ? { kind: "new" as const } : pane;
+      switch (decideOpen(ref, editorDirty, id)) {
+        case "already":
+          return;
+        case "confirm":
+          setPendingOpen(id);
+          return;
+        case "open":
+          openForEdit(id);
+      }
+    });
+    return () => void unlisten.then((f) => f());
+  }, [pane, editorDirty, openForEdit]);
 
   const refreshUnreadable = useCallback(async () => {
     try {
@@ -259,6 +286,19 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
             />
           </div>
           <section className="detail" aria-label={t.vault.details}>
+            {pendingOpen && (
+              <div className="confirm open-confirm" role="alert">
+                <span>
+                  {pane.kind === "edit" && selected ? t.vault.discardChanges(selected.title) : t.vault.discardNewItem}
+                </span>
+                <button className="btn btn-small" onClick={() => setPendingOpen(null)}>
+                  {t.vault.keepEditing}
+                </button>
+                <button className="btn btn-small btn-danger" onClick={() => openForEdit(pendingOpen)}>
+                  {t.vault.discard}
+                </button>
+              </div>
+            )}
             {pane.kind === "empty" && (
               <div className="detail-empty">
                 <Seal size={44} />
@@ -298,6 +338,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                 readOnly={readOnly}
                 onCancel={() => setPane({ kind: "view", id: selected.id })}
                 onSaved={onSaved}
+                onDirtyChange={setEditorDirty}
               />
             )}
             {pane.kind === "new" && (
@@ -307,6 +348,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                 readOnly={readOnly}
                 onCancel={() => setPane({ kind: "empty" })}
                 onSaved={onSaved}
+                onDirtyChange={setEditorDirty}
               />
             )}
           </section>

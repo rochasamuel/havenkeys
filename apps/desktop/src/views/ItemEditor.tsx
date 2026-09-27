@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { ItemInput, ItemOverview, ItemType, MatchType, ScannedTotp, SecretUpdate, UrlRule } from "../lib/types";
 import { EMPTY, KEEP, canScan, scanLabel, toUpdate, type SecretEdit } from "../lib/secretEdit";
+import { isDirty, type EditorSnapshot } from "../lib/openItem";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useI18n } from "../i18n/context";
@@ -14,11 +15,12 @@ interface Props {
   readOnly?: boolean;
   onCancel: () => void;
   onSaved: (item: ItemOverview) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const matchTypes: MatchType[] = ["domain", "origin", "exact"];
 
-export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: Props) {
+export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, onDirtyChange }: Props) {
   const { t } = useI18n();
   const matchLabels: Record<MatchType, string> = {
     domain: t.editor.matchDomain,
@@ -46,6 +48,14 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved }: 
   const [saving, setSaving] = useState(false);
   const [autoSignIn, setAutoSignIn] = useState(existing?.autoSignIn ?? true);
   const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
+
+  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn };
+  const [initialSnapshot] = useState(snapshot);
+  const dirty = isDirty(initialSnapshot, snapshot);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     let live = true;
