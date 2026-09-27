@@ -62,8 +62,9 @@ VaultScreen (React)
 
 `Request::OpenItem { item_id: Uuid, url: String, top_url: Option<String> }`
 with the same URL length/shape validation as `FillItem`. Response: an empty
-`ResultBody::Opened {}` (wire `{"type":"opened"}`). The TypeScript protocol
-package (`packages/protocol`) mirrors it.
+`ResultBody::OpenItem {}` (wire `{"type":"open_item"}`, every result names
+its request). The TypeScript protocol package (`packages/protocol`) mirrors
+it.
 
 ### 4.2 Bridge (`crates/havenkeys-bridge`)
 
@@ -132,9 +133,11 @@ URL (github.com item requested from evil.com); refused for an unknown ID;
 refused when bridging is disabled; a matching item calls the hook exactly
 once; a refused request never calls it; `OpenItem` is in the Secret class.
 
-**Extension:** popup row renders the button last; `popup_open_item` from a
-content-script sender is rejected; the URL comes from the tab, not the
-message; malformed `itemId` rejected.
+**Extension:** the popup's DOM has no test harness, so the button's
+placement (last in the row, after Fill and Code) is checked manually;
+`popup_open_item` parsing and handling are unit-tested — rejected from a
+content-script sender, the URL taken from the tab and not the message, and
+a malformed `itemId` rejected.
 
 **Desktop:** `decideOpen` unit tests (same item, other item dirty, other
 item clean, nothing open); `ItemEditor` dirty detection helper tested as a
