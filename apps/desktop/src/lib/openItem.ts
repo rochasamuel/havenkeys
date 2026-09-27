@@ -10,11 +10,20 @@ export type PaneRef = { kind: "empty" } | { kind: "view"; id: string } | { kind:
 
 /**
  * What to do when the browser extension asks to edit `id`:
- * `already` — that editor is open; `confirm` — another edit has unsaved
+ * `already` — that editor is open and visible; `reveal` — that editor is
+ * open but hidden behind a tool section (Settings/Generator), switch back
+ * to it without touching the editor; `confirm` — another edit has unsaved
  * changes, ask before discarding them; `open` — switch to `id`'s editor.
+ * `editorShown` is false when the vault screen is on a section (Settings,
+ * Generator) that hides the item pane even though it still has state.
  */
-export function decideOpen(pane: PaneRef, dirty: boolean, id: string): "open" | "already" | "confirm" {
-  if (pane.kind === "edit" && pane.id === id) return "already";
+export function decideOpen(
+  pane: PaneRef,
+  dirty: boolean,
+  id: string,
+  editorShown = true,
+): "open" | "already" | "reveal" | "confirm" {
+  if (pane.kind === "edit" && pane.id === id) return editorShown ? "already" : "reveal";
   if ((pane.kind === "edit" || pane.kind === "new") && dirty) return "confirm";
   return "open";
 }

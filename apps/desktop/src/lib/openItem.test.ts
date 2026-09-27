@@ -23,6 +23,13 @@ describe("decideOpen", () => {
     expect(decideOpen({ kind: "edit", id: B }, false, A)).toBe("open");
     expect(decideOpen({ kind: "new" }, false, A)).toBe("open");
   });
+  it("reveals the section when that item's editor is open but hidden behind a tool section", () => {
+    expect(decideOpen({ kind: "edit", id: A }, false, A, false)).toBe("reveal");
+    expect(decideOpen({ kind: "edit", id: A }, true, A, false)).toBe("reveal");
+  });
+  it("still reports already when that item's editor is open and shown", () => {
+    expect(decideOpen({ kind: "edit", id: A }, false, A, true)).toBe("already");
+  });
 });
 
 const base: EditorSnapshot = {
