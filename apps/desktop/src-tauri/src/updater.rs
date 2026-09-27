@@ -22,6 +22,12 @@ pub const STATUS_EVENT: &str = "updates://status";
 pub const RELEASES_URL: &str = "https://github.com/rochasamuel/havenkeys/releases/latest";
 const FIRST_CHECK: Duration = Duration::from_secs(5);
 const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+/// A check that has not answered by then failed; a peer holding the
+/// connection open must not leave the phase stuck at `Checking`.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+/// Generous for an installer on a slow link; past it the
+/// download failed rather than hanging in `Downloading` forever.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub struct Updates {
     machine: Mutex<Machine>,
@@ -99,8 +105,10 @@ fn publish(app: &AppHandle) -> UpdateStatus {
     status
 }
 
-async fn fetch(app: &AppHandle) -> tauri_plugin_updater::Result<Option<Update>> {
-    app.updater()?.check().await
+/// `None` when the check timed out.
+async fn fetch(app: &AppHandle) -> Option<tauri_plugin_updater::Result<Option<Update>>> {
+    let check = async { app.updater()?.check().await };
+    tokio::time::timeout(CHECK_TIMEOUT, check).await.ok()
 }
 
 /// One check. Overlapping calls collapse: a check that finds one already
@@ -118,7 +126,7 @@ pub async fn check(app: &AppHandle, manual: bool) {
     publish(app);
     // The plugin's error text may carry URLs; only the fact of failure is kept.
     let outcome = match fetch(app).await {
-        Ok(Some(update)) => {
+        Some(Ok(Some(update))) => {
             let found = CheckOutcome::Found {
                 version: update.version.clone(),
                 notes: update.body.clone().unwrap_or_default(),
@@ -128,13 +136,13 @@ pub async fn check(app: &AppHandle, manual: bool) {
             }
             found
         }
-        Ok(None) => {
+        Some(Ok(None)) => {
             if let Ok(mut pending) = updates.pending.lock() {
                 *pending = None;
             }
             CheckOutcome::UpToDate
         }
-        Err(_) => CheckOutcome::Failed,
+        Some(Err(_)) | None => CheckOutcome::Failed,
     };
     if let Ok(mut m) = updates.machine.lock() {
         m.finish_check(outcome, manual);
@@ -169,25 +177,24 @@ async fn install(app: &AppHandle) -> CmdResult<()> {
     publish(app);
 
     let progress = app.clone();
-    let bytes = update
-        .download(
-            move |chunk, total| {
-                let changed = progress
-                    .state::<Updates>()
-                    .machine
-                    .lock()
-                    .map(|mut m| m.progress(chunk as u64, total))
-                    .unwrap_or(false);
-                if changed {
-                    publish(&progress);
-                }
-            },
-            || {},
-        )
-        .await;
+    let download = update.download(
+        move |chunk, total| {
+            let changed = progress
+                .state::<Updates>()
+                .machine
+                .lock()
+                .map(|mut m| m.progress(chunk as u64, total))
+                .unwrap_or(false);
+            if changed {
+                publish(&progress);
+            }
+        },
+        || {},
+    );
     // `download` returns only bytes whose signature matched the public key
-    // in tauri.conf.json. Anything else stops here, with the vault as it was.
-    let Ok(bytes) = bytes else {
+    // in tauri.conf.json. Anything else (or a timeout) stops here, with the
+    // vault as it was.
+    let Ok(Ok(bytes)) = tokio::time::timeout(DOWNLOAD_TIMEOUT, download).await else {
         return Err(fail_install(app));
     };
 
@@ -252,7 +259,9 @@ pub fn set_update_auto_check(
     if !state.vault()?.is_unlocked() {
         return Err(havenkeys_core::Error::Locked.into());
     }
-    let next = UpdateSettings { auto_check: enabled };
+    let next = UpdateSettings {
+        auto_check: enabled,
+    };
     // Saved first: if the file cannot be written, nothing changes.
     next.save(&updates.dir).map_err(|_| settings_failed())?;
     *updates.settings.lock().map_err(|_| CmdError::internal())? = next;
