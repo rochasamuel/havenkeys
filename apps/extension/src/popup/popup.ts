@@ -71,9 +71,15 @@ function smallButton(text: string, title: string): HTMLButtonElement {
 
 const SVG = "http://www.w3.org/2000/svg";
 
-/** A square icon button; the icon is built with createElementNS, never parsed from markup. */
-function iconButton(pathData: string, label: string): HTMLButtonElement {
-  const b = h("button", { className: "icon-btn row-icon" });
+const PENCIL = "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10v3zM14 8l3 3";
+
+/**
+ * The row's initial, which turns into a pencil on hover or keyboard focus:
+ * clicking it opens the login in the desktop app. The icon is built with
+ * createElementNS, never parsed from markup.
+ */
+function editAvatar(initial: string, label: string): HTMLButtonElement {
+  const b = h("button", { className: "avatar" }, h("span", { className: "avatar-initial", text: initial }));
   b.type = "button";
   b.title = label;
   b.setAttribute("aria-label", label);
@@ -81,13 +87,11 @@ function iconButton(pathData: string, label: string): HTMLButtonElement {
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(SVG, "path");
-  path.setAttribute("d", pathData);
+  path.setAttribute("d", PENCIL);
   svg.append(path);
   b.append(svg);
   return b;
 }
-
-const PENCIL = "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10v3zM14 8l3 3";
 
 /** Fill into the page; the popup closes on success. */
 async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: HTMLElement): Promise<void> {
@@ -104,10 +108,14 @@ async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: 
 function matchRow(m: Match): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
   const status = h("div", { className: "row-status" });
+  // The initial opens this login in the desktop app. Closes the popup on
+  // success, like a fill, since focus moves to the app.
+  const edit = editAvatar(initial, t.popup.edit);
+  edit.addEventListener("click", () => void fillFromPopup(edit, { type: "popup_open_item", itemId: m.id }, status));
   const row = h(
     "li",
     { className: "item" },
-    h("span", { className: "avatar", text: initial }),
+    edit,
     h(
       "div",
       { className: "who" },
@@ -143,11 +151,6 @@ function matchRow(m: Match): HTMLElement {
     slot.append(show);
     actions.append(slot);
   }
-  // Last in the row: open this login in the desktop app. Closes the popup
-  // on success, like a fill, since focus moves to the app.
-  const edit = iconButton(PENCIL, t.popup.edit);
-  edit.addEventListener("click", () => void fillFromPopup(edit, { type: "popup_open_item", itemId: m.id }, status));
-  actions.append(edit);
   // The status line (a fill or code error) goes under the whole row, so a
   // long message gets the popup's full width instead of the text column's.
   row.append(actions, status);

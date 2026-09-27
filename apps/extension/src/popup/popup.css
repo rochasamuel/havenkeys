@@ -226,6 +226,41 @@ main {
   font-family: "Source Serif 4 Variable", Georgia, serif;
   font-size: 17px;
   font-weight: 520;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Hover or keyboard focus swaps the initial for a pencil. */
+.avatar svg {
+  display: none;
+  width: 17px;
+  height: 17px;
+}
+
+.avatar:hover,
+.avatar:focus-visible {
+  background: var(--hover);
+  color: var(--text-strong);
+}
+
+.avatar:hover .avatar-initial,
+.avatar:focus-visible .avatar-initial {
+  display: none;
+}
+
+.avatar:hover svg,
+.avatar:focus-visible svg {
+  display: block;
+}
+
+.avatar:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+.avatar:disabled {
+  cursor: default;
 }
 
 .who {
@@ -307,11 +342,6 @@ main {
 .actions .btn.small:first-child:hover {
   background: var(--brass-hi);
   border-color: var(--brass-hi);
-}
-
-.actions .row-icon {
-  width: 28px;
-  height: 28px;
 }
 
 .code {
