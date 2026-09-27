@@ -48,6 +48,11 @@ What the desktop app does today:
   recoverable (last 5)
 * Passkeys: a login shows the passkeys it holds (site, account, created),
   and each can be deleted
+* From version 0.9.0: checks GitHub Releases for signed updates (Settings →
+  Updates, on by default, can be turned off) and installs one on your click,
+  on Windows, macOS and the Linux AppImage. `.deb`/`.rpm` installs get a
+  notice with a link instead. 0.8.0 and earlier have no updater and must be
+  replaced by hand with 0.9.0, over the existing install
 
 What the browser extension does:
 

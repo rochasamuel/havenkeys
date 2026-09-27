@@ -1459,3 +1459,232 @@ in-page suggestions (the host grant).
 | M15 | On Chromium, a translucent overlay over the passkey card cannot get clicks through | Not yet run | n/a |
 | M18 | google.com: sign in with a saved password, let Google's own "create a passkey" prompt fire as a conditional `create()`. With **Add passkeys automatically** on: no card, a "Passkey saved to HavenKeys" notice, and the login gains a passkey. With the setting off: the "Add a passkey?" card opens instead, that login preselected | Not yet run | Not yet run |
 | M19 | A Passkeys Directory site with a saved password and no passkey (for example github.com): open the field menu and confirm the "`<name>` supports passkeys" / "How to add one" row appears and its link opens the site's own help page in a new tab. After saving a passkey for it, confirm the row is replaced by "You have a passkey for `<site>`" | Not yet run | Not yet run |
+
+---
+
+# Security Review: Desktop Auto-Update
+
+**Date:** 2026-09-27
+**Scope:** `apps/desktop/src-tauri/src/{updates.rs, updater.rs, tray.rs}`, the
+banner and Settings → Updates UI (`apps/desktop/src`), the updater
+configuration in `tauri.conf.json` / `tauri.bundle.conf.json`,
+`apps/desktop/src-tauri/windows/hooks.nsh`, and
+`.github/workflows/release.yml`. Design:
+`docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md`.
+**Method:** self-review of the implementation against the design, the test
+suites written alongside it, and the audits below. No release has yet been
+cut with this pipeline, so nothing here has run end to end against a real
+GitHub Release (see the manual checklist at the end).
+
+> This is an internal review, not an independent security audit.
+
+## Summary
+
+Component: **Desktop updater** (`tauri-plugin-updater` 2.12.0, driven only
+from Rust; no plugin permission reaches the webview). No critical issues were
+found. The design's central property — a bad or missing signature aborts
+before anything is installed or the vault is touched — is enforced by the
+plugin's own `download()` (confirmed in its source: it verifies the minisign
+signature before returning any bytes) and by the straight-line order in
+`updater.rs::install` (download → verify → lock → install). The residual risk
+worth naming plainly is the one every code-signed auto-updater carries: whoever
+holds the signing key can ship code to every installation.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| UP1 | Info | Updater | Malicious update from a compromised GitHub account, repository, CDN or network path | **Mitigated**: `Update::download` verifies the minisign signature against the public key in `tauri.conf.json` before returning bytes; a bad or missing signature aborts with nothing installed and the vault untouched |
+| UP2 | High | Updater (key custody) | Theft of the updater's private key and its passphrase lets the holder ship code to every installation, including the Rust core that holds the vault key | Accepted, inherent to any signed-updater design; mitigated operationally (key + passphrase only in repository secrets and an offline backup, never committed; releases stay drafts until reviewed and published; rotation procedure documented) |
+| UP3 | Info | Updater | Downgrade / replay of an old, still validly signed release | **Mitigated**: the plugin's default comparator installs only a version strictly greater than the one running |
+| UP4 | Info | Updater / UI | Release notes from `latest.json` rendered where a script tag or event handler could execute if treated as markup | **Mitigated by design**: notes are truncated to 4,000 characters and rendered as a text node, never HTML; `updates.rs` has a unit test asserting an `<img onerror=...>` payload survives truncation as literal text |
+| UP5 | Medium | Windows install / native host | Browsers keep `havenkeys-native-host.exe` running (it retries `connectNative` while the desktop app is gone); Windows cannot overwrite a running executable, so an in-place update could fail while a browser holds the file open | **Mitigated**: an NSIS `NSIS_HOOK_PREINSTALL` hook (`windows/hooks.nsh`) runs `taskkill /F /IM havenkeys-native-host.exe` before files are copied, so the installer never meets a locked file; this also fixes today's manual in-place installs. **Unverified**: whether the extension's next `connectNative` successfully restarts the host after the update (M20 below) |
+| UP6 | Info | Renderer exposure | The renderer could be given more updater surface than it needs | **Mitigated by design**: no `tauri-plugin-updater` permission is granted; the capability file allows only the four named commands (`update_status`, `check_for_update`, `install_update`, `set_update_auto_check`); the webview never calls the plugin |
+| UP7 | Info | Privacy | GitHub sees every automatic and manual update check (IP address, time, that HavenKeys is checking) | Accepted, documented; the automatic check can be turned off in Settings → Updates |
+
+## Details
+
+### UP1. Malicious update (Info, mitigated)
+**Attack scenario:** an attacker who controls the GitHub account, the
+repository, a CDN in front of it, or a network path in between serves
+arbitrary bytes as "the next release" — anything from a modified installer to
+a completely unrelated binary.
+**Mitigation:** `tauri-plugin-updater`'s `Update::download` verifies the
+minisign signature of the downloaded artifact against the public key embedded
+in `tauri.conf.json` (key ID `1D3AD839EC826779`) and only returns bytes once
+that check passes (confirmed by reading the plugin's source, not just its
+docs). `updater.rs::install` treats any `Err` from `download` identically to a
+network failure: `fail_install`, no lock, no install, no restart. TLS to
+`github.com` and its download redirect host raises the bar for tampering
+in-flight, but the signature — not TLS — is what actually gates installation.
+**Residual:** none beyond the signing key itself (UP2).
+
+### UP2. Theft of the signing key (High, accepted)
+**Attack scenario:** whoever obtains both the private key file and its
+passphrase can sign a release that every current and future installation will
+verify successfully and run — including the Rust core that decrypts vault
+items. This is not a bug to fix; it is the trust root the entire update
+mechanism rests on, the same as for any code-signed auto-updater (1Password,
+browsers, OS updaters included).
+**Mitigations:**
+* The key was generated once, by the project owner, on their own machine —
+  never by an agent, never in CI.
+* The private key and its passphrase exist only as GitHub repository secrets
+  (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) and in an
+  offline backup; they are never committed, logged, or printed in a build.
+* Releases are created as **drafts**; `/releases/latest` (what the updater
+  polls) ignores drafts, so a forged or accidentally-triggered release build
+  cannot reach any installation until a human reviews and publishes it.
+* A documented rotation procedure (`development.md`, "Releases and updates")
+  lets a compromised key be replaced: one release signed with the old key
+  whose config already trusts the new public key, then every later release
+  signed with the new key only.
+**Severity:** High, because a successful theft has no cryptographic
+containment — it is a full compromise of every installation that later
+updates. **Residual:** accepted as a trust assumption inherent to the design;
+see `threat-model.md` T10.
+
+### UP3. Downgrade / replay (Info, mitigated)
+**Attack scenario:** an attacker replays an old, genuinely signed release
+(one with a known vulnerability) hoping to push an installation backwards.
+**Mitigation:** the plugin's default version comparator only reports an
+update, and only installs, when the candidate's version is strictly greater
+than `app.package_info().version`. An old signed release is indistinguishable
+from "no update" to a newer install.
+
+### UP4. Notes injection (Info, mitigated by design)
+**Attack scenario:** a release's notes (`latest.json`'s `notes` field, taken
+from the GitHub release body at build time) contain markup or a script
+payload, hoping the desktop UI executes or renders it as HTML.
+**Mitigation:** `updates.rs::truncate_notes` only truncates (at a character
+boundary; `NOTES_LIMIT = 4000`) and does not alter content — its own test
+(`notes_are_truncated_on_a_character_boundary`) feeds it
+`<img src=x onerror=alert(1)>` and asserts the string survives unchanged. The
+UI is responsible for rendering that string as a text node rather than HTML,
+matching the project-wide rule against `innerHTML`/`dangerouslySetInnerHTML`.
+**Residual:** none identified; enforced by the same UI-hygiene convention as
+every other user-controlled string in the app.
+
+### UP5. Windows: the native host holds the file the installer needs to write (Medium, mitigated; unverified)
+**Attack/failure scenario (not an attacker, an ordinary case):** a browser
+extension keeps `havenkeys-native-host.exe` running — it retries
+`connectNative` while the desktop app is closed for the update — and Windows
+refuses to overwrite a running executable. Without a fix, an in-place update
+(and, separately, today's manual in-place reinstall) could fail partway
+through, leaving a broken install.
+**Mitigation:** `windows/hooks.nsh` registers `NSIS_HOOK_PREINSTALL`, which
+runs `taskkill /F /IM havenkeys-native-host.exe` (reaching only this user's
+own processes, matching a per-user install) before the installer copies any
+file.
+**Remaining limitation:** this has no dedicated automated test — it is NSIS
+script, not Rust or TypeScript — and the design explicitly calls out that the
+extension reconnecting afterward (a fresh `connectNative` spawning a new host
+process) must be confirmed by hand. See the manual checklist, UM4.
+
+### UP6. Renderer exposure (Info, mitigated by design)
+The updater plugin is registered in `lib.rs` but its own permission is never
+added to the capability file (confirmed: `grep -rn "updater" apps/desktop/src-tauri/capabilities/`
+finds only the four `allow-<command>` entries for `update_status`,
+`check_for_update`, `install_update` and `set_update_auto_check`, the same
+allowlist convention every other command follows). The renderer cannot call
+`check()`, `download()` or `install()` on the plugin directly, and has no way
+to reach the plugin's own JS API.
+
+### UP7. Privacy: GitHub sees checks (Info, accepted)
+Every automatic (once at start, then every 24 h) and manual check is an HTTPS
+request to GitHub, which learns the IP address, the time, and that a HavenKeys
+installation exists and is checking. This is inherent to using GitHub Releases
+as the distribution point. **Mitigation:** Settings → Updates can turn the
+automatic check off entirely (`autoCheck: false`); a manual check or install
+then only reaches GitHub on an explicit click.
+
+## Audits
+
+Run on 2026-09-27 (WSL2, Linux 6.6.87.2-microsoft-standard-WSL2), after Tasks
+1–6 of this branch (`tauri-plugin-updater = "2"`, resolved to 2.12.0, is the
+only new Cargo dependency; no new npm dependency was added).
+
+| Command | Result |
+|---|---|
+| `cargo test -p havenkeys-desktop` | 78 passed, 0 failed, including every `updates::tests::*` state-machine and settings-file test (found update → available, install refused outside `Available`, concurrent checks collapse, background failures stay silent while manual ones report, progress reported in whole-percent/mebibyte steps, `updates.json` default/round-trip/corrupt-file/unknown-fields-ignored, file mode 0600 on Unix, notes truncated on a character boundary without splitting a multi-byte character, `can_install_in_place` per platform/environment) |
+| `pnpm --filter @havenkeys/desktop test` | 8 files, 54 tests passed, 0 failed |
+| `cargo clippy -p havenkeys-desktop --all-targets -- -D warnings` | Clean |
+| `pnpm audit` | No known vulnerabilities found |
+| `cargo audit` | Same 7 pre-existing allowed warnings as every earlier review in this file (`proc-macro-error`, five `unic-*` crates, `glib`'s `VariantStrIter`), all through Tauri's Linux GTK stack, none introduced by the updater; **no vulnerabilities** |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok`. The same two `deny.toml`-only warnings as every earlier review (`Unicode-DFS-2016` matches no crate; the `RUSTSEC-2024-0429` ignore is not currently matched by `cargo-deny`'s view although `cargo audit` still reports it). No new license or advisory needed adding to `deny.toml` |
+
+**New dependency tree** (`cargo tree --manifest-path apps/desktop/src-tauri/Cargo.toml -e normal -p tauri-plugin-updater`):
+`tauri-plugin-updater` 2.12.0 pulls in `reqwest` 0.13, `minisign-verify` 0.2.5
+(the signature check itself), `flate2`, `infer`, `cfb`, `dirs`, `base64`,
+`futures-util`, `http`, and their transitive dependencies — all already
+covered by `cargo deny check licenses`' passing run above, so none needed
+adding to the allow list.
+
+**`THIRD-PARTY-NOTICES.md`:** unchanged. That file lists only the embedded
+fonts and the Passkeys Directory data snapshot — assets bundled into the app
+whose licences require an accompanying notice — not a general enumeration of
+Rust or npm dependencies (those are covered by the blanket statement at its
+top and enforced by `cargo deny check licenses`). `tauri-plugin-updater` and
+its dependency tree add no embedded font, data file, or copyleft-beyond-MPL
+license that would need a new entry.
+
+## Verified properties
+
+* A bad or missing signature never reaches `install()`: `install_update`
+  aborts through `fail_install` on any `Err` from `download`, before the vault
+  lock is touched (`updater.rs::install`).
+* `install` is reachable only from `Phase::Available` (`Machine::begin_install`
+  returns `NotAvailable` otherwise), so a second click, or a click with
+  nothing on offer, cannot start a second download or install.
+* The vault is locked (`state.lock(app, "update")`) only *after* a
+  successfully verified download and only *before* the platform install step
+  runs — never before verification, never after installation has already
+  begun.
+* Concurrent checks collapse into one (`begin_check` returns `false` while
+  `Checking`, `Downloading` or `Installing`); a check cannot interrupt an
+  install in progress.
+* No updater plugin permission is granted to the renderer; only the four named
+  commands are.
+* Release notes cannot inject markup: truncation preserves content exactly,
+  and the UI renders it as text.
+* Debug builds never schedule an automatic check (`cfg!(debug_assertions)`
+  short-circuits `schedule`).
+
+## Remaining limitations
+
+* **Installers are still not OS code-signed.** Windows SmartScreen and macOS
+  Gatekeeper warn on the *first* manual install of an updater-enabled version
+  (0.9.0 itself, and any user still on 0.8.0 or earlier); the OS has no way to
+  vouch for that first binary. Once installed, every *automatic* update after
+  that is verified by the minisign signature instead, but the initial trust
+  decision is still the user's own.
+* **`.deb`/`.rpm` installs are not updated in place.** Those users get a
+  notice and a link to the release page and must download and install the new
+  package themselves; only Windows, macOS and the AppImage self-update.
+* **GitHub sees every check**, automatic or manual, as documented in UP7.
+* **The daily timer is a monotonic sleep** (`tokio::time::sleep(CHECK_INTERVAL)`
+  in `updater.rs::schedule`), not a wall-clock schedule. A machine that
+  suspends often can go well over 24 hours between two automatic checks,
+  because sleep time may not fully count toward the timer depending on the
+  runtime and platform; a machine that is rarely suspended keeps to
+  approximately 24 hours. This affects only how promptly an update is
+  *offered*, never whether an installed one is verified.
+* **The install order (verify → lock → install) is enforced by the
+  straight-line structure of `updater.rs::install`, not by a dedicated
+  regression test.** A future refactor of that function could reorder the
+  steps without a test failing to catch it. Worth adding if that function is
+  touched again.
+* **Nothing in this section has run against a real, published GitHub
+  Release yet.** See the manual checklist below.
+
+## Manual checklist (verification pending)
+
+No release has been cut with the signing pipeline in place, so none of these
+checks has been run. Record the results here when they are (Task 8 of the
+implementation plan).
+
+| # | Check | Windows | macOS | Linux (AppImage) |
+|---|---|---|---|---|
+| UM1 | Publish a throwaway 0.9.0, then a signed 0.9.1: the running 0.9.0 offers 0.9.1 in the banner, the notes shown match the release, clicking Update downloads, verifies, locks the vault, installs, and restarts on 0.9.1 | Not yet run | Not yet run | Not yet run |
+| UM2 | A release whose asset is tampered with (or re-signed with a different key) after publishing is refused: the banner shows the fixed failure message, nothing is installed, and the vault is not locked | Not yet run | Not yet run | Not yet run |
+| UM3 | Settings → Updates: "Check for updates automatically" off stops the daily timer; "Check now" still works and reports "You're up to date" / offers the update / shows the error message correctly | Not yet run | Not yet run | Not yet run |
+| UM4 | Windows only: with a browser open and `havenkeys-native-host.exe` running (extension installed and connected), install an update; the installer completes without a file-in-use error, and the extension's next request successfully starts a new host process (UP5) | Not yet run | n/a | n/a |
+| UM5 | `.deb`/`.rpm` installs show the "Download" banner/button instead of "Update", and it opens the release page at the fixed `RELEASES_URL` rather than any URL taken from `latest.json` | n/a | n/a | Not yet run (`.deb`/`.rpm` path) |

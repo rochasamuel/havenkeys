@@ -13,11 +13,12 @@ This document describes *how* HavenKeys enforces the properties listed in
    the vault file on disk — is treated as input to be validated.
 3. Secrets are returned only for the operation that needs them, and only after
    explicit user action.
-4. No telemetry, analytics, crash reporting or update checks, and no
-   third-party network calls of any kind. The only outbound connections the
-   desktop app makes are to the account server you configure: on unlock, every
-   60 seconds while unlocked, and on every write (§13). Reads work offline
-   from the local encrypted replica.
+4. No telemetry, analytics or crash reporting, and no third-party network
+   calls beyond one bounded exception: checking for and downloading signed
+   app updates from GitHub Releases (§17). The only other outbound
+   connections the desktop app makes are to the account server you
+   configure: on unlock, every 60 seconds while unlocked, and on every write
+   (§13). Reads work offline from the local encrypted replica.
 
 ## 2. What is protected
 
@@ -619,6 +620,53 @@ See `autofill.md`, Automatic sign-in, for the full flow. In summary:
   explicit user interaction") as the automatic passkey upgrade. See
   `security-review.md` AS1 and AS2, and `threat-model.md` T9.
 
-## 17. Known limitations
+## 17. In-app updates
+
+See `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md` for the
+full design; `threat-model.md` lists the threats, `development.md` the
+release and key-rotation steps.
+
+* **The only new destinations** are `github.com` and the host GitHub's
+  download redirect points at, both over HTTPS. Nothing else the app talks to
+  changes. A request reveals the caller's IP address, the time, and the fact
+  that a HavenKeys installation is checking for or downloading an update — no
+  account, device ID, email or vault data. The automatic check can be turned
+  off in Settings → Updates; a manual check and download then happen only on
+  a click.
+* **Integrity comes from the minisign signature, not from TLS.** Every
+  release asset is signed with a key generated once by the project owner; the
+  public half (key ID `1D3AD839EC826779`) is committed in `tauri.conf.json`.
+  `tauri-plugin-updater`'s `download` verifies the signature before it
+  returns any bytes — a compromised GitHub account, repository, CDN or
+  network path can serve whatever it likes, but cannot make an install accept
+  it without the private key.
+* **No downgrade.** The plugin's comparator installs only a version greater
+  than the one running, so a captured old (still validly signed) release
+  cannot be replayed to push a device backwards.
+* **Order:** download → verify the signature (inside `download`, before any
+  bytes are returned) → lock the vault (`state.lock(app, "update")`, the same
+  path as quitting) → install → restart. A bad or missing signature aborts
+  before the vault is touched, so a failed or rejected update never leaves
+  keys in a half-exited process.
+* **The renderer stays unprivileged.** No `tauri-plugin-updater` permission is
+  granted to the webview; the capability file grants only the four named
+  commands (`update_status`, `check_for_update`, `install_update`,
+  `set_update_auto_check`). The webview never calls the plugin directly.
+* **Release notes are plain text**, truncated to 4,000 characters, and shown
+  to the user as a text node — never HTML, never interpolated into markup.
+* **The "Download" URL is a constant** in Rust
+  (`https://github.com/rochasamuel/havenkeys/releases/latest`), used only when
+  the running install cannot update itself in place (`.deb`/`.rpm`). It is
+  never taken from the downloaded `latest.json`, so a compromised manifest
+  cannot redirect that click.
+* **The setting** (`autoCheck`, default on) lives in `updates.json` next to
+  `device.json`, outside the encrypted vault. It holds nothing secret, and it
+  has to be readable while the vault is locked so the app can decide whether
+  to check for updates before anyone unlocks anything.
+* **Debug builds never check automatically** (`cfg!(debug_assertions)`
+  short-circuits the scheduler), so a development run never reaches GitHub on
+  its own.
+
+## 18. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.
