@@ -270,7 +270,7 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
 
       <div className="settings-block">
         <h3 className="group-title">{t.settings.about}</h3>
-        <p className="group-note">{t.settings.aboutText("0.6.0")}</p>
+        <p className="group-note">{t.settings.aboutText("0.7.0")}</p>
       </div>
     </section>
   );
