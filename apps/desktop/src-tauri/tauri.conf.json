@@ -74,7 +74,7 @@
     "shortDescription": "Local-first password manager",
     "linux": {
       "deb": {
-        "depends": ["libpipewire-0.3-0t64 | libpipewire-0.3-0"]
+        "depends": ["libpipewire-0.3-0t64 | libpipewire-0.3-0", "libgbm1"]
       }
     },
     "resources": {

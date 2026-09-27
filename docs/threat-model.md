@@ -195,6 +195,11 @@ trustworthy as the extension that reports it.
   unlocked (it is the UI, after all). We limit the blast radius (it cannot read
   the vault file, derive keys, or keep access after lock) but do not claim to
   prevent this.
+* **QR scan as a screen reader.** A compromised renderer can call
+  `scan_totp_qr` while the vault is unlocked, which captures the screen.
+  It receives only tokens and issuer/account labels of TOTP QR codes, never
+  pixels or other text, and a token only lets it save that code into an
+  item, which it could already do by typing one.
 
 ### T6 — Accidental disclosure
 Secrets must not end up in logs, error messages, panic messages, `Debug`
