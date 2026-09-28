@@ -27,6 +27,7 @@
   ],
   "exclude": [
     "src/hygiene.test.ts",
-    "src/i18n/bridge-parity.test.ts"
+    "src/i18n/bridge-parity.test.ts",
+    "src/options/options.test.ts"
   ]
 }

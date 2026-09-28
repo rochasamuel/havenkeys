@@ -1,13 +1,18 @@
-// Options page: turn in-page suggestions on or off by granting or removing
-// the optional host permission. The background registers the content
-// script when the permission changes (background/registration.ts).
+// Options page: the in-page suggestions preference (the field icon and the
+// menu under login fields), and the site access that save prompts and
+// passkeys need. Site access is granted at install; if the user withdrew it
+// in the browser, Allow asks for it again. The background re-registers the
+// content scripts when the grant changes (background/registration.ts).
 
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
+import { getInlineSuggestions, onInlineSuggestionsChanged, setInlineSuggestions } from "../shared/prefs";
 
 const status = document.getElementById("status") as HTMLElement;
 const toggle = document.getElementById("toggle") as HTMLButtonElement;
-let on = false;
+const accessStatus = document.getElementById("access-status") as HTMLElement;
+const allow = document.getElementById("allow") as HTMLButtonElement;
+let on = true;
 
 function text(id: string, value: string): void {
   (document.getElementById(id) as HTMLElement).textContent = value;
@@ -20,6 +25,10 @@ function fillStatic(): void {
   text("subtitle", t.options.subtitle);
   text("suggestions-title", t.options.suggestionsTitle);
   text("toggle-label", t.options.toggleLabel);
+  text("access-title", t.options.accessTitle);
+  text("access-label", t.options.accessLabel);
+  text("access-note", t.options.accessNote);
+  allow.textContent = t.options.allow;
   text("without-title", t.options.withoutTitle);
   const notes = document.getElementById("notes") as HTMLElement;
   notes.replaceChildren(
@@ -35,33 +44,43 @@ function fillStatic(): void {
   (document.getElementById("without") as HTMLElement).replaceChildren(t.options.withoutBefore, fill, t.options.withoutAfter);
 }
 
-async function refresh(): Promise<void> {
-  const granted = await grantedOrigins();
-  on = granted.length > 0;
-  if (!on) {
-    status.textContent = t.options.statusOff;
-    status.className = "status";
-  } else if (granted.length < INLINE_ORIGINS.length) {
-    status.textContent = t.options.statusHttps;
-    status.className = "status on";
-  } else {
-    status.textContent = t.options.statusOn;
-    status.className = "status on";
-  }
+function showSuggestions(value: boolean): void {
+  on = value;
+  status.textContent = on ? t.options.suggestionsOn : t.options.suggestionsOff;
+  status.className = on ? "status on" : "status";
   toggle.textContent = on ? t.options.turnOff : t.options.turnOn;
   toggle.className = on ? "btn" : "btn primary";
   toggle.hidden = false;
 }
 
+async function refreshAccess(): Promise<void> {
+  const granted = await grantedOrigins();
+  if (granted.length === 0) {
+    accessStatus.textContent = t.options.accessOff;
+    accessStatus.className = "status";
+  } else {
+    accessStatus.textContent = granted.length < INLINE_ORIGINS.length ? t.options.accessHttps : t.options.accessOn;
+    accessStatus.className = "status on";
+  }
+  allow.hidden = granted.length > 0;
+}
+
 toggle.addEventListener("click", () => {
+  const next = !on;
+  void setInlineSuggestions(next).then(() => showSuggestions(next));
+});
+
+allow.addEventListener("click", () => {
   // permissions.request must run directly in the click handler.
-  const change = on
-    ? chrome.permissions.remove({ origins: [...INLINE_ORIGINS] })
-    : chrome.permissions.request({ origins: [...INLINE_ORIGINS] });
-  void change.catch(() => false).then(refresh);
+  void chrome.permissions
+    .request({ origins: [...INLINE_ORIGINS] })
+    .catch(() => false)
+    .then(refreshAccess);
 });
 
 fillStatic();
-chrome.permissions.onAdded.addListener(() => void refresh());
-chrome.permissions.onRemoved.addListener(() => void refresh());
-void refresh();
+onInlineSuggestionsChanged(showSuggestions);
+chrome.permissions.onAdded.addListener(() => void refreshAccess());
+chrome.permissions.onRemoved.addListener(() => void refreshAccess());
+void getInlineSuggestions().then(showSuggestions);
+void refreshAccess();
