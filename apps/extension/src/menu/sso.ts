@@ -102,9 +102,12 @@ function renderSave(view: Extract<SsoView, { mode: "save" }>, token: string): vo
     if (!e.isTrusted || !guard.armed() || confirmBtn.disabled) return;
     confirmBtn.disabled = true;
     const r = await ask<null>(saveRequest(token, accountInput.value, finalTitleInput ? finalTitleInput.value : null));
+    // On success the background closes this frame. On failure the error
+    // takes the heading's place and confirm stays disabled (save.ts's
+    // fail()), but Not now/Save stay in place: the user can still dismiss.
     if (!r.ok) {
-      confirmBtn.disabled = false;
-      fail(r.message);
+      heading.textContent = r.message;
+      heading.className = "error";
     }
   }
   confirmBtn.addEventListener("click", (e) => void confirm(e));

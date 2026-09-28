@@ -529,6 +529,21 @@ main {
   outline-offset: 1px;
 }
 
+/* Mirrors save.html's #question: the heading is our own copy, so it wraps
+   rather than truncating; an error (fail()) reuses the id and gets .error
+   too, and must win over the base color (hence the higher-specificity
+   #heading.error rule, exactly like #question.error). */
+#heading {
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+#heading.error {
+  color: var(--danger);
+}
+
 .sso .list {
   list-style: none;
   margin: 0;

@@ -149,6 +149,57 @@ describe("sso save view", () => {
     expect(saveRequest(TOKEN, "me@example.com", "GitHub")).toEqual({ type: "sso_save", token: TOKEN, account: "me@example.com", title: "GitHub" });
     expect(saveRequest(TOKEN, "", null)).toEqual({ type: "sso_save", token: TOKEN, account: "", title: null });
   });
+
+  it("confirm sends the current field values for a new login", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: "octo@example.com", title: "GitHub", action: "add" });
+    const inputs = document.querySelectorAll<HTMLInputElement>("input");
+    inputs[0]!.value = "octocat@example.com";
+    inputs[1]!.value = "GitHub - Work";
+    const saveBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Save")!;
+    const handler = handlers.get(saveBtn)!;
+    replies.push({ ok: true, value: null }); // the sso_save reply; the background closes the frame on success
+
+    handler({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked).toContainEqual({ type: "sso_save", token: TOKEN, account: "octocat@example.com", title: "GitHub - Work" });
+  });
+
+  it("confirm sends a null title for an update (no title field)", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ mode: "save", site: "github.com", provider: "google", account: "me@example.com", title: null, action: "update" });
+    const account = document.querySelector<HTMLInputElement>("input")!;
+    account.value = "someone@example.com";
+    // sso.update ("Add") labels the confirm button for an update.
+    const saveBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Add")!;
+    const handler = handlers.get(saveBtn)!;
+    replies.push({ ok: true, value: null });
+
+    handler({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked).toContainEqual({ type: "sso_save", token: TOKEN, account: "someone@example.com", title: null });
+  });
+
+  it("a failed save shows the error in place and disables confirm, keeping both buttons", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: "octo@example.com", title: "GitHub", action: "add" });
+    const saveBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Save")! as HTMLButtonElement;
+    const dismissBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Not now")! as HTMLButtonElement;
+    const handler = handlers.get(saveBtn)!;
+    replies.push({ ok: false, message: "Something went wrong." });
+
+    handler({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const heading = document.getElementById("heading")!;
+    expect(heading.textContent).toBe("Something went wrong.");
+    expect(heading.classList.contains("error")).toBe(true);
+    expect(saveBtn.disabled).toBe(true);
+    // The buttons (and the fields) are still there: #main was not replaced.
+    expect(document.body.contains(dismissBtn)).toBe(true);
+    expect(document.body.contains(saveBtn)).toBe(true);
+    expect(document.querySelectorAll("input")).toHaveLength(2);
+  });
 });
 
 describe("sso notice view", () => {
