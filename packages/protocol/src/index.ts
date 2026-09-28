@@ -35,7 +35,7 @@ export type Request =
   | { type: "open_item"; itemId: string; url: string; topUrl?: string }
   | { type: "get_totp"; itemId: string; url: string; topUrl?: string }
   | { type: "generate_password" }
-  | { type: "check_login"; url: string; topUrl?: string; username: string | null; password: string }
+  | { type: "check_login"; url: string; topUrl?: string; username: string | null; password: string; currentPassword?: string }
   | {
       type: "save_login";
       url: string;

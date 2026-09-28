@@ -81,6 +81,11 @@ export interface Submission {
   username: string | null;
   /** Null for a username-only step. */
   password: string | null;
+  /**
+   * A change-password form's current password, when the user typed it or
+   * we filled it. Only compared in the core, to find the login to update.
+   */
+  currentPassword?: string;
 }
 
 /**
@@ -91,6 +96,9 @@ export interface Submission {
  * * Only a password the user typed, or one we generated, counts. One we
  *   filled from the vault is not new, and one a page script put there is
  *   not the user's (see fill.ts).
+ * * With a new password, the current one (typed, or filled from the
+ *   vault; never one a page script put there) goes along, so the core can
+ *   tell which login changed when the form has no username.
  * * Over-long values are ignored rather than truncated.
  */
 export function readSubmission(group: LoginGroup): Submission | null {
@@ -120,5 +128,11 @@ export function readSubmission(group: LoginGroup): Submission | null {
   if (source !== "user" && source !== "generated") return null;
   const password = pwEl.value;
   if (password.length > MAX_PASSWORD_CHARS) return null;
-  return { username, password };
+  const sub: Submission = { username, password };
+  const [oldEl] = pwEl === newEl ? fieldsOf(group, "current-password") : [];
+  const oldSource = oldEl && valueSource(oldEl);
+  if (oldEl?.value && oldEl.value.length <= MAX_PASSWORD_CHARS && (oldSource === "user" || oldSource === "vault")) {
+    sub.currentPassword = oldEl.value;
+  }
+  return sub;
 }

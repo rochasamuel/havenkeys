@@ -68,12 +68,16 @@ pub enum Request {
     GeneratePassword {},
     /// Would saving this submitted login add a new item, update one, or do
     /// nothing? The password is compared inside the core, never returned.
+    /// `current_password`: what a change-password form held as the current
+    /// password; it picks the login to update when no username identifies it.
     CheckLogin {
         url: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top_url: Option<String>,
         username: Option<String>,
         password: WireSecret,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        current_password: Option<WireSecret>,
     },
     /// Save a submitted login after the user confirmed it. With `item_id`,
     /// replace that login's password (it must be saved for `url`).
@@ -221,15 +225,25 @@ impl Request {
             .into_iter()
             .flatten()
             .all(|u| !u.is_empty() && u.len() <= MAX_URL_BYTES);
+        let secret_ok =
+            |s: &WireSecret| !s.expose().is_empty() && s.expose().len() <= MAX_SECRET_BYTES;
         let login_ok = match self {
             Request::CheckLogin {
-                username, password, ..
+                username,
+                password,
+                current_password,
+                ..
+            } => {
+                secret_ok(password)
+                    && current_password.as_ref().is_none_or(secret_ok)
+                    && username
+                        .as_ref()
+                        .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
             }
-            | Request::SaveLogin {
+            Request::SaveLogin {
                 username, password, ..
             } => {
-                !password.expose().is_empty()
-                    && password.expose().len() <= MAX_SECRET_BYTES
+                secret_ok(password)
                     && username
                         .as_ref()
                         .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)

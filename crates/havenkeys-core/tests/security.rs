@@ -562,7 +562,7 @@ fn check_login_classifies_submissions() {
     let (v, gh) = github_vault();
     let page = "https://github.com/session";
     let check =
-        |user: Option<&str>, pw: &str| v.check_login(page, None, user, &secret(pw)).unwrap();
+        |user: Option<&str>, pw: &str| v.check_login(page, None, user, &secret(pw), None).unwrap();
     assert_eq!(check(Some("octo"), "gh-secret"), SaveAction::Unchanged);
     assert_eq!(check(Some("  OCTO "), "gh-secret"), SaveAction::Unchanged);
     assert_eq!(check(Some("octo"), "new-secret"), SaveAction::Update(gh));
@@ -576,14 +576,78 @@ fn check_login_classifies_submissions() {
             "https://evil.com/",
             None,
             Some("octo"),
-            &secret("gh-secret")
+            &secret("gh-secret"),
+            None
         )
         .unwrap(),
         SaveAction::Add
     );
     assert!(v
-        .check_login(page, None, Some("octo"), &secret(""))
+        .check_login(page, None, Some("octo"), &secret(""), None)
         .is_err());
+}
+
+/// A change-password form usually has no username field: the current
+/// password the user entered picks the login to update.
+#[test]
+fn check_login_finds_the_changed_login_by_its_current_password() {
+    let (mut v, gh) = github_vault();
+    let page = "https://github.com/settings/security";
+    let check =
+        |v: &havenkeys_core::vault::VaultService, user: Option<&str>, new: &str, current: &str| {
+            v.check_login(page, None, user, &secret(new), Some(&secret(current)))
+                .unwrap()
+        };
+    assert_eq!(
+        check(&v, None, "new-secret", "gh-secret"),
+        SaveAction::Update(gh)
+    );
+    assert_eq!(
+        check(&v, Some("OCTO"), "new-secret", "gh-secret"),
+        SaveAction::Update(gh)
+    );
+    // The new password is already saved: nothing to offer.
+    assert_eq!(
+        check(&v, None, "gh-secret", "gh-secret"),
+        SaveAction::Unchanged
+    );
+    // A current password that is not saved for this page updates nothing.
+    assert_eq!(check(&v, None, "new-secret", "wrong"), SaveAction::Add);
+    assert_eq!(
+        check(&v, None, "new-secret", "bank-secret"),
+        SaveAction::Add
+    );
+    // Another user's form never updates octo's login.
+    assert_eq!(
+        check(&v, Some("someone-else"), "new-secret", "gh-secret"),
+        SaveAction::Add
+    );
+    // Another site never updates the github.com login.
+    assert_eq!(
+        v.check_login(
+            "https://evil.com/",
+            None,
+            None,
+            &secret("new-secret"),
+            Some(&secret("gh-secret"))
+        )
+        .unwrap(),
+        SaveAction::Add
+    );
+    // Two logins for the page share the current password: too ambiguous to pick one.
+    let staged = v
+        .stage_create(
+            login("GitHub work", "octo-work", "gh-secret", "github.com"),
+            NOW,
+        )
+        .unwrap();
+    v.commit_write(staged, 3).unwrap();
+    assert_eq!(check(&v, None, "new-secret", "gh-secret"), SaveAction::Add);
+    // With the username given, the ambiguity is gone.
+    assert_eq!(
+        check(&v, Some("octo"), "new-secret", "gh-secret"),
+        SaveAction::Update(gh)
+    );
 }
 
 #[test]
@@ -743,7 +807,7 @@ fn save_login_refused_while_locked() {
         Some(Error::Locked)
     );
     assert_eq!(
-        v.check_login("https://github.com/", None, None, &secret("x"))
+        v.check_login("https://github.com/", None, None, &secret("x"), None)
             .err(),
         Some(Error::Locked)
     );

@@ -184,11 +184,21 @@ pub fn dispatch(
             top_url,
             username,
             password,
+            current_password,
         } => {
             require_enabled(v)?;
             let secret = SecretString::new(password.expose().to_owned());
+            let current = current_password
+                .as_ref()
+                .map(|c| SecretString::new(c.expose().to_owned()));
             let (action, item_id) = match v
-                .check_login(url, top_url.as_deref(), username.as_deref(), &secret)
+                .check_login(
+                    url,
+                    top_url.as_deref(),
+                    username.as_deref(),
+                    &secret,
+                    current.as_ref(),
+                )
                 .map_err(code)?
             {
                 CoreSaveAction::Add => (SaveAction::Add, None),

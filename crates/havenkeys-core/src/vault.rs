@@ -1166,7 +1166,9 @@ impl VaultService {
     /// * `Unchanged`: a login for this page already has this username and
     ///   password. Nothing to offer.
     /// * `Update(id)`: a login for this page has this username with a
-    ///   different password.
+    ///   different password, or (a change-password form, often without a
+    ///   username field) exactly one login for this page, with this
+    ///   username if one was given, has `current` as its password.
     /// * `Add`: no login for this page has this username.
     ///
     /// Usernames compare case-insensitively after trimming. Passwords are
@@ -1177,13 +1179,16 @@ impl VaultService {
         top_url: Option<&str>,
         username: Option<&str>,
         password: &SecretString,
+        current: Option<&SecretString>,
     ) -> Result<SaveAction> {
         if password.is_empty() {
             return Err(Error::InvalidInput("password is required"));
         }
+        let current = current.filter(|c| !c.is_empty());
         let wanted = normalize_username(username);
         let candidates = self.find_matches(page_url, top_url)?;
         let mut update = None;
+        let mut by_current = Vec::new();
         for c in &candidates {
             let same_user = normalize_username(c.username.as_deref()) == wanted;
             // A password-only form (no username captured) is "unchanged" if
@@ -1191,16 +1196,28 @@ impl VaultService {
             if !same_user && wanted.is_some() {
                 continue;
             }
-            match self.load_details(&c.id) {
+            let saved = match self.load_details(&c.id) {
                 Ok(ItemDetails::Login {
                     password: Some(saved),
                     ..
-                }) if secrets_equal(&saved, password) => return Ok(SaveAction::Unchanged),
-                _ => {}
+                }) => Some(saved),
+                _ => None,
+            };
+            if let Some(saved) = &saved {
+                if secrets_equal(saved, password) {
+                    return Ok(SaveAction::Unchanged);
+                }
+                if current.is_some_and(|cur| secrets_equal(saved, cur)) {
+                    by_current.push(c.id);
+                }
             }
             if same_user && update.is_none() {
                 update = Some(c.id);
             }
+        }
+        // Two logins sharing the current password: do not guess between them.
+        if update.is_none() && by_current.len() == 1 {
+            update = by_current.pop();
         }
         Ok(update.map_or(SaveAction::Add, SaveAction::Update))
     }

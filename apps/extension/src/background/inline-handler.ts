@@ -102,6 +102,8 @@ interface PendingSave {
   token: string;
   frame: FrameRef;
   username: string | null;
+  /** What the prompt shows: for an update, the saved login's username. */
+  shownUsername: string | null;
   password: string;
   action: "add" | "update";
   itemId: string | null;
@@ -226,6 +228,16 @@ export function createInlineHandler(deps: InlineDeps) {
     return { ok: true, token, rows };
   }
 
+  /** A saved login's username, for the update prompt of a form that had none. */
+  async function savedUsername(frame: FrameRef, itemId: string): Promise<string | null> {
+    try {
+      const { matches } = await deps.client.request({ type: "find_matches", ...frameFields(frame) });
+      return matches.find((m) => m.id === itemId)?.username ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Passkeys first: a hint to use the site's own passkey sign-in when
    * HavenKeys holds one for the page, otherwise, for a site in the Passkeys
@@ -245,7 +257,11 @@ export function createInlineHandler(deps: InlineDeps) {
     return site?.help ? { hint: { kind: "add_passkey", name: site.name }, help: site.help } : { hint: null, help: null };
   }
 
-  async function submit(frame: FrameRef, username: string | null, password: string | null): Promise<void> {
+  /**
+   * `currentPassword` (a change-password form's) only goes into check_login,
+   * where it picks the login to update; it is never kept.
+   */
+  async function submit(frame: FrameRef, username: string | null, password: string | null, currentPassword?: string): Promise<void> {
     const now = deps.now();
     if (password === null) {
       // A username-only step: remember it briefly for the password step.
@@ -260,11 +276,18 @@ export function createInlineHandler(deps: InlineDeps) {
 
     let check: ResultFor<"check_login">;
     try {
-      check = await deps.client.request({ type: "check_login", ...frameFields(frame), username, password });
+      check = await deps.client.request({
+        type: "check_login",
+        ...frameFields(frame),
+        username,
+        password,
+        ...(currentPassword === undefined ? {} : { currentPassword }),
+      });
     } catch {
       return; // Locked, not running, rate limited: no prompt.
     }
     if (check.action === "unchanged") return;
+    const shownUsername = username ?? (check.itemId === null ? null : await savedUsername(frame, check.itemId));
 
     dropSave(frame.tabId, true);
     const token = deps.newToken();
@@ -272,6 +295,7 @@ export function createInlineHandler(deps: InlineDeps) {
       token,
       frame,
       username,
+      shownUsername,
       password,
       action: check.action,
       itemId: check.itemId,
@@ -342,7 +366,7 @@ export function createInlineHandler(deps: InlineDeps) {
         return {};
       }
       case "cs_submit":
-        await submit(frame, req.username, req.password);
+        await submit(frame, req.username, req.password, req.currentPassword);
         return {};
       case "cs_ready":
         return ready(frame);
@@ -428,7 +452,7 @@ export function createInlineHandler(deps: InlineDeps) {
       case "save_state": {
         const s = liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
-        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.username } };
+        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername } };
       }
       case "save_confirm": {
         const s = liveSave(tabId, req.token);

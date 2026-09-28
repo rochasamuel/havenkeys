@@ -249,7 +249,11 @@ function start(): void {
     if (!sub) return;
     lastSubmit = now;
     if (sub.password !== null) generatedIn = null;
-    void send({ type: "cs_submit", username: sub.username, password: sub.password });
+    void send(
+      sub.currentPassword === undefined
+        ? { type: "cs_submit", username: sub.username, password: sub.password }
+        : { type: "cs_submit", username: sub.username, password: sub.password, currentPassword: sub.currentPassword },
+    );
   }
 
   /** The group a submit button belongs to: its form, or the nearest container with a login field. */

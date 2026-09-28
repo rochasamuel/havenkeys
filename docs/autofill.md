@@ -77,7 +77,7 @@ every request the core re-derives the answer from the item's own rules:
 | `find_matches(url, top_url)` | ID, title, username, has-TOTP flag, strength. **No secrets.** | Only logins whose rules match the page |
 | `fill_for_page(id, url, top_url)` | Username and password only | `Denied` unless the item is a login whose rules match the page |
 | `totp_for_page(id, url, top_url, now)` | Current code only; the secret never leaves | Same as above |
-| `check_login(url, top_url, username, password)` | `Add`, `Update(id)` or `Unchanged`. Never a password | Only logins matching the page are compared |
+| `check_login(url, top_url, username, password, current?)` | `Add`, `Update(id)` or `Unchanged`. Never a password | Only logins matching the page are compared |
 | `save_login(url, top_url, username, password, update?)` | The item ID | An update must target a login matching the page; a new login is saved for the page's origin |
 
 All of them return `Locked` when the vault is locked. Secure notes are never
@@ -330,15 +330,24 @@ Detection is conservative:
   submit and use the prompt as an oracle for "is this the saved password?".
 * A new password beats the current one (signup, change password), and is
   dropped if its confirmation does not match.
+* **Change-password forms** rarely have a username field. With a new
+  password, the form's current password goes along too, if the user typed it
+  or we filled it from the vault (never one page script planted). It is only
+  compared in the core, to find the login that changed, and is not kept.
 * **Multi-step logins:** a username-only step is remembered in memory for 5
   minutes, per tab and origin, and joined with the password step.
 * **Generated passwords:** if a generated password was filled but no submit
   was seen, it is offered when the page unloads, so it is not lost.
 
 The background asks the desktop `check_login`. `Unchanged` (this username
-already has this password for this site) shows nothing. `Add` and `Update`
-show a prompt in the tab's top frame. The prompt reappears on the next page
-if the form navigated. The prompt shows the site and username. The password
+already has this password for this site) shows nothing. `Update` when a
+login for the site has this username with another password or, with no
+username, when exactly one login for the site (with this username, if there
+is one) has the form's current password; two logins sharing it are too
+ambiguous, and the answer is `Add`. `Add` and `Update` show a prompt in the
+tab's top frame. The prompt reappears on the next page
+if the form navigated. The prompt shows the site and username (for an update from a form with no
+username, the saved login's). The password
 stays in background memory only, and is dropped on confirm, on "Not now",
 after 3 minutes, and when the vault locks. Nothing is saved without the
 click.

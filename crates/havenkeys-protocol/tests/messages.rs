@@ -48,6 +48,7 @@ fn phase5_requests_parse_and_reencode_canonically() {
         format!(r#"{{"v":1,"id":3,"request":{{"type":"get_totp","itemId":"{ITEM}","url":"https://a.com/","topUrl":"https://a.com/"}}}}"#),
         r#"{"v":1,"id":4,"request":{"type":"check_login","url":"https://a.com/","username":"octo","password":"pw"}}"#.to_owned(),
         r#"{"v":1,"id":5,"request":{"type":"check_login","url":"https://a.com/","username":null,"password":"pw"}}"#.to_owned(),
+        r#"{"v":1,"id":5,"request":{"type":"check_login","url":"https://a.com/","username":null,"password":"pw","currentPassword":"old"}}"#.to_owned(),
         r#"{"v":1,"id":6,"request":{"type":"save_login","url":"https://a.com/","username":"octo","password":"pw","itemId":null}}"#.to_owned(),
         format!(r#"{{"v":1,"id":7,"request":{{"type":"save_login","url":"https://a.com/","topUrl":"https://a.com/","username":null,"password":"pw","itemId":"{ITEM}"}}}}"#),
     ];
@@ -83,6 +84,9 @@ fn phase5_malformed_requests_rejected() {
         (r#"{"v":1,"id":1,"request":{"type":"find_matches","url":"https://a.com/","topUrl":""}}"#.into(), ErrorCode::InvalidInput),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"find_matches","url":"https://a.com/","topUrl":"https://a.com/{long}"}}}}"#), ErrorCode::InvalidInput),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":null,"password":"{big_pw}"}}}}"#), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"check_login","url":"https://a.com/","username":null,"password":"x","currentPassword":""}}"#.into(), ErrorCode::InvalidInput),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":null,"password":"x","currentPassword":"{big_pw}"}}}}"#), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":null,"currentPassword":"old"}}"#.into(), ErrorCode::Malformed),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":"{big_user}","password":"x"}}}}"#), ErrorCode::InvalidInput),
     ];
     for (input, code) in &cases {

@@ -84,6 +84,12 @@ describe("message validation", () => {
       explicit: true,
     });
     expect(parseContentRequest({ type: "cs_submit", username: null, password: "x" })).not.toBeNull();
+    expect(parseContentRequest({ type: "cs_submit", username: null, password: "x", currentPassword: "old" })).toEqual({
+      type: "cs_submit",
+      username: null,
+      password: "x",
+      currentPassword: "old",
+    });
     for (const bad of [
       { type: "cs_open_menu", kind: "login", url: "https://github.com" },
       { type: "cs_open_menu", kind: "everything" },
@@ -93,6 +99,10 @@ describe("message validation", () => {
       { type: "cs_submit", username: "", password: "x" },
       { type: "cs_submit", username: null, password: "x".repeat(4097) },
       { type: "cs_submit", username: "u".repeat(513), password: "x" },
+      { type: "cs_submit", username: null, password: "x", currentPassword: "" },
+      { type: "cs_submit", username: null, password: "x", currentPassword: null },
+      { type: "cs_submit", username: null, password: "x", currentPassword: "x".repeat(4097) },
+      { type: "cs_submit", username: "u", password: null, currentPassword: "old" },
       { type: "cs_close_menu", token: "short" },
       { type: "fill_item", itemId: GH, url: "https://github.com" },
       null,
@@ -355,6 +365,27 @@ describe("save prompts", () => {
     });
     // Gone once used.
     expect((await h.handleInline(1, { type: "save_state", token: T1 })).ok).toBe(false);
+  });
+
+  it("a change-password form: the current password only goes to check_login", async () => {
+    const { h, requests } = setup((r) =>
+      r.type === "check_login" ? { type: "check_login", action: "update", itemId: GH } : defaultAnswer(r),
+    );
+    await h.handleContent(frame(), { type: "cs_submit", username: null, password: "new-pw", currentPassword: "old-pw" });
+    expect(requests[0]).toEqual({
+      type: "check_login",
+      url: "https://github.com/login",
+      username: null,
+      password: "new-pw",
+      currentPassword: "old-pw",
+    });
+    // The prompt names the saved login's username, which the form did not have.
+    const state = await h.handleInline(1, { type: "save_state", token: T1 });
+    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo" } });
+    expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
+    const save = requests.find((r) => r.type === "save_login");
+    expect(save).toMatchObject({ username: null, password: "new-pw", itemId: GH });
+    expect(JSON.stringify([state, save])).not.toContain("old-pw");
   });
 
   it("does not prompt for unchanged logins", async () => {

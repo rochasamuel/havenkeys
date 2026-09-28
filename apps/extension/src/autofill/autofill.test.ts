@@ -449,6 +449,37 @@ describe("submissions", () => {
     expect(readSubmission(group('[name="p"]'))).toBeNull();
   });
 
+  it("sends the current password of a change-password form, to find the login to update", () => {
+    const form = `<form><h1>Change password</h1><input name="a" type="password"><input name="b" type="password">
+      <input name="c" type="password"><button type="submit">Update</button></form>`;
+    // Typed by the user.
+    page(form);
+    for (const [n, v] of [["a", "old"], ["b", "new"], ["c", "new"]] as const) {
+      $(`[name="${n}"]`).value = v;
+      markUserEdit($(`[name="${n}"]`));
+    }
+    expect(readSubmission(group('[name="b"]'))).toEqual({ username: null, password: "new", currentPassword: "old" });
+    // Filled from the vault.
+    page(form);
+    const g = group('[name="b"]');
+    fillLogin(g, { username: null, password: "from-vault" }, env());
+    fillNewPassword(g, "Gen-3!", env());
+    expect(readSubmission(g)).toEqual({ username: null, password: "Gen-3!", currentPassword: "from-vault" });
+    // Planted by page script: left out, the new password is still offered.
+    $('[name="a"]').value = "guess";
+    expect(readSubmission(g)).toEqual({ username: null, password: "Gen-3!" });
+    // Too long: left out.
+    $('[name="a"]').value = "x".repeat(5000);
+    markUserEdit($('[name="a"]'));
+    expect(readSubmission(g)).toEqual({ username: null, password: "Gen-3!" });
+  });
+
+  it("sends no current password for a plain sign-in", () => {
+    page(`<form><input name="u" type="email" value="me"><input name="p" type="password" value="typed"></form>`);
+    markUserEdit($('[name="p"]'));
+    expect(readSubmission(group('[name="p"]'))).toStrictEqual({ username: "me", password: "typed" });
+  });
+
   it("ignores absurdly long values", () => {
     page(`<form><input name="u" type="email"><input name="p" type="password"></form>`);
     $('[name="p"]').value = "x".repeat(5000);

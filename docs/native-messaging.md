@@ -119,7 +119,7 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `fill_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `get_totp` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `generate_password` | none | yes | lookup |
-| `check_login` | `url`, `topUrl`?, `username` (string or null), `password` | yes | secret |
+| `check_login` | `url`, `topUrl`?, `username` (string or null), `password`, `currentPassword`? (a change-password form's current password) | yes | secret |
 | `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null) | yes | secret, plus one update per item per 10 min |
 | `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |
 | `passkey_get` | `itemId` (UUID), `credentialId`, `url`, `topUrl`?, `rpId`, `challenge` | yes | secret |
@@ -204,7 +204,7 @@ error.
 | Request frame | 16 KiB | host (stdin) and bridge (socket) |
 | Response frame | 256 KiB (Chrome's own cap is 1 MiB) | bridge, host |
 | URL, top URL | 4096 bytes each | extension, host, bridge |
-| Password in `check_login`/`save_login` | 16 KiB (the core allows 4096 characters) | host, bridge, core |
+| Password (and `currentPassword`) in `check_login`/`save_login` | 16 KiB (the core allows 4096 characters) | host, bridge, core |
 | Username | 2 KiB (the core allows 512 characters) | host, bridge, core |
 | Suggestions per `find_matches` | 50 | bridge, host, extension |
 | Passkeys per `find_passkeys`, candidates per `check_passkey_create` | 50 | bridge, host, extension |

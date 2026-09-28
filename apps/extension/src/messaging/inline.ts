@@ -29,7 +29,7 @@ export type ContentRequest =
   /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
   | { type: "cs_open_menu"; kind: MenuKind; explicit?: true }
   | { type: "cs_close_menu"; token: string }
-  | { type: "cs_submit"; username: string | null; password: string | null }
+  | { type: "cs_submit"; username: string | null; password: string | null; currentPassword?: string }
   | { type: "cs_ready" }
   /** The next step's field appeared in this frame during a sign-in run. */
   | { type: "cs_run_step"; kind: NextStep }
@@ -163,11 +163,15 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
     case "cs_close_menu":
       return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: "cs_close_menu", token: o.token } : null;
     case "cs_submit": {
-      if (!keysAre(o, ["type", "username", "password"])) return null;
-      const { username, password } = o;
+      const withCurrent = keysAre(o, ["type", "username", "password", "currentPassword"]);
+      if (!withCurrent && !keysAre(o, ["type", "username", "password"])) return null;
+      const { username, password, currentPassword } = o;
       if (!boundedOrNull(username, MAX_USERNAME_CHARS) || !boundedOrNull(password, MAX_PASSWORD_CHARS)) return null;
       if (username === null && password === null) return null;
-      return { type: "cs_submit", username, password };
+      if (!withCurrent) return { type: "cs_submit", username, password };
+      // Only beside a new password, and never null.
+      if (password === null || currentPassword === null || !boundedOrNull(currentPassword, MAX_PASSWORD_CHARS)) return null;
+      return { type: "cs_submit", username, password, currentPassword };
     }
     case "cs_ready":
       return keysAre(o, ["type"]) ? { type: "cs_ready" } : null;
