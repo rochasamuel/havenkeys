@@ -89,7 +89,7 @@ export const ptBR: Messages = {
       "Desativado. O HavenKeys não pode oferecer salvar logins nem cuidar de chaves de acesso. Preencher pelo botão da barra de ferramentas continua funcionando.",
     allow: "Permitir",
     accessNote:
-      "A extensão lê os campos de login quando você interage com eles e nunca envia o conteúdo das páginas a lugar nenhum; o app para computador decide quais logins cada site pode usar. Você pode limitar o acesso aos sites nas configurações de extensões do navegador.",
+      "A extensão lê os campos de login quando você interage com eles e nunca envia o conteúdo das páginas a lugar nenhum; o app para computador decide quais logins cada site pode usar. Desativar o acesso aos sites nas configurações de extensões do navegador interrompe as ofertas para salvar e as chaves de acesso. Limitá-lo a alguns sites, por enquanto, o desativa em todos.",
     withoutTitle: "Sem acesso aos sites",
     withoutBefore: "Clique no botão do HavenKeys na barra de ferramentas e escolha ",
     withoutAfter: ". A extensão passa a ter acesso só à aba em que você clicou, e só até você sair da página.",

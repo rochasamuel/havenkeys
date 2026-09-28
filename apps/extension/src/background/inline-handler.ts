@@ -182,8 +182,14 @@ export function createInlineHandler(deps: InlineDeps) {
   // ------------------------------------------------------------ content script
 
   async function openMenu(frame: FrameRef, kind: MenuKind, explicit: boolean): Promise<OpenMenuReply> {
-    // The user hid the menu under login fields; saving and passkeys go on.
-    if (deps.suggestionsOn && !(await deps.suggestionsOn())) return { ok: false };
+    if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
+      // The user hid the menu under login fields; saving and passkeys go on.
+      // A site's passkey autofill (a conditional get() waiting in this frame)
+      // still gets its rows, and nothing else: signing in with a passkey
+      // must not depend on the preference.
+      const waiting = kind === "login" && !explicit ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
+      return waiting.length === 0 ? { ok: false } : register(frame, kind, false, [], waiting, { hint: null, help: null });
+    }
     let locked = false;
     let items: Match[] = [];
     try {
@@ -199,9 +205,19 @@ export function createInlineHandler(deps: InlineDeps) {
     const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
     // Nothing to offer: stay out of the page, unless the user asked for the menu.
     if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !explicit) return { ok: false };
-    const { hint, help } =
+    const extra =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
+    return register(frame, kind, locked, items, passkeys, extra);
+  }
 
+  function register(
+    frame: FrameRef,
+    kind: MenuKind,
+    locked: boolean,
+    items: Match[],
+    passkeys: PasskeyRow[],
+    { hint, help }: { hint: MenuHint | null; help: string | null },
+  ): OpenMenuReply {
     closeMenu(frame.tabId);
     const token = deps.newToken();
     menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, expires: deps.now() + MENU_TTL_MS });

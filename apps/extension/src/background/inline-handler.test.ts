@@ -758,3 +758,53 @@ describe("suggestions preference", () => {
     expect(await h.handleContent(frame(), { type: "cs_ready" })).toMatchObject({ saveToken: T1 });
   });
 });
+
+describe("suggestions off: passkey autofill still shows", () => {
+  const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
+  const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo" };
+
+  function offWithPasskeys(rows = [row]) {
+    const requests: Request[] = [];
+    const picks: unknown[] = [];
+    const h = createInlineHandler({
+      client: {
+        request: (async (r: Request) => {
+          requests.push(r);
+          return defaultAnswer(r);
+        }) as never,
+      },
+      sendToFrame: async () => undefined,
+      now: () => 1,
+      newToken: () => T1,
+      suggestionsOn: async () => false,
+      passkeys: {
+        conditionalFor: () => rows,
+        pickConditional: async (...args: unknown[]) => {
+          picks.push(args);
+          return { ok: true as const, value: null };
+        },
+      },
+    });
+    return { h, requests, picks };
+  }
+
+  it("opens a login menu with only the waiting passkeys, and no saved passwords", async () => {
+    const { h, requests, picks } = offWithPasskeys();
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+    const view = await h.handleInline(1, { type: "menu_state", token: T1 });
+    expect(view).toMatchObject({ ok: true, value: { state: "ready", passkeys: [row], items: [], hint: null } });
+    expect(requests).toEqual([]); // no password lookup
+    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
+    expect((await h.handleInline(1, { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: CRED })).ok).toBe(true);
+    expect(picks).toHaveLength(1);
+  });
+
+  it("opens nothing without a waiting passkey request, from the icon, or in OTP and sign-up fields", async () => {
+    const { h: none } = offWithPasskeys([]);
+    expect(await none.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
+    const { h } = offWithPasskeys();
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login", explicit: true })).toEqual({ ok: false });
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "otp" })).toEqual({ ok: false });
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" })).toEqual({ ok: false });
+  });
+});

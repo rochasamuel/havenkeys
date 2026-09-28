@@ -96,7 +96,14 @@ A value of any other type is treated as on.
 `inline-handler.ts` `openMenu` reads the preference first. When off it
 returns `{ ok: false }` (the reply already used when there is nothing to
 offer), for every kind and with `explicit` too, before asking the desktop
-anything, and opens no frame. Every menu path goes through `openMenu`, so
+anything, and opens no frame — with one exception, added after the final
+review: for a non-explicit `login` request, if a site's passkey autofill (a
+conditional `get()`) is waiting in that frame, it opens a menu holding only
+those passkeys (no saved passwords, no hint). Otherwise a site whose
+passkey sign-in is autofill-only could not be signed in to with a HavenKeys
+passkey, and using passkeys must not depend on the preference. The content
+script correspondingly still asks, while off, for login fields on a
+trusted click (never from the icon, never for OTP or sign-up fields). Every menu path goes through `openMenu`, so
 this is the single place that decides.
 
 Not affected: `cs_submit` → `check_login` → save prompt, `cs_ready`

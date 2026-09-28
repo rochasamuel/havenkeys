@@ -138,9 +138,12 @@ function start(): void {
 
   /** `explicit`: from the field icon, so show the menu even with nothing to offer. */
   async function maybeOpen(field: HTMLInputElement, explicit = false): Promise<void> {
-    if (!suggestions || opening || menu?.field === field || !isFillable(field, defaultEnv())) return;
+    if (opening || menu?.field === field || !isFillable(field, defaultEnv())) return;
     const kind = menuKindFor(field);
     if (!kind) return;
+    // Suggestions off: only a login field may still ask, for the passkeys of
+    // a site's passkey autofill (the background offers nothing else).
+    if (!suggestions && (explicit || kind !== "login")) return;
     opening = true;
     const req: ContentRequest = explicit ? { type: "cs_open_menu", kind, explicit: true } : { type: "cs_open_menu", kind };
     const reply = (await send(req)) as { ok?: unknown; token?: unknown; rows?: unknown } | undefined;

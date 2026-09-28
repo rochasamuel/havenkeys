@@ -120,7 +120,7 @@ export const en = {
     accessOff: "Off. HavenKeys cannot offer to save logins or handle passkeys. Filling from the toolbar button still works.",
     allow: "Allow",
     accessNote:
-      "The extension reads login fields when you interact with them and never sends page contents anywhere; the desktop app decides which logins a website may use. You can limit site access in your browser's extension settings.",
+      "The extension reads login fields when you interact with them and never sends page contents anywhere; the desktop app decides which logins a website may use. Turning site access off in your browser's extension settings stops save prompts and passkeys. Limiting it to chosen sites currently turns it off on every site.",
     withoutTitle: "Without site access",
     /** Split around the popup's "Fill" button label, which is shown emphasised. */
     withoutBefore: "Click the HavenKeys button in the toolbar and choose ",

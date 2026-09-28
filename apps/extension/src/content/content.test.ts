@@ -130,7 +130,7 @@ describe("content script", () => {
     expect(document.documentElement.querySelector(":scope > div[title='HavenKeys']")).toBeNull();
   });
 
-  it("hides the field icon and any open menu while suggestions are off, without a reload", async () => {
+  it("hides the field icon while suggestions are off, without a reload", async () => {
     const setPref = (v: boolean) => storageListener?.({ inlineSuggestions: { newValue: v } }, "local");
     const iconEl = () => document.documentElement.querySelector(":scope > div[title='HavenKeys']");
     const pw = field("pw");
@@ -145,6 +145,35 @@ describe("content script", () => {
     expect(iconEl()).not.toBeNull(); // the focused field gets it back
     pw.blur();
     await new Promise((r) => setTimeout(r, 10));
+  });
+
+  it("still shows the save prompt and offers a generated password while suggestions are off", async () => {
+    const setPref = (v: boolean) => storageListener?.({ inlineSuggestions: { newValue: v } }, "local");
+    setPref(false);
+    try {
+      const token = "a".repeat(32);
+      deliver({ type: "bg_show_save", token });
+      const frame = document.documentElement.querySelector("iframe");
+      expect(frame?.getAttribute("src") ?? "").toContain("save.html");
+      deliver({ type: "bg_close_save", token });
+
+      document.body.innerHTML = `<form><h1>Create account</h1><input name="user" type="email">
+        <input name="new" type="password" autocomplete="new-password"><button type="submit">Sign up</button></form>`;
+      const reply = deliver({
+        type: "bg_fill",
+        origin: location.origin,
+        token: null,
+        fill: { kind: "generated", password: "Gen-pw-1!" },
+        submit: false,
+        totp: false,
+      }) as { filled: number };
+      expect(reply.filled).toBeGreaterThan(0);
+      sent.length = 0;
+      window.dispatchEvent(new Event("pagehide"));
+      expect(sent).toContainEqual(expect.objectContaining({ type: "cs_submit", password: "Gen-pw-1!" }));
+    } finally {
+      setPref(true);
+    }
   });
 
   it("page script cannot open menus by synthesizing typing", async () => {

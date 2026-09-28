@@ -740,10 +740,13 @@ ends an acknowledged modal request that is never answered with
   including the generated-password menu on sign-up fields — are a separate
   preference on the options page, on by default, stored as one boolean in
   `chrome.storage.local` (`shared/prefs.ts`). The background refuses to open
-  a menu while it is off, and the content script hides the icon and stops
-  asking, following changes live. Turning it off does not affect save and
-  update prompts, passkeys, popup fills or automatic sign-in started from
-  the popup. The two passkey
+  a menu while it is off, and the content script hides the icon, following
+  changes live. One exception keeps passkeys working: when a site's passkey
+  autofill (a conditional `get()`) is waiting in the frame, clicking a login
+  field still opens a menu with **only** those passkeys — no saved
+  passwords, no hints, never from the icon. Turning it off does not affect
+  save and update prompts, passkeys, popup fills or automatic sign-in
+  started from the popup. The two passkey
   scripts (§Passkeys) follow the same grant, registered as a separate group
   at `document_start`, so a browser that refuses `world: "MAIN"` keeps
   in-page suggestions.
