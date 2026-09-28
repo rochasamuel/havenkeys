@@ -43,14 +43,14 @@ pub fn manifest_json(host: &Path, kind: Kind) -> String {
     s
 }
 
-/// A browser profile directory and where its manifest goes, for Linux and
-/// macOS. The manifest is written only when `profile` exists, so browsers
-/// the user does not have get no directories created for them.
+/// Where a browser keeps its data and where its manifest goes, for Linux
+/// and macOS. The manifest is written only when one of `profiles` exists, so
+/// browsers the user does not have get no directories created for them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
     pub browser: &'static str,
     pub kind: Kind,
-    pub profile: PathBuf,
+    pub profiles: Vec<PathBuf>,
     pub manifest: PathBuf,
 }
 
@@ -61,13 +61,19 @@ fn chromium(browser: &'static str, profile: PathBuf) -> Target {
     Target {
         browser,
         kind: Kind::Chromium,
-        profile,
+        profiles: vec![profile],
         manifest,
     }
 }
 
 /// Linux: the XDG config directory (`$XDG_CONFIG_HOME`, else `~/.config`)
 /// for Chromium browsers, `~/.mozilla` for Firefox.
+///
+/// Firefox reads host manifests only from `~/.mozilla/native-messaging-hosts`
+/// (the snap and Flatpak builds through the WebExtensions portal, which
+/// looks there on the host), but its profile may live elsewhere: in
+/// `$XDG_CONFIG_HOME/mozilla` for profiles made by Firefox 147+, or inside
+/// the snap or Flatpak sandbox. Any of those means Firefox is installed.
 pub fn linux_targets(home: &Path, config: &Path) -> Vec<Target> {
     let mut t = vec![
         chromium("Google Chrome", config.join("google-chrome")),
@@ -80,7 +86,12 @@ pub fn linux_targets(home: &Path, config: &Path) -> Vec<Target> {
     t.push(Target {
         browser: "Firefox",
         kind: Kind::Firefox,
-        profile: home.join(".mozilla"),
+        profiles: vec![
+            home.join(".mozilla"),
+            config.join("mozilla"),
+            home.join("snap/firefox"),
+            home.join(".var/app/org.mozilla.firefox"),
+        ],
         manifest: home
             .join(".mozilla/native-messaging-hosts")
             .join(format!("{HOST_NAME}.json")),
@@ -102,7 +113,7 @@ pub fn macos_targets(home: &Path) -> Vec<Target> {
     t.push(Target {
         browser: "Firefox",
         kind: Kind::Firefox,
-        profile: s.join("Mozilla"),
+        profiles: vec![s.join("Mozilla"), s.join("Firefox")],
         manifest: s
             .join("Mozilla/NativeMessagingHosts")
             .join(format!("{HOST_NAME}.json")),
@@ -137,7 +148,7 @@ pub fn write_if_changed(path: &Path, contents: &str) -> io::Result<()> {
 pub fn register_targets(host: &Path, targets: &[Target]) -> Vec<&'static str> {
     targets
         .iter()
-        .filter(|t| t.profile.is_dir())
+        .filter(|t| t.profiles.iter().any(|p| p.is_dir()))
         .filter(|t| write_if_changed(&t.manifest, &manifest_json(host, t.kind)).is_ok())
         .map(|t| t.browser)
         .collect()
@@ -281,6 +292,35 @@ mod tests {
         // No directories were created for absent browsers.
         assert!(!config.join("chromium").exists());
         assert!(!config.join("BraveSoftware").exists());
+    }
+
+    #[test]
+    fn firefox_without_a_dot_mozilla_profile_is_still_registered() {
+        // A snap Firefox keeps its profile under ~/snap/firefox, and a new
+        // profile in Firefox 147+ lives in $XDG_CONFIG_HOME/mozilla, so
+        // ~/.mozilla may not exist. Both still read the host manifest from
+        // ~/.mozilla/native-messaging-hosts.
+        for marker in [
+            "snap/firefox",
+            ".config/mozilla",
+            ".var/app/org.mozilla.firefox",
+        ] {
+            let home = tempfile::tempdir().unwrap();
+            let config = home.path().join(".config");
+            fs::create_dir_all(home.path().join(marker)).unwrap();
+            let host = home.path().join("havenkeys-native-host");
+
+            let done = register_targets(&host, &linux_targets(home.path(), &config));
+            assert_eq!(done, vec!["Firefox"], "{marker}");
+            let firefox = home
+                .path()
+                .join(".mozilla/native-messaging-hosts/com.havenkeys.bridge.json");
+            assert_eq!(
+                fs::read_to_string(&firefox).unwrap(),
+                manifest_json(&host, Kind::Firefox),
+                "{marker}"
+            );
+        }
     }
 
     #[test]

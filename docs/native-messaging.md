@@ -49,8 +49,8 @@ registers it with the user's browsers (`apps/desktop/src-tauri/src/native_host.r
 
 | OS | What the app writes |
 |---|---|
-| Linux | `<profile>/NativeMessagingHosts/com.havenkeys.bridge.json` for each Chromium browser whose profile directory exists under `$XDG_CONFIG_HOME` (Chrome, Chrome Beta, Chromium, Brave, Edge, Vivaldi), and `~/.mozilla/native-messaging-hosts/com.havenkeys.bridge.json` if `~/.mozilla` exists |
-| macOS | The same files under `~/Library/Application Support/<browser>/` (Firefox: `Mozilla/NativeMessagingHosts/`) |
+| Linux | `<profile>/NativeMessagingHosts/com.havenkeys.bridge.json` for each Chromium browser whose profile directory exists under `$XDG_CONFIG_HOME` (Chrome, Chrome Beta, Chromium, Brave, Edge, Vivaldi), and `~/.mozilla/native-messaging-hosts/com.havenkeys.bridge.json` if Firefox has a profile in `~/.mozilla`, `$XDG_CONFIG_HOME/mozilla` (Firefox 147+), `~/snap/firefox` or `~/.var/app/org.mozilla.firefox` (the snap and Flatpak builds reach the host through the WebExtensions portal, which reads the same file) |
+| macOS | The same files under `~/Library/Application Support/<browser>/` (Firefox: `Mozilla/NativeMessagingHosts/`, written when `Mozilla/` or `Firefox/` exists) |
 | Windows | `%LOCALAPPDATA%\HavenKeys\com.havenkeys.bridge.{chrome,firefox}.json`, and `HKCU\Software\<browser>\NativeMessagingHosts\com.havenkeys.bridge` pointing to them for Chrome, Edge, Brave, Chromium, Vivaldi and Firefox |
 
 Only our own manifest files and keys are written, per user, with no

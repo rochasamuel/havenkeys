@@ -22,7 +22,14 @@ case "$(uname -s)" in
       "$HOME/.config/microsoft-edge"
       "$HOME/.config/vivaldi"
     )
-    firefox_dir="$HOME/.mozilla"
+    # Firefox reads ~/.mozilla/native-messaging-hosts even when its profile
+    # is elsewhere (XDG in Firefox 147+, snap, Flatpak).
+    firefox_dirs=(
+      "$HOME/.mozilla"
+      "${XDG_CONFIG_HOME:-$HOME/.config}/mozilla"
+      "$HOME/snap/firefox"
+      "$HOME/.var/app/org.mozilla.firefox"
+    )
     firefox_hosts="$HOME/.mozilla/native-messaging-hosts"
     ;;
   Darwin)
@@ -35,7 +42,7 @@ case "$(uname -s)" in
       "$s/Microsoft Edge"
       "$s/Vivaldi"
     )
-    firefox_dir="$s/Mozilla"
+    firefox_dirs=("$s/Mozilla" "$s/Firefox")
     firefox_hosts="$s/Mozilla/NativeMessagingHosts"
     ;;
   *)
@@ -87,7 +94,9 @@ for d in "${chromium_dirs[@]}"; do
     found=1
   fi
 done
-if [[ -d "$firefox_dir" ]]; then
+firefox_found=0
+for d in "${firefox_dirs[@]}"; do [[ -d "$d" ]] && firefox_found=1; done
+if [[ "$firefox_found" == 1 ]]; then
   write_manifest "$firefox_hosts/$NAME.json" allowed_extensions "$FIREFOX_ID"
   found=1
 fi
