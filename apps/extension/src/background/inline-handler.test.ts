@@ -19,7 +19,7 @@ const OTHER = "11111111-2222-4333-8444-555555555555";
 const T1 = "0".repeat(31) + "1";
 const GH_SITE = { name: "GitHub", domains: ["github.com"], passwordless: true, mfa: true, help: "https://docs.github.com/passkeys" };
 
-const ghMatch = { id: GH, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" as const };
+const ghMatch = { id: GH, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" as const, provider: null };
 
 function frame(over: Partial<FrameRef> = {}): FrameRef {
   return { tabId: 1, frameId: 0, url: "https://github.com/login", origin: "https://github.com", ...over };

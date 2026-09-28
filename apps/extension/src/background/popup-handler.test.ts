@@ -127,7 +127,7 @@ describe("popup handler", () => {
     const c = fakeClient((r) =>
       r.type === "fill_item"
         ? { type: "fill_item", username: "octo", password: "pw", autoSubmit: true }
-        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" }] },
+        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null }] },
     );
     const fills: unknown[][] = [];
     const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login" }), async (...a) => {

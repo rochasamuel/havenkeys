@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { b64urlLength, envelope, MAX_MATCHES, parseIncoming } from "./index";
+import { b64urlLength, envelope, MAX_MATCHES, parseIncoming, providersForOrigin } from "./index";
 
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
-const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" };
+const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null };
 
 describe("parseIncoming", () => {
   it("accepts every valid message shape", () => {
@@ -155,5 +155,31 @@ describe("passkey results", () => {
     expect(b64urlLength("a+b/")).toBeNull();
     expect(b64urlLength("AQ==")).toBeNull();
     expect(b64urlLength(5)).toBeNull();
+  });
+});
+
+describe("sign in with", () => {
+  const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+  it("parses start_sso, check_sso, save_sso and Match.provider", () => {
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "start_sso", provider: "google", account: null, providerOrigins: ["https://accounts.google.com"], autoChoose: true } }))
+      .toEqual({ kind: "result", id: 1, result: { type: "start_sso", provider: "google", account: null, providerOrigins: ["https://accounts.google.com"], autoChoose: true } });
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "check_sso", action: "update", itemId: ID } })?.kind).toBe("result");
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "save_sso", itemId: ID } })?.kind).toBe("result");
+    const m = { id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: "github" };
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m] } })?.kind).toBe("result");
+  });
+  it("rejects wrong shapes", () => {
+    const bad = [
+      { type: "start_sso", provider: "okta", account: null, providerOrigins: ["x"], autoChoose: true },
+      { type: "start_sso", provider: "google", account: null, providerOrigins: [], autoChoose: true },
+      { type: "start_sso", provider: "google", account: null, providerOrigins: ["a", "b", "c", "d", "e"], autoChoose: true },
+      { type: "check_sso", action: "update", itemId: null },
+      { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }] },
+    ];
+    for (const result of bad) expect(parseIncoming({ v: 1, id: 1, result })).toBeNull();
+  });
+  it("knows which providers an origin belongs to", () => {
+    expect(providersForOrigin("https://github.com")).toEqual(["github"]);
+    expect(providersForOrigin("https://accounts.google.com.evil.com")).toEqual([]);
   });
 });
