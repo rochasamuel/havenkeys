@@ -156,6 +156,7 @@ export const en = {
     save: "Save",
     update: "Update",
     notNow: "Not now",
+    titleLabel: "Name",
   },
 
   passkey: {

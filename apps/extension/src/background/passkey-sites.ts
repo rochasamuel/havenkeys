@@ -2,8 +2,9 @@
 // 2factorauth (CC-BY-4.0; see THIRD-PARTY-NOTICES.md). A snapshot committed
 // with the extension (scripts/update-passkey-directory.mjs), never fetched.
 //
-// Only a UI hint: a match shows a help link in the field menu, nothing more,
-// so matching is plain host-suffix comparison (no Public Suffix List).
+// Only UI hints: a match shows a help link in the field menu and suggests a
+// new login's name in the save prompt (which the user can edit), nothing
+// more, so matching is plain host-suffix comparison (no Public Suffix List).
 // The data is third-party text: validated here, shown with textContent only.
 
 import raw from "../data/passkey-sites.json";

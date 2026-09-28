@@ -116,7 +116,15 @@ describe("message validation", () => {
     expect(parseInlineRequest({ type: "menu_pick", token: T1, itemId: GH })).not.toBeNull();
     expect(parseInlineRequest({ type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ" })).not.toBeNull();
     expect(parseInlineRequest({ type: "menu_open_help", token: T1 })).toEqual({ type: "menu_open_help", token: T1 });
+    expect(parseInlineRequest({ type: "save_confirm", token: T1, title: "GitHub – work" })).toEqual({
+      type: "save_confirm",
+      token: T1,
+      title: "GitHub – work",
+    });
     for (const bad of [
+      { type: "save_confirm", token: T1, title: null },
+      { type: "save_confirm", token: T1, title: 7 },
+      { type: "save_confirm", token: T1, title: "x".repeat(257) },
       { type: "menu_pick", token: T1, itemId: "x" },
       { type: "menu_pick", token: "nope", itemId: GH },
       { type: "menu_state", token: T1, url: "https://evil.com" },
@@ -352,7 +360,7 @@ describe("save prompts", () => {
     });
     expect(sent[0]).toEqual({ to: { tabId: 1, frameId: 0 }, msg: { type: "bg_show_save", token: T1 } });
     const state = await h.handleInline(1, { type: "save_state", token: T1 });
-    expect(state).toEqual({ ok: true, value: { action: "add", site: "github.com", username: "octo" } });
+    expect(state).toEqual({ ok: true, value: { action: "add", site: "github.com", username: "octo", title: "github.com" } });
     expect(JSON.stringify(state)).not.toContain("typed");
     expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
     expect(requests[1]).toEqual({
@@ -362,6 +370,7 @@ describe("save prompts", () => {
       username: "octo",
       password: "typed",
       itemId: null,
+      title: "github.com",
     });
     // Gone once used.
     expect((await h.handleInline(1, { type: "save_state", token: T1 })).ok).toBe(false);
@@ -381,11 +390,27 @@ describe("save prompts", () => {
     });
     // The prompt names the saved login's username, which the form did not have.
     const state = await h.handleInline(1, { type: "save_state", token: T1 });
-    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo" } });
+    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo", title: null } });
     expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
     const save = requests.find((r) => r.type === "save_login");
     expect(save).toMatchObject({ username: null, password: "new-pw", itemId: GH });
+    expect(save).not.toHaveProperty("title");
     expect(JSON.stringify([state, save])).not.toContain("old-pw");
+  });
+
+  it("names a new login after the known site, or the host, and takes the user's title", async () => {
+    const known = setup(defaultAnswer, { passkeySite: (url) => (url.startsWith("https://github.com") ? GH_SITE : null) });
+    await known.h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "pw" });
+    expect(await known.h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { title: "GitHub" } });
+    await known.h.handleInline(1, { type: "save_confirm", token: T1 });
+    expect(known.requests.find((r) => r.type === "save_login")).toMatchObject({ title: "GitHub" });
+
+    for (const [typed, saved] of [["  GitHub – work  ", "GitHub – work"], ["   ", "github.com"]] as const) {
+      const { h, requests } = setup();
+      await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "pw" });
+      expect(await h.handleInline(1, { type: "save_confirm", token: T1, title: typed })).toEqual({ ok: true, value: null });
+      expect(requests.find((r) => r.type === "save_login")).toMatchObject({ title: saved });
+    }
   });
 
   it("does not prompt for unchanged logins", async () => {

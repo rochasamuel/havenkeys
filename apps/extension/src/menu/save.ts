@@ -1,14 +1,18 @@
 // "Save login?" prompt. Shows the site and username only; the password
 // stays in the background until the user confirms, and is dropped if they
-// don't.
+// don't. A new login's name is editable here: the page never sees this
+// frame, so the name is the user's, not the page's.
 
-import { SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type SaveView } from "../messaging/inline";
+import { MAX_TITLE_CHARS, SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type InlineRequest, type SaveView } from "../messaging/inline";
 import { applyDocumentLang, t } from "../i18n";
 import { ask, createClickGuard, tokenFromHash } from "./common";
 
 const question = document.getElementById("question") as HTMLElement;
 const detail = document.getElementById("detail") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
+const titleField = document.getElementById("title-field") as HTMLElement;
+const titleLabel = document.getElementById("title-label") as HTMLElement;
+const titleInput = document.getElementById("title") as HTMLInputElement;
 const confirmBtn = document.getElementById("confirm") as HTMLButtonElement;
 const dismissBtn = document.getElementById("dismiss") as HTMLButtonElement;
 const token = tokenFromHash();
@@ -20,9 +24,19 @@ document.title = t.save.pageTitle;
 question.textContent = t.save.loading;
 dismissBtn.textContent = t.save.notNow;
 confirmBtn.textContent = t.save.save;
+titleLabel.textContent = t.save.titleLabel;
+titleInput.maxLength = MAX_TITLE_CHARS;
+
+/** The confirm message: with the name field's text for a new login (null for an update). */
+export function confirmRequest(token: string, title: string | null): InlineRequest {
+  return title === null ? { type: "save_confirm", token } : { type: "save_confirm", token, title };
+}
 
 function show(view: SaveView): void {
   site.textContent = view.site;
+  // No autofocus: the prompt opens over the page and must not take its focus.
+  titleField.hidden = view.title === null;
+  titleInput.value = view.title ?? "";
   if (view.action === "update") {
     question.textContent = t.save.updateQuestion;
     confirmBtn.textContent = t.save.update;
@@ -42,17 +56,25 @@ function fail(message: string): void {
   // The error takes the question's place; the prompt grows to fit it (save_resize).
   detail.textContent = "";
   delete detail.dataset.truncate;
+  titleField.hidden = true;
   question.textContent = message;
   question.className = "error";
   confirmBtn.disabled = true;
 }
 
-confirmBtn.addEventListener("click", async (e) => {
-  if (!token || !e.isTrusted || !guard.armed()) return;
+async function confirm(e: Event): Promise<void> {
+  if (!token || !e.isTrusted || !guard.armed() || confirmBtn.disabled) return;
   confirmBtn.disabled = true;
-  const r = await ask<null>({ type: "save_confirm", token });
+  const r = await ask<null>(confirmRequest(token, titleField.hidden ? null : titleInput.value));
   // On success the background closes this frame.
   if (!r.ok) fail(r.message);
+}
+
+confirmBtn.addEventListener("click", (e) => void confirm(e));
+titleInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.isComposing) return;
+  e.preventDefault();
+  void confirm(e);
 });
 
 dismissBtn.addEventListener("click", (e) => {

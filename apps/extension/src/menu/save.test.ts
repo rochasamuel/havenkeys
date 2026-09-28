@@ -25,6 +25,15 @@ function page(): void {
     p.id = id;
     text.append(p);
   }
+  const field = document.createElement("label");
+  field.id = "title-field";
+  field.hidden = true;
+  const label = document.createElement("span");
+  label.id = "title-label";
+  const input = document.createElement("input");
+  input.id = "title";
+  field.append(label, input);
+  text.append(field);
   const actions = document.createElement("div");
   for (const id of ["dismiss", "confirm"]) {
     const b = document.createElement("button");
@@ -55,6 +64,47 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+async function openPrompt(view: object): Promise<void> {
+  replies = [{ ok: true, value: view }];
+  vi.resetModules();
+  await import("./save");
+  await vi.advanceTimersByTimeAsync(1000); // past the click guard
+}
+
+const titleField = () => document.getElementById("title-field") as HTMLElement;
+const titleInput = () => document.getElementById("title") as HTMLInputElement;
+const confirms = () => asked.filter((m) => (m as { type: string }).type === "save_confirm");
+
+describe("save prompt name", () => {
+  it("a new login: the suggested name, editable, not focused", async () => {
+    await openPrompt({ action: "add", site: "github.com", username: "octo", title: "GitHub" });
+    expect(titleField().hidden).toBe(false);
+    expect(titleInput().value).toBe("GitHub");
+    expect(titleInput().maxLength).toBe(256);
+    // Opening the prompt must not take the focus from the page.
+    expect(document.activeElement).not.toBe(titleInput());
+  });
+
+  it("an update keeps the login's title: no name field", async () => {
+    await openPrompt({ action: "update", site: "github.com", username: "octo", title: null });
+    expect(titleField().hidden).toBe(true);
+  });
+
+  it("the confirm carries the name only for a new login", async () => {
+    const { confirmRequest } = await import("./save");
+    expect(confirmRequest(TOKEN, "GitHub – work")).toEqual({ type: "save_confirm", token: TOKEN, title: "GitHub – work" });
+    expect(confirmRequest(TOKEN, null)).toEqual({ type: "save_confirm", token: TOKEN });
+  });
+
+  it("synthetic clicks and Enter presses save nothing", async () => {
+    await openPrompt({ action: "add", site: "github.com", username: "octo", title: "GitHub" });
+    titleInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    (document.getElementById("confirm") as HTMLButtonElement).click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(confirms()).toEqual([]);
+  });
 });
 
 describe("save prompt size", () => {

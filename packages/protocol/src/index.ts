@@ -43,6 +43,8 @@ export type Request =
       username: string | null;
       password: string;
       itemId: string | null;
+      /** A new login's name from the save prompt; the desktop uses the host without one. */
+      title?: string;
     }
   | { type: "find_passkeys"; url: string; topUrl?: string; rpId: string; allowCredentials: string[] }
   | { type: "passkey_get"; itemId: string; credentialId: string; url: string; topUrl?: string; rpId: string; challenge: string }

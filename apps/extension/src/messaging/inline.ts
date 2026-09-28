@@ -79,7 +79,8 @@ export type InlineRequest =
   /** The menu's content height, so wrapped rows are not clipped. */
   | { type: "menu_resize"; token: string; height: number }
   | { type: "save_state"; token: string }
-  | { type: "save_confirm"; token: string }
+  /** `title`: what the user left in the prompt's name field (a new login only). */
+  | { type: "save_confirm"; token: string; title?: string }
   | { type: "save_dismiss"; token: string }
   /** The save prompt's content height, so a long message is not clipped. */
   | { type: "save_resize"; token: string; height: number };
@@ -106,7 +107,12 @@ export interface SaveView {
   action: "add" | "update";
   site: string;
   username: string | null;
+  /** The suggested name for a new login; null for an update, which keeps its title. */
+  title: string | null;
 }
+
+/** The core's limit on a login title. */
+export const MAX_TITLE_CHARS = 256;
 
 export type InlineReply<T> = { ok: true; value: T } | { ok: false; message: string };
 
@@ -210,9 +216,13 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
     case "menu_open_help":
     case "menu_close":
     case "save_state":
-    case "save_confirm":
     case "save_dismiss":
       return keysAre(o, ["type", "token"]) ? { type: o.type, token } : null;
+    case "save_confirm":
+      if (keysAre(o, ["type", "token", "title"])) {
+        return typeof o.title === "string" && o.title.length <= MAX_TITLE_CHARS ? { type: "save_confirm", token, title: o.title } : null;
+      }
+      return keysAre(o, ["type", "token"]) ? { type: "save_confirm", token } : null;
     default:
       return null;
   }

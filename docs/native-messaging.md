@@ -120,7 +120,7 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `get_totp` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `generate_password` | none | yes | lookup |
 | `check_login` | `url`, `topUrl`?, `username` (string or null), `password`, `currentPassword`? (a change-password form's current password) | yes | secret |
-| `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null) | yes | secret, plus one update per item per 10 min |
+| `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min |
 | `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |
 | `passkey_get` | `itemId` (UUID), `credentialId`, `url`, `topUrl`?, `rpId`, `challenge` | yes | secret |
 | `check_passkey_create` | `url`, `topUrl`?, `rpId`, `userName`, `excludeCredentials` (list), `conditional` (bool) | yes | lookup |
@@ -206,6 +206,7 @@ error.
 | URL, top URL | 4096 bytes each | extension, host, bridge |
 | Password (and `currentPassword`) in `check_login`/`save_login` | 16 KiB (the core allows 4096 characters) | host, bridge, core |
 | Username | 2 KiB (the core allows 512 characters) | host, bridge, core |
+| `title` in `save_login` | 1 KiB, not empty (the core allows 256 characters, no control characters) | extension, host, bridge, core |
 | Suggestions per `find_matches` | 50 | bridge, host, extension |
 | Passkeys per `find_passkeys`, candidates per `check_passkey_create` | 50 | bridge, host, extension |
 | Binary fields (`credentialId`, `challenge`, `userHandle`, list entries, and every binary result) | unpadded base64url | extension, host, bridge |

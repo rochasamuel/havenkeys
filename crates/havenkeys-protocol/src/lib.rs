@@ -45,6 +45,8 @@ pub const MAX_SECRET_BYTES: usize = 4 * 4096;
 
 /// Largest username accepted in `check_login`/`save_login`.
 pub const MAX_USERNAME_BYTES: usize = 4 * 512;
+/// A login title from the save prompt (the core allows 256 characters).
+pub const MAX_TITLE_BYTES: usize = 4 * 256;
 
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;

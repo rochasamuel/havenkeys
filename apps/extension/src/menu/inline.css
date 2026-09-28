@@ -258,6 +258,41 @@ main {
   white-space: normal;
 }
 
+/* A new login's name, editable before saving. */
+.prompt .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.prompt .field[hidden] {
+  display: none;
+}
+
+.prompt .field span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.prompt .field input {
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+}
+
+.prompt .field input:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
 #question {
   overflow-wrap: anywhere;
 }

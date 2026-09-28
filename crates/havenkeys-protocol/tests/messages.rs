@@ -50,6 +50,7 @@ fn phase5_requests_parse_and_reencode_canonically() {
         r#"{"v":1,"id":5,"request":{"type":"check_login","url":"https://a.com/","username":null,"password":"pw"}}"#.to_owned(),
         r#"{"v":1,"id":5,"request":{"type":"check_login","url":"https://a.com/","username":null,"password":"pw","currentPassword":"old"}}"#.to_owned(),
         r#"{"v":1,"id":6,"request":{"type":"save_login","url":"https://a.com/","username":"octo","password":"pw","itemId":null}}"#.to_owned(),
+        r#"{"v":1,"id":6,"request":{"type":"save_login","url":"https://a.com/","username":"octo","password":"pw","itemId":null,"title":"A work"}}"#.to_owned(),
         format!(r#"{{"v":1,"id":7,"request":{{"type":"save_login","url":"https://a.com/","topUrl":"https://a.com/","username":null,"password":"pw","itemId":"{ITEM}"}}}}"#),
     ];
     for s in &ok {
@@ -85,6 +86,10 @@ fn phase5_malformed_requests_rejected() {
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"find_matches","url":"https://a.com/","topUrl":"https://a.com/{long}"}}}}"#), ErrorCode::InvalidInput),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":null,"password":"{big_pw}"}}}}"#), ErrorCode::InvalidInput),
         (r#"{"v":1,"id":1,"request":{"type":"check_login","url":"https://a.com/","username":null,"password":"x","currentPassword":""}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":null,"title":""}}"#.into(), ErrorCode::InvalidInput),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":null,"title":"{}"}}}}"#, "t".repeat(MAX_TITLE_BYTES + 1)), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":null,"title":7}}"#.into(), ErrorCode::Malformed),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":"{ITEM}","title":"Renamed"}}}}"#), ErrorCode::InvalidInput),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":null,"password":"x","currentPassword":"{big_pw}"}}}}"#), ErrorCode::InvalidInput),
         (r#"{"v":1,"id":1,"request":{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":null,"currentPassword":"old"}}"#.into(), ErrorCode::Malformed),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":"{big_user}","password":"x"}}}}"#), ErrorCode::InvalidInput),

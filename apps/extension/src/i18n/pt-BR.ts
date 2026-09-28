@@ -124,6 +124,7 @@ export const ptBR: Messages = {
     save: "Salvar",
     update: "Atualizar",
     notNow: "Agora não",
+    titleLabel: "Nome",
   },
 
   passkey: {

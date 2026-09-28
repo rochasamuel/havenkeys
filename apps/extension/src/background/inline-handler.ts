@@ -104,6 +104,8 @@ interface PendingSave {
   username: string | null;
   /** What the prompt shows: for an update, the saved login's username. */
   shownUsername: string | null;
+  /** A new login's suggested name: the known site's, else the host. Null for an update. */
+  title: string | null;
   password: string;
   action: "add" | "update";
   itemId: string | null;
@@ -296,6 +298,7 @@ export function createInlineHandler(deps: InlineDeps) {
       frame,
       username,
       shownUsername,
+      title: check.action === "add" ? (deps.passkeySite?.(frame.url)?.name ?? displayHost(frame.url) ?? null) : null,
       password,
       action: check.action,
       itemId: check.itemId,
@@ -452,11 +455,13 @@ export function createInlineHandler(deps: InlineDeps) {
       case "save_state": {
         const s = liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
-        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername } };
+        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title } };
       }
       case "save_confirm": {
         const s = liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
+        // A cleared name field falls back to the suggestion; the desktop checks the rest.
+        const title = s.action === "add" ? req.title?.trim() || s.title : null;
         try {
           await deps.client.request({
             type: "save_login",
@@ -464,6 +469,7 @@ export function createInlineHandler(deps: InlineDeps) {
             username: s.username,
             password: s.password,
             itemId: s.itemId,
+            ...(title ? { title } : {}),
           });
         } catch (e) {
           return fail(e);

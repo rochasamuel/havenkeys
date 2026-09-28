@@ -4,7 +4,7 @@ mod common;
 
 use common::*;
 use havenkeys_core::model::{ItemInput, ItemType, SecretField, SecretUpdate, Settings};
-use havenkeys_core::vault::{SaveAction, VaultState};
+use havenkeys_core::vault::{SaveAction, SaveTarget, VaultState};
 use havenkeys_core::Error;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
@@ -661,7 +661,7 @@ fn save_login_adds_for_the_page_site_only() {
             None,
             Some("me@example.com"),
             secret("s3cret-pw"),
-            None,
+            SaveTarget::New { title: None },
             NOW,
         )
         .unwrap();
@@ -691,10 +691,63 @@ fn save_login_adds_for_the_page_site_only() {
 
     // Pages that cannot hold a login are refused before anything is sealed.
     assert_eq!(
-        v.stage_save_login("file:///etc/passwd", None, None, secret("x"), None, NOW)
-            .err(),
+        v.stage_save_login(
+            "file:///etc/passwd",
+            None,
+            None,
+            secret("x"),
+            SaveTarget::New { title: None },
+            NOW
+        )
+        .err(),
         Some(Error::Denied)
     );
+}
+
+/// The title the user gave in the save prompt; without one, the host.
+#[test]
+fn save_login_takes_the_prompts_title() {
+    let (mut v, _) = github_vault();
+    let page = "https://www.example.com/signin";
+    let title_of = |v: &mut havenkeys_core::vault::VaultService, title: Option<&str>| {
+        let staged = v
+            .stage_save_login(
+                page,
+                None,
+                Some("me"),
+                secret("pw"),
+                SaveTarget::New { title },
+                NOW,
+            )
+            .unwrap();
+        let id = staged.item_id;
+        v.commit_write(staged.write, 7).unwrap();
+        v.find_matches(page, None)
+            .unwrap()
+            .into_iter()
+            .find(|m| m.id == id)
+            .unwrap()
+            .title
+    };
+    assert_eq!(
+        title_of(&mut v, Some("  Example — work ")),
+        "Example — work"
+    );
+    assert_eq!(title_of(&mut v, None), "example.com");
+    let long = "x".repeat(257);
+    for bad in ["", "   ", "a\nb", long.as_str()] {
+        assert!(matches!(
+            v.stage_save_login(
+                page,
+                None,
+                None,
+                secret("pw"),
+                SaveTarget::New { title: Some(bad) },
+                NOW
+            ),
+            Err(Error::InvalidInput(_))
+        ));
+    }
 }
 
 /// A2 (writes): an update is only accepted for a login saved for the page.
@@ -708,15 +761,22 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
             None,
             None,
             secret("x"),
-            Some(&bank),
+            SaveTarget::Update(&bank),
             NOW
         )
         .err(),
         Some(Error::Denied)
     );
     assert_eq!(
-        v.stage_save_login("https://evil.com/", None, None, secret("x"), Some(&gh), NOW)
-            .err(),
+        v.stage_save_login(
+            "https://evil.com/",
+            None,
+            None,
+            secret("x"),
+            SaveTarget::Update(&gh),
+            NOW
+        )
+        .err(),
         Some(Error::Denied)
     );
     assert_eq!(
@@ -732,7 +792,7 @@ fn save_login_update_is_origin_bound_and_keeps_history() {
             None,
             Some("ignored"),
             secret("new-gh"),
-            Some(&gh),
+            SaveTarget::Update(&gh),
             NOW + 1,
         )
         .unwrap();
@@ -800,7 +860,7 @@ fn save_login_refused_while_locked() {
             None,
             None,
             secret("x"),
-            Some(&gh),
+            SaveTarget::Update(&gh),
             NOW
         )
         .err(),
@@ -827,7 +887,7 @@ fn a_staged_save_touches_nothing_until_it_is_committed() {
             None,
             Some("someone-new"),
             secret("brand-new-pw"),
-            None,
+            SaveTarget::New { title: None },
             NOW,
         )
         .unwrap();
@@ -837,7 +897,7 @@ fn a_staged_save_touches_nothing_until_it_is_committed() {
             None,
             None,
             secret("also-new"),
-            Some(&gh),
+            SaveTarget::Update(&gh),
             NOW,
         )
         .unwrap();

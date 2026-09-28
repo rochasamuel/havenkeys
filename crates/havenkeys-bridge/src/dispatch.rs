@@ -9,7 +9,7 @@ use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::origin::MatchStrength as CoreStrength;
 use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
 use havenkeys_core::vault::{
-    SaveAction as CoreSaveAction, StagedSave, StagedWrite, VaultService, VaultState,
+    SaveAction as CoreSaveAction, SaveTarget, StagedSave, StagedWrite, VaultService, VaultState,
 };
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
@@ -213,6 +213,7 @@ pub fn dispatch(
             username,
             password,
             item_id,
+            title,
         } => {
             require_enabled(v)?;
             let secret = SecretString::new(password.expose().to_owned());
@@ -222,7 +223,12 @@ pub fn dispatch(
                     top_url.as_deref(),
                     username.as_deref(),
                     secret,
-                    item_id.as_ref(),
+                    match item_id {
+                        Some(id) => SaveTarget::Update(id),
+                        None => SaveTarget::New {
+                            title: title.as_deref(),
+                        },
+                    },
                     now_ms(unix_seconds),
                 )
                 .map_err(item_code)?;

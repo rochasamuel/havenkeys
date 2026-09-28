@@ -5,8 +5,8 @@
 use crate::secret::WireSecret;
 use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST, MAX_MATCHES,
-    MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES,
-    PROTOCOL_VERSION,
+    MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES,
+    MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -81,6 +81,7 @@ pub enum Request {
     },
     /// Save a submitted login after the user confirmed it. With `item_id`,
     /// replace that login's password (it must be saved for `url`).
+    /// `title`: a new login's name from the save prompt (else the host).
     SaveLogin {
         url: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -88,6 +89,8 @@ pub enum Request {
         username: Option<String>,
         password: WireSecret,
         item_id: Option<Uuid>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
     },
     /// Passkeys for `rp_id` usable on `url`. Public data only.
     /// `allow_credentials`: the site's allowCredentials (ours only).
@@ -241,9 +244,17 @@ impl Request {
                         .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
             }
             Request::SaveLogin {
-                username, password, ..
+                username,
+                password,
+                title,
+                item_id,
+                ..
             } => {
                 secret_ok(password)
+                    // A title names a new login; an update keeps its own.
+                    && title.as_ref().is_none_or(|t| {
+                        item_id.is_none() && !t.is_empty() && t.len() <= MAX_TITLE_BYTES
+                    })
                     && username
                         .as_ref()
                         .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)

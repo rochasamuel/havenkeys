@@ -78,7 +78,7 @@ every request the core re-derives the answer from the item's own rules:
 | `fill_for_page(id, url, top_url)` | Username and password only | `Denied` unless the item is a login whose rules match the page |
 | `totp_for_page(id, url, top_url, now)` | Current code only; the secret never leaves | Same as above |
 | `check_login(url, top_url, username, password, current?)` | `Add`, `Update(id)` or `Unchanged`. Never a password | Only logins matching the page are compared |
-| `save_login(url, top_url, username, password, update?)` | The item ID | An update must target a login matching the page; a new login is saved for the page's origin |
+| `save_login(url, top_url, username, password, target)` | The item ID | `target` is a new login (with an optional title) or an update. An update must target a login matching the page and keeps its title; a new login is saved for the page's origin |
 
 All of them return `Locked` when the vault is locked. Secure notes are never
 served to pages.
@@ -355,8 +355,19 @@ click.
 Saving an **update** changes only that login's password. The old one moves
 to the login's password history (5 entries, shown in the desktop app), and
 the bridge allows one browser-initiated change per item every 10 minutes. A
-new login is saved with the page's origin as a whole-site rule and the host
-(without `www.`) as its title.
+new login is saved with the page's origin as a whole-site rule.
+
+**A new login's name** is editable in the prompt before saving. It starts as
+the site's name when the page's host is in the bundled Passkeys Directory
+(`github.com` → "GitHub"; the host or a subdomain of a listed domain), and
+as the host (without `www.`) otherwise. The page's own `<title>` is never
+used: it is page-controlled, so any site could name itself "GitHub" in the
+vault. The prompt is an extension frame the page cannot read or type into,
+so the name is the user's or ours. A cleared field falls back to the
+suggestion. The field takes no focus when the prompt opens, and Enter saves
+(trusted key presses only, past the click guard). The core checks the name
+like any title (256 characters, no control characters). An update keeps the
+login's title, and the protocol refuses a title with `itemId`.
 
 ## Automatic sign-in
 

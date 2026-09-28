@@ -158,6 +158,15 @@ impl std::fmt::Debug for Suggestion {
     }
 }
 
+/// What [`VaultService::stage_save_login`] writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SaveTarget<'a> {
+    /// A new login. `title`: the user's, from the save prompt; else the host.
+    New { title: Option<&'a str> },
+    /// Replace this login's password. Its title and username stay.
+    Update(&'a Uuid),
+}
+
 /// Result of [`VaultService::check_login`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveAction {
@@ -1246,34 +1255,27 @@ impl VaultService {
         top_url: Option<&str>,
         username: Option<&str>,
         password: SecretString,
-        update: Option<&Uuid>,
+        target: SaveTarget<'_>,
         now_ms: i64,
     ) -> Result<StagedSave> {
         if password.is_empty() {
             return Err(Error::InvalidInput("password is required"));
         }
         self.session()?;
-        if let Some(id) = update {
-            let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
-            let input = ItemInput {
-                item_type: ItemType::Login,
-                title: existing.title.clone(),
-                username: existing.username.clone(),
-                urls: existing.urls.clone(),
-                password: SecretUpdate::Set(password),
-                totp: SecretUpdate::Keep,
-                notes: SecretUpdate::Keep,
-                content: SecretUpdate::Keep,
-                auto_sign_in: None,
-            };
-            return Ok(StagedSave {
-                item_id: *id,
-                write: self.stage_update(id, input, now_ms)?,
-            });
-        }
-        // Saved for the frame the form was in, as a whole-site rule.
+        let title = match target {
+            SaveTarget::New { title } => title,
+            SaveTarget::Update(id) => {
+                return self.stage_save_update(id, page_url, top_url, password, now_ms)
+            }
+        };
+        // Saved for the frame the form was in, as a whole-site rule. The
+        // title is the user's, from the save prompt, or else the host.
         let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-        let (title, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+        let (host, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+        let title = match title {
+            Some(t) => clean_title(t)?,
+            None => host,
+        };
         let input = ItemInput {
             item_type: ItemType::Login,
             title,
@@ -1292,6 +1294,33 @@ impl VaultService {
         Ok(StagedSave {
             item_id: write.item_id,
             write,
+        })
+    }
+
+    /// An update changes only the password; the login must match the page.
+    fn stage_save_update(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+        password: SecretString,
+        now_ms: i64,
+    ) -> Result<StagedSave> {
+        let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title: existing.title.clone(),
+            username: existing.username.clone(),
+            urls: existing.urls.clone(),
+            password: SecretUpdate::Set(password),
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+        };
+        Ok(StagedSave {
+            item_id: *id,
+            write: self.stage_update(id, input, now_ms)?,
         })
     }
 
