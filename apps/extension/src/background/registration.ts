@@ -1,8 +1,9 @@
-// Inline suggestions are opt-in. The content script is registered only for
-// the host patterns the user granted through the optional host permission
-// (options page, or the browser's own site-access controls), and removed
-// when they revoke it. Without a grant the extension works from the toolbar
-// popup alone, with activeTab.
+// Site access is requested at install (host_permissions), so the content
+// script and the passkey scripts are registered by default. They are
+// registered only for the host patterns actually granted: the user can
+// still narrow or withdraw access in the browser's own site-access
+// controls, and the scripts follow. Without any grant the extension works
+// from the toolbar popup alone, with activeTab.
 //
 // Passkeys (docs/superpowers/specs/2026-09-23-passkeys-design.md §5.1) share
 // this same grant: the page-world wrapper and the isolated bridge are

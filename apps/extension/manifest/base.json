@@ -7,9 +7,10 @@
   "permissions": [
     "nativeMessaging",
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
-  "optional_host_permissions": [
+  "host_permissions": [
     "https://*/*",
     "http://*/*"
   ],
