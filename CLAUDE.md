@@ -954,6 +954,13 @@ Extension fills fields
 > within 2 minutes, when the vault setting and the login's switch allow it.
 > Nothing is ever filled or submitted without that pick.
 
+> Amended on 2026-09-28 by
+> `docs/superpowers/specs/2026-09-28-sign-in-with-design.md`: after the user
+> picks a "Sign in with Google/Microsoft/GitHub/Apple" login, HavenKeys may
+> press that site's provider button and, on the provider's own origin (from
+> a fixed list in Rust), click the saved account in its chooser. It never
+> fills a password there and never presses a consent screen.
+
 Do not autofill automatically on page load.
 
 ---

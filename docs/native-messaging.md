@@ -127,6 +127,9 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null), `conditional` (bool) | yes | secret; a server write |
 | `passkey_status` | `url`, `topUrl`? | yes | lookup |
 | `open_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
+| `start_sso` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
+| `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"`), `account` (string or null) | yes | secret |
+| `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
 
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
@@ -145,17 +148,28 @@ exactly the item named (`autofill.md`, Automatic upgrade).
 
 There is deliberately no request to unlock the vault, list items, search,
 reveal notes, read a TOTP secret, read a passkey's private key, delete items
-or passkeys, or change anything except one login's password or passkeys.
-There are two writes. `save_login` can add a login for the page it names, or
-replace the password of a login that matches that page; the old password is
-kept in the item's history. `passkey_create` adds a passkey (see
-[Passkeys](#passkeys) below).
+or passkeys, or change anything except one login's password, passkeys or
+"Sign in with" account. There are three writes. `save_login` can add a login
+for the page it names, or replace the password of a login that matches that
+page; the old password is kept in the item's history. `passkey_create` adds a
+passkey (see [Passkeys](#passkeys) below). `save_sso` can add a login that
+signs in with a provider, or set the account on a login that already signs in
+with that provider (see [Sign in with](#sign-in-with) below); it never touches
+a password.
+
+`start_sso` asks whether `itemId` may start a "Sign in with" run on `url` —
+the same origin check as `fill_item`, but no secret comes back. `check_sso`
+asks whether saving a provider and account for `url` would add a login,
+update one, or do nothing, among the logins already saved for that page.
+`Match.provider` (`find_matches`'s result) is `null` for an ordinary login and
+the provider name for a "Sign in with" login; for such an item, `username`
+carries its account when the item has no username of its own.
 
 **Responses** answer one request ID and carry exactly one of `result` or
 `error`:
 
 ```json
-{"v":1,"id":7,"result":{"type":"find_matches","matches":[{"id":"…","title":"GitHub","username":"octo","hasTotp":true,"strength":"same_host"}]}}
+{"v":1,"id":7,"result":{"type":"find_matches","matches":[{"id":"…","title":"GitHub","username":"octo","hasTotp":true,"strength":"same_host","provider":null}]}}
 {"v":1,"id":8,"result":{"type":"fill_item","username":"octo","password":"…","autoSubmit":true}}
 {"v":1,"id":9,"result":{"type":"get_totp","code":"123456","period":30,"secondsRemaining":12,"autoSubmit":true}}
 {"v":1,"id":11,"result":{"type":"generate_password","password":"…"}}
@@ -167,6 +181,9 @@ kept in the item's history. `passkey_create` adds a passkey (see
 {"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
 {"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
 {"v":1,"id":10,"result":{"type":"open_item"}}
+{"v":1,"id":19,"result":{"type":"start_sso","provider":"google","account":"user@gmail.com","providerOrigins":["https://accounts.google.com"],"autoChoose":true}}
+{"v":1,"id":20,"result":{"type":"check_sso","action":"add","itemId":null}}
+{"v":1,"id":21,"result":{"type":"save_sso","itemId":"…"}}
 {"v":1,"id":10,"error":{"code":"denied","message":"This item is not saved for this website."}}
 ```
 
@@ -401,6 +418,35 @@ type.
 The extension side of the passkey flow — which page events become which
 request, and what the user clicks — is in `autofill.md` §Passkeys.
 
+### Sign in with
+
+The three requests come from the background's SSO handler
+(`background/sso-handler.ts`), driven by a trusted pick in the balloon, field
+menu or popup (`start_sso`) and by the content script's own save detection
+(`check_sso`, `save_sso`). `url`/`topUrl` are the browser's sender data, as
+for logins; `provider` and `account` come from the page (a provider button's
+identity, and text read off the provider's own chooser or a username step)
+and are treated as untrusted input.
+
+| Request | Core function | Returns | Checks |
+|---|---|---|---|
+| `start_sso` | `start_sso_for_page` | the item's provider and saved account, the provider's exact origins (from Rust's fixed table), and whether the run may auto-choose. **No secret** | Same origin check as `fill_item`; the item must be a login with `sign_in_with`. `autoChoose = settings.auto_sign_in && item.auto_sign_in` |
+| `check_sso` | `check_sso` | `add` (no login has this provider+account or this provider with no account), `update` (exactly one login has this provider and no account) or `unchanged`, and the `itemId` an `update` would change | Among logins whose own website rules match the page |
+| `save_sso` | `stage_save_sso` | the item ID | Without `itemId`: the same path as `save_login`, one whole-site rule for the frame's origin, `auto_sign_in` on, no password required. With `itemId`: the login must match the page and already sign in with `provider`; only its `account` changes, and `title` must be absent |
+
+`account` is validated the same way on every one of these requests: trimmed,
+empty becomes `null`, at most 254 characters, no control characters
+(`crates/havenkeys-core/src/sso.rs`). All three requests draw from the secret
+bucket; `save_sso` with an `itemId` shares `save_login`'s per-item cooldown
+(one update per item per 10 minutes). The provider's own page never receives
+a password or TOTP code through this path — the run only clicks an account
+row it finds by exact, case-insensitive email match, on an origin from Rust's
+list, and never presses a consent or permissions screen.
+
+The extension side — how a provider button is recognized, how the balloon and
+the run work, and the save-detection flow — is in `autofill.md` §"Sign in
+with Google, Microsoft, GitHub, Apple".
+
 ## 8. Known limitations
 
 * **Same-user processes can use the bridge.** Any program running as you
@@ -480,3 +526,7 @@ request, and what the user clicks — is in `autofill.md` §Passkeys.
 | `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | Passkey requests parse with exact shapes and bounds, results validate; create → get over the bridge, attacks, offline create stores nothing; `passkey_upgrade_through_the_bridge` (A1u end to end), `passkey_status_through_the_bridge` |
 | `apps/extension/src/webauthn/*.test.ts`, `background/webauthn-handler.test.ts`, `background/registration.test.ts` | Page script fallback paths and rebuilt credentials, bridge parsing, abort and timeout handling, sessions (offered passkeys only, same tab and frame, one operation at a time, lock and unlock), script registration groups, the automatic upgrade's auto/ask/fallback routing (including a lock during the "Add a passkey?" card falling back) and the "saved" notice |
 | `apps/extension/src/background/passkey-sites.test.ts`, `menu/passkey.test.ts`, `menu/menu.test.ts` | Passkeys Directory file shape and host matching (including evil-suffix cases), the field-menu hint rows and their order, the help link opening only on a trusted click |
+| `crates/havenkeys-core/tests/security.rs` | `start_sso`/`check_sso`/`stage_save_sso` origin binding and locked/denied cases, account validation, provider-origin table |
+| `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | `start_sso`/`check_sso`/`save_sso` parse with exact shapes and bounds; `Match.provider`; attacks over the bridge; the per-item update limiter shared with `save_login` |
+| `apps/extension/src/autofill/sso.test.ts` | Provider-button and chooser-row recognition (English and pt-BR, bare labels, OAuth links, hidden/disabled buttons, misleading text, thousands of buttons), consent-phrase detection |
+| `apps/extension/src/background/sso-state.test.ts`, `sso-handler.test.ts`, `content/sso.test.ts` | `PendingSso`/`SsoRun` TTLs, ending a run on user input or an off-list origin, popup acceptance only via `openerTabId`, chooser matching (0/1/2 rows), `autoChoose` off, save detection (untrusted clicks ignored, account captured only on provider origins, balloon on return, `unchanged` → no balloon) |
