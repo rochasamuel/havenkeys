@@ -59,6 +59,8 @@ const top = (tabId: number) => ({ tabId, frameId: 0 });
 export function createSsoHandler(deps: SsoDeps) {
   const state = createSsoState(deps.now);
   const sessions = new Map<number, Session>(); // by tab; the balloon lives in the top frame
+  // Bumped by reset(): an ask() whose check_sso was in flight across a lock is dropped.
+  let generation = 0;
 
   function close(tabId: number): void {
     const s = sessions.get(tabId);
@@ -85,13 +87,20 @@ export function createSsoHandler(deps: SsoDeps) {
     return s;
   }
 
+  /** Whether the tab shows a save question that has not expired (an expired one is dropped). */
+  function asking(tabId: number): boolean {
+    const s = sessions.get(tabId);
+    if (s?.kind !== "save") return false;
+    return live(tabId, s.token) !== null;
+  }
+
   // ------------------------------------------------------------ content script
 
   async function offer(frame: FrameRef, providers: SsoProvider[]): Promise<{ ok: true; token: string } | { ok: false }> {
     if (frame.frameId !== 0) return { ok: false };
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) return { ok: false };
-    // A save question outranks an offer.
-    if (sessions.get(frame.tabId)?.kind === "save") return { ok: false };
+    // A live save question outranks an offer.
+    if (asking(frame.tabId)) return { ok: false };
     let matches: Match[];
     try {
       matches = (await deps.client.request({ type: "find_matches", ...frameFields(frame) })).matches;
@@ -100,6 +109,8 @@ export function createSsoHandler(deps: SsoDeps) {
     }
     const rows = matches.filter((m) => m.provider !== null && providers.includes(m.provider));
     if (rows.length === 0) return { ok: false };
+    // An ask() may have opened a save question while find_matches was in flight.
+    if (asking(frame.tabId)) return { ok: false };
     const s = open(frame.tabId, (token, expires) => ({ kind: "offer", token, frame, rows, expires }));
     return { ok: true, token: s.token };
   }
@@ -114,9 +125,12 @@ export function createSsoHandler(deps: SsoDeps) {
       case "cs_sso_account":
         state.account(tab, frame.origin, req.account, frame.frameId === 0);
         return {};
-      case "cs_sso_stop":
-        if (state.run(frame.tabId)?.frameId === frame.frameId) state.endRun(frame.tabId);
+      case "cs_sso_stop": {
+        // Any trusted input in the run's tab, or in a popup it opened, ends it (spec §6.3).
+        const owner = state.run(tab.tabId) ? tab.tabId : tab.openerTabId;
+        if (owner !== undefined && state.run(owner)) state.endRun(owner);
         return {};
+      }
     }
   }
 
@@ -149,13 +163,14 @@ export function createSsoHandler(deps: SsoDeps) {
 
   /** Back from the provider: ask whether to save, unless the vault already has it. */
   async function ask(p: PendingSso): Promise<void> {
+    const gen = generation;
     let check: ResultFor<"check_sso">;
     try {
       check = await deps.client.request({ type: "check_sso", ...frameFields(p), provider: p.provider, account: p.account });
     } catch {
       return; // locked, not running, rate limited: no prompt
     }
-    if (check.action === "unchanged") return;
+    if (gen !== generation || check.action === "unchanged") return; // locked meanwhile, or nothing new
     const title = check.action === "add" ? (deps.siteName?.(p.url) ?? displayHost(p.url) ?? null) : null;
     const action = check.action;
     const s = open(p.tabId, (token, expires) => ({ kind: "save", token, pending: p, action, itemId: check.itemId, title, expires }));
@@ -272,6 +287,7 @@ export function createSsoHandler(deps: SsoDeps) {
 
   /** Vault locked or desktop gone: forget everything, close every balloon. */
   function reset(): void {
+    generation++;
     for (const tabId of [...sessions.keys()]) close(tabId);
     state.clear();
   }
