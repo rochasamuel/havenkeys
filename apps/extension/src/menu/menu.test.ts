@@ -5,6 +5,7 @@
 // background on a trusted, armed click (see common.ts's click guard).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { captureClicks } from "./click-capture.test-helper";
 
 const TOKEN = "a".repeat(32);
 const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -30,23 +31,6 @@ async function load(): Promise<void> {
   vi.resetModules();
   await import("./menu");
   await vi.advanceTimersByTimeAsync(0);
-}
-
-/** Captures 'click' listeners as they're registered, so a handler gated on
- * `e.isTrusted` can be exercised directly without jsdom's permanent false. */
-function captureClicks(): Map<Element, (e: Partial<MouseEvent>) => void> {
-  const handlers = new Map<Element, (e: Partial<MouseEvent>) => void>();
-  const orig = EventTarget.prototype.addEventListener;
-  vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(function (
-    this: EventTarget,
-    type: string,
-    listener: EventListenerOrEventListenerObject | null,
-    options?: boolean | AddEventListenerOptions,
-  ) {
-    if (type === "click" && listener && this instanceof Element) handlers.set(this, listener as (e: Partial<MouseEvent>) => void);
-    return orig.call(this, type, listener, options);
-  });
-  return handlers;
 }
 
 beforeEach(() => {

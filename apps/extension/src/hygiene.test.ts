@@ -24,7 +24,8 @@ function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) return sources(p);
-    return p.endsWith(".ts") && !p.endsWith(".test.ts") ? [p] : [];
+    // *.test-helper.ts: shared test support (e.g. menu/click-capture.test-helper.ts), not shipped code.
+    return p.endsWith(".ts") && !p.endsWith(".test.ts") && !p.endsWith(".test-helper.ts") ? [p] : [];
   });
 }
 
