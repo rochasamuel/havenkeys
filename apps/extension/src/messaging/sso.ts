@@ -82,18 +82,26 @@ const isHeight = (v: unknown): v is number =>
 
 /** Trimmed-shaped, email-like account text: the content script only ever sends this. */
 const ACCOUNT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Unicode "Cc" control characters, plus the bidi-override/isolate controls (not Cc themselves). */
+const CONTROL_OR_BIDI = /[\p{Cc}‪-‮⁦-⁩]/u;
 
+/** cs_sso_account: the content script only ever sends email-shaped text read from the page. */
 export function isAccount(v: unknown): v is string {
-  return typeof v === "string" && v.length >= 3 && v.length <= MAX_ACCOUNT_CHARS && ACCOUNT.test(v);
+  return typeof v === "string" && v.length >= 3 && v.length <= MAX_ACCOUNT_CHARS && !CONTROL_OR_BIDI.test(v) && ACCOUNT.test(v);
 }
 
 function isProviderList(v: unknown): v is SsoProvider[] {
   return Array.isArray(v) && v.length >= 1 && v.length <= 4 && v.every(isSsoProvider) && new Set(v).size === v.length;
 }
 
-/** A sso_save account: empty (none) or a bounded account-shaped string. */
+/**
+ * A sso_save account: the user's own edit of the balloon's account field, so
+ * it need not be email-shaped (a GitHub username, a phone number, …) — only
+ * bounded and free of control/bidi characters. Empty means none; Rust
+ * validates the final value on save.
+ */
 function isSaveAccount(v: unknown): v is string {
-  return typeof v === "string" && v.length <= MAX_ACCOUNT_CHARS && (v.length === 0 || isAccount(v));
+  return typeof v === "string" && v.length <= MAX_ACCOUNT_CHARS && !CONTROL_OR_BIDI.test(v);
 }
 
 function isTitle(v: unknown): v is string | null {

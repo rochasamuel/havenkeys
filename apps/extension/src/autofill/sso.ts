@@ -8,6 +8,7 @@
 
 import { SSO_PROVIDERS, type SsoProvider } from "@havenkeys/protocol";
 import type { Env } from "./group";
+import { PRESS_MIN_MARGIN } from "./submit";
 import { hasAny, hasPhrase, MAX_HINT_CHARS, normalize } from "./text";
 
 export const SSO_CANDIDATES = 'button, a[href], [role="button"], [role="link"], input[type="submit"], input[type="button"]';
@@ -29,14 +30,46 @@ const NEGATIVE = [
   "drive", "docs", "play", "store", "maps", "calendar", "repository", "repo", "star", "fork", "sponsor",
   "download", "app store", "teams", "office", "outlook", "music", "pay", "wallet", "podcasts", "tv",
 ];
-const CONSENT_WORDS = ["allow", "authorize", "authorise", "grant", "accept", "continue", "permitir", "autorizar", "aceitar", "continuar", "confirmar"];
+// Phrases safe to recognise as consent at the *start* of a label, at any
+// length: verbs no one is named after ("Continue as <the long account the
+// page chose>" must still be caught however long the account text is).
+// "grant"/"allow"/"accept"/"aceitar" stay in CONSENT_WORDS below instead of
+// here: they are common given names too ("Grant Smith"), so they only count
+// as consent for a short, bare button label, not merely at the start of one.
+const CONSENT_PREFIXES = ["continue as", "continuar como", "authorize", "authorise", "permitir", "autorizar"];
+const CONSENT_WORDS = ["allow", "accept", "aceitar", "continue", "continuar", "confirmar"];
+/** A short bare consent word only counts within this length. */
+const MAX_CONSENT_LABEL_CHARS = 30;
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+
+/**
+ * `el`'s text nodes joined with spaces (unlike `.textContent`, so sibling
+ * elements' text, e.g. a name and an email in adjacent `<div>`s, or two
+ * `<span>`s split mid-word ("Continuar com" + "o Google"), cannot fuse into
+ * one token: "Continuar com" + "o Google" stays "continuar com o google",
+ * not "continuar como google").
+ */
+function textOf(el: Element): string {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  for (let n = walker.nextNode(), total = 0; n && total < 400; n = walker.nextNode()) {
+    const t = n.nodeValue ?? "";
+    parts.push(t);
+    total += t.length;
+  }
+  return parts.join(" ");
+}
 
 function label(el: Element): string {
   const attr = (n: string) => (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
-  const own = el instanceof HTMLInputElement ? el.value.slice(0, MAX_HINT_CHARS) : (el.textContent ?? "").slice(0, MAX_HINT_CHARS);
+  const own = el instanceof HTMLInputElement ? el.value.slice(0, MAX_HINT_CHARS) : textOf(el).slice(0, MAX_HINT_CHARS);
   const img = el.querySelector("img[alt]")?.getAttribute("alt")?.slice(0, 60) ?? "";
   return normalize(`${own} ${attr("aria-label")} ${attr("title")} ${img}`, MAX_HINT_CHARS * 3);
+}
+
+/** Is `t` (a normalized label) a consent/permissions button? Never pressed. */
+function isConsentLabel(t: string): boolean {
+  return CONSENT_PREFIXES.some((p) => t.startsWith(p)) || (t.length <= MAX_CONSENT_LABEL_CHARS && hasAny(t, CONSENT_WORDS));
 }
 
 function hrefProvider(el: Element): SsoProvider | null {
@@ -111,37 +144,39 @@ export function findProviderButtons(root: ParentNode, env: Env): Map<SsoProvider
   return new Map([...out].map(([p, c]) => [p, c.el]));
 }
 
-/** The button to press for `provider`: the highest score, first in document order on a tie. */
-export function providerButton(root: ParentNode, provider: SsoProvider, env: Env): HTMLElement | null {
-  return findProviderButtons(root, env).get(provider) ?? null;
-}
-
 /**
- * `el`'s text nodes joined with spaces (unlike `.textContent`, so sibling
- * elements' text, e.g. a name and an email in adjacent `<div>`s, cannot fuse
- * into one token: "Me" + "Me@Gmail.com" stays two words, not one).
+ * The button to press for `provider`: the clear winner among that
+ * provider's own candidates only (its best score beats its runner-up by at
+ * least PRESS_MIN_MARGIN, mirroring `submit.ts`), or null when there is no
+ * candidate or the best is ambiguous (a tie, or too close to call).
  */
-function textOf(el: Element): string {
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  const parts: string[] = [];
-  for (let n = walker.nextNode(), total = 0; n && total < 400; n = walker.nextNode()) {
-    const t = n.nodeValue ?? "";
-    parts.push(t);
-    total += t.length;
-  }
-  return parts.join(" ");
+export function providerButton(root: ParentNode, provider: SsoProvider, env: Env): HTMLElement | null {
+  const ranked = scored(root, env)
+    .filter((c) => c.provider === provider)
+    .sort((a, b) => b.score - a.score);
+  const [best, second] = ranked;
+  if (!best) return null;
+  if (second && best.score - second.score < PRESS_MIN_MARGIN) return null;
+  return best.el;
 }
 
 /** The email address in an element's text, lowercased, or null. */
 export function emailIn(el: Element): string | null {
-  const m = EMAIL.exec(textOf(el).slice(0, 400)) ?? EMAIL.exec(el.getAttribute("data-identifier") ?? el.getAttribute("data-email") ?? "");
+  const attr = (el.getAttribute("data-identifier") ?? el.getAttribute("data-email") ?? "").slice(0, 400);
+  const m = EMAIL.exec(textOf(el).slice(0, 400)) ?? EMAIL.exec(attr);
   return m ? m[0].toLowerCase() : null;
 }
 
-/** The chooser row for `account`: exactly one clickable, visible element whose text holds it. */
+/**
+ * The chooser row for `account`: exactly one clickable, visible element
+ * whose text holds it and whose own label is not itself a consent screen
+ * (a "Continue as <account>" tile matches the account text too, but must
+ * never be treated as the row to click — safety does not depend on the
+ * caller checking `isConsentScreen` first).
+ */
 export function chooserRow(root: ParentNode, account: string, env: Env): HTMLElement | null {
   const want = account.trim().toLowerCase();
-  const hits = candidates(root, env).filter((el) => emailIn(el) === want);
+  const hits = candidates(root, env).filter((el) => emailIn(el) === want && !isConsentLabel(label(el)));
   // A row nested in another row (link inside list item) counts once: keep the outermost.
   const outer = hits.filter((el) => !hits.some((o) => o !== el && o.contains(el)));
   return outer.length === 1 ? (outer[0] as HTMLElement) : null;
@@ -149,8 +184,5 @@ export function chooserRow(root: ParentNode, account: string, env: Env): HTMLEle
 
 /** A permissions or confirmation screen: HavenKeys never presses these. */
 export function isConsentScreen(root: ParentNode, env: Env): boolean {
-  return candidates(root, env).some((el) => {
-    const t = label(el);
-    return t.length <= 30 && hasAny(t, CONSENT_WORDS);
-  });
+  return candidates(root, env).some((el) => isConsentLabel(label(el)));
 }

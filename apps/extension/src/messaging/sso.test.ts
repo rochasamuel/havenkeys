@@ -12,6 +12,13 @@ describe("sso messages", () => {
     expect(parseSsoContentRequest({ type: "cs_sso_stop" })).not.toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_pick", token: T, itemId: ID })).not.toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_save", token: T, account: "", title: null })).not.toBeNull();
+    // A GitHub username or phone number, not email-shaped: the user's own edit, Rust validates on save.
+    expect(parseSsoFrameRequest({ type: "sso_save", token: T, account: "samuelrocha", title: null })).toEqual({
+      type: "sso_save",
+      token: T,
+      account: "samuelrocha",
+      title: null,
+    });
     expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google" })).not.toBeNull();
     expect(parseSsoReady({ kind: "choose", account: "me@gmail.com" })).toEqual({ kind: "choose", account: "me@gmail.com" });
   });
@@ -26,9 +33,13 @@ describe("sso messages", () => {
     ]) expect(parseSsoContentRequest(bad)).toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_pick", token: "short", itemId: ID })).toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_save", token: T, account: "x".repeat(255), title: null })).toBeNull();
+    // A control character in a user-edited account is rejected even though it is not email-shaped.
+    expect(parseSsoFrameRequest({ type: "sso_save", token: T, account: "sam\u0000rocha", title: null })).toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_resize", token: T, height: 9999 })).toBeNull();
     expect(parseSsoReady({ kind: "choose", account: 5 })).toBeNull();
     expect(parsePressReply(undefined)).toEqual({ pressed: false });
     expect(isAccount("me@x.io")).toBe(true);
+    expect(isAccount("me@x.io\u0007")).toBe(false);
+    expect(isAccount(`me${String.fromCodePoint(0x202e)}@x.io`)).toBe(false);
   });
 });

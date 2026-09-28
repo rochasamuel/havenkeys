@@ -12,11 +12,19 @@ describe("pending captures", () => {
   it("prompts when the tab comes back after the provider", () => {
     const { s } = setup();
     s.click(1, "https://typeform.com/login", undefined, "google");
-    s.visit({ tabId: 1 }, G);
-    expect(s.account({ tabId: 1 }, G, "me@gmail.com")).toBe(true);
+    s.visit({ tabId: 1 }, G, true);
+    expect(s.account({ tabId: 1 }, G, "me@gmail.com", true)).toBe(true);
     const p = s.takeReturn(1, "https://admin.typeform.com");
     expect(p?.account).toBe("me@gmail.com");
     expect(s.pending(1)).toBeNull();
+  });
+  it("ignores a provider iframe embedded in the site page (not a top frame)", () => {
+    const { s } = setup();
+    s.click(1, "https://typeform.com/", undefined, "google");
+    s.visit({ tabId: 1 }, G, false); // a GSI iframe on the site, not a navigation
+    expect(s.account({ tabId: 1 }, G, "me@gmail.com", false)).toBe(false);
+    expect(s.pending(1)?.sawProvider).toBe(false);
+    expect(s.takeReturn(1, "https://typeform.com")).toBeNull();
   });
   it("return_before_provider_is_ignored", () => {
     const { s } = setup();
@@ -27,16 +35,16 @@ describe("pending captures", () => {
   it("learns the account only on the provider's own origins, also in a popup", () => {
     const { s } = setup();
     s.click(1, "https://typeform.com/", undefined, "google");
-    expect(s.account({ tabId: 1 }, "https://evil.com", "x@y.z")).toBe(false);
-    expect(s.account({ tabId: 9, openerTabId: 1 }, "https://login.live.com", "x@y.z")).toBe(false);
-    s.visit({ tabId: 9, openerTabId: 1 }, G);
-    expect(s.account({ tabId: 9, openerTabId: 1 }, G, "me@gmail.com")).toBe(true);
+    expect(s.account({ tabId: 1 }, "https://evil.com", "x@y.z", true)).toBe(false);
+    expect(s.account({ tabId: 9, openerTabId: 1 }, "https://login.live.com", "x@y.z", true)).toBe(false);
+    s.visit({ tabId: 9, openerTabId: 1 }, G, true);
+    expect(s.account({ tabId: 9, openerTabId: 1 }, G, "me@gmail.com", true)).toBe(true);
     expect(s.takeOnTabClosed(9)?.account).toBe("me@gmail.com");
   });
   it("expires", () => {
     const { s, advance } = setup();
     s.click(1, "https://typeform.com/", undefined, "google");
-    s.visit({ tabId: 1 }, G);
+    s.visit({ tabId: 1 }, G, true);
     advance(PENDING_TTL_MS + 1);
     expect(s.takeReturn(1, "https://typeform.com")).toBeNull();
   });

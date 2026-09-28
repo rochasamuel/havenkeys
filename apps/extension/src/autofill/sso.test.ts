@@ -42,6 +42,18 @@ describe("provider buttons", () => {
     const root = page(`${filler}<button>Continue with Google</button>`);
     expect(findProviderButtons(root, env).size).toBe(0);
   });
+  it("requires a clear winner over that provider's own runner-up before pressing", () => {
+    const tie = page(`<button>Continue with Google</button><button>Continue with Google</button>`);
+    expect(providerButton(tie, "google", env)).toBeNull();
+    const clear = page(`<input type="email"><button>Continue with Google</button><button>Google</button>`);
+    expect(providerButton(clear, "google", env)?.textContent).toBe("Continue with Google");
+  });
+  it("joins sibling elements' text with a space, so a split word does not fuse", () => {
+    // "Continuar com" + "o Google" naively concatenates to "Continuar como Google"
+    // ("continue how Google"), which no longer reads as "with the Google".
+    const root = page(`<button><span>Continuar com</span><span>o Google</span></button>`);
+    expect(findProviderButtons(root, env).get("google")).toBeTruthy();
+  });
 });
 
 describe("account chooser", () => {
@@ -62,5 +74,15 @@ describe("account chooser", () => {
     expect(isConsentScreen(page(`<p>Typeform wants to access your account</p><button>Allow</button><button>Cancel</button>`), env)).toBe(true);
     expect(isConsentScreen(page(`<button>Continuar</button>`), env)).toBe(true);
     expect(isConsentScreen(page(`<div role="link">me@gmail.com</div><div role="link">Use another account</div>`), env)).toBe(false);
+  });
+  it("never presses a 'Continue as <account>' tile, however long the account", () => {
+    const root = page(`<button>Continue as a.long.name@gmail.com</button>`);
+    expect(isConsentScreen(root, env)).toBe(true);
+    expect(chooserRow(root, "a.long.name@gmail.com", env)).toBeNull();
+  });
+  it("does not mistake a name that starts with a consent word for consent", () => {
+    const root = page(`<li><div role="link" data-identifier="grant@x.io">Grant Smith <div>grant@x.io</div></div></li>`);
+    expect(isConsentScreen(root, env)).toBe(false);
+    expect(chooserRow(root, "grant@x.io", env)).not.toBeNull();
   });
 });

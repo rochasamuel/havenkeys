@@ -76,13 +76,19 @@ export function createSsoState(now: () => number) {
       if (topUrl !== undefined) p.topUrl = topUrl;
       pendings.set(tabId, p);
     },
-    visit(tab: TabRef, origin: string): void {
+    // `top`: this is the tab's (or popup's) own top frame, not an iframe
+    // embedded in the site's page (e.g. a Google GSI iframe on the site
+    // itself, which never leaves the site and must not spuriously mark the
+    // provider as visited).
+    visit(tab: TabRef, origin: string, top: boolean): void {
+      if (!top) return;
       const p = pendingOf(tab);
       if (!p || !isProviderOrigin(p, origin)) return;
       p.sawProvider = true;
       if (tab.tabId !== p.tabId) p.popupTabId = tab.tabId;
     },
-    account(tab: TabRef, origin: string, account: string): boolean {
+    account(tab: TabRef, origin: string, account: string, top: boolean): boolean {
+      if (!top) return false;
       const p = pendingOf(tab);
       if (!p || !isProviderOrigin(p, origin)) return false;
       p.account = account;
