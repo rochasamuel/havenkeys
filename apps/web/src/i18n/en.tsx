@@ -305,7 +305,7 @@ export const en = {
       popup: {
         tab: "Toolbar",
         title: "Works without the in-page menu too.",
-        body: "In-page suggestions are off until you turn them on. Without them, the toolbar button fills the current tab, with the same origin checks and nothing running on pages you didn’t click.",
+        body: "Prefer no menu under login fields? Turn in-page suggestions off in the extension’s options: the toolbar button fills the current tab with the same origin checks, and offers to save logins and passkeys keep working.",
         alt: "The HavenKeys toolbar popup with two logins, Fill buttons and a one-time code",
       },
     } as Record<SceneId, { tab: string; title: string; body: string; alt: string }>,
@@ -404,7 +404,7 @@ export const en = {
 
     permTitle: "An extension that asks for less.",
     permLede:
-      "Most of the value, filling with origin checks, works with the tab you click on. Access to every site is what a malicious page or a compromised build would want most, so that’s yours to grant, not a condition of installing.",
+      "Offers to save logins and passkeys need the extension on the sites you visit, so it asks for that at install. It asks for nothing else, never reads pages you don’t interact with, and the desktop app decides which logins each site may use. You can take site access back in your browser at any time.",
     notRequested: "Not requested:",
     permHead: ["Permission", "Why"],
     always: "Always",
@@ -418,12 +418,17 @@ export const en = {
       {
         name: "scripting",
         optional: false,
-        why: "Put the fill script into that tab, or register it when in-page suggestions are on.",
+        why: "Put the fill script into that tab, and register it on the sites the extension has access to.",
       },
       {
         name: "https://*/*, http://*/*",
-        optional: true,
-        why: "In-page suggestions and save prompts. Asked for only when you turn them on, and you can narrow it to chosen sites.",
+        optional: false,
+        why: "Offers to save logins, passkeys and in-page suggestions. You can take it back in your browser’s extension settings.",
+      },
+      {
+        name: "storage",
+        optional: false,
+        why: "One setting: whether logins are suggested under login fields. Nothing else.",
       },
     ],
     optionalTag: "Optional, off by default",
@@ -593,8 +598,7 @@ export const en = {
           </li>
           <li>
             <strong>A username and password you submit on a login form</strong>, so it can ask
-            whether to save them. This needs in-page suggestions to be turned on, and nothing is
-            saved unless you confirm.
+            whether to save them. Nothing is saved unless you confirm.
           </li>
         </ul>
         <p>
@@ -606,12 +610,13 @@ export const en = {
           only for a server on the same computer). The server cannot decrypt it.
         </p>
         <p>
-          The extension keeps nothing in browser storage, cookies or on disk. A login it fills
-          stays in memory only while it fills the page. A login waiting to be saved is kept in
-          memory for at most three minutes, and is dropped as soon as you save it, dismiss the
-          prompt, or the vault locks. Suggestions inside web pages are off until you turn them on
-          in the extension's options; without them the extension runs on a page only when you
-          click its toolbar button.
+          The extension keeps no logins, page contents or addresses in browser storage, cookies
+          or on disk. Its only stored value is one setting, whether logins are suggested under
+          login fields. A login it fills stays in memory only while it fills the page. A login
+          waiting to be saved is kept in memory for at most three minutes, and is dropped as soon
+          as you save it, dismiss the prompt, or the vault locks. The extension runs on the
+          websites you visit so it can offer to save logins and handle passkeys; you can take that
+          access back in your browser's extension settings.
         </p>
 
         <h2>What we never collect</h2>

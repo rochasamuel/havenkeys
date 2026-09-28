@@ -87,10 +87,11 @@ registration alone.
    * **Firefox:** `about:debugging` → This Firefox → *Load Temporary Add-on* →
      `apps/extension/dist/firefox/manifest.json` (ID `havenkeys@havenkeys.app`).
 5. Start HavenKeys, unlock it, and turn on Settings → *Browser extension*.
-6. Optional: to get suggestions when clicking login fields and offers to save
-   logins, open the extension's options (the *Settings* button in the popup)
-   and turn on *Suggestions in login fields*. Reload tabs that were already
-   open.
+6. Save prompts, passkeys and suggestions when clicking login fields are on
+   from install. Reload tabs that were already open. To hide the menu under
+   login fields, turn off *Suggestions in login fields* in the extension's
+   options (the *Settings* button in the popup); save prompts and passkeys
+   keep working.
    Browser integration is **off by default**, for new vaults and for vaults
    created before this setting existed, because while it is on, other
    programs running as you can use it too (§8).
@@ -325,10 +326,10 @@ zeroized on drop.
 
 ## 7. Extension side
 
-**Permissions:** `nativeMessaging`, `activeTab` and `scripting`, plus the
-optional host permissions `https://*/*` and `http://*/*`. The optional ones
-are requested only when the user turns on in-page suggestions on the options
-page. See `security-model.md` §12 and `autofill.md`.
+**Permissions:** `nativeMessaging`, `activeTab`, `scripting`, `storage` (one
+boolean: whether in-page suggestions are shown) and the host permissions
+`https://*/*` and `http://*/*`, all requested at install. See
+`security-model.md` §12 and `autofill.md`.
 
 * The background worker is the only code that talks to the native host.
 * It accepts runtime messages from three kinds of sender, told apart by the

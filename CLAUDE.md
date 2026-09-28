@@ -669,6 +669,13 @@ Clearly document every permission in:
 docs/security-model.md
 ```
 
+> Amended on 2026-09-28 by
+> `docs/superpowers/specs/2026-09-28-extension-defaults-design.md`: site
+> access (`https://*/*`, `http://*/*`) is requested at install so save
+> prompts and passkeys work without setup. The menu under login fields is
+> a separate preference, on by default. Desktop browser integration stays
+> opt-in.
+
 ---
 
 # 19. Content script security

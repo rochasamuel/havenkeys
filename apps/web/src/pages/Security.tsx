@@ -58,7 +58,7 @@ export function Security() {
           <h2>{s.permTitle}</h2>
           <p>{s.permLede}</p>
           <p className="muted">
-            {s.notRequested} <code>&lt;all_urls&gt;</code>, <code>tabs</code>, <code>storage</code>,{" "}
+            {s.notRequested} <code>&lt;all_urls&gt;</code>, <code>tabs</code>,{" "}
             <code>cookies</code>, <code>webRequest</code>, <code>clipboardWrite</code>,{" "}
             <code>notifications</code>.
           </p>

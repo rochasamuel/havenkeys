@@ -312,6 +312,9 @@ be filled this way.
 
 ## Saving logins
 
+Save and update prompts do not depend on the in-page suggestions
+preference: they work whenever the extension has access to the site.
+
 Detection is conservative:
 
 * **Triggers:** a form `submit` event, a trusted Enter in a login field, or a
@@ -484,7 +487,7 @@ pattern, `<button class="g-recaptcha" data-callback=...>`) or that carries
 
 ### Popup-only mode
 
-Without the in-page-suggestions host permission, the popup injects the
+Without the host permission (withdrawn by the user), the popup injects the
 content script through `activeTab`, which the browser revokes once the tab
 navigates. A run started that way covers only the current page: single-page
 forms and SPA steps, not a step on a page the site navigates to.
@@ -504,8 +507,9 @@ forms and SPA steps, not a step on a page the site navigates to.
 
 ## Passkeys
 
-HavenKeys answers a site's WebAuthn calls on the hosts the user granted for
-in-page suggestions, and on no others. Keys, formats and the Rust checks are
+HavenKeys answers a site's WebAuthn calls on the hosts the extension has
+access to (every http/https host by default), and on no others. The in-page
+suggestions preference does not affect it. Keys, formats and the Rust checks are
 in `crypto.md` §Passkeys and `security-model.md` §15.
 
 ### How a request reaches HavenKeys
@@ -725,12 +729,21 @@ ends an acknowledged modal request that is never answered with
 
 ## Permissions and injection
 
-* Default: `nativeMessaging`, `activeTab`, `scripting`. The content script
-  runs only in a tab after the user fills from the popup there.
-* In-page suggestions and save prompts are opt-in, from the options page.
-  They request the optional host permissions `https://*/*` and `http://*/*`.
-  When granted, the background registers the content script for the granted
-  patterns in all frames. When revoked, it unregisters it. The two passkey
+* Requested at install: `nativeMessaging`, `activeTab`, `scripting`,
+  `storage`, and the host permissions `https://*/*` and `http://*/*`
+  (changed 2026-09-28; before, the host permissions were optional and off).
+  With the host grant, the background registers the content script for the
+  granted patterns in all frames, so save prompts, passkeys and in-page
+  suggestions work without setup. If the user withdraws the grant, it
+  unregisters it, and the options page and popup offer **Allow**.
+* **In-page suggestions** — the field icon and the menu under login fields,
+  including the generated-password menu on sign-up fields — are a separate
+  preference on the options page, on by default, stored as one boolean in
+  `chrome.storage.local` (`shared/prefs.ts`). The background refuses to open
+  a menu while it is off, and the content script hides the icon and stops
+  asking, following changes live. Turning it off does not affect save and
+  update prompts, passkeys, popup fills or automatic sign-in started from
+  the popup. The two passkey
   scripts (§Passkeys) follow the same grant, registered as a separate group
   at `document_start`, so a browser that refuses `world: "MAIN"` keeps
   in-page suggestions.
@@ -769,7 +782,8 @@ See `security-model.md` §12.
 * **Save prompts** depend on seeing the submission. Script-driven logins that
   never fire a submit, click or Enter are missed, except for generated
   passwords (offered on unload).
-* **Tabs opened before inline suggestions were turned on** need a reload.
+* **Tabs opened before the extension was installed or site access allowed**
+  need a reload.
   So do passkeys: the page script must run before the site's own scripts.
 * **Passkeys only on granted sites.** Without the host grant, sites get the
   browser's own WebAuthn.

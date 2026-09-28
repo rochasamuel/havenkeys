@@ -230,7 +230,9 @@ pnpm ui:check --app=desktop   # one app: extension | desktop
   The native host's stdout carries protocol frames only.
 * No `innerHTML`, `console.*`, `eval` or `chrome.storage` in the extension.
   Build the DOM with `createElement`/`textContent`. Enforced by
-  `apps/extension/src/hygiene.test.ts`.
+  `apps/extension/src/hygiene.test.ts`. The one storage exception is
+  `src/shared/prefs.ts`, which keeps a single boolean (whether in-page
+  suggestions are shown) in `chrome.storage.local`.
 * Extension code acts only on trusted user events (`isTrusted`), and takes
   page URLs from the browser's sender and tab data, never from messages or
   the DOM.

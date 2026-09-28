@@ -1905,3 +1905,28 @@ Both the compile step and the packaging/signing step now pass `-- --locked`, mat
 | # | Check |
 |---|---|
 | SC-M1 | At the first release cut with the split compile/sign workflow (SC1 above): confirm the "Package, sign and attach installers" step's logs show no dependency, proc-macro, or frontend recompilation (nothing for Cargo to build beyond packaging/signing), and that every `.sig` asset's trusted comment still carries `version:<the release version>` — this repeats UM6 above, now also confirming SC1's isolation held in practice. |
+
+## Extension site access on by default (2026-09-28)
+
+Spec: `docs/superpowers/specs/2026-09-28-extension-defaults-design.md`.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| E1 | Info | Extension | The content script and the two passkey scripts run on every http(s) page by default, instead of only after the user opted in on the options page | Accepted (spec §9) |
+| E2 | Info | Extension | Narrowing site access to chosen sites in the browser turns the scripts off everywhere (registration checks only the broad patterns) | Open, fails closed (`autofill.md` §Permissions) |
+
+### E1. Default-on site access (Info, accepted)
+Save and update prompts and passkeys need a script in the page, and an
+opt-in behind the options page meant they silently did not work. The host
+patterns moved from `optional_host_permissions` to `host_permissions`.
+**Cost:** a bug in the content or passkey scripts, or a compromised
+extension build, now reaches every page for every user. The scripts were
+already written to run on any granted page and treat it as hostile; none of
+them changed. **What did not change:** every page request still goes
+through the desktop, and browser integration there stays off by default
+(P6), so nothing reaches the vault until the user turns it on. The new
+`storage` permission holds one boolean (whether in-page suggestions are
+shown); `hygiene.test.ts` allows storage in `shared/prefs.ts` only.
+**Update impact:** Chrome disables an installed 0.9.x extension when it
+updates to a version with new host permissions, until the user accepts
+them.

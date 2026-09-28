@@ -63,8 +63,8 @@ adversaries it does **not** defend against.
   choose.
 * **Web pages** are hostile by default. They cannot message the extension
   (`externally_connectable` is empty, and page script has no extension
-  APIs). When in-page suggestions are on, a content script reads the page's
-  DOM as untrusted input. It acts only on trusted user events, and fills
+  APIs). On the hosts the extension has access to (every http/https page by
+  default), a content script reads the page's DOM as untrusted input. It acts only on trusted user events, and fills
   only what the background sends after the user picked an item in an
   extension-origin frame (`autofill.md`).
 * **The passkey page script** (`webauthn/page.ts`) runs in the page's own

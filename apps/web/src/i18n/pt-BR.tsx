@@ -312,7 +312,7 @@ export const ptBR: Messages = {
       popup: {
         tab: "Barra de ferramentas",
         title: "Funciona sem o menu na página também.",
-        body: "As sugestões na página ficam desligadas até você ativá-las. Sem elas, o botão da barra de ferramentas preenche a aba atual, com as mesmas verificações de origem e nada rodando em páginas em que você não clicou.",
+        body: "Prefere sem menu abaixo dos campos de login? Desative as sugestões na página nas opções da extensão: o botão da barra de ferramentas preenche a aba atual com as mesmas verificações de origem, e as ofertas para salvar logins e as chaves de acesso continuam funcionando.",
         alt: "O popup do HavenKeys na barra de ferramentas com dois logins, botões Fill e um código de uso único",
       },
     },
@@ -415,7 +415,7 @@ export const ptBR: Messages = {
 
     permTitle: "Uma extensão que pede menos.",
     permLede:
-      "A maior parte do valor, preencher com verificação de origem, funciona só com a aba em que você clica. Acesso a todos os sites é o que uma página maliciosa ou uma versão comprometida mais gostaria de ter, então isso é você quem concede, não uma condição para instalar.",
+      "Oferecer salvar logins e usar chaves de acesso exige que a extensão rode nos sites que você visita, então ela pede isso na instalação. Ela não pede mais nada, não lê páginas com as quais você não interage, e o app de desktop decide quais logins cada site pode usar. Você pode retirar o acesso aos sites no navegador a qualquer momento.",
     notRequested: "Não solicitadas:",
     permHead: ["Permissão", "Por quê"],
     always: "Sempre",
@@ -429,12 +429,17 @@ export const ptBR: Messages = {
       {
         name: "scripting",
         optional: false,
-        why: "Colocar o script de preenchimento nessa aba, ou registrá-lo quando as sugestões na página estão ligadas.",
+        why: "Colocar o script de preenchimento nessa aba e registrá-lo nos sites a que a extensão tem acesso.",
       },
       {
         name: "https://*/*, http://*/*",
-        optional: true,
-        why: "Sugestões na página e avisos para salvar. Só é pedida quando você as ativa, e você pode limitá-la aos sites que escolher.",
+        optional: false,
+        why: "Ofertas para salvar logins, chaves de acesso e sugestões na página. Você pode retirá-la nas configurações de extensões do navegador.",
+      },
+      {
+        name: "storage",
+        optional: false,
+        why: "Uma configuração: se os logins aparecem abaixo dos campos de login. Mais nada.",
       },
     ],
     optionalTag: "Opcional, desligada por padrão",
@@ -608,8 +613,7 @@ export const ptBR: Messages = {
           </li>
           <li>
             <strong>Um usuário e uma senha que você envia em um formulário de login</strong>, para
-            perguntar se você quer salvá-los. Isso exige que as sugestões nas páginas estejam
-            ativadas, e nada é salvo sem a sua confirmação.
+            perguntar se você quer salvá-los. Nada é salvo sem a sua confirmação.
           </li>
         </ul>
         <p>
@@ -621,12 +625,14 @@ export const ptBR: Messages = {
           mesmo computador). O servidor não consegue decifrá-lo.
         </p>
         <p>
-          A extensão não guarda nada no armazenamento do navegador, em cookies ou no disco. Um login
-          que ela preenche fica na memória só enquanto ela preenche a página. Um login aguardando
-          para ser salvo fica na memória por no máximo três minutos e é descartado assim que você o
-          salva, dispensa o aviso ou o cofre é bloqueado. As sugestões dentro das páginas ficam
-          desativadas até você ativá-las nas opções da extensão; sem elas, a extensão só roda em uma
-          página quando você clica no botão dela na barra de ferramentas.
+          A extensão não guarda logins, conteúdo de páginas nem endereços no armazenamento do
+          navegador, em cookies ou no disco. O único valor que ela guarda é uma configuração: se os
+          logins aparecem abaixo dos campos de login. Um login que ela preenche fica na memória só
+          enquanto ela preenche a página. Um login aguardando para ser salvo fica na memória por no
+          máximo três minutos e é descartado assim que você o salva, dispensa o aviso ou o cofre é
+          bloqueado. A extensão roda nos sites que você visita para poder oferecer salvar logins e
+          cuidar de chaves de acesso; você pode retirar esse acesso nas configurações de extensões
+          do navegador.
         </p>
 
         <h2>O que nunca coletamos</h2>

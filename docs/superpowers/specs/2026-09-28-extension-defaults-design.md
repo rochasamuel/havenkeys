@@ -1,6 +1,6 @@
 # Extension on by default; suggestions are only the field menu — Design
 
-Status: proposed, 2026-09-28.
+Status: implemented, 2026-09-28.
 
 > This software has not undergone an independent security audit.
 

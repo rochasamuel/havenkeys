@@ -330,15 +330,26 @@ macros appear in the core crate.
 |---|---|---|
 | `nativeMessaging` | yes | Talk to the native messaging host, the extension's only route to the vault |
 | `activeTab` | yes | When the user clicks the toolbar button: read that tab's URL to look up its logins, and allow filling it. Only that tab, until it navigates |
-| `scripting` | yes | Inject the content script into that tab for a popup fill, and register the content script when in-page suggestions are on |
-| `https://*/*`, `http://*/*` | **optional**, off by default | In-page suggestions and save prompts need a content script in the pages the user visits. Requested only from the options page, when the user turns suggestions on. The browser can narrow the grant to chosen sites, and the registered content script follows the grant |
+| `scripting` | yes | Inject the content script into that tab for a popup fill, and register the content script and passkey scripts for the granted hosts |
+| `https://*/*`, `http://*/*` | yes (`host_permissions`) | Save/update prompts, passkeys and in-page suggestions need scripts in the pages the user visits. Granted at install. The user can withdraw it in the browser's site-access controls; the scripts are then unregistered, and the options page and popup offer **Allow**. Narrowing it to chosen sites currently turns the scripts off everywhere (fails closed; `autofill.md` §Permissions) |
+| `storage` | yes | One boolean in `chrome.storage.local`: whether in-page suggestions (the field icon and menu) are shown. Nothing else is stored |
 
-Why not ask for everything at install: most of the value, filling with origin
-binding, works with `activeTab`. Broad host access is what a malicious page
-or a compromised extension build would most want, so the user decides.
-Without it, the extension never runs in pages the user did not click it on.
+Why site access is asked for at install (changed 2026-09-28, spec
+`2026-09-28-extension-defaults-design.md`): offering to save a new or
+changed password and answering passkey requests both need a script in the
+page, and asking users to find an options page first meant they silently
+did not work. The cost is a larger default surface: the isolated content
+script and the two passkey scripts now run in every http(s) page for every
+user, not only after an opt-in, so a bug in them or a compromised extension
+build reaches every page. They were already written to run everywhere once
+granted and treat every page as hostile (`threat-model.md` §2, T8); nothing
+in them changed. Nothing reaches the vault until the user turns on browser
+integration in the desktop app, which stays opt-in (§14 and
+`security-review.md` P6). The menu under login fields is a separate
+preference (options page, on by default); turning it off does not stop save
+prompts or passkeys.
 
-Not requested: `<all_urls>` as a required permission, `tabs`, `storage`,
+Not requested: `<all_urls>` as a required permission, `tabs`,
 `clipboardWrite`, `cookies`, `webRequest`, `webNavigation`, `notifications`.
 `externally_connectable` is empty, so web pages and other extensions cannot
 message the extension.
@@ -369,15 +380,15 @@ removed in Phase 5, because the menu and save pages must be framed by web
 pages. Framing by websites is limited to those pages by
 `web_accessible_resources`.
 
-**Passkey scripts:** when the user grants host access, the background also
-registers two scripts with `chrome.scripting.registerContentScripts`, for
+**Passkey scripts:** for the granted hosts (every http/https host unless the
+user narrowed site access), the background also registers two scripts with `chrome.scripting.registerContentScripts`, for
 exactly the same granted patterns, in all frames, at `document_start`:
 `webauthn-page.js` in the page's own world (`world: "MAIN"`), which wraps
 `navigator.credentials`, and `webauthn-bridge.js` in the isolated world,
 which relays it. They are registered and removed with the grant, as a group
 separate from the inline content script, so a browser that rejects
 `world: "MAIN"` loses passkeys but keeps in-page suggestions. No new
-permission is needed: `scripting` and the optional host permissions already
+permission is needed: `scripting` and the host permissions already
 cover registering scripts in granted pages, and neither script is a
 web-accessible resource. See §15.
 
