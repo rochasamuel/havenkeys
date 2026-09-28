@@ -1384,6 +1384,25 @@ p {
   }
 }
 
+.browser-section .hero__actions {
+  margin-top: clamp(48px, 6vw, 72px);
+}
+
+.browser-section__extra-title {
+  max-width: 900px;
+  margin: clamp(48px, 6vw, 72px) auto 28px;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  font-weight: 520;
+  color: var(--text-strong);
+}
+
+.browser-section__extra {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 /* -------------------------------------------------------------- desktop */
 
 .desktop-section__grid {
@@ -2171,6 +2190,13 @@ p {
 .setup__steps p {
   margin: 0;
   color: var(--muted-hi);
+}
+
+.setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 /* --------------------------------------------------------- legal pages */

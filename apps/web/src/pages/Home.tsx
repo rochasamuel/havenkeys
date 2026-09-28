@@ -10,6 +10,8 @@ import { Journey } from "../components/journey/Journey";
 import { useI18n } from "../i18n/context";
 
 const GITHUB = "https://github.com/rochasamuel/havenkeys";
+const CHROME_STORE = "https://chromewebstore.google.com/detail/havenkeys/fmmfkakdkkcfpdnfmbngnlelbfaogafo";
+const FIREFOX_STORE = "https://addons.mozilla.org/firefox/addon/havenkeys/";
 
 export function Home() {
   const { t, path } = useI18n();
@@ -63,6 +65,25 @@ export function Home() {
           <p>{h.browserLede}</p>
         </div>
         <BrowserShowcase />
+        <div className="hero__actions">
+          <a className="btn btn--ghost" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
+            <Icon name="external" size={15} />
+            {t.common.addToChrome}
+          </a>
+          <a className="btn btn--ghost" href={FIREFOX_STORE} target="_blank" rel="noopener noreferrer">
+            <Icon name="external" size={15} />
+            {t.common.addToFirefox}
+          </a>
+        </div>
+        <h3 className="browser-section__extra-title">{h.extensionListTitle}</h3>
+        <dl className="features browser-section__extra">
+          {h.extensionFeatures.map((f) => (
+            <div key={f.term}>
+              <dt>{f.term}</dt>
+              <dd>{f.text}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       <section className="section desktop-section">
@@ -144,6 +165,14 @@ export function Home() {
             <Icon name="download" />
             {t.common.downloadCta}
           </Link>
+          <a className="btn btn--ghost btn--lg" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
+            <Icon name="external" size={15} />
+            {t.common.addToChrome}
+          </a>
+          <a className="btn btn--ghost btn--lg" href={FIREFOX_STORE} target="_blank" rel="noopener noreferrer">
+            <Icon name="external" size={15} />
+            {t.common.addToFirefox}
+          </a>
           <a href={GITHUB} className="btn btn--ghost btn--lg" target="_blank" rel="noreferrer">
             <Icon name="github" />
             {h.readSource}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Icon } from "../components/Icon";
 
 /*
  * Every word the site shows, in English. pt-BR.tsx must match this shape
@@ -13,6 +14,8 @@ import { Link } from "react-router-dom";
 
 const GH = "https://github.com/rochasamuel/havenkeys";
 const DOCS = `${GH}/blob/main/docs/`;
+const CHROME_STORE = "https://chromewebstore.google.com/detail/havenkeys/fmmfkakdkkcfpdnfmbngnlelbfaogafo";
+const FIREFOX_STORE = "https://addons.mozilla.org/firefox/addon/havenkeys/";
 
 function Ext({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -35,6 +38,8 @@ export const en = {
     disclaimer:
       "This software has not undergone an independent security audit and should not be considered a replacement for professionally audited password managers for high-value production use.",
     downloadCta: "Download HavenKeys",
+    addToChrome: "Add to Chrome",
+    addToFirefox: "Add to Firefox",
   },
 
   nav: {
@@ -83,6 +88,18 @@ export const en = {
     browserTitle: "Autofill that waits for your click.",
     browserLede:
       "The extension for Chrome and Firefox reads the form the way you do, offers what’s saved for that site, and does nothing until you choose. These are the real menus.",
+    extensionListTitle: "Also in the extension",
+    extensionFeatures: [
+      {
+        term: "Passkeys",
+        text: "Sign in with a saved passkey from the field menu, and save new ones. After you sign in with a password on a site that supports passkeys, HavenKeys can add a passkey for you (you can turn this off).",
+      },
+      {
+        term: "Automatic sign-in",
+        text: "After you pick a login, HavenKeys can press the sign-in button and fill the next step and the one-time code, on the same site, within two minutes. Nothing happens without your pick. Off per login or for the whole vault.",
+      },
+      { term: "Edit in HavenKeys", text: "From the popup, open a login in the desktop app to change it." },
+    ],
 
     desktopTitle: "A vault that lives on your desk.",
     desktopLede:
@@ -90,7 +107,15 @@ export const en = {
     features: [
       { term: "Logins", text: "Usernames, passwords, websites with match rules, one-time codes and notes." },
       { term: "Secure notes", text: "Recovery codes, passphrases, anything that isn’t a login. Encrypted whole." },
+      {
+        term: "Passkeys",
+        text: "Create passkeys and sign in with them. The private key is made and used only in the Rust core; the site’s identity is checked there too.",
+      },
       { term: "One-time codes", text: "SHA-1, SHA-256 or SHA-512, six or eight digits. Paste an otpauth:// link once." },
+      {
+        term: "Scan a QR code",
+        text: "Set up a one-time code by scanning the QR code from the clipboard or the screen. The secret stays in Rust until you save.",
+      },
       { term: "Password generator", text: "Length and character sets are up to you. Random from the OS, with no bias." },
       { term: "Search", text: "Titles, usernames and websites, searched in memory. No plaintext index on disk." },
       { term: "Password history", text: "The last five passwords of every login, even ones changed from the browser." },
@@ -98,6 +123,22 @@ export const en = {
       {
         term: "Auto-lock",
         text: "After 5 to 60 minutes idle, on sleep and on quit. On Windows and Linux, when your session locks too.",
+      },
+      {
+        term: "Secret Key in the keychain",
+        text: "Stored in your system’s keychain (Windows Credential Manager, macOS Keychain, Secret Service on Linux).",
+      },
+      {
+        term: "Opens at login",
+        text: "Optionally starts with your computer, locked, in the tray, so the extension can reach it.",
+      },
+      {
+        term: "Updates itself",
+        text: "Checks for signed updates and installs only when you click Update. You can turn the check off.",
+      },
+      {
+        term: "English and Portuguese",
+        text: "The app and the extension follow your system language, or pick one.",
       },
     ],
 
@@ -460,19 +501,37 @@ export const en = {
         ),
       },
       {
-        title: "The extension is built from source",
+        title: "Add the browser extension",
         body: (
           <>
-            The browser extension and its native messaging host aren’t in these installers yet. The{" "}
-            <Ext href={`${GH}#readme`}>README</Ext> has the steps.
+            Install it from the <Ext href={CHROME_STORE}>Chrome Web Store</Ext> or{" "}
+            <Ext href={FIREFOX_STORE}>Firefox Add-ons</Ext>. The installers already include the
+            piece that connects the browser to the app, and register it with Chrome and Firefox.
+            Then unlock HavenKeys and turn on <strong>Settings → Browser extension</strong>.
           </>
         ),
+        actions: (
+          <>
+            <a className="btn btn--ghost btn--sm" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" size={15} />
+              Add to Chrome
+            </a>
+            <a className="btn btn--ghost btn--sm" href={FIREFOX_STORE} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" size={15} />
+              Add to Firefox
+            </a>
+          </>
+        ),
+      },
+      {
+        title: "It updates itself",
+        body: "From 0.9.0, HavenKeys checks for signed updates and installs one when you click Update. .deb and .rpm installs get a Download button that opens the release page instead. On 0.8.0 or earlier, install 0.9.0 once by hand, over the existing install — no need to uninstall first.",
       },
       {
         title: "Expect a warning on first run",
         body: "The installers aren’t code-signed yet, so Windows SmartScreen and macOS Gatekeeper will warn you. The Windows and macOS builds are newer and less tested than Linux.",
       },
-    ] as Array<{ title: string; body: ReactNode }>,
+    ] as Array<{ title: string; body: ReactNode; actions?: ReactNode }>,
   },
 
   privacy: {

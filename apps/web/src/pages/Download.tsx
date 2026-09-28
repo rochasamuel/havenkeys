@@ -106,7 +106,10 @@ export function Download() {
           {d.steps.map((step) => (
             <li key={step.title}>
               <h3>{step.title}</h3>
-              <p>{step.body}</p>
+              <div>
+                <p>{step.body}</p>
+                {step.actions && <div className="setup__actions">{step.actions}</div>}
+              </div>
             </li>
           ))}
         </ol>

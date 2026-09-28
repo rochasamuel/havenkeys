@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Icon } from "../components/Icon";
 import type { Messages } from "./en";
 
 /*
@@ -10,6 +11,8 @@ import type { Messages } from "./en";
 
 const GH = "https://github.com/rochasamuel/havenkeys";
 const DOCS = `${GH}/blob/main/docs/`;
+const CHROME_STORE = "https://chromewebstore.google.com/detail/havenkeys/fmmfkakdkkcfpdnfmbngnlelbfaogafo";
+const FIREFOX_STORE = "https://addons.mozilla.org/firefox/addon/havenkeys/";
 
 function Ext({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -30,6 +33,8 @@ export const ptBR: Messages = {
     disclaimer:
       "Este software não passou por uma auditoria de segurança independente e não deve ser considerado um substituto para gerenciadores de senhas auditados profissionalmente em uso de produção de alto valor.",
     downloadCta: "Baixar o HavenKeys",
+    addToChrome: "Adicionar ao Chrome",
+    addToFirefox: "Adicionar ao Firefox",
   },
 
   nav: {
@@ -78,6 +83,18 @@ export const ptBR: Messages = {
     browserTitle: "Preenchimento que espera o seu clique.",
     browserLede:
       "A extensão para Chrome e Firefox lê o formulário como você lê, oferece o que está salvo para aquele site e não faz nada até você escolher. Estes são os menus de verdade.",
+    extensionListTitle: "Também na extensão",
+    extensionFeatures: [
+      {
+        term: "Passkeys",
+        text: "Entre com uma passkey salva pelo menu do campo, e salve novas. Depois que você entra com uma senha em um site que aceita passkeys, o HavenKeys pode criar uma passkey para você (dá para desligar isso).",
+      },
+      {
+        term: "Entrada automática",
+        text: "Depois que você escolhe um login, o HavenKeys pode clicar no botão de entrar e preencher a etapa seguinte e o código de uso único, no mesmo site, em até dois minutos. Nada acontece sem a sua escolha. Dá para desligar por login ou para o cofre inteiro.",
+      },
+      { term: "Editar no HavenKeys", text: "Pelo popup, abra um login no app de desktop para alterá-lo." },
+    ],
 
     desktopTitle: "Um cofre que mora na sua mesa.",
     desktopLede:
@@ -86,8 +103,16 @@ export const ptBR: Messages = {
       { term: "Logins", text: "Usuários, senhas, sites com regras de correspondência, códigos de uso único e notas." },
       { term: "Notas seguras", text: "Códigos de recuperação, frases-senha, tudo que não é login. Cifradas por inteiro." },
       {
+        term: "Passkeys",
+        text: "Crie passkeys e entre com elas. A chave privada é criada e usada só no núcleo em Rust; a identidade do site também é conferida lá.",
+      },
+      {
         term: "Códigos de uso único",
         text: "SHA-1, SHA-256 ou SHA-512, seis ou oito dígitos. Cole um link otpauth:// uma única vez.",
+      },
+      {
+        term: "Ler um QR code",
+        text: "Configure um código de uso único lendo o QR code da área de transferência ou da tela. O segredo fica no Rust até você salvar.",
       },
       {
         term: "Gerador de senhas",
@@ -105,6 +130,22 @@ export const ptBR: Messages = {
       {
         term: "Bloqueio automático",
         text: "Após 5 a 60 minutos parado, ao suspender e ao sair. No Windows e no Linux, também quando a sessão é bloqueada.",
+      },
+      {
+        term: "Secret Key no chaveiro do sistema",
+        text: "Guardada no chaveiro do seu sistema (Windows Credential Manager, macOS Keychain, Secret Service no Linux).",
+      },
+      {
+        term: "Abre ao ligar o computador",
+        text: "Opcionalmente inicia junto com o computador, trancado, na bandeja do sistema, para que a extensão consiga alcançá-lo.",
+      },
+      {
+        term: "Se atualiza sozinho",
+        text: "Verifica se há atualizações assinadas e instala só quando você clica em Atualizar. Dá para desligar a verificação.",
+      },
+      {
+        term: "Português e inglês",
+        text: "O app e a extensão seguem o idioma do seu sistema, ou você escolhe um.",
       },
     ],
 
@@ -472,13 +513,31 @@ export const ptBR: Messages = {
         ),
       },
       {
-        title: "A extensão é compilada a partir do código",
+        title: "Adicione a extensão do navegador",
         body: (
           <>
-            A extensão do navegador e o host de native messaging ainda não vêm nesses instaladores.
-            O <Ext href={`${GH}#readme`}>README</Ext> (em inglês) tem o passo a passo.
+            Instale pela <Ext href={CHROME_STORE}>Chrome Web Store</Ext> ou pelo{" "}
+            <Ext href={FIREFOX_STORE}>Firefox Add-ons</Ext>. Os instaladores já incluem a parte que
+            conecta o navegador ao app, e a registram no Chrome e no Firefox. Depois, desbloqueie o
+            HavenKeys e ative <strong>Configurações → Extensão do navegador</strong>.
           </>
         ),
+        actions: (
+          <>
+            <a className="btn btn--ghost btn--sm" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" size={15} />
+              Adicionar ao Chrome
+            </a>
+            <a className="btn btn--ghost btn--sm" href={FIREFOX_STORE} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" size={15} />
+              Adicionar ao Firefox
+            </a>
+          </>
+        ),
+      },
+      {
+        title: "Ele se atualiza sozinho",
+        body: "A partir da 0.9.0, o HavenKeys verifica se há atualizações assinadas e instala uma quando você clica em Atualizar. Instalações .deb e .rpm recebem um botão Baixar que abre a página de versões. Na 0.8.0 ou anterior, instale a 0.9.0 uma vez, manualmente, por cima da instalação existente — sem precisar desinstalar antes.",
       },
       {
         title: "Espere um aviso na primeira execução",
