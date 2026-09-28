@@ -61,7 +61,17 @@ jobs:
       - name: Build the native host sidecar
         run: node scripts/build-native-host-sidecar.mjs --target ${{ matrix.target }}
 
-      - name: Build and attach installers
+      # Everything that runs third-party code happens here, without the
+      # signing secrets: dependency build scripts and proc macros, and the
+      # frontend build. `--locked` refuses a Cargo.lock that would change.
+      - name: Compile the app (no signing secrets)
+        working-directory: apps/desktop
+        run: pnpm tauri build --no-bundle --config src-tauri/tauri.bundle.conf.json ${{ matrix.args }} -- --locked
+
+      # Only packaging and signing are left for the step that holds the key:
+      # Cargo finds everything already built, and tauri.package.conf.json
+      # replaces the frontend build with a no-op (dist/ exists from above).
+      - name: Package, sign and attach installers
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,4 +93,4 @@ jobs:
           # the NSIS installer, not the MSI.
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          args: --config src-tauri/tauri.bundle.conf.json ${{ matrix.args }}
+          args: --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.package.conf.json ${{ matrix.args }} -- --locked

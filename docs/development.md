@@ -255,6 +255,13 @@ the security side.
   which only the release workflow passes with `--config`. A local `tauri
   build` (or `pnpm build`) does not create updater artifacts and does not need
   the signing key.
+* **The key only reaches packaging.** The workflow compiles first, without
+  the signing secrets (`tauri build --no-bundle … -- --locked`): every
+  dependency build script, proc macro and the frontend build run there. The
+  tauri-action step that holds the key adds `tauri.package.conf.json`, which
+  swaps the frontend build for a no-op, so it only packages and signs; Cargo
+  recompiles just `havenkeys-desktop` itself (its config is embedded). Keep
+  that split when editing `release.yml`.
 * **Releasing:**
   1. Bump the version (`apps/desktop/src-tauri/tauri.conf.json`,
      `apps/desktop/package.json`, and the extension's `manifest/base.json` /
