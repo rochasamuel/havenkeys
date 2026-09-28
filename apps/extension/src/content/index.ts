@@ -38,6 +38,7 @@ import {
 } from "../messaging/inline";
 import { InlineFrame, menuBox, saveBox, type Box } from "./frames";
 import { FieldIcon, iconBox } from "./icon";
+import { getInlineSuggestions, onInlineSuggestionsChanged } from "../shared/prefs";
 
 declare global {
   // Set in this content script's isolated world; page script cannot see it.
@@ -107,6 +108,8 @@ function start(): void {
    * current and do nothing. */
   let runSeq = 0;
   let stopWatch: (() => void) | null = null;
+  /** The options-page preference for the icon and menu; false until read, so no icon flashes. */
+  let suggestions = false;
 
   // ------------------------------------------------------------ menu
 
@@ -135,7 +138,7 @@ function start(): void {
 
   /** `explicit`: from the field icon, so show the menu even with nothing to offer. */
   async function maybeOpen(field: HTMLInputElement, explicit = false): Promise<void> {
-    if (opening || menu?.field === field || !isFillable(field, defaultEnv())) return;
+    if (!suggestions || opening || menu?.field === field || !isFillable(field, defaultEnv())) return;
     const kind = menuKindFor(field);
     if (!kind) return;
     opening = true;
@@ -198,6 +201,7 @@ function start(): void {
   }
 
   function showIcon(field: HTMLInputElement): void {
+    if (!suggestions) return hideIcon();
     if (icon?.field === field) return placeIcon();
     hideIcon();
     if (!isFillable(field, defaultEnv()) || !menuKindFor(field)) return;
@@ -561,9 +565,20 @@ function start(): void {
     }
   });
 
-  // A field the page focused before we loaded gets its icon (not a menu).
-  const focused = deepActiveElement();
-  if (focused instanceof HTMLInputElement) showIcon(focused);
+  // The icon and menu follow the preference live. A field the page focused
+  // before we loaded gets its icon (not a menu) once we know it is on.
+  function applySuggestions(on: boolean): void {
+    suggestions = on;
+    if (!on) {
+      closeMenu(true);
+      hideIcon();
+      return;
+    }
+    const focused = deepActiveElement();
+    if (focused instanceof HTMLInputElement) showIcon(focused);
+  }
+  onInlineSuggestionsChanged(applySuggestions);
+  void getInlineSuggestions().then(applySuggestions);
 
   // A save prompt for a login submitted just before this page loaded (top
   // frame only), and the next step of a sign-in run in progress.

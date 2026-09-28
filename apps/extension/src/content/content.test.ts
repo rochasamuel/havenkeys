@@ -12,6 +12,8 @@ type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }, reply: (r
 
 const sent: unknown[] = [];
 let listener: Listener | null = null;
+type StorageListener = (c: Record<string, { newValue?: unknown }>, area: string) => void;
+let storageListener: StorageListener | null = null;
 
 beforeAll(async () => {
   // jsdom has no layout: give every element a visible size.
@@ -35,6 +37,10 @@ beforeAll(async () => {
         return { saveToken: null };
       },
       onMessage: { addListener: (l: Listener) => (listener = l) },
+    },
+    storage: {
+      local: { get: async () => ({}) },
+      onChanged: { addListener: (l: StorageListener) => (storageListener = l) },
     },
   };
   await import("./index");
@@ -122,6 +128,23 @@ describe("content script", () => {
     pw.blur();
     await new Promise((r) => setTimeout(r, 10));
     expect(document.documentElement.querySelector(":scope > div[title='HavenKeys']")).toBeNull();
+  });
+
+  it("hides the field icon and any open menu while suggestions are off, without a reload", async () => {
+    const setPref = (v: boolean) => storageListener?.({ inlineSuggestions: { newValue: v } }, "local");
+    const iconEl = () => document.documentElement.querySelector(":scope > div[title='HavenKeys']");
+    const pw = field("pw");
+    pw.focus();
+    expect(iconEl()).not.toBeNull();
+    setPref(false);
+    expect(iconEl()).toBeNull();
+    pw.blur();
+    pw.focus();
+    expect(iconEl()).toBeNull();
+    setPref(true);
+    expect(iconEl()).not.toBeNull(); // the focused field gets it back
+    pw.blur();
+    await new Promise((r) => setTimeout(r, 10));
   });
 
   it("page script cannot open menus by synthesizing typing", async () => {
