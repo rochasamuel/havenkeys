@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import type { ItemInput, ItemOverview, ItemType, MatchType, ScannedTotp, SecretUpdate, SignInWith, SsoProvider, UrlRule } from "../lib/types";
 import { EMPTY, KEEP, canScan, scanLabel, toUpdate, type SecretEdit } from "../lib/secretEdit";
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
-import { PROVIDER_NAMES, PROVIDER_ORDER } from "../lib/sso";
+import { PROVIDER_NAMES, PROVIDER_ORDER, shouldCollapse } from "../lib/sso";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useI18n } from "../i18n/context";
@@ -213,6 +213,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
                     const p = e.target.value as SsoProvider | "";
                     setSignIn(p ? { provider: p, account: signIn?.account ?? null } : null);
                     if (!p) setPasswordOpen(true);
+                    else if (shouldCollapse(username, password, existing?.hasPassword ?? false)) setPasswordOpen(false);
                   }}
                 >
                   <option value="">{t.editor.providerNone}</option>
