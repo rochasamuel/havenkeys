@@ -229,6 +229,13 @@ fn account_ok(a: &Option<String>) -> bool {
     a.as_ref().is_none_or(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
 }
 
+/// A title only names a new item; an update keeps its own.
+fn title_ok(title: &Option<String>, item_id: &Option<Uuid>) -> bool {
+    title
+        .as_ref()
+        .is_none_or(|t| item_id.is_none() && !t.is_empty() && t.len() <= MAX_TITLE_BYTES)
+}
+
 impl Request {
     pub fn kind(&self) -> &'static str {
         match self {
@@ -301,10 +308,7 @@ impl Request {
                 ..
             } => {
                 secret_ok(password)
-                    // A title names a new login; an update keeps its own.
-                    && title.as_ref().is_none_or(|t| {
-                        item_id.is_none() && !t.is_empty() && t.len() <= MAX_TITLE_BYTES
-                    })
+                    && title_ok(title, item_id)
                     && username
                         .as_ref()
                         .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
@@ -315,12 +319,7 @@ impl Request {
                 title,
                 item_id,
                 ..
-            } => {
-                account_ok(account)
-                    && title.as_ref().is_none_or(|t| {
-                        item_id.is_none() && !t.is_empty() && t.len() <= MAX_TITLE_BYTES
-                    })
-            }
+            } => account_ok(account) && title_ok(title, item_id),
             _ => true,
         };
         let passkey_ok = match self {
@@ -672,6 +671,7 @@ pub struct Match {
     pub username: Option<String>,
     pub has_totp: bool,
     pub strength: MatchStrength,
+    #[serde(deserialize_with = "required")]
     pub provider: Option<SsoProvider>,
 }
 

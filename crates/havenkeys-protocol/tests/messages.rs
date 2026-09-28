@@ -545,6 +545,10 @@ fn sso_results_validate() {
     assert!(Outgoing::parse(inconsistent.as_bytes()).is_none());
     let m = format!(r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github"}}]}}}}"#);
     assert!(Outgoing::parse(m.as_bytes()).is_some());
+    // `provider` is required, like `account`: a Match missing the key (not
+    // just null) is rejected rather than silently defaulting to `None`.
+    let missing_provider = format!(r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site"}}]}}}}"#);
+    assert!(Outgoing::parse(missing_provider.as_bytes()).is_none());
 }
 
 /// Deterministic fuzz: random bytes and mutated valid messages must never
