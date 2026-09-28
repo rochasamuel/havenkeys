@@ -1,0 +1,156 @@
+// Recognising "Sign in with <provider>" buttons, and the saved account's row
+// on a provider's account chooser.
+//
+// The DOM is untrusted: its strings are only compared against fixed lists,
+// and the work per scan is bounded (MAX_SSO_CANDIDATES). A match only lets
+// the extension *offer* a sign-in the desktop already matched to this page;
+// what a run may do on the provider's page is bounded by origins from Rust.
+
+import { SSO_PROVIDERS, type SsoProvider } from "@havenkeys/protocol";
+import type { Env } from "./group";
+import { hasAny, hasPhrase, MAX_HINT_CHARS, normalize } from "./text";
+
+export const SSO_CANDIDATES = 'button, a[href], [role="button"], [role="link"], input[type="submit"], input[type="button"]';
+export const MAX_SSO_CANDIDATES = 400;
+export const SSO_MIN_SCORE = 60;
+/** A label longer than this (normalized) is prose, not a button. */
+const MAX_LABEL_CHARS = 60;
+
+// `normalize()` splits camelCase, so "GitHub" becomes "git hub"; "Github" or
+// "github" do not split. Both spellings are accepted.
+const NAMES: Record<SsoProvider, readonly string[]> = {
+  google: ["google"],
+  microsoft: ["microsoft"],
+  github: ["github", "git hub"],
+  apple: ["apple"],
+};
+const JOINERS = ["with", "using", "via", "com", "com a", "com o", "pelo", "pela"];
+const NEGATIVE = [
+  "drive", "docs", "play", "store", "maps", "calendar", "repository", "repo", "star", "fork", "sponsor",
+  "download", "app store", "teams", "office", "outlook", "music", "pay", "wallet", "podcasts", "tv",
+];
+const CONSENT_WORDS = ["allow", "authorize", "authorise", "grant", "accept", "continue", "permitir", "autorizar", "aceitar", "continuar", "confirmar"];
+const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+
+function label(el: Element): string {
+  const attr = (n: string) => (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
+  const own = el instanceof HTMLInputElement ? el.value.slice(0, MAX_HINT_CHARS) : (el.textContent ?? "").slice(0, MAX_HINT_CHARS);
+  const img = el.querySelector("img[alt]")?.getAttribute("alt")?.slice(0, 60) ?? "";
+  return normalize(`${own} ${attr("aria-label")} ${attr("title")} ${img}`, MAX_HINT_CHARS * 3);
+}
+
+function hrefProvider(el: Element): SsoProvider | null {
+  const href = el instanceof HTMLAnchorElement ? el.getAttribute("href") : null;
+  if (!href) return null;
+  let origin: string;
+  try {
+    origin = new URL(href, document.baseURI).origin;
+  } catch {
+    return null;
+  }
+  for (const [p, v] of Object.entries(SSO_PROVIDERS)) if (v.origins.includes(origin)) return p as SsoProvider;
+  return null;
+}
+
+function usable(el: HTMLElement, env: Env): boolean {
+  return env.isVisible(el) && !el.matches(":disabled") && el.getAttribute("aria-disabled") !== "true";
+}
+
+/**
+ * The provider this element signs in with, and how sure we are. `context`:
+ * the page also has a login field or another provider button, which lets a
+ * bare "Google" label count.
+ */
+export function providerOf(el: Element, context: boolean): { provider: SsoProvider; score: number } | null {
+  const text = label(el);
+  if (!text || text.length > MAX_LABEL_CHARS || hasAny(text, NEGATIVE)) return null;
+  const linked = hrefProvider(el);
+  let best: { provider: SsoProvider; score: number } | null = null;
+  for (const [p, names] of Object.entries(NAMES) as [SsoProvider, readonly string[]][]) {
+    for (const name of names) {
+      if (!hasPhrase(text, name)) continue;
+      let s = JOINERS.some((j) => hasPhrase(text, `${j} ${name}`)) ? 80 : text === name || text === `${name} account` ? 40 : 0;
+      if (s === 40 && context) s += 20;
+      if (linked === p) s += 30;
+      if (s > 0 && (!best || s > best.score)) best = { provider: p, score: s };
+    }
+  }
+  return best;
+}
+
+function candidates(root: ParentNode, env: Env): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(SSO_CANDIDATES))
+    .slice(0, MAX_SSO_CANDIDATES)
+    .filter((el) => usable(el, env));
+}
+
+function hasLoginField(root: ParentNode): boolean {
+  return root.querySelector('input[type="password"], input[type="email"], input[autocomplete~="username"]') !== null;
+}
+
+function scored(root: ParentNode, env: Env): { el: HTMLElement; provider: SsoProvider; score: number }[] {
+  const els = candidates(root, env);
+  const first = els.map((el) => ({ el, hit: providerOf(el, false) }));
+  const providers = new Set(first.flatMap((x) => (x.hit ? [x.hit.provider] : [])));
+  const context = providers.size >= 2 || hasLoginField(root);
+  const out: { el: HTMLElement; provider: SsoProvider; score: number }[] = [];
+  for (const { el } of first) {
+    const hit = providerOf(el, context);
+    if (hit && hit.score >= SSO_MIN_SCORE) out.push({ el, ...hit });
+  }
+  return out;
+}
+
+/** Each provider with a qualifying button on the page, and its best button. */
+export function findProviderButtons(root: ParentNode, env: Env): Map<SsoProvider, HTMLElement> {
+  const out = new Map<SsoProvider, { el: HTMLElement; score: number }>();
+  for (const c of scored(root, env)) {
+    const cur = out.get(c.provider);
+    if (!cur || c.score > cur.score) out.set(c.provider, c);
+  }
+  return new Map([...out].map(([p, c]) => [p, c.el]));
+}
+
+/** The button to press for `provider`: the highest score, first in document order on a tie. */
+export function providerButton(root: ParentNode, provider: SsoProvider, env: Env): HTMLElement | null {
+  return findProviderButtons(root, env).get(provider) ?? null;
+}
+
+/**
+ * `el`'s text nodes joined with spaces (unlike `.textContent`, so sibling
+ * elements' text, e.g. a name and an email in adjacent `<div>`s, cannot fuse
+ * into one token: "Me" + "Me@Gmail.com" stays two words, not one).
+ */
+function textOf(el: Element): string {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  for (let n = walker.nextNode(), total = 0; n && total < 400; n = walker.nextNode()) {
+    const t = n.nodeValue ?? "";
+    parts.push(t);
+    total += t.length;
+  }
+  return parts.join(" ");
+}
+
+/** The email address in an element's text, lowercased, or null. */
+export function emailIn(el: Element): string | null {
+  const m = EMAIL.exec(textOf(el).slice(0, 400)) ?? EMAIL.exec(el.getAttribute("data-identifier") ?? el.getAttribute("data-email") ?? "");
+  return m ? m[0].toLowerCase() : null;
+}
+
+/** The chooser row for `account`: exactly one clickable, visible element whose text holds it. */
+export function chooserRow(root: ParentNode, account: string, env: Env): HTMLElement | null {
+  const want = account.trim().toLowerCase();
+  const hits = candidates(root, env).filter((el) => emailIn(el) === want);
+  // A row nested in another row (link inside list item) counts once: keep the outermost.
+  const outer = hits.filter((el) => !hits.some((o) => o !== el && o.contains(el)));
+  return outer.length === 1 ? (outer[0] as HTMLElement) : null;
+}
+
+/** A permissions or confirmation screen: HavenKeys never presses these. */
+export function isConsentScreen(root: ParentNode, env: Env): boolean {
+  return candidates(root, env).some((el) => {
+    const t = label(el);
+    return t.length <= 30 && hasAny(t, CONSENT_WORDS);
+  });
+}
