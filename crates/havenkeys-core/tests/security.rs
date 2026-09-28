@@ -834,6 +834,7 @@ fn password_history_is_bounded_and_skips_unchanged() {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
             auto_sign_in: None,
+            sign_in_with: None,
         };
         let staged = v.stage_update(&gh, input, now).unwrap();
         v.commit_write(staged, now).unwrap();
@@ -870,6 +871,62 @@ fn save_login_refused_while_locked() {
         v.check_login("https://github.com/", None, None, &secret("x"), None)
             .err(),
         Some(Error::Locked)
+    );
+}
+
+fn google_login(title: &str, account: Option<&str>, url: &str) -> havenkeys_core::model::ItemInput {
+    let mut input = login(title, "", "", url);
+    input.username = None;
+    input.password = havenkeys_core::model::SecretUpdate::Keep;
+    input.sign_in_with = Some(havenkeys_core::sso::SignInWith {
+        provider: havenkeys_core::sso::SsoProvider::Google,
+        account: account.map(str::to_owned),
+    });
+    input
+}
+
+#[test]
+fn sign_in_with_round_trips_and_is_searchable() {
+    let (mut v, _) = github_vault();
+    let staged = v
+        .stage_create(
+            google_login("Typeform", Some(" me@gmail.com "), "typeform.com"),
+            NOW,
+        )
+        .unwrap();
+    let ov = v.commit_write(staged, 5).unwrap().unwrap();
+    let s = ov.sign_in_with.as_ref().unwrap();
+    assert_eq!(s.account.as_deref(), Some("me@gmail.com"));
+    assert!(!ov.has_password);
+    assert_eq!(v.search("me@gmail").unwrap().len(), 1);
+    assert_eq!(v.search("google").unwrap().len(), 1);
+}
+
+#[test]
+fn password_update_keeps_sign_in_with() {
+    let (mut v, _) = github_vault();
+    let staged = v
+        .stage_create(
+            google_login("Typeform", Some("me@gmail.com"), "typeform.com"),
+            NOW,
+        )
+        .unwrap();
+    let id = v.commit_write(staged, 5).unwrap().unwrap().id;
+    let staged = v
+        .stage_save_login(
+            "https://typeform.com/",
+            None,
+            None,
+            secret("also-a-password"),
+            SaveTarget::Update(&id),
+            NOW,
+        )
+        .unwrap();
+    let ov = v.commit_write(staged.write, 6).unwrap().unwrap();
+    assert!(ov.has_password);
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("me@gmail.com")
     );
 }
 

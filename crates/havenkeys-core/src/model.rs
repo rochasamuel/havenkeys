@@ -7,6 +7,7 @@
 use crate::error::{Error, Result};
 use crate::passkey::Passkey;
 use crate::secret::SecretString;
+use crate::sso::SignInWith;
 use crate::totp::TotpConfig;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -71,6 +72,10 @@ pub struct ItemOverview {
     /// existed are on.
     #[serde(default = "default_true")]
     pub auto_sign_in: bool,
+    /// "Sign in with <provider>" and the account used there. `default`:
+    /// overviews written before this field existed have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign_in_with: Option<SignInWith>,
     /// Unix milliseconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -211,6 +216,10 @@ pub struct ItemInput {
     /// on update and means on for a new item.
     #[serde(default)]
     pub auto_sign_in: Option<bool>,
+    /// "Sign in with …" for a login. Sent in full like `username`: `None`
+    /// on an update clears it.
+    #[serde(default)]
+    pub sign_in_with: Option<SignInWith>,
 }
 
 impl fmt::Debug for ItemInput {
@@ -412,7 +421,8 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
                 || !input.urls.is_empty()
                 || !input.password.is_keep()
                 || !input.totp.is_keep()
-                || !input.notes.is_keep() =>
+                || !input.notes.is_keep()
+                || input.sign_in_with.is_some() =>
         {
             Err(Error::InvalidInput(
                 "secure notes only have a title and content",
@@ -573,5 +583,23 @@ mod tests {
         )
         .unwrap();
         assert!(!ov.has_passkey);
+    }
+
+    #[test]
+    fn overviews_without_sign_in_with_parse_and_omit_it() {
+        let json = r#"{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","itemType":"login","title":"t",
+            "hasPassword":false,"hasTotp":false,"hasNotes":false,"createdAt":1,"updatedAt":1}"#;
+        let o: ItemOverview = serde_json::from_str(json).unwrap();
+        assert!(o.sign_in_with.is_none());
+        assert!(!serde_json::to_string(&o).unwrap().contains("signInWith"));
+    }
+
+    #[test]
+    fn secure_notes_cannot_sign_in_with() {
+        let input: ItemInput = serde_json::from_str(
+            r#"{"itemType":"secure_note","title":"n","signInWith":{"provider":"google"}}"#,
+        )
+        .unwrap();
+        assert!(check_shape(&input).is_err());
     }
 }

@@ -1003,6 +1003,12 @@ impl VaultService {
                             .and_then(|u| u.host_str().map(|h| h.contains(&q)))
                             .unwrap_or(false)
                     })
+                    || i.sign_in_with.as_ref().is_some_and(|s| {
+                        s.provider.name().to_lowercase().contains(&q)
+                            || s.account
+                                .as_deref()
+                                .is_some_and(|a| a.to_lowercase().contains(&q))
+                    })
             })
             .cloned()
             .collect();
@@ -1289,6 +1295,7 @@ impl VaultService {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
             auto_sign_in: None,
+            sign_in_with: None,
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1317,6 +1324,7 @@ impl VaultService {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
             auto_sign_in: None,
+            sign_in_with: existing.sign_in_with.clone(),
         };
         Ok(StagedSave {
             item_id: *id,
@@ -1588,6 +1596,7 @@ pub(crate) fn build_item(
         notes,
         content,
         auto_sign_in,
+        sign_in_with,
         ..
     } = input;
 
@@ -1684,6 +1693,10 @@ pub(crate) fn build_item(
         has_notes,
         has_passkey,
         auto_sign_in: auto_sign_in.unwrap_or(true),
+        sign_in_with: match item_type {
+            ItemType::Login => crate::sso::clean_sign_in_with(sign_in_with)?,
+            ItemType::SecureNote => None,
+        },
         created_at,
         updated_at: now_ms,
     };
