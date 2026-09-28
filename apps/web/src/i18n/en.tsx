@@ -138,7 +138,7 @@ export const en = {
       },
       {
         term: "English and Portuguese",
-        text: "The app and the extension follow your system language, or pick one.",
+        text: "The app follows your system language, or the one you pick in Settings. The extension follows your browser’s language.",
       },
     ],
 

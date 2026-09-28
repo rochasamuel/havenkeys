@@ -137,7 +137,7 @@ export const ptBR: Messages = {
       },
       {
         term: "Abre ao ligar o computador",
-        text: "Opcionalmente inicia junto com o computador, trancado, na bandeja do sistema, para que a extensão consiga alcançá-lo.",
+        text: "Opcionalmente inicia junto com o computador, bloqueado, na bandeja do sistema, para que a extensão consiga alcançá-lo.",
       },
       {
         term: "Se atualiza sozinho",
@@ -145,7 +145,7 @@ export const ptBR: Messages = {
       },
       {
         term: "Português e inglês",
-        text: "O app e a extensão seguem o idioma do seu sistema, ou você escolhe um.",
+        text: "O app segue o idioma do sistema, ou o que você escolher nas Configurações. A extensão segue o idioma do navegador.",
       },
     ],
 
