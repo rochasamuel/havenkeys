@@ -57,7 +57,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo" }], passkeys: [], hint: { kind: "use_passkey" } },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: { kind: "use_passkey" } },
       },
     ];
     await load();
@@ -71,7 +71,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo" }], passkeys: [], hint: { kind: "add_passkey", name: "GitHub" } },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: { kind: "add_passkey", name: "GitHub" } },
       },
     ];
     await load();
@@ -86,7 +86,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo" }], passkeys: [], hint: null },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: null },
       },
     ];
     await load();
@@ -101,7 +101,7 @@ describe("field menu copy and size", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null }], passkeys: [], hint: null },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null, provider: null }], passkeys: [], hint: null },
       },
     ];
     await load();

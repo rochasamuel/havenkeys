@@ -80,6 +80,8 @@ export interface InlineDeps {
   openTab?(url: string): void;
   /** Whether the field menu may open (the options page preference). Absent: on. */
   suggestionsOn?(): Promise<boolean>;
+  /** Starts a "Sign in with" run for a login saved with a provider (sso-handler.ts). */
+  startSso?(frame: FrameRef, itemId: string): Promise<InlineReply<null>>;
 }
 
 export const MENU_TTL_MS = 5 * 60_000;
@@ -391,7 +393,7 @@ export function createInlineHandler(deps: InlineDeps) {
         if (!m) return { ok: false, message: t.errors.menuExpired };
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
-        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username }));
+        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint } };
       }
       case "menu_pick": {
@@ -400,8 +402,11 @@ export function createInlineHandler(deps: InlineDeps) {
         // Only items this menu offered; the desktop re-checks the origin anyway.
         if (!m.items.some((i) => i.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
         closeMenu(tabId);
+        const offered = m.items.find((i) => i.id === req.itemId);
+        // A login saved with "Sign in with": press the provider's button
+        // instead of filling (start_sso re-checks the item for the page).
+        if (offered?.provider && m.kind === "login" && deps.startSso) return deps.startSso(m.frame, req.itemId);
         try {
-          const offered = m.items.find((i) => i.id === req.itemId);
           if (m.kind === "otp") {
             const totp = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
             await pickFill(m.frame, m.token, { kind: "otp", code: totp.code }, totp.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null);

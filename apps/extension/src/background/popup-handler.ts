@@ -17,6 +17,13 @@ export interface ActiveTab {
 }
 
 /**
+ * Start a "Sign in with" run in the tab's top frame (injecting the content
+ * script if needed): the desktop checks the item, the page's provider
+ * button is pressed.
+ */
+export type SsoStarter = (tabId: number, pageUrl: string, itemId: string) => Promise<PopupReply<null>>;
+
+/**
  * Put a fill into the tab's top frame (injecting the content script if
  * needed). Resolves to the number of fields filled.
  */
@@ -49,6 +56,7 @@ export function createPopupHandler(
   client: Client,
   activeTab: () => Promise<ActiveTab | undefined>,
   fillTab: TabFiller = async () => 0,
+  startSso?: SsoStarter,
 ) {
   const activeTabUrl = async () => (await activeTab())?.url;
 
@@ -65,23 +73,18 @@ export function createPopupHandler(
         const otp = await client.request({ type: "get_totp", itemId, url });
         filled = await fillTab(tab.id, url, { kind: "otp", code: otp.code }, otp.autoSubmit ? { itemId, hasTotp: true } : null);
       } else {
+        // One lookup, no secrets: whether the login signs in with a
+        // provider, and whether a run needs its OTP step.
+        const { matches } = await client.request({ type: "find_matches", url });
+        const m = matches.find((x) => x.id === itemId);
+        if (m?.provider && startSso) return startSso(tab.id, url, itemId);
         const c = await client.request({ type: "fill_item", itemId, url });
-        const auto = c.autoSubmit ? { itemId, hasTotp: await hasTotp(itemId, url) } : null;
+        const auto = c.autoSubmit ? { itemId, hasTotp: m?.hasTotp ?? false } : null;
         filled = await fillTab(tab.id, url, { kind: "login", username: c.username, password: c.password }, auto);
       }
       return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.errors.noLoginForm };
     } catch (e) {
       return fail(e);
-    }
-  }
-
-  /** Whether a login has TOTP, for the run's OTP step. A lookup, no secrets. */
-  async function hasTotp(itemId: string, url: string): Promise<boolean> {
-    try {
-      const { matches } = await client.request({ type: "find_matches", url });
-      return matches.find((m) => m.id === itemId)?.hasTotp ?? false;
-    } catch {
-      return false;
     }
   }
 

@@ -222,7 +222,7 @@ describe("suggestion menus", () => {
         state: "ready",
         kind: "login",
         site: "github.com",
-        items: [{ id: GH, title: "GitHub", username: "octo" }],
+        items: [{ id: GH, title: "GitHub", username: "octo", provider: null }],
         passkeys: [],
         hint: null,
       },
@@ -296,6 +296,23 @@ describe("suggestion menus", () => {
     expect((await h.handleInline(2, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
     expect((await h.handleInline(1, { type: "menu_pick", token: "f".repeat(32), itemId: GH })).ok).toBe(false);
     expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status"]);
+  });
+
+  it("a login saved with a provider starts a sign-in-with run instead of filling", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, requests, sent } = setup(
+      (r) => (r.type === "find_matches" ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }] } : defaultAnswer(r)),
+      { startSso },
+    );
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
+      ok: true,
+      value: { items: [{ id: GH, title: "GitHub", username: "octo", provider: "google" }] },
+    });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
+    expect(startSso).toHaveBeenCalledWith(frame(), GH);
+    expect(requests.some((r) => r.type === "fill_item")).toBe(false);
+    expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
   });
 
   it("passes the menu's measured height to the frame that opened it, for a live menu only", async () => {
