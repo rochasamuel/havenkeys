@@ -15,6 +15,7 @@ function caveats(r: ImportResult["report"], t: Messages): string[] {
   if (r.attachmentsSkipped) out.push(t.import.attachmentsSkipped(r.attachmentsSkipped));
   if (r.passwordHistorySkipped) out.push(t.import.passwordHistorySkipped(r.passwordHistorySkipped));
   if (r.urlsMovedToNotes) out.push(t.import.urlsMovedToNotes(r.urlsMovedToNotes));
+  if (r.ssoUpgraded) out.push(t.import.ssoUpgraded(r.ssoUpgraded));
   if (r.failed) out.push(t.import.failedItems(r.failed));
   return out;
 }

@@ -120,6 +120,7 @@ export interface ImportReport {
   attachmentsSkipped: number;
   passwordHistorySkipped: number;
   urlsMovedToNotes: number;
+  ssoUpgraded: number;
 }
 
 export interface ImportResult {

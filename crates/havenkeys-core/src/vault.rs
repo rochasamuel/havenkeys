@@ -1594,7 +1594,7 @@ impl VaultService {
     ) -> Result<StagedImport> {
         // Only items already in the vault count as duplicates; repeated
         // entries inside the export itself are imported as they are.
-        let existing = self.dedupe_keys()?;
+        let (existing, mut upgrade) = self.dedupe_index()?;
         let mut writes = Vec::new();
         report.logins = 0;
         report.secure_notes = 0;
@@ -1607,7 +1607,19 @@ impl VaultService {
                 report.failed += 1;
                 continue;
             };
-            if existing.contains(&dedupe_key(&overview, &details)) {
+            let key = dedupe_key(&overview, &details);
+            // A login already here, without sign_in_with, that this import
+            // carries it for: fill it in rather than skip or duplicate.
+            if let Some(sso) = overview.sign_in_with.clone() {
+                if let Some(target) = upgrade.remove(&key) {
+                    if let Some(write) = self.stage_sso_upgrade(&target, sso, now_ms)? {
+                        writes.push(write);
+                        report.sso_upgraded += 1;
+                        continue;
+                    }
+                }
+            }
+            if existing.contains(&key) {
                 report.skipped_duplicates += 1;
                 continue;
             }
@@ -1619,23 +1631,81 @@ impl VaultService {
             }
             writes.push(staged);
         }
-        report.imported = writes.len();
+        // Upgrades are recorded separately (`sso_upgraded`), not counted as
+        // newly imported items.
+        report.imported = writes.len() - report.sso_upgraded;
         Ok(StagedImport { writes, report })
     }
 
-    /// What is already here, for import de-duplication.
-    fn dedupe_keys(&self) -> Result<HashSet<[u8; 32]>> {
+    /// What is already here, for import de-duplication: every item's key,
+    /// and separately the keys of logins that still lack `sign_in_with` and
+    /// so are candidates for an upgrade, each mapped to its id. A key with
+    /// more than one such login is dropped from the upgrade map — the
+    /// importer does not guess which one a re-import means.
+    #[allow(clippy::type_complexity)]
+    fn dedupe_index(&self) -> Result<(HashSet<[u8; 32]>, HashMap<[u8; 32], Uuid>)> {
         let session = self.session()?;
         let mut keys = HashSet::new();
+        let mut upgrade: HashMap<[u8; 32], Option<Uuid>> = HashMap::new();
         for ov in session.overviews.values() {
             // Secure notes need their body; a damaged one simply isn't a duplicate.
             let details = match ov.item_type {
                 ItemType::Login => None,
                 ItemType::SecureNote => self.load_details(&ov.id).ok(),
             };
-            keys.insert(dedupe_key_parts(ov, details.as_ref()));
+            let key = dedupe_key_parts(ov, details.as_ref());
+            keys.insert(key);
+            if ov.item_type == ItemType::Login && ov.sign_in_with.is_none() {
+                upgrade
+                    .entry(key)
+                    .and_modify(|v| *v = None)
+                    .or_insert(Some(ov.id));
+            }
         }
-        Ok(keys)
+        let upgrade = upgrade
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|id| (k, id)))
+            .collect();
+        Ok((keys, upgrade))
+    }
+
+    /// Give an existing login the "Sign in with" a re-import carries. Notes
+    /// that are exactly the old importer's line are cleared; nothing else
+    /// changes. `None` when the login no longer opens.
+    fn stage_sso_upgrade(
+        &self,
+        id: &Uuid,
+        sso: SignInWith,
+        now_ms: i64,
+    ) -> Result<Option<StagedWrite>> {
+        let Ok(existing) = self.get_item(id) else {
+            return Ok(None);
+        };
+        // The `legacy` comparison uses the provider's display name,
+        // case-insensitively, because the export's own spelling ("Google",
+        // "google") may differ.
+        let legacy = crate::import::onepux::legacy_sso_note(sso.provider.name());
+        let clear_notes = matches!(
+            self.load_details(id),
+            Ok(ItemDetails::Login { notes: Some(n), .. }) if n.expose().trim().eq_ignore_ascii_case(&legacy)
+        );
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title: existing.title.clone(),
+            username: existing.username.clone(),
+            urls: existing.urls.clone(),
+            password: SecretUpdate::Keep,
+            totp: SecretUpdate::Keep,
+            notes: if clear_notes {
+                SecretUpdate::Clear
+            } else {
+                SecretUpdate::Keep
+            },
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: Some(sso),
+        };
+        self.stage_update(id, input, now_ms).map(Some)
     }
 
     /// Record a write the server accepted at `revision`. Returns the stored

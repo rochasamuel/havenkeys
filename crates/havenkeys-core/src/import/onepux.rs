@@ -22,6 +22,7 @@ use crate::model::{
     MAX_URLS, MAX_USERNAME_CHARS,
 };
 use crate::secret::SecretString;
+use crate::sso::{SignInWith, SsoProvider, MAX_ACCOUNT_CHARS};
 use crate::totp::parse_totp_input;
 use serde_json::Value;
 use std::io::{Cursor, Read};
@@ -217,6 +218,12 @@ impl Drop for Extras {
     }
 }
 
+/// The notes line the importer wrote for a "Sign in with" login before
+/// sign-in-with existed. A re-import clears notes that are exactly this.
+pub(crate) fn legacy_sso_note(name: &str) -> String {
+    format!("Sign in with {name}")
+}
+
 /// Render a section field value as text. Returns `None` for kinds that carry
 /// no importable text (attachments are counted separately).
 fn render_value(value: &Value, report: &mut ImportReport) -> Option<String> {
@@ -258,7 +265,7 @@ fn render_value(value: &Value, report: &mut ImportReport) -> Option<String> {
             }
             (!out.is_empty()).then(|| out.join("\n"))
         }
-        "ssoLogin" => non_empty(str_at(v, &["provider"])).map(|p| format!("Sign in with {p}")),
+        "ssoLogin" => non_empty(str_at(v, &["provider"])).map(legacy_sso_note),
         "file" => {
             report.attachments_skipped += 1;
             None
@@ -333,9 +340,11 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
 
     let mut extras = Extras::default();
     let mut totp: Option<SecretString> = None;
+    let mut sso: Option<SignInWith> = None;
 
     // Section fields: first valid TOTP becomes the item's TOTP (logins only);
-    // everything else is rendered into the notes.
+    // the first recognized "Sign in with" provider becomes sign_in_with
+    // (logins only); everything else is rendered into the notes.
     let is_login = matches!(category, "001" | "005");
     if let Some(sections) = details.get("sections").and_then(Value::as_array) {
         for section in sections {
@@ -352,6 +361,22 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                             totp = Some(SecretString::from(t));
                             continue;
                         }
+                    }
+                }
+                if is_login && sso.is_none() {
+                    if let Some(p) = value
+                        .get("ssoLogin")
+                        .and_then(|s| str_at(s, &["provider"]))
+                        .and_then(SsoProvider::from_name)
+                    {
+                        let account = non_empty(str_at(&value["ssoLogin"], &["username"]))
+                            .map(|a| clean_line(a, MAX_ACCOUNT_CHARS))
+                            .filter(|a| !a.is_empty());
+                        sso = Some(SignInWith {
+                            provider: p,
+                            account,
+                        });
+                        continue;
                     }
                 }
                 if let Some(text) = render_value(value, report) {
@@ -452,7 +477,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 notes: join_notes(extras.render()).map_or(SecretUpdate::Keep, SecretUpdate::Set),
                 content: SecretUpdate::Keep,
                 auto_sign_in: None,
-                sign_in_with: None,
+                sign_in_with: sso,
             }
         }
         "003" => {
@@ -664,10 +689,13 @@ mod tests {
         assert_eq!(gh.input.urls.len(), 1);
         assert_eq!(gh.input.urls[0].url, "https://github.com/login");
         assert_eq!(gh.created_at, Some(1_600_000_000_000));
+        let sso = gh.input.sign_in_with.as_ref().expect("ssoLogin becomes sign_in_with");
+        assert_eq!(sso.provider, crate::sso::SsoProvider::Google);
+        assert_eq!(sso.account, None);
         let notes = set_value(&gh.input.notes).unwrap();
         assert!(notes.starts_with("old notes"));
         assert!(notes.contains("[Security]\nRecovery code: RC-123"));
-        assert!(notes.contains("Sign in with Google"));
+        assert!(!notes.contains("Sign in with Google"), "ssoLogin no longer falls through to notes");
         assert!(notes.contains("Tags: work"));
         assert!(
             notes.contains("Website: javascript:alert(1)"),
@@ -694,6 +722,31 @@ mod tests {
         let pw = &parsed.items[3];
         assert_eq!(pw.input.title, "Untitled");
         assert_eq!(set_value(&pw.input.password), Some("standalone-pw"));
+    }
+
+    #[test]
+    fn sso_login_with_account_and_unknown_provider() {
+        let field = |v: serde_json::Value| json!({"title": "", "id": "sso", "value": {"ssoLogin": v}});
+        for (value, expect) in [
+            (json!({"provider": "GitHub", "username": "octo"}), Some(("github", Some("octo")))),
+            (json!({"provider": "Okta"}), None),
+        ] {
+            let data = json!({"accounts": [{"attrs": {}, "vaults": [{"attrs": {"name": "V"}, "items": [{
+                "uuid": "a", "categoryUuid": "001", "state": "active",
+                "overview": {"title": "Site", "url": "https://site.example"},
+                "details": {"loginFields": [], "sections": [{"title": "", "fields": [field(value)]}]}
+            }]}]}]});
+            let parsed = parse(&make_1pux(&data, 0)).unwrap();
+            let item = &parsed.items[0];
+            match expect {
+                Some((p, account)) => {
+                    let s = item.input.sign_in_with.as_ref().unwrap();
+                    assert_eq!(serde_json::to_value(s.provider).unwrap(), p);
+                    assert_eq!(s.account.as_deref(), account);
+                }
+                None => assert!(item.input.sign_in_with.is_none()),
+            }
+        }
     }
 
     #[test]

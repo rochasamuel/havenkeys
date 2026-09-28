@@ -514,6 +514,8 @@ export const en = {
       `${n} ${n === 1 ? "old password" : "old passwords"} from password history ${n === 1 ? "was" : "were"} left out.`,
     urlsMovedToNotes: (n: number) =>
       `${n} ${n === 1 ? "website entry wasn’t" : "website entries weren’t"} a web address and ${n === 1 ? "was" : "were"} kept in the item’s notes.`,
+    ssoUpgraded: (n: number) =>
+      `${n} ${n === 1 ? "login already in your vault now signs" : "logins already in your vault now sign"} in with Google, Microsoft, GitHub or Apple.`,
     failedItems: (n: number) =>
       `${n} ${n === 1 ? "item" : "items"} couldn’t be imported (a field was over the size limits).`,
     wasDeleted: "The export file was deleted.",

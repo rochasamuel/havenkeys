@@ -507,6 +507,8 @@ export const ptBR: Messages = {
       n === 1
         ? "1 entrada de site não era um endereço web e foi mantida nas notas do item."
         : `${n} entradas de site não eram endereços web e foram mantidas nas notas do item.`,
+    ssoUpgraded: (n: number) =>
+      `${n} ${n === 1 ? "login que já estava no cofre agora entra" : "logins que já estavam no cofre agora entram"} com Google, Microsoft, GitHub ou Apple.`,
     failedItems: (n: number) =>
       n === 1
         ? "1 item não pôde ser importado (um campo passou dos limites de tamanho)."
