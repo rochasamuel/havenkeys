@@ -91,14 +91,21 @@ shapes.
     `Locked`.
   * `autoChoose = settings.auto_sign_in && item.auto_sign_in`.
   * No secret is returned.
-* `CheckSso { url, topUrl?, provider, account? }` → `{ action: "add" | "unchanged" }`.
-  `unchanged` when an item matching the page already has the same provider
-  and the same account (case-insensitive), or the same provider with no
-  account when none is given.
-* `SaveSso { url, topUrl?, provider, account?, title? }` → `{ itemId }`.
-  Same path as `stage_save_login`: one `Domain` rule for the frame's origin,
-  title from the prompt or the host, no password required, `auto_sign_in`
-  on.
+* `CheckSso { url, topUrl?, provider, account? }` →
+  `{ action: "add" | "update" | "unchanged", itemId }`, among the logins
+  matching the page:
+  * `unchanged`: one has this provider and this account (case-insensitive),
+    or this provider and no account was learned.
+  * `update`: none has this account, but exactly one has this provider and
+    **no** account (typically imported from 1Password). The balloon offers
+    to add the account to it.
+  * `add`: otherwise.
+* `SaveSso { url, topUrl?, provider, account?, itemId?, title? }` → `{ itemId }`.
+  * Without `itemId`: same path as `stage_save_login`. One `Domain` rule for
+    the frame's origin, title from the prompt or the host, no password
+    required, `auto_sign_in` on.
+  * With `itemId`: the login must match the page and already sign in with
+    `provider`. Only its account changes, and `title` must be absent.
 
 ## 5. Detection and saving (extension)
 
@@ -149,10 +156,21 @@ balloon, the user can edit it, and Rust validates it on save.
 
 ### 5.4 Asking on return
 
-The first top-frame load in the tab on an origin that is **not** one of the
-provider's origins, while `PendingSso` is valid, triggers `CheckSso`.
+Once the flow has reached one of the provider's origins (in the tab, or in
+a popup it opened), either of these triggers `CheckSso` while `PendingSso`
+is valid:
+
+* the first later top-frame load in the tab on an origin that is **not**
+  one of the provider's origins;
+* the provider popup closing (many sites run OAuth in a popup and never
+  reload the tab).
+
+A load before the provider was reached (a site's own `/auth/google`
+interstitial) does not count.
 
 * `unchanged` → nothing, pending dropped.
+* `update` → the same balloon asking "Add this account to your saved
+  login?", with the account editable and no title field.
 * `add` → the save balloon (the existing top-right surface, `saveBox`):
 
 ```text
