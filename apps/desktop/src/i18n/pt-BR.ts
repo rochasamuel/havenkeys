@@ -43,6 +43,9 @@ const codes: Record<ErrorCode, string | null> = {
   screen_capture: "Não foi possível capturar a tela.",
   scan_expired: "O código lido expirou. Leia o QR code de novo.",
   autostart: "Não foi possível alterar se o HavenKeys abre ao iniciar a sessão.",
+  update_unavailable: "Não há atualização para instalar.",
+  update_failed: "Não foi possível instalar a atualização. Tente novamente mais tarde.",
+  update_settings: "Não foi possível salvar a configuração de atualizações.",
   unsupported_language: "Idioma não suportado.",
   keychain_unavailable:
     "O chaveiro do sistema não respondeu. Aprove a solicitação dele, se houver uma aberta, e tente novamente.",
@@ -513,6 +516,30 @@ export const ptBR: Messages = {
     deleteFile: "Excluir arquivo",
     keepFile: "Manter",
     deleteExport: "Excluir o arquivo de exportação",
+  },
+
+  updates: {
+    available: (version: string) => `O HavenKeys ${version} está disponível.`,
+    whatsNew: "Novidades",
+    hideNotes: "Ocultar novidades",
+    update: "Atualizar",
+    download: "Baixar",
+    later: "Depois",
+    restartNote: "Atualizar bloqueia o HavenKeys e o reinicia.",
+    downloading: (version: string, percent: number | null) =>
+      percent === null ? `Baixando o HavenKeys ${version}…` : `Baixando o HavenKeys ${version}… ${percent}%`,
+    installing: "Instalando a atualização…",
+    failed: "A atualização falhou. Tente novamente mais tarde.",
+    tryAgain: "Tentar novamente",
+    title: "Atualizações",
+    autoCheck: "Procurar atualizações automaticamente",
+    checkNow: "Procurar agora",
+    checking: "Procurando…",
+    upToDate: "O HavenKeys está atualizado.",
+    checkFailed: "Não foi possível procurar atualizações.",
+    version: (version: string) => `Versão ${version}`,
+    note: "O HavenKeys pergunta ao GitHub, onde suas versões são publicadas, se existe uma versão mais nova. As atualizações são assinadas, e nada é instalado até você escolher Atualizar.",
+    manualNote: "Esta cópia foi instalada por um pacote .deb ou .rpm. Novas versões são baixadas pela página de versões.",
   },
 
   errors: {

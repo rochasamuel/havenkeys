@@ -67,6 +67,18 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFEM0FEODM5RUM4MjY3NzkKUldSNVo0THNPZGc2SGJVMnJ4UlJ2SVpQZnpyeGloMFRocnB2L1JoVzd6TzFUVmtzVjBUNUNZcGkK",
+      "endpoints": [
+        "https://github.com/rochasamuel/havenkeys/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
@@ -78,6 +90,11 @@
       },
       "rpm": {
         "depends": ["pipewire-libs", "mesa-libgbm"]
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
       }
     },
     "resources": {

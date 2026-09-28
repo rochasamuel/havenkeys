@@ -179,3 +179,19 @@ export interface SyncReport {
   skippedItems: number;
   headerAdopted: boolean;
 }
+
+/** Where an update stands (Rust `updates::Phase`). Carries no secrets. */
+export type UpdatePhase =
+  | { phase: "idle" }
+  | { phase: "checking" }
+  | { phase: "available"; version: string; notes: string }
+  | { phase: "downloading"; version: string; downloaded: number; total: number | null }
+  | { phase: "installing" }
+  | { phase: "failed"; during: "check" | "install" };
+
+export type UpdateStatus = UpdatePhase & {
+  autoCheck: boolean;
+  /** False for a .deb/.rpm install: the button opens the release page instead. */
+  canInstallInPlace: boolean;
+  currentVersion: string;
+};

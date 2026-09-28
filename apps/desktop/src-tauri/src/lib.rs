@@ -17,6 +17,8 @@ mod secret_store;
 mod state;
 mod sync;
 mod tray;
+mod updater;
+mod updates;
 
 use havenkeys_bridge::Bridge;
 use havenkeys_core::store::Store;
@@ -84,6 +86,9 @@ pub fn run() {
         // Used from Rust only (native file picker for imports). The capability
         // grants the renderer no dialog permissions.
         .plugin(tauri_plugin_dialog::init())
+        // Used from Rust only (updater.rs). The capability grants the
+        // renderer none of the plugin's commands.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let path = vault_path(app)?;
             let dir = path.parent().ok_or("no data directory")?.to_path_buf();
@@ -170,6 +175,10 @@ pub fn run() {
             native_host::register_in_background(dir.clone());
 
             tray::install(app)?;
+
+            // In-app updates: this computer's setting and the daily check.
+            app.manage(updater::Updates::new(dir.clone()));
+            updater::schedule(app.handle().clone());
 
             // The window starts hidden (tauri.conf.json). A login launch
             // stays in the tray; any other launch shows it.
@@ -262,6 +271,10 @@ pub fn run() {
             import::import_1pux,
             import::delete_import_file,
             tray::set_ui_language,
+            updater::update_status,
+            updater::check_for_update,
+            updater::install_update,
+            updater::set_update_auto_check,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the HavenKeys application");

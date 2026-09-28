@@ -615,6 +615,41 @@ button {
   padding: 8px 14px;
 }
 
+.app-shell > .unlock {
+  flex: 1;
+  min-height: 0;
+}
+
+.update-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  padding: 8px 14px;
+}
+
+.update-hint {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.update-progress {
+  width: 140px;
+}
+
+/* Release notes: plain text from the release, kept short and scrollable. */
+.update-notes {
+  flex-basis: 100%;
+  max-height: 160px;
+  overflow: auto;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-weight: 400;
+}
+
 .vault {
   flex: 1;
   min-height: 0;

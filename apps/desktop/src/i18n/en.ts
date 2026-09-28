@@ -47,7 +47,10 @@ export type ErrorCode =
   | "signed_out"
   | "rate_limited"
   | "invalid_server_url"
-  | "sync_failed";
+  | "sync_failed"
+  | "update_unavailable"
+  | "update_failed"
+  | "update_settings";
 
 /**
  * The core's errors, by code (havenkeys-core Error::code and the
@@ -87,6 +90,9 @@ const codes: Record<ErrorCode, string | null> = {
   screen_capture: "Could not capture the screen.",
   scan_expired: "The scanned code expired. Scan it again.",
   autostart: "Could not change whether HavenKeys opens at login.",
+  update_unavailable: "There is no update to install.",
+  update_failed: "The update could not be installed. Try again later.",
+  update_settings: "Could not save the update setting.",
   unsupported_language: "Unsupported language.",
   keychain_unavailable:
     "Your system keychain did not answer. Approve its prompt if one is showing, then try again.",
@@ -515,6 +521,30 @@ export const en = {
     deleteFile: "Delete file",
     keepFile: "Keep it",
     deleteExport: "Delete the export file",
+  },
+
+  updates: {
+    available: (version: string) => `HavenKeys ${version} is available.`,
+    whatsNew: "What’s new",
+    hideNotes: "Hide notes",
+    update: "Update",
+    download: "Download",
+    later: "Later",
+    restartNote: "Updating locks HavenKeys and restarts it.",
+    downloading: (version: string, percent: number | null) =>
+      percent === null ? `Downloading HavenKeys ${version}…` : `Downloading HavenKeys ${version}… ${percent}%`,
+    installing: "Installing the update…",
+    failed: "The update failed. Try again later.",
+    tryAgain: "Try again",
+    title: "Updates",
+    autoCheck: "Check for updates automatically",
+    checkNow: "Check now",
+    checking: "Checking…",
+    upToDate: "HavenKeys is up to date.",
+    checkFailed: "Could not check for updates.",
+    version: (version: string) => `Version ${version}`,
+    note: "HavenKeys asks GitHub, where its releases are published, whether a newer version exists. Updates are signed, and nothing is installed until you choose Update.",
+    manualNote: "This copy was installed from a .deb or .rpm package. New versions are downloaded from the release page.",
   },
 
   errors: {

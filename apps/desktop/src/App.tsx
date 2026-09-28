@@ -5,6 +5,7 @@ import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
 import { EmergencyKit } from "./components/EmergencyKit";
 import { Seal } from "./components/Seal";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { UnlockScreen } from "./views/UnlockScreen";
 import { VaultScreen } from "./views/VaultScreen";
 import { WelcomeScreen } from "./views/WelcomeScreen";
@@ -34,6 +35,14 @@ export function App() {
   // that the Secret Key was deleted. Shown until dismissed. Rust's text is
   // fixed, so the UI shows its own translation of it.
   const [removedWarning, setRemovedWarning] = useState(false);
+  // The update version the user chose "Later" for, until the app restarts.
+  const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
+
+  // Choosing "Update available" in the tray undoes "Later".
+  useEffect(() => {
+    const unlisten = api.onUpdateShow(() => setDismissedUpdate(null));
+    return () => void unlisten.then((f) => f());
+  }, []);
 
   useEffect(() => {
     api.status().then(setStatus, (err) =>
@@ -112,6 +121,8 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [unlocked]);
 
+  const updateBanner = <UpdateBanner dismissed={dismissedUpdate} onDismiss={setDismissedUpdate} />;
+
   if (fatal) {
     return (
       <main className="welcome" data-tauri-drag-region>
@@ -168,20 +179,24 @@ export function App() {
 
   if (!unlocked) {
     return (
-      <UnlockScreen
-        key={session}
-        lockReason={lockReason}
-        needsSecretKey={device?.needsSecretKey ?? false}
-        onUnlocked={(s) => {
-          setLockReason(null);
-          setStatus(s);
-        }}
-      />
+      <div className="app-shell">
+        {updateBanner}
+        <UnlockScreen
+          key={session}
+          lockReason={lockReason}
+          needsSecretKey={device?.needsSecretKey ?? false}
+          onUnlocked={(s) => {
+            setLockReason(null);
+            setStatus(s);
+          }}
+        />
+      </div>
     );
   }
 
   return (
     <div className="app-shell">
+      {updateBanner}
       {signedOut ? (
         <div className="banner" role="status">
           {t.app.signedOut}

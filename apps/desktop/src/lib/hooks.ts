@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { TotpCode } from "./types";
+import type { TotpCode, UpdateStatus } from "./types";
 
 const ACTIVITY_THROTTLE_MS = 20_000;
 
@@ -91,4 +91,24 @@ export function useTotp(itemId: string, enabled: boolean) {
   }, [itemId, enabled]);
 
   return { code, remaining, failed };
+}
+
+/** The in-app update status, kept current by Rust's `updates://status` event. */
+export function useUpdateStatus(): UpdateStatus | null {
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.updateStatus().then(
+      (s) => {
+        if (live) setStatus(s);
+      },
+      () => undefined,
+    );
+    const unlisten = api.onUpdateStatus((s) => setStatus(s));
+    return () => {
+      live = false;
+      void unlisten.then((f) => f());
+    };
+  }, []);
+  return status;
 }

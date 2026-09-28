@@ -65,8 +65,9 @@ Owns everything about updates. The webview never calls the plugin.
 | `install_update` | From `Available` only: download → verify → lock → install → restart |
 | `set_update_auto_check` | Saves `autoCheck` and reschedules |
 
-State changes are pushed with an `update-status` event so the UI does not
-poll. No updater plugin permission is added to the capability file.
+State changes are pushed with an `updates://status` event so the UI does not
+poll. Choosing the tray's "Update available" emits `updates://show`, which
+brings back a banner dismissed with "Later". No updater plugin permission is added to the capability file.
 
 ### 3.3 Desktop UI
 
@@ -74,7 +75,12 @@ poll. No updater plugin permission is added to the capability file.
   screens: "HavenKeys 0.9.0 is available · What's new · Update". "What's new"
   expands the notes as text (never HTML). While downloading it shows a
   progress bar; on error, a fixed message ("Update failed. Try again later.").
-  It can be dismissed until the next launch.
+  "Later" dismisses that version until the next launch; the tray's "Update
+  available" brings it back, and Settings → Updates always shows the offer
+  with its own Update/Download button. A failure banner can be dismissed
+  until the status next changes. Checks time out after 30 s and downloads
+  after 10 minutes; a background check that fails keeps an offer already
+  on screen.
 - When `canInstallInPlace` is false the button reads "Download" and opens
   the release page through the existing `open_url` path. That URL is a
   constant in Rust (`https://github.com/rochasamuel/havenkeys/releases/latest`),
@@ -155,8 +161,15 @@ releases (e.g. 0.9.0 → 0.9.1) is tested on each OS.
 - **Integrity comes from the signature, not TLS.** A compromised GitHub
   account, repository, CDN or network cannot install code without the
   private key.
-- **No downgrade:** the plugin's default comparator installs only versions
-  greater than the running one, so an old signed release cannot be replayed.
+- **No downgrade:** `latest.json` itself is not signed; only the artifacts
+  are. So downgrade protection rests on `requireSignedVersion: true` in the
+  updater config: the signature's trusted comment binds the app version it
+  was signed for, and a manifest announcing any other version than the one
+  signed is rejected (as is a signature carrying no version). The plugin's
+  default comparator then refuses any version not greater than the running
+  one. Together, an old signed release cannot be replayed under a new
+  version number. Releases must be built with `@tauri-apps/cli` 2.12.0 or
+  later, which writes the version into the signature.
 - **Residual trust:** whoever holds the private key and passphrase can ship
   code to every install, including the Rust core that holds the vault key.
   Documented as a trust assumption in `docs/threat-model.md`.

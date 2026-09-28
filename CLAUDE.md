@@ -69,6 +69,12 @@ hosted service and there is no vendor account.
 > §10. The original text ("works completely without an internet connection",
 > "no backend required") described the folder-sync design that spec replaced.
 
+> Amended on 2026-09-27 by
+> `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md`: the
+> desktop app may contact GitHub Releases to check for and download signed
+> updates. Nothing is installed without the user's click; the automatic
+> check can be turned off in Settings → Updates.
+
 Do not introduce:
 
 * Cloud accounts

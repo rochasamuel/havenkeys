@@ -51,6 +51,10 @@ tauri-plugin-single-instance = "2"
 # Only its free `open_url` function (commands::open_website); the plugin is
 # never registered, so the renderer has no opener commands at all.
 tauri-plugin-opener = "2"
+# In-app updates (updater.rs), driven from Rust only: the capability grants
+# the renderer none of the plugin's commands. Verifies each download against
+# the minisign public key in tauri.conf.json before it can be installed.
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }

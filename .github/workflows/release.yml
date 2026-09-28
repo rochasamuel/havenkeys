@@ -61,15 +61,36 @@ jobs:
       - name: Build the native host sidecar
         run: node scripts/build-native-host-sidecar.mjs --target ${{ matrix.target }}
 
-      - name: Build and attach installers
+      # Everything that runs third-party code happens here, without the
+      # signing secrets: dependency build scripts and proc macros, and the
+      # frontend build. `--locked` refuses a Cargo.lock that would change.
+      - name: Compile the app (no signing secrets)
+        working-directory: apps/desktop
+        run: pnpm tauri build --no-bundle --config src-tauri/tauri.bundle.conf.json ${{ matrix.args }} -- --locked
+
+      # Only packaging and signing are left for the step that holds the key:
+      # Cargo finds everything already built, and tauri.package.conf.json
+      # replaces the frontend build with a no-op (dist/ exists from above).
+      - name: Package, sign and attach installers
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update artifacts (`.sig`) that the app verifies before
+          # installing. The public half is in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: "HavenKeys ${{ github.ref_name }}"
-          releaseBody: "Installers for this release. Unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first run."
+          # Also the "What's new" text every installed app shows (latest.json
+          # `notes`), so it stays neutral; installer warnings live on the
+          # website's download page.
+          releaseBody: "HavenKeys ${{ github.ref_name }}. See https://github.com/rochasamuel/havenkeys/releases for details."
           releaseDraft: true
           prerelease: false
-          args: --config src-tauri/tauri.bundle.conf.json ${{ matrix.args }}
+          # One latest.json for all three platforms; Windows updates through
+          # the NSIS installer, not the MSI.
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.package.conf.json ${{ matrix.args }} -- --locked

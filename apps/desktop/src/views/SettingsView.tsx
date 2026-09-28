@@ -7,7 +7,9 @@ import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
 import { ImportSection } from "./ImportSection";
 import { AccountSection } from "./AccountSection";
+import { UpdatesSection } from "./UpdatesSection";
 import { useI18n } from "../i18n/context";
+import { useUpdateStatus } from "../lib/hooks";
 import { errorMessage } from "../i18n/errors";
 import { isPreference, LANGUAGE_NAMES, PREFERENCES } from "../i18n/locale";
 
@@ -87,6 +89,7 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
   const { t, preference, setPreference } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
+  const updateStatus = useUpdateStatus();
 
   useEffect(() => {
     api
@@ -268,9 +271,11 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
 
       <ChangePassword />
 
+      <UpdatesSection />
+
       <div className="settings-block">
         <h3 className="group-title">{t.settings.about}</h3>
-        <p className="group-note">{t.settings.aboutText("0.8.0")}</p>
+        {updateStatus && <p className="group-note">{t.settings.aboutText(updateStatus.currentVersion)}</p>}
       </div>
     </section>
   );

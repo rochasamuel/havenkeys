@@ -400,6 +400,53 @@ rule #6 for one bounded case.
   mis-press unlikely; a mis-press can only act on the matched origin, so it
   cannot leak credentials elsewhere.
 
+### T10 — The desktop updater
+From 0.9.0 the desktop app checks GitHub Releases for newer signed builds and
+can install one on the user's click
+(`docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md`;
+`security-model.md` §17). This is a new, bounded exception to "minimal
+network exposure": the app can now reach `github.com` and its download
+redirect host on its own.
+
+* **A malicious update, from a compromised GitHub account, repository, CDN or
+  network path.** Whoever controls those can serve any bytes they like as the
+  next "release", but `tauri-plugin-updater`'s `download` verifies the
+  minisign signature against the public key committed in `tauri.conf.json`
+  before it returns any bytes. *Mitigation:* the signature check, which needs
+  the private key to pass. *Residual:* none beyond the key itself — see next.
+* **Theft of the updater's private key and its passphrase.** Whoever holds
+  both can sign a release that every installation will accept and run,
+  including the Rust core that holds the vault key — this is the actual trust
+  root behind every future update. *Mitigations:* the private key and
+  passphrase exist only in GitHub repository secrets (`TAURI_SIGNING_PRIVATE_KEY`,
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) and an offline backup, never in the
+  repository or a commit; releases stay drafts until the owner reviews and
+  publishes them, so a forged draft is never auto-published; `development.md`
+  documents a rotation procedure (ship one release signed with the old key
+  whose config trusts the new public key, then sign every later release with
+  the new one). *Residual:* accepted as a trust assumption — see
+  `security-review.md` for its severity.
+* **Replay of an old signed release** to push a device backwards to a version
+  with a known flaw, including a crafted `latest.json` (which is not signed)
+  that pairs a high version number with an old release's URL and signature.
+  *Mitigation:* `requireSignedVersion: true` — each signature's trusted
+  comment binds the version it was signed for, and an artifact whose signed
+  version differs from the announced one (or that has none) is rejected;
+  the plugin's comparator then installs only a version strictly greater than
+  the one running. *Residual:* depends on every release being built with
+  `@tauri-apps/cli` 2.12.0 or later (checked before publishing, see
+  `development.md`).
+* **Loss of the private key** (not an attack — a lost secret, a departed
+  operator with no backup). *Consequence:* no further release can be signed,
+  so no installation will ever be offered another automatic update again;
+  every user has to install the next version by hand once new key material
+  exists (a fresh key, and every future release re-signed with it, accepted
+  the same way the very first updater-enabled release was).
+* **Privacy.** GitHub sees the IP address, the time, and the fact that a
+  HavenKeys installation is checking, on every automatic and manual check.
+  *Mitigation:* Settings → Updates can turn the automatic check off; nothing
+  is sent unless the user checks or updates by hand.
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can

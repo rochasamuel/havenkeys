@@ -239,6 +239,67 @@ pnpm ui:check --app=desktop   # one app: extension | desktop
 * Types holding secrets implement a redacting `Debug`.
 * Errors are fixed strings; never interpolate user input.
 
+## Releases and updates
+
+See `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md` for the
+full design and `docs/security-model.md` §17 / `docs/threat-model.md` T10 for
+the security side.
+
+* **The signing key** was generated once, by the project owner, never by an
+  agent or in CI: `pnpm tauri signer generate -w ~/.tauri/havenkeys-updater.key`,
+  with a strong passphrase. The private key and its passphrase live only in
+  the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and in an offline backup. Never commit
+  them, paste them into an issue or PR, or print them in a build log.
+* **`createUpdaterArtifacts`** is set only in `apps/desktop/src-tauri/tauri.bundle.conf.json`,
+  which only the release workflow passes with `--config`. A local `tauri
+  build` (or `pnpm build`) does not create updater artifacts and does not need
+  the signing key.
+* **The key only reaches packaging.** The workflow compiles first, without
+  the signing secrets (`tauri build --no-bundle … -- --locked`): every
+  dependency build script, proc macro and the frontend build run there. The
+  tauri-action step that holds the key adds `tauri.package.conf.json`, which
+  swaps the frontend build for a no-op, so it only packages and signs; Cargo
+  recompiles just `havenkeys-desktop` itself (its config is embedded). Keep
+  that split when editing `release.yml`.
+* **Releasing:**
+  1. Bump the version (`apps/desktop/src-tauri/tauri.conf.json`,
+     `apps/desktop/package.json`, and the extension's `manifest/base.json` /
+     `package.json` if it also changed).
+  2. Push a `desktop-v*` tag. `.github/workflows/release.yml` builds Windows,
+     macOS and Linux installers, signs the updater artifacts, and attaches
+     everything to a **draft** GitHub Release.
+  3. Wait for the workflow to finish, then check the draft's `latest.json`
+     asset lists all four platform keys: `windows-x86_64`, `darwin-aarch64`,
+     `darwin-x86_64`, `linux-x86_64`.
+  4. Check that every `.sig` asset binds the version: `base64 -d
+     <asset>.sig | sed -n 3p` must show `trusted comment: … version:<the
+     release version>`. The app sets `requireSignedVersion`, so a signature
+     without it (built by a CLI older than 2.12.0) is refused by every
+     install. Keep `@tauri-apps/cli` at 2.12.0 or later.
+  5. Click **Publish release**. Publishing is what makes `/releases/latest`
+     (and so the update check) see it — a draft is invisible to both.
+* **The in-app "What's new"** comes from the release's `releaseBody` at
+  **build** time, baked into `latest.json`'s `notes` field. The workflow's
+  text is neutral ("HavenKeys desktop-vX.Y.Z. See … for details.") because
+  every installed app shows it; installer warnings (SmartScreen, Gatekeeper)
+  belong on the website's download page and the release page, not there. Editing the
+  release page's description afterward does not change what installed apps
+  show; to correct it after publishing, edit and re-upload the `latest.json`
+  asset itself before anyone updates.
+* **Key rotation, while the old key is still held** (planned, or suspected
+  compromise): generate the new key, ship one release signed with the *old*
+  key whose `tauri.conf.json` already trusts the *new* public key, so every
+  existing install can still verify and accept that one transitional
+  release; sign every release after that with the new key only. After a
+  suspected compromise do this at once — until installs have moved to the
+  transitional release, the thief can still sign updates they accept.
+* **Lost key** (no copy of the private key or its passphrase): there is no
+  in-app path. No installation can verify anything signed with a new key, so
+  users must install the next version by hand from the release page (as they
+  did the first updater-enabled release); from that version on, updates are
+  in-app again under the new key. See `threat-model.md` T10.
+
 ## Fuzzing
 
 The parsers that take untrusted input are fuzzed deterministically inside
