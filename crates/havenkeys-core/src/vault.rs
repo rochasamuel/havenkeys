@@ -20,6 +20,7 @@ use crate::model::{
 };
 use crate::origin::{match_item, site_of, MatchStrength, PageUrl};
 use crate::secret::SecretString;
+use crate::sso::{SignInWith, SsoProvider};
 use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
 use serde::Serialize;
@@ -147,6 +148,9 @@ pub struct Suggestion {
     pub username: Option<String>,
     pub has_totp: bool,
     pub strength: MatchStrength,
+    /// The account of a "Sign in with" login (never a secret).
+    pub account: Option<String>,
+    pub provider: Option<SsoProvider>,
 }
 
 impl std::fmt::Debug for Suggestion {
@@ -224,6 +228,23 @@ pub struct FillCredentials {
 impl std::fmt::Debug for FillCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("FillCredentials(<redacted>)")
+    }
+}
+
+/// Result of [`VaultService::start_sso_for_page`]. No secrets.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SsoStart {
+    pub provider: SsoProvider,
+    pub account: Option<String>,
+    pub auto_choose: bool,
+}
+
+impl std::fmt::Debug for SsoStart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SsoStart")
+            .field("provider", &self.provider)
+            .field("auto_choose", &self.auto_choose)
+            .finish_non_exhaustive()
     }
 }
 
@@ -1090,6 +1111,8 @@ impl VaultService {
                     username: o.username.clone(),
                     has_totp: o.has_totp,
                     strength,
+                    account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
+                    provider: o.sign_in_with.as_ref().map(|s| s.provider),
                 })
             })
             .collect();
@@ -1174,6 +1197,130 @@ impl VaultService {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
         Ok(session.settings.auto_sign_in && overview.auto_sign_in)
+    }
+
+    /// Start a "Sign in with" pick: the provider, account and whether the
+    /// run may click the account on the provider's chooser. Denied unless
+    /// the item is a login saved for the page (and embedding page) that
+    /// signs in with a provider. Nothing secret is returned.
+    pub fn start_sso_for_page(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<SsoStart> {
+        let overview = self.authorize_for_page(id, page_url, top_url)?;
+        let s = overview.sign_in_with.as_ref().ok_or(Error::Denied)?;
+        let settings = &self.session()?.settings;
+        Ok(SsoStart {
+            provider: s.provider,
+            account: s.account.clone(),
+            auto_choose: settings.auto_sign_in && overview.auto_sign_in,
+        })
+    }
+
+    /// What saving a "Sign in with" the user just used on the page would do.
+    /// See the spec §4: `Unchanged` when a login for the page already has
+    /// this provider and account (or this provider and no account was
+    /// learned); `Update(id)` when exactly one has this provider and no
+    /// account; `Add` otherwise.
+    pub fn check_sso(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        provider: SsoProvider,
+        account: Option<&str>,
+    ) -> Result<SaveAction> {
+        let wanted = normalize_username(account);
+        let mut without_account = Vec::new();
+        for s in self.find_matches(page_url, top_url)? {
+            if s.provider != Some(provider) {
+                continue;
+            }
+            let have = normalize_username(s.account.as_deref());
+            if wanted.is_none() || have == wanted {
+                return Ok(SaveAction::Unchanged);
+            }
+            if have.is_none() {
+                without_account.push(s.id);
+            }
+        }
+        Ok(match without_account.as_slice() {
+            [id] => SaveAction::Update(*id),
+            _ => SaveAction::Add,
+        })
+    }
+
+    /// Seal a "Sign in with" login the user confirmed in the save prompt.
+    /// A new login is stored for the frame's own site with no password; an
+    /// update must name a login saved for the page that already signs in
+    /// with `provider`, and changes only its account.
+    pub fn stage_save_sso(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        provider: SsoProvider,
+        account: Option<&str>,
+        target: SaveTarget<'_>,
+        now_ms: i64,
+    ) -> Result<StagedSave> {
+        self.session()?;
+        let sign_in_with = Some(SignInWith {
+            provider,
+            account: account.map(str::to_owned),
+        });
+        let input = match target {
+            SaveTarget::New { title } => {
+                let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+                let (host, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+                let title = match title {
+                    Some(t) => clean_title(t)?,
+                    None => host,
+                };
+                ItemInput {
+                    item_type: ItemType::Login,
+                    title,
+                    username: None,
+                    urls: vec![UrlRule {
+                        url: origin,
+                        match_type: MatchType::Domain,
+                    }],
+                    password: SecretUpdate::Keep,
+                    totp: SecretUpdate::Keep,
+                    notes: SecretUpdate::Keep,
+                    content: SecretUpdate::Keep,
+                    auto_sign_in: None,
+                    sign_in_with,
+                }
+            }
+            SaveTarget::Update(id) => {
+                let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+                if existing.sign_in_with.as_ref().map(|s| s.provider) != Some(provider) {
+                    return Err(Error::Denied);
+                }
+                let input = ItemInput {
+                    item_type: ItemType::Login,
+                    title: existing.title.clone(),
+                    username: existing.username.clone(),
+                    urls: existing.urls.clone(),
+                    password: SecretUpdate::Keep,
+                    totp: SecretUpdate::Keep,
+                    notes: SecretUpdate::Keep,
+                    content: SecretUpdate::Keep,
+                    auto_sign_in: None,
+                    sign_in_with,
+                };
+                return Ok(StagedSave {
+                    item_id: *id,
+                    write: self.stage_update(id, input, now_ms)?,
+                });
+            }
+        };
+        let write = self.stage_create(input, now_ms)?;
+        Ok(StagedSave {
+            item_id: write.item_id,
+            write,
+        })
     }
 
     /// What saving a login the user just submitted on the page would do.
