@@ -1028,7 +1028,10 @@ fn auto_sign_in_needs_the_setting_and_the_login_switch() {
 fn sso_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
     let (mut v, _) = github_vault();
     let staged = v
-        .stage_create(google_login("Typeform", Some("me@gmail.com"), "typeform.com"), NOW)
+        .stage_create(
+            google_login("Typeform", Some("me@gmail.com"), "typeform.com"),
+            NOW,
+        )
         .unwrap();
     let id = v.commit_write(staged, 5).unwrap().unwrap().id;
     (v, id)
@@ -1037,24 +1040,47 @@ fn sso_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
 #[test]
 fn start_sso_is_origin_bound_and_returns_no_secret() {
     let (mut v, id) = sso_vault();
-    let s = v.start_sso_for_page(&id, "https://admin.typeform.com/login", None).unwrap();
+    let s = v
+        .start_sso_for_page(&id, "https://admin.typeform.com/login", None)
+        .unwrap();
     assert_eq!(s.provider, SsoProvider::Google);
     assert_eq!(s.account.as_deref(), Some("me@gmail.com"));
     assert!(s.auto_choose);
-    for page in ["https://evil.com/", "https://typeform.com.evil.com/", "http://typeform.com/", "javascript:x"] {
-        assert_eq!(v.start_sso_for_page(&id, page, None).err(), Some(Error::Denied), "{page}");
+    for page in [
+        "https://evil.com/",
+        "https://typeform.com.evil.com/",
+        "http://typeform.com/",
+        "javascript:x",
+    ] {
+        assert_eq!(
+            v.start_sso_for_page(&id, page, None).err(),
+            Some(Error::Denied),
+            "{page}"
+        );
     }
     // A frame of typeform.com embedded in evil.com gets nothing.
     assert_eq!(
-        v.start_sso_for_page(&id, "https://typeform.com/", Some("https://evil.com/")).err(),
+        v.start_sso_for_page(&id, "https://typeform.com/", Some("https://evil.com/"))
+            .err(),
         Some(Error::Denied)
     );
     // A login without sign_in_with is not an SSO item.
     let gh = v.find_matches("https://github.com/", None).unwrap()[0].id;
-    assert_eq!(v.start_sso_for_page(&gh, "https://github.com/", None).err(), Some(Error::Denied));
-    assert_eq!(v.start_sso_for_page(&Uuid::new_v4(), "https://typeform.com/", None).err(), Some(Error::NotFound));
+    assert_eq!(
+        v.start_sso_for_page(&gh, "https://github.com/", None).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.start_sso_for_page(&Uuid::new_v4(), "https://typeform.com/", None)
+            .err(),
+        Some(Error::NotFound)
+    );
     v.lock();
-    assert_eq!(v.start_sso_for_page(&id, "https://typeform.com/", None).err(), Some(Error::Locked));
+    assert_eq!(
+        v.start_sso_for_page(&id, "https://typeform.com/", None)
+            .err(),
+        Some(Error::Locked)
+    );
 }
 
 #[test]
@@ -1063,7 +1089,11 @@ fn start_sso_auto_choose_follows_both_switches() {
     let mut settings = v.settings().unwrap();
     settings.auto_sign_in = false;
     v.update_settings(settings).unwrap();
-    assert!(!v.start_sso_for_page(&id, "https://typeform.com/", None).unwrap().auto_choose);
+    assert!(
+        !v.start_sso_for_page(&id, "https://typeform.com/", None)
+            .unwrap()
+            .auto_choose
+    );
 }
 
 #[test]
@@ -1080,16 +1110,31 @@ fn find_matches_reports_provider_and_account() {
 fn check_sso_actions() {
     let (mut v, id) = sso_vault();
     let page = "https://typeform.com/";
-    let check = |v: &havenkeys_core::vault::VaultService, p, a| v.check_sso(page, None, p, a).unwrap();
-    assert_eq!(check(&v, SsoProvider::Google, Some("ME@gmail.com")), SaveAction::Unchanged);
+    let check =
+        |v: &havenkeys_core::vault::VaultService, p, a| v.check_sso(page, None, p, a).unwrap();
+    assert_eq!(
+        check(&v, SsoProvider::Google, Some("ME@gmail.com")),
+        SaveAction::Unchanged
+    );
     assert_eq!(check(&v, SsoProvider::Google, None), SaveAction::Unchanged);
-    assert_eq!(check(&v, SsoProvider::Google, Some("other@gmail.com")), SaveAction::Add);
+    assert_eq!(
+        check(&v, SsoProvider::Google, Some("other@gmail.com")),
+        SaveAction::Add
+    );
     assert_eq!(check(&v, SsoProvider::Github, None), SaveAction::Add);
     // An imported login with the provider but no account is offered the account.
-    let staged = v.stage_create(google_login("Notion", None, "notion.so"), NOW).unwrap();
+    let staged = v
+        .stage_create(google_login("Notion", None, "notion.so"), NOW)
+        .unwrap();
     let notion = v.commit_write(staged, 6).unwrap().unwrap().id;
     assert_eq!(
-        v.check_sso("https://notion.so/", None, SsoProvider::Google, Some("me@gmail.com")).unwrap(),
+        v.check_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Google,
+            Some("me@gmail.com")
+        )
+        .unwrap(),
         SaveAction::Update(notion)
     );
     let _ = id;
@@ -1099,36 +1144,81 @@ fn check_sso_actions() {
 fn save_sso_adds_without_a_password_and_updates_only_the_account() {
     let (mut v, _) = sso_vault();
     let staged = v
-        .stage_save_sso("https://www.canva.com/login", None, SsoProvider::Apple, Some("me@icloud.com"),
-            SaveTarget::New { title: Some("Canva") }, NOW)
+        .stage_save_sso(
+            "https://www.canva.com/login",
+            None,
+            SsoProvider::Apple,
+            Some("me@icloud.com"),
+            SaveTarget::New {
+                title: Some("Canva"),
+            },
+            NOW,
+        )
         .unwrap();
     let ov = v.commit_write(staged.write, 7).unwrap().unwrap();
     assert_eq!(ov.title, "Canva");
     assert!(!ov.has_password);
     assert_eq!(ov.urls[0].url, "https://www.canva.com/");
-    assert_eq!(ov.sign_in_with.as_ref().unwrap().provider, SsoProvider::Apple);
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().provider,
+        SsoProvider::Apple
+    );
 
-    let staged = v.stage_create(google_login("Notion", None, "notion.so"), NOW).unwrap();
+    let staged = v
+        .stage_create(google_login("Notion", None, "notion.so"), NOW)
+        .unwrap();
     let notion = v.commit_write(staged, 8).unwrap().unwrap().id;
     let staged = v
-        .stage_save_sso("https://notion.so/", None, SsoProvider::Google, Some("me@gmail.com"),
-            SaveTarget::Update(&notion), NOW)
+        .stage_save_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Google,
+            Some("me@gmail.com"),
+            SaveTarget::Update(&notion),
+            NOW,
+        )
         .unwrap();
     let ov = v.commit_write(staged.write, 9).unwrap().unwrap();
     assert_eq!(ov.title, "Notion");
-    assert_eq!(ov.sign_in_with.as_ref().unwrap().account.as_deref(), Some("me@gmail.com"));
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("me@gmail.com")
+    );
 
     // Another site's login, or a different provider, cannot be touched.
     assert_eq!(
-        v.stage_save_sso("https://evil.com/", None, SsoProvider::Google, Some("x@y.z"), SaveTarget::Update(&notion), NOW).err(),
+        v.stage_save_sso(
+            "https://evil.com/",
+            None,
+            SsoProvider::Google,
+            Some("x@y.z"),
+            SaveTarget::Update(&notion),
+            NOW
+        )
+        .err(),
         Some(Error::Denied)
     );
     assert_eq!(
-        v.stage_save_sso("https://notion.so/", None, SsoProvider::Github, Some("x"), SaveTarget::Update(&notion), NOW).err(),
+        v.stage_save_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Github,
+            Some("x"),
+            SaveTarget::Update(&notion),
+            NOW
+        )
+        .err(),
         Some(Error::Denied)
     );
     assert!(matches!(
-        v.stage_save_sso("https://notion.so/", None, SsoProvider::Google, Some("a\u{7}b"), SaveTarget::New { title: None }, NOW),
+        v.stage_save_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Google,
+            Some("a\u{7}b"),
+            SaveTarget::New { title: None },
+            NOW
+        ),
         Err(Error::InvalidInput(_))
     ));
 }

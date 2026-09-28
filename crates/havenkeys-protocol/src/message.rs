@@ -226,7 +226,8 @@ fn name_ok(s: &str) -> bool {
 }
 
 fn account_ok(a: &Option<String>) -> bool {
-    a.as_ref().is_none_or(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
+    a.as_ref()
+        .is_none_or(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
 }
 
 /// A title only names a new item; an update keeps its own.

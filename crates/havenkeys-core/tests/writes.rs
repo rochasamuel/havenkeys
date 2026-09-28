@@ -242,11 +242,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
     // A note that isn't exactly that line is left alone.
     let b = vault
         .stage_create(
-            existing_login(
-                "Notion",
-                "https://notion.so",
-                "Sign in with Google\nmore",
-            ),
+            existing_login("Notion", "https://notion.so", "Sign in with Google\nmore"),
             NOW,
         )
         .unwrap();

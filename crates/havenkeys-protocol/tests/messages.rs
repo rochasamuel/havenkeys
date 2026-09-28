@@ -541,13 +541,18 @@ fn sso_results_validate() {
     assert!(Outgoing::parse(ok.as_bytes()).is_some());
     let too_many = r#"{"v":1,"id":1,"result":{"type":"start_sso","provider":"google","account":null,"providerOrigins":["a","b","c","d","e"],"autoChoose":true}}"#;
     assert!(Outgoing::parse(too_many.as_bytes()).is_none());
-    let inconsistent = r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"update","itemId":null}}"#;
+    let inconsistent =
+        r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"update","itemId":null}}"#;
     assert!(Outgoing::parse(inconsistent.as_bytes()).is_none());
-    let m = format!(r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github"}}]}}}}"#);
+    let m = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github"}}]}}}}"#
+    );
     assert!(Outgoing::parse(m.as_bytes()).is_some());
     // `provider` is required, like `account`: a Match missing the key (not
     // just null) is rejected rather than silently defaulting to `None`.
-    let missing_provider = format!(r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site"}}]}}}}"#);
+    let missing_provider = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site"}}]}}}}"#
+    );
     assert!(Outgoing::parse(missing_provider.as_bytes()).is_none());
 }
 
@@ -621,4 +626,3 @@ fn fuzz_parse_request_never_panics() {
         }
     }
 }
-

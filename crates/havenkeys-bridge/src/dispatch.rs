@@ -427,20 +427,41 @@ pub fn dispatch(
                 Err(ErrorCode::Denied)
             }
         }
-        Request::StartSso { item_id, url, top_url } => {
+        Request::StartSso {
+            item_id,
+            url,
+            top_url,
+        } => {
             require_enabled(v)?;
-            let s = v.start_sso_for_page(item_id, url, top_url.as_deref()).map_err(item_code)?;
+            let s = v
+                .start_sso_for_page(item_id, url, top_url.as_deref())
+                .map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::StartSso {
                 provider: wire_provider(s.provider),
                 account: s.account.clone(),
-                provider_origins: s.provider.origins().iter().map(|o| (*o).to_owned()).collect(),
+                provider_origins: s
+                    .provider
+                    .origins()
+                    .iter()
+                    .map(|o| (*o).to_owned())
+                    .collect(),
                 auto_choose: s.auto_choose,
             }))
         }
-        Request::CheckSso { url, top_url, provider, account } => {
+        Request::CheckSso {
+            url,
+            top_url,
+            provider,
+            account,
+        } => {
             require_enabled(v)?;
             let (action, item_id) = match v
-                .check_sso(url, top_url.as_deref(), core_provider(*provider), account.as_deref())
+                .check_sso(
+                    url,
+                    top_url.as_deref(),
+                    core_provider(*provider),
+                    account.as_deref(),
+                )
                 .map_err(code)?
             {
                 CoreSaveAction::Add => (SaveAction::Add, None),
@@ -449,7 +470,14 @@ pub fn dispatch(
             };
             Ok(Dispatched::Done(ResultBody::CheckSso { action, item_id }))
         }
-        Request::SaveSso { url, top_url, provider, account, item_id, title } => {
+        Request::SaveSso {
+            url,
+            top_url,
+            provider,
+            account,
+            item_id,
+            title,
+        } => {
             require_enabled(v)?;
             let staged = v
                 .stage_save_sso(
@@ -459,7 +487,9 @@ pub fn dispatch(
                     account.as_deref(),
                     match item_id {
                         Some(id) => SaveTarget::Update(id),
-                        None => SaveTarget::New { title: title.as_deref() },
+                        None => SaveTarget::New {
+                            title: title.as_deref(),
+                        },
                     },
                     now_ms(unix_seconds),
                 )

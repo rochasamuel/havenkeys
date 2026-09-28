@@ -689,13 +689,20 @@ mod tests {
         assert_eq!(gh.input.urls.len(), 1);
         assert_eq!(gh.input.urls[0].url, "https://github.com/login");
         assert_eq!(gh.created_at, Some(1_600_000_000_000));
-        let sso = gh.input.sign_in_with.as_ref().expect("ssoLogin becomes sign_in_with");
+        let sso = gh
+            .input
+            .sign_in_with
+            .as_ref()
+            .expect("ssoLogin becomes sign_in_with");
         assert_eq!(sso.provider, crate::sso::SsoProvider::Google);
         assert_eq!(sso.account, None);
         let notes = set_value(&gh.input.notes).unwrap();
         assert!(notes.starts_with("old notes"));
         assert!(notes.contains("[Security]\nRecovery code: RC-123"));
-        assert!(!notes.contains("Sign in with Google"), "ssoLogin no longer falls through to notes");
+        assert!(
+            !notes.contains("Sign in with Google"),
+            "ssoLogin no longer falls through to notes"
+        );
         assert!(notes.contains("Tags: work"));
         assert!(
             notes.contains("Website: javascript:alert(1)"),
@@ -726,9 +733,13 @@ mod tests {
 
     #[test]
     fn sso_login_with_account_and_unknown_provider() {
-        let field = |v: serde_json::Value| json!({"title": "", "id": "sso", "value": {"ssoLogin": v}});
+        let field =
+            |v: serde_json::Value| json!({"title": "", "id": "sso", "value": {"ssoLogin": v}});
         for (value, expect) in [
-            (json!({"provider": "GitHub", "username": "octo"}), Some(("github", Some("octo")))),
+            (
+                json!({"provider": "GitHub", "username": "octo"}),
+                Some(("github", Some("octo"))),
+            ),
             (json!({"provider": "Okta"}), None),
         ] {
             let data = json!({"accounts": [{"attrs": {}, "vaults": [{"attrs": {"name": "V"}, "items": [{

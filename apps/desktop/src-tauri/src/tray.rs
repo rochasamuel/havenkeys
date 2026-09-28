@@ -35,8 +35,18 @@ impl UiLanguage {
     /// Labels for the menu items `open`, `lock`, `quit` and `update`, in that order.
     pub fn labels(self) -> [&'static str; 4] {
         match self {
-            Self::En => ["Open HavenKeys", "Lock", "Quit HavenKeys", "Update available"],
-            Self::PtBr => ["Abrir HavenKeys", "Bloquear", "Sair do HavenKeys", "Atualização disponível"],
+            Self::En => [
+                "Open HavenKeys",
+                "Lock",
+                "Quit HavenKeys",
+                "Update available",
+            ],
+            Self::PtBr => [
+                "Abrir HavenKeys",
+                "Bloquear",
+                "Sair do HavenKeys",
+                "Atualização disponível",
+            ],
         }
     }
 }
@@ -185,11 +195,21 @@ mod tests {
     fn the_tray_labels_come_from_the_fixed_table() {
         assert_eq!(
             UiLanguage::En.labels(),
-            ["Open HavenKeys", "Lock", "Quit HavenKeys", "Update available"]
+            [
+                "Open HavenKeys",
+                "Lock",
+                "Quit HavenKeys",
+                "Update available"
+            ]
         );
         assert_eq!(
             UiLanguage::PtBr.labels(),
-            ["Abrir HavenKeys", "Bloquear", "Sair do HavenKeys", "Atualização disponível"]
+            [
+                "Abrir HavenKeys",
+                "Bloquear",
+                "Sair do HavenKeys",
+                "Atualização disponível"
+            ]
         );
     }
 }

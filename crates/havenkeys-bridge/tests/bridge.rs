@@ -952,7 +952,10 @@ fn passkey_status_through_the_bridge() {
 }
 
 fn start_sso(f: &Fixture, id: Uuid, url: &str) -> serde_json::Value {
-    call(f, serde_json::json!({"type": "start_sso", "itemId": id, "url": url}))
+    call(
+        f,
+        serde_json::json!({"type": "start_sso", "itemId": id, "url": url}),
+    )
 }
 
 #[test]
@@ -961,7 +964,10 @@ fn sso_flow_returns_no_secrets() {
     let m = find(&f, "https://typeform.com/login");
     let row = &m["result"]["matches"][0];
     assert_eq!(row["provider"], "google");
-    assert_eq!(row["username"], "me@gmail.com", "the account stands in for a missing username");
+    assert_eq!(
+        row["username"], "me@gmail.com",
+        "the account stands in for a missing username"
+    );
     let github_row = &find(&f, "https://github.com/")["result"]["matches"][0];
     assert!(github_row["provider"].is_null());
 
@@ -987,19 +993,34 @@ fn start_sso_attacks_are_denied() {
         assert_eq!(error_code(&start_sso(&f, id, url)), Some("denied"), "{url}");
     }
     f.vault.lock().unwrap().lock();
-    assert_eq!(error_code(&start_sso(&f, f.typeform, "https://typeform.com/")), Some("locked"));
+    assert_eq!(
+        error_code(&start_sso(&f, f.typeform, "https://typeform.com/")),
+        Some("locked")
+    );
 }
 
 #[test]
 fn save_sso_flow() {
     let f = online_fixture();
-    let r = call(&f, serde_json::json!({"type": "check_sso", "url": "https://typeform.com/", "provider": "google", "account": "ME@gmail.com"}));
-    assert_eq!(r["result"], serde_json::json!({"type": "check_sso", "action": "unchanged", "itemId": null}));
-    let r = call(&f, serde_json::json!({"type": "save_sso", "url": "https://canva.com/", "provider": "apple", "account": null, "itemId": null, "title": "Canva"}));
+    let r = call(
+        &f,
+        serde_json::json!({"type": "check_sso", "url": "https://typeform.com/", "provider": "google", "account": "ME@gmail.com"}),
+    );
+    assert_eq!(
+        r["result"],
+        serde_json::json!({"type": "check_sso", "action": "unchanged", "itemId": null})
+    );
+    let r = call(
+        &f,
+        serde_json::json!({"type": "save_sso", "url": "https://canva.com/", "provider": "apple", "account": null, "itemId": null, "title": "Canva"}),
+    );
     assert_eq!(r["result"]["type"], "save_sso");
     assert_eq!(f.changes.load(Ordering::SeqCst), 1);
     // Cannot retarget another site's login.
-    let r = call(&f, serde_json::json!({"type": "save_sso", "url": "https://evil.com/", "provider": "google", "account": "x", "itemId": f.typeform}));
+    let r = call(
+        &f,
+        serde_json::json!({"type": "save_sso", "url": "https://evil.com/", "provider": "google", "account": "x", "itemId": f.typeform}),
+    );
     assert_eq!(error_code(&r), Some("denied"));
 }
 
