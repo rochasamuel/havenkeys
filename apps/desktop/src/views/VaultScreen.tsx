@@ -360,9 +360,11 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               <ItemDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
+                items={items}
                 readOnly={readOnly}
                 onEdit={() => setPane({ kind: "edit", id: selected.id })}
                 onDelete={() => void onDelete(selected)}
+                onOpen={(id) => setPane({ kind: "view", id })}
               />
             )}
             {pane.kind === "edit" && selected && (

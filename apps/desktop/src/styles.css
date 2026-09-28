@@ -1399,6 +1399,17 @@ button {
   gap: 16px;
 }
 
+.sso-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.provider-icon {
+  flex: none;
+}
+
 /* Secrets */
 
 .masked {

@@ -19,6 +19,14 @@ export interface UrlRule {
   matchType: MatchType;
 }
 
+export type SsoProvider = "google" | "microsoft" | "github" | "apple";
+
+/** How a login signs in on the provider's own page, in place of a password there. */
+export interface SignInWith {
+  provider: SsoProvider;
+  account: string | null;
+}
+
 /** Item summary. Contains no passwords, TOTP secrets or note bodies. */
 export interface ItemOverview {
   id: string;
@@ -31,6 +39,7 @@ export interface ItemOverview {
   hasNotes: boolean;
   hasPasskey: boolean;
   autoSignIn: boolean;
+  signInWith?: SignInWith;
   createdAt: number;
   updatedAt: number;
 }
@@ -62,6 +71,7 @@ export interface ItemInput {
   notes?: SecretUpdate;
   content?: SecretUpdate;
   autoSignIn?: boolean;
+  signInWith?: SignInWith | null;
 }
 
 export type SecretField = "password" | "notes" | "content";

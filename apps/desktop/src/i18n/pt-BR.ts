@@ -281,6 +281,8 @@ export const ptBR: Messages = {
     dates: (created: string, changed: string) => `Criado em ${created} · Alterado em ${changed}`,
     confirmDelete: (title: string) => `Excluir “${title}” permanentemente?`,
     passkeyWarning: " As chaves de acesso dele também serão excluídas, e você pode perder o acesso a esses sites.",
+    signInWith: "Entrar com",
+    openProviderLogin: (provider: string) => `Abrir o login do ${provider}`,
   },
 
   editor: {
@@ -291,6 +293,12 @@ export const ptBR: Messages = {
     title: "Título",
     titlePlaceholderLogin: "ex.: GitHub",
     titlePlaceholderNote: "ex.: Wi-Fi de casa",
+    signInWith: "Entrar com",
+    providerNone: "Nada (só senha)",
+    providerPick: "Como você entra",
+    account: "Conta",
+    accountPlaceholder: "E-mail usado lá (opcional)",
+    alsoPassword: "Também tem senha",
     usernamePlaceholder: "Usuário ou e-mail",
     change: "Alterar",
     passwordRemoved: "A senha será removida.",

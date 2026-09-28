@@ -297,6 +297,8 @@ export const en = {
     dates: (created: string, changed: string) => `Created ${created} · Changed ${changed}`,
     confirmDelete: (title: string) => `Delete “${title}” permanently?`,
     passkeyWarning: " Its passkeys go with it, and you may lose access to those sites.",
+    signInWith: "Sign in with",
+    openProviderLogin: (provider: string) => `Open the ${provider} login`,
   },
 
   editor: {
@@ -307,6 +309,12 @@ export const en = {
     title: "Title",
     titlePlaceholderLogin: "e.g. GitHub",
     titlePlaceholderNote: "e.g. Wi-Fi at home",
+    signInWith: "Sign in with",
+    providerNone: "Nothing (password only)",
+    providerPick: "How you sign in",
+    account: "Account",
+    accountPlaceholder: "Email used there (optional)",
+    alsoPassword: "Also has a password",
     usernamePlaceholder: "Username or email",
     change: "Change",
     passwordRemoved: "The password will be removed.",
