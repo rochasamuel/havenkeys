@@ -1701,3 +1701,207 @@ implementation plan).
 | UM4 | Windows only: with a browser open and `havenkeys-native-host.exe` running (extension installed and connected), install an update; the installer completes without a file-in-use error, and the extension's next request successfully starts a new host process (UP5) | Not yet run | n/a | n/a |
 | UM5 | `.deb`/`.rpm` installs show the "Download" banner/button instead of "Update", and it opens the release page at the fixed `RELEASES_URL` rather than any URL taken from `latest.json` | n/a | n/a | Not yet run (`.deb`/`.rpm` path) |
 | UM6 | Before publishing each release: every `.sig` asset's trusted comment (`base64 -d <file>.sig`, third line) contains `version:<the release version>` (UP3); an install refuses a manifest whose version does not match | Not yet run | Not yet run | Not yet run |
+
+---
+
+## Full-application security scan (2026-09-27)
+
+**Date:** 2026-09-27
+**Scope:** the whole application, reviewed by six parallel internal reviewers, one per trust boundary: crypto and vault core (`crates/havenkeys-core`), the desktop↔extension bridge and native messaging (`crates/havenkeys-bridge`, `havenkeys-protocol`, `havenkeys-native-host`), the browser extension (`apps/extension`), the Tauri desktop app (`apps/desktop/src-tauri`, `apps/desktop/src`), the server and sync client (`crates/havenkeys-server`, `crates/havenkeys-sync-client`), and dependencies/build/release supply chain. Full reports:
+`.superpowers/security-scan/{cr-crypto-vault,br-bridge-native,ex-extension,dt-desktop,sv-server-sync,sc-supply-chain}.md`.
+**Method:** each reviewer read their area's source in full, traced untrusted input (a malicious web page, a copied vault file, a compromised extension, a malicious or compromised server operator, a local same-user process, a crafted import file) to its sensitive sink, and confirmed candidate findings against the code, with throwaway scratch scripts or tests outside the repo where that was cheap. A finding already recorded elsewhere in this document as accepted or fixed is marked KNOWN rather than reported again, unless the existing entry proved incomplete.
+
+> This is an internal review carried out by the project's own development process, not an independent third-party security audit (CLAUDE.md §50).
+
+### Summary
+
+No Critical or High findings. Five Medium findings, one of which was found independently from two different trust boundaries and describes the same underlying gap: CR1 and SV-1 both show that a hostile or compromised server can splice an old item overview (URL rules, `auto_sign_in`) with a newer details blob (the password), or the reverse, so the current secret reaches an origin the item no longer names. Fourteen Low and six Info findings round out the rest. Two findings were already fixed and one already mitigated by the time this scan ran: the Windows NSIS `taskkill` path-planting issue (DT5) is fixed, the release workflow now pins `--locked` on both build steps (SC2, fixed), and the release workflow now compiles without the signing secrets present (SC1, mitigated). Everything else is open (planned) or accepted, as detailed below.
+
+| ID | Title | Severity | Component | Status |
+|---|---|---|---|---|
+| CR1 / SV-1 | A hostile server can splice an old item overview (URL rules) with a newer details blob (password), or vice versa, so the current secret reaches an origin the item no longer names | Medium | Core sync / server | Open (planned) |
+| CR2 | A corrupt or missing settings blob silently falls back to `auto_sign_in`/`auto_passkey_upgrade` = on | Low | Core vault | Open (planned) |
+| CR3 | A crafted `.1pux` with millions of ZIP central-directory entries costs ~7× its size in memory before any size check runs | Low | Core import | Open (planned) |
+| BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Open |
+| BR-2 | The per-item password-change rate-limit budget is spent even when the write is denied or fails | Low | Bridge | Open (planned) |
+| EX-01 | Popup Fill writes credentials into a CSP-sandboxed (opaque-origin) document on the login's own origin | Medium | Extension (popup) | Open |
+| EX-02 | "Visible" field detection admits off-screen/clipped/covered/near-transparent inputs; fill and auto-submit ignore a cross-origin form `action` | Low | Extension (autofill) | Open (planned) |
+| EX-03 | Menu/save tokens live in the iframe `src`, so a page can re-frame `menu.html#token`/`save.html#token` itself; the frames.ts tamper guards are moot and Firefox relies on the arming delay alone | Low | Extension (menu) | Open (planned) |
+| EX-04 | Save-prompt oracle on a page-planted username, after the password is already known to the attacker | Info | Extension | Accepted (residual of F1) |
+| DT1 | A server session can be installed after the vault locks; a locked vault then stays "online" and account commands still work | Low | Desktop (sync) | Open (planned) |
+| DT2 | Extension-driven `open_item` resets the auto-lock idle timer | Low | Desktop (bridge hook) | Open (planned) |
+| DT3 | On Windows, the vault file and the keychain-stored Secret Key both roam with the user profile by default | Low | Desktop (storage) | Open (planned) |
+| DT4 | Linux screen-lock detection disables itself for the rest of the run after three transient probe failures | Low | Desktop (oslock) | Open (planned) |
+| DT5 | NSIS pre-install hook ran `taskkill` without a path (binary planting from the installer's folder) | Low | Desktop (Windows installer) | **Fixed** |
+| DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | Open (planned) |
+| SV-2 | Pull pages are limited by row count, not bytes; an ordinary vault can permanently exceed the client's 17 MiB cap and sync stops for good | Medium | Server / sync client | Open (planned) |
+| SV-3 | Any account holder can exhaust the server's memory and disk (no byte bound on pull/fetch, no per-account quota) | Low | Server | Open (planned; same fix as SV-2) |
+| SV-4 | Unauthenticated login is an Argon2id amplifier that can starve the DB connection pool (no wait timeout) | Low | Server (auth) | Open (planned) |
+| SV-5 | Restoring a server backup leaves every replica silently out of step (cursor ahead, ghost items, permanent conflicts) | Low | Server / sync | Open (planned) |
+| SV-6 | The sync client honours system/environment proxies, contrary to its manifest comment | Info | Sync client | Accepted (same-user precondition) |
+| SV-7 | A malicious server can force maximum-cost Argon2id and an unbounded pull loop | Info | Server / sync client | Accepted (subsumed by S5/S6) |
+| SV-8 | `admin new-account --server-url` accepts `http://localhost.evil.com` by prefix match | Info | Server (admin CLI) | Accepted (client fails closed regardless) |
+| SC1 | Signing secrets were exposed to the entire `cargo build`/`tauri build` process, not just the sign step | Medium | CI (release workflow) | **Mitigated** |
+| SC2 | The main release build did not pin `cargo build` to `--locked` | Low | CI (release workflow) | **Fixed** |
+| SC3 | No automated secret scanning in CI | Info | CI | Open (planned) |
+
+### Details
+
+#### CR1 / SV-1. Overview/details splice across revisions (Medium, open)
+**Attack scenario:** a hostile or compromised `havenkeys-server` operator keeps every blob version it has ever received. It later serves an item made of an old overview (stale URL rules, or a stale `auto_sign_in` flag) paired with a newer details blob (the current password), or the reverse. Each blob authenticates on its own — the AEAD's AAD binds only purpose, vault ID and item ID, never a revision or the sibling blob — so `check_item_bytes` accepts the pair as an ordinary update. The item then matches an origin the user has since removed, and `fill_for_page`/`totp_for_page` hand that origin the *current* secret. The user still has to pick the suggestion; there is no silent fill.
+**Evidence:** CR1 CONFIRMED via a throwaway probe crate linking the real `havenkeys-core` (`scratchpad/cr/probe`); SV-1 CONFIRMED independently via a separate throwaway crate (`scratchpad/sv/mix`) — both reproduce the same splice through the public core API and land the *new* password on the *removed* domain.
+**Suggested fix:** bind the two blobs of one write together — a random per-write id, or `SHA-256` of one blob, carried in both plaintexts (or both AADs) and checked in `check_item_bytes` — plus the per-item monotonic revision floor already proposed for plain replay (`docs/server-sync.md` §7, `docs/threat-model.md` T1b).
+**KNOWN?** Item replay in general is already documented and accepted (#9, S5, T1b); the cross-revision *splice* and its confidentiality effect (rather than just integrity/availability) were not recorded before this scan.
+
+#### CR2. Settings fallback to "on" when the settings blob is missing or won't open (Low, open)
+**Attack scenario:** someone who can write `vault.sqlite3` but has no keys (a tampered or restored backup, or another local account with file access) corrupts or deletes the `settings` row. `open_session` discards the failure and silently falls back to `Settings::default()`, which is `auto_sign_in = true` and `auto_passkey_upgrade = true` — switching a user who had turned both off back to automatic behavior, with nothing shown in `status()` or `damaged_items`.
+**Evidence:** CONFIRMED — a probe corrupts the settings row, unlocks again, and observes `auto_sign_in=true auto_passkey_upgrade=true` with `damaged_items: 0`.
+**Suggested fix:** on a settings blob that exists but fails to open or validate, fall back to the most restrictive values and surface a `damaged_settings` flag; keep `Settings::default()` only for the genuine "no row yet" case.
+
+#### CR3. Unbounded ZIP central-directory parsing in `.1pux` import (Low, open)
+**Attack scenario:** a crafted `.1pux` (an in-scope hostile input) is a ZIP64 archive with an empty export and a million empty `files/*` entries. `ZipArchive::new` builds per-entry metadata for the whole central directory before any HavenKeys size or count check runs, costing about 7× the archive's size in memory — enough to exhaust memory on a small machine well inside the existing 256 MiB archive cap.
+**Evidence:** CONFIRMED — a 98 MB / 1,000,000-entry crafted `.1pux` parsed at 717 MB peak RSS in 933 ms; extrapolated to the 256 MiB cap, roughly 1.8 GB.
+**Suggested fix:** read the end-of-central-directory record (or use the zip crate's own entry-count limit) before calling `ZipArchive::new`; refuse more than about 10,000 entries.
+
+#### BR-1. Windows pipe squatting: understated impact on the existing P10 entry (Medium, open)
+**Attack scenario:** another account on the same Windows machine pre-computes and creates the predictable named pipe (a hash of the profile path) before HavenKeys starts, or after it exits; the client side of `Endpoint::connect` never verifies who owns the server end of the pipe it opens. The existing P10 entry above (Native Messaging Phase) says the squatter "would receive your page URLs and could return fake answers. It could not read your vault." That is incomplete: every login form the victim submits sends `check_login {url, username, password}` with the **plaintext typed password**, automatically, before any save prompt, and a confirmed save sends `save_login` the same way. The squatter can also answer `generate_password` with a password of its own choosing, or answer `fill_item`/`autoSubmit: true` with attacker-controlled credentials to silently sign the victim into an attacker account. This is a cross-user credential compromise, in scope because P1 already treats other local users as attackers.
+**Evidence:** LIKELY (Windows is not runnable in this environment); traced through `crates/havenkeys-protocol/src/endpoint.rs:103-147`, `crates/havenkeys-native-host/src/lib.rs:95-110`, and `apps/extension/src/background/inline-handler.ts:241-243`.
+**Suggested fix:** on Windows, have `Endpoint::connect` check the pipe server process's token SID against the caller's own SID (`GetNamedPipeServerProcessId` + `GetSecurityInfo`) before trusting the connection; surface a failed `serve()` in Settings → Browser extension instead of swallowing it.
+**Note on P10 (this file, Native Messaging Phase, above):** P10's recorded impact — "could not read your vault" — remains true but is incomplete on its own: a squatter cannot read the vault, but it does receive plaintext passwords the user types or generates during the squatted session, and can plant fake fills. Read P10 together with this finding until it is fixed; status stays Open.
+
+#### BR-2. Per-item rate-limit budget spent before authorization or success (Low, open)
+**Attack scenario:** `allow_item_update` runs before dispatch, so a denied request (wrong origin, unknown item ID) or a failed write (server offline) still spends the item's 10-minute budget. A legitimate retry after a transient server outage is then refused as `rate_limited`, or a compromised extension/same-user process (P9, accepted) can jam a known item's password-update budget indefinitely without ever touching it. Availability only; no secret or integrity impact.
+**Evidence:** CONFIRMED by the existing test `password_updates_are_limited_per_item` (`crates/havenkeys-bridge/tests/bridge.rs:692`).
+**Suggested fix:** check the per-item budget without recording it before dispatch; record it only after `(self.inner.save)(…)` returns `Ok`.
+
+#### EX-01. Popup Fill into a CSP-sandboxed document (Medium, open)
+**Attack scenario:** a site hosts user-uploaded HTML under `Content-Security-Policy: sandbox allow-scripts` on its own origin — a standard way to host untrusted content "safely" same-origin. The document gets an opaque origin, but `tab.url` still reports the real site, so the HavenKeys popup offers the real saved login. `fillTab` injects the content script via `chrome.scripting.executeScript`, which does run inside sandboxed documents, and `handleFill` compares against `location.origin` (the document's real origin, not `"null"`), so the fill proceeds. The attacker's script running in the sandboxed document then reads the filled username, password, and (with Code → fill) TOTP code. The in-page, non-popup fill path is already safe: it rejects `sender.origin === "null"`.
+**Evidence:** CONFIRMED — browser behaviour reproduced with a Playwright/Chromium build serving a `sandbox allow-scripts allow-forms` test page (`scratchpad/ex/t2.mjs`); the HavenKeys code path (`background/index.ts:79-87`, `background/popup-handler.ts:149-170`, `content/index.ts:357`) confirmed by reading.
+**Suggested fix:** in `handleFill` (and the passkey bridge, as defence in depth), refuse unless `self.origin === location.origin`; or probe with `executeScript({func: () => self.origin})` before injecting from the popup path. Correct `docs/native-messaging.md:343`'s unqualified "a sandboxed frame (origin null) is ignored."
+
+#### EX-02. Visible-field heuristic and missing form-action check (Low, open)
+**Attack scenario:** with only HTML/CSS injection on the credential's origin (no script needed), an attacker places a genuine `<input type=password>` off-screen, clipped, covered, or shrunk to 4×4px at near-zero opacity, alongside a visible-looking form whose `action` points at an attacker-controlled origin. `isRendered`/`isFillable` treat all of these as fillable, so the password lands in a field the user never saw; if auto sign-in is on (the default), the extension also auto-presses the submit button, posting the password cross-origin.
+**Evidence:** CONFIRMED — `scratchpad/ex/t3.mjs` bundles the real `group.ts`/`fill.ts`/`submit.ts` and shows off-screen, clipped and covered fields all get filled (only `opacity:0` and smaller are excluded).
+**Suggested fix:** require viewport intersection and an `elementFromPoint` hit-test in `isRendered`; never fill a password field other than one that is itself hit-testable; do not auto-press (and consider not filling at all without a warning) when the form/button's `action`/`formaction` resolves to a different origin than the frame. Correct the Phase 5 "Verified properties" claim that hidden honeypot fields are never touched — that only holds for `opacity:0`/`display:none`/`visibility:hidden`/sub-4px fields.
+
+#### EX-03. Menu/save tokens in the iframe `src` are re-framable (Low, open)
+**Attack scenario:** on the credential's own origin (XSS), a page reads the one-time token out of the real menu iframe's `src`, then creates its own transparent `<iframe src="…/menu.html#token">` under a bait button in a way that avoids the attribute/removal MutationObserver. After the 400 ms arming delay, a click on the bait is accepted as a real pick, filling the page's own field where the script reads it. The same applies to `save.html`, and `cs_ready` hands a pending save token to whatever page loads next in the tab, from any origin. On Chromium, IntersectionObserver v2 still blocks this; on Firefox nothing does.
+**Evidence:** CONFIRMED by code; the Chromium mitigation's continued effectiveness was verified directly (`scratchpad/ex/t.mjs`: a 60×30 or covered frame correctly reports `isVisible:false`).
+**Suggested fix:** never put the token in the frame's URL — create the frame first, then post the token over `postMessage`/a `MessageChannel` after `load`; bind `cs_ready`'s pending save token to the submitting frame's origin.
+**KNOWN?** Substantially, as F3 (mitigated, Firefox delay only) and PK7 (both above). New here: F3's `!important` styles and tamper observer add nothing against a hostile page — it is fully bypassable by re-framing — and the save token can leak to a cross-origin next page in the same tab.
+
+#### EX-04. Save-prompt oracle on a planted username (Info, accepted)
+After the F1 fix, a script that already knows the user's typed password can still rewrite the username field and force a submit, learning (from whether a save prompt appears) which saved username the vault holds that password under. **Why accepted:** a narrow residual of the already-accepted F1 tradeoff — the attacker must already have the password and learns only which of the site's own usernames it is saved under, at the existing rate limit.
+
+#### DT1. Server session installed after lock; locked-but-online desktop (Low, open)
+**Attack scenario:** `sync::connect`/`sign_in` spawn a server login in the background and install the resulting session with `set_online` without re-checking the vault's lock state or epoch. A malicious or slow server can simply hold the response until the vault locks (user lock, screen lock, extension-driven lock); the session then lands after the lock, leaving a *locked* vault reachable as "online": the bearer token stays resident, `sync_now` polls every 60 s and fails silently without going offline, and `list_devices`/`revoke_device` (which check only `state.session()`, not `is_unlocked()`) work from a locked renderer, contrary to the documented invariant that a locked vault has no session.
+**Evidence:** LIKELY, traced through `apps/desktop/src-tauri/src/sync.rs:139-167`, `account.rs:199-202,338-367`; not exercised against a running app with a deliberately delayed server.
+**Suggested fix:** capture the vault epoch when the login is spawned; install the session only under the vault guard and only if still unlocked at the same epoch; add an explicit `is_unlocked()` check to `list_devices`/`revoke_device`.
+
+#### DT2. `open_item` from the bridge resets the idle timer (Low, open)
+**Attack scenario:** a compromised extension, or any same-user process (P9, accepted) that can name two logins matching a claimed page, alternates `open_item` between them every few minutes. Each triggers `ItemEditor` remounting, which calls `get_settings`/`reveal_secret` — both of which call `touch()` — so the idle timer never expires and the vault stays unlocked indefinitely while nobody is at the machine.
+**Evidence:** LIKELY, by code trace; same class as the already-fixed #1 (TOTP polling kept the vault unlocked).
+**Suggested fix:** stop `get_settings` and the editor's automatic note load from calling `touch()`; rely on `record_activity` for genuine interaction.
+
+#### DT3. Vault and Secret Key roam with the Windows profile (Low, open)
+**Attack scenario:** on a domain-joined machine with roaming profiles, `app_data_dir()` resolves to `%APPDATA%` (roaming), and the keychain store defaults to `CRED_PERSIST_ENTERPRISE`, so both the encrypted vault file and the Secret Key (in Credential Manager, or in `device.json` on the file-store fallback) are copied to the profile server at every logoff — undermining the Secret Key's stated purpose of protecting copies that leave the device.
+**Evidence:** LIKELY, from the vendored `tauri` and `windows-native-keyring-store` sources plus `lib.rs:59-72`/`secret_store.rs:233-237`; not verified on a real roaming profile.
+**Suggested fix:** use `%LOCALAPPDATA%` (`dirs::data_local_dir()`) for the vault and `device.json`; create the keychain entry with `persistence: Local`. At minimum, document the limitation next to S20.
+
+#### DT4. Linux screen-lock detection disables itself permanently after transient failures (Low, open)
+**Attack scenario:** three consecutive `loginctl` probe failures (a 2 s timeout under load, a D-Bus/logind restart, resume from suspend) permanently set the probe to "unknown" for the rest of the run, silently disabling screen-lock-triggered vault locking until restart, with nothing shown anywhere. A local attacker who can load the machine, or ordinary system hiccups, can trigger it.
+**Evidence:** LIKELY, code read.
+**Suggested fix:** back off and retry instead of disabling permanently; show a Settings indicator when screen-lock detection is unavailable.
+
+#### DT5. NSIS pre-install `taskkill` without a path (Low, **fixed**)
+The hook originally ran `nsExec::Exec 'taskkill /F /IM havenkeys-native-host.exe'`, an unqualified program name that `CreateProcess` resolves by searching the running executable's own directory first — typically `Downloads` for a manual install, where a drive-by-planted `taskkill.exe` could then run as the user. `apps/desktop/src-tauri/windows/hooks.nsh` now calls `"$SYSDIR\taskkill.exe"` explicitly, closing the planting path. Automatic updates were never affected: the updater downloads into a fresh random temp directory.
+
+#### DT6. Unreadable `device.json` silently replaced (Info, open)
+**Scenario:** `Device::load` treats both a read error and any parse failure (including an unknown field on a downgrade, since the type is `deny_unknown_fields`) as "absent," and immediately overwrites it with a new UUID and `file_key: None` — discarding the only copy of a file-stored Secret Key on machines where the keychain wasn't available, and creating a new device identity on the server. Availability only, not confidentiality.
+**Suggested fix:** don't overwrite on a read error; move the file aside (rather than replace it) on a parse error.
+
+#### SV-2. Pull pages bounded by row count, not bytes (Medium, open)
+**Attack scenario (no attacker required):** the server pages pulls at up to 500 rows with no byte cap; the client refuses any response over 17 MiB. A vault whose first 500 rows exceed that — as few as 13 one-megabyte secure notes, or roughly 500 items averaging 35 KB — wedges every device that signs in from cursor 0 at the same point, forever; a `TooLarge` failure never takes the device offline, so it looks "online" while never catching up on later items or deletions.
+**Evidence:** LIKELY, measured with the real core: a single 1 MiB ASCII note serializes to about 1.4 MB of base64, so about 12.7 fit per 17 MiB page; a note using `\u0001`-escaped bytes serializes about 6× larger, so about 2.1 fit.
+**Suggested fix:** cut pages by a byte budget (for example, 12 MiB) as well as by row count, on both `/v1/sync` and `/v1/items/fetch`; surface `TooLarge` as a visible "sync stuck" state instead of a silent per-tick failure.
+**KNOWN?** No — S9 (above) covers per-field limits on pulled items, not page size; `transport.rs`'s comment calling 17 MiB "the largest answer the protocol can legitimately produce" is not accurate given the measurements above.
+
+#### SV-3. No byte bound or per-account quota on pull/fetch (Low, open)
+**Attack scenario:** any account holder writes about 100 items with ~6 MiB blobs each (each write within the 16 MiB body cap), then calls `/v1/sync?since=0`; the server materializes the whole page (up to 1001 rows) into memory before building JSON — several GB for one request — OOM-killing the container and every account hosted on it.
+**Suggested fix:** the same byte-budgeted paging as SV-2, plus a per-account storage cap enforced in the write transaction.
+
+#### SV-4. Unauthenticated login as an Argon2id amplifier starving the DB pool (Low, open)
+**Attack scenario:** an outsider floods `/v1/auth/login` with random emails (each gets its own decoy key, so the per-account counter never fires); the per-address limiter is weaker than it looks — a routed IPv6 /64 gives a fresh budget per source address when the server isn't behind a proxy, and check-then-record is a race under a concurrent burst. Every login holds one of 10 pooled DB connections through a full Argon2id run, and `pool.get()` has no wait timeout, so authenticated `/v1/sync`/`/v1/items` requests queue until the client's own 30 s timeout gives up — devices drop to offline or read-only.
+**Suggested fix:** give `pool.get()` a wait timeout; release the connection before verifying; bound concurrent Argon2id work with a semaphore that fails fast; key the per-address limiter on the /64 for IPv6; make the check-then-record update atomic.
+**KNOWN?** Partly — `X-Forwarded-For` spoofing is already documented, and S8 (above) covers limiter lock-out; the IPv6 /64 rotation, the check-then-record race, and unbounded pool-wait starvation are new.
+
+#### SV-5. Backup restore leaves replicas silently out of step (Low, open)
+**Scenario (operational, not an attacker):** after the documented backup-restore mitigation for S5 (above), the server's revision counter can fall below what existing devices have already seen. Items created or edited after the snapshot then conflict forever, new writes can collide with revisions devices already consider pulled, and nothing ever removes the resulting ghost items. The restore drill in `docs/deployment.md` §5 only checks that a *fresh* sign-in sees the items, not what happens to devices that were already signed in.
+**Suggested fix:** store a server-side "vault epoch" that changes on every restore (or detect a revision below the client's cursor), and have the client wipe and re-pull from zero when it changes; update the restore procedure to say every existing device needs a fresh pull, not just `reset_sync_cursor`.
+
+#### SV-6. Sync client honours proxy environment variables (Info, accepted)
+Contrary to the crate's own "no proxy auto-detection" comment, `reqwest`'s default system-proxy detection is active. This only matters for the `http://localhost`/`127.0.0.1` development URL — production traffic is `https`, so a proxy sees only an opaque CONNECT tunnel — where a `HTTP_PROXY`/`ALL_PROXY` set in the user's own environment would see the bearer token and auth key in cleartext. **Why accepted:** this needs control of the user's own environment, the same same-user precondition already accepted elsewhere in this document (P9). A one-line `.no_proxy()` fix, or correcting the comment, is cheap if this file is touched again.
+
+#### SV-7. A malicious server can force maximum-cost KDF work and an unbounded pull loop (Info, accepted)
+Server-supplied KDF parameters and `hasMore` paging are both accepted anywhere inside their validated ranges, so a hostile server can make every sign-in or unlock-fallback cost a 1 GiB/t=16 Argon2id run, or keep a sync loop running indefinitely. **Why accepted:** neither leaks anything — the derived key still can't open the header without the Secret Key — and a hostile server can already refuse service outright, which is already accepted as inherent (S5, S6, above).
+
+#### SV-8. Admin CLI accepts `http://localhost.evil.com` by prefix match (Info, accepted)
+`admin new-account --server-url` checks `starts_with("http://localhost")` rather than parsing the host, but the sync client's own `HttpTransport::new` compares the exact host and refuses the URL, so activation fails closed regardless. **Why accepted:** no practical impact given the client-side check; worth tightening if the admin CLI is touched again.
+
+#### SC1. Signing secrets exposed to the whole build (Medium, **mitigated**)
+The release workflow previously ran `tauri-action` (which compiles the entire `havenkeys-desktop` dependency graph via `tauri build`, then signs) with `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` set as step `env:` for that whole step — any `build.rs` from a compromised or typosquatted dependency would inherit those secrets and could exfiltrate them from a GitHub-hosted runner with outbound network access. `.github/workflows/release.yml` now splits the job: a "Compile the app (no signing secrets)" step runs `pnpm tauri build --no-bundle --config src-tauri/tauri.bundle.conf.json ... -- --locked`, which builds every dependency, proc macro and the frontend without the signing key present; the later `tauri-apps/tauri-action` step (the one that does hold the key) only packages and signs, with `tauri.package.conf.json` replacing the frontend build with a no-op and Cargo reusing the artifacts already built in the first step. **Residual:** the Tauri CLI itself, the bundler's own tooling, and anything that still ends up recompiling inside the signing step run with the key present. Verification that no dependency actually recompiles during the signing step, at a real release, is pending — see the checklist below.
+
+#### SC2. Main release build not pinned to `--locked` (Low, **fixed**)
+Both the compile step and the packaging/signing step now pass `-- --locked`, matching the discipline `scripts/build-native-host-sidecar.mjs` already had for the sidecar build, so a `Cargo.lock` desynced from `Cargo.toml` at tag time fails the build instead of silently re-resolving dependencies.
+
+#### SC3. No automated secret scanning in CI (Info, open)
+`gitleaks` has been run manually against the full repository history at least once (2026-09-23, two reviewed and confirmed-benign findings), but nothing runs it on push or PR, so a future accidental secret commit would only be caught if someone remembers to run it by hand.
+**Suggested fix:** add a lightweight `gitleaks`/`trufflehog` step to a PR-triggered workflow with `permissions: contents: read` only.
+
+### Checked and sound
+
+**Crypto and vault core:**
+* KDF parameters are floor/ceiling-checked on every derivation path, including a server- or file-supplied header; a weakened KDF still cannot unwrap the vault key without the Secret Key.
+* AEAD is AES-256-GCM with a CSPRNG nonce on every seal and unambiguous AAD binding version, algorithm, purpose, vault and item; there is no downgrade path for unknown versions or algorithms.
+* The key hierarchy (HKDF with distinct `info` labels, a 128-bit CSPRNG Secret Key, separated data/vault keys) and every secret-returning path (gated on an unlocked session) hold up as documented.
+* Rekeying, header adoption and epoch checks all refuse a stale, mismatched, or wrong-vault state.
+* The password generator uses rejection sampling and an unbiased shuffle over a CSPRNG; TOTP correctly bounds digits/period/secret length; passkey signing uses RFC 6979 with the RP ID checked against the browser-reported URL under PSL-aware registrable-domain rules.
+* `Debug` output is redacted on every secret-bearing type; SQLite statements are all parameterized and the vault file is created 0600.
+
+**Bridge and native messaging:**
+* No path returns or changes anything while locked, with integration off, for a non-matching item, or for an unauthorized RP ID — verified across 43 origin-matching, 34 `authorize_rp`, and 13 protocol-parsing test cases.
+* Fill, TOTP, save-login and passkey operations are all independently origin/RP-bound in Rust, never trusting the extension's own claims.
+* Framing, malformed messages and oversized messages are all rejected safely on both hops; Unix socket and Windows pipe peer identity are both checked (Windows pipe *squatting before the peer check runs* is BR-1).
+* Rate limits, native-host manifest registration, and the AppImage/translocated-app path-hijack protection all hold as documented.
+
+**Browser extension:**
+* Senders are told apart only from browser-provided data (tab URL, `sender.origin`, `sender.url`), never from page-supplied message content, for authorization decisions.
+* Menus and picks require a trusted user gesture, are single-use and tab-bound, and expire; auto sign-in runs are bound to tab/frame/origin, move forward only, and end on any trusted user input.
+* Secrets never reach the menu/save/passkey UI beyond titles and usernames rendered with `textContent`; a full grep of `src` (excluding tests) finds no `innerHTML`, `eval`, browser storage API, or unexpected `postMessage`.
+* Extension CSP has no `unsafe-*`; permissions are `nativeMessaging`/`activeTab`/`scripting` only, with host access optional and user-granted; the full suite (26 files, 338 tests) passes.
+
+**Desktop (Tauri):**
+* The Tauri command allowlist is exactly the 43 commands the build declares, with no `allow-emit` and no filesystem/shell/http/dialog plugin permission beyond what's needed; the production CSP has no `unsafe-*` and navigation to non-app URLs is refused.
+* Master-password change, rekey, and header adoption all require the current password and epoch, and are only committed after the server accepts.
+* TOTP seeds and passkey private keys never reach the renderer; the QR-scan token and the import file path are both time-boxed and cleared on lock.
+* Locking drops the vault session, clears the clipboard, scan slot and import state, and remounts the whole vault UI tree, so no revealed secret survives in React state.
+* The updater's install order (download → verify signature → lock → install) is enforced by the plugin and the function's straight-line structure, and no updater plugin permission reaches the renderer.
+
+**Server and sync client:**
+* The auth key is a separate HKDF branch requiring the 128-bit Secret Key; a server, or a server-chosen weak KDF, cannot turn it into a password guess, and a downgraded KDF cannot open the real header.
+* Authorization on every route is derived from one session query keyed on account/device/vault; there is no IDOR, and item AEAD (AAD = purpose ‖ vault ‖ item) prevents cross-item or cross-vault substitution — the one exception, same-item version splicing, is CR1/SV-1 above.
+* Sessions are 256-bit CSPRNG tokens stored only as SHA-256 with 24 h expiry; invites are single-use, TTL-bound, and compared in constant time; SQL is fully parameterized; enumeration is defended with decoy KDF parameters and uniform error responses.
+* Client TLS uses rustls with default verification; `http` is allowed only for exact localhost addresses; the container runs as non-root with no build-time secrets.
+
+**Supply chain:**
+* No committed secret anywhere in git history (targeted `-S` searches across all refs for private-key, AWS, Slack and GitHub token markers all return nothing); `.gitleaksignore`'s two entries are genuinely benign on inspection.
+* `cargo audit`, `cargo deny check` and `pnpm audit` all pass, or show only the same pre-existing, already-triaged advisories as every earlier review in this document.
+* All GitHub Actions in `release.yml` are pinned to full commit SHAs; workflow permissions are `contents: write` only; the trigger is a tag push only (no `pull_request`/`pull_request_target`), so forked-PR secret exposure is not reachable.
+* pnpm's build-script gating is active and was observed live (an `esbuild` install script was ignored, not run); the Dockerfile excludes vault, import-export and `.env*` files from the build context via `.dockerignore` and runs the server as a non-root user.
+* The extension and website load no remote scripts, fonts, or stylesheets.
+
+### Pending manual checklist items
+
+| # | Check |
+|---|---|
+| SC-M1 | At the first release cut with the split compile/sign workflow (SC1 above): confirm the "Package, sign and attach installers" step's logs show no dependency, proc-macro, or frontend recompilation (nothing for Cargo to build beyond packaging/signing), and that every `.sig` asset's trusted comment still carries `version:<the release version>` — this repeats UM6 above, now also confirming SC1's isolation held in practice. |
