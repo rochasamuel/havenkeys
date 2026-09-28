@@ -31,13 +31,26 @@ const NEGATIVE = [
   "download", "app store", "teams", "office", "outlook", "music", "pay", "wallet", "podcasts", "tv",
 ];
 // Phrases safe to recognise as consent at the *start* of a label, at any
-// length: verbs no one is named after ("Continue as <the long account the
-// page chose>" must still be caught however long the account text is).
-// "grant"/"allow"/"accept"/"aceitar" stay in CONSENT_WORDS below instead of
-// here: they are common given names too ("Grant Smith"), so they only count
-// as consent for a short, bare button label, not merely at the start of one.
-const CONSENT_PREFIXES = ["continue as", "continuar como", "authorize", "authorise", "permitir", "autorizar"];
-const CONSENT_WORDS = ["allow", "accept", "aceitar", "continue", "continuar", "confirmar"];
+// length: verbs (or verb + object) no one is named after, so a long
+// trailing account or app name ("Allow access for <the long account the
+// page chose>", "Grant access to <a long application name>") is still
+// caught. Bare "allow" is included: an account row never starts with the
+// verb "Allow". Bare "grant" is deliberately excluded — it is a common
+// given/family name ("Grant Smith"), and no position- or length-based
+// string check can tell "Grant Smith" from "Grant access" apart by the
+// word "grant" alone; only the longer, unambiguous "grant access"/"grant
+// permission(s)" phrases are recognised. "accept"/"aceitar" stay in
+// CONSENT_WORDS below (common enough as a bare short button) rather than
+// here, since a name could plausibly start with them too.
+const CONSENT_PREFIXES = [
+  "continue as", "continuar como",
+  "authorize", "authorise", "permitir", "autorizar",
+  "allow", "allow access",
+  "grant access", "grant permission", "grant permissions",
+  "accept and continue", "aceitar e continuar",
+  "conceder acesso", "permitir acesso",
+];
+const CONSENT_WORDS = ["accept", "aceitar", "continue", "continuar", "confirmar"];
 /** A short bare consent word only counts within this length. */
 const MAX_CONSENT_LABEL_CHARS = 30;
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;

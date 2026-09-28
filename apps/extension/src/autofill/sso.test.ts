@@ -85,4 +85,12 @@ describe("account chooser", () => {
     expect(isConsentScreen(root, env)).toBe(false);
     expect(chooserRow(root, "grant@x.io", env)).not.toBeNull();
   });
+  it("never presses a long 'Allow access …' or 'Grant access …' consent button", () => {
+    const allow = page(`<button>Allow access for a.long.name@gmail.com</button>`);
+    expect(isConsentScreen(allow, env)).toBe(true);
+    expect(chooserRow(allow, "a.long.name@gmail.com", env)).toBeNull();
+
+    const grant = page(`<button>Grant access to Some Long Application Name Inc</button>`);
+    expect(isConsentScreen(grant, env)).toBe(true);
+  });
 });
