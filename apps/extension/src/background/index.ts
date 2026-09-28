@@ -21,6 +21,7 @@ import { createInlineHandler, type AutoRun, type FrameRef } from "./inline-handl
 import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
+import { getInlineSuggestions } from "../shared/prefs";
 import { createWebAuthnHandler } from "./webauthn-handler";
 import { parsePkRequest, parseWaRequest, type BgWaResize, type BgWaResult } from "../webauthn/messages";
 
@@ -67,6 +68,7 @@ const inline = createInlineHandler({
   passkeys,
   passkeySite: (url) => findPasskeySite(url),
   openTab: (url) => void chrome.tabs.create({ url }).catch(() => undefined),
+  suggestionsOn: getInlineSuggestions,
 });
 
 async function activeTab(): Promise<ActiveTab | undefined> {

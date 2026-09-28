@@ -728,3 +728,33 @@ describe("automatic sign-in", () => {
     expect(await h.handleContent(frame(), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
   });
 });
+
+describe("suggestions preference", () => {
+  const off = { suggestionsOn: async () => false };
+
+  it("opens no menu of any kind when off, even from the field icon, and asks the desktop nothing", async () => {
+    const { h, requests } = setup(defaultAnswer, off);
+    for (const kind of ["login", "otp", "new_password"] as const) {
+      expect(await h.handleContent(frame(), { type: "cs_open_menu", kind })).toEqual({ ok: false });
+      expect(await h.handleContent(frame(), { type: "cs_open_menu", kind, explicit: true })).toEqual({ ok: false });
+    }
+    expect(requests).toEqual([]);
+  });
+
+  it("still offers to save a new login and to update a changed password when off", async () => {
+    const { h, sent } = setup(defaultAnswer, off);
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "typed" });
+    expect(await h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { action: "add" } });
+    expect(sent[0]?.msg).toEqual({ type: "bg_show_save", token: T1 });
+
+    const upd = setup((r) => (r.type === "check_login" ? { type: "check_login", action: "update", itemId: GH } : defaultAnswer(r)), off);
+    await upd.h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "changed" });
+    expect(await upd.h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { action: "update" } });
+  });
+
+  it("still reshows a pending save prompt on the next page when off", async () => {
+    const { h } = setup(defaultAnswer, off);
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "pw" });
+    expect(await h.handleContent(frame(), { type: "cs_ready" })).toMatchObject({ saveToken: T1 });
+  });
+});

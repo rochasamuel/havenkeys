@@ -78,6 +78,8 @@ export interface InlineDeps {
   passkeySite?(url: string): PasskeySite | null;
   /** Opens a new tab, e.g. for the directory's help link. */
   openTab?(url: string): void;
+  /** Whether the field menu may open (the options page preference). Absent: on. */
+  suggestionsOn?(): Promise<boolean>;
 }
 
 export const MENU_TTL_MS = 5 * 60_000;
@@ -180,6 +182,8 @@ export function createInlineHandler(deps: InlineDeps) {
   // ------------------------------------------------------------ content script
 
   async function openMenu(frame: FrameRef, kind: MenuKind, explicit: boolean): Promise<OpenMenuReply> {
+    // The user hid the menu under login fields; saving and passkeys go on.
+    if (deps.suggestionsOn && !(await deps.suggestionsOn())) return { ok: false };
     let locked = false;
     let items: Match[] = [];
     try {
