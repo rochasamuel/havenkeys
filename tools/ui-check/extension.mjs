@@ -254,6 +254,70 @@ export const extensionScenarios = [
     },
   },
 
+  // ---------------------------------------------------------------- sign in with
+  {
+    name: "sso-offer",
+    page: "sso.html",
+    frame: { kind: "sso" },
+    replies: () => ({
+      sso_state: ok({
+        mode: "offer",
+        site: "github.com",
+        rows: [
+          { id: ID1, provider: "google", title: "GitHub", account: "octocat@example.com" },
+          { id: ID2, provider: "github", title: "GitHub - Work", account: null },
+        ],
+      }),
+    }),
+  },
+  {
+    name: "sso-offer-long",
+    page: "sso.html",
+    frame: { kind: "sso" },
+    replies: () => ({
+      sso_state: ok({
+        mode: "offer",
+        site: "accounts.example-with-a-long-hostname.com",
+        rows: [
+          {
+            id: ID1,
+            provider: "microsoft",
+            title: "A very long saved login title that keeps going and going",
+            account: "firstname.lastname.with-a-long-address@corporate-example.com",
+          },
+        ],
+      }),
+    }),
+  },
+  {
+    name: "sso-save-add",
+    page: "sso.html",
+    frame: { kind: "sso" },
+    replies: () => ({
+      sso_state: ok({ mode: "save", site: "github.com", provider: "github", account: "octocat@example.com", title: "GitHub", action: "add" }),
+    }),
+  },
+  {
+    name: "sso-save-update",
+    page: "sso.html",
+    frame: { kind: "sso" },
+    replies: () => ({
+      sso_state: ok({ mode: "save", site: "accounts.google.com", provider: "google", account: null, title: null, action: "update" }),
+    }),
+  },
+  {
+    name: "sso-notice",
+    page: "sso.html",
+    frame: { kind: "sso" },
+    replies: () => ({ sso_state: ok({ mode: "notice", site: "github.com", provider: "apple" }) }),
+  },
+  {
+    name: "sso-expired",
+    page: "sso.html",
+    frame: { kind: "sso" },
+    replies: (x) => ({ sso_state: err(x.promptExpired) }),
+  },
+
   // ---------------------------------------------------------------- passkey card
   {
     name: "passkey-locked",
@@ -366,7 +430,7 @@ export function chromeStub(setup) {
   const reply = (msg) => {
     sent.push(msg);
     const type = msg && msg.type;
-    if (type === "menu_resize" || type === "save_resize" || type === "pk_resize") {
+    if (type === "menu_resize" || type === "save_resize" || type === "sso_resize" || type === "pk_resize") {
       window.__hk.sizes[type] = msg.height;
       return { ok: true, value: null };
     }
@@ -409,7 +473,7 @@ export async function renderExtension(page, baseUrl, scenario, locale) {
   let height;
   if (f.kind === "popup") [width, height] = [320, 600];
   else if (f.kind === "menu") [width, height] = [f.width, MENU_HEADER + f.rows * MENU_ROW + MENU_PADDING];
-  else if (f.kind === "save") [width, height] = [SAVE.width, SAVE.height];
+  else if (f.kind === "save" || f.kind === "sso") [width, height] = [SAVE.width, SAVE.height];
   else if (f.kind === "passkey") [width, height] = [PASSKEY.width, PASSKEY.height];
   else [width, height] = [f.width, f.height];
   await page.setViewportSize({ width, height });
@@ -423,7 +487,7 @@ export async function renderExtension(page, baseUrl, scenario, locale) {
   }
 
   // Follow the size the page reports, as the content script / bridge would.
-  const key = { menu: "menu_resize", save: "save_resize", passkey: "pk_resize" }[f.kind];
+  const key = { menu: "menu_resize", save: "save_resize", sso: "sso_resize", passkey: "pk_resize" }[f.kind];
   if (key) {
     for (let i = 0; i < 4; i++) {
       await page.waitForTimeout(120);

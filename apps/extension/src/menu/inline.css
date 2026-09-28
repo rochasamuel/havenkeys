@@ -497,6 +497,54 @@ main {
   display: none;
 }
 
+/* "Sign in with" balloon: an offer list, the save/update question, or the
+   no-button notice, all in the .card.save shell (auto height). */
+
+.provider-icon {
+  flex: none;
+}
+
+.icon-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms;
+}
+
+.icon-close:hover {
+  background: var(--hover);
+}
+
+.icon-close:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+.sso .list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sso .provider {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
