@@ -5,6 +5,7 @@ use havenkeys_bridge::Bridge;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, Settings, UrlRule};
+use havenkeys_core::sso::{SignInWith, SsoProvider};
 use havenkeys_core::store::{AccountRecord, Store};
 use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
 use havenkeys_core::SecretString;
@@ -28,6 +29,7 @@ struct Fixture {
     github: Uuid,
     bank: Uuid,
     note: Uuid,
+    typeform: Uuid,
 }
 
 fn account() -> AccountRef {
@@ -131,6 +133,30 @@ fn build_fixture(writer: Option<()>) -> Fixture {
         )
         .unwrap();
     let note = v.commit_write(staged, 3).unwrap().unwrap().id;
+    let staged = v
+        .stage_create(
+            ItemInput {
+                item_type: ItemType::Login,
+                title: "Typeform".into(),
+                username: None,
+                urls: vec![UrlRule {
+                    url: "https://typeform.com".into(),
+                    match_type: MatchType::Domain,
+                }],
+                password: SecretUpdate::Keep,
+                totp: SecretUpdate::Keep,
+                notes: SecretUpdate::Keep,
+                content: SecretUpdate::Keep,
+                auto_sign_in: None,
+                sign_in_with: Some(SignInWith {
+                    provider: SsoProvider::Google,
+                    account: Some("me@gmail.com".into()),
+                }),
+            },
+            NOW,
+        )
+        .unwrap();
+    let typeform = v.commit_write(staged, 4).unwrap().unwrap().id;
 
     let vault = Arc::new(Mutex::new(v));
     let locks = Arc::new(AtomicUsize::new(0));
@@ -174,6 +200,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
         github,
         bank,
         note,
+        typeform,
     }
 }
 
@@ -922,6 +949,58 @@ fn passkey_status_through_the_bridge() {
     assert_eq!(status("https://github.com/")["result"]["hasPasskey"], false);
     f.vault.lock().unwrap().lock();
     assert_eq!(error_code(&status("https://github.com/")), Some("locked"));
+}
+
+fn start_sso(f: &Fixture, id: Uuid, url: &str) -> serde_json::Value {
+    call(f, serde_json::json!({"type": "start_sso", "itemId": id, "url": url}))
+}
+
+#[test]
+fn sso_flow_returns_no_secrets() {
+    let f = fixture();
+    let m = find(&f, "https://typeform.com/login");
+    let row = &m["result"]["matches"][0];
+    assert_eq!(row["provider"], "google");
+    assert_eq!(row["username"], "me@gmail.com", "the account stands in for a missing username");
+    let github_row = &find(&f, "https://github.com/")["result"]["matches"][0];
+    assert!(github_row["provider"].is_null());
+
+    let r = start_sso(&f, f.typeform, "https://typeform.com/login");
+    assert_eq!(
+        r["result"],
+        serde_json::json!({"type": "start_sso", "provider": "google", "account": "me@gmail.com",
+            "providerOrigins": ["https://accounts.google.com"], "autoChoose": true})
+    );
+}
+
+/// A1/A2 for sign-in-with: another site, another item, a locked vault.
+#[test]
+fn start_sso_attacks_are_denied() {
+    let f = fixture();
+    for (url, id) in [
+        ("https://evil.com/", f.typeform),
+        ("https://typeform.com.evil.com/", f.typeform),
+        ("https://github.com/", f.github), // a login without sign-in-with
+        ("https://typeform.com/", Uuid::new_v4()),
+        ("https://typeform.com/", f.note),
+    ] {
+        assert_eq!(error_code(&start_sso(&f, id, url)), Some("denied"), "{url}");
+    }
+    f.vault.lock().unwrap().lock();
+    assert_eq!(error_code(&start_sso(&f, f.typeform, "https://typeform.com/")), Some("locked"));
+}
+
+#[test]
+fn save_sso_flow() {
+    let f = online_fixture();
+    let r = call(&f, serde_json::json!({"type": "check_sso", "url": "https://typeform.com/", "provider": "google", "account": "ME@gmail.com"}));
+    assert_eq!(r["result"], serde_json::json!({"type": "check_sso", "action": "unchanged", "itemId": null}));
+    let r = call(&f, serde_json::json!({"type": "save_sso", "url": "https://canva.com/", "provider": "apple", "account": null, "itemId": null, "title": "Canva"}));
+    assert_eq!(r["result"]["type"], "save_sso");
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+    // Cannot retarget another site's login.
+    let r = call(&f, serde_json::json!({"type": "save_sso", "url": "https://evil.com/", "provider": "google", "account": "x", "itemId": f.typeform}));
+    assert_eq!(error_code(&r), Some("denied"));
 }
 
 // ------------------------------------------------------------------ socket

@@ -1,20 +1,21 @@
 //! Request → core call. The authorization decisions live in the core
 //! (`VaultService::{find_matches, fill_for_page, totp_for_page, check_login,
 //! save_login, find_passkeys, passkey_assert, check_passkey_create,
-//! stage_passkey_create, has_passkey_for_page}`); this layer
-//! adds the integration switch and maps types, and never widens what the core
-//! returns.
+//! stage_passkey_create, has_passkey_for_page, start_sso_for_page, check_sso,
+//! stage_save_sso}`); this layer adds the integration switch and maps types,
+//! and never widens what the core returns.
 
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::origin::MatchStrength as CoreStrength;
 use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
+use havenkeys_core::sso::SsoProvider as CoreProvider;
 use havenkeys_core::vault::{
     SaveAction as CoreSaveAction, SaveTarget, StagedSave, StagedWrite, VaultService, VaultState,
 };
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
     ErrorCode, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
-    ResultBody, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
+    ResultBody, SaveAction, SsoProvider as WireProvider, UpgradeHint, WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -69,6 +70,24 @@ fn strength(s: CoreStrength) -> MatchStrength {
     }
 }
 
+fn wire_provider(p: CoreProvider) -> WireProvider {
+    match p {
+        CoreProvider::Google => WireProvider::Google,
+        CoreProvider::Microsoft => WireProvider::Microsoft,
+        CoreProvider::Github => WireProvider::Github,
+        CoreProvider::Apple => WireProvider::Apple,
+    }
+}
+
+fn core_provider(p: WireProvider) -> CoreProvider {
+    match p {
+        WireProvider::Google => CoreProvider::Google,
+        WireProvider::Microsoft => CoreProvider::Microsoft,
+        WireProvider::Github => CoreProvider::Github,
+        WireProvider::Apple => CoreProvider::Apple,
+    }
+}
+
 fn now_ms(unix_seconds: u64) -> i64 {
     i64::try_from(unix_seconds.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
@@ -92,6 +111,10 @@ fn byte_list(v: &[String]) -> Result<Vec<Vec<u8>>, ErrorCode> {
 pub enum Dispatched {
     Done(ResultBody),
     Save(StagedSave),
+    /// A "Sign in with" login created or updated by `save_sso`. Same reason
+    /// as `Save`: the write reaches the server before the item ID is
+    /// returned.
+    SaveSso(StagedSave),
     /// A passkey sealed into its login. `result` is returned only after the
     /// server accepted `write`.
     CreatePasskey {
@@ -129,9 +152,11 @@ pub fn dispatch(
                 .map(|s| Match {
                     id: s.id,
                     title: s.title,
-                    username: s.username,
+                    // A sign-in-with login shows its account where a username would go.
+                    username: s.username.or(s.account),
                     has_totp: s.has_totp,
                     strength: strength(s.strength),
+                    provider: s.provider.map(wire_provider),
                 })
                 .collect();
             Ok(Dispatched::Done(ResultBody::FindMatches { matches }))
@@ -401,6 +426,45 @@ pub fn dispatch(
             } else {
                 Err(ErrorCode::Denied)
             }
+        }
+        Request::StartSso { item_id, url, top_url } => {
+            require_enabled(v)?;
+            let s = v.start_sso_for_page(item_id, url, top_url.as_deref()).map_err(item_code)?;
+            Ok(Dispatched::Done(ResultBody::StartSso {
+                provider: wire_provider(s.provider),
+                account: s.account.clone(),
+                provider_origins: s.provider.origins().iter().map(|o| (*o).to_owned()).collect(),
+                auto_choose: s.auto_choose,
+            }))
+        }
+        Request::CheckSso { url, top_url, provider, account } => {
+            require_enabled(v)?;
+            let (action, item_id) = match v
+                .check_sso(url, top_url.as_deref(), core_provider(*provider), account.as_deref())
+                .map_err(code)?
+            {
+                CoreSaveAction::Add => (SaveAction::Add, None),
+                CoreSaveAction::Update(id) => (SaveAction::Update, Some(id)),
+                CoreSaveAction::Unchanged => (SaveAction::Unchanged, None),
+            };
+            Ok(Dispatched::Done(ResultBody::CheckSso { action, item_id }))
+        }
+        Request::SaveSso { url, top_url, provider, account, item_id, title } => {
+            require_enabled(v)?;
+            let staged = v
+                .stage_save_sso(
+                    url,
+                    top_url.as_deref(),
+                    core_provider(*provider),
+                    account.as_deref(),
+                    match item_id {
+                        Some(id) => SaveTarget::Update(id),
+                        None => SaveTarget::New { title: title.as_deref() },
+                    },
+                    now_ms(unix_seconds),
+                )
+                .map_err(item_code)?;
+            Ok(Dispatched::SaveSso(staged))
         }
     }
 }

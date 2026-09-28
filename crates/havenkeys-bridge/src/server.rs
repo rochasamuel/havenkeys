@@ -162,7 +162,13 @@ impl Bridge {
             | Request::SaveLogin { .. }
             | Request::PasskeyGet { .. }
             | Request::PasskeyCreate { .. }
-            | Request::OpenItem { .. } => Some(RequestClass::Secret),
+            | Request::OpenItem { .. }
+            // Each follows a user action; `start_sso` has a visible effect
+            // (the provider's chooser page), and `check_sso` reveals which
+            // sites have logins.
+            | Request::StartSso { .. }
+            | Request::CheckSso { .. }
+            | Request::SaveSso { .. } => Some(RequestClass::Secret),
         };
         if let Some(class) = class {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
@@ -172,6 +178,9 @@ impl Bridge {
         // Password changes from the browser: one per item per interval.
         // Checked before the core, so probing unknown IDs also spends it.
         if let Request::SaveLogin {
+            item_id: Some(id), ..
+        }
+        | Request::SaveSso {
             item_id: Some(id), ..
         } = req
         {
@@ -191,6 +200,10 @@ impl Bridge {
                 let item_id = staged.item_id;
                 (self.inner.save)(staged.write).map(|()| ResultBody::SaveLogin { item_id })
             }
+            Ok(Dispatched::SaveSso(staged)) => {
+                let item_id = staged.item_id;
+                (self.inner.save)(staged.write).map(|()| ResultBody::SaveSso { item_id })
+            }
             Ok(Dispatched::CreatePasskey { write, result }) => {
                 (self.inner.save)(write).map(|()| result)
             }
@@ -208,7 +221,7 @@ impl Bridge {
         };
         if matches!(
             req,
-            Request::SaveLogin { .. } | Request::PasskeyCreate { .. }
+            Request::SaveLogin { .. } | Request::PasskeyCreate { .. } | Request::SaveSso { .. }
         ) && result.is_ok()
         {
             (self.inner.on_items_changed)();
