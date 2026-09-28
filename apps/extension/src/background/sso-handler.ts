@@ -198,7 +198,7 @@ export function createSsoHandler(deps: SsoDeps) {
       providerOrigins: s.providerOrigins,
       autoChoose: s.autoChoose,
     });
-    const { pressed } = parsePressReply(await deps.sendToFrame(frame, { type: "bg_sso_press", provider: s.provider }));
+    const { pressed } = parsePressReply(await deps.sendToFrame(frame, { type: "bg_sso_press", provider: s.provider, origin: frame.origin }));
     if (pressed) {
       state.pressed(frame.tabId);
       return { ok: true, value: null };

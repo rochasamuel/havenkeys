@@ -70,6 +70,8 @@ describe("offer", () => {
     expect(await h.handleFrame(1, { type: "sso_pick", token: r.token, itemId: ID })).toEqual({ ok: true, value: null });
     expect(requests.map((q) => q.type)).toEqual(["find_matches", "start_sso"]);
     expect(sent.map((s) => s.msg.type)).toContain("bg_sso_press");
+    // The press names the page's own origin, so a stale press after the frame navigated is refused there.
+    expect(sent.find((s) => s.msg.type === "bg_sso_press")?.msg).toMatchObject({ origin: top.origin });
     // Not on another origin (an iframe here: a top-frame load elsewhere would end the run),
     // and not in an unrelated tab.
     expect(h.ready({ tabId: 1, frameId: 4, url: "https://evil.com/", origin: "https://evil.com", topUrl: top.url }, { tabId: 1 })).toBeNull();

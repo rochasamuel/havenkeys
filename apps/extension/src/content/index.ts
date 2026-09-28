@@ -543,12 +543,19 @@ function start(): void {
     hideIcon();
     closeSave();
     sso.teardown();
+    ssoWatching = false;
     // A generated password must not be lost because we missed the submit
     // (e.g. a script-driven signup): offer it as the page goes away.
     // readSubmission only reports it if the field still holds our value.
     if (generatedIn) captureFrom(generatedIn, true);
     // Navigation is expected mid-run; the next page asks with cs_ready.
     endLocalRun(false);
+  });
+  // A page restored from the back/forward cache skips reload: sso.teardown()
+  // above already stopped its scan, so re-apply the preference to start it
+  // again (applySuggestions is a no-op otherwise).
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) applySuggestions(suggestions);
   });
 
   // ------------------------------------------------------------ background

@@ -315,6 +315,25 @@ describe("suggestion menus", () => {
     expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
   });
 
+  it("a menu opened from a non-top frame never offers sign-in-with logins (spec §6.2: only the top frame presses)", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h } = setup(
+      (r) =>
+        r.type === "find_matches"
+          ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }, { ...ghMatch, id: OTHER, provider: null }] }
+          : defaultAnswer(r),
+      { startSso },
+    );
+    await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
+      ok: true,
+      value: { items: [{ id: OTHER, title: "GitHub", username: "octo", provider: null }] },
+    });
+    // Not offered, so it cannot be picked either.
+    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
+    expect(startSso).not.toHaveBeenCalled();
+  });
+
   it("passes the menu's measured height to the frame that opened it, for a live menu only", async () => {
     const { h, sent, advance } = setup();
     await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });

@@ -19,7 +19,11 @@ describe("sso messages", () => {
       account: "samuelrocha",
       title: null,
     });
-    expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google" })).not.toBeNull();
+    expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google", origin: "https://accounts.google.com" })).toEqual({
+      type: "bg_sso_press",
+      provider: "google",
+      origin: "https://accounts.google.com",
+    });
     expect(parseSsoReady({ kind: "choose", account: "me@gmail.com" })).toEqual({ kind: "choose", account: "me@gmail.com" });
   });
   it("rejects everything else", () => {
@@ -36,6 +40,8 @@ describe("sso messages", () => {
     // A control character in a user-edited account is rejected even though it is not email-shaped.
     expect(parseSsoFrameRequest({ type: "sso_save", token: T, account: "sam\u0000rocha", title: null })).toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_resize", token: T, height: 9999 })).toBeNull();
+    expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google" })).toBeNull();
+    expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google", origin: 7 })).toBeNull();
     expect(parseSsoReady({ kind: "choose", account: 5 })).toBeNull();
     expect(parsePressReply(undefined)).toEqual({ pressed: false });
     expect(isAccount("me@x.io")).toBe(true);

@@ -139,6 +139,22 @@ describe("scanning for provider buttons", () => {
     expect(ssoFrames()).toHaveLength(1);
   });
 
+  it("a closed balloon stays closed on a query or hash change alone: only the pathname brings it back", async () => {
+    button("Continue with Google");
+    reply = { ok: true, token: TOKEN };
+    const c = make();
+    c.watchPage();
+    await vi.advanceTimersByTimeAsync(SCAN_DEBOUNCE_MS);
+    c.handleBackground({ type: "bg_sso_close", token: TOKEN });
+    expect(ssoFrames()).toHaveLength(0);
+
+    history.pushState(null, "", "/login?next=%2Fsettings#top");
+    document.body.append(document.createElement("div"));
+    await vi.advanceTimersByTimeAsync(SCAN_DEBOUNCE_MS);
+    expect(ssoFrames()).toHaveLength(0);
+    expect(buttonsSent()).toHaveLength(1);
+  });
+
   it("a balloon the page removes is not offered again on this page", async () => {
     button("Continue with Google");
     reply = { ok: true, token: TOKEN };
@@ -199,7 +215,7 @@ describe("pressing after a pick", () => {
     const b = button("Continue with Google");
     const click = vi.spyOn(b, "click");
     const c = make();
-    expect(c.handleBackground({ type: "bg_sso_press", provider: "google" })).toEqual({ pressed: true });
+    expect(c.handleBackground({ type: "bg_sso_press", provider: "google", origin: location.origin })).toEqual({ pressed: true });
     expect(click).toHaveBeenCalledOnce();
     c.onTrustedInput();
     c.onTrustedInput();
@@ -209,7 +225,7 @@ describe("pressing after a pick", () => {
   it("does not press without a button, and input then sends nothing", () => {
     button("Continue with GitHub");
     const c = make();
-    expect(c.handleBackground({ type: "bg_sso_press", provider: "google" })).toEqual({ pressed: false });
+    expect(c.handleBackground({ type: "bg_sso_press", provider: "google", origin: location.origin })).toEqual({ pressed: false });
     c.onTrustedInput();
     expect(sent).toEqual([]);
   });
@@ -220,14 +236,21 @@ describe("pressing after a pick", () => {
     const captcha = document.createElement("iframe");
     captcha.src = "https://challenges.cloudflare.com/turnstile";
     document.body.append(captcha);
-    expect(make().handleBackground({ type: "bg_sso_press", provider: "google" })).toEqual({ pressed: false });
+    expect(make().handleBackground({ type: "bg_sso_press", provider: "google", origin: location.origin })).toEqual({ pressed: false });
     expect(click).not.toHaveBeenCalled();
   });
 
   it("does not press when the button is ambiguous", () => {
     button("Continue with Google");
     button("Sign in with Google");
-    expect(make().handleBackground({ type: "bg_sso_press", provider: "google" })).toEqual({ pressed: false });
+    expect(make().handleBackground({ type: "bg_sso_press", provider: "google", origin: location.origin })).toEqual({ pressed: false });
+  });
+
+  it("A1: does not press when the message's origin does not match this page (a stale press after the frame navigated)", () => {
+    const b = button("Continue with Google");
+    const click = vi.spyOn(b, "click");
+    expect(make().handleBackground({ type: "bg_sso_press", provider: "google", origin: "https://evil.com" })).toEqual({ pressed: false });
+    expect(click).not.toHaveBeenCalled();
   });
 
   it("a choose instruction off the provider's origins does nothing", async () => {

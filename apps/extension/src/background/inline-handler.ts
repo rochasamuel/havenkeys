@@ -393,19 +393,29 @@ export function createInlineHandler(deps: InlineDeps) {
         if (!m) return { ok: false, message: t.errors.menuExpired };
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
-        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
+        // "Sign in with" logins press the provider's button in the top
+        // frame only (spec §6.2); a menu opened from a non-top frame never
+        // offers them, so a field there cannot start a run.
+        const items = m.items
+          .filter((i) => m.frame.frameId === 0 || i.provider === null)
+          .map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint } };
       }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
         if (!m || m.locked) return { ok: false, message: t.errors.menuExpired };
         // Only items this menu offered; the desktop re-checks the origin anyway.
-        if (!m.items.some((i) => i.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
-        closeMenu(tabId);
         const offered = m.items.find((i) => i.id === req.itemId);
+        if (!offered) return { ok: false, message: t.errors.unknownItem };
+        // "Sign in with" logins press the provider's button in the top frame
+        // only (spec §6.2). menu_state never offers them from a non-top
+        // frame, and a pick for one here is refused rather than falling
+        // through to a fill.
+        if (offered.provider && m.kind === "login" && m.frame.frameId !== 0) return { ok: false, message: t.errors.unknownItem };
+        closeMenu(tabId);
         // A login saved with "Sign in with": press the provider's button
         // instead of filling (start_sso re-checks the item for the page).
-        if (offered?.provider && m.kind === "login" && deps.startSso) return deps.startSso(m.frame, req.itemId);
+        if (offered.provider && m.kind === "login" && deps.startSso) return deps.startSso(m.frame, req.itemId);
         try {
           if (m.kind === "otp") {
             const totp = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });

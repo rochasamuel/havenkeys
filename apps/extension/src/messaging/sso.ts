@@ -32,7 +32,8 @@ export type BackgroundToSso =
   | { type: "bg_sso_show"; token: string }
   | { type: "bg_sso_close"; token: string }
   | { type: "bg_sso_resize"; token: string; height: number }
-  | { type: "bg_sso_press"; provider: SsoProvider };
+  /** `origin`: the page origin the press is for; the content script refuses if its own origin differs (the frame navigated). */
+  | { type: "bg_sso_press"; provider: SsoProvider; origin: string };
 
 export type SsoPressReply = { pressed: boolean };
 
@@ -168,8 +169,8 @@ export function parseSsoBackgroundMessage(msg: unknown): BackgroundToSso | null 
         ? { type: "bg_sso_resize", token: o.token, height: o.height }
         : null;
     case "bg_sso_press":
-      return keysAre(o, ["type", "provider"]) && isSsoProvider(o.provider)
-        ? { type: "bg_sso_press", provider: o.provider }
+      return keysAre(o, ["type", "provider", "origin"]) && isSsoProvider(o.provider) && typeof o.origin === "string"
+        ? { type: "bg_sso_press", provider: o.provider, origin: o.origin }
         : null;
     default:
       return null;

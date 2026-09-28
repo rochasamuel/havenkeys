@@ -29,8 +29,10 @@ export function createSsoContent(deps: {
   isTop: boolean;
 }) {
   let frame: InlineFrame | null = null;
-  /** The user (or the page) closed the balloon here: no offer again until the URL changes. */
-  let dismissedHref: string | null = null;
+  /** The user (or the page) closed the balloon here: no offer again until the URL changes.
+   * Keyed on origin + pathname, not the full href: a query or hash change alone must not
+   * bring the offer back. */
+  let dismissedAt: string | null = null;
   let lastSent = "";
   let href = location.href;
   let scanUntil = 0;
@@ -48,18 +50,21 @@ export function createSsoContent(deps: {
     frame = null;
   }
 
+  /** Origin + pathname, ignoring query and hash (see dismissedAt). */
+  const pageKey = () => location.origin + location.pathname;
+
   function show(token: string): void {
     if (!deps.isTop) return;
     closeFrame();
     frame = new InlineFrame("sso.html", token, ssoBox(deps.viewport()), () => {
       if (frame?.token === token) {
         closeFrame();
-        dismissedHref = location.href; // the page removed it: do not offer again here
+        dismissedAt = pageKey(); // the page removed it: do not offer again here
       }
     });
   }
 
-  const offerable = () => watching && deps.suggestions() && !frame && dismissedHref !== location.href;
+  const offerable = () => watching && deps.suggestions() && !frame && dismissedAt !== pageKey();
 
   async function scan(): Promise<void> {
     scanTimer = null;
@@ -179,14 +184,14 @@ export function createSsoContent(deps: {
         case "bg_sso_close":
           if (frame?.token === m.token) {
             closeFrame();
-            dismissedHref = location.href;
+            dismissedAt = pageKey();
           }
           return undefined;
         case "bg_sso_resize":
           if (frame?.token === m.token) frame.place(ssoBox(deps.viewport(), m.height));
           return undefined;
         case "bg_sso_press": {
-          if (!deps.isTop) return { pressed: false };
+          if (!deps.isTop || m.origin !== location.origin) return { pressed: false };
           const env = defaultEnv();
           const button = providerButton(document, m.provider, env);
           if (!button || hasChallenge(document, env)) return { pressed: false };
