@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MENU_HEADER, MENU_PADDING, MENU_ROW, SAVE_HEIGHT, SAVE_WIDTH, menuBox, saveBox } from "./frames";
+import { MENU_HEADER, MENU_PADDING, MENU_ROW, SAVE_HEIGHT, SAVE_WIDTH, SSO_HEIGHT, menuBox, saveBox, ssoBox } from "./frames";
 
 const field = { top: 100, bottom: 130, left: 20, width: 300 } as DOMRect;
 const viewport = { width: 1000, height: 800 };
@@ -28,5 +28,12 @@ describe("saveBox", () => {
 
   it("never grows taller than the viewport allows", () => {
     expect(saveBox({ width: 1000, height: 150 }, 200).height).toBe(150 - 24);
+  });
+});
+
+describe("ssoBox", () => {
+  it("sits where the save prompt does, at the sign-in-with height", () => {
+    expect(ssoBox({ width: 1000 })).toEqual(saveBox({ width: 1000 }, SSO_HEIGHT));
+    expect(ssoBox({ width: 1000, height: 800 }, 200)).toEqual(saveBox({ width: 1000, height: 800 }, 200));
   });
 });

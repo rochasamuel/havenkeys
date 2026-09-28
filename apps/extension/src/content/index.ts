@@ -18,6 +18,9 @@
 //   autoSubmit), press the page's button once, then watch for the next step
 //   and ask the background to continue. Any trusted key, input or pointer
 //   event from the user ends the run.
+// * Sign in with: provider buttons are looked for (bounded, see
+//   content/sso.ts) only while suggestions are on; the balloon they allow is
+//   an offer, and nothing is pressed without the user's pick.
 // * Nothing is logged, stored, or written anywhere but field values.
 
 import { isLoginRole, isNewPasswordRole } from "../autofill/classify";
@@ -36,8 +39,10 @@ import {
   type MenuKind,
   type NextStep,
 } from "../messaging/inline";
+import { parseSsoBackgroundMessage, parseSsoReady } from "../messaging/sso";
 import { InlineFrame, menuBox, saveBox, type Box } from "./frames";
 import { FieldIcon, iconBox } from "./icon";
+import { createSsoContent } from "./sso";
 import { getInlineSuggestions, onInlineSuggestionsChanged } from "../shared/prefs";
 
 declare global {
@@ -126,6 +131,15 @@ function start(): void {
   function viewport() {
     return { width: document.documentElement.clientWidth || innerWidth, height: innerHeight };
   }
+
+  const sso = createSsoContent({
+    send: (m) => chrome.runtime.sendMessage(m).catch(() => undefined),
+    viewport,
+    suggestions: () => suggestions,
+    isTop: window.top === window,
+  });
+  /** sso.watchPage() is in effect (suggestions on). */
+  let ssoWatching = false;
 
   function placeMenu(): void {
     if (!menu) return;
@@ -403,6 +417,7 @@ function start(): void {
     (e) => {
       if (!e.isTrusted) return;
       if (runActive) endLocalRun(true); // the user took over
+      sso.onTrustedInput();
       // The icon's own click handler toggles the menu.
       if (icon && e.composedPath()[0] === icon.view.el) return;
       const input = inputFrom(e);
@@ -422,6 +437,7 @@ function start(): void {
     (e) => {
       if (!e.isTrusted) return;
       if (runActive) endLocalRun(true); // the user took over
+      sso.onTrustedInput();
       const input = inputFrom(e);
       switch (e.key) {
         case "Tab":
@@ -475,6 +491,7 @@ function start(): void {
       const input = inputFrom(e);
       if (!e.isTrusted || !input) return;
       if (runActive) endLocalRun(true); // the user took over
+      sso.onTrustedInput();
       markUserEdit(input);
       // Typing in a login field (e.g. one the page focused on load) opens
       // the menu, unless the user closed it there or there is nothing to offer.
@@ -497,7 +514,9 @@ function start(): void {
     (e) => {
       if (!e.isTrusted) return;
       if (icon && e.composedPath()[0] === icon.view.el) return;
-      const el = (e.composedPath()[0] as Element | undefined)?.closest?.('button, input[type="submit"], input[type="image"], [role="button"]');
+      const target = e.composedPath()[0];
+      if (target instanceof Element) sso.onTrustedClick(target);
+      const el = (target as Element | undefined)?.closest?.('button, input[type="submit"], input[type="image"], [role="button"]');
       if (!el || !isSubmitLike(el)) return;
       const root = rootForButton(el);
       if (root) captureFrom(root);
@@ -523,6 +542,7 @@ function start(): void {
     closeMenu(true);
     hideIcon();
     closeSave();
+    sso.teardown();
     // A generated password must not be lost because we missed the submit
     // (e.g. a script-driven signup): offer it as the page goes away.
     // readSubmission only reports it if the field still holds our value.
@@ -536,6 +556,12 @@ function start(): void {
   chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
     // Only the background worker (no tab) of this extension.
     if (sender.id !== chrome.runtime.id || sender.tab !== undefined) return false;
+    const s = parseSsoBackgroundMessage(raw);
+    if (s) {
+      const r = sso.handleBackground(s);
+      if (r) sendResponse(r);
+      return false;
+    }
     const m = parseBackgroundMessage(raw);
     if (!m) return false;
     switch (m.type) {
@@ -579,7 +605,13 @@ function start(): void {
     if (!on) {
       closeMenu(true);
       hideIcon();
+      if (ssoWatching) sso.teardown();
+      ssoWatching = false;
       return;
+    }
+    if (!ssoWatching) {
+      ssoWatching = true;
+      sso.watchPage();
     }
     const focused = deepActiveElement();
     if (focused instanceof HTMLInputElement) showIcon(focused);
@@ -590,9 +622,11 @@ function start(): void {
   // A save prompt for a login submitted just before this page loaded (top
   // frame only), and the next step of a sign-in run in progress.
   void send({ type: "cs_ready" }).then((r) => {
-    const reply = r as { saveToken?: unknown; watch?: unknown } | undefined;
+    const reply = r as { saveToken?: unknown; watch?: unknown; sso?: unknown } | undefined;
     if (window.top === window && typeof reply?.saveToken === "string" && TOKEN.test(reply.saveToken)) showSave(reply.saveToken);
     if (reply?.watch === "password" || reply?.watch === "otp") startWatch(reply.watch, null);
+    // On a provider's page during a run: click the saved account on its chooser.
+    sso.onReady(parseSsoReady(reply?.sso));
   });
 }
 

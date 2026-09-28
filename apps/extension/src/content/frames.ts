@@ -49,11 +49,18 @@ export class InlineFrame {
   #observer: MutationObserver;
   #closed = false;
 
-  constructor(page: "menu.html" | "save.html" | "passkey.html", token: string, box: Box, onGone: () => void) {
+  constructor(page: "menu.html" | "save.html" | "passkey.html" | "sso.html", token: string, box: Box, onGone: () => void) {
     this.token = token;
     const el = document.createElement("iframe");
     el.src = `${chrome.runtime.getURL(page)}#${token}`;
-    el.title = page === "menu.html" ? t.menu.pageTitle : page === "passkey.html" ? t.passkey.pageTitle : "HavenKeys";
+    el.title =
+      page === "menu.html"
+        ? t.menu.pageTitle
+        : page === "passkey.html"
+          ? t.passkey.pageTitle
+          : page === "sso.html"
+            ? t.sso.pageTitle
+            : "HavenKeys";
     el.setAttribute("referrerpolicy", "no-referrer");
     el.setAttribute("allow", "");
     this.el = el;
@@ -121,6 +128,13 @@ export function menuBox(field: DOMRect, rows: number, viewport: { width: number;
 export function saveBox(viewport: { width: number; height?: number }, height = SAVE_HEIGHT): Box {
   const room = viewport.height !== undefined && viewport.height > 0 ? Math.max(96, viewport.height - 24) : height;
   return { top: 12, left: Math.max(4, viewport.width - SAVE_WIDTH - 16), width: SAVE_WIDTH, height: Math.min(height, room) };
+}
+
+export const SSO_HEIGHT = 150;
+
+/** Top right, like the save prompt. */
+export function ssoBox(viewport: { width: number; height?: number }, height = SSO_HEIGHT): Box {
+  return saveBox(viewport, height);
 }
 
 export const PASSKEY_WIDTH = 380;
