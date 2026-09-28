@@ -4,9 +4,9 @@
 
 use crate::secret::WireSecret;
 use crate::{
-    COSE_ES256, CREDENTIAL_ID_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST, MAX_MATCHES,
-    MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES,
-    MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
+    COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST,
+    MAX_MATCHES, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES,
+    MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -151,6 +151,46 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top_url: Option<String>,
     },
+    /// Start signing in with `item_id`'s provider, only if it is a login
+    /// saved for `url` that signs in with one. No secrets come back.
+    StartSso {
+        item_id: Uuid,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
+    /// Would saving this "Sign in with" add a login, add the account to one,
+    /// or do nothing?
+    CheckSso {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        provider: SsoProvider,
+        #[serde(deserialize_with = "required")]
+        account: Option<String>,
+    },
+    /// Save a "Sign in with" after the user confirmed it. With `item_id`,
+    /// set that login's account (it must be saved for `url`).
+    SaveSso {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        provider: SsoProvider,
+        #[serde(deserialize_with = "required")]
+        account: Option<String>,
+        item_id: Option<Uuid>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
+}
+
+/// Requires the key to be present, unlike a bare `Option<T>` field (whose
+/// key serde treats as optional even without `#[serde(default)]`). Still
+/// accepts an explicit JSON `null`.
+fn required<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    d: D,
+) -> Result<Option<T>, D::Error> {
+    Option::<T>::deserialize(d)
 }
 
 /// Decoded length of an unpadded base64url string, or `None`.
@@ -185,6 +225,10 @@ fn name_ok(s: &str) -> bool {
     s.len() <= MAX_USERNAME_BYTES
 }
 
+fn account_ok(a: &Option<String>) -> bool {
+    a.as_ref().is_none_or(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
+}
+
 impl Request {
     pub fn kind(&self) -> &'static str {
         match self {
@@ -202,6 +246,9 @@ impl Request {
             Request::PasskeyCreate { .. } => "passkey_create",
             Request::PasskeyStatus { .. } => "passkey_status",
             Request::OpenItem { .. } => "open_item",
+            Request::StartSso { .. } => "start_sso",
+            Request::CheckSso { .. } => "check_sso",
+            Request::SaveSso { .. } => "save_sso",
         }
     }
 
@@ -218,7 +265,10 @@ impl Request {
             | Request::CheckPasskeyCreate { url, top_url, .. }
             | Request::PasskeyCreate { url, top_url, .. }
             | Request::PasskeyStatus { url, top_url }
-            | Request::OpenItem { url, top_url, .. } => [Some(url), top_url.as_deref()],
+            | Request::OpenItem { url, top_url, .. }
+            | Request::StartSso { url, top_url, .. }
+            | Request::CheckSso { url, top_url, .. }
+            | Request::SaveSso { url, top_url, .. } => [Some(url), top_url.as_deref()],
         }
     }
 
@@ -258,6 +308,18 @@ impl Request {
                     && username
                         .as_ref()
                         .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
+            }
+            Request::CheckSso { account, .. } => account_ok(account),
+            Request::SaveSso {
+                account,
+                title,
+                item_id,
+                ..
+            } => {
+                account_ok(account)
+                    && title.as_ref().is_none_or(|t| {
+                        item_id.is_none() && !t.is_empty() && t.len() <= MAX_TITLE_BYTES
+                    })
             }
             _ => true,
         };
@@ -428,6 +490,16 @@ impl Response {
                 ..
             }) => credential_ok(credential_id) && *public_key_algorithm == COSE_ES256,
             Some(ResultBody::PasskeyGet { credential_id, .. }) => credential_ok(credential_id),
+            Some(ResultBody::StartSso {
+                provider_origins, ..
+            }) => {
+                !provider_origins.is_empty()
+                    && provider_origins.len() <= MAX_PROVIDER_ORIGINS
+                    && provider_origins.iter().all(|o| o.len() <= MAX_URL_BYTES)
+            }
+            Some(ResultBody::CheckSso { action, item_id }) => {
+                (*action == SaveAction::Update) == item_id.is_some()
+            }
             _ => true,
         }
     }
@@ -511,6 +583,21 @@ pub enum ResultBody {
         has_passkey: bool,
     },
     OpenItem {},
+    StartSso {
+        provider: SsoProvider,
+        account: Option<String>,
+        /// Where the run may click the account (exact origins, from Rust).
+        provider_origins: Vec<String>,
+        /// Rust's decision that the run may click the saved account.
+        auto_choose: bool,
+    },
+    CheckSso {
+        action: SaveAction,
+        item_id: Option<Uuid>,
+    },
+    SaveSso {
+        item_id: Uuid,
+    },
 }
 
 /// What saving a submitted login would do.
@@ -541,6 +628,9 @@ impl fmt::Debug for ResultBody {
             ResultBody::PasskeyCreate { .. } => "passkey_create",
             ResultBody::PasskeyStatus { .. } => "passkey_status",
             ResultBody::OpenItem {} => "open_item",
+            ResultBody::StartSso { .. } => "start_sso",
+            ResultBody::CheckSso { .. } => "check_sso",
+            ResultBody::SaveSso { .. } => "save_sso",
         };
         write!(f, "ResultBody({kind})")
     }
@@ -563,6 +653,16 @@ pub enum MatchStrength {
     SameSite,
 }
 
+/// A "Sign in with" provider. Mirrors havenkeys_core::sso::SsoProvider.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SsoProvider {
+    Google,
+    Microsoft,
+    Github,
+    Apple,
+}
+
 /// One suggestion. No secrets.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -572,6 +672,7 @@ pub struct Match {
     pub username: Option<String>,
     pub has_totp: bool,
     pub strength: MatchStrength,
+    pub provider: Option<SsoProvider>,
 }
 
 impl fmt::Debug for Match {
