@@ -106,6 +106,19 @@ export const extensionScenarios = [
     },
   },
   {
+    name: "popup-unlocked-sso",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({
+      popup_state: ok({
+        kind: "unlocked",
+        site: "typeform.com",
+        matches: [{ ...matches[0], title: "Typeform", username: "me@gmail.com", provider: "google" }, matches[2]],
+      }),
+    }),
+  },
+  {
     name: "popup-unlocked-offer",
     page: "popup.html",
     frame: { kind: "popup" },
@@ -134,6 +147,14 @@ export const extensionScenarios = [
       page: "menu.html",
       frame: { kind: "menu", width, rows: 3 },
       replies: () => ({ menu_state: ok(menuView({ items: menuItems })) }),
+    },
+    {
+      name: `menu-sso-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 2 },
+      replies: () => ({
+        menu_state: ok(menuView({ items: [{ ...menuItems[0], title: "Typeform", username: "me@gmail.com", provider: "google" }, menuItems[1]] })),
+      }),
     },
     {
       name: `menu-passkeys-${width}`,

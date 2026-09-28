@@ -32,6 +32,23 @@ async function load(): Promise<void> {
   await vi.advanceTimersByTimeAsync(0);
 }
 
+/** Captures 'click' listeners as they're registered, so a handler gated on
+ * `e.isTrusted` can be exercised directly without jsdom's permanent false. */
+function captureClicks(): Map<Element, (e: Partial<MouseEvent>) => void> {
+  const handlers = new Map<Element, (e: Partial<MouseEvent>) => void>();
+  const orig = EventTarget.prototype.addEventListener;
+  vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(function (
+    this: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions,
+  ) {
+    if (type === "click" && listener && this instanceof Element) handlers.set(this, listener as (e: Partial<MouseEvent>) => void);
+    return orig.call(this, type, listener, options);
+  });
+  return handlers;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   replies = [];
@@ -135,5 +152,35 @@ describe("field menu copy and size", () => {
     await load();
     await vi.advanceTimersByTimeAsync(50);
     expect(asked).toContainEqual({ type: "menu_resize", token: TOKEN, height: 34 + 2 * 64 });
+  });
+});
+
+describe("field menu sign-in-with rows", () => {
+  it("shows the provider icon and ssoRow detail, and picks by itemId", async () => {
+    const handlers = captureClicks();
+    replies = [
+      {
+        ok: true,
+        value: {
+          state: "ready",
+          kind: "login",
+          site: "typeform.com",
+          items: [{ id: ITEM, title: "Typeform", username: "me@gmail.com", provider: "google" }],
+          passkeys: [],
+          hint: null,
+        },
+      },
+    ];
+    await load();
+    await vi.advanceTimersByTimeAsync(1000); // let the click guard arm
+    const row = document.querySelector("button.row") as HTMLButtonElement;
+    expect(row.querySelector(".user")?.textContent).toBe("Google · me@gmail.com");
+    expect(row.querySelector("svg.provider-icon")).not.toBeNull();
+    expect(row.querySelector(".avatar")?.textContent).toBe("");
+
+    replies.push({ ok: true, value: null });
+    handlers.get(row)?.({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked).toContainEqual({ type: "menu_pick", token: TOKEN, itemId: ITEM });
   });
 });
