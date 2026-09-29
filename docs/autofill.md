@@ -572,8 +572,15 @@ follows the existing in-page suggestions preference — off, no balloon — and
 is offered only in the top frame; an iframe never gets one. Closing it hides
 it for that page (origin + pathname; a query or hash change alone does not
 bring it back) until the next navigation. SSO logins also appear, with the
-same icon, in the top-frame field menu and the toolbar popup (**Sign in**
-instead of **Fill**); all three entry points start the same run.
+same icon, in the field menu and the toolbar popup (**Sign in** instead of
+**Fill**). A pick in the balloon always starts the run below. A pick in the
+field menu or the popup first asks the desktop `fill_item`, as for any
+login: if the login also has a saved password, that password is filled
+exactly as for a plain login (automatic sign-in rules unchanged, no run);
+only a login with no password starts the run. The extension cannot tell
+which case a row is before the pick, so the row looks the same either way;
+"Sign in" stays accurate because, with automatic sign-in on, a password fill
+signs in too.
 
 ### The run
 
@@ -594,14 +601,20 @@ instead of **Fill**); all three entry points start the same run.
    `submit.ts` requires for automatic sign-in — and clicks it. No winner, or
    a challenge (reCAPTCHA/hCaptcha/Turnstile) on the page: nothing is
    pressed, and the balloon shows "Couldn't find the Sign in with `<Provider>`
-   button". Only the top frame ever presses; an SSO row inside an iframe
-   login widget is reachable only through the balloon or the popup, not a
-   subframe field menu.
+   button". Only the top frame ever presses: in a field menu inside an
+   iframe, an SSO login with no password starts no run and the pick answers
+   "Couldn't find the Sign in with `<Provider>` button"; one that also has a
+   password is filled there as usual.
 3. **Choose.** Once pressed, the run only continues if `autoChoose` is on and
-   the item has a saved account. A frame in the run's tab, or in a **popup
-   that tab opened** (`openerTabId`, supplied by the browser, not the page),
-   is told to choose only once its own origin is one of the run's provider
-   origins. It retries on a debounced `MutationObserver` for up to
+   the item has a saved account. The **top frame** of the run's tab, or of a
+   **popup that tab opened** (`openerTabId`, supplied by the browser, not the
+   page), is told to choose only once its own origin is one of the run's
+   provider origins. Iframes are never told to choose (the background answers
+   them nothing and the content script ignores a choose outside the top
+   frame), so a provider's embedded widget on some page, such as a Google
+   Identity Services iframe, cannot spend the run. The run is used once: the
+   first provider top frame to ask gets the account, and the run ends there.
+   That page retries on a debounced `MutationObserver` for up to
    `CHOOSE_WAIT_MS` (10 s), clicking the saved account only when
    `chooserRow` finds **exactly one** clickable, visible element whose text
    contains that account (case-insensitive) and whose own label is not
@@ -617,9 +630,11 @@ Checked before every press and before every choose attempt:
 | Consent or permissions wording ("Continue as …", "Allow…", "Grant access/permission(s)…", "Authorize…", recognized at any length as a prefix, plus a few short bare words such as "Accept"/"Continuar" under 30 characters) | Never pressed; the run ends |
 | Ambiguity: no clear-winner button, or more than one (or zero) chooser rows match the account | Nothing is clicked; the run ends |
 | A password field / no matching chooser row (the provider asks for a password instead of showing a chooser) | `chooserRow` simply finds nothing to click; the ordinary field menu still offers the vault's login for the provider's own origin, and the user picks it manually |
-| Any trusted user input (`keydown`, `input`, `pointerdown`) in the run's tab, or in its opener popup | Ends the run (`cs_sso_stop`) |
+| The user's next trusted input (`keydown`, `input`, `pointerdown`) in the document that pressed the button | That document sends `cs_sso_stop`; the background ends the run of its tab (or of the tab that opened it, for a popup) |
+| Trusted user input on the provider page while it waits for the chooser | Cancels that wait |
 | The frame's origin is not the one the desktop matched (press), or not one of the run's provider origins (choose) | Refused |
-| Vault lock, 2 minutes elapsed, or the tab navigates away | Ends the run |
+| 2 minutes elapsed, or the tab's top frame loads an origin that is neither the site's nor a provider's | Ends the run |
+| Vault lock | Clears the background's runs and pending captures; a chooser wait already in progress on the provider page is not told and ends by itself within `CHOOSE_WAIT_MS` (10 s) |
 
 ### Save detection
 

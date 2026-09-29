@@ -1995,17 +1995,19 @@ already saved as belonging to their own login. The keyword list itself also
 actively stops the run wherever it does match, which is the common case for
 the four supported providers' actual consent screens as of this writing.
 **Limitation, documented:** provider page redesigns can change this
-behaviour; `sso.rs`'s word list is not verified against live provider pages
+behaviour; the word list in `apps/extension/src/autofill/sso.ts` is not verified against live provider pages
 on an ongoing basis (`autofill.md`, "Known limitation"; `security-model.md`
 §17).
 
 ### SSO4. `openerTabId` trust (Low, accepted, sound)
-**Question:** the run accepts a choose step from a frame in the run's own
-tab, or in a tab whose `openerTabId` is the run's tab — could a hostile page
+**Question:** the run accepts a choose step from the top frame of the run's
+own tab, or of a tab whose `openerTabId` is the run's tab (iframes never
+choose) — could a hostile page
 forge this to reach another tab's run?
-**Why sound:** `openerTabId` is supplied by the browser itself from the tab
-that actually opened the popup (`chrome.tabs.onCreated`/`onUpdated`
-metadata), never anything a page's message content claims. A page opening a
+**Why sound:** `openerTabId` is supplied by the browser itself: the
+background reads it from `sender.tab.openerTabId` on the content script's
+message (`background/index.ts`), never from anything a page's message
+content claims. A page opening a
 popup to a provider origin, with that popup's `openerTabId` pointing back at
 it, is exactly the legitimate OAuth-popup flow the design accounts for
 (spec §6.2, "a popup whose `openerTabId` is the run's tab"). The run still
