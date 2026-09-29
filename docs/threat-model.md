@@ -404,7 +404,7 @@ rule #6 for one bounded case.
 From 0.9.0 the desktop app checks GitHub Releases for newer signed builds and
 can install one on the user's click
 (`docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md`;
-`security-model.md` §17). This is a new, bounded exception to "minimal
+`security-model.md` §18). This is a new, bounded exception to "minimal
 network exposure": the app can now reach `github.com` and its download
 redirect host on its own.
 

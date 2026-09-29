@@ -80,7 +80,7 @@ real ongoing cost and are out of scope for this MVP.
 
 From version 0.9.0, the desktop app updates itself on Windows, macOS and the
 Linux AppImage: it checks GitHub Releases on its own, and offers a signed
-update the user installs with one click (`docs/security-model.md` §17). `.deb`
+update the user installs with one click (`docs/security-model.md` §18). `.deb`
 and `.rpm` installs are not replaced in place — the app tells the user a new
 version exists and links to the release page, where they download and install
 it themselves. Anyone still on 0.8.0 or earlier has no updater at all and must

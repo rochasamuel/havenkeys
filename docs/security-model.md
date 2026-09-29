@@ -15,7 +15,7 @@ This document describes *how* HavenKeys enforces the properties listed in
    explicit user action.
 4. No telemetry, analytics or crash reporting, and no third-party network
    calls beyond one bounded exception: checking for and downloading signed
-   app updates from GitHub Releases (§17). The only other outbound
+   app updates from GitHub Releases (§18). The only other outbound
    connections the desktop app makes are to the account server you
    configure: on unlock, every 60 seconds while unlocked, and on every write
    (§13). Reads work offline from the local encrypted replica.
@@ -667,7 +667,7 @@ In summary:
 * **No new browser permission.** Recognizing provider buttons and reading a
   chooser's account text both happen inside the same content script that
   already runs on granted pages; nothing new is requested (`autofill.md`
-  §Permissions, §12 below).
+  §Permissions, §12 above).
 
 ## 18. In-app updates
 

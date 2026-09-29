@@ -731,6 +731,34 @@ fn password_updates_are_limited_per_item() {
     assert!(save(&f, "https://new.example/", None, "x", None)["result"].is_null());
 }
 
+/// `save_sso` shares `save_login`'s per-item cooldown (server.rs checks both
+/// request kinds under the same `allow_item_update` branch): a second
+/// `save_sso` for the same item inside the interval is rate-limited, and so
+/// is a `save_login` for that same item afterward, whichever request made
+/// the first change. Same offline fixture as
+/// `password_updates_are_limited_per_item`: the limiter runs before the
+/// core, so it still engages even though every save is refused for lack of
+/// a server session.
+#[test]
+fn save_sso_shares_the_per_item_limiter() {
+    let f = fixture();
+    let url = "https://typeform.com/";
+    let save_sso = |account: &str| {
+        call(
+            &f,
+            serde_json::json!({"type": "save_sso", "url": url, "provider": "google", "account": account, "itemId": f.typeform}),
+        )
+    };
+    assert!(save_sso("one@gmail.com")["result"].is_null());
+    assert_eq!(error_code(&save_sso("two@gmail.com")), Some("rate_limited"));
+    // A save_login for the same item right after still hits the cooldown
+    // save_sso just started.
+    assert_eq!(
+        error_code(&save(&f, url, None, "pw", Some(f.typeform))),
+        Some("rate_limited")
+    );
+}
+
 #[test]
 fn save_requests_share_the_secret_rate_limit() {
     let f = fixture();

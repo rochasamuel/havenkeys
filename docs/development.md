@@ -244,7 +244,7 @@ pnpm ui:check --app=desktop   # one app: extension | desktop
 ## Releases and updates
 
 See `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md` for the
-full design and `docs/security-model.md` §17 / `docs/threat-model.md` T10 for
+full design and `docs/security-model.md` §18 / `docs/threat-model.md` T10 for
 the security side.
 
 * **The signing key** was generated once, by the project owner, never by an
