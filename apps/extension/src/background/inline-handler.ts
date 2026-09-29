@@ -395,7 +395,7 @@ export function createInlineHandler(deps: InlineDeps) {
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
-        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint } };
+        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: null } };
       }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
@@ -448,6 +448,9 @@ export function createInlineHandler(deps: InlineDeps) {
         }
         return { ok: true, value: null };
       }
+      case "menu_pick_identity":
+      case "menu_open_identity":
+        return { ok: false, message: t.errors.menuExpired }; // placeholder until identity menus land
       case "menu_open_help": {
         const m = liveMenu(tabId, req.token);
         if (!m || m.locked || !m.help || !deps.openTab) return { ok: false, message: t.errors.menuExpired };

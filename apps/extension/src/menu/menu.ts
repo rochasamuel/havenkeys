@@ -116,7 +116,7 @@ function render(t: string, view: MenuView): void {
     hint?.kind === "add_passkey"
       ? [row(sparkle(), msg.menu.addPasskeyTitle(hint.name), msg.menu.addPasskeyBody, () => pick({ type: "menu_open_help", token: t }), { title: true, detail: true })]
       : [];
-  const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...tail];
+  const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind === "otp" ? "otp" : "login")), ...tail];
   // Opened from the field's icon with nothing saved for this site.
   if (rows.length === 0) {
     main.replaceChildren(

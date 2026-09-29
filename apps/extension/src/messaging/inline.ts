@@ -11,10 +11,20 @@
 // unguessable session token, and the background checks that the frame
 // asking is in the same tab as the session.
 
-import { CREDENTIAL_ID_BYTES, isB64Url, isUuid, type SsoProvider } from "@havenkeys/protocol";
+import {
+  CREDENTIAL_ID_BYTES,
+  isB64Url,
+  isIdentityRole,
+  isUuid,
+  MAX_IDENTITY_ROLES,
+  MAX_IDENTITY_VALUE_BYTES,
+  type IdentityRole,
+  type IdentityValue,
+  type SsoProvider,
+} from "@havenkeys/protocol";
 import type { PasskeyRow } from "../webauthn/messages";
 
-export type MenuKind = "login" | "otp" | "new_password";
+export type MenuKind = "login" | "otp" | "new_password" | "identity";
 
 /** Steps of an automatic sign-in, in order. */
 export type RunStep = "username" | "password" | "otp";
@@ -27,7 +37,7 @@ const RUN_STEPS: readonly RunStep[] = ["username", "password", "otp"];
 
 export type ContentRequest =
   /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
-  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true }
+  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[] }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null; currentPassword?: string }
   | { type: "cs_ready" }
@@ -44,7 +54,8 @@ export type ReadyReply = { saveToken: string | null; watch: NextStep | null };
 export type FillPayload =
   | { kind: "login"; username: string | null; password: string | null }
   | { kind: "otp"; code: string }
-  | { kind: "generated"; password: string };
+  | { kind: "generated"; password: string }
+  | { kind: "identity"; values: IdentityValue[] };
 
 export type BackgroundToContent =
   /**
@@ -63,7 +74,9 @@ export type BackgroundToContent =
   /** Resize the save prompt to the height its page reported (save_resize). */
   | { type: "bg_resize_save"; token: string; height: number }
   | { type: "bg_close_save"; token: string }
-  | { type: "bg_run_end" };
+  | { type: "bg_run_end" }
+  /** Popup: which identity roles has this (top) frame's first identity form? */
+  | { type: "bg_identity_roles" };
 
 export type FillReply = { filled: number; pressing: RunStep | null };
 
@@ -75,6 +88,10 @@ export type InlineRequest =
   | { type: "menu_pick_passkey"; token: string; itemId: string; credentialId: string }
   | { type: "menu_generate"; token: string }
   | { type: "menu_open_help"; token: string }
+  /** Fill the identity; `documents`: the user confirmed the document fields. */
+  | { type: "menu_pick_identity"; token: string; documents: boolean }
+  /** Open the identity in the desktop app (the menu's empty-identity row). */
+  | { type: "menu_open_identity"; token: string }
   | { type: "menu_close"; token: string }
   /** The menu's content height, so wrapped rows are not clipped. */
   | { type: "menu_resize"; token: string; height: number }
@@ -101,9 +118,24 @@ export interface MenuItemView {
  */
 export type MenuHint = { kind: "use_passkey" } | { kind: "add_passkey"; name: string };
 
+/** The menu's identity row. No values: counts and role names only. */
+export interface IdentityRowView {
+  title: string;
+  /** Fields in the form the identity has a value for. */
+  fills: number;
+  /** Document roles the form asks for and the identity has. */
+  documents: IdentityRole[];
+  /** false on http pages: documents will not be filled. */
+  documentsAllowed: boolean;
+  /** The identity has no values at all (or does not exist yet). */
+  empty: boolean;
+}
+
+export type IdentityRolesReply = { roles: IdentityRole[] };
+
 export type MenuView =
   | { state: "locked" }
-  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null };
+  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null; identity: IdentityRowView | null };
 
 export interface SaveView {
   action: "add" | "update";
@@ -152,22 +184,51 @@ function keysAre(o: Obj, keys: readonly string[]): boolean {
 }
 
 const isToken = (v: unknown): v is string => typeof v === "string" && TOKEN.test(v);
-const MENU_KINDS: readonly MenuKind[] = ["login", "otp", "new_password"];
+const MENU_KINDS: readonly MenuKind[] = ["login", "otp", "new_password", "identity"];
 
 function boundedOrNull(v: unknown, max: number): v is string | null {
   return v === null || (typeof v === "string" && v.length > 0 && v.length <= max);
+}
+
+function parseRoleList(v: unknown): IdentityRole[] | null {
+  if (!Array.isArray(v) || v.length === 0 || v.length > MAX_IDENTITY_ROLES) return null;
+  const out: IdentityRole[] = [];
+  for (const r of v) {
+    if (!isIdentityRole(r) || out.includes(r)) return null;
+    out.push(r);
+  }
+  return out;
+}
+
+export function parseIdentityRolesReply(v: unknown): IdentityRole[] {
+  const o = obj(v);
+  return (o && keysAre(o, ["roles"]) && parseRoleList(o.roles)) || [];
 }
 
 export function parseContentRequest(msg: unknown): ContentRequest | null {
   const o = obj(msg);
   if (!o) return null;
   switch (o.type) {
-    case "cs_open_menu":
+    case "cs_open_menu": {
       if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
-      if (keysAre(o, ["type", "kind"])) return { type: "cs_open_menu", kind: o.kind as MenuKind };
-      return keysAre(o, ["type", "kind", "explicit"]) && o.explicit === true
-        ? { type: "cs_open_menu", kind: o.kind as MenuKind, explicit: true }
-        : null;
+      const kind = o.kind as MenuKind;
+      const keys = Object.keys(o).filter((k) => k !== "type" && k !== "kind");
+      if (keys.some((k) => k !== "explicit" && k !== "roles")) return null;
+      if ("explicit" in o && o.explicit !== true) return null;
+      let roles: IdentityRole[] | undefined;
+      if ("roles" in o) {
+        if (kind !== "identity" && kind !== "login") return null;
+        const parsed = parseRoleList(o.roles);
+        if (!parsed) return null;
+        roles = parsed;
+      } else if (kind === "identity") return null;
+      return {
+        type: "cs_open_menu",
+        kind,
+        ...(o.explicit === true ? { explicit: true as const } : {}),
+        ...(roles ? { roles } : {}),
+      };
+    }
     case "cs_close_menu":
       return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: "cs_close_menu", token: o.token } : null;
     case "cs_submit": {
@@ -209,6 +270,12 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
         isB64Url(o.credentialId, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES)
         ? { type: "menu_pick_passkey", token, itemId: o.itemId, credentialId: o.credentialId }
         : null;
+    case "menu_pick_identity":
+      return keysAre(o, ["type", "token", "documents"]) && typeof o.documents === "boolean"
+        ? { type: "menu_pick_identity", token, documents: o.documents }
+        : null;
+    case "menu_open_identity":
+      return keysAre(o, ["type", "token"]) ? { type: "menu_open_identity", token } : null;
     case "menu_resize":
       return keysAre(o, ["type", "token", "height"]) && isMenuHeight(o.height) ? { type: "menu_resize", token, height: o.height } : null;
     case "save_resize":
@@ -247,6 +314,17 @@ function parseFill(v: unknown): FillPayload | null {
       return keysAre(o, ["kind", "password"]) && typeof o.password === "string" && o.password.length > 0
         ? { kind: "generated", password: o.password }
         : null;
+    case "identity": {
+      if (!keysAre(o, ["kind", "values"]) || !Array.isArray(o.values) || o.values.length > MAX_IDENTITY_ROLES) return null;
+      const values: IdentityValue[] = [];
+      for (const x of o.values) {
+        const v = obj(x);
+        if (!v || !keysAre(v, ["role", "value"]) || !isIdentityRole(v.role) || typeof v.value !== "string") return null;
+        if (v.value.length === 0 || v.value.length > MAX_IDENTITY_VALUE_BYTES || values.some((y) => y.role === v.role)) return null;
+        values.push({ role: v.role, value: v.value });
+      }
+      return { kind: "identity", values };
+    }
     default:
       return null;
   }
@@ -262,6 +340,7 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       if (o.token !== null && !isToken(o.token)) return null;
       if (typeof o.submit !== "boolean" || typeof o.totp !== "boolean") return null;
       const fill = parseFill(o.fill);
+      if (fill?.kind === "identity" && (o.submit || o.totp)) return null;
       return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill, submit: o.submit, totp: o.totp };
     }
     case "bg_resize_menu":
@@ -278,6 +357,8 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: o.type, token: o.token } : null;
     case "bg_run_end":
       return keysAre(o, ["type"]) ? { type: "bg_run_end" } : null;
+    case "bg_identity_roles":
+      return keysAre(o, ["type"]) ? { type: "bg_identity_roles" } : null;
     default:
       return null;
   }

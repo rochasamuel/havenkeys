@@ -392,6 +392,8 @@ function start(): void {
     }
     if (!group) return none;
     switch (m.fill.kind) {
+      case "identity":
+        return none; // placeholder until identity fills land
       case "login": {
         const filled = fillLogin(group, m.fill, env);
         return { filled, pressing: filled > 0 && m.submit ? pressAfterFill(group, "login", m.totp) : null };
