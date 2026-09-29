@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { ItemOverview, ItemType } from "../lib/types";
+import type { AccountStatus, ItemOverview, ItemType } from "../lib/types";
 import { monogram, primaryHost } from "../lib/format";
 import { ssoSubtitle } from "../lib/sso";
 import { Icon } from "../components/Icon";
+import { Seal } from "../components/Seal";
 import type { Section } from "./VaultScreen";
 import { useI18n } from "../i18n/context";
 
@@ -15,9 +16,24 @@ interface Props {
   onNew: (type: ItemType) => void;
   /** Offline: creating an item would fail, so the control is disabled up front. */
   newDisabled?: boolean;
+  /** The HavenKeys Account row, pinned first, or null when it does not belong here. */
+  account: AccountStatus | null;
+  accountSelected: boolean;
+  onSelectAccount: () => void;
 }
 
-export function ItemList({ items, query, section, selectedId, onSelect, onNew, newDisabled }: Props) {
+export function ItemList({
+  items,
+  query,
+  section,
+  selectedId,
+  onSelect,
+  onNew,
+  newDisabled,
+  account,
+  accountSelected,
+  onSelectAccount,
+}: Props) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const headings: Partial<Record<Section, string>> = {
@@ -86,6 +102,28 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
           )}
         </div>
       </header>
+
+      {account && (
+        <ul className="list-pinned">
+          <li>
+            <button
+              className="list-item"
+              aria-current={accountSelected ? "true" : undefined}
+              onClick={onSelectAccount}
+            >
+              <span className="avatar avatar-account" aria-hidden="true">
+                <Seal size={24} />
+              </span>
+              <span className="list-item-text">
+                <span className="list-item-title">{t.accountItem.title}</span>
+                <span className="list-item-sub" data-truncate="">
+                  {account.email}
+                </span>
+              </span>
+            </button>
+          </li>
+        </ul>
+      )}
 
       {items.length === 0 ? (
         <div className="list-empty">

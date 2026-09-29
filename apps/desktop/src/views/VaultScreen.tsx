@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import type { ItemOverview, ItemType } from "../lib/types";
+import type { AccountStatus, ItemOverview, ItemType } from "../lib/types";
+import { showAccountItem } from "../lib/accountItem";
 import { decideOpen } from "../lib/openItem";
 import { Icon, type IconName } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import { useToast } from "../components/Toast";
 import { ItemList } from "./ItemList";
 import { ItemDetail } from "./ItemDetail";
+import { AccountItemDetail } from "./AccountItemDetail";
 import { ItemEditor } from "./ItemEditor";
 import { GeneratorView } from "./GeneratorView";
 import { SettingsView } from "./SettingsView";
@@ -20,7 +22,8 @@ type Pane =
   | { kind: "empty" }
   | { kind: "view"; id: string }
   | { kind: "edit"; id: string }
-  | { kind: "new"; itemType: ItemType };
+  | { kind: "new"; itemType: ItemType }
+  | { kind: "account" };
 
 interface Props {
   damagedItems: number;
@@ -47,6 +50,13 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   const [busyResync, setBusyResync] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
+
+  // The HavenKeys Account item is built from the account record; no secret
+  // is fetched until the user reveals or copies the Secret Key.
+  useEffect(() => {
+    api.accountStatus().then(setAccount, () => setAccount(null));
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -93,7 +103,9 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     let unlisten: (() => void) | null = null;
     void api.onOpenItem((id) => {
       const pane = paneRef.current;
-      const ref = pane.kind === "new" ? { kind: "new" as const } : pane;
+      // The Account item has no editor to lose: it counts as an empty pane.
+      const ref =
+        pane.kind === "new" ? { kind: "new" as const } : pane.kind === "account" ? { kind: "empty" as const } : pane;
       const editorShown = sectionRef.current !== "generator" && sectionRef.current !== "settings";
       switch (decideOpen(ref, editorDirtyRef.current, id, editorShown)) {
         case "already":
@@ -207,6 +219,14 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     }
   }
 
+  // "Show Emergency Kit" on the Account item: Settings, scrolled to the kit.
+  function showKit() {
+    setSection("settings");
+    window.requestAnimationFrame(() =>
+      document.getElementById("emergency-kit")?.scrollIntoView({ block: "start", behavior: "smooth" }),
+    );
+  }
+
   function newItem(itemType: ItemType) {
     if (isToolSection) setSection("all");
     setPane({ kind: "new", itemType });
@@ -318,6 +338,9 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               onSelect={(id) => setPane({ kind: "view", id })}
               onNew={newItem}
               newDisabled={readOnly}
+              account={showAccountItem(account, section, query, t.accountItem.title) ? account : null}
+              accountSelected={pane.kind === "account"}
+              onSelectAccount={() => setPane({ kind: "account" })}
             />
           </div>
           <section className="detail" aria-label={t.vault.details}>
@@ -355,6 +378,9 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                   </div>
                 )}
               </div>
+            )}
+            {pane.kind === "account" && account && (
+              <AccountItemDetail account={account} onShowKit={showKit} />
             )}
             {pane.kind === "view" && selected && (
               <ItemDetail

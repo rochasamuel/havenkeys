@@ -252,6 +252,8 @@ pub fn run() {
             account::revoke_device,
             account::remove_device,
             account::get_emergency_kit,
+            account::reveal_account_secret_key,
+            account::copy_account_field,
             commands::sync_now,
             commands::resync_vault,
             commands::reveal_previous_password,

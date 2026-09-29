@@ -6,6 +6,8 @@
 //! server records the result and never sees the master password, the Secret
 //! Key, the KEK or the vault key.
 
+use crate::commands::CopyResult;
+use crate::device::Device;
 use crate::secret_store::Storage;
 use crate::state::{AppState, CmdError, CmdResult};
 use crate::sync::{self, DEVICE_NAME};
@@ -14,13 +16,13 @@ use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::store::{AccountRecord, KeyScheme, Store};
 use havenkeys_core::sync::{encode_header_for, prepare_sign_in};
-use havenkeys_core::vault::{self, prepare_new_account_vault, VaultStatus};
+use havenkeys_core::vault::{self, prepare_new_account_vault, VaultService, VaultStatus};
 use havenkeys_core::SecretString;
 use havenkeys_sync_client::{invite as invite_parser, Activation};
 use qrcode::{EcLevel, QrCode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
@@ -671,6 +673,84 @@ fn emergency_kit(state: &AppState) -> CmdResult<EmergencyKit> {
     })
 }
 
+// ------------------------------------------------------------------ Account item
+
+/// The values of the HavenKeys Account item, pinned first in the vault list.
+/// The item is virtual (spec 2026-09-29-account-item): it is built from the
+/// account record and this device's Secret Key when shown, never stored, and
+/// the browser extension cannot reach it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountField {
+    Email,
+    Server,
+    AccountId,
+    SecretKey,
+}
+
+/// The account behind the Account item. Only while unlocked.
+fn unlocked_account(vault: &VaultService) -> havenkeys_core::Result<AccountRecord> {
+    if !vault.is_unlocked() {
+        return Err(havenkeys_core::Error::Locked);
+    }
+    vault.account()?.ok_or(havenkeys_core::Error::NoVault)
+}
+
+/// One value of the Account item. The Secret Key comes from this device's
+/// keychain (or `device.json`); `NotFound` when this computer lacks it.
+fn account_field(
+    account: &AccountRecord,
+    device: &mut Device,
+    field: AccountField,
+) -> havenkeys_core::Result<SecretString> {
+    Ok(match field {
+        AccountField::Email => SecretString::new(account.email.clone()),
+        AccountField::Server => SecretString::new(account.server_url.clone()),
+        AccountField::AccountId => SecretString::new(account.account_id.to_string()),
+        AccountField::SecretKey => device
+            .secret_key_text(account.account_id)
+            .ok_or(havenkeys_core::Error::NotFound)?,
+    })
+}
+
+/// The value and the vault's clipboard delay. The vault is released before
+/// the device store is taken, as in `emergency_kit`.
+fn account_value(state: &AppState, field: AccountField) -> CmdResult<(SecretString, u32)> {
+    state.touch();
+    let (account, seconds) = {
+        let v = state.vault()?;
+        (unlocked_account(&v)?, v.settings()?.clipboard_clear_seconds)
+    };
+    let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+    Ok((account_field(&account, &mut device, field)?, seconds))
+}
+
+/// The Secret Key, on an explicit reveal from the Account item.
+#[tauri::command]
+pub async fn reveal_account_secret_key(app: AppHandle) -> CmdResult<SecretString> {
+    off_main_thread(app, |state| {
+        account_value(state, AccountField::SecretKey).map(|(value, _)| value)
+    })
+    .await
+}
+
+/// Copy one of the Account item's values. It goes from here to the
+/// clipboard, cleared after the usual delay; the renderer never holds it.
+#[tauri::command]
+pub async fn copy_account_field(app: AppHandle, field: AccountField) -> CmdResult<CopyResult> {
+    off_main_thread(app, move |state| {
+        let (value, seconds) = account_value(state, field)?;
+        state
+            .clipboard
+            .copy(value.expose(), Duration::from_secs(u64::from(seconds)))
+            .map_err(|_| CmdError::clipboard())?;
+        Ok(CopyResult {
+            clear_after_seconds: seconds,
+        })
+    })
+    .await
+}
+
 /// Percent-encode everything but the unreserved set (RFC 3986 §2.3), so an
 /// address with a `+` or a server URL with a port survives the round trip.
 fn percent_encode(value: &str) -> String {
@@ -689,6 +769,127 @@ fn percent_encode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::percent_encode;
+
+    mod account_item {
+        use super::super::{account_field, unlocked_account, AccountField};
+        use crate::device::Device;
+        use crate::secret_store::MemoryKeyStore;
+        use havenkeys_core::account::{AccountRef, NormalizedEmail};
+        use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+        use havenkeys_core::crypto::secret_key::SecretKey;
+        use havenkeys_core::store::{AccountRecord, Store};
+        use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
+        use havenkeys_core::{Error, SecretString};
+        use uuid::Uuid;
+
+        const ACCOUNT: Uuid = Uuid::from_u128(0x5eed);
+
+        fn record() -> AccountRecord {
+            AccountRecord {
+                account_id: ACCOUNT,
+                email: "user@example.com".into(),
+                server_url: "https://vault.example.com".into(),
+                server_cursor: 0,
+                max_header_rev: 0,
+                last_synced_at: None,
+            }
+        }
+
+        /// An activated account vault, unlocked, and its Secret Key.
+        fn activated() -> (VaultService, SecretKey) {
+            let account =
+                AccountRef::new(ACCOUNT, NormalizedEmail::parse("user@example.com").unwrap());
+            let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
+            let made = prepare_new_account_vault(
+                &SecretString::from("correct horse battery staple"),
+                &account,
+                kdf,
+                1_700_000_000_000,
+            )
+            .unwrap();
+            let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+            vault
+                .create_account_vault(made.prepared, &record())
+                .unwrap();
+            (vault, made.secret_key)
+        }
+
+        fn device_with(key: Option<&SecretKey>) -> (tempfile::TempDir, Device) {
+            let dir = tempfile::tempdir().unwrap();
+            let mut device = Device::load(dir.path(), Box::new(MemoryKeyStore::default()));
+            if let Some(key) = key {
+                device.set_secret_key(ACCOUNT, key).unwrap();
+            }
+            (dir, device)
+        }
+
+        #[test]
+        fn a_locked_vault_gives_no_account_values() {
+            let (mut vault, _) = activated();
+            vault.lock();
+            assert!(matches!(unlocked_account(&vault), Err(Error::Locked)));
+        }
+
+        #[test]
+        fn every_field_reads_from_the_account_and_the_device() {
+            let (vault, key) = activated();
+            let (_dir, mut device) = device_with(Some(&key));
+            let account = unlocked_account(&vault).unwrap();
+            let value = |device: &mut Device, field| {
+                account_field(&account, device, field)
+                    .unwrap()
+                    .expose()
+                    .to_owned()
+            };
+            assert_eq!(value(&mut device, AccountField::Email), "user@example.com");
+            assert_eq!(
+                value(&mut device, AccountField::Server),
+                "https://vault.example.com"
+            );
+            assert_eq!(
+                value(&mut device, AccountField::AccountId),
+                ACCOUNT.to_string()
+            );
+            assert_eq!(
+                value(&mut device, AccountField::SecretKey),
+                key.to_text().expose()
+            );
+        }
+
+        #[test]
+        fn a_missing_secret_key_is_not_found_but_the_rest_still_reads() {
+            let (vault, _) = activated();
+            let (_dir, mut device) = device_with(None);
+            let account = unlocked_account(&vault).unwrap();
+            assert!(matches!(
+                account_field(&account, &mut device, AccountField::SecretKey),
+                Err(Error::NotFound)
+            ));
+            assert!(account_field(&account, &mut device, AccountField::Email).is_ok());
+        }
+
+        #[test]
+        fn fields_parse_from_the_wire_and_unknown_ones_are_refused() {
+            for (wire, field) in [
+                ("\"email\"", AccountField::Email),
+                ("\"server\"", AccountField::Server),
+                ("\"account_id\"", AccountField::AccountId),
+                ("\"secret_key\"", AccountField::SecretKey),
+            ] {
+                assert_eq!(serde_json::from_str::<AccountField>(wire).unwrap(), field);
+            }
+            assert!(serde_json::from_str::<AccountField>("\"password\"").is_err());
+        }
+
+        #[test]
+        fn a_revealed_key_does_not_debug_print() {
+            let (vault, key) = activated();
+            let (_dir, mut device) = device_with(Some(&key));
+            let account = unlocked_account(&vault).unwrap();
+            let value = account_field(&account, &mut device, AccountField::SecretKey).unwrap();
+            assert!(!format!("{value:?}").contains(key.to_text().expose()));
+        }
+    }
 
     #[test]
     fn reserved_characters_are_escaped() {

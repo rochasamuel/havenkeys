@@ -39,7 +39,7 @@ function useCopy(itemId: string) {
   );
 }
 
-function Field({ label, children, actions }: { label: string; children: ReactNode; actions?: ReactNode }) {
+export function Field({ label, children, actions }: { label: string; children: ReactNode; actions?: ReactNode }) {
   return (
     <div className="row">
       <div className="row-main">
@@ -51,7 +51,7 @@ function Field({ label, children, actions }: { label: string; children: ReactNod
   );
 }
 
-function IconButton({
+export function IconButton({
   icon,
   label,
   onClick,

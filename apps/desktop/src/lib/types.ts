@@ -77,6 +77,9 @@ export interface ItemInput {
 export type SecretField = "password" | "notes" | "content";
 export type CopyField = "username" | "password" | "totp";
 
+/** A value of the HavenKeys Account item (spec 2026-09-29-account-item). */
+export type AccountField = "email" | "server" | "account_id" | "secret_key";
+
 export interface TotpCode {
   code: string;
   period: number;

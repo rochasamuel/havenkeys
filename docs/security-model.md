@@ -239,6 +239,8 @@ means a live server session, which a locked vault does not have.
 | `sync_now`, `resync_vault` | yes (online) | no |
 | `set_ui_language` | no | no. Accepts only `en` or `pt-BR` and relabels the tray menu from a fixed table |
 | `get_emergency_kit` | yes | **the Secret Key**, plus a QR encoding it. The only command that returns long-term key material, on explicit request, with its own unlocked check because the Secret Key lives outside the vault (`server-sync.md` §7) |
+| `reveal_account_secret_key` | yes | **the Secret Key**, on an explicit reveal in the HavenKeys Account item. Same checks as `get_emergency_kit` |
+| `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
 convenience only.
@@ -435,6 +437,14 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
 * The Emergency Kit (Secret Key, account, email, server and a QR code) is
   shown only while unlocked, on request. Right after activation, continuing
   requires confirming it was saved.
+* The **HavenKeys Account** item pinned first in the vault list is virtual:
+  the desktop builds it from the account record and this device's Secret Key
+  when shown, and it is never stored as a vault item. So the Secret Key never
+  enters vault ciphertext or reaches the server, and the item is not in the
+  item store the native-messaging bridge searches, so the extension cannot
+  see it. It has no master-password field. The key is revealed only on a
+  click and hidden again after 30 s, on lock, or on leaving the item
+  (`specs/2026-09-29-account-item-design.md`).
 * **The Secret Key lives in the OS keychain** (Windows Credential Manager,
   macOS Keychain, the Secret Service on Linux; service `app.havenkeys`, user
   = account ID), with `device.json` as the fallback when no keychain is

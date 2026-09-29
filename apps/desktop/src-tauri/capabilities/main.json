@@ -31,6 +31,8 @@
     "allow-sync-now",
     "allow-resync-vault",
     "allow-get-emergency-kit",
+    "allow-reveal-account-secret-key",
+    "allow-copy-account-field",
     "allow-reveal-previous-password",
     "allow-get-totp-code",
     "allow-copy-secret",

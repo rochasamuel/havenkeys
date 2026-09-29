@@ -7,6 +7,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AccountField,
   AccountStatus,
   CopyField,
   CopyResult,
@@ -104,6 +105,10 @@ export const api = {
 
   deviceStatus: () => call<DeviceStatus>("device_status"),
   emergencyKit: () => call<EmergencyKit>("get_emergency_kit"),
+  /** The Account item's Secret Key, on an explicit reveal. */
+  revealAccountSecretKey: () => call<string>("reveal_account_secret_key"),
+  /** Rust copies the Account item's value and clears the clipboard later. */
+  copyAccountField: (field: AccountField) => call<CopyResult>("copy_account_field", { field }),
 
   /** First run: the invite string from the account's operator. */
   activate: (invite: string, password: string) =>

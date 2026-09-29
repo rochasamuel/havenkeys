@@ -358,6 +358,32 @@ export const ptBR: Messages = {
     avoidAmbiguous: "Evitar caracteres parecidos",
   },
 
+  accountItem: {
+    title: "Conta HavenKeys",
+    kind: "Sua conta HavenKeys",
+    accountId: "ID da conta",
+    secretKeyHeading: "Secret Key",
+    showSecretKey: "Mostrar Secret Key",
+    hideSecretKey: "Ocultar Secret Key",
+    hiddenSecretKey: "Secret Key oculta",
+    copy: {
+      email: "Copiar e-mail",
+      server: "Copiar servidor",
+      account_id: "Copiar ID da conta",
+      secret_key: "Copiar Secret Key",
+    },
+    copied: {
+      email: (seconds: number) => `E-mail copiado. A área de transferência é limpa em ${seconds}\u00a0s.`,
+      server: (seconds: number) => `Servidor copiado. A área de transferência é limpa em ${seconds}\u00a0s.`,
+      account_id: (seconds: number) => `ID da conta copiado. A área de transferência é limpa em ${seconds}\u00a0s.`,
+      secret_key: (seconds: number) => `Secret Key copiada. A área de transferência é limpa em ${seconds}\u00a0s.`,
+    },
+    notOnThisComputer: "A Secret Key não está neste computador.",
+    note: "Use estes dados com sua senha mestra para entrar no HavenKeys em outro computador.",
+    showKit: "Mostrar Emergency Kit",
+    readOnly: "Gerado a partir da sua conta. Não pode ser editado nem excluído.",
+  },
+
   kit: {
     qrLabel: "QR code da Secret Key",
     loadFailed: "Não foi possível carregar o Emergency Kit.",
