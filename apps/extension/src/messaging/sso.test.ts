@@ -43,15 +43,15 @@ describe("sso messages", () => {
     expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google" })).toBeNull();
     expect(parseSsoBackgroundMessage({ type: "bg_sso_press", provider: "google", origin: 7 })).toBeNull();
     expect(parseSsoReady({ kind: "choose", account: 5 })).toBeNull();
+    expect(parsePressReply(undefined)).toEqual({ pressed: false });
+    expect(isAccount("me@x.io")).toBe(true);
+    expect(isAccount("me@x.io\u0007")).toBe(false);
+    expect(isAccount(`me${String.fromCodePoint(0x202e)}@x.io`)).toBe(false);
   });
   it("parses the login phase and cs_sso_login", () => {
     expect(parseSsoReady({ kind: "login" })).toEqual({ kind: "login" });
     expect(parseSsoReady({ kind: "login", account: "a@b.co" })).toBeNull();
     expect(parseSsoContentRequest({ type: "cs_sso_login" })).toEqual({ type: "cs_sso_login" });
     expect(parseSsoContentRequest({ type: "cs_sso_login", itemId: "x" })).toBeNull();
-    expect(parsePressReply(undefined)).toEqual({ pressed: false });
-    expect(isAccount("me@x.io")).toBe(true);
-    expect(isAccount("me@x.io\u0007")).toBe(false);
-    expect(isAccount(`me${String.fromCodePoint(0x202e)}@x.io`)).toBe(false);
   });
 });

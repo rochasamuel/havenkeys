@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSsoState, PENDING_TTL_MS, SSO_RUN_TTL_MS } from "./sso-state";
 
-
 function setup() {
   let t = 1_000;
   const s = createSsoState(() => t);
