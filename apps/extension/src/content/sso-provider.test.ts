@@ -154,3 +154,101 @@ describe("choosing the saved account", () => {
     expect(sent).toEqual([]);
   });
 });
+
+/** Google's "Use another account" entry on the chooser. */
+function anotherAccount(): HTMLElement {
+  const a = document.createElement("div");
+  a.setAttribute("role", "link");
+  a.textContent = "Use another account";
+  document.body.append(a);
+  return a;
+}
+
+function input(type: string, name: string): HTMLInputElement {
+  const i = document.createElement("input");
+  i.type = type;
+  i.name = name;
+  document.body.append(i);
+  return i;
+}
+
+describe("handing the provider's login form to the background", () => {
+  it("clicks \"Use another account\" once when the row is missing, then hands the email step over", async () => {
+    row("you@gmail.com");
+    const other = anotherAccount();
+    const click = vi.spyOn(other, "click");
+    const c = make();
+    c.onReady({ kind: "choose", account: "me@gmail.com" });
+    expect(click).toHaveBeenCalledOnce();
+    expect(sent).toEqual([]);
+    input("email", "identifier");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(click).toHaveBeenCalledOnce();
+    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+    document.body.append(document.createElement("div"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+  });
+
+  it("clicks the account row, then hands over a password step in the same document", async () => {
+    const r = row("me@gmail.com");
+    const click = vi.spyOn(r, "click");
+    const c = make();
+    c.onReady({ kind: "choose", account: "me@gmail.com" });
+    expect(click).toHaveBeenCalledOnce();
+    r.remove();
+    input("password", "Passwd");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(click).toHaveBeenCalledOnce();
+    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+  });
+
+  it("hands over a password page in a new document at once", () => {
+    input("password", "Passwd");
+    make().onReady({ kind: "login" });
+    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+  });
+
+  it("consent_stops_before_another_account", async () => {
+    button("Allow");
+    const other = anotherAccount();
+    const click = vi.spyOn(other, "click");
+    const c = make();
+    c.onReady({ kind: "choose", account: "me@gmail.com" });
+    input("email", "identifier");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(click).not.toHaveBeenCalled();
+    expect(sent).toEqual([]);
+  });
+
+  it("the user's input before the email field appears cancels", async () => {
+    row("you@gmail.com");
+    anotherAccount();
+    const c = make();
+    c.onReady({ kind: "choose", account: "me@gmail.com" });
+    c.onTrustedInput();
+    input("email", "identifier");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(sent).toEqual([]);
+  });
+
+  it("does nothing in a subframe", async () => {
+    input("password", "Passwd");
+    make(false).onReady({ kind: "login" });
+    document.body.append(document.createElement("div"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sent).toEqual([]);
+  });
+
+  it("sends nothing when no form appears within CHOOSE_WAIT_MS", async () => {
+    const disconnect = vi.spyOn(MutationObserver.prototype, "disconnect");
+    const c = make();
+    c.onReady({ kind: "login" });
+    await vi.advanceTimersByTimeAsync(CHOOSE_WAIT_MS);
+    expect(disconnect).toHaveBeenCalled();
+    disconnect.mockRestore();
+    input("password", "Passwd");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(sent).toEqual([]);
+  });
+});

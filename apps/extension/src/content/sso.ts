@@ -1,7 +1,8 @@
 // "Sign in with" in the page: notice the site's provider buttons (to offer a
 // saved sign-in), notice the user's own clicks on them (to offer saving),
-// press the button after the user picked, and click the saved account on
-// the provider's chooser when the background says so.
+// press the button after the user picked, and, on the provider's page during
+// a run, click the saved account on the chooser, or "Use another account",
+// and hand the login form to the background.
 //
 // Bounded work: one scan per debounce, at most MAX_SSO_CANDIDATES elements,
 // observation for SCAN_WINDOW_MS after load or a URL change. Page strings
@@ -9,7 +10,8 @@
 
 import { providersForOrigin } from "@havenkeys/protocol";
 import { defaultEnv } from "../autofill/group";
-import { chooserRow, emailIn, findProviderButtons, isConsentScreen, providerButton, providerOf, SSO_CANDIDATES, SSO_MIN_SCORE } from "../autofill/sso";
+import { findLoginGroup } from "../autofill/page";
+import { anotherAccountButton, chooserRow, emailIn, findProviderButtons, isConsentScreen, providerButton, providerOf, SSO_CANDIDATES, SSO_MIN_SCORE } from "../autofill/sso";
 import { hasChallenge } from "../autofill/submit";
 import { TOKEN } from "../messaging/inline";
 import type { BackgroundToSso, SsoContentRequest, SsoPressReply, SsoReady } from "../messaging/sso";
@@ -128,18 +130,44 @@ export function createSsoContent(deps: {
     chooseStop = null;
   }
 
-  function choose(account: string): void {
+  /**
+   * On the provider's page during a run: choose the saved account (or "Use
+   * another account"), then hand the login form to the background, which
+   * fills the provider login and signs in (spec 2026-09-29 §3). One click of
+   * each kind, one hand-off, within CHOOSE_WAIT_MS; any user input ends it.
+   * `account` is set on a `choose` document, null on a `login` document.
+   */
+  function providerStep(account: string | null): void {
     cancelChoose();
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let chose = account === null;
+    let anotherClicked = false;
     const attempt = () => {
       timer = null;
       const env = defaultEnv();
       // A permissions screen: never pressed, and the run is over.
       if (isConsentScreen(document, env)) return cancelChoose();
-      const row = chooserRow(document, account, env);
-      if (!row) return;
-      cancelChoose();
-      row.click();
+      if (!chose && account !== null) {
+        const row = chooserRow(document, account, env);
+        if (row) {
+          chose = true;
+          row.click();
+          return; // the provider moves on: a new document, or a password step here
+        }
+        const other = anotherAccountButton(document, env);
+        if (other && !anotherClicked) {
+          anotherClicked = true;
+          chose = true;
+          other.click();
+          return;
+        }
+      }
+      // Neither the row nor "Use another account" but a login form (the
+      // provider signed out entirely) falls through to the hand-off too.
+      if (findLoginGroup(document, env)) {
+        cancelChoose();
+        void deps.send({ type: "cs_sso_login" });
+      }
     };
     const mo = new MutationObserver(() => {
       if (timer === null) timer = setTimeout(attempt, CHOOSE_DEBOUNCE_MS);
@@ -202,9 +230,9 @@ export function createSsoContent(deps: {
       }
     },
     onReady(sso: SsoReady): void {
-      // Only a top frame chooses (the background answers subframes with null too).
-      if (!deps.isTop) return;
-      if (sso?.kind === "choose" && providersForOrigin(location.origin).length > 0) choose(sso.account);
+      // Only a top frame acts (the background answers subframes with null too).
+      if (!deps.isTop || !sso || providersForOrigin(location.origin).length === 0) return;
+      providerStep(sso.kind === "choose" ? sso.account : null);
     },
     teardown(): void {
       watching = false;
