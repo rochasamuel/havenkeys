@@ -55,6 +55,10 @@ export const en = {
     codeTitle: "Show the one-time code",
     fillCodeTitle: "Fill this code into the page",
     edit: "Edit in HavenKeys",
+    fillIdentity: "Fill identity",
+    fillIdentityTitle: "Fill your identity into this page’s form",
+    identityKind: "Identity",
+    identityAsks: (docs: string) => `This page also asks for ${docs}.`,
     pill: {
       offline: "Offline",
       locked: "Locked",
@@ -232,6 +236,7 @@ export const en = {
     pleaseWait: "Please wait…",
     pageNotSupported: "This page can't use saved logins.",
     noLoginForm: "No login form found on this page.",
+    noIdentityForm: "No form for your identity on this page.",
     hostUnavailable: "The HavenKeys native messaging host is not installed or failed to start.",
     timeout: "HavenKeys did not respond.",
     unexpectedResponse: "Unexpected response.",

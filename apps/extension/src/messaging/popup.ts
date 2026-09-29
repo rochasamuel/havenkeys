@@ -3,7 +3,7 @@
 // The popup never talks to the native host and never supplies a URL: the
 // background worker reads the active tab's URL itself.
 
-import type { Match } from "@havenkeys/protocol";
+import type { IdentityRole, Match } from "@havenkeys/protocol";
 
 export type PopupRequest =
   | { type: "popup_state" }
@@ -14,7 +14,9 @@ export type PopupRequest =
   /** Fill this login's current one-time code into the active tab. */
   | { type: "popup_fill_totp"; itemId: string }
   /** Show this login in the desktop app's editor. */
-  | { type: "popup_open_item"; itemId: string };
+  | { type: "popup_open_item"; itemId: string }
+  /** Fill the page's first identity form. `documents`: null = not asked yet. */
+  | { type: "popup_fill_identity"; documents: boolean | null };
 
 export type PopupState =
   | { kind: "host_unavailable" }
@@ -22,13 +24,16 @@ export type PopupState =
   | { kind: "no_vault" }
   | { kind: "locked" }
   | { kind: "disabled" }
-  | { kind: "unlocked"; site: string | null; matches: Match[] }
+  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null }
   | { kind: "error"; message: string };
 
 export interface TotpView {
   code: string;
   secondsRemaining: number;
 }
+
+/** Reply to `popup_fill_identity`: null = filled, or ask about these documents first. */
+export type IdentityFillReply = { confirm: IdentityRole[] } | null;
 
 export type PopupReply<T> = { ok: true; value: T } | { ok: false; message: string };
 
@@ -49,6 +54,10 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
     case "popup_open_item":
       return keys.length === 2 && typeof o.itemId === "string" && UUID.test(o.itemId)
         ? { type: o.type, itemId: o.itemId }
+        : null;
+    case "popup_fill_identity":
+      return keys.length === 2 && (o.documents === null || typeof o.documents === "boolean")
+        ? { type: "popup_fill_identity", documents: o.documents }
         : null;
     default:
       return null;

@@ -23,6 +23,10 @@ export const ptBR: Messages = {
     codeTitle: "Mostrar o código de verificação",
     fillCodeTitle: "Preencher a página com este código",
     edit: "Editar no HavenKeys",
+    fillIdentity: "Preencher identidade",
+    fillIdentityTitle: "Preencher sua identidade no formulário desta página",
+    identityKind: "Identidade",
+    identityAsks: (docs: string) => `Esta página também pede ${docs}.`,
     pill: {
       offline: "Offline",
       locked: "Bloqueado",
@@ -199,6 +203,7 @@ export const ptBR: Messages = {
     pleaseWait: "Aguarde…",
     pageNotSupported: "Esta página não pode usar logins salvos.",
     noLoginForm: "Nenhum formulário de login encontrado nesta página.",
+    noIdentityForm: "Nenhum formulário para sua identidade nesta página.",
     hostUnavailable: "O host de mensagens nativas do HavenKeys não está instalado ou não conseguiu iniciar.",
     timeout: "O HavenKeys não respondeu.",
     unexpectedResponse: "Resposta inesperada.",
