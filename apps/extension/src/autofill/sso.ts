@@ -199,3 +199,22 @@ export function chooserRow(root: ParentNode, account: string, env: Env): HTMLEle
 export function isConsentScreen(root: ParentNode, env: Env): boolean {
   return candidates(root, env).some((el) => isConsentLabel(label(el)));
 }
+
+/** "Use another account" on a provider's account chooser, in the languages HavenKeys ships. */
+const ANOTHER_ACCOUNT = [
+  "use another account", "usar outra conta",
+  "sign in with a different account", "usar uma conta diferente",
+  "use a different account", "entrar com outra conta",
+];
+
+/**
+ * The chooser's "Use another account" control: exactly one visible,
+ * enabled candidate whose whole label is one of the phrases, on a page
+ * that is not a consent screen. Null otherwise.
+ */
+export function anotherAccountButton(root: ParentNode, env: Env): HTMLElement | null {
+  if (isConsentScreen(root, env)) return null;
+  const hits = candidates(root, env).filter((el) => ANOTHER_ACCOUNT.includes(label(el)));
+  const outer = hits.filter((el) => !hits.some((o) => o !== el && o.contains(el)));
+  return outer.length === 1 ? (outer[0] as HTMLElement) : null;
+}
