@@ -225,6 +225,7 @@ describe("suggestion menus", () => {
         items: [{ id: GH, title: "GitHub", username: "octo", provider: null }],
         passkeys: [],
         hint: null,
+        identity: null,
       },
     });
     expect(JSON.stringify(state)).not.toContain("pw");
