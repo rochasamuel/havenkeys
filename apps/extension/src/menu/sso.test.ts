@@ -114,18 +114,64 @@ describe("sso offer view", () => {
 
 describe("sso save view", () => {
   it("shows the account, and hides the title field for an update", async () => {
-    await openPrompt({ mode: "save", site: "github.com", provider: "google", account: "me@example.com", title: null, action: "update" });
+    await openPrompt({ mode: "save", site: "github.com", provider: "google", account: "me@example.com", accounts: [], title: null, action: "update" });
     const inputs = document.querySelectorAll("input");
     expect(inputs).toHaveLength(1);
     expect(inputs[0]!.value).toBe("me@example.com");
   });
 
   it("shows an empty account and a title field for a new login", async () => {
-    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: null, title: "GitHub", action: "add" });
+    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: null, accounts: [], title: "GitHub", action: "add" });
     const inputs = document.querySelectorAll("input");
     expect(inputs).toHaveLength(2);
     expect(inputs[0]!.value).toBe("");
     expect(inputs[1]!.value).toBe("GitHub");
+  });
+
+  it("offers the vault's accounts in a list, preselecting the suggested one", async () => {
+    await openPrompt({ mode: "save", site: "typeform.com", provider: "google", account: "work@x.com", accounts: ["me@gmail.com", "work@x.com"], title: "Typeform", action: "add" });
+    const select = document.querySelector("select")!;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(["me@gmail.com", "work@x.com", "Other email…"]);
+    expect(select.value).toBe("work@x.com");
+    // The free-text field is hidden until "Other email…" is chosen; the title field stays.
+    const inputs = document.querySelectorAll<HTMLInputElement>("input");
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]!.hidden).toBe(true);
+  });
+
+  it("adds a suggestion the vault does not have to the list, and preselects the first account without one", async () => {
+    await openPrompt({ mode: "save", site: "typeform.com", provider: "google", account: "new@x.com", accounts: ["me@gmail.com"], title: null, action: "update" });
+    let select = document.querySelector("select")!;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["new@x.com", "me@gmail.com", ""]);
+    expect(select.value).toBe("new@x.com");
+    page();
+    await openPrompt({ mode: "save", site: "typeform.com", provider: "google", account: null, accounts: ["me@gmail.com"], title: null, action: "update" });
+    select = document.querySelector("select")!;
+    expect(select.value).toBe("me@gmail.com");
+  });
+
+  it("sends the chosen account, or the typed one after \"Other email…\"", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ mode: "save", site: "typeform.com", provider: "google", account: null, accounts: ["me@gmail.com", "work@x.com"], title: "Typeform", action: "add" });
+    const select = document.querySelector("select")!;
+    const other = document.querySelector<HTMLInputElement>("input")!;
+    const saveBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Save")!;
+    select.value = "work@x.com";
+    select.dispatchEvent(new Event("change"));
+    replies.push({ ok: false, message: "retry" });
+    handlers.get(saveBtn)!({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked).toContainEqual({ type: "sso_save", token: TOKEN, account: "work@x.com", title: "Typeform" });
+
+    select.value = "";
+    select.dispatchEvent(new Event("change"));
+    expect(other.hidden).toBe(false);
+    other.value = "typed@x.com";
+    (saveBtn as HTMLButtonElement).disabled = false;
+    replies.push({ ok: true, value: null });
+    handlers.get(saveBtn)!({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked).toContainEqual({ type: "sso_save", token: TOKEN, account: "typed@x.com", title: "Typeform" });
   });
 
   it("builds the save request from the token, the account field and the title (add only)", async () => {
@@ -136,7 +182,7 @@ describe("sso save view", () => {
 
   it("confirm sends the current field values for a new login", async () => {
     const handlers = captureClicks();
-    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: "octo@example.com", title: "GitHub", action: "add" });
+    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: "octo@example.com", accounts: [], title: "GitHub", action: "add" });
     const inputs = document.querySelectorAll<HTMLInputElement>("input");
     inputs[0]!.value = "octocat@example.com";
     inputs[1]!.value = "GitHub - Work";
@@ -151,7 +197,7 @@ describe("sso save view", () => {
 
   it("confirm sends a null title for an update (no title field)", async () => {
     const handlers = captureClicks();
-    await openPrompt({ mode: "save", site: "github.com", provider: "google", account: "me@example.com", title: null, action: "update" });
+    await openPrompt({ mode: "save", site: "github.com", provider: "google", account: "me@example.com", accounts: [], title: null, action: "update" });
     const account = document.querySelector<HTMLInputElement>("input")!;
     account.value = "someone@example.com";
     // sso.update ("Add") labels the confirm button for an update.
@@ -166,7 +212,7 @@ describe("sso save view", () => {
 
   it("a failed save shows the error in place and disables confirm, keeping both buttons", async () => {
     const handlers = captureClicks();
-    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: "octo@example.com", title: "GitHub", action: "add" });
+    await openPrompt({ mode: "save", site: "github.com", provider: "github", account: "octo@example.com", accounts: [], title: "GitHub", action: "add" });
     const saveBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Save")! as HTMLButtonElement;
     const dismissBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Not now")! as HTMLButtonElement;
     const handler = handlers.get(saveBtn)!;

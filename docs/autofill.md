@@ -703,20 +703,50 @@ is what "reached the provider" means; an embedded Google Identity Services
 iframe that never navigates the top frame does **not** count, so a page
 cannot arm a save prompt just by drawing a GSI button nobody clicked.
 
+A weaker suggestion comes from the **`login_hint`** parameter (OAuth 2.0 /
+OpenID Connect) of a URL that the clicked tab, or a tab it opened, starts
+loading after the click. The background reads it from the browser's tab
+events (`tabs.onCreated` `pendingUrl`, `tabs.onUpdated` `url`). Those events
+report URLs only for sites the extension has host access to, so no new
+permission is needed. Many sites send the account they last used there,
+often through their own identity provider first (Typeform: its Okta
+`authorize` URL). It is the only source when the provider approves with
+redirects alone and never shows a page. It is kept only if it looks like an
+email. The provider page's own account wins over it.
+
+The save prompt then offers **the vault's accounts for the provider**:
+`check_sso` returns the usernames of the logins that the vault's own URL
+rules match to the provider's sign-in page (for Google, a login saved for
+`google.com` matches `https://accounts.google.com/`). These are the same
+logins a provider page is filled from. When there are any, the account field
+is a list of them. The suggestion is added to the list if the vault lacks it
+and preselected; otherwise the first account is preselected. "Other email…"
+reveals a free-text field. With none, it is the text field as before.
+
 Once the provider has been reached, either of these asks the desktop
 `check_sso` while the pending capture is still valid:
 
 * the first later top-frame load in the tab on an origin that is **not** one
   of the provider's origins (back on the site, or somewhere else);
 * the provider popup closing (many sites run OAuth in a popup and never
-  reload the tab).
+  reload the tab). A tab opened by the clicked tab after the click counts
+  as that popup even if no provider page ever loaded in it: a provider
+  where the user is already signed in and has consented may approve with
+  redirects alone (Google with a `login_hint` does), so no document on its
+  origin runs the content script. The trusted click on the provider button
+  is still required; closing that popup without signing in also asks, as
+  closing the provider's chooser always did.
 
 `unchanged` (this provider and account, or this provider with no account, is
 already saved) shows nothing. `update` (exactly one login has this provider
 and no account, typically imported from 1Password) offers to add the account
 to it. `add` shows the ordinary save balloon, naming the site **where the
 user clicked**, not the page they returned to, with the account and a title
-editable before **Save**. A stale pending capture simply expires without
+editable before **Save**. Sites often move on right as the question appears
+(the popup closes, then the tab loads the dashboard), which takes the balloon
+with the old page, so an open save question is shown again on each later
+top-frame load in that tab until it is answered, dismissed or expires
+(5 minutes). It holds no secret. A stale pending capture simply expires without
 ever asking, so it can never block a later, unrelated offer. Everything —
 pending captures, runs and open balloons — is dropped on lock.
 

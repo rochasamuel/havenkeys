@@ -232,6 +232,23 @@ chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
   return false;
 });
 
+// A site's login popup, and the URLs it or the clicked tab load (an OAuth
+// `login_hint` to suggest in the save prompt). URLs are visible to us only
+// for sites we have host access to; nothing is stored beyond the hint.
+const tabRef = (tab: chrome.tabs.Tab) =>
+  tab.id === undefined ? null : tab.openerTabId === undefined ? { tabId: tab.id } : { tabId: tab.id, openerTabId: tab.openerTabId };
+chrome.tabs.onCreated.addListener((tab) => {
+  const ref = tabRef(tab);
+  if (!ref) return;
+  if (ref.openerTabId !== undefined) sso.tabCreated(ref);
+  const url = tab.pendingUrl ?? tab.url;
+  if (url) sso.tabUrl(ref, url);
+});
+chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
+  const ref = tabRef(tab);
+  if (ref && change.url) sso.tabUrl(ref, change.url);
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   inline.forgetTab(tabId);
   passkeys.forgetTab(tabId);

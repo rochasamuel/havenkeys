@@ -276,7 +276,8 @@ main {
   font-weight: 600;
 }
 
-.prompt .field input {
+.prompt .field input,
+.prompt .field select {
   height: 30px;
   padding: 0 9px;
   border: 1px solid var(--line-strong);
@@ -287,7 +288,12 @@ main {
   font-size: 13px;
 }
 
-.prompt .field input:focus-visible {
+.prompt .field input[hidden] {
+  display: none;
+}
+
+.prompt .field input:focus-visible,
+.prompt .field select:focus-visible {
   outline: 2px solid var(--brass);
   outline-offset: 1px;
   border-color: transparent;
