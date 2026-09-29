@@ -1002,4 +1002,23 @@ describe("identity menu", () => {
     const open = await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName"] });
     expect(open).toEqual({ ok: false });
   });
+  it("shows a locked row when the vault is locked, and refuses to fill from it", async () => {
+    const { h, requests } = setup(answerWith({ find_identity: new BridgeError("locked", "x") }));
+    const open = (await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName"] })) as { ok: boolean; token: string };
+    expect(open.ok).toBe(true);
+    expect(await h.handleInline(TAB, { type: "menu_state", token: open.token })).toEqual({ ok: true, value: { state: "locked" } });
+    expect(await h.handleInline(TAB, { type: "menu_pick_identity", token: open.token, documents: false })).toMatchObject({ ok: false });
+    expect(requests.map((r) => r.type)).toEqual(["find_identity"]);
+  });
+
+  it("stays out of the page when the desktop denies the request", async () => {
+    const { h } = setup(answerWith({ find_identity: new BridgeError("denied", "x") }));
+    expect(await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName"] })).toEqual({ ok: false });
+  });
+
+  it("adds no identity row under a sign-up form when there is no identity", async () => {
+    const { h } = setup(answerWith({ find_matches: { type: "find_matches", matches: [] }, find_identity: new BridgeError("not_found", "x") }));
+    const open = await h.handleContent(idFrame("https://shop.com/signup"), { type: "cs_open_menu", kind: "login", roles: ["email", "fullName"] });
+    expect(open).toEqual({ ok: false });
+  });
 });
