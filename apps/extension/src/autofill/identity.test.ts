@@ -126,4 +126,27 @@ describe("identity groups", () => {
     const g = identityGroupFor($("#n"), env)!;
     expect(rolesOf(g)).toEqual(["fullName", "addressLine1", "street", "number", "complement"]);
   });
+
+  it("prefers specific roles over generic words", () => {
+    page(`<form>
+      <input id="a" name="email_address">
+      <label>Phone number<input id="b"></label>
+      <label>Numero de telefone<input id="c"></label>
+      <label>Order number<input id="d"></label>
+      <label>Unit price<input id="e"></label>
+      <label>Nome da mãe<input id="f"></label>
+      <label>Nome do titular<input id="g"></label>
+      <label>Region<input id="h"></label>
+      <input id="i" type="date" autocomplete="name">
+    </form>`);
+    expect(role("#a")).toBe("email");
+    expect(role("#b")).toBe("phone");
+    expect(role("#c")).toBe("phone");
+    for (const id of ["#d", "#e", "#f", "#g", "#h", "#i"]) expect(role(id), id).toBeNull();
+  });
+
+  it("refuses fields inside a search landmark", () => {
+    page(`<form role="search"><input id="d" name="cidade"><input id="z" name="cep"></form>`);
+    expect(identityGroupFor($("#z"), env)).toBeNull();
+  });
 });

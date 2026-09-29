@@ -65,23 +65,24 @@ const WORDS: Array<[IdentityRole, readonly string[]]> = [
   ["passport", ["passport", "passaporte"]],
   ["driversLicense", ["cnh", "driver license", "drivers license", "driving licence", "carteira de motorista"]],
   ["birthDate", ["data de nascimento", "nascimento", "date of birth", "birth date", "birthday", "birthdate", "dob"]],
+  ["email", ["email", "e mail"]],
+  ["phone", ["celular", "telefone", "phone", "mobile", "tel", "whatsapp"]],
+  ["username", ["username", "user name", "nome de usuario"]],
+  ["company", ["empresa", "company", "organization", "organizacao", "nome fantasia", "razao social"]],
   ["postalCode", ["cep", "zip", "zip code", "zipcode", "postal", "postal code", "postcode"]],
   ["neighborhood", ["bairro", "neighborhood", "district"]],
-  ["complement", ["complemento", "apt", "apartment", "suite", "unit"]],
+  ["complement", ["complemento", "apt", "apartment", "suite"]],
   ["number", ["numero", "number", "house number", "num"]],
   ["street", ["logradouro", "rua", "endereco", "street", "address", "address line 1"]],
   ["city", ["cidade", "city", "municipio", "town"]],
-  ["state", ["estado", "uf", "state", "province", "region"]],
+  ["state", ["estado", "uf", "state", "province"]],
   ["country", ["pais", "country"]],
-  ["phone", ["celular", "telefone", "phone", "mobile", "tel", "whatsapp"]],
-  ["company", ["empresa", "company", "organization", "organizacao"]],
-  ["email", ["email", "e mail"]],
-  ["username", ["username", "user name", "nome de usuario"]],
   ["fullName", ["nome", "name"]],
 ];
 
 /** Wording that means "not the person's data" even when a role word matches. */
-const NEGATIVE = ["search", "busca", "pesquisar", "coupon", "cupom", "promo", "cc", "card", "cartao", "cvv", "cvc", "captcha", "quantity", "quantidade"];
+const NEGATIVE = ["search", "busca", "pesquisar", "coupon", "cupom", "promo", "cc", "card", "cartao", "cvv", "cvc", "captcha", "quantity", "quantidade",
+  "order", "pedido", "account", "conta", "tracking", "rastreio", "invoice", "nota fiscal", "price", "preco", "mae", "mother", "titular", "holder", "unit"];
 
 const WORDS_ON_ATTRS = 70;
 const WORDS_ON_TEXT = 60;
@@ -115,20 +116,20 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   if (/\b(cc-|one-time-code|current-password|new-password)/.test(ac)) return null;
   const attrs = normalize(`${attr(el, "name")} ${attr(el, "id")}`);
   const text = normalize(`${attr(el, "placeholder")} ${attr(el, "aria-label")} ${attr(el, "title")} ${labelText(el)}`, MAX_HINT_CHARS * 3);
-  if (hasAny(`${attrs} ${text}`, NEGATIVE) || attr(el, "role") === "search") return null;
+  if (hasAny(`${attrs} ${text}`, NEGATIVE) || attr(el, "role") === "search" || el.closest('[role="search"]')) return null;
 
+  // A date input only takes a birth date; a multi-line field only takes an address.
+  const allowed = (role: IdentityRole): boolean =>
+    (type !== "date" || role === "birthDate") && (tag !== "textarea" || role === "street" || role === "addressLine1");
   const fromAc = autocompleteRole(el);
-  if (fromAc) return { role: fromAc, confidence: 1, byAutocomplete: true };
+  if (fromAc) return allowed(fromAc) ? { role: fromAc, confidence: 1, byAutocomplete: true } : null;
   if (type === "email") return { role: "email", confidence: 0.8, byAutocomplete: false };
   if (type === "tel") return { role: "phone", confidence: 0.8, byAutocomplete: false };
 
   for (const [role, words] of WORDS) {
     const score = hasAny(attrs, words) ? WORDS_ON_ATTRS : hasAny(text, words) ? WORDS_ON_TEXT : 0;
     if (score < THRESHOLD) continue;
-    // A date input only takes a birth date.
-    if (type === "date" && role !== "birthDate") return null;
-    // A multi-line field only takes an address.
-    if (tag === "textarea" && role !== "street" && role !== "addressLine1") return null;
+    if (!allowed(role)) return null;
     return { role: role === "street" && tag === "textarea" ? "addressLine1" : role, confidence: score / 100, byAutocomplete: false };
   }
   return null;
