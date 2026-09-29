@@ -45,6 +45,9 @@ export function createSsoContent(deps: {
   let listening = false;
   /** We pressed a provider button for a run: the user's next input ends it. */
   let pressed = false;
+  /** A provider document of a run (a non-null SsoReady): until the hand-off, the
+   * user's input, giving up or a consent screen ends the background's run. */
+  let providerRun = false;
   let chooseStop: (() => void) | null = null;
 
   function closeFrame(): void {
@@ -130,11 +133,22 @@ export function createSsoContent(deps: {
     chooseStop = null;
   }
 
+  /** Stop the wait and end the background's run (once per document). */
+  function endRun(): void {
+    cancelChoose();
+    if (pressed || providerRun) {
+      pressed = false;
+      providerRun = false;
+      void deps.send({ type: "cs_sso_stop" });
+    }
+  }
+
   /**
    * On the provider's page during a run: choose the saved account (or "Use
    * another account"), then hand the login form to the background, which
    * fills the provider login and signs in (spec 2026-09-29 §3). One click of
-   * each kind, one hand-off, within CHOOSE_WAIT_MS; any user input ends it.
+   * each kind, one hand-off, within CHOOSE_WAIT_MS; any user input, giving
+   * up or a consent screen ends the run (cs_sso_stop).
    * `account` is set on a `choose` document, null on a `login` document.
    */
   function providerStep(account: string | null): void {
@@ -147,7 +161,7 @@ export function createSsoContent(deps: {
       timer = null;
       const env = defaultEnv();
       // A permissions screen: never pressed, and the run is over.
-      if (isConsentScreen(document, env)) return cancelChoose();
+      if (isConsentScreen(document, env)) return endRun();
       if (!chose && account !== null) {
         const row = chooserRow(document, account, env);
         if (row) {
@@ -174,6 +188,7 @@ export function createSsoContent(deps: {
       // provider signed out entirely) falls through to the hand-off too.
       if (findLoginGroup(document, env)) {
         cancelChoose();
+        providerRun = false; // the background consumes the run on this request
         void deps.send({ type: "cs_sso_login" });
       }
     };
@@ -181,7 +196,7 @@ export function createSsoContent(deps: {
       if (timer === null) timer = setTimeout(attempt, CHOOSE_DEBOUNCE_MS);
     });
     mo.observe(document.documentElement, { childList: true, subtree: true });
-    const giveUp = setTimeout(cancelChoose, CHOOSE_WAIT_MS);
+    const giveUp = setTimeout(endRun, CHOOSE_WAIT_MS);
     chooseStop = () => {
       mo.disconnect();
       clearTimeout(giveUp);
@@ -206,11 +221,7 @@ export function createSsoContent(deps: {
       }
     },
     onTrustedInput(): void {
-      cancelChoose();
-      if (pressed) {
-        pressed = false;
-        void deps.send({ type: "cs_sso_stop" });
-      }
+      endRun();
     },
     handleBackground(m: BackgroundToSso): SsoPressReply | undefined {
       switch (m.type) {
@@ -240,6 +251,7 @@ export function createSsoContent(deps: {
     onReady(sso: SsoReady): void {
       // Only a top frame acts (the background answers subframes with null too).
       if (!deps.isTop || !sso || providersForOrigin(location.origin).length === 0) return;
+      providerRun = true;
       providerStep(sso.kind === "choose" ? sso.account : null);
     },
     teardown(): void {

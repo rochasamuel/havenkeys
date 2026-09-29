@@ -116,6 +116,7 @@ describe("choosing the saved account", () => {
     const click = vi.spyOn(r, "click");
     await vi.advanceTimersByTimeAsync(2000);
     expect(click).not.toHaveBeenCalled();
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]); // the run is over
   });
 
   it("does not click when two rows hold the account", async () => {
@@ -137,21 +138,31 @@ describe("choosing the saved account", () => {
     await vi.advanceTimersByTimeAsync(CHOOSE_WAIT_MS);
     expect(disconnect).toHaveBeenCalled();
     disconnect.mockRestore();
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]); // giving up ends the run
     const r = row("me@gmail.com");
     const click = vi.spyOn(r, "click");
     await vi.advanceTimersByTimeAsync(2000);
     expect(click).not.toHaveBeenCalled();
   });
 
-  it("the user's input before the row appears cancels", async () => {
+  it("the user's input before the row appears cancels and ends the run, once", async () => {
     const c = make();
     c.onReady({ kind: "choose", account: "me@gmail.com" });
+    c.onTrustedInput();
     c.onTrustedInput();
     const r = row("me@gmail.com");
     const click = vi.spyOn(r, "click");
     await vi.advanceTimersByTimeAsync(2000);
     expect(click).not.toHaveBeenCalled();
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]);
+  });
+
+  it("the user's input after the row was clicked still ends the run", async () => {
+    row("me@gmail.com");
+    const c = make();
+    c.onReady({ kind: "choose", account: "me@gmail.com" });
+    c.onTrustedInput();
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]);
   });
 });
 
@@ -188,7 +199,8 @@ describe("handing the provider's login form to the background", () => {
     expect(click).toHaveBeenCalledOnce();
     expect(sent).toEqual([{ type: "cs_sso_login" }]);
     document.body.append(document.createElement("div"));
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(CHOOSE_WAIT_MS);
+    c.onTrustedInput(); // the background consumed the run: nothing to stop
     expect(sent).toEqual([{ type: "cs_sso_login" }]);
   });
 
@@ -227,10 +239,31 @@ describe("handing the provider's login form to the background", () => {
     expect(sent).toEqual([{ type: "cs_sso_login" }]);
   });
 
-  it("hands over a password page in a new document at once", () => {
+  it("hands over a password page in a new document at once; no cs_sso_stop afterwards", async () => {
+    input("password", "Passwd");
+    const c = make();
+    c.onReady({ kind: "login" });
+    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+    await vi.advanceTimersByTimeAsync(CHOOSE_WAIT_MS);
+    c.onTrustedInput();
+    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+  });
+
+  it("the user's input on a login document before the form appears ends the run, once", async () => {
+    const c = make();
+    c.onReady({ kind: "login" });
+    c.onTrustedInput();
+    c.onTrustedInput();
+    input("password", "Passwd");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]);
+  });
+
+  it("a consent screen on a login document ends the run", () => {
+    button("Allow");
     input("password", "Passwd");
     make().onReady({ kind: "login" });
-    expect(sent).toEqual([{ type: "cs_sso_login" }]);
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]);
   });
 
   it("consent_stops_before_another_account", async () => {
@@ -242,7 +275,7 @@ describe("handing the provider's login form to the background", () => {
     input("email", "identifier");
     await vi.advanceTimersByTimeAsync(2000);
     expect(click).not.toHaveBeenCalled();
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]); // the run is over; no hand-off
   });
 
   it("the user's input before the email field appears cancels", async () => {
@@ -253,18 +286,20 @@ describe("handing the provider's login form to the background", () => {
     c.onTrustedInput();
     input("email", "identifier");
     await vi.advanceTimersByTimeAsync(2000);
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]);
   });
 
   it("does nothing in a subframe", async () => {
     input("password", "Passwd");
-    make(false).onReady({ kind: "login" });
+    const c = make(false);
+    c.onReady({ kind: "login" });
     document.body.append(document.createElement("div"));
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(CHOOSE_WAIT_MS);
+    c.onTrustedInput();
     expect(sent).toEqual([]);
   });
 
-  it("sends nothing when no form appears within CHOOSE_WAIT_MS", async () => {
+  it("gives up when no form appears within CHOOSE_WAIT_MS and ends the run", async () => {
     const disconnect = vi.spyOn(MutationObserver.prototype, "disconnect");
     const c = make();
     c.onReady({ kind: "login" });
@@ -273,6 +308,7 @@ describe("handing the provider's login form to the background", () => {
     disconnect.mockRestore();
     input("password", "Passwd");
     await vi.advanceTimersByTimeAsync(2000);
-    expect(sent).toEqual([]);
+    c.onTrustedInput(); // already ended: not sent twice
+    expect(sent).toEqual([{ type: "cs_sso_stop" }]);
   });
 });
