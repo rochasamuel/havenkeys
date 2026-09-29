@@ -15,6 +15,8 @@ export const SSO_PROVIDERS: Readonly<Record<SsoProvider, { name: string; origins
 export const SSO_PROVIDER_IDS = Object.keys(SSO_PROVIDERS) as readonly SsoProvider[];
 
 export const MAX_ACCOUNT_CHARS = 254;
+/** Most vault accounts a check_sso result may offer (Rust: MAX_PROVIDER_ACCOUNTS). */
+export const MAX_PROVIDER_ACCOUNTS = 10;
 
 export function isSsoProvider(v: unknown): v is SsoProvider {
   return typeof v === "string" && Object.prototype.hasOwnProperty.call(SSO_PROVIDERS, v);

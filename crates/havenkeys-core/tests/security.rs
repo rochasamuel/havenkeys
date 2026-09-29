@@ -1141,6 +1141,38 @@ fn check_sso_actions() {
 }
 
 #[test]
+fn provider_accounts_are_the_usernames_the_vault_matches_to_the_provider() {
+    let (mut v, _) = sso_vault();
+    for (rev, input) in (7..).zip([
+        login("Google", " Me@Gmail.com ", "pw", "google.com"),
+        login(
+            "Google (work)",
+            "srocha@callix.com.br",
+            "pw",
+            "https://accounts.google.com",
+        ),
+        login("Google again", "me@gmail.com", "pw", "google.com"),
+        login("Google, no username", "", "pw", "google.com"),
+        login("Look-alike", "evil@x.com", "pw", "google.com.evil.com"),
+    ]) {
+        let staged = v.stage_create(input, NOW).unwrap();
+        v.commit_write(staged, rev).unwrap();
+    }
+    // Sorted, trimmed, lowercased, deduplicated; the Typeform "Sign in with"
+    // login (not saved for Google's page) and the look-alike are not included.
+    assert_eq!(
+        v.provider_accounts(SsoProvider::Google).unwrap(),
+        vec!["me@gmail.com".to_owned(), "srocha@callix.com.br".to_owned()]
+    );
+    assert!(v.provider_accounts(SsoProvider::Apple).unwrap().is_empty());
+    v.lock();
+    assert_eq!(
+        v.provider_accounts(SsoProvider::Google).err(),
+        Some(Error::Locked)
+    );
+}
+
+#[test]
 fn save_sso_adds_without_a_password_and_updates_only_the_account() {
     let (mut v, _) = sso_vault();
     let staged = v

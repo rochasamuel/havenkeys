@@ -52,6 +52,8 @@ pub const MAX_TITLE_BYTES: usize = 4 * 256;
 pub const MAX_ACCOUNT_BYTES: usize = 4 * 254;
 /// Most provider origins a start_sso result may carry.
 pub const MAX_PROVIDER_ORIGINS: usize = 4;
+/// Most vault accounts a check_sso result may offer.
+pub const MAX_PROVIDER_ACCOUNTS: usize = 10;
 
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;

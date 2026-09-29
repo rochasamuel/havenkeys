@@ -468,7 +468,18 @@ pub fn dispatch(
                 CoreSaveAction::Update(id) => (SaveAction::Update, Some(id)),
                 CoreSaveAction::Unchanged => (SaveAction::Unchanged, None),
             };
-            Ok(Dispatched::Done(ResultBody::CheckSso { action, item_id }))
+            // Only a prompt that will be shown is offered the vault's accounts.
+            let accounts = if action == SaveAction::Unchanged {
+                Vec::new()
+            } else {
+                v.provider_accounts(core_provider(*provider))
+                    .map_err(code)?
+            };
+            Ok(Dispatched::Done(ResultBody::CheckSso {
+                action,
+                item_id,
+                accounts,
+            }))
         }
         Request::SaveSso {
             url,

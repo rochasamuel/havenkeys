@@ -182,7 +182,7 @@ carries its account when the item has no username of its own.
 {"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
 {"v":1,"id":10,"result":{"type":"open_item"}}
 {"v":1,"id":19,"result":{"type":"start_sso","provider":"google","account":"user@gmail.com","providerOrigins":["https://accounts.google.com"],"autoChoose":true}}
-{"v":1,"id":20,"result":{"type":"check_sso","action":"add","itemId":null}}
+{"v":1,"id":20,"result":{"type":"check_sso","action":"add","itemId":null,"accounts":["user@gmail.com"]}}
 {"v":1,"id":21,"result":{"type":"save_sso","itemId":"…"}}
 {"v":1,"id":10,"error":{"code":"denied","message":"This item is not saved for this website."}}
 ```
@@ -431,7 +431,7 @@ and are treated as untrusted input.
 | Request | Core function | Returns | Checks |
 |---|---|---|---|
 | `start_sso` | `start_sso_for_page` | the item's provider and saved account, the provider's exact origins (from Rust's fixed table), and whether the run may auto-choose. **No secret** | Same origin check as `fill_item`; the item must be a login with `sign_in_with`. `autoChoose = settings.auto_sign_in && item.auto_sign_in` |
-| `check_sso` | `check_sso` | `add` (no login has this provider+account or this provider with no account), `update` (exactly one login has this provider and no account) or `unchanged`, and the `itemId` an `update` would change | Among logins whose own website rules match the page |
+| `check_sso` | `check_sso`, `provider_accounts` | `add` (no login has this provider+account or this provider with no account), `update` (exactly one login has this provider and no account) or `unchanged`, the `itemId` an `update` would change, and, unless `unchanged`, `accounts`: the usernames (trimmed, lowercased, deduplicated, sorted, at most 10) of logins whose rules match the provider's own sign-in origins, offered as choices in the save prompt. Omitted when empty; an older desktop never sends it | Among logins whose own website rules match the page |
 | `save_sso` | `stage_save_sso` | the item ID | Without `itemId`: the same path as `save_login`, one whole-site rule for the frame's origin, `auto_sign_in` on, no password required. With `itemId`: the login must match the page and already sign in with `provider`; only its `account` changes, and `title` must be absent |
 
 `account` is validated the same way on every one of these requests: trimmed,

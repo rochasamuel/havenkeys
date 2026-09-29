@@ -165,6 +165,17 @@ describe("sign in with", () => {
       .toEqual({ kind: "result", id: 1, result: { type: "start_sso", provider: "google", account: null, providerOrigins: ["https://accounts.google.com"], autoChoose: true } });
     expect(parseIncoming({ v: 1, id: 1, result: { type: "check_sso", action: "update", itemId: ID } })?.kind).toBe("result");
     expect(parseIncoming({ v: 1, id: 1, result: { type: "save_sso", itemId: ID } })?.kind).toBe("result");
+    // `accounts` is optional (an older desktop omits it) and defaults to none.
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "check_sso", action: "add", itemId: null } })).toEqual({
+      kind: "result",
+      id: 1,
+      result: { type: "check_sso", action: "add", itemId: null, accounts: [] },
+    });
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "check_sso", action: "add", itemId: null, accounts: ["me@gmail.com"] } })).toEqual({
+      kind: "result",
+      id: 1,
+      result: { type: "check_sso", action: "add", itemId: null, accounts: ["me@gmail.com"] },
+    });
     const m = { id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: "github" };
     expect(parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m] } })?.kind).toBe("result");
   });
@@ -174,6 +185,10 @@ describe("sign in with", () => {
       { type: "start_sso", provider: "google", account: null, providerOrigins: [], autoChoose: true },
       { type: "start_sso", provider: "google", account: null, providerOrigins: ["a", "b", "c", "d", "e"], autoChoose: true },
       { type: "check_sso", action: "update", itemId: null },
+      { type: "check_sso", action: "add", itemId: null, accounts: Array(11).fill("a@b.co") },
+      { type: "check_sso", action: "add", itemId: null, accounts: [""] },
+      { type: "check_sso", action: "add", itemId: null, accounts: ["a".repeat(255)] },
+      { type: "check_sso", action: "add", itemId: null, accounts: "me@gmail.com" },
       { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }] },
     ];
     for (const result of bad) expect(parseIncoming({ v: 1, id: 1, result })).toBeNull();
