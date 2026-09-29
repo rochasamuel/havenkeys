@@ -995,6 +995,116 @@ back to the browser when no acknowledgement comes within 1 s (no bridge), and
 ends an acknowledged modal request that is never answered with
 `NotAllowedError` after the clamped timeout plus 15 s.
 
+## Identity
+
+Spec: `docs/superpowers/specs/2026-09-29-identity-autofill-design.md`. The
+account's Identity (name, email, phone, birth date, address, documents) fills
+sign-up and checkout forms after one click. Unlike logins it is **not bound
+to a site** (`security-model.md` §20 lists the rules that replace the
+binding and what they do not cover). Nothing is filled on page load, and
+nothing is submitted.
+
+### Signals (`autofill/identity.ts`)
+
+A field gets one of 25 roles (`fullName`, `firstName`, `middleName`,
+`lastName`, `email`, `phone`, `birthDate`, `birthDay`, `birthMonth`,
+`birthYear`, `company`, `street`, `number`, `complement`, `addressLine1`,
+`addressLine2`, `neighborhood`, `city`, `state`, `postalCode`, `country`,
+`username`, `cpf`, `rg`, `passport`, `driversLicense`) from, in order:
+
+1. **`autocomplete`**, after dropping `section-*`, `shipping`, `billing`,
+   `home`, `work`, `mobile`, `fax` and `pager`: `name`, `given-name`,
+   `additional-name`, `family-name`, `email`, `tel`, `tel-national`, `bday`,
+   `bday-day`, `bday-month`, `bday-year`, `organization`, `street-address`,
+   `address-line1`, `address-line2`, `address-level3` (neighborhood),
+   `address-level2` (city), `address-level1` (state), `postal-code`,
+   `country`, `country-name`, `username`. Confidence 1.
+2. **Input type**: `email`, `tel`. Confidence 0.8.
+3. **Words** in the name and id (weight 70) or the placeholder, aria-label,
+   title and label (weight 60), English and Portuguese, accents ignored:
+   nome, sobrenome, nome completo, e-mail, celular, telefone, nascimento,
+   empresa, logradouro, rua, endereco, numero, complemento, apt, bairro,
+   cidade, estado, UF, CEP, zip, pais, country, CPF, RG, passaporte, CNH and
+   the English equivalents. A word must reach 60 to count.
+
+Never an identity field: password and one-time-code fields, **card fields**
+(`cc-*` autocomplete; the words cc, card, cartao, cvv, cvc), words that mean
+something other than the person's data (order and account numbers, tracking,
+coupon, quantity, "nome da mae", "titular" and holder), search boxes
+(`type=search`, `role=search`), input types other than text, email, tel,
+number, url and date, and hidden, disabled or read-only fields. The login
+classifier is unchanged: the words it treats as "not a username" stay
+negatives there.
+
+### Qualifying forms
+
+The group is the same one the login classifier uses (`groupRoot`, bounded).
+A group qualifies when it has at least two identity fields, or one whose
+autocomplete names the role and the role is not `email` or `username`. A
+lone `autocomplete=postal-code` works; a newsletter's lone email box does not.
+
+### The menu decision (`menuKindFor`)
+
+The content script sends the roles of the group's fields that can be filled
+**now**: empty, or holding a value HavenKeys wrote. A form whose identity
+fields are all filled gets no identity menu.
+
+| Field the user clicked | Menu |
+|---|---|
+| A login field (username or password) in a group whose intent is `login` | Login menu, no identity row |
+| A username-like field in a group with no password field and not a login (a checkout's CPF box) and with fillable identity roles | Identity menu |
+| A username-like field in a sign-up group, with fillable roles | Login menu; the identity row is added below any logins |
+| A new-password field | Generated-password menu |
+| An OTP field | Code menu |
+| Any other field with an identity role in a qualifying group whose intent is not `login` | Identity menu |
+| Anything else | No menu |
+
+The row shows the ID-card icon, the identity's name (or "Identity") and
+"Fills N fields". When the group has document fields and the page is https,
+clicking the row does not fill: the menu says "*site* also asks for: CPF, RG"
+with **Fill CPF and RG too** and **Fill without documents**. On an http page
+the question is not asked; documents stay empty and the row says so. An
+identity with no values shows "Your identity is empty" and opens it in the
+desktop app (`open_identity`). A locked vault, a disabled integration and a
+rate-limited lookup show what they show for logins (a rate-limited lookup
+shows no menu). A cross-site iframe gets no identity row.
+
+### Writing rules (`autofill/identity-fill.ts`)
+
+* Only the group of the clicked field. From the popup, the first group in the
+  top frame with at least two identity fields.
+* Only **empty** fields, or fields holding what HavenKeys wrote. What the user
+  typed or the site filled is kept.
+* Each field is re-checked (visible, enabled, editable) just before writing.
+* `<input>`: the native value setter, then `input` and `change`. A
+  `type=date` takes `birthDate` only. When the value exceeds `maxlength`, a
+  phone number is retried without its leading `+55`.
+* `<select>`: the option whose value or text equals the value, ignoring case,
+  accents and spaces. `state` also matches the Brazilian UF code and state
+  name both ways (a 27-entry table); `country` also matches `BR`, Brasil and
+  Brazil. No match: the field is skipped. Selected through `selectedIndex`,
+  then `input` and `change`.
+* `<textarea>`: only for `autocomplete=street-address`. It gets street,
+  number and complement on separate lines, or address line 1 when the
+  identity has no street.
+* Values are written to `value` and `selectedIndex` only, never to
+  attributes, and never logged. The content script drops the reply after
+  writing.
+
+### Toolbar popup
+
+A **Fill identity** button under the logins, shown when the vault is unlocked
+and the identity has a value. It injects into the top frame, then asks the
+documents question the same way the menu does.
+
+### Limitations
+
+* A phishing page can show a form the identity fills (`security-model.md`
+  §20). The documents step names the documents and the site.
+* The classifier is heuristic. A field with an unusual label may be skipped
+  or, rarely, misclassified; a select with unusual option text is skipped.
+* Card data is not stored in the identity and card fields are never filled.
+
 ## Permissions and injection
 
 * Requested at install: `nativeMessaging`, `activeTab`, `scripting`,
