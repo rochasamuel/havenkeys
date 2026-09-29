@@ -155,9 +155,13 @@ export function createSsoState(now: () => number) {
       runs.delete(r.tabId);
       return r;
     },
+    /** A top-frame load in the run's tab: leaving for an unrelated origin ends
+     * the run, and so does coming back to the site once the run reached
+     * `login` (the provider finished). Before that the site may reload first. */
     topLoad(tabId: number, origin: string): void {
       const r = run(tabId);
-      if (r && origin !== r.siteOrigin && !r.providerOrigins.includes(origin)) runs.delete(tabId);
+      if (!r || r.providerOrigins.includes(origin)) return;
+      if (origin !== r.siteOrigin || r.phase === "login") runs.delete(tabId);
     },
     endRun(tabId: number): void {
       runs.delete(tabId);
