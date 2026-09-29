@@ -15,8 +15,13 @@ export type PopupRequest =
   | { type: "popup_fill_totp"; itemId: string }
   /** Show this login in the desktop app's editor. */
   | { type: "popup_open_item"; itemId: string }
-  /** Fill the page's first identity form. `documents`: null = not asked yet. */
-  | { type: "popup_fill_identity"; documents: boolean | null };
+  /**
+   * Fill the page's first identity form. `documents`: null = not asked yet.
+   * The answer carries the origin the question named; the background
+   * refuses it if the tab has since moved to another origin.
+   */
+  | { type: "popup_fill_identity"; documents: null }
+  | { type: "popup_fill_identity"; documents: boolean; origin: string };
 
 export type PopupState =
   | { kind: "host_unavailable" }
@@ -32,12 +37,23 @@ export interface TotpView {
   secondsRemaining: number;
 }
 
-/** Reply to `popup_fill_identity`: null = filled, or ask about these documents first. */
-export type IdentityFillReply = { confirm: IdentityRole[] } | null;
+/** Reply to `popup_fill_identity`: null = filled, or ask about these documents first, for this page origin. */
+export type IdentityFillReply = { confirm: IdentityRole[]; origin: string } | null;
 
 export type PopupReply<T> = { ok: true; value: T } | { ok: false; message: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** An http(s) origin exactly as URL serializes it. */
+function isOrigin(v: unknown): v is string {
+  if (typeof v !== "string" || v.length > 512) return false;
+  try {
+    const u = new URL(v);
+    return (u.protocol === "https:" || u.protocol === "http:") && u.origin === v;
+  } catch {
+    return false;
+  }
+}
 
 /** Strictly validate a popup request. */
 export function parsePopupRequest(msg: unknown): PopupRequest | null {
@@ -56,8 +72,9 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
         ? { type: o.type, itemId: o.itemId }
         : null;
     case "popup_fill_identity":
-      return keys.length === 2 && (o.documents === null || typeof o.documents === "boolean")
-        ? { type: "popup_fill_identity", documents: o.documents }
+      if (o.documents === null) return keys.length === 2 ? { type: "popup_fill_identity", documents: null } : null;
+      return keys.length === 3 && typeof o.documents === "boolean" && isOrigin(o.origin)
+        ? { type: "popup_fill_identity", documents: o.documents, origin: o.origin }
         : null;
     default:
       return null;

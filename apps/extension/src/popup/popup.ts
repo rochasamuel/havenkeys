@@ -10,6 +10,7 @@ import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView 
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
 import { providerIcon } from "../menu/icons";
+import { displayHost } from "../shared/url";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
@@ -132,20 +133,28 @@ function identityRow(title: string): HTMLElement {
     h("div", { className: "actions" }, fill),
     status,
   );
-  async function run(documents: boolean | null): Promise<void> {
-    fill.disabled = true;
-    const r = await send<IdentityFillReply>({ type: "popup_fill_identity", documents });
-    fill.disabled = false;
-    if (!r.ok) return void status.replaceChildren(h("span", { className: "error", text: r.message }));
+  /** Buttons of the request in flight: all disabled until it answers. */
+  let busy: HTMLButtonElement[] = [fill];
+  async function run(req: Extract<PopupRequest, { type: "popup_fill_identity" }>): Promise<void> {
+    if (busy.some((b) => b.disabled)) return;
+    for (const b of busy) b.disabled = true;
+    const r = await send<IdentityFillReply>(req);
+    for (const b of busy) b.disabled = false;
+    if (!r.ok) {
+      busy = [fill];
+      return void status.replaceChildren(h("span", { className: "error", text: r.message }));
+    }
     if (r.value === null) return window.close();
+    const { origin } = r.value;
     const list = r.value.confirm.map((x: IdentityRole) => t.menu.documentLabels[x as keyof typeof t.menu.documentLabels] ?? x).join(t.menu.and);
     const yes = smallButton(t.menu.identityFillWithDocs(list), "");
     const no = smallButton(t.menu.identityFillWithoutDocs, "");
-    yes.addEventListener("click", () => void run(true));
-    no.addEventListener("click", () => void run(false));
-    status.replaceChildren(h("p", { text: t.popup.identityAsks(list) }), yes, no);
+    busy = [fill, yes, no];
+    yes.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: true, origin }));
+    no.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: false, origin }));
+    status.replaceChildren(h("p", { text: t.popup.identityAsks(displayHost(origin) ?? origin, list) }), yes, no);
   }
-  fill.addEventListener("click", () => void run(null));
+  fill.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: null }));
   return row;
 }
 

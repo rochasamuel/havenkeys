@@ -26,7 +26,7 @@ export const ptBR: Messages = {
     fillIdentity: "Preencher identidade",
     fillIdentityTitle: "Preencher sua identidade no formulário desta página",
     identityKind: "Identidade",
-    identityAsks: (docs: string) => `Esta página também pede ${docs}.`,
+    identityAsks: (site: string, docs: string) => `${site} também pede ${docs}.`,
     pill: {
       offline: "Offline",
       locked: "Bloqueado",
@@ -204,6 +204,7 @@ export const ptBR: Messages = {
     pageNotSupported: "Esta página não pode usar logins salvos.",
     noLoginForm: "Nenhum formulário de login encontrado nesta página.",
     noIdentityForm: "Nenhum formulário para sua identidade nesta página.",
+    identityPageChanged: "A página mudou para outro site. Abra o HavenKeys de novo para preencher sua identidade.",
     hostUnavailable: "O host de mensagens nativas do HavenKeys não está instalado ou não conseguiu iniciar.",
     timeout: "O HavenKeys não respondeu.",
     unexpectedResponse: "Resposta inesperada.",

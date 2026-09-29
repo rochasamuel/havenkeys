@@ -1127,7 +1127,12 @@ shows no menu). A cross-site iframe gets no identity row.
 
 A **Fill identity** button under the logins, shown when the vault is unlocked
 and the identity has a value. It injects into the top frame, then asks the
-documents question the same way the menu does.
+documents question the same way the menu does, naming the site ("shop.com
+also asks for CPF"). The background returns the page origin with the
+question and the popup sends it back with the answer; if the active tab's
+origin changed in between, the background refuses the answer ("The page
+changed to another site") and fills nothing. Fill and both answers are
+disabled while a request is in flight.
 
 ### Limitations
 

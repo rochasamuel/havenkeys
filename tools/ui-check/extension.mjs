@@ -152,7 +152,7 @@ export const extensionScenarios = [
     granted: true,
     replies: () => ({
       popup_state: ok({ kind: "unlocked", site: "shop.example.com", matches: [], identity: { title: "Samuel Rocha" } }),
-      popup_fill_identity: ok({ confirm: ["cpf", "rg"] }),
+      popup_fill_identity: ok({ confirm: ["cpf", "rg"], origin: "https://shop.example.com" }),
     }),
     async act(page) {
       await page.click(".item.identity .btn");

@@ -151,13 +151,16 @@ export function createPopupHandler(
         const url = pageUrlForRequest(tab?.url);
         if (!tab || !url || !scanIdentity) return { ok: false, message: t.errors.pageNotSupported };
         try {
+          const origin = new URL(url).origin;
+          // The documents answer is for the site the question named.
+          if (req.documents !== null && req.origin !== origin) return { ok: false, message: t.errors.identityPageChanged };
           const pageRoles = await scanIdentity(tab.id);
           if (pageRoles.length === 0) return { ok: false, message: t.errors.noIdentityForm };
           const summary = await client.request({ type: "find_identity", url });
           const has = pageRoles.filter((r) => summary.roles.includes(r));
           // Documents only on https, whatever the popup says.
           const docs = url.startsWith("https:") ? has.filter((r) => DOCUMENT_ROLES.includes(r)) : [];
-          if (req.documents === null && docs.length > 0) return { ok: true, value: { confirm: docs } };
+          if (req.documents === null && docs.length > 0) return { ok: true, value: { confirm: docs, origin } };
           const withDocs = req.documents === true && docs.length > 0;
           const roles = has.filter((r) => withDocs || !DOCUMENT_ROLES.includes(r));
           if (roles.length === 0) return { ok: false, message: t.menu.identityNothing };
