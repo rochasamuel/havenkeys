@@ -4,6 +4,7 @@ mod common;
 
 use common::*;
 use havenkeys_core::model::{ItemInput, ItemType, SecretField, SecretUpdate, Settings};
+use havenkeys_core::sso::SsoProvider;
 use havenkeys_core::vault::{SaveAction, SaveTarget, VaultState};
 use havenkeys_core::Error;
 use rusqlite::{params, Connection};
@@ -834,6 +835,7 @@ fn password_history_is_bounded_and_skips_unchanged() {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
             auto_sign_in: None,
+            sign_in_with: None,
         };
         let staged = v.stage_update(&gh, input, now).unwrap();
         v.commit_write(staged, now).unwrap();
@@ -870,6 +872,62 @@ fn save_login_refused_while_locked() {
         v.check_login("https://github.com/", None, None, &secret("x"), None)
             .err(),
         Some(Error::Locked)
+    );
+}
+
+fn google_login(title: &str, account: Option<&str>, url: &str) -> havenkeys_core::model::ItemInput {
+    let mut input = login(title, "", "", url);
+    input.username = None;
+    input.password = havenkeys_core::model::SecretUpdate::Keep;
+    input.sign_in_with = Some(havenkeys_core::sso::SignInWith {
+        provider: havenkeys_core::sso::SsoProvider::Google,
+        account: account.map(str::to_owned),
+    });
+    input
+}
+
+#[test]
+fn sign_in_with_round_trips_and_is_searchable() {
+    let (mut v, _) = github_vault();
+    let staged = v
+        .stage_create(
+            google_login("Typeform", Some(" me@gmail.com "), "typeform.com"),
+            NOW,
+        )
+        .unwrap();
+    let ov = v.commit_write(staged, 5).unwrap().unwrap();
+    let s = ov.sign_in_with.as_ref().unwrap();
+    assert_eq!(s.account.as_deref(), Some("me@gmail.com"));
+    assert!(!ov.has_password);
+    assert_eq!(v.search("me@gmail").unwrap().len(), 1);
+    assert_eq!(v.search("google").unwrap().len(), 1);
+}
+
+#[test]
+fn password_update_keeps_sign_in_with() {
+    let (mut v, _) = github_vault();
+    let staged = v
+        .stage_create(
+            google_login("Typeform", Some("me@gmail.com"), "typeform.com"),
+            NOW,
+        )
+        .unwrap();
+    let id = v.commit_write(staged, 5).unwrap().unwrap().id;
+    let staged = v
+        .stage_save_login(
+            "https://typeform.com/",
+            None,
+            None,
+            secret("also-a-password"),
+            SaveTarget::Update(&id),
+            NOW,
+        )
+        .unwrap();
+    let ov = v.commit_write(staged.write, 6).unwrap().unwrap();
+    assert!(ov.has_password);
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("me@gmail.com")
     );
 }
 
@@ -965,4 +1023,290 @@ fn auto_sign_in_needs_the_setting_and_the_login_switch() {
     );
     v.lock();
     assert_eq!(v.auto_sign_in_for(&gh).err(), Some(Error::Locked));
+}
+
+fn sso_vault() -> (havenkeys_core::vault::VaultService, Uuid) {
+    let (mut v, _) = github_vault();
+    let staged = v
+        .stage_create(
+            google_login("Typeform", Some("me@gmail.com"), "typeform.com"),
+            NOW,
+        )
+        .unwrap();
+    let id = v.commit_write(staged, 5).unwrap().unwrap().id;
+    (v, id)
+}
+
+#[test]
+fn start_sso_is_origin_bound_and_returns_no_secret() {
+    let (mut v, id) = sso_vault();
+    let s = v
+        .start_sso_for_page(&id, "https://admin.typeform.com/login", None)
+        .unwrap();
+    assert_eq!(s.provider, SsoProvider::Google);
+    assert_eq!(s.account.as_deref(), Some("me@gmail.com"));
+    assert!(s.auto_choose);
+    for page in [
+        "https://evil.com/",
+        "https://typeform.com.evil.com/",
+        "http://typeform.com/",
+        "javascript:x",
+    ] {
+        assert_eq!(
+            v.start_sso_for_page(&id, page, None).err(),
+            Some(Error::Denied),
+            "{page}"
+        );
+    }
+    // A frame of typeform.com embedded in evil.com gets nothing.
+    assert_eq!(
+        v.start_sso_for_page(&id, "https://typeform.com/", Some("https://evil.com/"))
+            .err(),
+        Some(Error::Denied)
+    );
+    // A login without sign_in_with is not an SSO item.
+    let gh = v.find_matches("https://github.com/", None).unwrap()[0].id;
+    assert_eq!(
+        v.start_sso_for_page(&gh, "https://github.com/", None).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.start_sso_for_page(&Uuid::new_v4(), "https://typeform.com/", None)
+            .err(),
+        Some(Error::NotFound)
+    );
+    v.lock();
+    assert_eq!(
+        v.start_sso_for_page(&id, "https://typeform.com/", None)
+            .err(),
+        Some(Error::Locked)
+    );
+}
+
+#[test]
+fn start_sso_auto_choose_follows_both_switches() {
+    let (mut v, id) = sso_vault();
+    let mut settings = v.settings().unwrap();
+    settings.auto_sign_in = false;
+    v.update_settings(settings).unwrap();
+    assert!(
+        !v.start_sso_for_page(&id, "https://typeform.com/", None)
+            .unwrap()
+            .auto_choose
+    );
+}
+
+#[test]
+fn find_matches_reports_provider_and_account() {
+    let (v, id) = sso_vault();
+    let m = v.find_matches("https://typeform.com/", None).unwrap();
+    let s = m.iter().find(|s| s.id == id).unwrap();
+    assert_eq!(s.provider, Some(SsoProvider::Google));
+    assert_eq!(s.account.as_deref(), Some("me@gmail.com"));
+    assert_eq!(s.username, None);
+}
+
+#[test]
+fn check_sso_actions() {
+    let (mut v, id) = sso_vault();
+    let page = "https://typeform.com/";
+    let check =
+        |v: &havenkeys_core::vault::VaultService, p, a| v.check_sso(page, None, p, a).unwrap();
+    assert_eq!(
+        check(&v, SsoProvider::Google, Some("ME@gmail.com")),
+        SaveAction::Unchanged
+    );
+    assert_eq!(check(&v, SsoProvider::Google, None), SaveAction::Unchanged);
+    assert_eq!(
+        check(&v, SsoProvider::Google, Some("other@gmail.com")),
+        SaveAction::Add
+    );
+    assert_eq!(check(&v, SsoProvider::Github, None), SaveAction::Add);
+    // An imported login with the provider but no account is offered the account.
+    let staged = v
+        .stage_create(google_login("Notion", None, "notion.so"), NOW)
+        .unwrap();
+    let notion = v.commit_write(staged, 6).unwrap().unwrap().id;
+    assert_eq!(
+        v.check_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Google,
+            Some("me@gmail.com")
+        )
+        .unwrap(),
+        SaveAction::Update(notion)
+    );
+    let _ = id;
+}
+
+#[test]
+fn save_sso_adds_without_a_password_and_updates_only_the_account() {
+    let (mut v, _) = sso_vault();
+    let staged = v
+        .stage_save_sso(
+            "https://www.canva.com/login",
+            None,
+            SsoProvider::Apple,
+            Some("me@icloud.com"),
+            SaveTarget::New {
+                title: Some("Canva"),
+            },
+            NOW,
+        )
+        .unwrap();
+    let ov = v.commit_write(staged.write, 7).unwrap().unwrap();
+    assert_eq!(ov.title, "Canva");
+    assert!(!ov.has_password);
+    assert_eq!(ov.urls[0].url, "https://www.canva.com/");
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().provider,
+        SsoProvider::Apple
+    );
+
+    let staged = v
+        .stage_create(google_login("Notion", None, "notion.so"), NOW)
+        .unwrap();
+    let notion = v.commit_write(staged, 8).unwrap().unwrap().id;
+    let staged = v
+        .stage_save_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Google,
+            Some("me@gmail.com"),
+            SaveTarget::Update(&notion),
+            NOW,
+        )
+        .unwrap();
+    let ov = v.commit_write(staged.write, 9).unwrap().unwrap();
+    assert_eq!(ov.title, "Notion");
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("me@gmail.com")
+    );
+
+    // Another site's login, or a different provider, cannot be touched.
+    assert_eq!(
+        v.stage_save_sso(
+            "https://evil.com/",
+            None,
+            SsoProvider::Google,
+            Some("x@y.z"),
+            SaveTarget::Update(&notion),
+            NOW
+        )
+        .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        v.stage_save_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Github,
+            Some("x"),
+            SaveTarget::Update(&notion),
+            NOW
+        )
+        .err(),
+        Some(Error::Denied)
+    );
+    assert!(matches!(
+        v.stage_save_sso(
+            "https://notion.so/",
+            None,
+            SsoProvider::Google,
+            Some("a\u{7}b"),
+            SaveTarget::New { title: None },
+            NOW
+        ),
+        Err(Error::InvalidInput(_))
+    ));
+}
+
+/// Updating a "Sign in with" login only fills in an account; saving none
+/// over it would erase the one it has.
+#[test]
+fn save_sso_update_needs_an_account() {
+    let (v, id) = sso_vault();
+    for account in [None, Some(""), Some("   ")] {
+        assert!(
+            matches!(
+                v.stage_save_sso(
+                    "https://typeform.com/",
+                    None,
+                    SsoProvider::Google,
+                    account,
+                    SaveTarget::Update(&id),
+                    NOW
+                ),
+                Err(Error::InvalidInput(_))
+            ),
+            "{account:?}"
+        );
+    }
+    let item = v.get_item(&id).unwrap();
+    assert_eq!(
+        item.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("me@gmail.com")
+    );
+}
+
+/// A re-import whose upgrade target no longer opens counts as one failure;
+/// the other items are still staged.
+#[test]
+fn a_failing_import_upgrade_does_not_abort_the_import() {
+    use havenkeys_core::import::{ImportReport, ImportedItem};
+    use havenkeys_core::sso::SignInWith;
+
+    let (_d, path) = file_vault();
+    let (id, sk) = {
+        let (mut v, sk) = activated_vault_at(&path);
+        let staged = v
+            .stage_create(login("GitHub", "octo", "pw", "github.com"), NOW)
+            .unwrap();
+        let id = v.commit_write(staged, 1).unwrap().unwrap().id;
+        (id, sk)
+    };
+    let c = Connection::open(&path).unwrap();
+    let mut blob: Vec<u8> = c
+        .query_row(
+            "SELECT details FROM items WHERE id = ?1",
+            params![id.to_string()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let last = blob.len() - 1;
+    blob[last] ^= 0x01;
+    c.execute(
+        "UPDATE items SET details = ?1 WHERE id = ?2",
+        params![blob, id.to_string()],
+    )
+    .unwrap();
+    drop(c);
+
+    let mut v = open_file(&path);
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    let mut upgrade = login("GitHub", "octo", "pw", "github.com");
+    upgrade.sign_in_with = Some(SignInWith {
+        provider: SsoProvider::Google,
+        account: None,
+    });
+    let items = vec![
+        ImportedItem {
+            input: upgrade,
+            created_at: None,
+            updated_at: None,
+        },
+        ImportedItem {
+            input: login("Notion", "me", "pw2", "notion.so"),
+            created_at: None,
+            updated_at: None,
+        },
+    ];
+    let staged = v.stage_import(items, ImportReport::default(), NOW).unwrap();
+    assert_eq!(staged.report.failed, 1);
+    assert_eq!(staged.report.sso_upgraded, 0);
+    assert_eq!(staged.report.logins, 1);
+    assert_eq!(staged.writes.len(), 1);
 }

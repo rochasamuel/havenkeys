@@ -155,6 +155,121 @@ fn a_staged_import_seals_new_items_and_skips_ones_already_here() {
     assert_eq!(fastmail.updated_at, 1_600_000_500_000);
 }
 
+/// A re-import that now knows about `sign_in_with` (the old importer wrote
+/// "Sign in with Google" as a free-text note instead) fills it in on the
+/// matching login already in the vault rather than treating it as a
+/// duplicate, and clears notes only when they are exactly that old line.
+#[test]
+fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
+    use havenkeys_core::import::{ImportReport, ImportedItem};
+    use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
+    use havenkeys_core::sso::{SignInWith, SsoProvider};
+
+    let (mut vault, _sk) = activated_vault();
+
+    let existing_login = |title: &str, url: &str, notes: &str| ItemInput {
+        item_type: ItemType::Login,
+        title: title.into(),
+        username: None,
+        urls: vec![UrlRule {
+            url: url.into(),
+            match_type: MatchType::Domain,
+        }],
+        password: SecretUpdate::Keep,
+        totp: SecretUpdate::Keep,
+        notes: SecretUpdate::Set(secret(notes)),
+        content: SecretUpdate::Keep,
+        auto_sign_in: None,
+        sign_in_with: None,
+    };
+    let imported = |title: &str, url: &str| ImportedItem {
+        input: ItemInput {
+            item_type: ItemType::Login,
+            title: title.into(),
+            username: None,
+            urls: vec![UrlRule {
+                url: url.into(),
+                match_type: MatchType::Domain,
+            }],
+            password: SecretUpdate::Keep,
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: Some(SignInWith {
+                provider: SsoProvider::Google,
+                account: None,
+            }),
+        },
+        created_at: None,
+        updated_at: None,
+    };
+
+    // The old importer's exact note: cleared once sign_in_with takes over.
+    let a = vault
+        .stage_create(
+            existing_login("Typeform", "https://typeform.com", "Sign in with Google"),
+            NOW,
+        )
+        .unwrap();
+    let a_id = a.item_id;
+    vault.commit_write(a, 1).unwrap();
+
+    let staged = vault
+        .stage_import(
+            vec![imported("Typeform", "https://typeform.com")],
+            ImportReport::default(),
+            NOW,
+        )
+        .unwrap();
+    assert_eq!(staged.report.sso_upgraded, 1);
+    assert_eq!(staged.report.skipped_duplicates, 0);
+    assert_eq!(staged.report.imported, 0);
+    assert_eq!(staged.writes.len(), 1);
+
+    let mut revision = 1;
+    for write in staged.writes {
+        revision += 1;
+        vault.commit_write(write, revision).unwrap();
+    }
+    let item = vault.get_item(&a_id).unwrap();
+    assert_eq!(
+        item.sign_in_with.as_ref().map(|s| s.provider),
+        Some(SsoProvider::Google)
+    );
+    assert!(!item.has_notes, "the old importer's exact line is cleared");
+
+    // A note that isn't exactly that line is left alone.
+    let b = vault
+        .stage_create(
+            existing_login("Notion", "https://notion.so", "Sign in with Google\nmore"),
+            NOW,
+        )
+        .unwrap();
+    let b_id = b.item_id;
+    vault.commit_write(b, revision).unwrap();
+    revision += 1;
+
+    let staged = vault
+        .stage_import(
+            vec![imported("Notion", "https://notion.so")],
+            ImportReport::default(),
+            NOW,
+        )
+        .unwrap();
+    assert_eq!(staged.report.sso_upgraded, 1);
+    for write in staged.writes {
+        revision += 1;
+        vault.commit_write(write, revision).unwrap();
+    }
+    let item = vault.get_item(&b_id).unwrap();
+    assert_eq!(
+        item.sign_in_with.as_ref().map(|s| s.provider),
+        Some(SsoProvider::Google)
+    );
+    assert!(item.has_notes, "notes that don't match exactly are kept");
+}
+
 /// A locked vault cannot seal anything, import included.
 #[test]
 fn a_staged_import_needs_an_unlocked_vault() {

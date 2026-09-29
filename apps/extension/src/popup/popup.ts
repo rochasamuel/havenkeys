@@ -5,10 +5,11 @@
 // All DOM is built with createElement/textContent: vault data is never
 // parsed as HTML.
 
-import type { Match } from "@havenkeys/protocol";
+import { SSO_PROVIDERS, type Match, type SsoProvider } from "@havenkeys/protocol";
 import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
+import { providerIcon } from "../menu/icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
@@ -74,18 +75,21 @@ const SVG = "http://www.w3.org/2000/svg";
 const PENCIL = "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10v3zM14 8l3 3";
 
 /**
- * The row's initial, which turns into a pencil on hover or keyboard focus:
- * clicking it opens the login in the desktop app. The icon is built with
- * createElementNS, never parsed from markup.
+ * The row's initial (or, for a "sign in with" login, its provider mark),
+ * which turns into a pencil on hover or keyboard focus: clicking it opens
+ * the login in the desktop app. The icon is built with createElementNS,
+ * never parsed from markup.
  */
-function editAvatar(initial: string, label: string): HTMLButtonElement {
-  const b = h("button", { className: "avatar" }, h("span", { className: "avatar-initial", text: initial }));
+function editAvatar(initial: string, label: string, provider: SsoProvider | null): HTMLButtonElement {
+  const mark = provider ? providerIcon(provider, 16) : h("span", { className: "avatar-initial", text: initial });
+  const b = h("button", { className: "avatar" }, mark);
   b.type = "button";
   b.title = label;
   b.setAttribute("aria-label", label);
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("avatar-edit-icon");
   const path = document.createElementNS(SVG, "path");
   path.setAttribute("d", PENCIL);
   svg.append(path);
@@ -105,27 +109,35 @@ async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: 
   status.replaceChildren(h("span", { className: "error", text: r.message }));
 }
 
+/**
+ * The user line: `ssoRow` text for a "sign in with" login, else the plain
+ * username. With no username, the text is our own copy (wraps); with one,
+ * it's user data (truncates).
+ */
+function userLine(m: Match): HTMLElement {
+  if (m.provider) {
+    const text = t.menu.ssoRow(SSO_PROVIDERS[m.provider].name, m.username);
+    return m.username !== null ? truncates(h("div", { className: "user", text })) : h("div", { className: "user copy", text });
+  }
+  return m.username !== null ? truncates(h("div", { className: "user", text: m.username })) : h("div", { className: "user copy", text: t.common.noUsername });
+}
+
 function matchRow(m: Match): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
   const status = h("div", { className: "row-status" });
-  // The initial opens this login in the desktop app. Closes the popup on
-  // success, like a fill, since focus moves to the app.
-  const edit = editAvatar(initial, t.popup.edit);
+  // The initial (or provider mark) opens this login in the desktop app.
+  // Closes the popup on success, like a fill, since focus moves to the app.
+  const edit = editAvatar(initial, t.popup.edit, m.provider);
   edit.addEventListener("click", () => void fillFromPopup(edit, { type: "popup_open_item", itemId: m.id }, status));
   const row = h(
     "li",
     { className: "item" },
     edit,
-    h(
-      "div",
-      { className: "who" },
-      truncates(h("div", { className: "title", text: m.title })),
-      m.username !== null ? truncates(h("div", { className: "user", text: m.username })) : h("div", { className: "user copy", text: t.common.noUsername }),
-    ),
+    h("div", { className: "who" }, truncates(h("div", { className: "title", text: m.title })), userLine(m)),
   );
   const actions = h("div", { className: "actions" });
 
-  const fill = smallButton(t.popup.fill, t.popup.fillTitle);
+  const fill = smallButton(m.provider ? t.popup.signIn : t.popup.fill, m.provider ? t.popup.signInTitle : t.popup.fillTitle);
   fill.addEventListener("click", () => void fillFromPopup(fill, { type: "popup_fill", itemId: m.id }, status));
   actions.append(fill);
 

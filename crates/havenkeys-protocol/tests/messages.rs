@@ -337,6 +337,7 @@ fn too_many_matches_rejected() {
         username: None,
         has_totp: false,
         strength: MatchStrength::SameHost,
+        provider: None,
     };
     let r = Response::ok(
         1,
@@ -503,6 +504,58 @@ fn passkey_upgrade_results_validate() {
     }
 }
 
+#[test]
+fn sso_requests_parse() {
+    let ok = [
+        format!(r#"{{"v":1,"id":1,"request":{{"type":"start_sso","itemId":"{ITEM}","url":"https://typeform.com/"}}}}"#),
+        r#"{"v":1,"id":2,"request":{"type":"check_sso","url":"https://typeform.com/","provider":"google","account":null}}"#.to_owned(),
+        r#"{"v":1,"id":3,"request":{"type":"save_sso","url":"https://typeform.com/","provider":"github","account":"octo","itemId":null,"title":"Typeform"}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":4,"request":{{"type":"save_sso","url":"https://a.com/","topUrl":"https://b.com/","provider":"apple","account":null,"itemId":"{ITEM}"}}}}"#),
+    ];
+    for s in &ok {
+        assert!(parse(s).is_ok(), "{s}");
+    }
+}
+
+#[test]
+fn sso_requests_are_bounded_and_strict() {
+    let long = "a".repeat(4 * 254 + 1);
+    let bad = [
+        (r#"{"v":1,"id":1,"request":{"type":"check_sso","url":"https://a.com/","provider":"okta","account":null}}"#.to_owned(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"check_sso","url":"https://a.com/","provider":"google"}}"#.to_owned(), ErrorCode::Malformed),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_sso","url":"https://a.com/","provider":"google","account":"{long}"}}}}"#), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"check_sso","url":"https://a.com/","provider":"google","account":""}}"#.to_owned(), ErrorCode::InvalidInput),
+        // A title only names a new login.
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"save_sso","url":"https://a.com/","provider":"google","account":null,"itemId":"{ITEM}","title":"x"}}}}"#), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"start_sso","url":"https://a.com/"}}"#.to_owned(), ErrorCode::Malformed),
+        (format!(r#"{{"v":1,"id":1,"request":{{"type":"start_sso","itemId":"{ITEM}","url":"https://a.com/","extra":1}}}}"#), ErrorCode::Malformed),
+    ];
+    for (s, code) in bad {
+        assert_eq!(parse(&s).unwrap_err().code, code, "{s}");
+    }
+}
+
+#[test]
+fn sso_results_validate() {
+    let ok = r#"{"v":1,"id":1,"result":{"type":"start_sso","provider":"google","account":"me@gmail.com","providerOrigins":["https://accounts.google.com"],"autoChoose":true}}"#;
+    assert!(Outgoing::parse(ok.as_bytes()).is_some());
+    let too_many = r#"{"v":1,"id":1,"result":{"type":"start_sso","provider":"google","account":null,"providerOrigins":["a","b","c","d","e"],"autoChoose":true}}"#;
+    assert!(Outgoing::parse(too_many.as_bytes()).is_none());
+    let inconsistent =
+        r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"update","itemId":null}}"#;
+    assert!(Outgoing::parse(inconsistent.as_bytes()).is_none());
+    let m = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github"}}]}}}}"#
+    );
+    assert!(Outgoing::parse(m.as_bytes()).is_some());
+    // `provider` is required, like `account`: a Match missing the key (not
+    // just null) is rejected rather than silently defaulting to `None`.
+    let missing_provider = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site"}}]}}}}"#
+    );
+    assert!(Outgoing::parse(missing_provider.as_bytes()).is_none());
+}
+
 /// Deterministic fuzz: random bytes and mutated valid messages must never
 /// panic, and anything accepted must be a well-formed request.
 #[test]
@@ -531,6 +584,8 @@ fn fuzz_parse_request_never_panics() {
         r#"{"v":1,"id":14,"request":{"type":"check_passkey_create","url":"https://github.com/","rpId":"github.com","userName":"octo","excludeCredentials":[],"conditional":false}}"#.to_string(),
         format!(r#"{{"v":1,"id":15,"request":{{"type":"passkey_create","url":"https://github.com/","rpId":"github.com","challenge":"{CHAL}","userHandle":"AQ","userName":"octo","displayName":null,"itemId":null,"conditional":false}}}}"#),
         r#"{"v":1,"id":16,"request":{"type":"passkey_status","url":"https://github.com/"}}"#.to_string(),
+        format!(r#"{{"v":1,"id":17,"request":{{"type":"start_sso","itemId":"{ITEM}","url":"https://a.com/"}}}}"#),
+        r#"{"v":1,"id":18,"request":{"type":"save_sso","url":"https://a.com/","provider":"google","account":"a","itemId":null}}"#.to_string(),
     ]
     .into_iter()
     .map(String::into_bytes)

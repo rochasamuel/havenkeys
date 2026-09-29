@@ -231,11 +231,15 @@ main {
   cursor: pointer;
 }
 
-/* Hover or keyboard focus swaps the initial for a pencil. */
-.avatar svg {
+/* Hover or keyboard focus swaps the initial (or provider mark) for a pencil. */
+.avatar-edit-icon {
   display: none;
   width: 17px;
   height: 17px;
+}
+
+.provider-icon {
+  flex: none;
 }
 
 .avatar:hover,
@@ -245,12 +249,14 @@ main {
 }
 
 .avatar:hover .avatar-initial,
-.avatar:focus-visible .avatar-initial {
+.avatar:hover .provider-icon,
+.avatar:focus-visible .avatar-initial,
+.avatar:focus-visible .provider-icon {
   display: none;
 }
 
-.avatar:hover svg,
-.avatar:focus-visible svg {
+.avatar:hover .avatar-edit-icon,
+.avatar:focus-visible .avatar-edit-icon {
   display: block;
 }
 

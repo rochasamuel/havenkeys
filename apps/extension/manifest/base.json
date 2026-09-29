@@ -37,9 +37,11 @@
       "resources": [
         "menu.html",
         "save.html",
+        "sso.html",
         "passkey.html",
         "menu.js",
         "save.js",
+        "sso.js",
         "passkey.js",
         "inline.css",
         "theme.css",

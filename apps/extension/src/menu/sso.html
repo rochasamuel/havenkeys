@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign in with HavenKeys</title>
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="inline.css" />
+    <script src="sso.js" defer></script>
+  </head>
+  <body>
+    <div class="card save sso" role="dialog" aria-labelledby="heading">
+      <header class="head">
+        <svg class="mark" viewBox="0 0 1024 1024" aria-hidden="true"><path class="mark-shield" d="M512 196 L772 300 V500 C772 668 662 792 512 846 C362 792 252 668 252 500 V300 Z" /><circle class="mark-key" cx="512" cy="468" r="84" /><rect class="mark-key" x="486" y="520" width="52" height="170" rx="18" /></svg>
+        <span class="brand">HavenKeys</span>
+        <span id="site" class="site" data-truncate></span>
+        <button id="close" class="icon-close" type="button" aria-label="Close">×</button>
+      </header>
+      <div id="main" class="prompt"><p id="heading">…</p></div>
+    </div>
+  </body>
+</html>

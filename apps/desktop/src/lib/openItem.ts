@@ -3,7 +3,7 @@
 // untouched editor from a changed one.
 
 import type { SecretEdit } from "./secretEdit";
-import type { UrlRule } from "./types";
+import type { SignInWith, UrlRule } from "./types";
 
 /** The part of the vault screen's pane that decides what an open request does. */
 export type PaneRef = { kind: "empty" } | { kind: "view"; id: string } | { kind: "edit"; id: string } | { kind: "new" };
@@ -37,6 +37,7 @@ export interface EditorSnapshot {
   totp: SecretEdit;
   notes: SecretEdit;
   autoSignIn: boolean;
+  signInWith: SignInWith | null;
 }
 
 /** Compared in memory only; never logged or stored. */

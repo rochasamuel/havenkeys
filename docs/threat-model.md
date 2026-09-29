@@ -404,7 +404,7 @@ rule #6 for one bounded case.
 From 0.9.0 the desktop app checks GitHub Releases for newer signed builds and
 can install one on the user's click
 (`docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md`;
-`security-model.md` §17). This is a new, bounded exception to "minimal
+`security-model.md` §18). This is a new, bounded exception to "minimal
 network exposure": the app can now reach `github.com` and its download
 redirect host on its own.
 
@@ -446,6 +446,65 @@ redirect host on its own.
   HavenKeys installation is checking, on every automatic and manual check.
   *Mitigation:* Settings → Updates can turn the automatic check off; nothing
   is sent unless the user checks or updates by hand.
+
+### T11 — Sign in with Google, Microsoft, GitHub, Apple
+After the user picks a "Sign in with" login, HavenKeys may press that site's
+provider button and, on the provider's own page, click the saved account in
+its chooser (`docs/superpowers/specs/2026-09-28-sign-in-with-design.md`).
+This amends rule #6 for one more bounded case, alongside T9 and the automatic
+passkey upgrade (T8). Details in `autofill.md` §"Sign in with", the wire
+messages in `native-messaging.md` §"Sign in with", the mechanism in
+`security-model.md` §17.
+
+* **A fake provider button.** A hostile or careless page can put a
+  "Sign in with Google" label on any element. *Mitigation:* pressing it does
+  nothing HavenKeys did not already permit the page to do — it only
+  navigates that same page, exactly as the page's own JavaScript could have.
+  The run never treats the press itself as success; it continues only when a
+  **later** frame lands on one of the provider's real origins, checked
+  against the frame's own origin in the background, never against anything
+  the page claims. *Residual:* none beyond a wasted click if the label was a
+  lie.
+* **A hostile page triggering the balloon.** Any page can have provider
+  buttons, so any page can make the balloon appear. *Mitigation:* the
+  balloon only ever lists **that page's own** matching logins — the same
+  `find_matches` origin binding as the field menu — and shows no secret.
+  Nothing is pressed or clicked until the user picks a row inside the
+  balloon, which is an extension-origin frame the page cannot read or script
+  and which requires the same trusted-click, 400 ms-armed guard as the field
+  menu (`autofill.md`, "Suggestion UI"). *Residual:* a page learns that the
+  user has a saved "Sign in with" login for it, the same class of signal
+  `autofill.md` already documents for the ordinary menu and save prompts.
+* **A provider look-alike origin.** A page cannot get the run to click an
+  account on `accounts-google.com` or `login.microsoftonline.com.evil.com`.
+  *Mitigation:* the run's provider origins are an **exact-origin list**
+  returned by Rust (`sso.rs`), never a suffix, prefix, or pattern match; a
+  frame whose origin is not literally in that list is refused, for both the
+  press-confirmation check and the choose step. *Residual:* none — this is
+  the same exact-origin discipline `autofill.md` §Domain matching applies
+  everywhere else, applied to a fixed, closed table instead of a per-item
+  rule.
+* **A chooser spoof inside the provider's own page.** A page that has
+  compromised the *provider's own origin* (or a same-origin script it can
+  inject there) could draw a fake row and get HavenKeys to click it, or grab
+  the account text HavenKeys reads for a save prompt. **Out of scope:** a
+  compromised provider origin is outside this threat model — see §2, "Web
+  pages are hostile by default," which does not extend to trusting an
+  attacker who already controls `accounts.google.com` itself. What remains
+  bounded even then: the click only lands on an element already on that
+  page, nothing is typed, and a save prompt from a forged account name is
+  still shown to the user before anything is written (`autofill.md`,
+  "Save detection").
+* **Consent screens.** A keyword match
+  (`isConsentScreen`/`isConsentLabel`) refuses to press or click a row on a
+  page that looks like a permissions or consent screen. *Mitigation:*
+  documented as a heuristic, not a guarantee, in `security-model.md` §17.
+  *Residual:* an unrecognized consent screen that also shows a row whose
+  email matches the saved account (`security-review.md`, "Sign in with").
+* **No secrets on this path.** The run never receives or sends a password or
+  TOTP code; it only clicks a chooser row. Page-sourced account text is
+  validated in Rust (254 characters, no control characters) and is only ever
+  a suggestion the user can edit before saving.
 
 ## 4. Out of scope (not defended)
 
@@ -509,3 +568,6 @@ redirect host on its own.
 | A1u | Automatic passkey upgrade (`conditional create`) requested for a login other than the one just filled, for another site, before any fill, or after the 5-minute window | DENIED; falls back to the browser, nothing created | `crates/havenkeys-core/tests/passkeys.rs` (`conditional_create_needs_auto_for_exactly_that_login`), `crates/havenkeys-bridge/tests/bridge.rs` (`passkey_upgrade_through_the_bridge`) |
 | A2u | Automatic upgrade on the same registrable domain as the fill (a subdomain) versus a look-alike domain | Subdomain: allowed if the login is offered there; look-alike (`github.com.evil.com`): `upgrade: none`, `authorize_rp` itself refuses | `crates/havenkeys-core/tests/passkeys.rs` (`upgrade_is_per_site_and_never_for_look_alikes`) |
 | A3u | Page repeats the automatic upgrade after one silent save (fresh user handles), or aims it at an account whose passkey the vault already holds | DENIED; falls back to the browser, the existing passkey is untouched | `crates/havenkeys-core/tests/passkeys.rs` (`one_fill_grants_one_silent_passkey`, `conditional_create_never_replaces_the_filled_logins_own_passkey`) |
+| A1s | `start_sso` for an item that does not match the page, is not a login, or has no `sign_in_with`, or a locked vault | DENIED/`locked`; no secret, no provider origins for a wrong page | `crates/havenkeys-core/tests/security.rs` (`start_sso_is_origin_bound_and_returns_no_secret`), `crates/havenkeys-bridge/tests/bridge.rs` (`start_sso_attacks_are_denied`) |
+| A2s | A run tries to click a chooser row on an origin not in the provider's exact list, or in a frame/tab that is neither the run's own nor its opener popup | Refused; nothing clicked | `apps/extension/src/background/sso-state.test.ts`, `content/sso.test.ts` |
+| A3s | `save_sso` with `itemId` targets a login that does not match the page or does not already sign in with that provider | DENIED | `crates/havenkeys-core/tests/security.rs` (`save_sso_adds_without_a_password_and_updates_only_the_account`) |

@@ -48,6 +48,11 @@ pub const MAX_USERNAME_BYTES: usize = 4 * 512;
 /// A login title from the save prompt (the core allows 256 characters).
 pub const MAX_TITLE_BYTES: usize = 4 * 256;
 
+/// Largest account sent with check_sso/save_sso (the core allows 254 characters).
+pub const MAX_ACCOUNT_BYTES: usize = 4 * 254;
+/// Most provider origins a start_sso result may carry.
+pub const MAX_PROVIDER_ORIGINS: usize = 4;
+
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;
 

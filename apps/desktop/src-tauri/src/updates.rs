@@ -143,7 +143,9 @@ impl Machine {
                 notes: truncate_notes(&notes),
             },
             CheckOutcome::UpToDate => Phase::Idle,
-            CheckOutcome::Failed if manual => Phase::Failed { during: Stage::Check },
+            CheckOutcome::Failed if manual => Phase::Failed {
+                during: Stage::Check,
+            },
             CheckOutcome::Failed => match before {
                 offer @ Phase::Available { .. } => offer,
                 _ => Phase::Idle,
@@ -169,7 +171,12 @@ impl Machine {
     /// Adds a downloaded chunk. `true` when the change is worth telling the
     /// UI about: the whole percentage moved, or (size unknown) another MiB.
     pub fn progress(&mut self, chunk: u64, total: Option<u64>) -> bool {
-        let Phase::Downloading { downloaded, total: known, .. } = &mut self.phase else {
+        let Phase::Downloading {
+            downloaded,
+            total: known,
+            ..
+        } = &mut self.phase
+        else {
             return false;
         };
         let before = *downloaded;
@@ -233,16 +240,29 @@ mod tests {
     #[test]
     fn settings_default_to_checking_when_the_file_is_missing() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(UpdateSettings::load(dir.path()), UpdateSettings { auto_check: true });
+        assert_eq!(
+            UpdateSettings::load(dir.path()),
+            UpdateSettings { auto_check: true }
+        );
     }
 
     #[test]
     fn settings_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        UpdateSettings { auto_check: false }.save(dir.path()).unwrap();
-        assert_eq!(UpdateSettings::load(dir.path()), UpdateSettings { auto_check: false });
-        UpdateSettings { auto_check: true }.save(dir.path()).unwrap();
-        assert_eq!(UpdateSettings::load(dir.path()), UpdateSettings { auto_check: true });
+        UpdateSettings { auto_check: false }
+            .save(dir.path())
+            .unwrap();
+        assert_eq!(
+            UpdateSettings::load(dir.path()),
+            UpdateSettings { auto_check: false }
+        );
+        UpdateSettings { auto_check: true }
+            .save(dir.path())
+            .unwrap();
+        assert_eq!(
+            UpdateSettings::load(dir.path()),
+            UpdateSettings { auto_check: true }
+        );
         assert!(!dir.path().join("updates.json.tmp").exists());
     }
 
@@ -263,7 +283,10 @@ mod tests {
             br#"{"autoCheck":false,"channel":"beta"}"#,
         )
         .unwrap();
-        assert_eq!(UpdateSettings::load(dir.path()), UpdateSettings { auto_check: false });
+        assert_eq!(
+            UpdateSettings::load(dir.path()),
+            UpdateSettings { auto_check: false }
+        );
     }
 
     #[test]
@@ -279,7 +302,10 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         UpdateSettings::default().save(dir.path()).unwrap();
-        let mode = std::fs::metadata(dir.path().join(FILE)).unwrap().permissions().mode();
+        let mode = std::fs::metadata(dir.path().join(FILE))
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(mode & 0o777, 0o600);
     }
 
@@ -291,7 +317,10 @@ mod tests {
         m.finish_check(found("0.9.0"), false);
         assert_eq!(
             m.phase(),
-            &Phase::Available { version: "0.9.0".into(), notes: "Fixes.".into() }
+            &Phase::Available {
+                version: "0.9.0".into(),
+                notes: "Fixes.".into()
+            }
         );
     }
 
@@ -311,7 +340,12 @@ mod tests {
         assert_eq!(m.phase(), &Phase::Idle);
         m.begin_check();
         m.finish_check(CheckOutcome::Failed, true);
-        assert_eq!(m.phase(), &Phase::Failed { during: Stage::Check });
+        assert_eq!(
+            m.phase(),
+            &Phase::Failed {
+                during: Stage::Check
+            }
+        );
         // A failure does not block the next check.
         assert!(m.begin_check());
     }
@@ -325,7 +359,10 @@ mod tests {
         m.finish_check(CheckOutcome::Failed, false);
         assert_eq!(
             m.phase(),
-            &Phase::Available { version: "0.9.0".into(), notes: "Fixes.".into() }
+            &Phase::Available {
+                version: "0.9.0".into(),
+                notes: "Fixes.".into()
+            }
         );
         // The offer can still be installed.
         assert_eq!(m.begin_install(), Ok("0.9.0".into()));
@@ -338,7 +375,12 @@ mod tests {
         m.finish_check(found("0.9.0"), false);
         m.begin_check();
         m.finish_check(CheckOutcome::Failed, true);
-        assert_eq!(m.phase(), &Phase::Failed { during: Stage::Check });
+        assert_eq!(
+            m.phase(),
+            &Phase::Failed {
+                during: Stage::Check
+            }
+        );
     }
 
     #[test]
@@ -383,7 +425,11 @@ mod tests {
         assert_eq!(m.begin_install(), Ok("0.9.0".into()));
         assert_eq!(
             m.phase(),
-            &Phase::Downloading { version: "0.9.0".into(), downloaded: 0, total: None }
+            &Phase::Downloading {
+                version: "0.9.0".into(),
+                downloaded: 0,
+                total: None
+            }
         );
         // The second click.
         assert_eq!(m.begin_install(), Err(NotAvailable));
@@ -396,7 +442,12 @@ mod tests {
         m.finish_check(found("0.9.0"), false);
         m.begin_install().unwrap();
         m.install_failed();
-        assert_eq!(m.phase(), &Phase::Failed { during: Stage::Install });
+        assert_eq!(
+            m.phase(),
+            &Phase::Failed {
+                during: Stage::Install
+            }
+        );
         assert!(m.begin_check());
     }
 
@@ -412,7 +463,11 @@ mod tests {
         assert!(m.progress(985, Some(1000))); // 100 %
         assert_eq!(
             m.phase(),
-            &Phase::Downloading { version: "0.9.0".into(), downloaded: 1000, total: Some(1000) }
+            &Phase::Downloading {
+                version: "0.9.0".into(),
+                downloaded: 1000,
+                total: Some(1000)
+            }
         );
     }
 
@@ -454,10 +509,15 @@ mod tests {
         let mut m = Machine::new();
         m.begin_check();
         m.finish_check(
-            CheckOutcome::Found { version: "0.9.0".into(), notes: "x".repeat(1_000_000) },
+            CheckOutcome::Found {
+                version: "0.9.0".into(),
+                notes: "x".repeat(1_000_000),
+            },
             false,
         );
-        let Phase::Available { notes, .. } = m.phase() else { panic!() };
+        let Phase::Available { notes, .. } = m.phase() else {
+            panic!()
+        };
         assert_eq!(notes.chars().count(), NOTES_LIMIT + 1);
     }
 
@@ -476,15 +536,24 @@ mod tests {
         let json = |p: Phase| serde_json::to_value(p).unwrap();
         assert_eq!(json(Phase::Idle), serde_json::json!({ "phase": "idle" }));
         assert_eq!(
-            json(Phase::Available { version: "0.9.0".into(), notes: "n".into() }),
+            json(Phase::Available {
+                version: "0.9.0".into(),
+                notes: "n".into()
+            }),
             serde_json::json!({ "phase": "available", "version": "0.9.0", "notes": "n" })
         );
         assert_eq!(
-            json(Phase::Downloading { version: "0.9.0".into(), downloaded: 5, total: None }),
+            json(Phase::Downloading {
+                version: "0.9.0".into(),
+                downloaded: 5,
+                total: None
+            }),
             serde_json::json!({ "phase": "downloading", "version": "0.9.0", "downloaded": 5, "total": null })
         );
         assert_eq!(
-            json(Phase::Failed { during: Stage::Install }),
+            json(Phase::Failed {
+                during: Stage::Install
+            }),
             serde_json::json!({ "phase": "failed", "during": "install" })
         );
     }

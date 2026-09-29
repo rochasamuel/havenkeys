@@ -20,6 +20,7 @@ use crate::model::{
 };
 use crate::origin::{match_item, site_of, MatchStrength, PageUrl};
 use crate::secret::SecretString;
+use crate::sso::{SignInWith, SsoProvider};
 use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
 use serde::Serialize;
@@ -147,6 +148,9 @@ pub struct Suggestion {
     pub username: Option<String>,
     pub has_totp: bool,
     pub strength: MatchStrength,
+    /// The account of a "Sign in with" login (never a secret).
+    pub account: Option<String>,
+    pub provider: Option<SsoProvider>,
 }
 
 impl std::fmt::Debug for Suggestion {
@@ -224,6 +228,23 @@ pub struct FillCredentials {
 impl std::fmt::Debug for FillCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("FillCredentials(<redacted>)")
+    }
+}
+
+/// Result of [`VaultService::start_sso_for_page`]. No secrets.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SsoStart {
+    pub provider: SsoProvider,
+    pub account: Option<String>,
+    pub auto_choose: bool,
+}
+
+impl std::fmt::Debug for SsoStart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SsoStart")
+            .field("provider", &self.provider)
+            .field("auto_choose", &self.auto_choose)
+            .finish_non_exhaustive()
     }
 }
 
@@ -1003,6 +1024,12 @@ impl VaultService {
                             .and_then(|u| u.host_str().map(|h| h.contains(&q)))
                             .unwrap_or(false)
                     })
+                    || i.sign_in_with.as_ref().is_some_and(|s| {
+                        s.provider.name().to_lowercase().contains(&q)
+                            || s.account
+                                .as_deref()
+                                .is_some_and(|a| a.to_lowercase().contains(&q))
+                    })
             })
             .cloned()
             .collect();
@@ -1084,6 +1111,8 @@ impl VaultService {
                     username: o.username.clone(),
                     has_totp: o.has_totp,
                     strength,
+                    account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
+                    provider: o.sign_in_with.as_ref().map(|s| s.provider),
                 })
             })
             .collect();
@@ -1168,6 +1197,135 @@ impl VaultService {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
         Ok(session.settings.auto_sign_in && overview.auto_sign_in)
+    }
+
+    /// Start a "Sign in with" pick: the provider, account and whether the
+    /// run may click the account on the provider's chooser. Denied unless
+    /// the item is a login saved for the page (and embedding page) that
+    /// signs in with a provider. Nothing secret is returned.
+    pub fn start_sso_for_page(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<SsoStart> {
+        let overview = self.authorize_for_page(id, page_url, top_url)?;
+        let s = overview.sign_in_with.as_ref().ok_or(Error::Denied)?;
+        let settings = &self.session()?.settings;
+        Ok(SsoStart {
+            provider: s.provider,
+            account: s.account.clone(),
+            auto_choose: settings.auto_sign_in && overview.auto_sign_in,
+        })
+    }
+
+    /// What saving a "Sign in with" the user just used on the page would do.
+    /// See the spec §4: `Unchanged` when a login for the page already has
+    /// this provider and account (or this provider and no account was
+    /// learned); `Update(id)` when exactly one has this provider and no
+    /// account; `Add` otherwise.
+    pub fn check_sso(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        provider: SsoProvider,
+        account: Option<&str>,
+    ) -> Result<SaveAction> {
+        let wanted = normalize_username(account);
+        let mut without_account = Vec::new();
+        for s in self.find_matches(page_url, top_url)? {
+            if s.provider != Some(provider) {
+                continue;
+            }
+            let have = normalize_username(s.account.as_deref());
+            if wanted.is_none() || have == wanted {
+                return Ok(SaveAction::Unchanged);
+            }
+            if have.is_none() {
+                without_account.push(s.id);
+            }
+        }
+        Ok(match without_account.as_slice() {
+            [id] => SaveAction::Update(*id),
+            _ => SaveAction::Add,
+        })
+    }
+
+    /// Seal a "Sign in with" login the user confirmed in the save prompt.
+    /// A new login is stored for the frame's own site with no password; an
+    /// update must name a login saved for the page that already signs in
+    /// with `provider`, and changes only its account.
+    pub fn stage_save_sso(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        provider: SsoProvider,
+        account: Option<&str>,
+        target: SaveTarget<'_>,
+        now_ms: i64,
+    ) -> Result<StagedSave> {
+        self.session()?;
+        let sign_in_with = Some(SignInWith {
+            provider,
+            account: account.map(str::to_owned),
+        });
+        let input = match target {
+            SaveTarget::New { title } => {
+                let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+                let (host, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+                let title = match title {
+                    Some(t) => clean_title(t)?,
+                    None => host,
+                };
+                ItemInput {
+                    item_type: ItemType::Login,
+                    title,
+                    username: None,
+                    urls: vec![UrlRule {
+                        url: origin,
+                        match_type: MatchType::Domain,
+                    }],
+                    password: SecretUpdate::Keep,
+                    totp: SecretUpdate::Keep,
+                    notes: SecretUpdate::Keep,
+                    content: SecretUpdate::Keep,
+                    auto_sign_in: None,
+                    sign_in_with,
+                }
+            }
+            SaveTarget::Update(id) => {
+                // An update only ever fills in an account: saving none over
+                // a login would erase the one it has.
+                if account.is_none_or(|a| a.trim().is_empty()) {
+                    return Err(Error::InvalidInput("account is required"));
+                }
+                let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+                if existing.sign_in_with.as_ref().map(|s| s.provider) != Some(provider) {
+                    return Err(Error::Denied);
+                }
+                let input = ItemInput {
+                    item_type: ItemType::Login,
+                    title: existing.title.clone(),
+                    username: existing.username.clone(),
+                    urls: existing.urls.clone(),
+                    password: SecretUpdate::Keep,
+                    totp: SecretUpdate::Keep,
+                    notes: SecretUpdate::Keep,
+                    content: SecretUpdate::Keep,
+                    auto_sign_in: None,
+                    sign_in_with,
+                };
+                return Ok(StagedSave {
+                    item_id: *id,
+                    write: self.stage_update(id, input, now_ms)?,
+                });
+            }
+        };
+        let write = self.stage_create(input, now_ms)?;
+        Ok(StagedSave {
+            item_id: write.item_id,
+            write,
+        })
     }
 
     /// What saving a login the user just submitted on the page would do.
@@ -1289,6 +1447,7 @@ impl VaultService {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
             auto_sign_in: None,
+            sign_in_with: None,
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1317,6 +1476,7 @@ impl VaultService {
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
             auto_sign_in: None,
+            sign_in_with: existing.sign_in_with.clone(),
         };
         Ok(StagedSave {
             item_id: *id,
@@ -1439,7 +1599,7 @@ impl VaultService {
     ) -> Result<StagedImport> {
         // Only items already in the vault count as duplicates; repeated
         // entries inside the export itself are imported as they are.
-        let existing = self.dedupe_keys()?;
+        let (existing, mut upgrade) = self.dedupe_index()?;
         let mut writes = Vec::new();
         report.logins = 0;
         report.secure_notes = 0;
@@ -1452,7 +1612,29 @@ impl VaultService {
                 report.failed += 1;
                 continue;
             };
-            if existing.contains(&dedupe_key(&overview, &details)) {
+            let key = dedupe_key(&overview, &details);
+            // A login already here, without sign_in_with, that this import
+            // carries it for: fill it in rather than skip or duplicate.
+            if let Some(sso) = overview.sign_in_with.clone() {
+                if let Some(target) = upgrade.remove(&key) {
+                    match self.stage_sso_upgrade(&target, sso, now_ms) {
+                        Ok(Some(write)) => {
+                            writes.push(write);
+                            report.sso_upgraded += 1;
+                            continue;
+                        }
+                        Ok(None) => {}
+                        // A login here that no longer seals (a damaged
+                        // details blob) fails on its own; the rest of the
+                        // import goes on.
+                        Err(_) => {
+                            report.failed += 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            if existing.contains(&key) {
                 report.skipped_duplicates += 1;
                 continue;
             }
@@ -1464,23 +1646,81 @@ impl VaultService {
             }
             writes.push(staged);
         }
-        report.imported = writes.len();
+        // Upgrades are recorded separately (`sso_upgraded`), not counted as
+        // newly imported items.
+        report.imported = writes.len() - report.sso_upgraded;
         Ok(StagedImport { writes, report })
     }
 
-    /// What is already here, for import de-duplication.
-    fn dedupe_keys(&self) -> Result<HashSet<[u8; 32]>> {
+    /// What is already here, for import de-duplication: every item's key,
+    /// and separately the keys of logins that still lack `sign_in_with` and
+    /// so are candidates for an upgrade, each mapped to its id. A key with
+    /// more than one such login is dropped from the upgrade map — the
+    /// importer does not guess which one a re-import means.
+    #[allow(clippy::type_complexity)]
+    fn dedupe_index(&self) -> Result<(HashSet<[u8; 32]>, HashMap<[u8; 32], Uuid>)> {
         let session = self.session()?;
         let mut keys = HashSet::new();
+        let mut upgrade: HashMap<[u8; 32], Option<Uuid>> = HashMap::new();
         for ov in session.overviews.values() {
             // Secure notes need their body; a damaged one simply isn't a duplicate.
             let details = match ov.item_type {
                 ItemType::Login => None,
                 ItemType::SecureNote => self.load_details(&ov.id).ok(),
             };
-            keys.insert(dedupe_key_parts(ov, details.as_ref()));
+            let key = dedupe_key_parts(ov, details.as_ref());
+            keys.insert(key);
+            if ov.item_type == ItemType::Login && ov.sign_in_with.is_none() {
+                upgrade
+                    .entry(key)
+                    .and_modify(|v| *v = None)
+                    .or_insert(Some(ov.id));
+            }
         }
-        Ok(keys)
+        let upgrade = upgrade
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|id| (k, id)))
+            .collect();
+        Ok((keys, upgrade))
+    }
+
+    /// Give an existing login the "Sign in with" a re-import carries. Notes
+    /// that are exactly the old importer's line are cleared; nothing else
+    /// changes. `None` when the login no longer opens.
+    fn stage_sso_upgrade(
+        &self,
+        id: &Uuid,
+        sso: SignInWith,
+        now_ms: i64,
+    ) -> Result<Option<StagedWrite>> {
+        let Ok(existing) = self.get_item(id) else {
+            return Ok(None);
+        };
+        // The `legacy` comparison uses the provider's display name,
+        // case-insensitively, because the export's own spelling ("Google",
+        // "google") may differ.
+        let legacy = crate::import::onepux::legacy_sso_note(sso.provider.name());
+        let clear_notes = matches!(
+            self.load_details(id),
+            Ok(ItemDetails::Login { notes: Some(n), .. }) if n.expose().trim().eq_ignore_ascii_case(&legacy)
+        );
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title: existing.title.clone(),
+            username: existing.username.clone(),
+            urls: existing.urls.clone(),
+            password: SecretUpdate::Keep,
+            totp: SecretUpdate::Keep,
+            notes: if clear_notes {
+                SecretUpdate::Clear
+            } else {
+                SecretUpdate::Keep
+            },
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: Some(sso),
+        };
+        self.stage_update(id, input, now_ms).map(Some)
     }
 
     /// Record a write the server accepted at `revision`. Returns the stored
@@ -1588,6 +1828,7 @@ pub(crate) fn build_item(
         notes,
         content,
         auto_sign_in,
+        sign_in_with,
         ..
     } = input;
 
@@ -1684,6 +1925,10 @@ pub(crate) fn build_item(
         has_notes,
         has_passkey,
         auto_sign_in: auto_sign_in.unwrap_or(true),
+        sign_in_with: match item_type {
+            ItemType::Login => crate::sso::clean_sign_in_with(sign_in_with)?,
+            ItemType::SecureNote => None,
+        },
         created_at,
         updated_at: now_ms,
     };

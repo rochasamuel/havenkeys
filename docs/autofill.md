@@ -525,6 +525,157 @@ forms and SPA steps, not a step on a page the site navigates to.
 * **Heuristics can pick no button.** When no candidate clearly wins, the
   fields are filled and the user presses, exactly like today's behaviour.
 
+## Sign in with Google, Microsoft, GitHub, Apple
+
+Some logins are never used with a password: the site is always reached
+through "Sign in with Google" (or Microsoft, GitHub, Apple). HavenKeys can
+remember which provider and account a login uses (`sign_in_with` on the
+item), offer it on the site's own sign-in page, and — after one click —
+press the site's button and pick the saved account on the provider's own
+chooser. It never enters a password or grants permissions on this path.
+Providers, their exact origins, and the wire messages are in
+`native-messaging.md` §"Sign in with"; the security properties are in
+`security-model.md` and `threat-model.md`.
+
+Code: `apps/extension/src/autofill/sso.ts` (pure field detection, shared by
+the balloon scan, the press and the chooser), `content/sso.ts` (per-page
+state), `background/sso-state.ts` and `background/sso-handler.ts`
+(cross-tab/cross-frame state and the wire calls).
+
+### Recognizing a provider button
+
+Candidates are the same broad set as other clickable elements (`button`,
+`a[href]`, `[role=button]`, `[role=link]`, `input[type=submit|button]`), at
+most `MAX_SSO_CANDIDATES` (400) of them, visible and not disabled. Each is
+scored per provider from its text, `aria-label`, `title` and an inner
+`img[alt]` (English and pt-BR: "Sign in / Log in / Continue / Sign up with
+`<Provider>`", "Entrar / Continuar / Acessar com `<Provider>`"), with a bonus
+when the `href` itself points at that provider's origin. A bare "`<Provider>`"
+label counts only with context — another provider's button, or a login field,
+on the page — so a plain "Google" is not enough on its own. Misleading text
+("Google Drive", "GitHub repository", download-store wording, and so on) is
+excluded. A label needs a score of `SSO_MIN_SCORE` (60) to qualify.
+
+### The balloon
+
+While in-page suggestions are on, the top frame watches for provider buttons
+for `SCAN_WINDOW_MS` (60 s) after load and after every URL change (route
+changes reopen the window), rescanning at most every `SCAN_DEBOUNCE_MS`
+(750 ms) through the same debounced `MutationObserver` other autofill uses —
+never the whole document on every mutation. When the set of recognized
+providers changes, the content script tells the background
+(`cs_sso_buttons`, no page data beyond the provider list); the background
+asks `find_matches` for the page and keeps only matches whose `provider` is
+one of them. If any remain, a small balloon opens in the top-right corner:
+one row per login, `[icon] Sign in with `<Provider>` · `<account>``. It
+follows the existing in-page suggestions preference — off, no balloon — and
+is offered only in the top frame; an iframe never gets one. Closing it hides
+it for that page (origin + pathname; a query or hash change alone does not
+bring it back) until the next navigation. SSO logins also appear, with the
+same icon, in the field menu and the toolbar popup (**Sign in** instead of
+**Fill**). A pick in the balloon always starts the run below. A pick in the
+field menu or the popup first asks the desktop `fill_item`, as for any
+login: if the login also has a saved password, that password is filled
+exactly as for a plain login (automatic sign-in rules unchanged, no run);
+only a login with no password starts the run. The extension cannot tell
+which case a row is before the pick, so the row looks the same either way;
+"Sign in" stays accurate because, with automatic sign-in on, a password fill
+signs in too.
+
+### The run
+
+1. The user picks an SSO item. The background asks the desktop `start_sso`,
+   which re-checks the item against the page (the same origin check as
+   `fill_item`) and returns the provider, the saved account, that provider's
+   **exact origins** (a fixed table in Rust) and whether the run may
+   auto-choose (`settings.auto_sign_in && item.auto_sign_in`). No secret
+   comes back. The background keeps this, with no secrets, as an `SsoRun`:
+   tab, frame, the site's origin, provider, account, the provider origins,
+   `autoChoose`, a phase (`press` then `choose`), and an expiry
+   `SSO_RUN_TTL_MS` (2 minutes) out. One run per tab; a new pick replaces it.
+2. **Press.** The background asks the top frame to press that provider's
+   button (`bg_sso_press`, carrying the origin the desktop matched); the
+   content script refuses unless it is still the top frame and still on that
+   exact origin, then looks for a **clear winner** among that provider's own
+   candidates — the best score beats the runner-up by at least 20 points, as
+   `submit.ts` requires for automatic sign-in — and clicks it. No winner, or
+   a challenge (reCAPTCHA/hCaptcha/Turnstile) on the page: nothing is
+   pressed, and the balloon shows "Couldn't find the Sign in with `<Provider>`
+   button". Only the top frame ever presses: in a field menu inside an
+   iframe, an SSO login with no password starts no run and the pick answers
+   "Couldn't find the Sign in with `<Provider>` button"; one that also has a
+   password is filled there as usual.
+3. **Choose.** Once pressed, the run only continues if `autoChoose` is on and
+   the item has a saved account. The **top frame** of the run's tab, or of a
+   **popup that tab opened** (`openerTabId`, supplied by the browser, not the
+   page), is told to choose only once its own origin is one of the run's
+   provider origins. Iframes are never told to choose (the background answers
+   them nothing and the content script ignores a choose outside the top
+   frame), so a provider's embedded widget on some page, such as a Google
+   Identity Services iframe, cannot spend the run. The run is used once: the
+   first provider top frame to ask gets the account, and the run ends there.
+   That page retries on a debounced `MutationObserver` for up to
+   `CHOOSE_WAIT_MS` (10 s), clicking the saved account only when
+   `chooserRow` finds **exactly one** clickable, visible element whose text
+   contains that account (case-insensitive) and whose own label is not
+   itself consent wording — two matching rows, or none, and nothing is
+   clicked. The run ends after one click, successful or not.
+
+### Stop conditions
+
+Checked before every press and before every choose attempt:
+
+| Condition | Effect |
+|---|---|
+| Consent or permissions wording ("Continue as …", "Allow…", "Grant access/permission(s)…", "Authorize…", recognized at any length as a prefix, plus a few short bare words such as "Accept"/"Continuar" under 30 characters) | Never pressed; the run ends |
+| Ambiguity: no clear-winner button, or more than one (or zero) chooser rows match the account | Nothing is clicked; the run ends |
+| A password field / no matching chooser row (the provider asks for a password instead of showing a chooser) | `chooserRow` simply finds nothing to click; the ordinary field menu still offers the vault's login for the provider's own origin, and the user picks it manually |
+| The user's next trusted input (`keydown`, `input`, `pointerdown`) in the document that pressed the button | That document sends `cs_sso_stop`; the background ends the run of its tab (or of the tab that opened it, for a popup) |
+| Trusted user input on the provider page while it waits for the chooser | Cancels that wait |
+| The frame's origin is not the one the desktop matched (press), or not one of the run's provider origins (choose) | Refused |
+| 2 minutes elapsed, or the tab's top frame loads an origin that is neither the site's nor a provider's | Ends the run |
+| Vault lock | Clears the background's runs and pending captures; a chooser wait already in progress on the provider page is not told and ends by itself within `CHOOSE_WAIT_MS` (10 s) |
+
+### Save detection
+
+A trusted (`isTrusted`) click on a recognized provider button starts a
+`PendingSso` in background memory: the tab, the page URL, the provider, and
+an expiry `PENDING_TTL_MS` (5 minutes) out. One per tab; a new click replaces
+it; scripted clicks are ignored. The account is learned **only on that
+provider's own origins**, in the tab or in a popup it opened, never from the
+site's own page: a trusted click on an account-chooser row (the email-shaped
+text inside it), or a username-only step submitted there. Reaching a
+provider origin also marks the pending capture as "saw the provider" — this
+is what "reached the provider" means; an embedded Google Identity Services
+iframe that never navigates the top frame does **not** count, so a page
+cannot arm a save prompt just by drawing a GSI button nobody clicked.
+
+Once the provider has been reached, either of these asks the desktop
+`check_sso` while the pending capture is still valid:
+
+* the first later top-frame load in the tab on an origin that is **not** one
+  of the provider's origins (back on the site, or somewhere else);
+* the provider popup closing (many sites run OAuth in a popup and never
+  reload the tab).
+
+`unchanged` (this provider and account, or this provider with no account, is
+already saved) shows nothing. `update` (exactly one login has this provider
+and no account, typically imported from 1Password) offers to add the account
+to it. `add` shows the ordinary save balloon, naming the site **where the
+user clicked**, not the page they returned to, with the account and a title
+editable before **Save**. A stale pending capture simply expires without
+ever asking, so it can never block a later, unrelated offer. Everything —
+pending captures, runs and open balloons — is dropped on lock.
+
+### Known limitation
+
+**Google Identity Services (GIS) iframe buttons and One Tap are not
+recognized or pressed.** They are iframes from `accounts.google.com/gsi`
+embedded directly in the site, not a same-origin button HavenKeys can find
+and click; sites with their own "Sign in with Google" button work normally.
+Corporate SSO (Okta, SAML, an organization's Azure AD tenant beyond the fixed
+Microsoft origins) is out of scope entirely.
+
 ## Passkeys
 
 HavenKeys answers a site's WebAuthn calls on the hosts the extension has

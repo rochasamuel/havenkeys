@@ -91,8 +91,9 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
     let mut report = staged.report;
     let committed = sync::push_batches(&app, staged.writes).await?;
     // What the server accepted is what the vault has; the staged count was a
-    // forecast.
-    report.imported = committed;
+    // forecast. Upgrades (already-present logins that gained sign_in_with)
+    // are counted separately, not as newly imported items.
+    report.imported = committed.saturating_sub(report.sso_upgraded);
 
     let state = app.state::<AppState>();
     let file_name = path

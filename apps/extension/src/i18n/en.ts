@@ -49,6 +49,8 @@ export const en = {
     unreachable: "The extension could not be reached.",
     fill: "Fill",
     fillTitle: "Fill this login into the page",
+    signIn: "Sign in",
+    signInTitle: "Sign in with this login’s provider",
     code: "Code",
     codeTitle: "Show the one-time code",
     fillCodeTitle: "Fill this code into the page",
@@ -146,6 +148,7 @@ export const en = {
     noCodesBody: "No login for this site has a one-time code.",
     noLoginsTitle: "No logins for this site",
     noLoginsBody: "Save one in the HavenKeys app.",
+    ssoRow: (provider: string, account: string | null) => (account ? `${provider} · ${account}` : `Sign in with ${provider}`),
   },
 
   save: {
@@ -157,6 +160,23 @@ export const en = {
     update: "Update",
     notNow: "Not now",
     titleLabel: "Name",
+  },
+
+  sso: {
+    pageTitle: "Sign in with HavenKeys",
+    offerTitle: "Sign in",
+    row: (provider: string, account: string | null) => (account ? `${provider} · ${account}` : `Sign in with ${provider}`),
+    saveQuestion: "Save this login to HavenKeys?",
+    updateQuestion: "Add this account to your saved login?",
+    signInWith: (provider: string) => `Sign in with ${provider}`,
+    accountLabel: "Account",
+    accountPlaceholder: "Email (optional)",
+    titleLabel: "Name",
+    save: "Save",
+    update: "Add",
+    notNow: "Not now",
+    close: "Close",
+    noButton: (provider: string) => `Couldn’t find the “Sign in with ${provider}” button on this page.`,
   },
 
   passkey: {

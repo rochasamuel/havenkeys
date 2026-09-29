@@ -5,6 +5,10 @@
 // These validators exist so the extension, too, only ever acts on messages
 // of exactly the expected shape. See docs/native-messaging.md.
 
+export * from "./sso";
+
+import { isSsoProvider, type SsoProvider } from "./sso";
+
 export const PROTOCOL_VERSION = 1;
 export const MAX_URL_BYTES = 4096;
 export const MAX_MATCHES = 50;
@@ -61,7 +65,19 @@ export type Request =
       itemId: string | null;
       conditional: boolean;
     }
-  | { type: "passkey_status"; url: string; topUrl?: string };
+  | { type: "passkey_status"; url: string; topUrl?: string }
+  | { type: "start_sso"; itemId: string; url: string; topUrl?: string }
+  | { type: "check_sso"; url: string; topUrl?: string; provider: SsoProvider; account: string | null }
+  | {
+      type: "save_sso";
+      url: string;
+      topUrl?: string;
+      provider: SsoProvider;
+      account: string | null;
+      itemId: string | null;
+      /** A new login's name from the save prompt; the desktop uses the host without one. */
+      title?: string;
+    };
 
 export type RequestType = Request["type"];
 
@@ -85,6 +101,7 @@ export interface Match {
   username: string | null;
   hasTotp: boolean;
   strength: MatchStrength;
+  provider: SsoProvider | null;
 }
 
 /** A passkey offered for a page. Never contains a key. */
@@ -124,7 +141,10 @@ export type Result =
       publicKeyAlgorithm: number;
     }
   | { type: "passkey_status"; hasPasskey: boolean }
-  | { type: "open_item" };
+  | { type: "open_item" }
+  | { type: "start_sso"; provider: SsoProvider; account: string | null; providerOrigins: string[]; autoChoose: boolean }
+  | { type: "check_sso"; action: SaveAction; itemId: string | null }
+  | { type: "save_sso"; itemId: string };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -253,11 +273,12 @@ const STRENGTHS: readonly MatchStrength[] = ["exact_url", "same_host", "same_sit
 const SAVE_ACTIONS: readonly SaveAction[] = ["add", "update", "unchanged"];
 
 function parseMatch(v: unknown): Match | null {
-  if (!isObj(v) || !hasExactKeys(v, ["id", "title", "username", "hasTotp", "strength"])) return null;
-  const { id, title, username, hasTotp, strength } = v;
+  if (!isObj(v) || !hasExactKeys(v, ["id", "title", "username", "hasTotp", "strength", "provider"])) return null;
+  const { id, title, username, hasTotp, strength, provider } = v;
   if (!isStr(id) || !UUID.test(id) || !isStr(title) || !isNullableStr(username) || !isBool(hasTotp)) return null;
   if (!STRENGTHS.includes(strength as MatchStrength)) return null;
-  return { id, title, username, hasTotp, strength: strength as MatchStrength };
+  if (provider !== null && !isSsoProvider(provider)) return null;
+  return { id, title, username, hasTotp, strength: strength as MatchStrength, provider };
 }
 
 function parseResult(v: unknown): Result | null {
@@ -335,6 +356,29 @@ function parseResult(v: unknown): Result | null {
       return { type: "passkey_status", hasPasskey: v.hasPasskey };
     case "open_item":
       return hasExactKeys(v, ["type"]) ? { type: "open_item" } : null;
+    case "start_sso": {
+      if (!hasExactKeys(v, ["type", "provider", "account", "providerOrigins", "autoChoose"])) return null;
+      const { provider, account, providerOrigins, autoChoose } = v;
+      if (!isSsoProvider(provider) || !isNullableStr(account) || !isBool(autoChoose)) return null;
+      if (!Array.isArray(providerOrigins) || providerOrigins.length === 0 || providerOrigins.length > 4) return null;
+      const origins: string[] = [];
+      for (const o of providerOrigins) {
+        if (!isStr(o) || o.length > MAX_URL_BYTES) return null;
+        origins.push(o);
+      }
+      return { type: "start_sso", provider, account, providerOrigins: origins, autoChoose };
+    }
+    case "check_sso": {
+      if (!hasExactKeys(v, ["type", "action", "itemId"])) return null;
+      const { action, itemId } = v;
+      if (!SAVE_ACTIONS.includes(action as SaveAction)) return null;
+      if (itemId !== null && !isUuid(itemId)) return null;
+      if ((action === "update") !== (itemId !== null)) return null;
+      return { type: "check_sso", action: action as SaveAction, itemId };
+    }
+    case "save_sso":
+      if (!hasExactKeys(v, ["type", "itemId"]) || !isUuid(v.itemId)) return null;
+      return { type: "save_sso", itemId: v.itemId };
     default:
       return null;
   }

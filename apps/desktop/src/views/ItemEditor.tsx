@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { ItemInput, ItemOverview, ItemType, MatchType, ScannedTotp, SecretUpdate, UrlRule } from "../lib/types";
+import type { ItemInput, ItemOverview, ItemType, MatchType, ScannedTotp, SecretUpdate, SignInWith, SsoProvider, UrlRule } from "../lib/types";
 import { EMPTY, KEEP, canScan, scanLabel, toUpdate, type SecretEdit } from "../lib/secretEdit";
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
+import { PROVIDER_NAMES, PROVIDER_ORDER, shouldCollapse } from "../lib/sso";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useI18n } from "../i18n/context";
@@ -48,8 +49,10 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [saving, setSaving] = useState(false);
   const [autoSignIn, setAutoSignIn] = useState(existing?.autoSignIn ?? true);
   const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
+  const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
+  const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
 
-  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn };
+  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, signInWith: signIn };
   const [initialSnapshot] = useState(snapshot);
   const dirty = isDirty(initialSnapshot, snapshot);
   useEffect(() => {
@@ -146,6 +149,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             totp: toUpdate(totp),
             notes: textUpdate,
             autoSignIn,
+            signInWith: signIn ? { provider: signIn.provider, account: signIn.account?.trim() || null } : null,
           }
         : { itemType, title, content: textUpdate };
 
@@ -199,81 +203,125 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
 
         {itemType === "login" && (
           <>
-            <label className="row edit-row">
-              <span className="edit-label">{t.common.username}</span>
-              <input
-                className="edit-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t.editor.usernamePlaceholder}
-                autoComplete="off"
-                spellCheck={false}
-                autoCapitalize="off"
-                maxLength={512}
-              />
-            </label>
-
             <div className="row edit-row">
-              <span className="edit-label">{t.common.password}</span>
-              {password.mode === "keep" ? (
-                <div className="edit-secret">
-                  {/* Stands in for the password: may be cut short in a narrow pane. */}
-                  <span className="mono masked" data-truncate="">
-                    ••••••••••••
-                  </span>
-                  <span className="edit-secret-actions">
-                    <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
-                      {t.editor.change}
-                    </button>
-                    <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
-                      {t.common.remove}
-                    </button>
-                  </span>
-                </div>
-              ) : password.mode === "clear" ? (
-                <div className="edit-secret">
-                  <span className="muted">{t.editor.passwordRemoved}</span>
-                  <span className="edit-secret-actions">
-                    <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
-                      {t.common.undo}
-                    </button>
-                  </span>
-                </div>
-              ) : password.mode === "set" ? (
-                <div className="edit-secret">
+              <span className="edit-label">{t.editor.signInWith}</span>
+              <span className="select-wrap">
+                <select
+                  value={signIn?.provider ?? ""}
+                  aria-label={t.editor.providerPick}
+                  onChange={(e) => {
+                    const p = e.target.value as SsoProvider | "";
+                    setSignIn(p ? { provider: p, account: signIn?.account ?? null } : null);
+                    if (!p) setPasswordOpen(true);
+                    else if (shouldCollapse(username, password, existing?.hasPassword ?? false)) setPasswordOpen(false);
+                  }}
+                >
+                  <option value="">{t.editor.providerNone}</option>
+                  {PROVIDER_ORDER.map((p) => (
+                    <option key={p} value={p}>{PROVIDER_NAMES[p]}</option>
+                  ))}
+                </select>
+                <Icon name="chevronDown" size={14} className="select-chevron" />
+              </span>
+            </div>
+            {signIn && (
+              <label className="row edit-row">
+                <span className="edit-label">{t.editor.account}</span>
+                <input
+                  className="edit-input"
+                  value={signIn.account ?? ""}
+                  onChange={(e) => setSignIn({ provider: signIn.provider, account: e.target.value })}
+                  placeholder={t.editor.accountPlaceholder}
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  maxLength={254}
+                />
+              </label>
+            )}
+            {passwordOpen ? (
+              <>
+                <label className="row edit-row">
+                  <span className="edit-label">{t.common.username}</span>
                   <input
-                    className="edit-input mono"
-                    type={showPassword ? "text" : "password"}
-                    value={password.value}
-                    onChange={(e) => setPassword({ mode: "set", value: e.target.value })}
-                    placeholder={t.common.password}
-                    autoComplete="new-password"
+                    className="edit-input"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder={t.editor.usernamePlaceholder}
+                    autoComplete="off"
                     spellCheck={false}
                     autoCapitalize="off"
-                    aria-label={t.common.password}
+                    maxLength={512}
                   />
-                  <span className="edit-secret-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => setShowPassword((s) => !s)}
-                      aria-label={showPassword ? t.common.hidePassword : t.common.showPassword}
-                      title={showPassword ? t.common.hidePassword : t.common.showPassword}
-                    >
-                      <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
-                    </button>
-                    <button type="button" className="btn btn-small" onClick={() => void generate()}>
-                      <Icon name="dice" size={15} /> {t.editor.generate}
-                    </button>
-                    {!isNew && existing.hasPassword && (
-                      <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
-                        {t.common.cancel}
-                      </button>
-                    )}
-                  </span>
+                </label>
+
+                <div className="row edit-row">
+                  <span className="edit-label">{t.common.password}</span>
+                  {password.mode === "keep" ? (
+                    <div className="edit-secret">
+                      {/* Stands in for the password: may be cut short in a narrow pane. */}
+                      <span className="mono masked" data-truncate="">
+                        ••••••••••••
+                      </span>
+                      <span className="edit-secret-actions">
+                        <button type="button" className="btn btn-small" onClick={() => setPassword({ mode: "set", value: "" })}>
+                          {t.editor.change}
+                        </button>
+                        <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setPassword({ mode: "clear" })}>
+                          {t.common.remove}
+                        </button>
+                      </span>
+                    </div>
+                  ) : password.mode === "clear" ? (
+                    <div className="edit-secret">
+                      <span className="muted">{t.editor.passwordRemoved}</span>
+                      <span className="edit-secret-actions">
+                        <button type="button" className="btn btn-small" onClick={() => setPassword(KEEP)}>
+                          {t.common.undo}
+                        </button>
+                      </span>
+                    </div>
+                  ) : password.mode === "set" ? (
+                    <div className="edit-secret">
+                      <input
+                        className="edit-input mono"
+                        type={showPassword ? "text" : "password"}
+                        value={password.value}
+                        onChange={(e) => setPassword({ mode: "set", value: e.target.value })}
+                        placeholder={t.common.password}
+                        autoComplete="new-password"
+                        spellCheck={false}
+                        autoCapitalize="off"
+                        aria-label={t.common.password}
+                      />
+                      <span className="edit-secret-actions">
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => setShowPassword((s) => !s)}
+                          aria-label={showPassword ? t.common.hidePassword : t.common.showPassword}
+                          title={showPassword ? t.common.hidePassword : t.common.showPassword}
+                        >
+                          <Icon name={showPassword ? "eyeOff" : "eye"} size={16} />
+                        </button>
+                        <button type="button" className="btn btn-small" onClick={() => void generate()}>
+                          <Icon name="dice" size={15} /> {t.editor.generate}
+                        </button>
+                        {!isNew && existing.hasPassword && (
+                          <button type="button" className="btn btn-small btn-quiet" onClick={() => setPassword(KEEP)}>
+                            {t.common.cancel}
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            ) : (
+              <button type="button" className="row row-button add-row" onClick={() => setPasswordOpen(true)}>
+                <Icon name="plus" size={15} /> {t.editor.alsoPassword}
+              </button>
+            )}
           </>
         )}
       </div>

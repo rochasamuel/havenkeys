@@ -17,6 +17,8 @@ export const ptBR: Messages = {
     unreachable: "Não foi possível acessar a extensão.",
     fill: "Preencher",
     fillTitle: "Preencher a página com este login",
+    signIn: "Entrar",
+    signInTitle: "Entrar com o provedor deste login",
     code: "Código",
     codeTitle: "Mostrar o código de verificação",
     fillCodeTitle: "Preencher a página com este código",
@@ -114,6 +116,7 @@ export const ptBR: Messages = {
     noCodesBody: "Nenhum login deste site tem código de verificação.",
     noLoginsTitle: "Nenhum login para este site",
     noLoginsBody: "Salve um no app HavenKeys.",
+    ssoRow: (provider: string, account: string | null) => (account ? `${provider} · ${account}` : `Entrar com ${provider}`),
   },
 
   save: {
@@ -125,6 +128,23 @@ export const ptBR: Messages = {
     update: "Atualizar",
     notNow: "Agora não",
     titleLabel: "Nome",
+  },
+
+  sso: {
+    pageTitle: "Entrar com HavenKeys",
+    offerTitle: "Entrar",
+    row: (provider: string, account: string | null) => (account ? `${provider} · ${account}` : `Entrar com ${provider}`),
+    saveQuestion: "Salvar este login no HavenKeys?",
+    updateQuestion: "Adicionar esta conta ao login salvo?",
+    signInWith: (provider: string) => `Entrar com ${provider}`,
+    accountLabel: "Conta",
+    accountPlaceholder: "E-mail (opcional)",
+    titleLabel: "Nome",
+    save: "Salvar",
+    update: "Adicionar",
+    notNow: "Agora não",
+    close: "Fechar",
+    noButton: (provider: string) => `Não encontrei o botão “Entrar com ${provider}” nesta página.`,
   },
 
   passkey: {

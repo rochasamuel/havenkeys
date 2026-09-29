@@ -1930,3 +1930,96 @@ shown); `hygiene.test.ts` allows storage in `shared/prefs.ts` only.
 **Update impact:** Chrome disables an installed 0.9.x extension when it
 updates to a version with new host permissions, until the user accepts
 them.
+
+## Sign in with Google, Microsoft, GitHub and Apple (2026-09-28)
+
+Spec: `docs/superpowers/specs/2026-09-28-sign-in-with-design.md`. Scope: the
+`sign_in_with` item field and `SsoProvider`/`sso.rs`
+(`crates/havenkeys-core`), `start_sso`/`check_sso`/`save_sso`
+(`crates/havenkeys-protocol`, `crates/havenkeys-bridge`), the extension's
+button/chooser detection and run
+(`apps/extension/src/autofill/sso.ts`, `content/sso.ts`,
+`background/sso-state.ts`, `background/sso-handler.ts`), the desktop UI
+(`ItemDetail.tsx`, `ItemEditor.tsx`), and the `.1pux` importer's `ssoLogin`
+mapping and re-import upgrade.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| SSO1 | Low | Extension (save detection) | A trusted click on a page element that merely *says* "Sign in with Google" arms a save prompt | Accepted, bounded |
+| SSO2 | Low | Extension / Core | The account text offered in the save and choose flows comes from the provider page | Accepted, mitigated |
+| SSO3 | Medium | Extension | Consent detection is keyword-based | Accepted, documented |
+| SSO4 | Low | Extension | `openerTabId` (which frame may act as "the run's popup") is trusted | Accepted, sound |
+| SSO5 | Info | Extension | Google Identity Services (GIS) iframe buttons and One Tap are not recognized or pressed | Accepted, functional limitation |
+
+### SSO1. A fake "Sign in with" label arms a save prompt (Low, accepted)
+**Attack/failure scenario:** any page can put "Sign in with Google" text on
+any clickable element and get a user to click it. The click starts a
+`PendingSso` in background memory and, if the flow later reaches a real
+Google origin and returns, offers to save that account against the page's
+own site.
+**Why low:** the click only *arms* a possible save; nothing is written
+without a second explicit action. The resulting balloon always names the
+site being saved for and requires **Save**, and it can only ever offer to
+save a login *for the page the user clicked on* — it cannot target another
+site, and it carries no password. A misleading label at worst produces an
+unwanted save offer the user can dismiss or ignore (`autofill.md`, "Save
+detection").
+
+### SSO2. Account text comes from the provider page (Low, accepted/mitigated)
+**Attack scenario:** a compromised or malicious provider-origin page (or one
+whose chooser the extension misreads) could feed an arbitrary string as the
+"account" shown in the save prompt or clicked in a later run.
+**Mitigation:** the text is validated on arrival in Rust — trimmed, at most
+254 characters, no control characters (`crates/havenkeys-core/src/sso.rs`)
+— and is always shown to the user, editable, before a save is confirmed. On
+the *choose* side, a bad value can only cause `chooserRow` to fail to find a
+unique matching row (nothing is clicked) or, if it happens to collide with a
+real row's visible email, click that row — the same click a user reaching
+that chooser manually could make. No secret is read or written based on this
+text; it is a display value and a lookup key into the vault's own logins,
+never a credential.
+
+### SSO3. Consent detection is keyword-based (Medium, accepted, documented)
+**Failure mode:** `isConsentScreen`/`isConsentLabel` recognize a fixed list
+of English and Portuguese consent/permission phrases ("Continue as …",
+"Allow…", "Grant access/permission(s)…", "Authorize…", plus a few short bare
+words). A provider redesign that phrases its consent screen outside this
+list, while also showing a row whose visible email equals the saved account,
+could be clicked as if it were an ordinary chooser row.
+**Mitigation (why not worse):** a click still requires `chooserRow` to find
+**exactly one** clickable, visible element whose text contains the saved
+account — an unrecognized consent screen still needs that same coincidence
+to be reachable at all, and pressing it only grants whatever that specific
+screen asks for, on the provider's own real origin, for an account the user
+already saved as belonging to their own login. The keyword list itself also
+actively stops the run wherever it does match, which is the common case for
+the four supported providers' actual consent screens as of this writing.
+**Limitation, documented:** provider page redesigns can change this
+behaviour; the word list in `apps/extension/src/autofill/sso.ts` is not verified against live provider pages
+on an ongoing basis (`autofill.md`, "Known limitation"; `security-model.md`
+§17).
+
+### SSO4. `openerTabId` trust (Low, accepted, sound)
+**Question:** the run accepts a choose step from the top frame of the run's
+own tab, or of a tab whose `openerTabId` is the run's tab (iframes never
+choose) — could a hostile page
+forge this to reach another tab's run?
+**Why sound:** `openerTabId` is supplied by the browser itself: the
+background reads it from `sender.tab.openerTabId` on the content script's
+message (`background/index.ts`), never from anything a page's message
+content claims. A page opening a
+popup to a provider origin, with that popup's `openerTabId` pointing back at
+it, is exactly the legitimate OAuth-popup flow the design accounts for
+(spec §6.2, "a popup whose `openerTabId` is the run's tab"). The run still
+independently requires that popup's own frame origin to be one of the
+provider's exact origins before it will act — the opener relationship alone
+grants nothing.
+
+### SSO5. GIS iframe / One Tap not supported (Info, functional limitation)
+Google Identity Services renders its button and One Tap prompt inside a
+cross-origin iframe from `accounts.google.com/gsi` that HavenKeys' content
+script cannot reach or classify as a same-page button. Sites using GIS this
+way get no balloon-driven press; sites with their own button (the common
+"Continue with Google" pattern most sites use) work normally. Not a security
+finding — documented in `autofill.md` as a known limitation and in the
+design's out-of-scope list (§13).

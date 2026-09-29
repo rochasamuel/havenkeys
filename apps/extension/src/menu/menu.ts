@@ -2,9 +2,11 @@
 // codes go from the background straight to the content script and never
 // pass through this page.
 
+import { SSO_PROVIDERS } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
+import { providerIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -69,6 +71,13 @@ async function pick(req: Parameters<typeof ask>[0]): Promise<void> {
 }
 
 function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButtonElement {
+  if (kind === "login" && item.provider) {
+    const name = SSO_PROVIDERS[item.provider].name;
+    return row(providerIcon(item.provider), item.title, msg.menu.ssoRow(name, item.username), () => pick({ type: "menu_pick", token: t, itemId: item.id }), {
+      title: false,
+      detail: item.username === null,
+    });
+  }
   const detail = kind === "otp" ? msg.menu.fillCode : (item.username ?? msg.common.noUsername);
   const copy = { title: false, detail: kind === "otp" || item.username === null };
   return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy);

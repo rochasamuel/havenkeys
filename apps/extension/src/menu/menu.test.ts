@@ -5,6 +5,7 @@
 // background on a trusted, armed click (see common.ts's click guard).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { captureClicks } from "./click-capture.test-helper";
 
 const TOKEN = "a".repeat(32);
 const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -57,7 +58,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo" }], passkeys: [], hint: { kind: "use_passkey" } },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: { kind: "use_passkey" } },
       },
     ];
     await load();
@@ -71,7 +72,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo" }], passkeys: [], hint: { kind: "add_passkey", name: "GitHub" } },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: { kind: "add_passkey", name: "GitHub" } },
       },
     ];
     await load();
@@ -86,7 +87,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo" }], passkeys: [], hint: null },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: null },
       },
     ];
     await load();
@@ -101,7 +102,7 @@ describe("field menu copy and size", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null }], passkeys: [], hint: null },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null, provider: null }], passkeys: [], hint: null },
       },
     ];
     await load();
@@ -135,5 +136,35 @@ describe("field menu copy and size", () => {
     await load();
     await vi.advanceTimersByTimeAsync(50);
     expect(asked).toContainEqual({ type: "menu_resize", token: TOKEN, height: 34 + 2 * 64 });
+  });
+});
+
+describe("field menu sign-in-with rows", () => {
+  it("shows the provider icon and ssoRow detail, and picks by itemId", async () => {
+    const handlers = captureClicks();
+    replies = [
+      {
+        ok: true,
+        value: {
+          state: "ready",
+          kind: "login",
+          site: "typeform.com",
+          items: [{ id: ITEM, title: "Typeform", username: "me@gmail.com", provider: "google" }],
+          passkeys: [],
+          hint: null,
+        },
+      },
+    ];
+    await load();
+    await vi.advanceTimersByTimeAsync(1000); // let the click guard arm
+    const row = document.querySelector("button.row") as HTMLButtonElement;
+    expect(row.querySelector(".user")?.textContent).toBe("Google · me@gmail.com");
+    expect(row.querySelector("svg.provider-icon")).not.toBeNull();
+    expect(row.querySelector(".avatar")?.textContent).toBe("");
+
+    replies.push({ ok: true, value: null });
+    handlers.get(row)?.({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked).toContainEqual({ type: "menu_pick", token: TOKEN, itemId: ITEM });
   });
 });

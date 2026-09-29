@@ -112,14 +112,19 @@ describe("popup handler", () => {
   });
 
   it("fills the active tab using the tab's own URL", async () => {
-    const c = fakeClient(() => ({ type: "fill_item", username: "octo", password: "pw", autoSubmit: false }));
+    const c = fakeClient((r) =>
+      r.type === "find_matches"
+        ? { type: "find_matches", matches: [] }
+        : { type: "fill_item", username: "octo", password: "pw", autoSubmit: false },
+    );
     const fills: unknown[] = [];
     const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login?x=1" }), async (...a) => {
       fills.push(a);
       return 2;
     });
     expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
-    expect(c.seen[0]).toEqual({ type: "fill_item", itemId: ID, url: "https://github.com/login" });
+    expect(c.seen[0]).toEqual({ type: "find_matches", url: "https://github.com/login" });
+    expect(c.seen[1]).toEqual({ type: "fill_item", itemId: ID, url: "https://github.com/login" });
     expect(fills).toEqual([[7, "https://github.com/login", { kind: "login", username: "octo", password: "pw" }, null]]);
   });
 
@@ -127,7 +132,7 @@ describe("popup handler", () => {
     const c = fakeClient((r) =>
       r.type === "fill_item"
         ? { type: "fill_item", username: "octo", password: "pw", autoSubmit: true }
-        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" }] },
+        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null }] },
     );
     const fills: unknown[][] = [];
     const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login" }), async (...a) => {
@@ -136,7 +141,48 @@ describe("popup handler", () => {
     });
     await h.handle({ type: "popup_fill", itemId: ID });
     expect(fills[0]?.[3]).toEqual({ itemId: ID, hasTotp: true });
-    expect(c.seen.map((r) => r.type)).toEqual(["fill_item", "find_matches"]);
+    expect(c.seen.map((r) => r.type)).toEqual(["find_matches", "fill_item"]);
+  });
+
+  function providerLogin(password: string | null) {
+    const c = fakeClient((r) =>
+      r.type === "fill_item"
+        ? { type: "fill_item", username: password === null ? null : "me", password, autoSubmit: false }
+        : {
+            type: "find_matches",
+            matches: [{ id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google" }],
+          },
+    );
+    const fills: unknown[] = [];
+    const starts: unknown[] = [];
+    const h = createPopupHandler(
+      c,
+      async () => ({ id: 7, url: "https://typeform.com/login?x=1" }),
+      async (...a) => {
+        fills.push(a);
+        return 2;
+      },
+      async (...a) => {
+        starts.push(a);
+        return { ok: true, value: null };
+      },
+    );
+    return { c, h, fills, starts };
+  }
+
+  it("starts a sign-in-with run for a login saved with a provider and no password, without filling", async () => {
+    const { c, h, fills, starts } = providerLogin(null);
+    expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
+    expect(starts).toEqual([[7, "https://typeform.com/login", ID]]);
+    expect(fills).toEqual([]);
+    expect(c.seen.map((r) => r.type)).toEqual(["find_matches", "fill_item"]);
+  });
+
+  it("fills the password of a login saved with a provider and a password", async () => {
+    const { h, fills, starts } = providerLogin("pw");
+    expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
+    expect(starts).toEqual([]);
+    expect(fills).toEqual([[7, "https://typeform.com/login", { kind: "login", username: "me", password: "pw" }, null]]);
   });
 
   it("passes a code-only run for a popup TOTP fill", async () => {

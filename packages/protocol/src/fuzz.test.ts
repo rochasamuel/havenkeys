@@ -19,7 +19,7 @@ const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 const SEEDS: unknown[] = [
   { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true } },
-  { v: 1, id: 2, result: { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }] } },
+  { v: 1, id: 2, result: { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: null }] } },
   { v: 1, id: 3, result: { type: "fill_item", username: "u", password: "p", autoSubmit: false } },
   { v: 1, id: 4, result: { type: "get_totp", code: "123456", period: 30, secondsRemaining: 3, autoSubmit: false } },
   { v: 1, id: 5, result: { type: "check_login", action: "update", itemId: ID } },
@@ -33,6 +33,9 @@ const SEEDS: unknown[] = [
   { v: 1, id: 4, result: { type: "check_passkey_create", excluded: true, candidates: [], upgrade: { kind: "none" } } },
   { v: 1, id: 5, result: { type: "passkey_create", credentialId: CRED, attestationObject: "oA", clientDataJson: "e30", authenticatorData: "AA", publicKey: "MA", publicKeyAlgorithm: -7 } },
   { v: 1, id: 6, result: { type: "passkey_status", hasPasskey: false } },
+  { v: 1, id: 9, result: { type: "start_sso", provider: "google", account: "a@b.c", providerOrigins: ["https://accounts.google.com"], autoChoose: false } },
+  { v: 1, id: 10, result: { type: "check_sso", action: "add", itemId: null } },
+  { v: 1, id: 11, result: { type: "save_sso", itemId: ID } },
 ];
 
 const ATOMS: unknown[] = [null, true, false, 0, -1, 1.5, 2 ** 32, "", "x", ID, "__proto__", "constructor", [], {}, NaN];
@@ -70,6 +73,9 @@ describe("parseIncoming fuzz", () => {
         expect(msg.result.matches.length).toBeLessThanOrEqual(MAX_MATCHES);
       }
       if (msg.kind === "result" && msg.result.type === "check_login") {
+        expect(msg.result.action === "update").toBe(msg.result.itemId !== null);
+      }
+      if (msg.kind === "result" && msg.result.type === "check_sso") {
         expect(msg.result.action === "update").toBe(msg.result.itemId !== null);
       }
     }

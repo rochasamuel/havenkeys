@@ -11,7 +11,7 @@
 // unguessable session token, and the background checks that the frame
 // asking is in the same tab as the session.
 
-import { CREDENTIAL_ID_BYTES, isB64Url, isUuid } from "@havenkeys/protocol";
+import { CREDENTIAL_ID_BYTES, isB64Url, isUuid, type SsoProvider } from "@havenkeys/protocol";
 import type { PasskeyRow } from "../webauthn/messages";
 
 export type MenuKind = "login" | "otp" | "new_password";
@@ -89,6 +89,8 @@ export interface MenuItemView {
   id: string;
   title: string;
   username: string | null;
+  /** Set for a login saved with "Sign in with <provider>"; picking it starts a run. */
+  provider: SsoProvider | null;
 }
 
 /**

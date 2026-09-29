@@ -63,6 +63,9 @@ importers:
       '@havenkeys/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@havenkeys/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
     devDependencies:
       '@fontsource-variable/hanken-grotesk':
         specifier: ^5.3.0
@@ -140,6 +143,9 @@ importers:
 
   packages/protocol:
     devDependencies:
+      '@types/node':
+        specifier: ^26.6.2
+        version: 26.6.2
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

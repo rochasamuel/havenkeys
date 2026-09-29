@@ -19,7 +19,7 @@ const OTHER = "11111111-2222-4333-8444-555555555555";
 const T1 = "0".repeat(31) + "1";
 const GH_SITE = { name: "GitHub", domains: ["github.com"], passwordless: true, mfa: true, help: "https://docs.github.com/passkeys" };
 
-const ghMatch = { id: GH, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" as const };
+const ghMatch = { id: GH, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" as const, provider: null };
 
 function frame(over: Partial<FrameRef> = {}): FrameRef {
   return { tabId: 1, frameId: 0, url: "https://github.com/login", origin: "https://github.com", ...over };
@@ -222,7 +222,7 @@ describe("suggestion menus", () => {
         state: "ready",
         kind: "login",
         site: "github.com",
-        items: [{ id: GH, title: "GitHub", username: "octo" }],
+        items: [{ id: GH, title: "GitHub", username: "octo", provider: null }],
         passkeys: [],
         hint: null,
       },
@@ -296,6 +296,63 @@ describe("suggestion menus", () => {
     expect((await h.handleInline(2, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
     expect((await h.handleInline(1, { type: "menu_pick", token: "f".repeat(32), itemId: GH })).ok).toBe(false);
     expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status"]);
+  });
+
+  const googleAnswer =
+    (password: string | null) =>
+    (r: Request): unknown =>
+      r.type === "find_matches"
+        ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }] }
+        : r.type === "fill_item"
+          ? { type: "fill_item", username: password === null ? null : "octo", password, autoSubmit: false }
+          : defaultAnswer(r);
+
+  it("a login saved with a provider and no password starts a sign-in-with run instead of filling", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, requests, sent } = setup(googleAnswer(null), { startSso });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
+      ok: true,
+      value: { items: [{ id: GH, title: "GitHub", username: "octo", provider: "google" }] },
+    });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
+    expect(startSso).toHaveBeenCalledWith(frame(), GH);
+    expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status", "fill_item"]);
+    expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
+  });
+
+  it("a login saved with a provider and a password fills the password", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, sent } = setup(googleAnswer("pw"), { startSso });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
+    expect(startSso).not.toHaveBeenCalled();
+    expect(sent.find((s) => s.msg.type === "bg_fill")?.msg).toMatchObject({ fill: { kind: "login", username: "octo", password: "pw" } });
+  });
+
+  it("in a non-top frame, a provider login without a password starts no run (spec §6.2: only the top frame presses)", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, sent } = setup(googleAnswer(null), { startSso });
+    await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
+      ok: true,
+      value: { items: [{ id: GH, title: "GitHub", username: "octo", provider: "google" }] },
+    });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({
+      ok: false,
+      message: "Couldn’t find the “Sign in with Google” button on this page.",
+    });
+    expect(startSso).not.toHaveBeenCalled();
+    expect(sent.some((s) => s.msg.type === "bg_fill")).toBe(false);
+  });
+
+  it("in a non-top frame, a provider login with a password fills as usual", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, sent } = setup(googleAnswer("pw"), { startSso });
+    await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
+    expect(startSso).not.toHaveBeenCalled();
+    expect(sent.find((s) => s.msg.type === "bg_fill")).toMatchObject({ to: { tabId: 1, frameId: 3 }, msg: { fill: { password: "pw" } } });
   });
 
   it("passes the menu's measured height to the frame that opened it, for a live menu only", async () => {

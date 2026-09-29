@@ -15,7 +15,7 @@ This document describes *how* HavenKeys enforces the properties listed in
    explicit user action.
 4. No telemetry, analytics or crash reporting, and no third-party network
    calls beyond one bounded exception: checking for and downloading signed
-   app updates from GitHub Releases (§17). The only other outbound
+   app updates from GitHub Releases (§18). The only other outbound
    connections the desktop app makes are to the account server you
    configure: on unlock, every 60 seconds while unlocked, and on every write
    (§13). Reads work offline from the local encrypted replica.
@@ -631,7 +631,45 @@ See `autofill.md`, Automatic sign-in, for the full flow. In summary:
   explicit user interaction") as the automatic passkey upgrade. See
   `security-review.md` AS1 and AS2, and `threat-model.md` T9.
 
-## 17. In-app updates
+## 17. Sign in with Google, Microsoft, GitHub, Apple
+
+See `autofill.md`, "Sign in with Google, Microsoft, GitHub, Apple", and
+`native-messaging.md` §"Sign in with" for the full flow and wire messages.
+In summary:
+
+* **The cross-origin step is bounded to a fixed Rust list, one click.**
+  `start_sso` returns the provider's **exact origins** from a closed table in
+  `havenkeys-core` (`sso.rs`) — never anything the page or the extension
+  supplies. A run may click on those origins only, and only once: exactly
+  one clickable element on the provider's chooser whose text holds the saved
+  account, matched case-insensitively. Two matching rows, or none, and
+  nothing is clicked.
+* **Consent is never granted.** A keyword-based check
+  (`isConsentScreen`/`isConsentLabel`) recognizes permission and consent
+  wording ("Continue as …", "Allow…", "Grant access/permission(s)…",
+  "Authorize…") and refuses to press or click anything on such a screen. This
+  is a heuristic over untrusted page text, not a cryptographic guarantee: see
+  `security-review.md` for its residual risk.
+* **No password or TOTP secret is ever sent to a provider page.** The run
+  only clicks a chooser row; it never types anything. On a page that asks for
+  a password instead of showing a chooser, the run simply finds no row to
+  click and stops; the vault's login for that provider's own origin, if any,
+  is still offered through the ordinary field menu.
+* **Page-sourced account text is untrusted.** The text the extension reads
+  from a provider's chooser or a username step is only ever a suggestion. It
+  reaches Rust as a plain field on `check_sso`/`save_sso` and is validated
+  there like any other input: trimmed, at most 254 characters, no control
+  characters. It never decides which origins a run may act on.
+* **`start_sso` is origin-bound exactly like `fill_item`.** The item must be
+  a login with `sign_in_with` whose own website rules match the page; an
+  unrelated item, a wrong origin, or a locked vault all fail the same way as
+  every other secret-returning request.
+* **No new browser permission.** Recognizing provider buttons and reading a
+  chooser's account text both happen inside the same content script that
+  already runs on granted pages; nothing new is requested (`autofill.md`
+  §Permissions, §12 above).
+
+## 18. In-app updates
 
 See `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md` for the
 full design; `threat-model.md` lists the threats, `development.md` the
@@ -687,6 +725,6 @@ release and key-rotation steps.
   short-circuits the scheduler), so a development run never reaches GitHub on
   its own.
 
-## 18. Known limitations
+## 19. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.

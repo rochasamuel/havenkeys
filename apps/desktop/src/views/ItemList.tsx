@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ItemOverview, ItemType } from "../lib/types";
 import { monogram, primaryHost } from "../lib/format";
+import { ssoSubtitle } from "../lib/sso";
 import { Icon } from "../components/Icon";
 import type { Section } from "./VaultScreen";
 import { useI18n } from "../i18n/context";
@@ -97,7 +98,8 @@ export function ItemList({ items, query, section, selectedId, onSelect, onNew, n
       ) : (
         <ul className="list-items">
           {items.map((item) => {
-            const data = item.itemType === "login" ? (item.username ?? primaryHost(item)) : null;
+            const data =
+              item.itemType === "login" ? (item.username ?? (item.signInWith ? ssoSubtitle(item.signInWith) : null) ?? primaryHost(item)) : null;
             const sub = data ?? (item.itemType === "login" ? t.common.login : t.common.secureNote);
             return (
               <li key={item.id}>

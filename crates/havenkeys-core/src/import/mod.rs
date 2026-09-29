@@ -49,4 +49,7 @@ pub struct ImportReport {
     /// Website entries that were not valid http(s) addresses; kept as text in
     /// the item's notes instead of as matchable websites.
     pub urls_moved_to_notes: usize,
+    /// Logins already in the vault (same title, username and websites) that
+    /// lacked "Sign in with" and got it from this import.
+    pub sso_upgraded: usize,
 }

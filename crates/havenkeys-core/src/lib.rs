@@ -16,6 +16,7 @@ pub mod model;
 pub mod origin;
 pub mod passkey;
 pub mod secret;
+pub mod sso;
 pub mod store;
 pub mod sync;
 pub mod totp;

@@ -40,6 +40,7 @@ const base: EditorSnapshot = {
   totp: { mode: "keep" },
   notes: { mode: "keep" },
   autoSignIn: true,
+  signInWith: null,
 };
 
 describe("isDirty", () => {

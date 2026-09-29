@@ -3,18 +3,22 @@ import { api } from "../lib/api";
 import type { CopyField, ItemOverview, PasskeyInfo } from "../lib/types";
 import { formatDate, groupCode, monogram, primaryHost } from "../lib/format";
 import { useRevealedSecret, useTotp } from "../lib/hooks";
+import { providerLogin, PROVIDER_NAMES } from "../lib/sso";
 import { CopyButton } from "../components/CopyButton";
 import { Icon } from "../components/Icon";
+import { ProviderIcon } from "../components/ProviderIcon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
 interface Props {
   item: ItemOverview;
+  items: ItemOverview[];
   /** Offline: editing or deleting would fail, so the controls are disabled up front. */
   readOnly: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onOpen: (id: string) => void;
 }
 
 function useCopy(itemId: string) {
@@ -222,7 +226,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
   );
 }
 
-export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
+export function ItemDetail({ item, items, readOnly, onEdit, onDelete, onOpen }: Props) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const copy = useCopy(item.id);
@@ -271,6 +275,23 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete }: Props) {
       {item.itemType === "login" && (
         <>
           <div className="group">
+            {item.signInWith && (() => {
+              const linked = providerLogin(items, item);
+              const name = PROVIDER_NAMES[item.signInWith.provider];
+              return (
+                <Field
+                  label={t.detail.signInWith}
+                  actions={linked ? <IconButton icon="arrowRight" label={t.detail.openProviderLogin(name)} onClick={() => onOpen(linked.id)} /> : undefined}
+                >
+                  <span className="sso-value">
+                    <ProviderIcon provider={item.signInWith.provider} />
+                    <span>{name}</span>
+                    {item.signInWith.account && <span className="muted selectable" data-truncate="">{item.signInWith.account}</span>}
+                  </span>
+                </Field>
+              );
+            })()}
+
             {item.username && (
               <Field
                 label={t.common.username}

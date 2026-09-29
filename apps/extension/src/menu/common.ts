@@ -3,6 +3,7 @@
 
 import type { InlineReply, InlineRequest } from "../messaging/inline";
 import { TOKEN } from "../messaging/inline";
+import type { SsoFrameRequest } from "../messaging/sso";
 import type { PkRequest } from "../webauthn/messages";
 import { t } from "../i18n";
 
@@ -12,7 +13,7 @@ export function tokenFromHash(): string | null {
   return TOKEN.test(fragment) ? fragment : null;
 }
 
-export async function ask<T>(req: InlineRequest | PkRequest): Promise<InlineReply<T>> {
+export async function ask<T>(req: InlineRequest | PkRequest | SsoFrameRequest): Promise<InlineReply<T>> {
   try {
     return (await chrome.runtime.sendMessage(req)) as InlineReply<T>;
   } catch {
