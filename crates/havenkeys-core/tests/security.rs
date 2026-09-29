@@ -1222,3 +1222,91 @@ fn save_sso_adds_without_a_password_and_updates_only_the_account() {
         Err(Error::InvalidInput(_))
     ));
 }
+
+/// Updating a "Sign in with" login only fills in an account; saving none
+/// over it would erase the one it has.
+#[test]
+fn save_sso_update_needs_an_account() {
+    let (v, id) = sso_vault();
+    for account in [None, Some(""), Some("   ")] {
+        assert!(
+            matches!(
+                v.stage_save_sso(
+                    "https://typeform.com/",
+                    None,
+                    SsoProvider::Google,
+                    account,
+                    SaveTarget::Update(&id),
+                    NOW
+                ),
+                Err(Error::InvalidInput(_))
+            ),
+            "{account:?}"
+        );
+    }
+    let item = v.get_item(&id).unwrap();
+    assert_eq!(
+        item.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("me@gmail.com")
+    );
+}
+
+/// A re-import whose upgrade target no longer opens counts as one failure;
+/// the other items are still staged.
+#[test]
+fn a_failing_import_upgrade_does_not_abort_the_import() {
+    use havenkeys_core::import::{ImportReport, ImportedItem};
+    use havenkeys_core::sso::SignInWith;
+
+    let (_d, path) = file_vault();
+    let (id, sk) = {
+        let (mut v, sk) = activated_vault_at(&path);
+        let staged = v
+            .stage_create(login("GitHub", "octo", "pw", "github.com"), NOW)
+            .unwrap();
+        let id = v.commit_write(staged, 1).unwrap().unwrap().id;
+        (id, sk)
+    };
+    let c = Connection::open(&path).unwrap();
+    let mut blob: Vec<u8> = c
+        .query_row(
+            "SELECT details FROM items WHERE id = ?1",
+            params![id.to_string()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let last = blob.len() - 1;
+    blob[last] ^= 0x01;
+    c.execute(
+        "UPDATE items SET details = ?1 WHERE id = ?2",
+        params![blob, id.to_string()],
+    )
+    .unwrap();
+    drop(c);
+
+    let mut v = open_file(&path);
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    let mut upgrade = login("GitHub", "octo", "pw", "github.com");
+    upgrade.sign_in_with = Some(SignInWith {
+        provider: SsoProvider::Google,
+        account: None,
+    });
+    let items = vec![
+        ImportedItem {
+            input: upgrade,
+            created_at: None,
+            updated_at: None,
+        },
+        ImportedItem {
+            input: login("Notion", "me", "pw2", "notion.so"),
+            created_at: None,
+            updated_at: None,
+        },
+    ];
+    let staged = v.stage_import(items, ImportReport::default(), NOW).unwrap();
+    assert_eq!(staged.report.failed, 1);
+    assert_eq!(staged.report.sso_upgraded, 0);
+    assert_eq!(staged.report.logins, 1);
+    assert_eq!(staged.writes.len(), 1);
+}

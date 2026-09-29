@@ -1294,6 +1294,11 @@ impl VaultService {
                 }
             }
             SaveTarget::Update(id) => {
+                // An update only ever fills in an account: saving none over
+                // a login would erase the one it has.
+                if account.is_none_or(|a| a.trim().is_empty()) {
+                    return Err(Error::InvalidInput("account is required"));
+                }
                 let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
                 if existing.sign_in_with.as_ref().map(|s| s.provider) != Some(provider) {
                     return Err(Error::Denied);
@@ -1612,10 +1617,20 @@ impl VaultService {
             // carries it for: fill it in rather than skip or duplicate.
             if let Some(sso) = overview.sign_in_with.clone() {
                 if let Some(target) = upgrade.remove(&key) {
-                    if let Some(write) = self.stage_sso_upgrade(&target, sso, now_ms)? {
-                        writes.push(write);
-                        report.sso_upgraded += 1;
-                        continue;
+                    match self.stage_sso_upgrade(&target, sso, now_ms) {
+                        Ok(Some(write)) => {
+                            writes.push(write);
+                            report.sso_upgraded += 1;
+                            continue;
+                        }
+                        Ok(None) => {}
+                        // A login here that no longer seals (a damaged
+                        // details blob) fails on its own; the rest of the
+                        // import goes on.
+                        Err(_) => {
+                            report.failed += 1;
+                            continue;
+                        }
                     }
                 }
             }
