@@ -51,7 +51,7 @@ const matches = [
 const menuItems = matches.map(({ id, title, username }) => ({ id, title, username }));
 
 function identityRow(over) {
-  return { title: "Samuel Rocha", fills: 5, documents: [], documentsAllowed: true, empty: false, ...over };
+  return { title: "Samuel Rocha", fills: 5, documents: [], documentsAllowed: true, empty: false, missing: false, ...over };
 }
 
 function menuView(over) {
@@ -250,6 +250,16 @@ export const extensionScenarios = [
       frame: { kind: "menu", width, rows: 1 },
       replies: () => ({
         menu_state: ok(menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow({ empty: true, fills: 0 }) })),
+      }),
+    },
+    {
+      name: `menu-identity-missing-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({
+        menu_state: ok(
+          menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow({ title: "", empty: true, missing: true, fills: 0, documentsAllowed: false }) }),
+        ),
       }),
     },
     {

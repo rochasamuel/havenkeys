@@ -136,7 +136,9 @@ function documentsStep(t: string, site: string, docs: readonly IdentityRole[]): 
   withoutDocs.focus();
 }
 
-function identityRow(t: string, site: string, v: IdentityRowView): HTMLButtonElement {
+function identityRow(t: string, site: string, v: IdentityRowView): HTMLElement {
+  // No identity on this device yet: nothing to open, so no button.
+  if (v.missing) return hintNote(msg.menu.identityEmptyTitle, msg.menu.identityMissingBody);
   if (v.empty) {
     return row(idCard(), msg.menu.identityEmptyTitle, msg.menu.identityEmptyBody, () => pick({ type: "menu_open_identity", token: t }), {
       title: true,

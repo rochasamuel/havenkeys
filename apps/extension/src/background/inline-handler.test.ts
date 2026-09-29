@@ -973,13 +973,25 @@ describe("identity menu", () => {
     expect(requests.at(-1)).toMatchObject({ roles: ["fullName"] });
   });
 
-  it("shows the empty identity row when there is none, and opens it", async () => {
+  it("shows the missing identity row when there is none, and never sends open_identity for it", async () => {
     const { h, requests } = setup(answerWith({ find_identity: new BridgeError("not_found", "x"), open_identity: { type: "open_identity" } }));
     const open = (await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName", "city"] })) as { token: string };
     const view = await h.handleInline(TAB, { type: "menu_state", token: open.token });
-    expect(view).toMatchObject({ value: { identity: { empty: true } } });
+    expect(view).toMatchObject({ value: { identity: { empty: true, missing: true } } });
     expect(await h.handleInline(TAB, { type: "menu_pick_identity", token: open.token, documents: false })).toMatchObject({ ok: false });
-    await h.handleInline(TAB, { type: "menu_open_identity", token: open.token });
+    expect(await h.handleInline(TAB, { type: "menu_open_identity", token: open.token })).toEqual({
+      ok: false,
+      message: "Open the HavenKeys app to add your details.",
+    });
+    expect(requests.some((r) => r.type === "open_identity")).toBe(false);
+  });
+
+  it("opens an identity that exists but has no values", async () => {
+    const { h, requests } = setup(answerWith({ find_identity: { ...summary, roles: [] }, open_identity: { type: "open_identity" } }));
+    const open = (await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName", "city"] })) as { token: string };
+    const view = await h.handleInline(TAB, { type: "menu_state", token: open.token });
+    expect(view).toMatchObject({ value: { identity: { empty: true, missing: false } } });
+    expect(await h.handleInline(TAB, { type: "menu_open_identity", token: open.token })).toEqual({ ok: true, value: null });
     expect(requests.at(-1)?.type).toBe("open_identity");
   });
 

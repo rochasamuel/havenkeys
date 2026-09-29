@@ -302,8 +302,15 @@ describe("identity row", () => {
     expect(asked.at(-1)).toEqual({ type: "menu_pick_identity", token: TOKEN, documents: false });
   });
 
+  it("says to open HavenKeys, with no button, when the identity does not exist yet", async () => {
+    await setup({ title: "", fills: 0, documents: [], documentsAllowed: false, empty: true, missing: true });
+    expect(document.querySelectorAll("#main button")).toHaveLength(0);
+    expect(document.getElementById("main")?.textContent).toContain("Open the HavenKeys app to add your details.");
+    expect(asked.some((m) => (m as { type: string }).type === "menu_open_identity")).toBe(false);
+  });
+
   it("opens the desktop app for an empty identity", async () => {
-    const handlers = await setup({ title: "", fills: 0, documents: [], documentsAllowed: true, empty: true });
+    const handlers = await setup({ title: "", fills: 0, documents: [], documentsAllowed: true, empty: true, missing: false });
     const row = document.querySelector<HTMLButtonElement>("button.row")!;
     expect(row.textContent).toContain("Your identity is empty");
     await click(handlers, row);

@@ -1081,7 +1081,11 @@ fast second click or Enter on the row cannot confirm the documents), and
 focus moves to **Fill without documents**. On an http page
 the question is not asked; documents stay empty and the row says so. An
 identity with no values shows "Your identity is empty" and opens it in the
-desktop app (`open_identity`). A locked vault, a disabled integration and a
+desktop app (`open_identity`). When the identity item does not exist on this
+device yet (`find_identity` answers `not_found`: not synced or not created),
+the menu shows the same title with "Open the HavenKeys app to add your
+details" as plain text, with no button, and the background refuses
+`menu_open_identity` for it: the desktop would have no item to open. A locked vault, a disabled integration and a
 rate-limited lookup show what they show for logins (a rate-limited lookup
 shows no menu). A cross-site iframe gets no identity row.
 

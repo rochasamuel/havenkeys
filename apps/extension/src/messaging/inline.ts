@@ -129,6 +129,12 @@ export interface IdentityRowView {
   documentsAllowed: boolean;
   /** The identity has no values at all (or does not exist yet). */
   empty: boolean;
+  /**
+   * The identity item does not exist on this device yet (not synced, or not
+   * created). The row only says to open HavenKeys: `open_identity` would
+   * have nothing to open.
+   */
+  missing: boolean;
 }
 
 export type IdentityRolesReply = { roles: IdentityRole[] };

@@ -107,6 +107,7 @@ export const ptBR: Messages = {
     identityFallback: "Sua identidade",
     identityFills: (n: number) => (n === 1 ? "Preenche 1 campo" : `Preenche ${n} campos`),
     identityEmptyTitle: "Sua identidade está vazia",
+    identityMissingBody: "Abra o app HavenKeys para adicionar seus dados.",
     identityAlsoAsks: (site: string, docs: string) => `${site} também pede: ${docs}`,
     identityFillWithDocs: (docs: string) => `Preencher ${docs} também`,
     identityFillWithoutDocs: "Preencher sem documentos",

@@ -139,6 +139,7 @@ export const en = {
     identityFallback: "Your identity",
     identityFills: (n: number) => (n === 1 ? "Fills 1 field" : `Fills ${n} fields`),
     identityEmptyTitle: "Your identity is empty",
+    identityMissingBody: "Open the HavenKeys app to add your details.",
     identityAlsoAsks: (site: string, docs: string) => `${site} also asks for: ${docs}`,
     identityFillWithDocs: (docs: string) => `Fill ${docs} too`,
     identityFillWithoutDocs: "Fill without documents",

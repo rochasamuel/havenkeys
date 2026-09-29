@@ -203,7 +203,7 @@ export function createInlineHandler(deps: InlineDeps) {
     } catch (e) {
       if (e instanceof BridgeError && e.code === "locked") throw e;
       if (e instanceof BridgeError && e.code === "not_found") {
-        return { title: "", fills: 0, documents: [], documentsAllowed: false, empty: true };
+        return { title: "", fills: 0, documents: [], documentsAllowed: false, empty: true, missing: true };
       }
       return null;
     }
@@ -214,6 +214,7 @@ export function createInlineHandler(deps: InlineDeps) {
       documents: has.filter((r) => DOCUMENT_ROLES.includes(r)),
       documentsAllowed: frame.url.startsWith("https:"),
       empty: summary.roles.length === 0,
+      missing: false,
     };
   }
 
@@ -514,6 +515,8 @@ export function createInlineHandler(deps: InlineDeps) {
       case "menu_open_identity": {
         const m = liveMenu(tabId, req.token);
         if (!m || !m.identity) return { ok: false, message: t.errors.menuExpired };
+        // Nothing to open yet: the menu row only says to open HavenKeys.
+        if (m.identity.missing) return { ok: false, message: t.menu.identityMissingBody };
         closeMenu(tabId);
         try {
           await deps.client.request({ type: "open_identity", ...frameFields(m.frame) });
