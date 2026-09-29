@@ -87,6 +87,20 @@ describe("scanning for provider buttons", () => {
     ]);
   });
 
+  it("sends the same providers again after teardown and a new watch (a back/forward cache restore)", async () => {
+    button("Continue with Google");
+    const c = make();
+    c.watchPage();
+    await vi.advanceTimersByTimeAsync(SCAN_DEBOUNCE_MS);
+    c.teardown();
+    c.watchPage();
+    await vi.advanceTimersByTimeAsync(SCAN_DEBOUNCE_MS);
+    expect(buttonsSent()).toEqual([
+      { type: "cs_sso_buttons", providers: ["google"] },
+      { type: "cs_sso_buttons", providers: ["google"] },
+    ]);
+  });
+
   it("sends nothing while in-page suggestions are off", async () => {
     suggestions = false;
     button("Continue with Google");

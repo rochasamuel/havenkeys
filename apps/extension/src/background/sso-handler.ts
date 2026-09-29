@@ -98,6 +98,7 @@ export function createSsoHandler(deps: SsoDeps) {
 
   async function offer(frame: FrameRef, providers: SsoProvider[]): Promise<{ ok: true; token: string } | { ok: false }> {
     if (frame.frameId !== 0) return { ok: false };
+    const gen = generation;
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) return { ok: false };
     // A live save question outranks an offer.
     if (asking(frame.tabId)) return { ok: false };
@@ -107,6 +108,7 @@ export function createSsoHandler(deps: SsoDeps) {
     } catch {
       return { ok: false }; // locked, not running, integration off: stay out of the page
     }
+    if (gen !== generation) return { ok: false }; // locked meanwhile
     const rows = matches.filter((m) => m.provider !== null && providers.includes(m.provider));
     if (rows.length === 0) return { ok: false };
     // An ask() may have opened a save question while find_matches was in flight.
@@ -143,6 +145,9 @@ export function createSsoHandler(deps: SsoDeps) {
       const back = state.takeReturn(frame.tabId, frame.origin);
       if (back) void ask(back);
     }
+    // Only a top frame chooses: the run is used once, and a provider-origin
+    // iframe (a sign-in widget on some page) must not spend it.
+    if (!isTop) return null;
     const account = state.chooseFor(tab, frame.origin);
     return account === null ? null : { kind: "choose", account };
   }

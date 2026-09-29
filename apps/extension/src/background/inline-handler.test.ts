@@ -298,12 +298,18 @@ describe("suggestion menus", () => {
     expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status"]);
   });
 
-  it("a login saved with a provider starts a sign-in-with run instead of filling", async () => {
+  const googleAnswer =
+    (password: string | null) =>
+    (r: Request): unknown =>
+      r.type === "find_matches"
+        ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }] }
+        : r.type === "fill_item"
+          ? { type: "fill_item", username: password === null ? null : "octo", password, autoSubmit: false }
+          : defaultAnswer(r);
+
+  it("a login saved with a provider and no password starts a sign-in-with run instead of filling", async () => {
     const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
-    const { h, requests, sent } = setup(
-      (r) => (r.type === "find_matches" ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }] } : defaultAnswer(r)),
-      { startSso },
-    );
+    const { h, requests, sent } = setup(googleAnswer(null), { startSso });
     await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
     expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
       ok: true,
@@ -311,27 +317,42 @@ describe("suggestion menus", () => {
     });
     expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
     expect(startSso).toHaveBeenCalledWith(frame(), GH);
-    expect(requests.some((r) => r.type === "fill_item")).toBe(false);
+    expect(requests.map((r) => r.type)).toEqual(["find_matches", "passkey_status", "fill_item"]);
     expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
   });
 
-  it("a menu opened from a non-top frame never offers sign-in-with logins (spec §6.2: only the top frame presses)", async () => {
+  it("a login saved with a provider and a password fills the password", async () => {
     const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
-    const { h } = setup(
-      (r) =>
-        r.type === "find_matches"
-          ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }, { ...ghMatch, id: OTHER, provider: null }] }
-          : defaultAnswer(r),
-      { startSso },
-    );
+    const { h, sent } = setup(googleAnswer("pw"), { startSso });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
+    expect(startSso).not.toHaveBeenCalled();
+    expect(sent.find((s) => s.msg.type === "bg_fill")?.msg).toMatchObject({ fill: { kind: "login", username: "octo", password: "pw" } });
+  });
+
+  it("in a non-top frame, a provider login without a password starts no run (spec §6.2: only the top frame presses)", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, sent } = setup(googleAnswer(null), { startSso });
     await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });
     expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
       ok: true,
-      value: { items: [{ id: OTHER, title: "GitHub", username: "octo", provider: null }] },
+      value: { items: [{ id: GH, title: "GitHub", username: "octo", provider: "google" }] },
     });
-    // Not offered, so it cannot be picked either.
-    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({
+      ok: false,
+      message: "Couldn’t find the “Sign in with Google” button on this page.",
+    });
     expect(startSso).not.toHaveBeenCalled();
+    expect(sent.some((s) => s.msg.type === "bg_fill")).toBe(false);
+  });
+
+  it("in a non-top frame, a provider login with a password fills as usual", async () => {
+    const startSso = vi.fn(async () => ({ ok: true as const, value: null }));
+    const { h, sent } = setup(googleAnswer("pw"), { startSso });
+    await h.handleContent(frame({ frameId: 3 }), { type: "cs_open_menu", kind: "login" });
+    expect(await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).toEqual({ ok: true, value: null });
+    expect(startSso).not.toHaveBeenCalled();
+    expect(sent.find((s) => s.msg.type === "bg_fill")).toMatchObject({ to: { tabId: 1, frameId: 3 }, msg: { fill: { password: "pw" } } });
   });
 
   it("passes the menu's measured height to the frame that opened it, for a live menu only", async () => {

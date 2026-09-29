@@ -144,11 +144,15 @@ describe("popup handler", () => {
     expect(c.seen.map((r) => r.type)).toEqual(["find_matches", "fill_item"]);
   });
 
-  it("starts a sign-in-with run for a login saved with a provider, without filling", async () => {
-    const c = fakeClient(() => ({
-      type: "find_matches",
-      matches: [{ id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google" }],
-    }));
+  function providerLogin(password: string | null) {
+    const c = fakeClient((r) =>
+      r.type === "fill_item"
+        ? { type: "fill_item", username: password === null ? null : "me", password, autoSubmit: false }
+        : {
+            type: "find_matches",
+            matches: [{ id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google" }],
+          },
+    );
     const fills: unknown[] = [];
     const starts: unknown[] = [];
     const h = createPopupHandler(
@@ -163,10 +167,22 @@ describe("popup handler", () => {
         return { ok: true, value: null };
       },
     );
+    return { c, h, fills, starts };
+  }
+
+  it("starts a sign-in-with run for a login saved with a provider and no password, without filling", async () => {
+    const { c, h, fills, starts } = providerLogin(null);
     expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
     expect(starts).toEqual([[7, "https://typeform.com/login", ID]]);
     expect(fills).toEqual([]);
-    expect(c.seen.map((r) => r.type)).toEqual(["find_matches"]);
+    expect(c.seen.map((r) => r.type)).toEqual(["find_matches", "fill_item"]);
+  });
+
+  it("fills the password of a login saved with a provider and a password", async () => {
+    const { h, fills, starts } = providerLogin("pw");
+    expect(await h.handle({ type: "popup_fill", itemId: ID })).toEqual({ ok: true, value: null });
+    expect(starts).toEqual([]);
+    expect(fills).toEqual([[7, "https://typeform.com/login", { kind: "login", username: "me", password: "pw" }, null]]);
   });
 
   it("passes a code-only run for a popup TOTP fill", async () => {

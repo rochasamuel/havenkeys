@@ -202,10 +202,15 @@ export function createSsoContent(deps: {
       }
     },
     onReady(sso: SsoReady): void {
+      // Only a top frame chooses (the background answers subframes with null too).
+      if (!deps.isTop) return;
       if (sso?.kind === "choose" && providersForOrigin(location.origin).length > 0) choose(sso.account);
     },
     teardown(): void {
       watching = false;
+      // A page restored from the back/forward cache re-arms with watchPage():
+      // it must send its buttons again, even if they are the same.
+      lastSent = "";
       closeFrame();
       cancelChoose();
       stopObserving();

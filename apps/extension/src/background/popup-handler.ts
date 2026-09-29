@@ -77,8 +77,10 @@ export function createPopupHandler(
         // provider, and whether a run needs its OTP step.
         const { matches } = await client.request({ type: "find_matches", url });
         const m = matches.find((x) => x.id === itemId);
-        if (m?.provider && startSso) return startSso(tab.id, url, itemId);
         const c = await client.request({ type: "fill_item", itemId, url });
+        // A saved password is filled even when the login also signs in with
+        // a provider; only a login without one presses the provider's button.
+        if (c.password === null && m?.provider && startSso) return startSso(tab.id, url, itemId);
         const auto = c.autoSubmit ? { itemId, hasTotp: m?.hasTotp ?? false } : null;
         filled = await fillTab(tab.id, url, { kind: "login", username: c.username, password: c.password }, auto);
       }

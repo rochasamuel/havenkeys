@@ -7,6 +7,7 @@
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { OTP_SETTLE_MS } from "../autofill/submit";
+import { SCAN_DEBOUNCE_MS } from "./sso";
 
 type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }, reply: (r: unknown) => void) => boolean | void;
 
@@ -198,6 +199,21 @@ describe("content script", () => {
     deliver(loginFill(location.origin));
     document.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true }));
     expect(sent.filter((m) => (m as { type: string }).type === "cs_submit")).toEqual([]);
+  });
+
+  it("a page restored from the back/forward cache offers its provider buttons again", async () => {
+    const ssoButtons = () => sent.filter((m) => (m as { type: string }).type === "cs_sso_buttons");
+    document.body.replaceChildren();
+    const b = document.createElement("button");
+    b.textContent = "Continue with Google";
+    document.body.append(b);
+    await new Promise((r) => setTimeout(r, SCAN_DEBOUNCE_MS + 100));
+    expect(ssoButtons()).toEqual([{ type: "cs_sso_buttons", providers: ["google"] }]);
+    sent.length = 0;
+    window.dispatchEvent(new Event("pagehide"));
+    window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    await new Promise((r) => setTimeout(r, SCAN_DEBOUNCE_MS + 100));
+    expect(ssoButtons()).toEqual([{ type: "cs_sso_buttons", providers: ["google"] }]);
   });
 });
 

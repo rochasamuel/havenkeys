@@ -17,6 +17,7 @@
 //   continuation fill is re-requested from the desktop for the frame's URL.
 
 import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
+import { SSO_PROVIDERS } from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
 import { t } from "../i18n";
 import {
@@ -393,12 +394,7 @@ export function createInlineHandler(deps: InlineDeps) {
         if (!m) return { ok: false, message: t.errors.menuExpired };
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
-        // "Sign in with" logins press the provider's button in the top
-        // frame only (spec §6.2); a menu opened from a non-top frame never
-        // offers them, so a field there cannot start a run.
-        const items = m.items
-          .filter((i) => m.frame.frameId === 0 || i.provider === null)
-          .map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
+        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint } };
       }
       case "menu_pick": {
@@ -407,21 +403,22 @@ export function createInlineHandler(deps: InlineDeps) {
         // Only items this menu offered; the desktop re-checks the origin anyway.
         const offered = m.items.find((i) => i.id === req.itemId);
         if (!offered) return { ok: false, message: t.errors.unknownItem };
-        // "Sign in with" logins press the provider's button in the top frame
-        // only (spec §6.2). menu_state never offers them from a non-top
-        // frame, and a pick for one here is refused rather than falling
-        // through to a fill.
-        if (offered.provider && m.kind === "login" && m.frame.frameId !== 0) return { ok: false, message: t.errors.unknownItem };
         closeMenu(tabId);
-        // A login saved with "Sign in with": press the provider's button
-        // instead of filling (start_sso re-checks the item for the page).
-        if (offered.provider && m.kind === "login" && deps.startSso) return deps.startSso(m.frame, req.itemId);
         try {
           if (m.kind === "otp") {
             const totp = await deps.client.request({ type: "get_totp", itemId: req.itemId, ...frameFields(m.frame) });
             await pickFill(m.frame, m.token, { kind: "otp", code: totp.code }, totp.autoSubmit ? { itemId: req.itemId, hasTotp: true } : null);
           } else {
             const c = await deps.client.request({ type: "fill_item", itemId: req.itemId, ...frameFields(m.frame) });
+            // A login saved with "Sign in with" and no password: press the
+            // provider's button instead (start_sso re-checks the item for
+            // the page). That happens in the top frame only (spec §6.2); a
+            // field in an iframe says the button is not here. A saved
+            // password is always filled, provider or not.
+            if (c.password === null && offered.provider && m.kind === "login") {
+              if (m.frame.frameId !== 0) return { ok: false, message: t.sso.noButton(SSO_PROVIDERS[offered.provider].name) };
+              if (deps.startSso) return await deps.startSso(m.frame, req.itemId);
+            }
             const auto = c.autoSubmit ? { itemId: req.itemId, hasTotp: offered?.hasTotp ?? false } : null;
             await pickFill(m.frame, m.token, { kind: "login", username: c.username, password: c.password }, auto);
           }

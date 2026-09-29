@@ -18,7 +18,7 @@ beforeAll(() => {
 let content: ReturnType<typeof createSsoContent> | null = null;
 let sent: SsoContentRequest[] = [];
 
-function make() {
+function make(isTop = true) {
   content = createSsoContent({
     send: async (m) => {
       sent.push(m);
@@ -26,7 +26,7 @@ function make() {
     },
     viewport: () => ({ width: 1000, height: 800 }),
     suggestions: () => true,
-    isTop: true,
+    isTop,
   });
   return content;
 }
@@ -97,6 +97,15 @@ describe("choosing the saved account", () => {
     const click = vi.spyOn(r, "click");
     make().onReady({ kind: "choose", account: "me@gmail.com" });
     expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("does nothing in a subframe (a provider widget embedded in another page)", async () => {
+    const r = row("me@gmail.com");
+    const click = vi.spyOn(r, "click");
+    make(false).onReady({ kind: "choose", account: "me@gmail.com" });
+    document.body.append(document.createElement("div"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(click).not.toHaveBeenCalled();
   });
 
   it("never clicks on a consent screen", async () => {

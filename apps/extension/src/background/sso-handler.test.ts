@@ -86,6 +86,15 @@ describe("offer", () => {
     expect(await h.start(top, ID)).toEqual({ ok: true, value: null });
     expect(h.ready(googleFrame(9), { tabId: 9, openerTabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
   });
+  it("a provider-origin iframe does not choose or spend the run; the popup's top frame then does", async () => {
+    const { h } = setup({ start_sso: START_SSO });
+    await h.start(top, ID);
+    // Google's own sign-in widget, embedded in the site's page during the run.
+    const gsi: FrameRef = { tabId: 1, frameId: 5, url: "https://accounts.google.com/gsi/iframe", origin: "https://accounts.google.com", topUrl: top.url };
+    expect(h.ready(gsi, { tabId: 1 })).toBeNull();
+    expect(h.ready({ ...gsi, tabId: 9, topUrl: "https://accounts.google.com/o/oauth2/v2" }, { tabId: 9, openerTabId: 1 })).toBeNull();
+    expect(h.ready(googleFrame(9), { tabId: 9, openerTabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
+  });
   it("a top-frame load on an unrelated origin ends the run", async () => {
     const { h } = setup({
       start_sso: { type: "start_sso", provider: "google", account: "me@gmail.com", providerOrigins: ["https://accounts.google.com"], autoChoose: true },
@@ -223,6 +232,22 @@ describe("sessions", () => {
     expect(await offered).toEqual({ ok: false });
     const token = tokenOf(sent.find((s) => s.msg.type === "bg_sso_show"));
     expect(await h.handleFrame(1, { type: "sso_state", token })).toMatchObject({ ok: true, value: { mode: "save" } });
+  });
+  it("a lock while find_matches is pending offers nothing", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { h, requests, sent } = setup({
+      find_matches: async () => {
+        await gate;
+        return { matches: [match] };
+      },
+    });
+    const offered = h.handleContent(top, { tabId: 1 }, buttons);
+    await vi.waitFor(() => expect(requests.some((r) => r.type === "find_matches")).toBe(true));
+    h.reset();
+    release();
+    expect(await offered).toEqual({ ok: false });
+    expect(sent).toEqual([]);
   });
   it("a lock while check_sso is pending shows nothing", async () => {
     let release!: () => void;
