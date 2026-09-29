@@ -155,7 +155,8 @@ impl Bridge {
             | Request::GeneratePassword {}
             | Request::FindPasskeys { .. }
             | Request::CheckPasskeyCreate { .. }
-            | Request::PasskeyStatus { .. } => Some(RequestClass::Lookup),
+            | Request::PasskeyStatus { .. }
+            | Request::FindIdentity { .. } => Some(RequestClass::Lookup),
             Request::FillItem { .. }
             | Request::GetTotp { .. }
             | Request::CheckLogin { .. }
@@ -163,6 +164,8 @@ impl Bridge {
             | Request::PasskeyGet { .. }
             | Request::PasskeyCreate { .. }
             | Request::OpenItem { .. }
+            | Request::FillIdentity { .. }
+            | Request::OpenIdentity { .. }
             // Each follows a user action; `start_sso` has a visible effect
             // (the provider's chooser page), and `check_sso` reveals which
             // sites have logins.
@@ -213,6 +216,16 @@ impl Bridge {
                     Some(hook) => {
                         hook(id);
                         Ok(ResultBody::OpenItem {})
+                    }
+                    None => Err(ErrorCode::Internal),
+                }
+            }
+            Ok(Dispatched::OpenIdentity(id)) => {
+                let hook = guard(&self.inner.on_open_item).clone();
+                match hook {
+                    Some(hook) => {
+                        hook(id);
+                        Ok(ResultBody::OpenIdentity {})
                     }
                     None => Err(ErrorCode::Internal),
                 }

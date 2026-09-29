@@ -6,6 +6,7 @@
 //! and never widens what the core returns.
 
 use havenkeys_core::generator::{generate, GeneratorOptions};
+use havenkeys_core::identity::FillRole;
 use havenkeys_core::origin::MatchStrength as CoreStrength;
 use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
 use havenkeys_core::sso::SsoProvider as CoreProvider;
@@ -14,8 +15,9 @@ use havenkeys_core::vault::{
 };
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
-    ErrorCode, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
-    ResultBody, SaveAction, SsoProvider as WireProvider, UpgradeHint, WireSecret, MAX_MATCHES,
+    ErrorCode, IdentityRole, IdentityValue, LockState, Match, MatchStrength, PasskeyCandidate,
+    PasskeyMatch, Request, ResultBody, SaveAction, SsoProvider as WireProvider, UpgradeHint,
+    WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -79,6 +81,68 @@ fn wire_provider(p: CoreProvider) -> WireProvider {
     }
 }
 
+fn core_role(r: IdentityRole) -> FillRole {
+    match r {
+        IdentityRole::FullName => FillRole::FullName,
+        IdentityRole::FirstName => FillRole::FirstName,
+        IdentityRole::MiddleName => FillRole::MiddleName,
+        IdentityRole::LastName => FillRole::LastName,
+        IdentityRole::Email => FillRole::Email,
+        IdentityRole::Phone => FillRole::Phone,
+        IdentityRole::BirthDate => FillRole::BirthDate,
+        IdentityRole::BirthDay => FillRole::BirthDay,
+        IdentityRole::BirthMonth => FillRole::BirthMonth,
+        IdentityRole::BirthYear => FillRole::BirthYear,
+        IdentityRole::Company => FillRole::Company,
+        IdentityRole::Street => FillRole::Street,
+        IdentityRole::Number => FillRole::Number,
+        IdentityRole::Complement => FillRole::Complement,
+        IdentityRole::AddressLine1 => FillRole::AddressLine1,
+        IdentityRole::AddressLine2 => FillRole::AddressLine2,
+        IdentityRole::Neighborhood => FillRole::Neighborhood,
+        IdentityRole::City => FillRole::City,
+        IdentityRole::State => FillRole::State,
+        IdentityRole::PostalCode => FillRole::PostalCode,
+        IdentityRole::Country => FillRole::Country,
+        IdentityRole::Username => FillRole::Username,
+        IdentityRole::Cpf => FillRole::Cpf,
+        IdentityRole::Rg => FillRole::Rg,
+        IdentityRole::Passport => FillRole::Passport,
+        IdentityRole::DriversLicense => FillRole::DriversLicense,
+    }
+}
+
+fn wire_role(r: FillRole) -> IdentityRole {
+    match r {
+        FillRole::FullName => IdentityRole::FullName,
+        FillRole::FirstName => IdentityRole::FirstName,
+        FillRole::MiddleName => IdentityRole::MiddleName,
+        FillRole::LastName => IdentityRole::LastName,
+        FillRole::Email => IdentityRole::Email,
+        FillRole::Phone => IdentityRole::Phone,
+        FillRole::BirthDate => IdentityRole::BirthDate,
+        FillRole::BirthDay => IdentityRole::BirthDay,
+        FillRole::BirthMonth => IdentityRole::BirthMonth,
+        FillRole::BirthYear => IdentityRole::BirthYear,
+        FillRole::Company => IdentityRole::Company,
+        FillRole::Street => IdentityRole::Street,
+        FillRole::Number => IdentityRole::Number,
+        FillRole::Complement => IdentityRole::Complement,
+        FillRole::AddressLine1 => IdentityRole::AddressLine1,
+        FillRole::AddressLine2 => IdentityRole::AddressLine2,
+        FillRole::Neighborhood => IdentityRole::Neighborhood,
+        FillRole::City => IdentityRole::City,
+        FillRole::State => IdentityRole::State,
+        FillRole::PostalCode => IdentityRole::PostalCode,
+        FillRole::Country => IdentityRole::Country,
+        FillRole::Username => IdentityRole::Username,
+        FillRole::Cpf => IdentityRole::Cpf,
+        FillRole::Rg => IdentityRole::Rg,
+        FillRole::Passport => IdentityRole::Passport,
+        FillRole::DriversLicense => IdentityRole::DriversLicense,
+    }
+}
+
 fn core_provider(p: WireProvider) -> CoreProvider {
     match p {
         WireProvider::Google => CoreProvider::Google,
@@ -124,6 +188,9 @@ pub enum Dispatched {
     /// The item may be opened in the desktop editor; the caller runs the
     /// hook once the vault lock is released.
     OpenItem(Uuid),
+    /// The identity may be opened in the desktop; the caller runs the
+    /// open-item hook once the vault lock is released.
+    OpenIdentity(Uuid),
 }
 
 /// Answer a request. `lock` is handled by the caller, which must not hold
@@ -426,6 +493,43 @@ pub fn dispatch(
             } else {
                 Err(ErrorCode::Denied)
             }
+        }
+        Request::FindIdentity { url, top_url } => {
+            require_enabled(v)?;
+            let s = v
+                .identity_summary_for_page(url, top_url.as_deref())
+                .map_err(code)?;
+            Ok(Dispatched::Done(ResultBody::FindIdentity {
+                title: s.title,
+                email: s.email,
+                roles: s.roles.into_iter().map(wire_role).collect(),
+            }))
+        }
+        Request::FillIdentity {
+            url,
+            top_url,
+            roles,
+            documents,
+        } => {
+            require_enabled(v)?;
+            let roles: Vec<FillRole> = roles.iter().copied().map(core_role).collect();
+            let values = v
+                .identity_values_for_page(url, top_url.as_deref(), &roles, *documents)
+                .map_err(code)?
+                .into_iter()
+                .map(|(role, value)| IdentityValue {
+                    role: wire_role(role),
+                    value: WireSecret::new(value.expose().to_owned()),
+                })
+                .collect();
+            Ok(Dispatched::Done(ResultBody::FillIdentity { values }))
+        }
+        Request::OpenIdentity { url, top_url } => {
+            require_enabled(v)?;
+            let id = v
+                .identity_id_for_page(url, top_url.as_deref())
+                .map_err(code)?;
+            Ok(Dispatched::OpenIdentity(id))
         }
         Request::StartSso {
             item_id,
