@@ -1006,7 +1006,7 @@ nothing is submitted.
 
 ### Signals (`autofill/identity.ts`)
 
-A field gets one of 25 roles (`fullName`, `firstName`, `middleName`,
+A field gets one of 26 roles (`fullName`, `firstName`, `middleName`,
 `lastName`, `email`, `phone`, `birthDate`, `birthDay`, `birthMonth`,
 `birthYear`, `company`, `street`, `number`, `complement`, `addressLine1`,
 `addressLine2`, `neighborhood`, `city`, `state`, `postalCode`, `country`,
@@ -1084,9 +1084,11 @@ shows no menu). A cross-site iframe gets no identity row.
   name both ways (a 27-entry table); `country` also matches `BR`, Brasil and
   Brazil. No match: the field is skipped. Selected through `selectedIndex`,
   then `input` and `change`.
-* `<textarea>`: only for `autocomplete=street-address`. It gets street,
-  number and complement on separate lines, or address line 1 when the
-  identity has no street.
+* `<textarea>`: only a multi-line field whose role is street or address line
+  1, whether by autocomplete (`street-address`, `address-line1`) or by its
+  words (rua, endereco, street, address). It gets street, number and
+  complement on separate lines, or address line 1 when the identity has none
+  of them. Any other role in a textarea is not classified.
 * Values are written to `value` and `selectedIndex` only, never to
   attributes, and never logged. The content script drops the reply after
   writing.
