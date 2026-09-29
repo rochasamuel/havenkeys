@@ -110,8 +110,9 @@ or read-only fields, and fields inside a login group whose intent is `login`.
 
 A field needs confidence ≥ 0.5 to count. A **form qualifies** for the
 identity menu when it has at least two identity fields, or one when the
-field's autocomplete names the role (so a lone `autocomplete=postal-code`
-still works).
+field's autocomplete names the role and the role is not `email` or
+`username` (so a lone `autocomplete=postal-code` works, and a newsletter's
+lone email box does not).
 
 The login classifier is unchanged: the words it treats as "not a username"
 stay negatives there.
@@ -119,13 +120,17 @@ stay negatives there.
 ### 5.2 Menu
 
 * New `MenuKind` `"identity"`. `menuKindFor` returns it for a field with an
-  identity role in a qualifying form, when the field is not a login field.
+  identity role in a qualifying form whose login intent is not `login`, when
+  the field is not a login field, **or** when the login classifier called it
+  a username but the group has no password field (a checkout's CPF box looks
+  like gov.br's login field; the form's intent tells them apart).
   Menus open on the same trusted events as today and respect the in-page
   menu preference.
 * On a **sign-up** group (`groupIntent` = `signup`), the email/username
   field's `login` menu also shows the identity row, below any logins.
 * The row: the ID-card icon, the identity's name (or "Identity"), and
-  "Fills N fields" (N = identity fields in the group with a value to fill).
+  "Fills N fields" (N = identity fields in the group whose role is in
+  `find_identity`'s `roles`).
 * **Documents**: when the group has document fields, clicking the row does
   not fill. The menu shows "*shop.com* also asks for: CPF, RG" with **Fill
   CPF and RG too** and **Fill without documents**. On an http page the
@@ -141,7 +146,8 @@ The content script sends the roles of the group's fields with the open
 request; the background keeps them in the menu session (as it keeps offered
 items) and sends `fill_identity` with exactly those roles when the user
 picks. The fill result goes back to that frame by `documentId`, as login
-fills do, carrying `{field index → value}` for the session's fields.
+fills do, carrying `[{role, value}]`; the content script re-classifies the
+clicked field's group and writes each value into the fields with that role.
 
 ### 5.4 Writing
 
@@ -177,14 +183,19 @@ the popup's login fill, then follows §5.2's document step in the popup.
 
 ```text
 find_identity { url, topUrl? }
-  → identity { available: bool, title: string, email: string | null }
+  → find_identity { title: string, email: string | null, roles: [Role, …] }
 
 fill_identity { url, topUrl?, roles: [Role, …], documents: bool }
-  → identity_values { values: [ { role, value } ] }
+  → fill_identity { values: [ { role, value } ] }
 
 open_identity { url, topUrl? }
-  → opened {}          (the desktop shows the identity, as open_item does)
+  → open_identity {}   (the desktop shows the identity, as open_item does)
 ```
+
+Results are named after their requests, as every other result is.
+`find_identity`'s `roles` are the roles the identity has a value for, names
+only (documents included, so the menu can say "also asks for CPF"); it
+never carries a value. An empty list is an empty identity.
 
 * `roles`: 1–40 entries, no duplicates, each a known role; anything else is
   a malformed message.
