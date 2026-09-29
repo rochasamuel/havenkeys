@@ -2,9 +2,9 @@
 // codes go from the background straight to the content script and never
 // pass through this page.
 
-import { SSO_PROVIDERS } from "@havenkeys/protocol";
+import { SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
-import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type MenuItemView, type MenuView } from "../messaging/inline";
+import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
 import { providerIcon } from "./icons";
 
@@ -36,6 +36,24 @@ function sparkle(): SVGSVGElement {
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(ns, "path");
   path.setAttribute("d", "M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M6 6l2.6 2.6M15.4 15.4 18 18M6 18l2.6-2.6M15.4 8.6 18 6");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.6");
+  path.setAttribute("stroke-linecap", "round");
+  svg.append(path);
+  return svg;
+}
+
+/** The identity row's glyph: an ID card in the 1.6-stroke icon set. */
+function idCard(): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M4.5 6h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM9 12a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 9 12zM6 15.5c.5-1.3 1.6-2 3-2s2.5.7 3 2M14 10h3.5M14 13.5h3.5");
   path.setAttribute("fill", "none");
   path.setAttribute("stroke", "currentColor");
   path.setAttribute("stroke-width", "1.6");
@@ -83,6 +101,56 @@ function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButt
   return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy);
 }
 
+function documentList(roles: readonly IdentityRole[]): string {
+  return roles.map((r) => msg.menu.documentLabels[r as keyof typeof msg.menu.documentLabels] ?? r).join(msg.menu.and);
+}
+
+/** A plain action button for the documents step, under the click guard. */
+function action(text: string, primary: boolean, onPick: () => Promise<void>): HTMLButtonElement {
+  const b = h("button", { className: primary ? "step-btn primary" : "step-btn", text });
+  b.type = "button";
+  b.addEventListener("click", (e) => {
+    if (!e.isTrusted || !guard.armed() || b.disabled) return;
+    b.disabled = true;
+    void onPick().finally(() => (b.disabled = false));
+  });
+  return b;
+}
+
+function documentsStep(t: string, site: string, docs: readonly IdentityRole[]): void {
+  const list = documentList(docs);
+  main.replaceChildren(
+    h(
+      "div",
+      { className: "message step" },
+      h("strong", { text: msg.menu.identityAlsoAsks(site, list) }),
+      action(msg.menu.identityFillWithDocs(list), true, () => pick({ type: "menu_pick_identity", token: t, documents: true })),
+      action(msg.menu.identityFillWithoutDocs, false, () => pick({ type: "menu_pick_identity", token: t, documents: false })),
+    ),
+  );
+}
+
+function identityRow(t: string, site: string, v: IdentityRowView): HTMLButtonElement {
+  if (v.empty) {
+    return row(idCard(), msg.menu.identityEmptyTitle, msg.menu.identityEmptyBody, () => pick({ type: "menu_open_identity", token: t }), {
+      title: true,
+      detail: true,
+    });
+  }
+  const askFirst = v.documents.length > 0 && v.documentsAllowed;
+  const detail = v.documents.length > 0 && !v.documentsAllowed ? msg.menu.identityNoDocsHttp : msg.menu.identityFills(v.fills);
+  return row(
+    idCard(),
+    v.title || msg.menu.identityFallback,
+    detail,
+    async () => {
+      if (askFirst) documentsStep(t, site, v.documents);
+      else await pick({ type: "menu_pick_identity", token: t, documents: false });
+    },
+    { title: v.title === "", detail: true },
+  );
+}
+
 /** A row that only informs: no button, not in the arrow-key order. */
 function hintNote(title: string, detail: string): HTMLElement {
   return h(
@@ -104,6 +172,10 @@ function render(t: string, view: MenuView): void {
     );
     return;
   }
+  if (view.kind === "identity") {
+    main.replaceChildren(view.identity ? identityRow(t, view.site, view.identity) : message(msg.menu.unavailable, msg.menu.identityNothing));
+    return;
+  }
   const kind = view.kind;
   const passkeyRows = view.passkeys.map((p) =>
     row(monogram(p.title), p.title, msg.menu.passkeyRow(p.userName || msg.menu.passkeyAccountFallback), () =>
@@ -116,7 +188,8 @@ function render(t: string, view: MenuView): void {
     hint?.kind === "add_passkey"
       ? [row(sparkle(), msg.menu.addPasskeyTitle(hint.name), msg.menu.addPasskeyBody, () => pick({ type: "menu_open_help", token: t }), { title: true, detail: true })]
       : [];
-  const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind === "otp" ? "otp" : "login")), ...tail];
+  const identity = view.identity ? [identityRow(t, view.site, view.identity)] : [];
+  const rows = [...lead, ...passkeyRows, ...view.items.map((i) => itemRow(t, i, kind)), ...identity, ...tail];
   // Opened from the field's icon with nothing saved for this site.
   if (rows.length === 0) {
     main.replaceChildren(
@@ -137,7 +210,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row"));
+  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row, button.step-btn"));
   if (rows.length === 0) return;
   const i = rows.indexOf(document.activeElement as HTMLButtonElement);
   const next = e.key === "ArrowDown" ? (i + 1) % rows.length : (i - 1 + rows.length) % rows.length;
