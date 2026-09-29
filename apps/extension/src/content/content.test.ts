@@ -6,6 +6,7 @@
 // cannot open menus or trigger fills.
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { markUserEdit } from "../autofill/fill";
 import { OTP_SETTLE_MS } from "../autofill/submit";
 import { SCAN_DEBOUNCE_MS } from "./sso";
 
@@ -323,5 +324,81 @@ describe("automatic sign-in", () => {
     expect(submitted).not.toHaveBeenCalled();
     expect(sent).not.toContainEqual({ type: "cs_run_stop" });
     vi.useRealTimers();
+  });
+});
+
+describe("menuKindFor", () => {
+  const set = (html: string) => (document.body.innerHTML = html);
+  const f = (sel: string) => document.querySelector(sel) as HTMLInputElement;
+  const kindFor = async (el: HTMLInputElement) => (await import("./index")).menuKindFor(el);
+
+  it("opens the identity menu on a checkout's CPF field", async () => {
+    set(`<form><input id="n" name="nome" aria-label="Nome completo"><input id="c" name="cpf" aria-label="CPF"><button>Finalizar compra</button></form>`);
+    expect(await kindFor(f("#c"))).toEqual({ kind: "identity", roles: ["fullName", "cpf"] });
+  });
+
+  it("keeps the login menu on a gov.br-style CPF login", async () => {
+    set(`<form><h1>Entrar</h1><input id="c" name="cpf" aria-label="CPF"><button type="submit">Entrar</button></form>`);
+    expect((await kindFor(f("#c")))?.kind).toBe("login");
+  });
+
+  it("adds identity roles to a sign-up form's email field", async () => {
+    set(`<form><h1>Create account</h1><input id="n" name="first_name" aria-label="First name"><input id="e" type="email" name="email"><input type="password" name="pw" autocomplete="new-password"><button type="submit">Sign up</button></form>`);
+    const k = await kindFor(f("#e"));
+    expect(k?.kind).toBe("login");
+    expect(k?.roles).toContain("firstName");
+  });
+
+  it("never offers the identity on a login form", async () => {
+    set(`<form><h1>Sign in</h1><input id="e" type="email" name="email"><input type="password" name="pw"><button type="submit">Sign in</button></form>`);
+    expect(await kindFor(f("#e"))).toEqual({ kind: "login" });
+  });
+
+  it("offers nothing when every identity field already holds the user's own value", async () => {
+    set(`<form><input id="n" name="nome" aria-label="Nome completo"><input id="c" name="cpf" aria-label="CPF"><button>Finalizar compra</button></form>`);
+    for (const el of [f("#n"), f("#c")]) {
+      el.value = "typed";
+      markUserEdit(el);
+    }
+    // The name field is no login field: nothing to offer. (The CPF field falls
+    // back to what it would get without an identity: the login menu.)
+    expect(await kindFor(f("#n"))).toBeNull();
+    expect(await kindFor(f("#c"))).toEqual({ kind: "login" });
+    expect(deliver({ type: "bg_identity_roles" })).toEqual({ roles: [] });
+  });
+});
+
+describe("identity fills", () => {
+  it("fills the picked form's identity fields on the matched origin", () => {
+    document.body.innerHTML = `<form><input name="nome" aria-label="Nome completo"><input name="cep" aria-label="CEP"></form>`;
+    const reply = deliver({
+      type: "bg_fill",
+      origin: location.origin,
+      token: null,
+      fill: { kind: "identity", values: [{ role: "fullName", value: "Samuel" }, { role: "postalCode", value: "70000-000" }] },
+      submit: false,
+      totp: false,
+    });
+    expect(reply).toEqual({ filled: 2, pressing: null });
+    expect(field("nome").value).toBe("Samuel");
+  });
+
+  it("refuses an identity fill for another origin", () => {
+    document.body.innerHTML = `<form><input name="nome" aria-label="Nome completo"><input name="cep" aria-label="CEP"></form>`;
+    const reply = deliver({
+      type: "bg_fill",
+      origin: "https://evil.example",
+      token: null,
+      fill: { kind: "identity", values: [{ role: "fullName", value: "Samuel" }] },
+      submit: false,
+      totp: false,
+    });
+    expect(reply).toEqual({ filled: 0, pressing: null });
+    expect(field("nome").value).toBe("");
+  });
+
+  it("answers the popup's role scan", () => {
+    document.body.innerHTML = `<form><input name="nome" aria-label="Nome completo"><input name="cpf" aria-label="CPF"></form>`;
+    expect(deliver({ type: "bg_identity_roles" })).toEqual({ roles: ["fullName", "cpf"] });
   });
 });
