@@ -82,7 +82,29 @@ const WORDS: Array<[IdentityRole, readonly string[]]> = [
 
 /** Wording that means "not the person's data" even when a role word matches. */
 const NEGATIVE = ["search", "busca", "pesquisar", "coupon", "cupom", "promo", "cc", "card", "cartao", "cvv", "cvc", "captcha", "quantity", "quantidade",
-  "order", "pedido", "account", "conta", "tracking", "rastreio", "invoice", "nota fiscal", "price", "preco", "mae", "mother", "titular", "holder", "unit"];
+  "order", "pedido", "account", "conta", "tracking", "rastreio", "invoice", "nota fiscal", "price", "preco", "mae", "mother", "titular", "holder", "unit",
+  "estado civil", "marital", "civil status"];
+
+/**
+ * Compound labels the first-match word list would get wrong (final review
+ * finding 4). Each is checked against the name, id and label text together.
+ */
+const BIRTH = ["nascimento", "birth", "naturalidade", "dob"];
+const PLACE = ["cidade", "city", "town", "municipio", "pais", "country", "local", "place", "estado", "state", "uf"];
+const DOCUMENT = ["documento", "document", "doc"];
+const ADDRESS = ["endereco", "address", "logradouro", "rua", "street", "cep", "zip"];
+
+/** Null when the words make a role match wrong; the role otherwise. */
+function compound(role: IdentityRole, all: string): IdentityRole | null {
+  // "Cidade/País de nascimento", "Country of birth": a birthplace, not a birth date, city or country.
+  if (hasAny(all, BIRTH) && hasAny(all, PLACE)) return null;
+  // "Número do documento", "Document number": not a house number.
+  if (role === "number" && hasAny(all, DOCUMENT)) return null;
+  // "Endereço da empresa", "Company address": the company's address, not a
+  // company name; ambiguous as the user's street, so neither.
+  if (role === "company" && hasAny(all, ADDRESS)) return null;
+  return role;
+}
 
 const WORDS_ON_ATTRS = 70;
 const WORDS_ON_TEXT = 60;
@@ -113,7 +135,10 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   const type = tag === "input" ? (el as HTMLInputElement).type.toLowerCase() : tag;
   if (tag === "input" && !TEXT_TYPES.has(type)) return null;
   const ac = attr(el, "autocomplete").toLowerCase();
-  if (/\b(cc-|one-time-code|current-password|new-password)/.test(ac)) return null;
+  // Password-type fields are excluded by type above. Checkouts put
+  // new-password on address fields to keep the browser's autofill away, so
+  // only card and one-time-code tokens refuse a text field here.
+  if (/\b(cc-|one-time-code)/.test(ac)) return null;
   const attrs = normalize(`${attr(el, "name")} ${attr(el, "id")}`);
   const text = normalize(`${attr(el, "placeholder")} ${attr(el, "aria-label")} ${attr(el, "title")} ${labelText(el)}`, MAX_HINT_CHARS * 3);
   if (hasAny(`${attrs} ${text}`, NEGATIVE) || attr(el, "role") === "search" || el.closest('[role="search"]')) return null;
@@ -126,10 +151,11 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   if (type === "email") return { role: "email", confidence: 0.8, byAutocomplete: false };
   if (type === "tel") return { role: "phone", confidence: 0.8, byAutocomplete: false };
 
-  for (const [role, words] of WORDS) {
+  for (const [found, words] of WORDS) {
     const score = hasAny(attrs, words) ? WORDS_ON_ATTRS : hasAny(text, words) ? WORDS_ON_TEXT : 0;
     if (score < THRESHOLD) continue;
-    if (!allowed(role)) return null;
+    const role = compound(found, `${attrs} ${text}`);
+    if (!role || !allowed(role)) return null;
     return { role: role === "street" && tag === "textarea" ? "addressLine1" : role, confidence: score / 100, byAutocomplete: false };
   }
   return null;

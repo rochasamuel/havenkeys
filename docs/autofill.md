@@ -1027,12 +1027,25 @@ A field gets one of 26 roles (`fullName`, `firstName`, `middleName`,
    cidade, estado, UF, CEP, zip, pais, country, CPF, RG, passaporte, CNH and
    the English equivalents. A word must reach 60 to count.
 
+**Compound labels** override the first word that matched: a birth word
+(nascimento, birth, naturalidade, dob) together with a place word (cidade,
+city, pais, country, local, place, estado, state, UF, municipio, town) is a
+birthplace, so the field gets no role (not `birthDate`, `city` or
+`country`); a document word (documento, document, doc) means the field is
+never `number`; an address word (endereco, address, logradouro, rua, street,
+CEP, zip) with a company word means the company's address, so the field gets
+no role (neither `company` nor `street`: whose street it is is ambiguous).
+"Estado civil" and marital status are negatives.
+
 Never an identity field: password and one-time-code fields, **card fields**
 (`cc-*` autocomplete; the words cc, card, cartao, cvv, cvc), words that mean
 something other than the person's data (order and account numbers, tracking,
 coupon, quantity, "nome da mae", "titular" and holder), search boxes
 (`type=search`, `role=search`), input types other than text, email, tel,
-number, url and date, and hidden, disabled or read-only fields. The login
+number, url and date, and hidden, disabled or read-only fields.
+`autocomplete="new-password"` or `current-password` on a text field does not
+refuse it (checkouts set it on address fields to keep the browser's own
+autofill away; password-type fields are excluded by type). The login
 classifier is unchanged: the words it treats as "not a username" stay
 negatives there.
 

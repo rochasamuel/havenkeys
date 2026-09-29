@@ -90,6 +90,63 @@ describe("identityRoleOf", () => {
   });
 });
 
+describe("compound labels", () => {
+  it("does not read a birthplace as a birth date, city or country", () => {
+    page(`<form>
+      <label>Cidade de nascimento<input id="a"></label>
+      <label>País de nascimento<input id="b"></label>
+      <label>Country of birth<input id="c"></label>
+      <label>Place of birth<input id="d"></label>
+      <input id="e" name="birth_city">
+      <label>Data de nascimento<input id="f"></label>
+    </form>`);
+    for (const id of ["#a", "#b", "#c", "#d", "#e"]) expect(role(id), id).toBeNull();
+    expect(role("#f")).toBe("birthDate");
+  });
+
+  it("never reads a document number as a house number", () => {
+    page(`<form>
+      <label>Número do documento<input id="a"></label>
+      <label>Document number<input id="b"></label>
+      <input id="c" name="doc_number">
+      <label>Número<input id="d"></label>
+    </form>`);
+    for (const id of ["#a", "#b", "#c"]) expect(role(id), id).toBeNull();
+    expect(role("#d")).toBe("number");
+  });
+
+  it("does not read marital status as a state", () => {
+    page(`<form><label>Estado civil<input id="a"></label><label>Marital status<select id="b"></select></label><label>Estado<input id="c"></label></form>`);
+    expect(role("#a")).toBeNull();
+    expect(role("#b")).toBeNull();
+    expect(role("#c")).toBe("state");
+  });
+
+  it("does not read a company's address as the company (nor as the user's street)", () => {
+    page(`<form>
+      <label>Company address<input id="a"></label>
+      <label>Endereço da empresa<input id="b"></label>
+      <label>Company<input id="c"></label>
+    </form>`);
+    expect(role("#a")).toBeNull();
+    expect(role("#b")).toBeNull();
+    expect(role("#c")).toBe("company");
+  });
+});
+
+describe("autocomplete used to block the browser", () => {
+  it("still classifies a text field marked new-password or current-password", () => {
+    page(`<form>
+      <input id="a" name="cep" autocomplete="new-password">
+      <input id="b" name="cidade" autocomplete="current-password">
+      <input id="c" type="password" name="nome" autocomplete="new-password">
+    </form>`);
+    expect(role("#a")).toBe("postalCode");
+    expect(role("#b")).toBe("city");
+    expect(role("#c")).toBeNull();
+  });
+});
+
 describe("identity groups", () => {
   it("qualify with two identity fields", () => {
     page(BR_CHECKOUT);
