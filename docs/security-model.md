@@ -240,6 +240,9 @@ means a live server session, which a locked vault does not have.
 | `set_ui_language` | no | no. Accepts only `en` or `pt-BR` and relabels the tray menu from a fixed table |
 | `get_emergency_kit` | yes | **the Secret Key**, plus a QR encoding it. The only command that returns long-term key material, on explicit request, with its own unlocked check because the Secret Key lives outside the vault (`server-sync.md` §7) |
 | `reveal_account_secret_key` | yes | **the Secret Key**, on an explicit reveal in the HavenKeys Account item. Same checks as `get_emergency_kit` |
+| `identity_item_id` | yes | no. The Identity's derived item ID |
+| `reveal_identity` | yes | **the identity's values** (and the formatted address), when its detail or editor opens. `Denied` for any item that is not an identity |
+| `copy_identity_field` | yes | no. Copies one identity value, the address block or a custom field (`custom:<n>`, n < 50) from Rust, cleared after the clipboard delay; anything else fails to parse |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
@@ -445,6 +448,16 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   see it. It has no master-password field. The key is revealed only on a
   click and hidden again after 30 s, on lock, or on leaving the item
   (`specs/2026-09-29-account-item-design.md`).
+* The **Identity** (name, documents, contact, address, custom fields, notes)
+  is a stored, synced item like a login. Only the display name and the email
+  go into its overview (decrypted at unlock, for the list and search);
+  everything else is in its details blob and decrypted when the user opens
+  it. There is exactly one per account: its item ID is derived from the vault
+  key (`crypto.md`), each device creates it at connect if missing, the core
+  refuses to create another or to delete it, and a create race ends in a
+  409 and a pull. The extension cannot read it: `find_matches`,
+  `fill_for_page` and `get_totp` refuse any item that is not a login
+  (`tests/identity.rs`). Filling forms from it is a later, separate design.
 * **The Secret Key lives in the OS keychain** (Windows Credential Manager,
   macOS Keychain, the Secret Service on Linux; service `app.havenkeys`, user
   = account ID), with `device.json` as the fallback when no keychain is

@@ -5,6 +5,7 @@
 //! * [`ItemDetails`]  — secrets; decrypted per request only.
 
 use crate::error::{Error, Result};
+use crate::identity::IdentityFields;
 use crate::passkey::Passkey;
 use crate::secret::SecretString;
 use crate::sso::SignInWith;
@@ -30,6 +31,8 @@ pub const MAX_PASSWORD_HISTORY: usize = 5;
 pub enum ItemType {
     Login,
     SecureNote,
+    /// The account's one Identity (spec 2026-09-29-identity-item).
+    Identity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +125,7 @@ pub enum ItemDetails {
     SecureNote {
         content: SecretString,
     },
+    Identity(Box<IdentityFields>),
 }
 
 /// A password that was replaced, and when (Unix milliseconds).
@@ -151,6 +155,7 @@ impl ItemDetails {
         match self {
             ItemDetails::Login { .. } => ItemType::Login,
             ItemDetails::SecureNote { .. } => ItemType::SecureNote,
+            ItemDetails::Identity(_) => ItemType::Identity,
         }
     }
 }
@@ -220,6 +225,10 @@ pub struct ItemInput {
     /// on an update clears it.
     #[serde(default)]
     pub sign_in_with: Option<SignInWith>,
+    /// An identity's values, sent in full on every save. Required for an
+    /// identity, refused for the other types.
+    #[serde(default)]
+    pub identity: Option<IdentityFields>,
 }
 
 impl fmt::Debug for ItemInput {
@@ -407,9 +416,29 @@ pub(crate) fn check_note_content(n: &SecretString) -> Result<()> {
     Ok(())
 }
 
-/// Reject login-only fields on a secure note and vice versa.
+/// Reject login-only fields on a secure note and vice versa, and anything
+/// but identity values on an identity.
 pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
+    let identity_only = input
+        .username
+        .as_deref()
+        .is_some_and(|u| !u.trim().is_empty())
+        || !input.urls.is_empty()
+        || !input.password.is_keep()
+        || !input.totp.is_keep()
+        || !input.notes.is_keep()
+        || !input.content.is_keep()
+        || input.sign_in_with.is_some();
     match input.item_type {
+        ItemType::Identity if input.identity.is_none() => {
+            Err(Error::InvalidInput("an identity needs its values"))
+        }
+        ItemType::Identity if identity_only => {
+            Err(Error::InvalidInput("an identity only has identity values"))
+        }
+        ItemType::Login | ItemType::SecureNote if input.identity.is_some() => {
+            Err(Error::InvalidInput("only an identity has identity values"))
+        }
         ItemType::Login if !input.content.is_keep() => {
             Err(Error::InvalidInput("logins do not have note content"))
         }
@@ -565,7 +594,7 @@ mod tests {
         let d: ItemDetails = serde_json::from_str(r#"{"type":"login","password":"pw"}"#).unwrap();
         match d {
             ItemDetails::Login { passkeys, .. } => assert!(passkeys.is_empty()),
-            ItemDetails::SecureNote { .. } => panic!("wrong type"),
+            _ => panic!("wrong type"),
         }
         // An empty passkey list is not written, so existing blobs are unchanged.
         let json = serde_json::to_string(&ItemDetails::Login {

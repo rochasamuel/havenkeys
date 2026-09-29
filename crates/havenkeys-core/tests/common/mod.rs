@@ -41,6 +41,7 @@ pub fn login(title: &str, username: &str, password: &str, url: &str) -> ItemInpu
         content: SecretUpdate::Keep,
         auto_sign_in: None,
         sign_in_with: None,
+        identity: None,
     }
 }
 
@@ -120,5 +121,6 @@ pub fn note(title: &str, content: &str) -> ItemInput {
         content: SecretUpdate::Set(secret(content)),
         auto_sign_in: None,
         sign_in_with: None,
+        identity: None,
     }
 }

@@ -36,12 +36,17 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
         ▼
  vault key (32 random bytes from the OS CSPRNG; stored only wrapped)
         │
+        ├─ HKDF-SHA-256(ikm = vault key, info = "havenkeys/v3/identity-item-id")
+        │     → first 16 bytes → UUID v8: the item ID of the account's one
+        │       Identity (an identifier, not a key; see below)
+        │
         │  HKDF-SHA-256(ikm = vault key, info = "havenkeys/v1/data")
         ▼
  data key (32 bytes, memory only while unlocked)
         │
         ├── item overview blobs   (title, username, URLs, flags, timestamps)
-        ├── item details blobs    (password, TOTP config, notes, note content, password history)
+        ├── item details blobs    (password, TOTP config, notes, note content, password history,
+        │                          identity values)
         └── settings blob         (auto-lock, clipboard timeout; device-local, unsynced)
 ```
 
@@ -65,6 +70,16 @@ Why this shape:
   trade-off this fallback keeps.
 * **HKDF domain separation** (`info` strings) ensures the KEK, the auth key
   and the data key can never collide with each other or with future keys.
+* **The Identity's item ID is derived from the vault key**
+  (`derive_identity_item_id`, info `"havenkeys/v3/identity-item-id"`), so
+  every device of an account agrees on it without coordination and the
+  account ends up with exactly one Identity even when two devices create it
+  at once. It is an identifier the server sees in the clear, like every item
+  ID; deriving it from the vault key (not, say, from the account ID) means the
+  server cannot tell which of its blobs is the Identity. It reveals nothing
+  about the vault key: HKDF output under a distinct label, truncated to 16
+  bytes. It does not change when the master password changes, because the
+  vault key does not (spec `2026-09-29-identity-item-design.md` §5.1).
 * **The KEK derivation takes the account ID and the normalized email as HKDF
   salt** — not the vault ID — so it is bound to the identity that owns the
   vault, not to any particular copy of it, and the same password used for two

@@ -8,10 +8,12 @@ use crate::account::AccountRef;
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
 use crate::crypto::keys::{
-    derive_auth_key_from_master, derive_data_key, derive_kek_v3, AuthKey, Key256, KEY_LEN,
+    derive_auth_key_from_master, derive_data_key, derive_identity_item_id, derive_kek_v3, AuthKey,
+    Key256, KEY_LEN,
 };
 use crate::crypto::secret_key::SecretKey;
 use crate::error::{Error, Result};
+use crate::identity::{IdentityField, IdentityFields};
 use crate::import::{ImportReport, ImportedItem};
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
@@ -65,6 +67,8 @@ pub struct VaultStatus {
 pub(crate) struct Session {
     pub(crate) vault_id: Uuid,
     pub(crate) data_key: Key256,
+    /// The item ID of the account's one Identity, derived from the vault key.
+    pub(crate) identity_id: Uuid,
     pub(crate) overviews: HashMap<Uuid, ItemOverview>,
     pub(crate) settings: Settings,
     pub(crate) damaged_items: usize,
@@ -671,6 +675,7 @@ impl VaultService {
         self.session = Some(Session {
             vault_id,
             data_key,
+            identity_id: derive_identity_item_id(&prepared.vault_key)?,
             overviews: HashMap::new(),
             settings,
             damaged_items: 0,
@@ -772,6 +777,7 @@ impl VaultService {
         Ok(Session {
             vault_id,
             data_key,
+            identity_id: derive_identity_item_id(vault_key)?,
             overviews,
             settings,
             damaged_items,
@@ -1155,7 +1161,7 @@ impl VaultService {
             .clone();
         let password = match self.load_details(id)? {
             ItemDetails::Login { password, .. } => password,
-            ItemDetails::SecureNote { .. } => return Err(Error::Denied),
+            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) => return Err(Error::Denied),
         };
         if password.is_some() {
             self.record_fill(*id, page_url, now_ms)?;
@@ -1311,6 +1317,7 @@ impl VaultService {
                     content: SecretUpdate::Keep,
                     auto_sign_in: None,
                     sign_in_with,
+                    identity: None,
                 }
             }
             SaveTarget::Update(id) => {
@@ -1334,6 +1341,7 @@ impl VaultService {
                     content: SecretUpdate::Keep,
                     auto_sign_in: None,
                     sign_in_with,
+                    identity: None,
                 };
                 return Ok(StagedSave {
                     item_id: *id,
@@ -1468,6 +1476,7 @@ impl VaultService {
             content: SecretUpdate::Keep,
             auto_sign_in: None,
             sign_in_with: None,
+            identity: None,
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1497,6 +1506,7 @@ impl VaultService {
             content: SecretUpdate::Keep,
             auto_sign_in: None,
             sign_in_with: existing.sign_in_with.clone(),
+            identity: None,
         };
         Ok(StagedSave {
             item_id: *id,
@@ -1509,7 +1519,7 @@ impl VaultService {
             ItemDetails::Login {
                 password_history, ..
             } => Ok(password_history.iter().map(|p| p.replaced_at).collect()),
-            ItemDetails::SecureNote { .. } => Ok(Vec::new()),
+            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) => Ok(Vec::new()),
         }
     }
 
@@ -1530,6 +1540,11 @@ impl VaultService {
     /// disk; the server must accept the write before [`commit_write`](Self::commit_write)
     /// records it.
     pub fn stage_create(&self, input: ItemInput, now_ms: i64) -> Result<StagedWrite> {
+        // The one identity is only ever created by `stage_identity_if_missing`,
+        // under its derived ID.
+        if input.item_type == ItemType::Identity {
+            return Err(Error::Denied);
+        }
         let id = Uuid::new_v4();
         let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
         self.stage(overview, Some(&details), None)
@@ -1562,6 +1577,9 @@ impl VaultService {
         if !session.overviews.contains_key(id) {
             return Err(Error::NotFound);
         }
+        if *id == session.identity_id {
+            return Err(Error::Denied);
+        }
         Ok(StagedWrite {
             item_id: *id,
             base_revision: self.store.item_revision(id)?,
@@ -1570,6 +1588,71 @@ impl VaultService {
             epoch: self.epoch,
             plain: None,
         })
+    }
+
+    // ------------------------------------------------------------ identity
+
+    /// The item ID of the account's one Identity (spec 2026-09-29-identity-item §5.1).
+    pub fn identity_item_id(&self) -> Result<Uuid> {
+        Ok(self.session()?.identity_id)
+    }
+
+    /// Stage the account's Identity, with `email` prefilled, unless the
+    /// replica already has it. Sent with no base revision: if another device
+    /// created it first, the server refuses this one and a pull brings theirs.
+    pub fn stage_identity_if_missing(
+        &self,
+        email: &str,
+        now_ms: i64,
+    ) -> Result<Option<StagedWrite>> {
+        let session = self.session()?;
+        let id = session.identity_id;
+        if session.overviews.contains_key(&id) {
+            return Ok(None);
+        }
+        let input = ItemInput {
+            item_type: ItemType::Identity,
+            title: String::new(),
+            username: None,
+            urls: Vec::new(),
+            password: SecretUpdate::Keep,
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: None,
+            identity: Some(IdentityFields {
+                email: Some(SecretString::from(email)),
+                ..Default::default()
+            }),
+        };
+        let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
+        self.stage(overview, Some(&details), None).map(Some)
+    }
+
+    /// Every value of an identity, for the desktop's detail and editor.
+    /// `Denied` for any other kind of item.
+    pub fn reveal_identity(&self, id: &Uuid) -> Result<IdentityFields> {
+        match self.load_details(id)? {
+            ItemDetails::Identity(fields) => Ok(*fields),
+            _ => Err(Error::Denied),
+        }
+    }
+
+    /// One identity value, for copying. `NotFound` when it is empty.
+    pub fn identity_value(&self, id: &Uuid, field: IdentityField) -> Result<SecretString> {
+        self.reveal_identity(id)?
+            .value(field)
+            .ok_or(Error::NotFound)
+    }
+
+    /// One custom field's value, by its position.
+    pub fn identity_custom_value(&self, id: &Uuid, index: usize) -> Result<SecretString> {
+        let mut fields = self.reveal_identity(id)?;
+        if index >= fields.custom.len() {
+            return Err(Error::NotFound);
+        }
+        Ok(fields.custom.swap_remove(index).value)
     }
 
     pub(crate) fn stage(
@@ -1663,6 +1746,10 @@ impl VaultService {
             match item_type {
                 ItemType::Login => report.logins += 1,
                 ItemType::SecureNote => report.secure_notes += 1,
+                // The importer never produces one (§2: imported identities
+                // stay secure notes); an identity is only ever created by
+                // `stage_identity_if_missing`.
+                ItemType::Identity => return Err(Error::Denied),
             }
             writes.push(staged);
         }
@@ -1685,7 +1772,7 @@ impl VaultService {
         for ov in session.overviews.values() {
             // Secure notes need their body; a damaged one simply isn't a duplicate.
             let details = match ov.item_type {
-                ItemType::Login => None,
+                ItemType::Login | ItemType::Identity => None,
                 ItemType::SecureNote => self.load_details(&ov.id).ok(),
             };
             let key = dedupe_key_parts(ov, details.as_ref());
@@ -1739,6 +1826,7 @@ impl VaultService {
             content: SecretUpdate::Keep,
             auto_sign_in: None,
             sign_in_with: Some(sso),
+            identity: None,
         };
         self.stage_update(id, input, now_ms).map(Some)
     }
@@ -1814,6 +1902,11 @@ fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [
                 field(&mut h, content.expose());
             }
         }
+        // Never "the same" as an imported item: keyed by its own ID.
+        ItemType::Identity => {
+            field(&mut h, "identity");
+            field(&mut h, &overview.id.to_string());
+        }
     }
     h.finalize().into()
 }
@@ -1838,9 +1931,9 @@ pub(crate) fn build_item(
     now_ms: i64,
 ) -> Result<(ItemOverview, ItemDetails)> {
     check_shape(&input)?;
-    let title = clean_title(&input.title)?;
     let ItemInput {
         item_type,
+        title,
         username,
         urls,
         password,
@@ -1849,7 +1942,7 @@ pub(crate) fn build_item(
         content,
         auto_sign_in,
         sign_in_with,
-        ..
+        identity,
     } = input;
 
     let details = match item_type {
@@ -1911,6 +2004,19 @@ pub(crate) fn build_item(
             check_note_content(&content)?;
             ItemDetails::SecureNote { content }
         }
+        ItemType::Identity => {
+            if !matches!(current, None | Some(ItemDetails::Identity(_))) {
+                return Err(Error::Corrupted);
+            }
+            // `check_shape` guarantees the values are there.
+            let fields = identity.ok_or(Error::InvalidInput("an identity needs its values"))?;
+            ItemDetails::Identity(Box::new(fields.clean(now_ms)?))
+        }
+    };
+    // An identity's title is its name, never typed; it may be empty.
+    let title = match &details {
+        ItemDetails::Identity(fields) => fields.display_name(),
+        _ => clean_title(&title)?,
     };
 
     let (has_password, has_totp, has_notes, has_passkey) = match &details {
@@ -1927,6 +2033,11 @@ pub(crate) fn build_item(
             !passkeys.is_empty(),
         ),
         ItemDetails::SecureNote { .. } => (false, false, false, false),
+        ItemDetails::Identity(fields) => (false, false, fields.notes.is_some(), false),
+    };
+    let identity_email = match &details {
+        ItemDetails::Identity(fields) => fields.email.as_ref().map(|e| e.expose().to_owned()),
+        _ => None,
     };
     let overview = ItemOverview {
         id,
@@ -1935,10 +2046,12 @@ pub(crate) fn build_item(
         username: match item_type {
             ItemType::Login => clean_username(username.as_deref())?,
             ItemType::SecureNote => None,
+            // Shown as the list subtitle and searched, like a login's username.
+            ItemType::Identity => identity_email,
         },
         urls: match item_type {
             ItemType::Login => clean_urls(&urls)?,
-            ItemType::SecureNote => Vec::new(),
+            ItemType::SecureNote | ItemType::Identity => Vec::new(),
         },
         has_password,
         has_totp,
@@ -1947,7 +2060,7 @@ pub(crate) fn build_item(
         auto_sign_in: auto_sign_in.unwrap_or(true),
         sign_in_with: match item_type {
             ItemType::Login => crate::sso::clean_sign_in_with(sign_in_with)?,
-            ItemType::SecureNote => None,
+            ItemType::SecureNote | ItemType::Identity => None,
         },
         created_at,
         updated_at: now_ms,

@@ -64,7 +64,52 @@ const items = [
     createdAt: NOW - 10 * DAY,
     updatedAt: NOW - 10 * DAY,
   },
+  {
+    id: "00f03a59-33cc-8082-a649-ca545b3b372d",
+    itemType: "identity",
+    title: "Samuel Rocha",
+    username: "samuel.rocha@example.com",
+    urls: [],
+    hasPassword: false,
+    hasTotp: false,
+    hasNotes: true,
+    hasPasskey: false,
+    autoSignIn: true,
+    createdAt: NOW - 5 * DAY,
+    updatedAt: NOW - 1 * DAY,
+  },
 ];
+
+const IDENTITY_ID = "00f03a59-33cc-8082-a649-ca545b3b372d";
+
+const identity = {
+  fields: {
+    firstName: "Samuel",
+    lastName: "Rocha",
+    gender: "Masculino",
+    birthDate: "2000-04-20",
+    occupation: "Desenvolvedor de Software",
+    cpf: "123.456.789-00",
+    rg: "1.234.567 SSP/DF",
+    email: "samuel.rocha@example.com",
+    mobilePhone: "+55 (61) 99999-0000",
+    street: "Quadra 02 Conjunto 01 (Setor Especial) with a long street name",
+    number: "10",
+    neighborhood: "Estrutural",
+    city: "Brasília",
+    state: "DF",
+    postalCode: "71266-105",
+    country: "Brasil",
+    username: "samuelrocha",
+    website: "https://example.com/",
+    custom: [
+      { label: "Blood type", value: "O+", hidden: false },
+      { label: "Library card PIN", value: "4321", hidden: true },
+    ],
+    notes: "Allergic to penicillin.",
+  },
+  address: "Quadra 02 Conjunto 01 (Setor Especial) with a long street name, 10\nEstrutural\nBrasília – DF\nCEP 71266-105\nBrasil",
+};
 
 const settings = {
   autoLockMinutes: 15,
@@ -92,6 +137,9 @@ function baseResponses() {
     vault_status: { state: "unlocked", vaultExists: true, damagedItems: 0, unreadableItems: 0 },
     device_status: { keyScheme: "account_bound", needsSecretKey: false, online: true, secretKeyStorage: "keychain" },
     list_items: items,
+    identity_item_id: IDENTITY_ID,
+    reveal_identity: identity,
+    copy_identity_field: { clearAfterSeconds: 30 },
     get_item: items[0],
     reveal_secret: "correct horse battery staple — a long passphrase note\nSecond line of the note.",
     password_history: [NOW - 40 * DAY, NOW - 200 * DAY],
@@ -359,6 +407,44 @@ export const desktopScenarios = [
       await page.click(".list-items li:nth-child(3) .list-item");
       await page.waitForTimeout(200);
     },
+  },
+  {
+    name: "identity",
+    respond: {},
+    act: async (page) => {
+      await page.click(nav(4));
+    },
+  },
+  {
+    name: "identity-revealed",
+    respond: {},
+    act: async (page) => {
+      await page.click(nav(4));
+      await page.click(".item section:nth-of-type(2) .icon-btn >> nth=0");
+      await page.click(".item .copy-btn >> nth=0");
+    },
+  },
+  {
+    name: "identity-empty",
+    respond: {
+      list_items: items.map((i) => (i.itemType === "identity" ? { ...i, title: "", username: null, hasNotes: false } : i)),
+      reveal_identity: { fields: {}, address: null },
+    },
+    act: async (page) => {
+      await page.click(nav(4));
+    },
+  },
+  {
+    name: "identity-editor",
+    respond: {},
+    act: async (page) => {
+      await page.click(nav(4));
+      await page.click(".item-head-actions .btn");
+    },
+  },
+  {
+    name: "identity-not-created",
+    respond: { list_items: items.filter((i) => i.itemType !== "identity") },
   },
   {
     name: "account-item",

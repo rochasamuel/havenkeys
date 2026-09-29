@@ -2646,3 +2646,50 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   margin: 0;
   color: var(--muted);
 }
+
+/* --------------------------------------------------------------- identity */
+
+.avatar-identity {
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+}
+
+.address-block {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.identity-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.identity-empty-title {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  color: var(--text-strong);
+}
+
+.identity-empty .muted {
+  max-width: 38ch;
+  margin: 0 0 8px;
+}
+
+.custom-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-edit-controls,
+.custom-edit-hidden {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

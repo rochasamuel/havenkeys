@@ -11,7 +11,7 @@ export interface VaultStatus {
   unreadableItems: number;
 }
 
-export type ItemType = "login" | "secure_note";
+export type ItemType = "login" | "secure_note" | "identity";
 export type MatchType = "exact" | "origin" | "domain";
 
 export interface UrlRule {
@@ -72,7 +72,59 @@ export interface ItemInput {
   content?: SecretUpdate;
   autoSignIn?: boolean;
   signInWith?: SignInWith | null;
+  /** An identity's values, sent in full on every save. */
+  identity?: IdentityFields;
 }
+
+/** Something else the user wants to remember on their identity. */
+export interface CustomField {
+  label: string;
+  value: string;
+  /** Masked until revealed, like a password. */
+  hidden: boolean;
+}
+
+/** The account's one Identity (spec 2026-09-29-identity-item). Every value optional. */
+export interface IdentityFields {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  gender?: string | null;
+  /** YYYY-MM-DD */
+  birthDate?: string | null;
+  occupation?: string | null;
+  company?: string | null;
+  jobTitle?: string | null;
+  cpf?: string | null;
+  rg?: string | null;
+  passport?: string | null;
+  driversLicense?: string | null;
+  email?: string | null;
+  mobilePhone?: string | null;
+  homePhone?: string | null;
+  workPhone?: string | null;
+  street?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  username?: string | null;
+  website?: string | null;
+  custom?: CustomField[];
+  notes?: string | null;
+}
+
+/** An opened identity: its values and the address block Rust formatted. */
+export interface IdentityView {
+  fields: IdentityFields;
+  address: string | null;
+}
+
+/** A typed identity value; `address` is the formatted block, `custom:<n>` a custom field. */
+export type IdentityCopyField = Exclude<keyof IdentityFields, "custom"> | "address" | `custom:${number}`;
 
 export type SecretField = "password" | "notes" | "content";
 export type CopyField = "username" | "password" | "totp";

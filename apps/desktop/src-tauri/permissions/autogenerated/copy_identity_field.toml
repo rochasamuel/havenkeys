@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-copy-identity-field"
+description = "Enables the copy_identity_field command without any pre-configured scope."
+commands.allow = ["copy_identity_field"]
+
+[[permission]]
+identifier = "deny-copy-identity-field"
+description = "Denies the copy_identity_field command without any pre-configured scope."
+commands.deny = ["copy_identity_field"]

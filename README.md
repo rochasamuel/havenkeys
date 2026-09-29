@@ -36,6 +36,10 @@ What the desktop app does today:
   in Settings; the extension follows the browser's language
 * Logins (username, password, websites with match rules, TOTP, notes)
 * Secure notes
+* An **Identity** per account (name, documents such as CPF and RG, contact,
+  address, anything else in custom fields): created automatically, shown and
+  edited in the desktop app, each value copyable. Filling web forms from it
+  comes later
 * A **HavenKeys Account** item pinned first in All items: your email,
   server, account ID and Secret Key, to read or copy when setting up
   another computer (read-only; never stored in the vault or sent to the

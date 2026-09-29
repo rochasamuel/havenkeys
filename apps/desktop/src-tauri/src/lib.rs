@@ -8,6 +8,7 @@ mod autostart;
 mod clipboard;
 mod commands;
 mod device;
+mod identity;
 mod import;
 mod item_input;
 mod native_host;
@@ -254,6 +255,9 @@ pub fn run() {
             account::get_emergency_kit,
             account::reveal_account_secret_key,
             account::copy_account_field,
+            identity::identity_item_id,
+            identity::reveal_identity,
+            identity::copy_identity_field,
             commands::sync_now,
             commands::resync_vault,
             commands::reveal_previous_password,

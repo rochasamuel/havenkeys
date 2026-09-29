@@ -478,6 +478,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 content: SecretUpdate::Keep,
                 auto_sign_in: None,
                 sign_in_with: sso,
+                identity: None,
             }
         }
         "003" => {
@@ -493,6 +494,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 content: SecretUpdate::Set(join_notes(extras.render()).unwrap_or_default()),
                 auto_sign_in: None,
                 sign_in_with: None,
+                identity: None,
             }
         }
         other => {
@@ -528,6 +530,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 content: SecretUpdate::Set(content),
                 auto_sign_in: None,
                 sign_in_with: None,
+                identity: None,
             }
         }
     };

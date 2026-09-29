@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reveal-identity"
+description = "Enables the reveal_identity command without any pre-configured scope."
+commands.allow = ["reveal_identity"]
+
+[[permission]]
+identifier = "deny-reveal-identity"
+description = "Denies the reveal_identity command without any pre-configured scope."
+commands.deny = ["reveal_identity"]

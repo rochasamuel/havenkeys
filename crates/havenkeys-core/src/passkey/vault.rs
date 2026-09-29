@@ -407,6 +407,7 @@ impl VaultService {
                         content: SecretUpdate::Keep,
                         auto_sign_in: None,
                         sign_in_with: None,
+                        identity: None,
                     };
                     let (overview, details) =
                         build_item(Uuid::new_v4(), input, None, now_ms, now_ms)?;
@@ -483,7 +484,7 @@ impl VaultService {
                     created_at: p.created_at,
                 })
                 .collect()),
-            ItemDetails::SecureNote { .. } => Ok(Vec::new()),
+            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) => Ok(Vec::new()),
         }
     }
 

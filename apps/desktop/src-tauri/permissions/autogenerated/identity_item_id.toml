@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-identity-item-id"
+description = "Enables the identity_item_id command without any pre-configured scope."
+commands.allow = ["identity_item_id"]
+
+[[permission]]
+identifier = "deny-identity-item-id"
+description = "Denies the identity_item_id command without any pre-configured scope."
+commands.deny = ["identity_item_id"]

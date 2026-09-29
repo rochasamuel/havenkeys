@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AccountStatus, ItemOverview, ItemType } from "../lib/types";
 import { monogram, primaryHost } from "../lib/format";
 import { ssoSubtitle } from "../lib/sso";
+import { identityTitle } from "../lib/identity";
 import { Icon } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import type { Section } from "./VaultScreen";
@@ -137,8 +138,14 @@ export function ItemList({
         <ul className="list-items">
           {items.map((item) => {
             const data =
-              item.itemType === "login" ? (item.username ?? (item.signInWith ? ssoSubtitle(item.signInWith) : null) ?? primaryHost(item)) : null;
-            const sub = data ?? (item.itemType === "login" ? t.common.login : t.common.secureNote);
+              item.itemType === "login"
+                ? (item.username ?? (item.signInWith ? ssoSubtitle(item.signInWith) : null) ?? primaryHost(item))
+                : item.itemType === "identity"
+                  ? item.username
+                  : null;
+            const sub =
+              data ?? (item.itemType === "login" ? t.common.login : item.itemType === "identity" ? t.identity.kind : t.common.secureNote);
+            const title = item.itemType === "identity" ? identityTitle(item.title, t.identity.title) : item.title;
             return (
               <li key={item.id}>
                 <button
@@ -147,12 +154,18 @@ export function ItemList({
                   onClick={() => onSelect(item.id)}
                 >
                   <span className={`avatar avatar-${item.itemType}`} aria-hidden="true">
-                    {item.itemType === "secure_note" ? <Icon name="note" size={15} /> : monogram(item.title)}
+                    {item.itemType === "secure_note" ? (
+                      <Icon name="note" size={15} />
+                    ) : item.itemType === "identity" ? (
+                      <Icon name="idCard" size={16} />
+                    ) : (
+                      monogram(item.title)
+                    )}
                   </span>
                   <span className="list-item-text">
                     {/* User data may be cut with an ellipsis (data-truncate); our own words never are. */}
                     <span className="list-item-title" data-truncate="">
-                      {item.title}
+                      {title}
                     </span>
                     <span className="list-item-sub" data-truncate={data !== null ? "" : undefined}>
                       {sub}
