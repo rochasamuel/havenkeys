@@ -370,6 +370,44 @@ describe("completing the provider login", () => {
     expect(fills).toHaveLength(0);
     expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull();
   });
+  it("cs_sso_stop from the provider tab ends a run waiting for the login form", async () => {
+    const { h, fills } = await toLogin({ find_matches: { matches: [google()] }, fill_item: { type: "fill_item", username: "u", password: "p", autoSubmit: true } });
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_stop" });
+    expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull(); // a later provider document gets nothing
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(0);
+  });
+  it("cs_sso_stop from the provider popup ends the opener's run waiting for the login form", async () => {
+    const env = setup({ start_sso: START_SSO });
+    await env.h.start(top, ID);
+    expect(env.h.ready(googleFrame(9), { tabId: 9, openerTabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
+    await env.h.handleContent(googleFrame(9), { tabId: 9, openerTabId: 1 }, { type: "cs_sso_stop" });
+    expect(env.h.ready(googleFrame(9), { tabId: 9, openerTabId: 1 })).toBeNull();
+    expect(env.h.ready(googleFrame(), { tabId: 1 })).toBeNull();
+  });
+  it("returning to the site ends a run waiting for the login form", async () => {
+    const { h } = await toLogin({});
+    expect(h.ready({ tabId: 1, frameId: 0, url: "https://typeform.com/", origin: "https://typeform.com" }, { tabId: 1 })).toBeNull();
+    expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull();
+  });
+  it("a lock while find_matches is in flight fills nothing", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const env = await toLogin({
+      find_matches: async () => {
+        await gate;
+        return { matches: [google()] };
+      },
+      fill_item: { type: "fill_item", username: "u", password: "p", autoSubmit: true },
+    });
+    const done = env.h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    await vi.waitFor(() => expect(env.requests.some((r) => r.type === "find_matches")).toBe(true));
+    env.h.reset();
+    release();
+    await done;
+    expect(env.requests.some((r) => r.type === "fill_item")).toBe(false);
+    expect(env.fills).toHaveLength(0);
+  });
   it("a lock while fill_item is in flight fills nothing", async () => {
     let h!: ReturnType<typeof setup>["h"];
     const env = await toLogin({

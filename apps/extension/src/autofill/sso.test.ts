@@ -97,7 +97,7 @@ describe("account chooser", () => {
 
 describe("use another account", () => {
   it("finds it in English and Portuguese", () => {
-    for (const text of ["Use another account", "Usar outra conta", "Sign in with a different account", "Usar uma conta diferente"]) {
+    for (const text of ["Use another account", "Usar outra conta", "Sign in with a different account", "Usar uma conta diferente", "Use a different account", "Entrar com outra conta"]) {
       const root = page(`<ul><li><div role="link">Me <div>me@gmail.com</div></div></li><li><div role="link">${text}</div></li></ul>`);
       expect(anotherAccountButton(root, env)?.textContent).toBe(text);
     }
