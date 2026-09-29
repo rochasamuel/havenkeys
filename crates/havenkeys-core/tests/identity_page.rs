@@ -1,0 +1,189 @@
+//! Identity access for web pages (spec 2026-09-29-identity-autofill §6.2).
+
+mod common;
+
+use common::{activated_vault, secret, NOW};
+use havenkeys_core::identity::{FillRole, IdentityFields};
+use havenkeys_core::model::{ItemInput, ItemType, SecretUpdate};
+use havenkeys_core::vault::VaultService;
+use havenkeys_core::Error;
+
+fn some(v: &str) -> Option<havenkeys_core::SecretString> {
+    Some(secret(v))
+}
+
+/// A vault whose identity holds a name, a phone, an address and a CPF.
+fn with_identity() -> VaultService {
+    let (mut v, _) = activated_vault();
+    let staged = v
+        .stage_identity_if_missing("user@example.com", NOW)
+        .unwrap()
+        .unwrap();
+    let id = staged.item_id;
+    v.commit_write(staged, 1).unwrap();
+    let fields = IdentityFields {
+        first_name: some("Samuel"),
+        last_name: some("Rocha"),
+        email: some("user@example.com"),
+        mobile_phone: some("+55 61 99999-0000"),
+        postal_code: some("71266-105"),
+        cpf: some("123.456.789-00"),
+        ..Default::default()
+    };
+    let input = ItemInput {
+        item_type: ItemType::Identity,
+        title: String::new(),
+        username: None,
+        urls: vec![],
+        password: SecretUpdate::Keep,
+        totp: SecretUpdate::Keep,
+        notes: SecretUpdate::Keep,
+        content: SecretUpdate::Keep,
+        auto_sign_in: None,
+        sign_in_with: None,
+        identity: Some(fields),
+    };
+    let staged = v.stage_update(&id, input, NOW + 1).unwrap();
+    v.commit_write(staged, 2).unwrap();
+    v
+}
+
+const SHOP: &str = "https://shop.example.com/checkout";
+
+fn values(
+    v: &VaultService,
+    url: &str,
+    top: Option<&str>,
+    roles: &[FillRole],
+    docs: bool,
+) -> Vec<(FillRole, String)> {
+    v.identity_values_for_page(url, top, roles, docs)
+        .unwrap()
+        .into_iter()
+        .map(|(r, s)| (r, s.expose().to_owned()))
+        .collect()
+}
+
+#[test]
+fn the_summary_names_the_roles_with_a_value_and_no_values() {
+    let v = with_identity();
+    let s = v.identity_summary_for_page(SHOP, None).unwrap();
+    assert_eq!(s.title, "Samuel Rocha");
+    assert_eq!(s.email.as_deref(), Some("user@example.com"));
+    for r in [
+        FillRole::FullName,
+        FillRole::Phone,
+        FillRole::PostalCode,
+        FillRole::Cpf,
+    ] {
+        assert!(s.roles.contains(&r), "{r:?}");
+    }
+    assert!(!s.roles.contains(&FillRole::City));
+    assert!(!format!("{s:?}").contains("Samuel"));
+}
+
+#[test]
+fn only_the_requested_roles_come_back() {
+    let v = with_identity();
+    let got = values(&v, SHOP, None, &[FillRole::FullName, FillRole::City], false);
+    assert_eq!(got, vec![(FillRole::FullName, "Samuel Rocha".to_owned())]);
+}
+
+#[test]
+fn documents_need_the_flag_and_https() {
+    let v = with_identity();
+    assert!(values(&v, SHOP, None, &[FillRole::Cpf], false).is_empty());
+    assert_eq!(
+        values(&v, SHOP, None, &[FillRole::Cpf], true),
+        vec![(FillRole::Cpf, "123.456.789-00".to_owned())]
+    );
+    assert!(
+        values(&v, "http://shop.example.com/", None, &[FillRole::Cpf], true).is_empty(),
+        "never on http"
+    );
+    assert_eq!(
+        values(
+            &v,
+            "http://shop.example.com/",
+            None,
+            &[FillRole::PostalCode],
+            true
+        )
+        .len(),
+        1,
+        "other values still fill on http"
+    );
+}
+
+#[test]
+fn frames_must_be_same_site_as_the_top_page() {
+    let v = with_identity();
+    let same = values(
+        &v,
+        "https://pay.example.com/f",
+        Some(SHOP),
+        &[FillRole::FullName],
+        false,
+    );
+    assert_eq!(same.len(), 1);
+    assert!(matches!(
+        v.identity_values_for_page(
+            SHOP,
+            Some("https://evil.com/"),
+            &[FillRole::FullName],
+            false
+        ),
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        v.identity_summary_for_page(SHOP, Some("https://evil.com/")),
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        v.identity_id_for_page(SHOP, Some("not a url")),
+        Err(Error::Denied)
+    ));
+}
+
+#[test]
+fn non_web_pages_and_a_locked_vault_are_refused() {
+    let mut v = with_identity();
+    for bad in [
+        "file:///etc/passwd",
+        "chrome://settings",
+        "javascript:alert(1)",
+        "",
+    ] {
+        assert!(
+            matches!(v.identity_summary_for_page(bad, None), Err(Error::Denied)),
+            "{bad}"
+        );
+    }
+    v.lock();
+    assert!(matches!(
+        v.identity_summary_for_page(SHOP, None),
+        Err(Error::Locked)
+    ));
+}
+
+#[test]
+fn a_vault_without_its_identity_says_not_found() {
+    let (v, _) = activated_vault();
+    assert!(matches!(
+        v.identity_summary_for_page(SHOP, None),
+        Err(Error::NotFound)
+    ));
+    assert!(matches!(
+        v.identity_id_for_page(SHOP, None),
+        Err(Error::NotFound)
+    ));
+}
+
+#[test]
+fn the_id_for_page_is_the_identity() {
+    let v = with_identity();
+    assert_eq!(
+        v.identity_id_for_page(SHOP, None).unwrap(),
+        v.identity_item_id().unwrap()
+    );
+}
