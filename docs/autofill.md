@@ -1076,6 +1076,14 @@ shows no menu). A cross-site iframe gets no identity row.
 * Only **empty** fields, or fields holding what HavenKeys wrote. What the user
   typed or the site filled is kept.
 * Each field is re-checked (visible, enabled, editable) just before writing.
+* **Visible** is stricter than for logins, both when classifying and when
+  writing (`autofill/visibility.ts`, `Env.identityVisible`): rendered with a
+  size, inside the page's scrollable area (no `left: -9999px`), combined
+  opacity of the field and its ancestors at least 0.1, no `clip`/`clip-path`
+  collapsing it, and no `overflow: hidden`/`clip` ancestor that is collapsed
+  or cuts it off. At most 16 elements are read per field. A field covered by
+  another element is not detected (floating labels would make hit testing
+  refuse real forms; `security-model.md` §20).
 * `<input>`: the native value setter, then `input` and `change`. A
   `type=date` takes `birthDate` only. When the value exceeds `maxlength`, a
   phone number is retried without its leading `+55`.

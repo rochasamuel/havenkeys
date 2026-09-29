@@ -21,6 +21,7 @@ import {
   type GroupIntent,
 } from "./classify";
 import { MAX_HINT_CHARS, normalize } from "./text";
+import { isIdentityVisible } from "./visibility";
 
 /** Inputs examined per group. */
 export const MAX_GROUP_INPUTS = 60;
@@ -53,12 +54,19 @@ const IGNORED_TYPES = new Set([
 export interface Env {
   /** Is the element rendered and visible to the user? */
   isVisible(el: HTMLElement): boolean;
+  /**
+   * Stricter check for identity fields, which have no site binding: also
+   * refuses off-page, near-transparent, clipped and collapsed-overflow
+   * fields (autofill/visibility.ts). Identity code falls back to isVisible
+   * when absent (tests that do not exercise layout).
+   */
+  identityVisible?(el: HTMLElement): boolean;
   /** Page path, used as intent evidence (`/signup`, `/login`). */
   path: string;
 }
 
 export function defaultEnv(): Env {
-  return { isVisible: isRendered, path: location.pathname };
+  return { isVisible: isRendered, identityVisible: (el) => isRendered(el) && isIdentityVisible(el), path: location.pathname };
 }
 
 /** Visible and usable: rendered with a size, not hidden by CSS. */

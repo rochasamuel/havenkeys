@@ -137,7 +137,8 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
 
 /** Visible, enabled, editable. */
 export function isIdentityFillable(el: IdentityElement, env: Env): boolean {
-  if (el.disabled || !env.isVisible(el)) return false;
+  if (el.disabled) return false;
+  if (!(env.identityVisible ? env.identityVisible(el) : env.isVisible(el))) return false;
   if (el instanceof HTMLSelectElement) return true;
   if (el.readOnly) return false;
   return !(el instanceof HTMLInputElement) || TEXT_TYPES.has(el.type.toLowerCase());
