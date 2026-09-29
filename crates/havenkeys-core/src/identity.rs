@@ -152,6 +152,80 @@ pub enum IdentityField {
     Address,
 }
 
+/// What a web form field asks for, as the browser extension classifies it
+/// (spec 2026-09-29-identity-autofill §4). Some roles are derived from
+/// several identity values; the extension never gets more than a role's
+/// value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FillRole {
+    FullName,
+    FirstName,
+    MiddleName,
+    LastName,
+    Email,
+    Phone,
+    BirthDate,
+    BirthDay,
+    BirthMonth,
+    BirthYear,
+    Company,
+    Street,
+    Number,
+    Complement,
+    AddressLine1,
+    AddressLine2,
+    Neighborhood,
+    City,
+    State,
+    PostalCode,
+    Country,
+    Username,
+    Cpf,
+    Rg,
+    Passport,
+    DriversLicense,
+}
+
+impl FillRole {
+    pub const ALL: [FillRole; 26] = [
+        FillRole::FullName,
+        FillRole::FirstName,
+        FillRole::MiddleName,
+        FillRole::LastName,
+        FillRole::Email,
+        FillRole::Phone,
+        FillRole::BirthDate,
+        FillRole::BirthDay,
+        FillRole::BirthMonth,
+        FillRole::BirthYear,
+        FillRole::Company,
+        FillRole::Street,
+        FillRole::Number,
+        FillRole::Complement,
+        FillRole::AddressLine1,
+        FillRole::AddressLine2,
+        FillRole::Neighborhood,
+        FillRole::City,
+        FillRole::State,
+        FillRole::PostalCode,
+        FillRole::Country,
+        FillRole::Username,
+        FillRole::Cpf,
+        FillRole::Rg,
+        FillRole::Passport,
+        FillRole::DriversLicense,
+    ];
+
+    /// Document numbers: filled only after the user confirms them, and only
+    /// on https pages.
+    pub fn is_document(self) -> bool {
+        matches!(
+            self,
+            FillRole::Cpf | FillRole::Rg | FillRole::Passport | FillRole::DriversLicense
+        )
+    }
+}
+
 /// Which characters a field may hold.
 #[derive(Clone, Copy)]
 enum Allow {
@@ -345,6 +419,55 @@ impl IdentityFields {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join(" ")
+    }
+
+    /// The value for a form field of `role`, derived as the spec says; `None`
+    /// when the identity has nothing for it.
+    pub fn fill_value(&self, role: FillRole) -> Option<SecretString> {
+        let get = |v: &Option<SecretString>| v.as_ref().map(|s| s.expose().to_owned());
+        let date_part = |i: usize| -> Option<String> {
+            let d = self.birth_date.as_ref()?.expose().to_owned();
+            let part = d.split('-').nth(i)?.to_owned();
+            // Day and month unpadded ("04" → "4"); the year as is.
+            Some(if i == 0 {
+                part
+            } else {
+                part.trim_start_matches('0').to_owned()
+            })
+        };
+        let value = match role {
+            FillRole::FullName => Some(self.display_name()).filter(|n| !n.is_empty()),
+            FillRole::FirstName => get(&self.first_name),
+            FillRole::MiddleName => get(&self.middle_name),
+            FillRole::LastName => get(&self.last_name),
+            FillRole::Email => get(&self.email),
+            FillRole::Phone => get(&self.mobile_phone)
+                .or_else(|| get(&self.home_phone))
+                .or_else(|| get(&self.work_phone)),
+            FillRole::BirthDate => get(&self.birth_date),
+            FillRole::BirthDay => date_part(2),
+            FillRole::BirthMonth => date_part(1),
+            FillRole::BirthYear => date_part(0),
+            FillRole::Company => get(&self.company),
+            FillRole::Street => get(&self.street),
+            FillRole::Number => get(&self.number),
+            FillRole::Complement | FillRole::AddressLine2 => get(&self.complement),
+            FillRole::AddressLine1 => match (get(&self.street), get(&self.number)) {
+                (Some(s), Some(n)) => Some(format!("{s}, {n}")),
+                (s, n) => s.or(n),
+            },
+            FillRole::Neighborhood => get(&self.neighborhood),
+            FillRole::City => get(&self.city),
+            FillRole::State => get(&self.state),
+            FillRole::PostalCode => get(&self.postal_code),
+            FillRole::Country => get(&self.country),
+            FillRole::Username => get(&self.username),
+            FillRole::Cpf => get(&self.cpf),
+            FillRole::Rg => get(&self.rg),
+            FillRole::Passport => get(&self.passport),
+            FillRole::DriversLicense => get(&self.drivers_license),
+        };
+        value.map(SecretString::new)
     }
 
     /// One value, for copying. `Address` is the formatted block.
@@ -666,5 +789,68 @@ mod tests {
         assert!(f.value(IdentityField::Rg).is_none());
         let debug = format!("{f:?} {:?}", f.custom[0]);
         assert!(!debug.contains("123.456") && !debug.contains("4321") && !debug.contains("PIN"));
+    }
+
+    #[test]
+    fn fill_values_are_derived_as_the_spec_says() {
+        let f = IdentityFields {
+            first_name: s("Samuel"),
+            last_name: s("Rocha"),
+            birth_date: s("2000-04-20"),
+            home_phone: s("61 3333-4444"),
+            work_phone: s("61 2222-0000"),
+            street: s("Quadra 02"),
+            number: s("10"),
+            complement: s("Apto 3"),
+            cpf: s("123.456.789-00"),
+            ..Default::default()
+        };
+        let v = |r| f.fill_value(r).map(|x| x.expose().to_owned());
+        assert_eq!(v(FillRole::FullName).as_deref(), Some("Samuel Rocha"));
+        assert_eq!(
+            v(FillRole::Phone).as_deref(),
+            Some("61 3333-4444"),
+            "home when no mobile"
+        );
+        assert_eq!(v(FillRole::BirthDay).as_deref(), Some("20"));
+        assert_eq!(v(FillRole::BirthMonth).as_deref(), Some("4"));
+        assert_eq!(v(FillRole::BirthYear).as_deref(), Some("2000"));
+        assert_eq!(v(FillRole::AddressLine1).as_deref(), Some("Quadra 02, 10"));
+        assert_eq!(v(FillRole::AddressLine2).as_deref(), Some("Apto 3"));
+        assert_eq!(v(FillRole::Cpf).as_deref(), Some("123.456.789-00"));
+        assert_eq!(v(FillRole::Email), None);
+        assert_eq!(v(FillRole::MiddleName), None);
+    }
+
+    #[test]
+    fn mobile_wins_and_address_line_takes_what_exists() {
+        let f = IdentityFields {
+            mobile_phone: s("+55 61 99999-0000"),
+            home_phone: s("61 3333-4444"),
+            number: s("10"),
+            ..Default::default()
+        };
+        assert_eq!(
+            f.fill_value(FillRole::Phone).unwrap().expose(),
+            "+55 61 99999-0000"
+        );
+        assert_eq!(f.fill_value(FillRole::AddressLine1).unwrap().expose(), "10");
+        assert!(IdentityFields::default()
+            .fill_value(FillRole::FullName)
+            .is_none());
+    }
+
+    #[test]
+    fn document_roles() {
+        let docs: Vec<_> = FillRole::ALL.iter().filter(|r| r.is_document()).collect();
+        assert_eq!(
+            docs,
+            [
+                &FillRole::Cpf,
+                &FillRole::Rg,
+                &FillRole::Passport,
+                &FillRole::DriversLicense
+            ]
+        );
     }
 }
