@@ -6,8 +6,10 @@
 // of exactly the expected shape. See docs/native-messaging.md.
 
 export * from "./sso";
+export * from "./identity";
 
 import { isSsoProvider, MAX_ACCOUNT_CHARS, MAX_PROVIDER_ACCOUNTS, type SsoProvider } from "./sso";
+import { isIdentityRole, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, type IdentityRole, type IdentityValue } from "./identity";
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_URL_BYTES = 4096;
@@ -77,7 +79,10 @@ export type Request =
       itemId: string | null;
       /** A new login's name from the save prompt; the desktop uses the host without one. */
       title?: string;
-    };
+    }
+  | { type: "find_identity"; url: string; topUrl?: string }
+  | { type: "fill_identity"; url: string; topUrl?: string; roles: IdentityRole[]; documents: boolean }
+  | { type: "open_identity"; url: string; topUrl?: string };
 
 export type RequestType = Request["type"];
 
@@ -144,7 +149,10 @@ export type Result =
   | { type: "open_item" }
   | { type: "start_sso"; provider: SsoProvider; account: string | null; providerOrigins: string[]; autoChoose: boolean }
   | { type: "check_sso"; action: SaveAction; itemId: string | null; accounts: string[] }
-  | { type: "save_sso"; itemId: string };
+  | { type: "save_sso"; itemId: string }
+  | { type: "find_identity"; title: string; email: string | null; roles: IdentityRole[] }
+  | { type: "fill_identity"; values: IdentityValue[] }
+  | { type: "open_identity" };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -255,6 +263,38 @@ function parseUpgrade(v: unknown): UpgradeHint | null {
     return hasExactKeys(v, ["kind", "itemId"]) && isUuid(v.itemId) ? { kind: v.kind, itemId: v.itemId } : null;
   }
   return null;
+}
+
+function parseRoles(v: unknown): IdentityRole[] | null {
+  if (!Array.isArray(v) || v.length > MAX_IDENTITY_ROLES) return null;
+  const out: IdentityRole[] = [];
+  for (const r of v) {
+    if (!isIdentityRole(r) || out.includes(r)) return null;
+    out.push(r);
+  }
+  return out;
+}
+
+/** UTF-8 byte length, the unit the Rust side bounds values in. */
+const utf8Length = (s: string) => {
+  let len = 0;
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code <= 0x7f) len += 1;
+    else if (code <= 0x7ff) len += 2;
+    else if (code < 0xd800 || code >= 0xe000) len += 3;
+    else {
+      i++; // surrogate pair
+      len += 4;
+    }
+  }
+  return len;
+};
+
+function parseIdentityValue(v: unknown): IdentityValue | null {
+  if (!isObj(v) || !hasExactKeys(v, ["role", "value"])) return null;
+  if (!isIdentityRole(v.role) || !isStr(v.value) || v.value.length === 0 || utf8Length(v.value) > MAX_IDENTITY_VALUE_BYTES) return null;
+  return { role: v.role, value: v.value };
 }
 
 function parseList<T>(v: unknown, one: (x: unknown) => T | null): T[] | null {
@@ -387,6 +427,23 @@ function parseResult(v: unknown): Result | null {
     case "save_sso":
       if (!hasExactKeys(v, ["type", "itemId"]) || !isUuid(v.itemId)) return null;
       return { type: "save_sso", itemId: v.itemId };
+    case "find_identity": {
+      if (!hasExactKeys(v, ["type", "title", "email", "roles"]) || !isStr(v.title) || !isNullableStr(v.email)) return null;
+      const roles = parseRoles(v.roles);
+      return roles && { type: "find_identity", title: v.title, email: v.email, roles };
+    }
+    case "fill_identity": {
+      if (!hasExactKeys(v, ["type", "values"]) || !Array.isArray(v.values) || v.values.length > MAX_IDENTITY_ROLES) return null;
+      const values: IdentityValue[] = [];
+      for (const x of v.values) {
+        const p = parseIdentityValue(x);
+        if (!p || values.some((y) => y.role === p.role)) return null;
+        values.push(p);
+      }
+      return { type: "fill_identity", values };
+    }
+    case "open_identity":
+      return hasExactKeys(v, ["type"]) ? { type: "open_identity" } : null;
     default:
       return null;
   }

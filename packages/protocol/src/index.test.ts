@@ -198,3 +198,27 @@ describe("sign in with", () => {
     expect(providersForOrigin("https://accounts.google.com.evil.com")).toEqual([]);
   });
 });
+
+describe("identity results", () => {
+  it("accepts well-formed identity results", () => {
+    const ok = [
+      { v: 1, id: 1, result: { type: "find_identity", title: "Samuel", email: null, roles: ["fullName", "cpf"] } },
+      { v: 1, id: 2, result: { type: "fill_identity", values: [{ role: "city", value: "Brasília" }] } },
+      { v: 1, id: 3, result: { type: "fill_identity", values: [] } },
+      { v: 1, id: 4, result: { type: "open_identity" } },
+    ];
+    for (const m of ok) expect(parseIncoming(m), JSON.stringify(m)).not.toBeNull();
+  });
+
+  it("rejects unknown roles, duplicates, empty and oversized values", () => {
+    const bad = [
+      { v: 1, id: 1, result: { type: "find_identity", title: "x", email: null, roles: ["password"] } },
+      { v: 1, id: 1, result: { type: "find_identity", title: "x", email: null, roles: ["city", "city"] } },
+      { v: 1, id: 1, result: { type: "fill_identity", values: [{ role: "city", value: "" }] } },
+      { v: 1, id: 1, result: { type: "fill_identity", values: [{ role: "city", value: "x".repeat(4097) }] } },
+      { v: 1, id: 1, result: { type: "fill_identity", values: [{ role: "city", value: "a", extra: 1 }] } },
+      { v: 1, id: 1, result: { type: "open_identity", x: 1 } },
+    ];
+    for (const m of bad) expect(parseIncoming(m), JSON.stringify(m)).toBeNull();
+  });
+});
