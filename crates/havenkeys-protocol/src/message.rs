@@ -5,10 +5,12 @@
 use crate::secret::WireSecret;
 use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST,
-    MAX_MATCHES, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES,
-    MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
+    MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES, MAX_PROVIDER_ACCOUNTS,
+    MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES,
+    MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fmt;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -182,6 +184,82 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
     },
+    /// The account's Identity: title, email and which roles have a value.
+    /// No values. Any http(s) page; a frame only when same-site as its tab.
+    FindIdentity {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
+    /// The identity's values for `roles`. Documents only with `documents`
+    /// and on an https page (the core decides).
+    FillIdentity {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        roles: Vec<IdentityRole>,
+        documents: bool,
+    },
+    /// Bring the desktop window forward on the identity. Returns nothing.
+    OpenIdentity {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
+}
+
+/// A form field's role for an identity fill. Mirrors
+/// havenkeys_core::identity::FillRole; the bridge maps between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IdentityRole {
+    FullName,
+    FirstName,
+    MiddleName,
+    LastName,
+    Email,
+    Phone,
+    BirthDate,
+    BirthDay,
+    BirthMonth,
+    BirthYear,
+    Company,
+    Street,
+    Number,
+    Complement,
+    AddressLine1,
+    AddressLine2,
+    Neighborhood,
+    City,
+    State,
+    PostalCode,
+    Country,
+    Username,
+    Cpf,
+    Rg,
+    Passport,
+    DriversLicense,
+}
+
+/// One identity value for a fill.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IdentityValue {
+    pub role: IdentityRole,
+    pub value: WireSecret,
+}
+
+impl fmt::Debug for IdentityValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IdentityValue")
+            .field("role", &self.role)
+            .finish_non_exhaustive()
+    }
+}
+
+fn roles_unique(roles: &[IdentityRole]) -> bool {
+    let mut seen = HashSet::new();
+    roles.iter().all(|r| seen.insert(*r))
 }
 
 /// Requires the key to be present, unlike a bare `Option<T>` field (whose
@@ -257,6 +335,9 @@ impl Request {
             Request::StartSso { .. } => "start_sso",
             Request::CheckSso { .. } => "check_sso",
             Request::SaveSso { .. } => "save_sso",
+            Request::FindIdentity { .. } => "find_identity",
+            Request::FillIdentity { .. } => "fill_identity",
+            Request::OpenIdentity { .. } => "open_identity",
         }
     }
 
@@ -276,7 +357,10 @@ impl Request {
             | Request::OpenItem { url, top_url, .. }
             | Request::StartSso { url, top_url, .. }
             | Request::CheckSso { url, top_url, .. }
-            | Request::SaveSso { url, top_url, .. } => [Some(url), top_url.as_deref()],
+            | Request::SaveSso { url, top_url, .. }
+            | Request::FindIdentity { url, top_url }
+            | Request::FillIdentity { url, top_url, .. }
+            | Request::OpenIdentity { url, top_url } => [Some(url), top_url.as_deref()],
         }
     }
 
@@ -361,7 +445,13 @@ impl Request {
             }
             _ => true,
         };
-        urls_ok && login_ok && passkey_ok
+        let identity_ok = match self {
+            Request::FillIdentity { roles, .. } => {
+                !roles.is_empty() && roles.len() <= MAX_IDENTITY_ROLES && roles_unique(roles)
+            }
+            _ => true,
+        };
+        urls_ok && login_ok && passkey_ok && identity_ok
     }
 }
 
@@ -508,6 +598,25 @@ impl Response {
                         .iter()
                         .all(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
             }
+            Some(ResultBody::FindIdentity {
+                title,
+                email,
+                roles,
+            }) => {
+                title.len() <= MAX_TITLE_BYTES
+                    && email.as_ref().is_none_or(|e| e.len() <= MAX_USERNAME_BYTES)
+                    && roles.len() <= MAX_IDENTITY_ROLES
+                    && roles_unique(roles)
+            }
+            Some(ResultBody::FillIdentity { values }) => {
+                let roles: Vec<IdentityRole> = values.iter().map(|v| v.role).collect();
+                values.len() <= MAX_IDENTITY_ROLES
+                    && roles_unique(&roles)
+                    && values.iter().all(|v| {
+                        !v.value.expose().is_empty()
+                            && v.value.expose().len() <= MAX_IDENTITY_VALUE_BYTES
+                    })
+            }
             _ => true,
         }
     }
@@ -610,6 +719,16 @@ pub enum ResultBody {
     SaveSso {
         item_id: Uuid,
     },
+    FindIdentity {
+        title: String,
+        email: Option<String>,
+        /// Roles the identity has a value for; names only.
+        roles: Vec<IdentityRole>,
+    },
+    FillIdentity {
+        values: Vec<IdentityValue>,
+    },
+    OpenIdentity {},
 }
 
 /// What saving a submitted login would do.
@@ -643,6 +762,9 @@ impl fmt::Debug for ResultBody {
             ResultBody::StartSso { .. } => "start_sso",
             ResultBody::CheckSso { .. } => "check_sso",
             ResultBody::SaveSso { .. } => "save_sso",
+            ResultBody::FindIdentity { .. } => "find_identity",
+            ResultBody::FillIdentity { .. } => "fill_identity",
+            ResultBody::OpenIdentity {} => "open_identity",
         };
         write!(f, "ResultBody({kind})")
     }

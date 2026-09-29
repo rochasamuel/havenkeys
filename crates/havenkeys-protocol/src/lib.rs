@@ -57,6 +57,10 @@ pub const MAX_PROVIDER_ACCOUNTS: usize = 10;
 
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;
+/// Roles one fill_identity may ask for (a form has fewer fields than this).
+pub const MAX_IDENTITY_ROLES: usize = 40;
+/// Largest identity value returned (the core's longest field is 4096 characters of a custom value; filled roles are far shorter).
+pub const MAX_IDENTITY_VALUE_BYTES: usize = 4096;
 
 /// Credential IDs HavenKeys creates, and the only length it accepts.
 pub const CREDENTIAL_ID_BYTES: usize = 16;
