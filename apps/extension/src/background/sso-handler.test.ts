@@ -16,6 +16,7 @@ function setup(answers: Record<string, unknown>, opts: { suggestions?: boolean }
   let clock = 1_000;
   const requests: { type: string }[] = [];
   const sent: { frame: unknown; msg: { type: string } }[] = [];
+  const fills: { frame: unknown; payload: unknown; auto: unknown }[] = [];
   const client = {
     request: vi.fn(async (r: { type: string }) => {
       requests.push(r);
@@ -34,8 +35,12 @@ function setup(answers: Record<string, unknown>, opts: { suggestions?: boolean }
     now: () => clock,
     newToken: () => (n++).toString(16).padStart(32, "0"),
     suggestionsOn: async () => opts.suggestions ?? true,
+    pickFill: async (frame, payload, auto) => {
+      fills.push({ frame, payload, auto });
+      return 1;
+    },
   });
-  return { h, requests, sent, advance: (ms: number) => (clock += ms) };
+  return { h, requests, sent, fills, advance: (ms: number) => (clock += ms) };
 }
 
 /** Click Google on typeform.com, visit Google, come back: the save question opens. */
@@ -77,7 +82,8 @@ describe("offer", () => {
     expect(h.ready({ tabId: 1, frameId: 4, url: "https://evil.com/", origin: "https://evil.com", topUrl: top.url }, { tabId: 1 })).toBeNull();
     expect(h.ready(googleFrame(2), { tabId: 2 })).toBeNull();
     expect(h.ready(googleFrame(), { tabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
-    expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull(); // once
+    // The next provider document (the password page after the chooser click) waits for the login form.
+    expect(h.ready(googleFrame(), { tabId: 1 })).toEqual({ kind: "login" });
   });
   it("a popup the run's tab opened may choose", async () => {
     const { h } = setup({
@@ -285,5 +291,96 @@ describe("stop", () => {
     await h.start(top, ID);
     await h.handleContent(googleFrame(9), { tabId: 9 }, { type: "cs_sso_stop" });
     expect(h.ready(googleFrame(), { tabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
+  });
+});
+
+describe("completing the provider login", () => {
+  const google = (over: object = {}) => ({ id: "9c9e6679-7425-40de-944b-e07fc1f90ae7", title: "Google", username: "Me@Gmail.com", hasTotp: true, strength: "same_host", provider: null, ...over });
+
+  async function toLogin(answers: Record<string, unknown>) {
+    const env = setup({ start_sso: START_SSO, ...answers });
+    await env.h.start(top, ID);
+    expect(env.h.ready(googleFrame(), { tabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
+    return env;
+  }
+
+  it("fills the one provider login with that account and presses", async () => {
+    const { h, fills, requests } = await toLogin({
+      find_matches: { matches: [google()] },
+      fill_item: { type: "fill_item", username: "Me@Gmail.com", password: "pw", autoSubmit: true },
+    });
+    expect(h.ready(googleFrame(), { tabId: 1 })).toEqual({ kind: "login" }); // the password page after a chooser click
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(requests.map((r) => r.type)).toContain("fill_item");
+    expect(requests.find((r) => r.type === "fill_item")).toMatchObject({ itemId: google().id, url: googleFrame().url });
+    expect(fills).toEqual([{ frame: googleFrame(), payload: { kind: "login", username: "Me@Gmail.com", password: "pw" }, auto: { itemId: google().id, hasTotp: true } }]);
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(1); // once
+    expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull(); // the run is over
+  });
+  it("a popup the run's tab opened completes the login", async () => {
+    const { h, fills } = await toLogin({
+      find_matches: { matches: [google()] },
+      fill_item: { type: "fill_item", username: "Me@Gmail.com", password: "pw", autoSubmit: true },
+    });
+    await h.handleContent(googleFrame(9), { tabId: 9, openerTabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(1);
+  });
+  it("two_provider_logins_fill_nothing", async () => {
+    const { h, fills, requests } = await toLogin({ find_matches: { matches: [google(), google({ id: "8c9e6679-7425-40de-944b-e07fc1f90ae7" })] } });
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(0);
+    expect(requests.some((r) => r.type === "fill_item")).toBe(false);
+    expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull(); // the run ended
+  });
+  it("other_account_is_never_filled", async () => {
+    const { h, fills, requests } = await toLogin({ find_matches: { matches: [google({ username: "you@gmail.com" }), google({ id: "8c9e6679-7425-40de-944b-e07fc1f90ae7", username: null })] } });
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(0);
+    expect(requests.some((r) => r.type === "fill_item")).toBe(false);
+  });
+  it("provider_switch_off_fills_without_press", async () => {
+    const { h, fills } = await toLogin({
+      find_matches: { matches: [google()] },
+      fill_item: { type: "fill_item", username: "Me@Gmail.com", password: "pw", autoSubmit: false },
+    });
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(1);
+    expect(fills[0]?.auto).toBeNull();
+  });
+  it("subframe_login_is_ignored", async () => {
+    const { h, fills, requests } = await toLogin({ find_matches: { matches: [google()] }, fill_item: { type: "fill_item", username: "u", password: "p", autoSubmit: true } });
+    const sub: FrameRef = { ...googleFrame(), frameId: 4, topUrl: "https://typeform.com/" };
+    await h.handleContent(sub, { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(0);
+    expect(requests.some((r) => r.type === "find_matches")).toBe(false);
+    expect(h.ready(sub, { tabId: 1 })).toBeNull();
+    // The run was not spent: the top frame still completes it.
+    expect(h.ready(googleFrame(), { tabId: 1 })).toEqual({ kind: "login" });
+  });
+  it("another origin or an unrelated tab is ignored", async () => {
+    const { h, fills } = await toLogin({ find_matches: { matches: [google()] }, fill_item: { type: "fill_item", username: "u", password: "p", autoSubmit: true } });
+    await h.handleContent({ tabId: 1, frameId: 0, url: "https://evil.com/", origin: "https://evil.com" }, { tabId: 1 }, { type: "cs_sso_login" });
+    await h.handleContent(googleFrame(2), { tabId: 2 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(0);
+  });
+  it("a denied fill ends the run quietly", async () => {
+    const { h, fills } = await toLogin({ find_matches: { matches: [google()] }, fill_item: new BridgeError("denied", "x") });
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(fills).toHaveLength(0);
+    expect(h.ready(googleFrame(), { tabId: 1 })).toBeNull();
+  });
+  it("a lock while fill_item is in flight fills nothing", async () => {
+    let h!: ReturnType<typeof setup>["h"];
+    const env = await toLogin({
+      find_matches: { matches: [google()] },
+      fill_item: () => {
+        h.reset();
+        return { type: "fill_item", username: "u", password: "p", autoSubmit: true };
+      },
+    });
+    h = env.h;
+    await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_login" });
+    expect(env.fills).toHaveLength(0);
   });
 });

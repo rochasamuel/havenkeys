@@ -8,12 +8,16 @@
 //   this tab's offer listed, and start_sso re-checks it against the page.
 // * The run's provider origins come from start_sso (Rust). A provider page
 //   gets the account to click only in the run's tab or a popup it opened.
+// * On the provider's top frame the run completes one login: the single
+//   provider login with the run's account, filled by `fill_item` (Rust
+//   re-checks the page) and pressed only when Rust's autoSubmit allows
+//   (docs/superpowers/specs/2026-09-29-sign-in-with-provider-login-design.md).
 // * Save prompts hold no secret. Everything is dropped on lock.
 
 import type { Match, Request, RequestType, ResultFor, SsoProvider } from "@havenkeys/protocol";
 import { SSO_PROVIDERS } from "@havenkeys/protocol";
 import { t } from "../i18n";
-import type { InlineReply } from "../messaging/inline";
+import type { FillPayload, InlineReply } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
 import {
   isAccount,
@@ -25,7 +29,7 @@ import {
   type SsoView,
 } from "../messaging/sso";
 import { displayHost } from "../shared/url";
-import type { FrameRef } from "./inline-handler";
+import type { AutoRun, FrameRef } from "./inline-handler";
 import { createSsoState, type PendingSso, type TabRef } from "./sso-state";
 
 type Client = { request<T extends RequestType>(r: Extract<Request, { type: T }>): Promise<ResultFor<T>> };
@@ -40,6 +44,8 @@ export interface SsoDeps {
   suggestionsOn?(): Promise<boolean>;
   /** The page's name in the Passkeys Directory, for a new login's title. */
   siteName?(url: string): string | null;
+  /** The inline handler's fill-and-maybe-press (starts an automatic sign-in run when `auto` is set). */
+  pickFill?(frame: FrameRef, payload: FillPayload, auto: AutoRun | null): Promise<number>;
 }
 
 export const FRAME_TTL_MS = 5 * 60_000;
@@ -55,6 +61,7 @@ function fail(e: unknown): { ok: false; message: string } {
 
 const frameFields = (f: { url: string; topUrl?: string }) => (f.topUrl === undefined ? { url: f.url } : { url: f.url, topUrl: f.topUrl });
 const top = (tabId: number) => ({ tabId, frameId: 0 });
+const sameAccount = (a: string | null, b: string | null) => a !== null && b !== null && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function createSsoHandler(deps: SsoDeps) {
   const state = createSsoState(deps.now);
@@ -133,6 +140,9 @@ export function createSsoHandler(deps: SsoDeps) {
         if (owner !== undefined && state.run(owner)) state.endRun(owner);
         return {};
       }
+      case "cs_sso_login":
+        await completeLogin(frame, tab);
+        return {};
     }
   }
 
@@ -149,7 +159,29 @@ export function createSsoHandler(deps: SsoDeps) {
     // iframe (a sign-in widget on some page) must not spend it.
     if (!isTop) return null;
     const account = state.chooseFor(tab, frame.origin);
-    return account === null ? null : { kind: "choose", account };
+    if (account !== null) return { kind: "choose", account };
+    return state.loginReady(tab, frame.origin) ? { kind: "login" } : null;
+  }
+
+  /** cs_sso_login: the provider's login form is up; fill the provider login with the run's account. */
+  async function completeLogin(frame: FrameRef, tab: TabRef): Promise<void> {
+    if (frame.frameId !== 0 || !deps.pickFill) return;
+    const run = state.loginFor(tab, frame.origin); // consumed: once per run
+    if (!run) return;
+    const gen = generation;
+    try {
+      const { matches } = await deps.client.request({ type: "find_matches", ...frameFields(frame) });
+      // Exactly one login for this account; none or several: fill nothing.
+      const mine = matches.filter((m) => sameAccount(m.username, run.account));
+      if (mine.length !== 1 || gen !== generation) return;
+      const login = mine[0] as Match;
+      const c = await deps.client.request({ type: "fill_item", itemId: login.id, ...frameFields(frame) });
+      if (gen !== generation) return; // locked meanwhile
+      // autoSubmit is Rust's: the vault setting and the provider login's switch.
+      await deps.pickFill(frame, { kind: "login", username: c.username, password: c.password }, c.autoSubmit ? { itemId: login.id, hasTotp: login.hasTotp } : null);
+    } catch {
+      // Locked, denied, desktop gone: the run is already over; the field menu stays available.
+    }
   }
 
   /** A username-only step submitted on the provider's page names the account. */

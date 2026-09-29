@@ -71,6 +71,8 @@ const sso = createSsoHandler({
   newToken,
   suggestionsOn: getInlineSuggestions,
   siteName: (url) => findPasskeySite(url)?.name ?? null,
+  // The inline handler is created below; it exists by the time a run reaches the provider page.
+  pickFill: (frame, payload, auto) => inline.pickFill(frame, null, payload, auto),
 });
 const inline = createInlineHandler({
   client,
