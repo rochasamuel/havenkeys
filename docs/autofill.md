@@ -635,9 +635,9 @@ signs in too.
      a username or password field), the wait ends without a click and the
      login hand-off below runs instead.
    Two matching account rows, or none, and nothing is clicked; the document
-   simply keeps waiting until `CHOOSE_WAIT_MS` runs out or a login form
-   appears. A visible permissions/consent screen (below) is never clicked or
-   waited past.
+   simply keeps waiting until `CHOOSE_WAIT_MS` runs out (which ends the run)
+   or a login form appears. A visible permissions/consent screen (below) is
+   never clicked or waited past, and ends the run.
 4. **Login.** With the run in phase `login`, the next provider top-frame
    document also gets `{kind: "login"}`, and the same bounded, debounced wait
    (10 s per document) looks only for a login form. The first time one
@@ -677,13 +677,15 @@ Checked before every press, choose or login attempt:
 
 | Condition | Effect |
 |---|---|
-| Consent or permissions wording ("Continue as …", "Allow…", "Grant access/permission(s)…", "Authorize…", recognized at any length as a prefix, plus a few short bare words such as "Accept"/"Continuar" under 30 characters) | Never pressed or clicked, on a chooser or a login-hand-off document; the wait on that document ends |
+| Consent or permissions wording ("Continue as …", "Allow…", "Grant access/permission(s)…", "Authorize…", recognized at any length as a prefix, plus a few short bare words such as "Accept"/"Continuar" under 30 characters) | Never pressed or clicked, on a chooser or a login-hand-off document; the wait on that document ends and the run ends (`cs_sso_stop`) |
 | Ambiguity: no clear-winner provider button (press); more than one (or zero) chooser rows match the account (choose); or more than one (or zero) provider logins match the run's account (login) | Nothing is clicked or filled; the run ends |
 | No matching chooser row and no "Use another account" control, but a login form is (the provider asks for a password directly, or the saved account is not signed in at all) | The login hand-off runs instead of a click (see Login, above) |
 | The user's next trusted input (`keydown`, `input`, `pointerdown`) in the document that pressed the button | That document sends `cs_sso_stop`; the background ends the run of its tab (or of the tab that opened it, for a popup) |
-| Trusted user input on the provider page while it waits for the chooser or for a login form | Cancels that wait |
+| Trusted user input on a provider document that received the run (`choose` or `login`) before it handed the login form over — while it waits, or after it clicked the account row | Cancels that wait; the document sends `cs_sso_stop` once and the background ends the run (of the tab, or of the tab that opened the popup), so a later provider document gets nothing |
+| That document has not handed a login form over within `CHOOSE_WAIT_MS` (10 s) | It gives up: the wait ends and the document sends `cs_sso_stop` once |
 | The frame's origin is not the one the desktop matched (press), or not one of the run's provider origins (choose, login) | Refused |
 | 2 minutes elapsed, or the tab's top frame loads an origin that is neither the site's nor a provider's | Ends the run |
+| The tab's top frame loads the site's origin again once the run is in phase `login` (the provider finished and sent the user back); before `login` a site reload keeps the run | Ends the run |
 | Vault lock | Clears the background's runs and pending captures; a chooser or login wait already in progress on the provider page is not told and ends by itself within `CHOOSE_WAIT_MS` (10 s) |
 | A visible CAPTCHA, once the hand-off starts the automatic sign-in run | The current step's fields stay filled; nothing is pressed (see Automatic sign-in, Stopping) |
 
