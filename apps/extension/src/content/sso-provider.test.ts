@@ -179,6 +179,8 @@ describe("handing the provider's login form to the background", () => {
     const click = vi.spyOn(other, "click");
     const c = make();
     c.onReady({ kind: "choose", account: "me@gmail.com" });
+    expect(click).not.toHaveBeenCalled(); // the rows may still be rendering
+    await vi.advanceTimersByTimeAsync(1000);
     expect(click).toHaveBeenCalledOnce();
     expect(sent).toEqual([]);
     input("email", "identifier");
@@ -188,6 +190,28 @@ describe("handing the provider's login form to the background", () => {
     document.body.append(document.createElement("div"));
     await vi.advanceTimersByTimeAsync(1000);
     expect(sent).toEqual([{ type: "cs_sso_login" }]);
+  });
+
+  it("waits for the rows: a saved row rendered after \"Use another account\" wins", async () => {
+    const other = anotherAccount();
+    const clickOther = vi.spyOn(other, "click");
+    const c = make();
+    c.onReady({ kind: "choose", account: "me@gmail.com" });
+    await vi.advanceTimersByTimeAsync(100); // within one debounce
+    const r = row("me@gmail.com");
+    const clickRow = vi.spyOn(r, "click");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(clickRow).toHaveBeenCalledOnce();
+    expect(clickOther).not.toHaveBeenCalled();
+  });
+
+  it("clicks the row, not the hand-off, on a chooser that also shows a login field", () => {
+    const r = row("me@gmail.com");
+    input("email", "identifier");
+    const click = vi.spyOn(r, "click");
+    make().onReady({ kind: "choose", account: "me@gmail.com" });
+    expect(click).toHaveBeenCalledOnce();
+    expect(sent).toEqual([]);
   });
 
   it("clicks the account row, then hands over a password step in the same document", async () => {

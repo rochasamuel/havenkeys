@@ -141,7 +141,8 @@ export function createSsoContent(deps: {
     cancelChoose();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let chose = account === null;
-    let anotherClicked = false;
+    /** Consecutive attempts that saw "Use another account" but not the saved row. */
+    let seenAnother = 0;
     const attempt = () => {
       timer = null;
       const env = defaultEnv();
@@ -154,11 +155,18 @@ export function createSsoContent(deps: {
           row.click();
           return; // the provider moves on: a new document, or a password step here
         }
+        // A chooser may render "Use another account" before its account
+        // rows: click it only once two consecutive attempts saw it without
+        // the saved row (the row wins if it appears meanwhile).
         const other = anotherAccountButton(document, env);
-        if (other && !anotherClicked) {
-          anotherClicked = true;
+        seenAnother = other ? seenAnother + 1 : 0;
+        if (other && seenAnother >= 2) {
           chose = true;
           other.click();
+          return;
+        }
+        if (other) {
+          if (timer === null) timer = setTimeout(attempt, CHOOSE_DEBOUNCE_MS);
           return;
         }
       }
