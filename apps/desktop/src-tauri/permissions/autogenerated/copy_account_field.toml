@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-copy-account-field"
+description = "Enables the copy_account_field command without any pre-configured scope."
+commands.allow = ["copy_account_field"]
+
+[[permission]]
+identifier = "deny-copy-account-field"
+description = "Denies the copy_account_field command without any pre-configured scope."
+commands.deny = ["copy_account_field"]

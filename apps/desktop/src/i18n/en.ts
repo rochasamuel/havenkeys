@@ -374,6 +374,33 @@ export const en = {
     avoidAmbiguous: "Avoid look-alikes",
   },
 
+  accountItem: {
+    title: "HavenKeys Account",
+    kind: "Your HavenKeys account",
+    accountId: "Account ID",
+    secretKeyHeading: "Secret Key",
+    showSecretKey: "Show Secret Key",
+    hideSecretKey: "Hide Secret Key",
+    hiddenSecretKey: "Hidden Secret Key",
+    copy: {
+      email: "Copy email",
+      server: "Copy server",
+      account_id: "Copy account ID",
+      secret_key: "Copy Secret Key",
+    },
+    /** By copied field; each language agrees the word with its own noun. */
+    copied: {
+      email: (seconds: number) => `Email copied. The clipboard clears in ${seconds}\u00a0s.`,
+      server: (seconds: number) => `Server copied. The clipboard clears in ${seconds}\u00a0s.`,
+      account_id: (seconds: number) => `Account ID copied. The clipboard clears in ${seconds}\u00a0s.`,
+      secret_key: (seconds: number) => `Secret Key copied. The clipboard clears in ${seconds}\u00a0s.`,
+    },
+    notOnThisComputer: "The Secret Key is not on this computer.",
+    note: "Use these with your master password to sign in to HavenKeys on another computer.",
+    showKit: "Show Emergency Kit",
+    readOnly: "Built from your account. It cannot be edited or deleted.",
+  },
+
   kit: {
     qrLabel: "Secret Key QR code",
     loadFailed: "Could not load the Emergency Kit.",

@@ -2618,3 +2618,31 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     animation: none !important;
   }
 }
+
+/* --------------------------------------------------------- account item */
+
+/* The HavenKeys Account item: the seal on the brand's own ground. */
+.avatar-account {
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+}
+
+.list-pinned {
+  flex: none;
+  margin: 0 8px 4px;
+  padding: 2px 0 6px;
+  list-style: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-item-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.account-item-note p {
+  margin: 0;
+  color: var(--muted);
+}

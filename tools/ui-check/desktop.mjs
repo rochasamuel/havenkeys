@@ -120,6 +120,8 @@ function baseResponses() {
       { id: "d2", name: "Home desktop", createdAt: "2026-02-02T10:00:00Z", lastSeenAt: new Date(Date.now() - 3 * DAY).toISOString(), current: false },
     ],
     get_emergency_kit: kit,
+    reveal_account_secret_key: "H1-A3F9KQ-7XR2PL-M8WD4T-JC6VNB-2HYE5S",
+    copy_account_field: { clearAfterSeconds: 30 },
     import_1pux: {
       fileName: "1PasswordExport-ABCDEFGHIJKLMNOPQRSTUVWX-20260920-143000.1pux",
       report: {
@@ -356,6 +358,31 @@ export const desktopScenarios = [
     async act(page) {
       await page.click(".list-items li:nth-child(3) .list-item");
       await page.waitForTimeout(200);
+    },
+  },
+  {
+    name: "account-item",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-pinned .list-item");
+    },
+  },
+  {
+    name: "account-item-revealed",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-pinned .list-item");
+      await page.click(".item .icon-btn[aria-label*='Secret Key'] >> nth=0");
+      await page.click(".item .copy-btn >> nth=0");
+    },
+  },
+  {
+    name: "account-item-no-key",
+    respond: {
+      device_status: { keyScheme: "account_bound", needsSecretKey: true, online: true, secretKeyStorage: "none" },
+    },
+    act: async (page) => {
+      await page.click(".list-pinned .list-item");
     },
   },
   {

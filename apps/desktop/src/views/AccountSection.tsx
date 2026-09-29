@@ -231,7 +231,7 @@ export function AccountSection({ online }: { online: boolean }) {
       <h3 className="group-title">{t.account.devices}</h3>
       <Devices online={online} />
 
-      <h3 className="group-title">{t.account.kitTitle}</h3>
+      <h3 className="group-title" id="emergency-kit">{t.account.kitTitle}</h3>
       {storage === "file" && (
         <p className="group-note warn">{t.account.keyInFile}</p>
       )}

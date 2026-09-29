@@ -36,6 +36,10 @@ What the desktop app does today:
   in Settings; the extension follows the browser's language
 * Logins (username, password, websites with match rules, TOTP, notes)
 * Secure notes
+* A **HavenKeys Account** item pinned first in All items: your email,
+  server, account ID and Secret Key, to read or copy when setting up
+  another computer (read-only; never stored in the vault or sent to the
+  browser extension)
 * In-memory search over titles, usernames and websites
 * Password generator (OS CSPRNG, unbiased)
 * TOTP codes (SHA-1/256/512, 6/8 digits, `otpauth://` import)

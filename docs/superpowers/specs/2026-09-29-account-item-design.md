@@ -1,6 +1,6 @@
 # The HavenKeys Account item — Design
 
-Status: proposed, 2026-09-29.
+Status: accepted, 2026-09-29.
 
 > This software has not undergone an independent security audit.
 

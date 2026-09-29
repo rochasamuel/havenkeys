@@ -569,7 +569,7 @@ pub enum CopyField {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyResult {
-    clear_after_seconds: u32,
+    pub(crate) clear_after_seconds: u32,
 }
 
 #[tauri::command]
