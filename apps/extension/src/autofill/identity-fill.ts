@@ -51,7 +51,32 @@ function aliases(role: IdentityRole, value: string): string[] {
 export function matchOption(select: HTMLSelectElement, role: IdentityRole, value: string): number {
   const wanted = aliases(role, value);
   const options = Array.from(select.options).slice(0, 500);
-  return options.findIndex((o) => wanted.includes(normalize(o.value)) || wanted.includes(normalize(o.textContent ?? "")));
+  return options.findIndex(
+    (o) =>
+      !o.disabled &&
+      !(o.parentElement instanceof HTMLOptGroupElement && o.parentElement.disabled) &&
+      (wanted.includes(normalize(o.value)) || wanted.includes(normalize(o.textContent ?? ""))),
+  );
+}
+
+/**
+ * A birth date (ISO, as Rust sends it) in the format a text field's
+ * placeholder shows: dd/mm/aaaa (or yyyy), mm/dd/yyyy, yyyy-mm-dd, with
+ * `/`, `-` or `.`. Null when the placeholder shows no format: the field is
+ * skipped rather than guessed at.
+ */
+export function birthDateFor(placeholder: string, iso: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const [, y, mo, d] = m as unknown as [string, string, string, string];
+  const p = placeholder.slice(0, 200).toLowerCase();
+  let f = /(?:^|[^a-z])dd([/.-])mm\1(?:aaaa|yyyy)(?![a-z])/.exec(p);
+  if (f) return `${d}${f[1]}${mo}${f[1]}${y}`;
+  f = /(?:^|[^a-z])mm([/.-])dd\1(?:aaaa|yyyy)(?![a-z])/.exec(p);
+  if (f) return `${mo}${f[1]}${d}${f[1]}${y}`;
+  f = /(?:^|[^a-z])(?:aaaa|yyyy)([/.-])mm\1dd(?![a-z])/.exec(p);
+  if (f) return `${y}${f[1]}${mo}${f[1]}${d}`;
+  return null;
 }
 
 function mine(el: IdentityElement): boolean {
@@ -88,7 +113,13 @@ function write(el: IdentityElement, role: IdentityRole, value: string): boolean 
   }
   let v = value;
   if (el instanceof HTMLInputElement) {
-    if (el.type === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+    if (el.type === "date") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+    } else if (role === "birthDate") {
+      const formatted = birthDateFor(el.getAttribute("placeholder") ?? "", v);
+      if (formatted === null) return false;
+      v = formatted;
+    }
     if (role === "phone") {
       const fit = phoneFor(el, v);
       if (fit === null) return false;
@@ -108,9 +139,15 @@ function fillableNow(el: IdentityElement, env: Env): boolean {
   return el.isConnected && isIdentityFillable(el, env) && (isEmpty(el) || mine(el));
 }
 
+/** A birth date text field without a format in its placeholder is never written: do not ask for it. */
+function takesValue(f: { el: IdentityElement; role: IdentityRole }): boolean {
+  if (f.role !== "birthDate" || !(f.el instanceof HTMLInputElement) || f.el.type === "date") return true;
+  return birthDateFor(f.el.getAttribute("placeholder") ?? "", "2000-01-01") !== null;
+}
+
 /** The roles worth asking for: those of fields we could write right now. */
 export function rolesToFill(group: IdentityGroup, env: Env): IdentityRole[] {
-  return rolesOf({ root: group.root, fields: group.fields.filter((f) => fillableNow(f.el, env)) });
+  return rolesOf({ root: group.root, fields: group.fields.filter((f) => takesValue(f) && fillableNow(f.el, env)) });
 }
 
 const ADDRESS_LINES: readonly IdentityRole[] = ["street", "number", "complement"];

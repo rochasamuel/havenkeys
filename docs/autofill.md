@@ -1101,12 +1101,18 @@ shows no menu). A cross-site iframe gets no identity row.
   another element is not detected (floating labels would make hit testing
   refuse real forms; `security-model.md` §20).
 * `<input>`: the native value setter, then `input` and `change`. A
-  `type=date` takes `birthDate` only. When the value exceeds `maxlength`, a
-  phone number is retried without its leading `+55`.
+  `type=date` takes `birthDate` only, as ISO. A text field takes `birthDate`
+  only when its placeholder shows the format, reformatted locally from the
+  ISO value: `dd/mm/aaaa` or `dd/mm/yyyy` → DD/MM/YYYY, `mm/dd/yyyy` →
+  MM/DD/YYYY, `yyyy-mm-dd` or `aaaa-mm-dd` → YYYY-MM-DD (any of `/ - .`,
+  case ignored, the placeholder's separator kept). Without one the field is
+  skipped and `birthDate` is not asked for. When the value exceeds
+  `maxlength`, a phone number is retried without its leading `+55`.
 * `<select>`: the option whose value or text equals the value, ignoring case,
   accents and spaces. `state` also matches the Brazilian UF code and state
   name both ways (a 27-entry table); `country` also matches `BR`, Brasil and
-  Brazil. No match: the field is skipped. Selected through `selectedIndex`,
+  Brazil. Disabled options (and options in a disabled group) never match.
+  No match: the field is skipped. Selected through `selectedIndex`,
   then `input` and `change`.
 * `<textarea>`: only a multi-line field whose role is street or address line
   1, whether by autocomplete (`street-address`, `address-line1`) or by its

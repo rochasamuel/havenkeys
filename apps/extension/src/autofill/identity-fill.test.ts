@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "./group";
 import { identityGroupFor } from "./identity";
-import { fillIdentity, matchOption, rolesToFill } from "./identity-fill";
+import { birthDateFor, fillIdentity, matchOption, rolesToFill } from "./identity-fill";
 
 let hiddenIds = new Set<string>();
 const env: Env = { isVisible: (el) => !el.hidden && !hiddenIds.has(el.id), path: "/" };
@@ -72,7 +72,56 @@ describe("fillIdentity", () => {
   });
 });
 
+describe("birth date in a text field", () => {
+  const form = (placeholder: string | null) =>
+    `<form><input id="n" name="nome_completo" aria-label="Nome completo"><input id="b" name="nascimento" aria-label="Data de nascimento"${
+      placeholder === null ? "" : ` placeholder="${placeholder}"`
+    }></form>`;
+
+  it("writes the format the placeholder shows", () => {
+    for (const [ph, want] of [
+      ["dd/mm/aaaa", "20/04/2000"],
+      ["DD/MM/YYYY", "20/04/2000"],
+      ["dd.mm.yyyy", "20.04.2000"],
+      ["dd-mm-aaaa", "20-04-2000"],
+      ["mm/dd/yyyy", "04/20/2000"],
+      ["yyyy-mm-dd", "2000-04-20"],
+      ["aaaa/mm/dd", "2000/04/20"],
+      ["Ex.: dd/mm/aaaa", "20/04/2000"],
+    ] as const) {
+      page(form(ph));
+      expect(fillIdentity(group(), [{ role: "birthDate", value: "2000-04-20" }], env), ph).toBe(1);
+      expect($("#b").value, ph).toBe(want);
+    }
+  });
+
+  it("skips the field, and does not ask for the date, without a format", () => {
+    for (const ph of [null, "Sua data de nascimento", "dd/mm", "ddd/mm/aaaa"]) {
+      page(form(ph));
+      expect(rolesToFill(group(), env), String(ph)).not.toContain("birthDate");
+      expect(fillIdentity(group(), [{ role: "birthDate", value: "2000-04-20" }], env), String(ph)).toBe(0);
+      expect($("#b").value).toBe("");
+    }
+    page(form("dd/mm/aaaa"));
+    expect(rolesToFill(group(), env)).toContain("birthDate");
+  });
+
+  it("reformats only a well-formed ISO date", () => {
+    expect(birthDateFor("dd/mm/aaaa", "20/04/2000")).toBeNull();
+    expect(birthDateFor("dd/mm/aaaa", "2000-4-20")).toBeNull();
+  });
+});
+
 describe("select matching", () => {
+  it("never selects a disabled option", () => {
+    page(`<form><select id="uf" name="uf" aria-label="UF"><option value="">--</option><option value="DF" disabled>DF</option>
+      <optgroup label="x" disabled><option value="SP">SP</option></optgroup><option value="RJ">RJ</option></select></form>`);
+    const uf = $<HTMLSelectElement>("#uf");
+    expect(matchOption(uf, "state", "DF")).toBe(-1);
+    expect(matchOption(uf, "state", "SP")).toBe(-1);
+    expect(matchOption(uf, "state", "RJ")).toBe(3);
+  });
+
   it("matches state names, UF codes and countries, ignoring case and accents", () => {
     page(FORM);
     const uf = $<HTMLSelectElement>("#uf");
