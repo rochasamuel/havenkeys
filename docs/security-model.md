@@ -637,24 +637,43 @@ See `autofill.md`, "Sign in with Google, Microsoft, GitHub, Apple", and
 `native-messaging.md` §"Sign in with" for the full flow and wire messages.
 In summary:
 
-* **The cross-origin step is bounded to a fixed Rust list, one click.**
-  `start_sso` returns the provider's **exact origins** from a closed table in
+* **The cross-origin step is bounded to a fixed Rust list.** `start_sso`
+  returns the provider's **exact origins** from a closed table in
   `havenkeys-core` (`sso.rs`) — never anything the page or the extension
-  supplies. A run may click on those origins only, and only once: exactly
-  one clickable element on the provider's chooser whose text holds the saved
-  account, matched case-insensitively. Two matching rows, or none, and
-  nothing is clicked.
+  supplies. A run may act on those origins only, in the top frame of the
+  run's tab or a popup it opened, within its `SSO_RUN_TTL_MS` (2 minutes).
+  On the chooser: exactly one clickable element whose text holds the saved
+  account, matched case-insensitively, or "Use another account" once it has
+  been seen without that row on two consecutive attempts. Two matching
+  account rows, or none, and nothing is clicked.
+* **The login hand-off fills, and may press, the provider's own page —
+  once, under several independent bounds.** After the user's pick, if the
+  saved account is not already signed in at the provider, HavenKeys may
+  fill, and with all three switches on press through, the provider's own
+  login form there (`autofill.md` §"Sign in with", Login). This is bounded
+  by: the run's Rust-listed origins; the top frame of the run's tab or its
+  opener popup; the run's 2-minute expiry; **exactly one** provider login
+  whose saved username equals the run's account (zero or more than one and
+  nothing is filled); Rust's own origin check on `fill_item`, identical to
+  every other fill; and the three switches — the site login's own
+  `autoChoose`, the vault-wide `auto_sign_in` setting, and the provider
+  login's own `auto_sign_in` switch. It is a one-time hand-off:
+  `cs_sso_login` is honoured once per run, and the fill still runs through
+  the same automatic-sign-in stop conditions (a visible CAPTCHA, the user's
+  own input, an unrecognized step) as an ordinary same-site pick.
+* **The extension gains no secret it could not already request.**
+  `fill_item` for a login saved for the provider's own origin, asked from
+  that origin, was always allowed; what changes is that no click on the
+  provider's page needs to precede it. Nothing is sent to the site that
+  started the run: it can at most cause a run that ends on the real
+  provider page, filling the user's own provider login, after the user
+  picked its "Sign in with" row there — it cannot see the provider page.
 * **Consent is never granted.** A keyword-based check
   (`isConsentScreen`/`isConsentLabel`) recognizes permission and consent
   wording ("Continue as …", "Allow…", "Grant access/permission(s)…",
   "Authorize…") and refuses to press or click anything on such a screen. This
   is a heuristic over untrusted page text, not a cryptographic guarantee: see
   `security-review.md` for its residual risk.
-* **No password or TOTP secret is ever sent to a provider page.** The run
-  only clicks a chooser row; it never types anything. On a page that asks for
-  a password instead of showing a chooser, the run simply finds no row to
-  click and stops; the vault's login for that provider's own origin, if any,
-  is still offered through the ordinary field menu.
 * **Page-sourced account text is untrusted.** The text the extension reads
   from a provider's chooser or a username step is only ever a suggestion. It
   reaches Rust as a plain field on `check_sso`/`save_sso` and is validated

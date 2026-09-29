@@ -961,6 +961,13 @@ Extension fills fields
 > a fixed list in Rust), click the saved account in its chooser. It never
 > fills a password there and never presses a consent screen.
 
+> Amended on 2026-09-29 by
+> `docs/superpowers/specs/2026-09-29-sign-in-with-provider-login-design.md`:
+> after that pick, if the account is not signed in at the provider,
+> HavenKeys may click "Use another account" and sign in with the vault's
+> one login for that provider and account (email, password, TOTP) on the
+> provider's own origin, under the automatic sign-in rules and switches.
+
 Do not autofill automatically on page load.
 
 ---

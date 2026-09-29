@@ -531,11 +531,14 @@ Some logins are never used with a password: the site is always reached
 through "Sign in with Google" (or Microsoft, GitHub, Apple). HavenKeys can
 remember which provider and account a login uses (`sign_in_with` on the
 item), offer it on the site's own sign-in page, and — after one click —
-press the site's button and pick the saved account on the provider's own
-chooser. It never enters a password or grants permissions on this path.
-Providers, their exact origins, and the wire messages are in
-`native-messaging.md` §"Sign in with"; the security properties are in
-`security-model.md` and `threat-model.md`.
+press the site's button, pick the saved account (or "Use another account")
+on the provider's own chooser, and, if the account is not already signed in
+there, hand the provider's login form to the vault's own login for that
+provider and account. It never grants permissions on this path, and it only
+ever fills the provider's **own** saved login, on the provider's **own**
+origin, for the account the user already picked. Providers, their exact
+origins, and the wire messages are in `native-messaging.md` §"Sign in with";
+the security properties are in `security-model.md` and `threat-model.md`.
 
 Code: `apps/extension/src/autofill/sso.ts` (pure field detection, shared by
 the balloon scan, the press and the chooser), `content/sso.ts` (per-page
@@ -588,11 +591,12 @@ signs in too.
    which re-checks the item against the page (the same origin check as
    `fill_item`) and returns the provider, the saved account, that provider's
    **exact origins** (a fixed table in Rust) and whether the run may
-   auto-choose (`settings.auto_sign_in && item.auto_sign_in`). No secret
-   comes back. The background keeps this, with no secrets, as an `SsoRun`:
-   tab, frame, the site's origin, provider, account, the provider origins,
-   `autoChoose`, a phase (`press` then `choose`), and an expiry
-   `SSO_RUN_TTL_MS` (2 minutes) out. One run per tab; a new pick replaces it.
+   auto-choose (`settings.auto_sign_in && item.auto_sign_in`, the site
+   login's own switch). No secret comes back. The background keeps this,
+   with no secrets, as an `SsoRun`: tab, frame, the site's origin, provider,
+   account, the provider origins, `autoChoose`, a phase (`press → choose →
+   login`, then the run ends), and an expiry `SSO_RUN_TTL_MS` (2 minutes)
+   out. One run per tab; a new pick replaces it.
 2. **Press.** The background asks the top frame to press that provider's
    button (`bg_sso_press`, carrying the origin the desktop matched); the
    content script refuses unless it is still the top frame and still on that
@@ -606,35 +610,82 @@ signs in too.
    "Couldn't find the Sign in with `<Provider>` button"; one that also has a
    password is filled there as usual.
 3. **Choose.** Once pressed, the run only continues if `autoChoose` is on and
-   the item has a saved account. The **top frame** of the run's tab, or of a
+   the item has a saved account — this is the first of the flow's three
+   switches (see Login, below). The **top frame** of the run's tab, or of a
    **popup that tab opened** (`openerTabId`, supplied by the browser, not the
    page), is told to choose only once its own origin is one of the run's
    provider origins. Iframes are never told to choose (the background answers
    them nothing and the content script ignores a choose outside the top
    frame), so a provider's embedded widget on some page, such as a Google
-   Identity Services iframe, cannot spend the run. The run is used once: the
-   first provider top frame to ask gets the account, and the run ends there.
-   That page retries on a debounced `MutationObserver` for up to
-   `CHOOSE_WAIT_MS` (10 s), clicking the saved account only when
-   `chooserRow` finds **exactly one** clickable, visible element whose text
-   contains that account (case-insensitive) and whose own label is not
-   itself consent wording — two matching rows, or none, and nothing is
-   clicked. The run ends after one click, successful or not.
+   Identity Services iframe, cannot spend the run. The first provider top
+   frame to ask moves the run from `choose` to `login`, and that document
+   then retries on a debounced `MutationObserver`, for up to
+   `CHOOSE_WAIT_MS` (10 s):
+   * if `chooserRow` finds **exactly one** clickable, visible element whose
+     text contains the saved account (case-insensitive) and whose own label
+     is not itself consent wording, it is clicked and the attempt on this
+     document stops (the provider moves on to a new document, or straight to
+     a password step);
+   * otherwise, if `anotherAccountButton` finds "Use another account" (or its
+     English/pt-BR equivalents) but no account row, it is clicked once **two
+     consecutive attempts**, a debounce apart, have seen it without the row —
+     a chooser may render it before its account rows finish loading — and the
+     row still wins if it appears meanwhile;
+   * otherwise, if neither is present but a login form is (`findLoginGroup`:
+     a username or password field), the wait ends without a click and the
+     login hand-off below runs instead.
+   Two matching account rows, or none, and nothing is clicked; the document
+   simply keeps waiting until `CHOOSE_WAIT_MS` runs out or a login form
+   appears. A visible permissions/consent screen (below) is never clicked or
+   waited past.
+4. **Login.** With the run in phase `login`, the next provider top-frame
+   document also gets `{kind: "login"}`, and the same bounded, debounced wait
+   (10 s per document) looks only for a login form. The first time one
+   appears, the content script asks the background to finish the sign-in
+   (`cs_sso_login`, no fields — the frame is identified from the sender),
+   once; the run is consumed the moment the background accepts the request,
+   whether or not the fill that follows succeeds, so `cs_sso_login` can never
+   act twice for the same run. The background then:
+   1. accepts the request only for a live run in phase `login`, from a top
+      frame of the run's tab or its opener popup, on one of the run's
+      provider origins;
+   2. asks the desktop `find_matches` for that frame and keeps the results
+      whose `username`, trimmed and lowercased, equals the run's account,
+      trimmed and lowercased the same way — **not exactly one** match (zero,
+      or more than one) and nothing is filled; the run has already ended, and
+      the page's ordinary field menu stays available for a manual pick;
+   3. asks `fill_item` for that one login and this frame's URL — Rust
+      re-checks the login against the provider page, exactly as for every
+      other fill;
+   4. hands the fill to the same [automatic sign-in run](#automatic-sign-in)
+      (`pickFill`) used everywhere else, bound to the provider's own origin:
+      username → Next → password → Sign in → OTP. It only presses anything
+      when **all three switches** are on: `autoChoose` (switch 1, above),
+      the vault-wide `auto_sign_in` setting, and the **provider login's own**
+      `auto_sign_in` switch — the last two are `fill_item.autoSubmit`,
+      computed by Rust for the provider login, exactly as for any other fill
+      (see Automatic sign-in, Switches). With `autoSubmit` off, the
+      provider's current step (usually just the email) is filled and nothing
+      is pressed.
+   From here the automatic sign-in run's own limits apply — 2 minutes, one
+   origin, stops on user input or a visible CAPTCHA, never retries (see
+   Stopping, above) — exactly as for a same-site pick.
 
 ### Stop conditions
 
-Checked before every press and before every choose attempt:
+Checked before every press, choose or login attempt:
 
 | Condition | Effect |
 |---|---|
-| Consent or permissions wording ("Continue as …", "Allow…", "Grant access/permission(s)…", "Authorize…", recognized at any length as a prefix, plus a few short bare words such as "Accept"/"Continuar" under 30 characters) | Never pressed; the run ends |
-| Ambiguity: no clear-winner button, or more than one (or zero) chooser rows match the account | Nothing is clicked; the run ends |
-| A password field / no matching chooser row (the provider asks for a password instead of showing a chooser) | `chooserRow` simply finds nothing to click; the ordinary field menu still offers the vault's login for the provider's own origin, and the user picks it manually |
+| Consent or permissions wording ("Continue as …", "Allow…", "Grant access/permission(s)…", "Authorize…", recognized at any length as a prefix, plus a few short bare words such as "Accept"/"Continuar" under 30 characters) | Never pressed or clicked, on a chooser or a login-hand-off document; the wait on that document ends |
+| Ambiguity: no clear-winner provider button (press); more than one (or zero) chooser rows match the account (choose); or more than one (or zero) provider logins match the run's account (login) | Nothing is clicked or filled; the run ends |
+| No matching chooser row and no "Use another account" control, but a login form is (the provider asks for a password directly, or the saved account is not signed in at all) | The login hand-off runs instead of a click (see Login, above) |
 | The user's next trusted input (`keydown`, `input`, `pointerdown`) in the document that pressed the button | That document sends `cs_sso_stop`; the background ends the run of its tab (or of the tab that opened it, for a popup) |
-| Trusted user input on the provider page while it waits for the chooser | Cancels that wait |
-| The frame's origin is not the one the desktop matched (press), or not one of the run's provider origins (choose) | Refused |
+| Trusted user input on the provider page while it waits for the chooser or for a login form | Cancels that wait |
+| The frame's origin is not the one the desktop matched (press), or not one of the run's provider origins (choose, login) | Refused |
 | 2 minutes elapsed, or the tab's top frame loads an origin that is neither the site's nor a provider's | Ends the run |
-| Vault lock | Clears the background's runs and pending captures; a chooser wait already in progress on the provider page is not told and ends by itself within `CHOOSE_WAIT_MS` (10 s) |
+| Vault lock | Clears the background's runs and pending captures; a chooser or login wait already in progress on the provider page is not told and ends by itself within `CHOOSE_WAIT_MS` (10 s) |
+| A visible CAPTCHA, once the hand-off starts the automatic sign-in run | The current step's fields stay filled; nothing is pressed (see Automatic sign-in, Stopping) |
 
 ### Save detection
 
@@ -675,6 +726,20 @@ embedded directly in the site, not a same-origin button HavenKeys can find
 and click; sites with their own "Sign in with Google" button work normally.
 Corporate SSO (Okta, SAML, an organization's Azure AD tenant beyond the fixed
 Microsoft origins) is out of scope entirely.
+
+**The login hand-off can land on a recovery or sign-up step.**
+`findLoginGroup` accepts any username-classed field, so if a chooser row
+click leads the provider to a "verify it's you" or "create an account" step
+instead of the ordinary password step, the hand-off still fires: it fills
+the same vault email there too, on the Rust-checked provider login, and a
+visible CAPTCHA stops the run before anything is pressed. The residual cost
+is at most an unneeded "Next" press on such a step, not a wrong credential
+or a wrong site.
+
+**Phone prompts, security keys, passkeys and "stay signed in?" screens are
+not handled.** None of these is a login form `findLoginGroup` or the
+automatic sign-in run recognizes, so the run simply stops there and the user
+finishes signing in by hand.
 
 ## Passkeys
 

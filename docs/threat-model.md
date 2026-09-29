@@ -449,8 +449,12 @@ redirect host on its own.
 
 ### T11 — Sign in with Google, Microsoft, GitHub, Apple
 After the user picks a "Sign in with" login, HavenKeys may press that site's
-provider button and, on the provider's own page, click the saved account in
-its chooser (`docs/superpowers/specs/2026-09-28-sign-in-with-design.md`).
+provider button, click the saved account (or "Use another account") in the
+provider's own chooser, and, if the account is not already signed in there,
+sign it in with the vault's own login for that provider and account —
+username, password and TOTP if it has one
+(`docs/superpowers/specs/2026-09-28-sign-in-with-design.md`,
+`docs/superpowers/specs/2026-09-29-sign-in-with-provider-login-design.md`).
 This amends rule #6 for one more bounded case, alongside T9 and the automatic
 passkey upgrade (T8). Details in `autofill.md` §"Sign in with", the wire
 messages in `native-messaging.md` §"Sign in with", the mechanism in
@@ -476,35 +480,54 @@ messages in `native-messaging.md` §"Sign in with", the mechanism in
   user has a saved "Sign in with" login for it, the same class of signal
   `autofill.md` already documents for the ordinary menu and save prompts.
 * **A provider look-alike origin.** A page cannot get the run to click an
-  account on `accounts-google.com` or `login.microsoftonline.com.evil.com`.
-  *Mitigation:* the run's provider origins are an **exact-origin list**
-  returned by Rust (`sso.rs`), never a suffix, prefix, or pattern match; a
-  frame whose origin is not literally in that list is refused, for both the
-  press-confirmation check and the choose step. *Residual:* none — this is
-  the same exact-origin discipline `autofill.md` §Domain matching applies
-  everywhere else, applied to a fixed, closed table instead of a per-item
-  rule.
-* **A chooser spoof inside the provider's own page.** A page that has
-  compromised the *provider's own origin* (or a same-origin script it can
-  inject there) could draw a fake row and get HavenKeys to click it, or grab
-  the account text HavenKeys reads for a save prompt. **Out of scope:** a
-  compromised provider origin is outside this threat model — see §2, "Web
-  pages are hostile by default," which does not extend to trusting an
-  attacker who already controls `accounts.google.com` itself. What remains
-  bounded even then: the click only lands on an element already on that
-  page, nothing is typed, and a save prompt from a forged account name is
-  still shown to the user before anything is written (`autofill.md`,
-  "Save detection").
+  account, or complete a login, on `accounts-google.com` or
+  `login.microsoftonline.com.evil.com`. *Mitigation:* the run's provider
+  origins are an **exact-origin list** returned by Rust (`sso.rs`), never a
+  suffix, prefix, or pattern match; a frame whose origin is not literally in
+  that list is refused, for the press-confirmation check, the choose step
+  and the login hand-off alike. *Residual:* none — this is the same
+  exact-origin discipline `autofill.md` §Domain matching applies everywhere
+  else, applied to a fixed, closed table instead of a per-item rule.
+* **Site X triggering a login on the provider's real page.** Site X's own
+  page cannot ask for a provider login directly; it can only get the user to
+  pick its own "Sign in with" row, which starts the run, and the login
+  hand-off fires only if the *provider itself* later shows a login form on
+  one of the Rust-listed origins. *Mitigation:* the hand-off fills exactly
+  the **single** provider login whose saved username equals the run's
+  account — found by Rust's own `find_matches` for that provider page,
+  independent of anything site X sent — after the same origin check
+  `fill_item` always runs. **Two (or zero) matching provider logins and
+  nothing is filled**; the run simply ends. *Residual:* none beyond the
+  "fake provider button" and "look-alike origin" bullets above — site X
+  never learns whether a hand-off happened, or with which login.
+* **A chooser or login-form spoof inside the provider's own page.** A page
+  that has compromised the *provider's own origin* (or a same-origin script
+  it can inject there) could draw a fake row and get HavenKeys to click it,
+  draw a fake login form and get HavenKeys to fill the provider login's
+  email and password into it, or grab the account text HavenKeys reads for a
+  save prompt. **Out of scope:** a compromised provider origin is outside
+  this threat model — see §2, "Web pages are hostile by default," which does
+  not extend to trusting an attacker who already controls
+  `accounts.google.com` itself. What remains bounded even then: the click or
+  fill only lands on an element already on that page, the fill is always the
+  **one** provider login Rust matched to that exact origin and account — not
+  a password for any other site or account — and a save prompt from a forged
+  account name is still shown to the user before anything is written
+  (`autofill.md`, "Save detection").
 * **Consent screens.** A keyword match
   (`isConsentScreen`/`isConsentLabel`) refuses to press or click a row on a
   page that looks like a permissions or consent screen. *Mitigation:*
   documented as a heuristic, not a guarantee, in `security-model.md` §17.
   *Residual:* an unrecognized consent screen that also shows a row whose
   email matches the saved account (`security-review.md`, "Sign in with").
-* **No secrets on this path.** The run never receives or sends a password or
-  TOTP code; it only clicks a chooser row. Page-sourced account text is
-  validated in Rust (254 characters, no control characters) and is only ever
-  a suggestion the user can edit before saving.
+* **The provider login's secrets travel only to the provider's own,
+  Rust-checked origin.** The login hand-off can now fill, and with all three
+  switches on submit, the provider login's password and TOTP code — but only
+  on the exact origin `fill_item`/`get_totp` returned them for, only for the
+  single matching provider login, and never to site X: site X cannot see the
+  provider's page or learn whether the hand-off ran. Page-sourced account
+  text is still validated in Rust (254 characters, no control characters)
+  and is only ever a suggestion the user can edit before saving.
 
 ## 4. Out of scope (not defended)
 
