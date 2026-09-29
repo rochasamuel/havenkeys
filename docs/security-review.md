@@ -1950,6 +1950,7 @@ mapping and re-import upgrade.
 | SSO3 | Medium | Extension | Consent detection is keyword-based | Accepted, documented |
 | SSO4 | Low | Extension | `openerTabId` (which frame may act as "the run's popup") is trusted | Accepted, sound |
 | SSO5 | Info | Extension | Google Identity Services (GIS) iframe buttons and One Tap are not recognized or pressed | Accepted, functional limitation |
+| SSO6 | Medium | Extension (background/content) | A pick on site X can fill the provider's password without a second click there | Accepted, bounded |
 
 ### SSO1. A fake "Sign in with" label arms a save prompt (Low, accepted)
 **Attack/failure scenario:** any page can put "Sign in with Google" text on
@@ -2023,3 +2024,34 @@ way get no balloon-driven press; sites with their own button (the common
 "Continue with Google" pattern most sites use) work normally. Not a security
 finding — documented in `autofill.md` as a known limitation and in the
 design's out-of-scope list (§13).
+
+### SSO6. A pick on site X can fill the provider's password without a second click (Medium, accepted)
+**Scenario:** the user picks a "Sign in with `<Provider>`" login on site X.
+If the saved account is not already signed in at the provider (no chooser
+row, or the provider asks for a password), HavenKeys' login hand-off
+(`docs/superpowers/specs/2026-09-29-sign-in-with-provider-login-design.md`)
+fills — and, with the flow's three switches on, submits — the vault's
+provider login on the provider's own page, without the user clicking
+anything there. This is new: before this change, HavenKeys only ever clicked
+an already-signed-in chooser row on the provider's page.
+**Mitigation (spec §5):** the hand-off is bounded by all of the following
+at once — the run's Rust-listed provider origins (`sso.rs`), the top frame
+of the run's tab or its opener popup, the run's 2-minute expiry, **exactly
+one** provider login whose saved username equals the run's account (zero or
+more than one and nothing is filled), Rust's own origin check on
+`fill_item`/`get_totp` (identical to every other fill), and the three
+switches (the site login's `autoChoose`, the vault-wide `auto_sign_in`
+setting, and the provider login's own `auto_sign_in` switch). The extension
+gains no secret it could not already request — `fill_item` for a login saved
+for the provider's own origin, asked from that origin, was always allowed;
+what changes is that no click on that page needs to precede it. Nothing
+reaches site X: it can at most cause a run that ends on the real provider
+page, with the user's own provider login, after the user's own pick.
+**Limitation, documented:** the hand-off relies on the same page-structure
+heuristics (`findLoginGroup`, `chooserRow`, `anotherAccountButton`,
+`isConsentScreen`) as the rest of autofill, so it can land on a recovery or
+sign-up step reached after a chooser-row click, filling the same vault email
+there too (`autofill.md`, "Known limitation"). A visible CAPTCHA stops the
+run before anything is pressed. Phone prompts, security keys, passkeys and
+"stay signed in?" screens are not recognized as a login form at all, so the
+run simply stops and the user finishes by hand.

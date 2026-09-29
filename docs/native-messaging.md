@@ -438,10 +438,21 @@ and are treated as untrusted input.
 empty becomes `null`, at most 254 characters, no control characters
 (`crates/havenkeys-core/src/sso.rs`). All three requests draw from the secret
 bucket; `save_sso` with an `itemId` shares `save_login`'s per-item cooldown
-(one update per item per 10 minutes). The provider's own page never receives
-a password or TOTP code through this path — the run only clicks an account
-row it finds by exact, case-insensitive email match, on an origin from Rust's
-list, and never presses a consent or permissions screen.
+(one update per item per 10 minutes). None of `start_sso`, `check_sso` or
+`save_sso` itself carries a secret — the chooser click they drive only clicks
+an account row it finds by exact, case-insensitive email match, on an origin
+from Rust's list, and never presses a consent or permissions screen.
+
+After that pick, if the saved account is not already signed in at the
+provider, the background may go on to request `fill_item` (and, for a login
+with TOTP, `get_totp`) for the **single** vault login Rust's `find_matches`
+matches to the provider page whose username equals the run's account —
+exactly the same requests, and the same origin check, as any other fill, now
+made against the provider's own origin instead of the site the user picked
+on. Two matching logins, or none, and neither is requested. Whatever comes
+back is filled, and pressed on, only under the automatic sign-in rules and
+switches (`autofill.md` §"Sign in with", "Login";
+`docs/superpowers/specs/2026-09-29-sign-in-with-provider-login-design.md`).
 
 The extension side — how a provider button is recognized, how the balloon and
 the run work, and the save-detection flow — is in `autofill.md` §"Sign in

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { Env } from "./group";
-import { chooserRow, emailIn, findProviderButtons, isConsentScreen, providerButton, MAX_SSO_CANDIDATES } from "./sso";
+import { anotherAccountButton, chooserRow, emailIn, findProviderButtons, isConsentScreen, providerButton, MAX_SSO_CANDIDATES } from "./sso";
 
 const env: Env = { isVisible: (el) => !el.hidden && el.style.display !== "none", path: "/login" };
 const page = (html: string) => {
@@ -92,5 +92,22 @@ describe("account chooser", () => {
 
     const grant = page(`<button>Grant access to Some Long Application Name Inc</button>`);
     expect(isConsentScreen(grant, env)).toBe(true);
+  });
+});
+
+describe("use another account", () => {
+  it("finds it in English and Portuguese", () => {
+    for (const text of ["Use another account", "Usar outra conta", "Sign in with a different account", "Usar uma conta diferente", "Use a different account", "Entrar com outra conta"]) {
+      const root = page(`<ul><li><div role="link">Me <div>me@gmail.com</div></div></li><li><div role="link">${text}</div></li></ul>`);
+      expect(anotherAccountButton(root, env)?.textContent).toBe(text);
+    }
+  });
+  it("no_another_account_on_consent", () => {
+    const root = page(`<div role="link">Use another account</div><button>Allow</button><button>Cancel</button>`);
+    expect(anotherAccountButton(root, env)).toBeNull();
+  });
+  it("ignores hidden or duplicated controls", () => {
+    expect(anotherAccountButton(page(`<div role="link" hidden>Use another account</div>`), env)).toBeNull();
+    expect(anotherAccountButton(page(`<div role="link">Use another account</div><a href="#">Use another account</a>`), env)).toBeNull();
   });
 });

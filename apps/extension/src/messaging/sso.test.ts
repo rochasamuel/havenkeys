@@ -48,4 +48,10 @@ describe("sso messages", () => {
     expect(isAccount("me@x.io\u0007")).toBe(false);
     expect(isAccount(`me${String.fromCodePoint(0x202e)}@x.io`)).toBe(false);
   });
+  it("parses the login phase and cs_sso_login", () => {
+    expect(parseSsoReady({ kind: "login" })).toEqual({ kind: "login" });
+    expect(parseSsoReady({ kind: "login", account: "a@b.co" })).toBeNull();
+    expect(parseSsoContentRequest({ type: "cs_sso_login" })).toEqual({ type: "cs_sso_login" });
+    expect(parseSsoContentRequest({ type: "cs_sso_login", itemId: "x" })).toBeNull();
+  });
 });

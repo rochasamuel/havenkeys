@@ -61,7 +61,7 @@ describe("runs", () => {
     expect(s.chooseFor({ tabId: 1 }, "https://evil.com")).toBeNull();
     expect(s.chooseFor({ tabId: 1 }, "https://accounts.google.com.evil.com")).toBeNull();
     expect(s.chooseFor({ tabId: 1 }, G)).toBe("me@gmail.com");
-    expect(s.run(1)).toBeNull(); // one action only
+    expect(s.run(1)?.phase).toBe("login"); // choose is used once; the run waits for the login form
   });
   it("follows a popup opened by the run's tab, nothing else", () => {
     const { s } = setup();
@@ -90,5 +90,48 @@ describe("runs", () => {
     s.pressed(1);
     advance(SSO_RUN_TTL_MS + 1);
     expect(s.chooseFor({ tabId: 1 }, G)).toBeNull();
+  });
+  it("choose moves to login; login_only_once_top_run_tab", () => {
+    const { s } = setup();
+    start(s);
+    s.pressed(1);
+    expect(s.chooseFor({ tabId: 1 }, G)).toBe("me@gmail.com");
+    expect(s.run(1)?.phase).toBe("login");
+    expect(s.chooseFor({ tabId: 1 }, G)).toBeNull(); // choose happens once
+    expect(s.loginReady({ tabId: 1 }, G)).toBe(true);
+    expect(s.loginReady({ tabId: 1 }, "https://evil.com")).toBe(false);
+    expect(s.loginFor({ tabId: 7 }, G)).toBeNull(); // unrelated tab
+    expect(s.loginFor({ tabId: 1 }, "https://accounts.google.com.evil.com")).toBeNull();
+    expect(s.loginFor({ tabId: 9, openerTabId: 1 }, G)?.account).toBe("me@gmail.com"); // popup
+    expect(s.loginFor({ tabId: 1 }, G)).toBeNull(); // consumed
+    expect(s.run(1)).toBeNull();
+  });
+  it("a login-phase run ends when the tab's top frame returns to the site", () => {
+    const { s } = setup();
+    start(s);
+    s.pressed(1);
+    s.chooseFor({ tabId: 1 }, G);
+    s.topLoad(1, G); // another provider document: still waiting for the login form
+    expect(s.run(1)?.phase).toBe("login");
+    s.topLoad(1, "https://typeform.com"); // the provider finished and sent the tab back
+    expect(s.run(1)).toBeNull();
+    expect(s.loginReady({ tabId: 1 }, G)).toBe(false);
+  });
+  it("a press- or choose-phase run survives a site reload (the site may reload before the provider)", () => {
+    const { s } = setup();
+    start(s);
+    s.topLoad(1, "https://typeform.com");
+    expect(s.run(1)?.phase).toBe("press");
+    s.pressed(1);
+    s.topLoad(1, "https://typeform.com");
+    expect(s.run(1)?.phase).toBe("choose");
+  });
+  it("login expires with the run", () => {
+    const { s, advance } = setup();
+    start(s);
+    s.pressed(1);
+    s.chooseFor({ tabId: 1 }, G);
+    advance(SSO_RUN_TTL_MS + 1);
+    expect(s.loginFor({ tabId: 1 }, G)).toBeNull();
   });
 });
