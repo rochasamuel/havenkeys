@@ -643,3 +643,66 @@ fn fuzz_parse_request_never_panics() {
         }
     }
 }
+
+#[test]
+fn identity_requests_parse_and_are_bounded() {
+    let ok = [
+        r#"{"v":1,"id":1,"request":{"type":"find_identity","url":"https://shop.com/"}}"#,
+        r#"{"v":1,"id":2,"request":{"type":"open_identity","url":"https://shop.com/","topUrl":"https://shop.com/"}}"#,
+        r#"{"v":1,"id":3,"request":{"type":"fill_identity","url":"https://shop.com/","roles":["fullName","postalCode","cpf"],"documents":true}}"#,
+    ];
+    for s in ok {
+        let env = parse(s).unwrap_or_else(|_| panic!("{s}"));
+        assert!(matches!(
+            env.request.kind(),
+            "find_identity" | "open_identity" | "fill_identity"
+        ));
+    }
+    let many = format!(
+        r#"{{"v":1,"id":4,"request":{{"type":"fill_identity","url":"https://a.com/","roles":[{}],"documents":false}}}}"#,
+        vec![r#""city""#; 41].join(",")
+    );
+    let bad = [
+        r#"{"v":1,"id":5,"request":{"type":"fill_identity","url":"https://a.com/","roles":[],"documents":false}}"#.to_owned(),
+        r#"{"v":1,"id":6,"request":{"type":"fill_identity","url":"https://a.com/","roles":["city","city"],"documents":false}}"#.to_owned(),
+        r#"{"v":1,"id":7,"request":{"type":"fill_identity","url":"https://a.com/","roles":["password"],"documents":false}}"#.to_owned(),
+        r#"{"v":1,"id":8,"request":{"type":"fill_identity","url":"https://a.com/","roles":["city"]}}"#.to_owned(),
+        r#"{"v":1,"id":9,"request":{"type":"find_identity","url":"https://a.com/","itemId":"x"}}"#.to_owned(),
+        many,
+    ];
+    for s in &bad {
+        assert!(parse(s).is_err(), "{s}");
+    }
+}
+
+#[test]
+fn identity_results_are_validated() {
+    let valid = [
+        r#"{"v":1,"id":1,"result":{"type":"find_identity","title":"Samuel","email":null,"roles":["fullName","cpf"]}}"#,
+        r#"{"v":1,"id":2,"result":{"type":"fill_identity","values":[{"role":"city","value":"Brasília"}]}}"#,
+        r#"{"v":1,"id":3,"result":{"type":"fill_identity","values":[]}}"#,
+        r#"{"v":1,"id":4,"result":{"type":"open_identity"}}"#,
+    ];
+    for s in valid {
+        assert!(Outgoing::parse(s.as_bytes()).is_some(), "{s}");
+    }
+    let long = "x".repeat(MAX_IDENTITY_VALUE_BYTES + 1);
+    let invalid = [
+        r#"{"v":1,"id":1,"result":{"type":"fill_identity","values":[{"role":"city","value":""}]}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"fill_identity","values":[{"role":"city","value":"a"},{"role":"city","value":"b"}]}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"fill_identity","values":[{{"role":"city","value":"{long}"}}]}}}}"#),
+        r#"{"v":1,"id":1,"result":{"type":"find_identity","title":"x","email":null,"roles":["city","city"]}}"#.to_owned(),
+    ];
+    for s in &invalid {
+        assert!(Outgoing::parse(s.as_bytes()).is_none(), "{s}");
+    }
+}
+
+#[test]
+fn identity_values_never_debug_print() {
+    let v = IdentityValue {
+        role: IdentityRole::Cpf,
+        value: WireSecret::new("123.456.789-00".into()),
+    };
+    assert!(!format!("{v:?}").contains("123"));
+}

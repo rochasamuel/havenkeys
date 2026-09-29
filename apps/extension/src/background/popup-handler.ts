@@ -1,8 +1,9 @@
 // Answers popup requests using the native client. Kept free of `chrome.*`
 // so it can be tested with a fake client.
 
+import { DOCUMENT_ROLES, type IdentityRole } from "@havenkeys/protocol";
 import type { FillPayload } from "../messaging/inline";
-import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
+import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
 import { displayHost, pageUrlForRequest } from "../shared/url";
 import { t } from "../i18n";
@@ -22,6 +23,12 @@ export interface ActiveTab {
  * button is pressed.
  */
 export type SsoStarter = (tabId: number, pageUrl: string, itemId: string) => Promise<PopupReply<null>>;
+
+/**
+ * Inject the content script into the tab's top frame and ask which identity
+ * fields it can fill now.
+ */
+export type IdentityScanner = (tabId: number) => Promise<IdentityRole[]>;
 
 /**
  * Put a fill into the tab's top frame (injecting the content script if
@@ -57,6 +64,7 @@ export function createPopupHandler(
   activeTab: () => Promise<ActiveTab | undefined>,
   fillTab: TabFiller = async () => 0,
   startSso?: SsoStarter,
+  scanIdentity?: IdentityScanner,
 ) {
   const activeTabUrl = async () => (await activeTab())?.url;
 
@@ -96,15 +104,22 @@ export function createPopupHandler(
       if (!status.vaultExists) return { kind: "no_vault" };
       if (status.state !== "unlocked") return { kind: "locked" };
       const url = pageUrlForRequest(await activeTabUrl());
-      if (!url) return { kind: "unlocked", site: null, matches: [] };
+      if (!url) return { kind: "unlocked", site: null, matches: [], identity: null };
       const found = await client.request({ type: "find_matches", url });
-      return { kind: "unlocked", site: displayHost(url), matches: found.matches };
+      let identity: { title: string } | null = null;
+      try {
+        const s = await client.request({ type: "find_identity", url });
+        if (s.roles.length > 0) identity = { title: s.title };
+      } catch {
+        identity = null;
+      }
+      return { kind: "unlocked", site: displayHost(url), matches: found.matches, identity };
     } catch (e) {
       return stateForError(e);
     }
   }
 
-  async function handle(req: PopupRequest): Promise<PopupReply<PopupState | TotpView | null>> {
+  async function handle(req: PopupRequest): Promise<PopupReply<PopupState | TotpView | IdentityFillReply>> {
     switch (req.type) {
       case "popup_state":
         return { ok: true, value: await state() };
@@ -131,6 +146,31 @@ export function createPopupHandler(
         return fillFromPopup(req.itemId, false);
       case "popup_fill_totp":
         return fillFromPopup(req.itemId, true);
+      case "popup_fill_identity": {
+        const tab = await activeTab();
+        const url = pageUrlForRequest(tab?.url);
+        if (!tab || !url || !scanIdentity) return { ok: false, message: t.errors.pageNotSupported };
+        try {
+          const origin = new URL(url).origin;
+          // The documents answer is for the site the question named.
+          if (req.documents !== null && req.origin !== origin) return { ok: false, message: t.errors.identityPageChanged };
+          const pageRoles = await scanIdentity(tab.id);
+          if (pageRoles.length === 0) return { ok: false, message: t.errors.noIdentityForm };
+          const summary = await client.request({ type: "find_identity", url });
+          const has = pageRoles.filter((r) => summary.roles.includes(r));
+          // Documents only on https, whatever the popup says.
+          const docs = url.startsWith("https:") ? has.filter((r) => DOCUMENT_ROLES.includes(r)) : [];
+          if (req.documents === null && docs.length > 0) return { ok: true, value: { confirm: docs, origin } };
+          const withDocs = req.documents === true && docs.length > 0;
+          const roles = has.filter((r) => withDocs || !DOCUMENT_ROLES.includes(r));
+          if (roles.length === 0) return { ok: false, message: t.menu.identityNothing };
+          const r = await client.request({ type: "fill_identity", url, roles, documents: withDocs });
+          const filled = await fillTab(tab.id, url, { kind: "identity", values: r.values });
+          return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.menu.identityNothing };
+        } catch (e) {
+          return fail(e);
+        }
+      }
       case "popup_open_item": {
         // Same rule as fill: the URL is the tab's, and the desktop opens
         // only a login saved for it.

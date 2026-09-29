@@ -50,8 +50,12 @@ const matches = [
 ];
 const menuItems = matches.map(({ id, title, username }) => ({ id, title, username }));
 
+function identityRow(over) {
+  return { title: "Samuel Rocha", fills: 5, documents: [], documentsAllowed: true, empty: false, missing: false, ...over };
+}
+
 function menuView(over) {
-  return { state: "ready", kind: "login", site: "github.com", items: menuItems.slice(0, 2), passkeys: [], hint: null, ...over };
+  return { state: "ready", kind: "login", site: "github.com", items: menuItems.slice(0, 2), passkeys: [], hint: null, identity: null, ...over };
 }
 
 /**
@@ -88,7 +92,7 @@ export const extensionScenarios = [
     page: "popup.html",
     frame: { kind: "popup" },
     granted: true,
-    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "github.com", matches }) }),
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "github.com", matches, identity: null }) }),
   },
   {
     name: "popup-unlocked-code-and-error",
@@ -96,7 +100,7 @@ export const extensionScenarios = [
     frame: { kind: "popup" },
     granted: true,
     replies: (x) => ({
-      popup_state: ok({ kind: "unlocked", site: "github.com", matches }),
+      popup_state: ok({ kind: "unlocked", site: "github.com", matches, identity: null }),
       popup_totp: ok({ code: "38149207", secondsRemaining: 25 }),
       popup_fill: err(x.integrationDisabled),
     }),
@@ -115,6 +119,7 @@ export const extensionScenarios = [
         kind: "unlocked",
         site: "typeform.com",
         matches: [{ ...matches[0], title: "Typeform", username: "me@gmail.com", provider: "google" }, matches[2]],
+        identity: null,
       }),
     }),
   },
@@ -123,21 +128,42 @@ export const extensionScenarios = [
     page: "popup.html",
     frame: { kind: "popup" },
     granted: false,
-    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "accounts.example-with-a-long-hostname.com", matches: matches.slice(0, 1) }) }),
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "accounts.example-with-a-long-hostname.com", matches: matches.slice(0, 1), identity: null }) }),
   },
   {
     name: "popup-unlocked-no-matches",
     page: "popup.html",
     frame: { kind: "popup" },
     granted: false,
-    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "example.com", matches: [] }) }),
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "example.com", matches: [], identity: null }) }),
   },
   {
     name: "popup-unlocked-no-page",
     page: "popup.html",
     frame: { kind: "popup" },
     granted: true,
-    replies: () => ({ popup_state: ok({ kind: "unlocked", site: null, matches: [] }) }),
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: null, matches: [], identity: null }) }),
+  },
+
+  {
+    name: "popup-identity",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({
+      popup_state: ok({ kind: "unlocked", site: "shop.example.com", matches: [], identity: { title: "Samuel Rocha" } }),
+      popup_fill_identity: ok({ confirm: ["cpf", "rg"], origin: "https://shop.example.com" }),
+    }),
+    async act(page) {
+      await page.click(".item.identity .btn");
+    },
+  },
+  {
+    name: "popup-identity-with-logins",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "github.com", matches, identity: { title: "" } }) }),
   },
 
   // ---------------------------------------------------------------- inline menu
@@ -186,6 +212,61 @@ export const extensionScenarios = [
       page: "menu.html",
       frame: { kind: "menu", width, rows: 1 },
       replies: () => ({ menu_state: ok(menuView({ kind: "new_password", items: [] })) }),
+    },
+    {
+      name: `menu-identity-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({ menu_state: ok(menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow() })) }),
+    },
+    {
+      name: `menu-identity-documents-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({
+        menu_state: ok(
+          menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow({ documents: ["cpf", "rg"] }) }),
+        ),
+      }),
+      async act(page) {
+        await page.waitForTimeout(600);
+        await page.click("button.row");
+        await page.waitForTimeout(100);
+      },
+    },
+    {
+      name: `menu-identity-http-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({
+        menu_state: ok(
+          menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow({ documents: ["cpf"], documentsAllowed: false }) }),
+        ),
+      }),
+    },
+    {
+      name: `menu-identity-empty-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({
+        menu_state: ok(menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow({ empty: true, fills: 0 }) })),
+      }),
+    },
+    {
+      name: `menu-identity-missing-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({
+        menu_state: ok(
+          menuView({ kind: "identity", site: "shop.example.com", items: [], identity: identityRow({ title: "", empty: true, missing: true, fills: 0, documentsAllowed: false }) }),
+        ),
+      }),
+    },
+    {
+      name: `menu-signup-identity-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 3 },
+      replies: () => ({ menu_state: ok(menuView({ items: menuItems.slice(0, 2), identity: identityRow({ fills: 5 }) })) }),
     },
     {
       name: `menu-locked-${width}`,
@@ -315,7 +396,7 @@ export const extensionScenarios = [
     page: "sso.html",
     frame: { kind: "sso" },
     replies: () => ({
-      sso_state: ok({ mode: "save", site: "github.com", provider: "github", account: "octocat@example.com", title: "GitHub", action: "add" }),
+      sso_state: ok({ mode: "save", site: "github.com", provider: "github", account: "octocat@example.com", accounts: ["octocat@example.com", "work@example.com"], title: "GitHub", action: "add" }),
     }),
   },
   {
@@ -323,7 +404,7 @@ export const extensionScenarios = [
     page: "sso.html",
     frame: { kind: "sso" },
     replies: () => ({
-      sso_state: ok({ mode: "save", site: "accounts.google.com", provider: "google", account: null, title: null, action: "update" }),
+      sso_state: ok({ mode: "save", site: "accounts.google.com", provider: "google", account: null, accounts: [], title: null, action: "update" }),
     }),
   },
   {

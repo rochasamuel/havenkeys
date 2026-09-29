@@ -968,6 +968,13 @@ Extension fills fields
 > one login for that provider and account (email, password, TOTP) on the
 > provider's own origin, under the automatic sign-in rules and switches.
 
+> Amended on 2026-09-29 by
+> `docs/superpowers/specs/2026-09-29-identity-autofill-design.md`: after the
+> user picks their Identity in the menu or popup, HavenKeys fills that form's
+> identity fields on any site (not bound to a saved website). Document
+> numbers need a second click naming them and only fill on https pages; a
+> cross-site frame gets nothing; nothing is overwritten or submitted.
+
 Do not autofill automatically on page load.
 
 ---

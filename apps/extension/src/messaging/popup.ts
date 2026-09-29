@@ -3,7 +3,7 @@
 // The popup never talks to the native host and never supplies a URL: the
 // background worker reads the active tab's URL itself.
 
-import type { Match } from "@havenkeys/protocol";
+import type { IdentityRole, Match } from "@havenkeys/protocol";
 
 export type PopupRequest =
   | { type: "popup_state" }
@@ -14,7 +14,14 @@ export type PopupRequest =
   /** Fill this login's current one-time code into the active tab. */
   | { type: "popup_fill_totp"; itemId: string }
   /** Show this login in the desktop app's editor. */
-  | { type: "popup_open_item"; itemId: string };
+  | { type: "popup_open_item"; itemId: string }
+  /**
+   * Fill the page's first identity form. `documents`: null = not asked yet.
+   * The answer carries the origin the question named; the background
+   * refuses it if the tab has since moved to another origin.
+   */
+  | { type: "popup_fill_identity"; documents: null }
+  | { type: "popup_fill_identity"; documents: boolean; origin: string };
 
 export type PopupState =
   | { kind: "host_unavailable" }
@@ -22,7 +29,7 @@ export type PopupState =
   | { kind: "no_vault" }
   | { kind: "locked" }
   | { kind: "disabled" }
-  | { kind: "unlocked"; site: string | null; matches: Match[] }
+  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null }
   | { kind: "error"; message: string };
 
 export interface TotpView {
@@ -30,9 +37,23 @@ export interface TotpView {
   secondsRemaining: number;
 }
 
+/** Reply to `popup_fill_identity`: null = filled, or ask about these documents first, for this page origin. */
+export type IdentityFillReply = { confirm: IdentityRole[]; origin: string } | null;
+
 export type PopupReply<T> = { ok: true; value: T } | { ok: false; message: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** An http(s) origin exactly as URL serializes it. */
+function isOrigin(v: unknown): v is string {
+  if (typeof v !== "string" || v.length > 512) return false;
+  try {
+    const u = new URL(v);
+    return (u.protocol === "https:" || u.protocol === "http:") && u.origin === v;
+  } catch {
+    return false;
+  }
+}
 
 /** Strictly validate a popup request. */
 export function parsePopupRequest(msg: unknown): PopupRequest | null {
@@ -49,6 +70,11 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
     case "popup_open_item":
       return keys.length === 2 && typeof o.itemId === "string" && UUID.test(o.itemId)
         ? { type: o.type, itemId: o.itemId }
+        : null;
+    case "popup_fill_identity":
+      if (o.documents === null) return keys.length === 2 ? { type: "popup_fill_identity", documents: null } : null;
+      return keys.length === 3 && typeof o.documents === "boolean" && isOrigin(o.origin)
+        ? { type: "popup_fill_identity", documents: o.documents, origin: o.origin }
         : null;
     default:
       return null;

@@ -17,7 +17,7 @@
 //   continuation fill is re-requested from the desktop for the frame's URL.
 
 import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
-import { SSO_PROVIDERS } from "@havenkeys/protocol";
+import { DOCUMENT_ROLES, SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
 import { t } from "../i18n";
 import {
@@ -26,6 +26,7 @@ import {
   type BackgroundToContent,
   type ContentRequest,
   type FillPayload,
+  type IdentityRowView,
   type InlineReply,
   type InlineRequest,
   type MenuHint,
@@ -98,6 +99,9 @@ interface MenuSession {
   passkeys: PasskeyRow[];
   hint: MenuHint | null;
   help: string | null;
+  /** The form's identity roles (from the content script). */
+  roles: IdentityRole[];
+  identity: IdentityRowView | null;
   expires: number;
 }
 
@@ -188,7 +192,33 @@ export function createInlineHandler(deps: InlineDeps) {
 
   // ------------------------------------------------------------ content script
 
-  async function openMenu(frame: FrameRef, kind: MenuKind, explicit: boolean): Promise<OpenMenuReply> {
+  /**
+   * The identity row for a form with `roles`, or null when there is nothing
+   * to offer. Throws BridgeError("locked") through for the caller.
+   */
+  async function identityRow(frame: FrameRef, roles: IdentityRole[]): Promise<IdentityRowView | null> {
+    let summary: ResultFor<"find_identity">;
+    try {
+      summary = await deps.client.request({ type: "find_identity", ...frameFields(frame) });
+    } catch (e) {
+      if (e instanceof BridgeError && e.code === "locked") throw e;
+      if (e instanceof BridgeError && e.code === "not_found") {
+        return { title: "", fills: 0, documents: [], documentsAllowed: false, empty: true, missing: true };
+      }
+      return null;
+    }
+    const has = roles.filter((r) => summary.roles.includes(r));
+    return {
+      title: summary.title,
+      fills: has.length,
+      documents: has.filter((r) => DOCUMENT_ROLES.includes(r)),
+      documentsAllowed: frame.url.startsWith("https:"),
+      empty: summary.roles.length === 0,
+      missing: false,
+    };
+  }
+
+  async function openMenu(frame: FrameRef, kind: MenuKind, explicit: boolean, roles: IdentityRole[] = []): Promise<OpenMenuReply> {
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
       // The user hid the menu under login fields; saving and passkeys go on.
       // A site's passkey autofill (a conditional get() waiting in this frame)
@@ -196,6 +226,16 @@ export function createInlineHandler(deps: InlineDeps) {
       // must not depend on the preference.
       const waiting = kind === "login" && !explicit ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
       return waiting.length === 0 ? { ok: false } : register(frame, kind, false, [], waiting, { hint: null, help: null });
+    }
+    if (kind === "identity") {
+      let row: IdentityRowView | null;
+      try {
+        row = await identityRow(frame, roles);
+      } catch {
+        return register(frame, kind, true, [], [], { hint: null, help: null }, roles, null);
+      }
+      if (!row || (!row.empty && row.fills === 0 && !explicit)) return { ok: false };
+      return register(frame, kind, false, [], [], { hint: null, help: null }, roles, row);
     }
     let locked = false;
     let items: Match[] = [];
@@ -210,11 +250,17 @@ export function createInlineHandler(deps: InlineDeps) {
     if (kind === "otp") items = items.filter((m) => m.hasTotp);
     if (kind === "new_password") items = [];
     const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
+    // A sign-up form's email field also offers the identity, when it has something for the form.
+    let identity: IdentityRowView | null = null;
+    if (kind === "login" && !locked && roles.length > 0) {
+      identity = await identityRow(frame, roles).catch(() => null);
+      if (identity && identity.fills === 0) identity = null;
+    }
     // Nothing to offer: stay out of the page, unless the user asked for the menu.
-    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !explicit) return { ok: false };
+    if (!locked && kind !== "new_password" && items.length === 0 && passkeys.length === 0 && !identity && !explicit) return { ok: false };
     const extra =
       kind === "login" && !locked && items.length > 0 && passkeys.length === 0 ? await passkeyHint(frame) : { hint: null, help: null };
-    return register(frame, kind, locked, items, passkeys, extra);
+    return register(frame, kind, locked, items, passkeys, extra, roles, identity);
   }
 
   function register(
@@ -224,12 +270,14 @@ export function createInlineHandler(deps: InlineDeps) {
     items: Match[],
     passkeys: PasskeyRow[],
     { hint, help }: { hint: MenuHint | null; help: string | null },
+    roles: IdentityRole[] = [],
+    identity: IdentityRowView | null = null,
   ): OpenMenuReply {
     closeMenu(frame.tabId);
     const token = deps.newToken();
-    menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, expires: deps.now() + MENU_TTL_MS });
-    const offered = items.length + passkeys.length + (hint ? 1 : 0);
-    const rows = locked || kind === "new_password" ? 1 : Math.max(1, Math.min(offered, MENU_MAX_ROWS));
+    menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, roles, identity, expires: deps.now() + MENU_TTL_MS });
+    const offered = items.length + passkeys.length + (hint ? 1 : 0) + (identity ? 1 : 0);
+    const rows = locked || kind === "new_password" || kind === "identity" ? 1 : Math.max(1, Math.min(offered, MENU_MAX_ROWS));
     return { ok: true, token, rows };
   }
 
@@ -365,7 +413,7 @@ export function createInlineHandler(deps: InlineDeps) {
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
     switch (req.type) {
       case "cs_open_menu":
-        return openMenu(frame, req.kind, req.explicit === true);
+        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? []);
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
         if (m && m.token === req.token && m.frame.frameId === frame.frameId) menus.delete(frame.tabId);
@@ -395,7 +443,7 @@ export function createInlineHandler(deps: InlineDeps) {
         if (m.locked) return { ok: true, value: { state: "locked" } };
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
-        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint } };
+        return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity } };
       }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
@@ -443,6 +491,35 @@ export function createInlineHandler(deps: InlineDeps) {
         try {
           const g = await deps.client.request({ type: "generate_password" });
           await pickFill(m.frame, m.token, { kind: "generated", password: g.password }, null);
+        } catch (e) {
+          return fail(e);
+        }
+        return { ok: true, value: null };
+      }
+      case "menu_pick_identity": {
+        const m = liveMenu(tabId, req.token);
+        if (!m || m.locked || !m.identity) return { ok: false, message: t.errors.menuExpired };
+        if (m.identity.empty) return { ok: false, message: t.menu.identityEmptyBody };
+        const docs = req.documents && m.identity.documentsAllowed;
+        const roles = m.roles.filter((r) => docs || !DOCUMENT_ROLES.includes(r));
+        if (roles.length === 0) return { ok: false, message: t.menu.identityNothing };
+        closeMenu(tabId);
+        try {
+          const r = await deps.client.request({ type: "fill_identity", ...frameFields(m.frame), roles, documents: docs });
+          const filled = await pickFill(m.frame, m.token, { kind: "identity", values: r.values }, null);
+          return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.menu.identityNothing };
+        } catch (e) {
+          return fail(e);
+        }
+      }
+      case "menu_open_identity": {
+        const m = liveMenu(tabId, req.token);
+        if (!m || !m.identity) return { ok: false, message: t.errors.menuExpired };
+        // Nothing to open yet: the menu row only says to open HavenKeys.
+        if (m.identity.missing) return { ok: false, message: t.menu.identityMissingBody };
+        closeMenu(tabId);
+        try {
+          await deps.client.request({ type: "open_identity", ...frameFields(m.frame) });
         } catch (e) {
           return fail(e);
         }

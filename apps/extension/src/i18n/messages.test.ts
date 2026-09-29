@@ -12,7 +12,7 @@ function leaves(a: unknown, b: unknown, path = ""): Leaf[] {
 }
 
 /** Words that are the same in both languages. */
-const SAME = new Set(["popup.pill.offline"]);
+const SAME = new Set(["popup.pill.offline", "menu.documentLabels.cpf", "menu.documentLabels.rg"]);
 
 describe("pt-BR messages", () => {
   const all = leaves(en, ptBR);

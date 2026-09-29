@@ -1267,3 +1267,178 @@ mod socket {
         );
     }
 }
+
+use havenkeys_core::identity::IdentityFields;
+
+/// Give the fixture's vault its identity, with a name, postal code and CPF.
+fn add_identity(f: &Fixture) -> Uuid {
+    let mut v = f.vault.lock().unwrap();
+    let staged = v
+        .stage_identity_if_missing("user@example.com", NOW)
+        .unwrap()
+        .unwrap();
+    let id = staged.item_id;
+    v.commit_write(staged, 50).unwrap();
+    let input = ItemInput {
+        item_type: ItemType::Identity,
+        title: String::new(),
+        username: None,
+        urls: vec![],
+        password: SecretUpdate::Keep,
+        totp: SecretUpdate::Keep,
+        notes: SecretUpdate::Keep,
+        content: SecretUpdate::Keep,
+        auto_sign_in: None,
+        sign_in_with: None,
+        identity: Some(IdentityFields {
+            first_name: Some(SecretString::from("Samuel")),
+            postal_code: Some(SecretString::from("71266-105")),
+            cpf: Some(SecretString::from("123.456.789-00")),
+            ..Default::default()
+        }),
+    };
+    let staged = v.stage_update(&id, input, NOW + 1).unwrap();
+    v.commit_write(staged, 51).unwrap();
+    id
+}
+
+fn fill_identity(
+    f: &Fixture,
+    url: &str,
+    top: Option<&str>,
+    roles: &[&str],
+    documents: bool,
+) -> serde_json::Value {
+    let mut req = serde_json::json!({"type": "fill_identity", "url": url, "roles": roles, "documents": documents});
+    if let Some(t) = top {
+        req["topUrl"] = serde_json::json!(t);
+    }
+    call(f, req)
+}
+
+#[test]
+fn identity_is_found_and_filled_by_role() {
+    let f = fixture();
+    add_identity(&f);
+    let found = call(
+        &f,
+        serde_json::json!({"type": "find_identity", "url": "https://shop.com/"}),
+    );
+    assert_eq!(found["result"]["title"], "Samuel");
+    let roles = found["result"]["roles"].as_array().unwrap();
+    assert!(roles.contains(&serde_json::json!("cpf")), "names only");
+    assert!(
+        !found.to_string().contains("123.456"),
+        "no values in find_identity"
+    );
+
+    let r = fill_identity(
+        &f,
+        "https://shop.com/",
+        None,
+        &["firstName", "postalCode"],
+        false,
+    );
+    assert_eq!(
+        r["result"]["values"],
+        serde_json::json!([{"role": "firstName", "value": "Samuel"}, {"role": "postalCode", "value": "71266-105"}])
+    );
+}
+
+#[test]
+fn identity_documents_need_confirmation_and_https() {
+    let f = fixture();
+    add_identity(&f);
+    let no = fill_identity(&f, "https://shop.com/", None, &["cpf"], false);
+    assert_eq!(no["result"]["values"], serde_json::json!([]));
+    let yes = fill_identity(&f, "https://shop.com/", None, &["cpf"], true);
+    assert_eq!(yes["result"]["values"][0]["value"], "123.456.789-00");
+    let http = fill_identity(&f, "http://shop.com/", None, &["cpf"], true);
+    assert_eq!(http["result"]["values"], serde_json::json!([]));
+}
+
+/// Attack: evil.com embeds shop.com's checkout in an iframe to harvest the
+/// identity through the user's click.
+#[test]
+fn identity_denied_to_a_cross_site_frame() {
+    let f = fixture();
+    add_identity(&f);
+    let r = fill_identity(
+        &f,
+        "https://shop.com/checkout",
+        Some("https://evil.com/"),
+        &["firstName"],
+        false,
+    );
+    assert_eq!(error_code(&r), Some("denied"));
+    let r = call(
+        &f,
+        serde_json::json!({"type": "find_identity", "url": "https://shop.com/", "topUrl": "https://evil.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("denied"));
+}
+
+#[test]
+fn identity_requests_respect_lock_integration_and_absence() {
+    let f = fixture();
+    let r = call(
+        &f,
+        serde_json::json!({"type": "find_identity", "url": "https://shop.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("not_found"), "no identity yet");
+    add_identity(&f);
+    f.vault
+        .lock()
+        .unwrap()
+        .update_settings(Settings {
+            browser_integration: false,
+            ..Settings::default()
+        })
+        .unwrap();
+    let r = call(
+        &f,
+        serde_json::json!({"type": "find_identity", "url": "https://shop.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("integration_disabled"));
+    f.vault.lock().unwrap().lock();
+    let r = fill_identity(&f, "https://shop.com/", None, &["firstName"], false);
+    assert_eq!(error_code(&r), Some("locked"));
+}
+
+#[test]
+fn open_identity_opens_it_through_the_hook() {
+    let f = fixture();
+    let id = add_identity(&f);
+    let r = call(
+        &f,
+        serde_json::json!({"type": "open_identity", "url": "https://shop.com/"}),
+    );
+    assert_eq!(r["result"], serde_json::json!({"type": "open_identity"}));
+    assert_eq!(*f.opened.lock().unwrap(), vec![id]);
+}
+
+#[test]
+fn fill_identity_shares_the_secret_rate_limit() {
+    let f = fixture();
+    add_identity(&f);
+    for _ in 0..10 {
+        fill_identity(&f, "https://shop.com/", None, &["firstName"], false);
+    }
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+}
+
+/// Attack: a request for a thousand roles.
+#[test]
+fn fill_identity_with_too_many_roles_is_rejected() {
+    let f = fixture();
+    add_identity(&f);
+    let roles = vec!["city"; 1000];
+    let r = fill_identity(&f, "https://shop.com/", None, &roles, false);
+    assert!(matches!(
+        error_code(&r),
+        Some("invalid_input") | Some("malformed") | Some("too_large")
+    ));
+}

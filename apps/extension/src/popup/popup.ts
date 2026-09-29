@@ -5,11 +5,12 @@
 // All DOM is built with createElement/textContent: vault data is never
 // parsed as HTML.
 
-import { SSO_PROVIDERS, type Match, type SsoProvider } from "@havenkeys/protocol";
-import type { PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
+import { SSO_PROVIDERS, type IdentityRole, type Match, type SsoProvider } from "@havenkeys/protocol";
+import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
 import { providerIcon } from "../menu/icons";
+import { displayHost } from "../shared/url";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
@@ -122,6 +123,41 @@ function userLine(m: Match): HTMLElement {
   return m.username !== null ? truncates(h("div", { className: "user", text: m.username })) : h("div", { className: "user copy", text: t.common.noUsername });
 }
 
+function identityRow(title: string): HTMLElement {
+  const status = h("div", { className: "row-status" });
+  const fill = smallButton(t.popup.fillIdentity, t.popup.fillIdentityTitle);
+  const row = h(
+    "div",
+    { className: "item identity" },
+    h("div", { className: "who" }, truncates(h("div", { className: "title", text: title || t.menu.identityFallback })), h("div", { className: "user copy", text: t.popup.identityKind })),
+    h("div", { className: "actions" }, fill),
+    status,
+  );
+  /** Buttons of the request in flight: all disabled until it answers. */
+  let busy: HTMLButtonElement[] = [fill];
+  async function run(req: Extract<PopupRequest, { type: "popup_fill_identity" }>): Promise<void> {
+    if (busy.some((b) => b.disabled)) return;
+    for (const b of busy) b.disabled = true;
+    const r = await send<IdentityFillReply>(req);
+    for (const b of busy) b.disabled = false;
+    if (!r.ok) {
+      busy = [fill];
+      return void status.replaceChildren(h("span", { className: "error", text: r.message }));
+    }
+    if (r.value === null) return window.close();
+    const { origin } = r.value;
+    const list = r.value.confirm.map((x: IdentityRole) => t.menu.documentLabels[x as keyof typeof t.menu.documentLabels] ?? x).join(t.menu.and);
+    const yes = smallButton(t.menu.identityFillWithDocs(list), "");
+    const no = smallButton(t.menu.identityFillWithoutDocs, "");
+    busy = [fill, yes, no];
+    yes.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: true, origin }));
+    no.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: false, origin }));
+    status.replaceChildren(h("p", { text: t.popup.identityAsks(displayHost(origin) ?? origin, list) }), yes, no);
+  }
+  fill.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: null }));
+  return row;
+}
+
 function matchRow(m: Match): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
   const status = h("div", { className: "row-status" });
@@ -209,6 +245,7 @@ function render(state: PopupState): void {
       } else {
         parts.push(h("ul", { className: "list" }, ...state.matches.map(matchRow)));
       }
+      if (state.identity) parts.push(identityRow(state.identity.title));
       main.replaceChildren(...parts);
       void offerSuggestions();
       return;

@@ -28,8 +28,11 @@ import { fillLogin, fillNewPassword, fillOtp, markUserEdit, valueSource } from "
 import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
 import { findSubmitButton, hasChallenge, pressWhenReady, type PressStep } from "../autofill/submit";
+import { findIdentityGroup, identityGroupFor } from "../autofill/identity";
+import { fillIdentity, rolesToFill } from "../autofill/identity-fill";
 import { hasAny, normalize, SUBMIT_WORDS } from "../autofill/text";
 import { watchNext, type WatchKind } from "../autofill/watch";
+import type { IdentityRole } from "@havenkeys/protocol";
 import {
   parseBackgroundMessage,
   TOKEN,
@@ -82,12 +85,27 @@ function inputFrom(e: Event): HTMLInputElement | null {
   return t instanceof HTMLInputElement ? t : null;
 }
 
-function menuKindFor(field: HTMLInputElement): MenuKind | null {
-  const { kind } = groupFor(field, defaultEnv());
-  if (isLoginRole(kind)) return "login";
-  if (isNewPasswordRole(kind)) return "new_password";
-  if (kind === "otp") return "otp";
-  return null;
+/**
+ * Which menu a field gets, and the identity roles of its form that could be
+ * filled now (none when everything is already filled: nothing to ask for).
+ */
+export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; roles?: IdentityRole[] } | null {
+  const env = defaultEnv();
+  const { group, kind } = groupFor(field, env);
+  const loginIntent = group.intent === "login";
+  const identity = loginIntent ? null : identityGroupFor(field, env);
+  const fillable = identity ? rolesToFill(identity, env) : [];
+  const roles = fillable.length > 0 ? fillable : undefined;
+  if (isLoginRole(kind)) {
+    const hasPassword = group.fields.some((f) => f.el.type === "password");
+    if (hasPassword || loginIntent || !roles) {
+      return group.intent === "signup" && roles ? { kind: "login", roles } : { kind: "login" };
+    }
+    return { kind: "identity", roles };
+  }
+  if (isNewPasswordRole(kind)) return { kind: "new_password" };
+  if (kind === "otp") return { kind: "otp" };
+  return roles ? { kind: "identity", roles } : null;
 }
 
 function start(): void {
@@ -153,13 +171,19 @@ function start(): void {
   /** `explicit`: from the field icon, so show the menu even with nothing to offer. */
   async function maybeOpen(field: HTMLInputElement, explicit = false): Promise<void> {
     if (opening || menu?.field === field || !isFillable(field, defaultEnv())) return;
-    const kind = menuKindFor(field);
-    if (!kind) return;
+    const choice = menuKindFor(field);
+    if (!choice) return;
+    const kind = choice.kind;
     // Suggestions off: only a login field may still ask, for the passkeys of
     // a site's passkey autofill (the background offers nothing else).
     if (!suggestions && (explicit || kind !== "login")) return;
     opening = true;
-    const req: ContentRequest = explicit ? { type: "cs_open_menu", kind, explicit: true } : { type: "cs_open_menu", kind };
+    const req: ContentRequest = {
+      type: "cs_open_menu",
+      kind,
+      ...(explicit ? { explicit: true as const } : {}),
+      ...(choice.roles ? { roles: choice.roles } : {}),
+    };
     const reply = (await send(req)) as { ok?: unknown; token?: unknown; rows?: unknown } | undefined;
     opening = false;
     if (!reply || reply.ok !== true || typeof reply.token !== "string" || !TOKEN.test(reply.token)) {
@@ -381,6 +405,18 @@ function start(): void {
     // The frame may have navigated since the desktop matched its URL.
     if (m.origin !== location.origin) return none;
     const env = defaultEnv();
+    // An identity fills the identity group of the picked field (or the page's
+    // first one for a popup fill), never the login group.
+    if (m.fill.kind === "identity") {
+      let target: typeof picked = null;
+      if (m.token !== null) {
+        target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
+        picked = null;
+        if (!target || !target.field.isConnected) return none;
+      }
+      const ig = target ? identityGroupFor(target.field, env) : findIdentityGroup(document, env);
+      return { filled: ig ? fillIdentity(ig, m.fill.values, env) : 0, pressing: null };
+    }
     let group;
     if (m.token !== null) {
       const target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
@@ -575,6 +611,14 @@ function start(): void {
       case "bg_fill":
         sendResponse(handleFill(m));
         return false;
+      case "bg_identity_roles": {
+        if (window.top !== window) sendResponse({ roles: [] });
+        else {
+          const g = findIdentityGroup(document, defaultEnv());
+          sendResponse({ roles: g ? rolesToFill(g, defaultEnv()) : [] });
+        }
+        return false;
+      }
       case "bg_close_menu":
         // Escape in the menu, or a pick: either way the user is done with it here.
         if (menu?.frame.token === m.token) {

@@ -1,6 +1,6 @@
 # Filling forms from the Identity — Design
 
-Status: proposed, 2026-09-29.
+Status: accepted, 2026-09-29.
 Builds on `2026-09-29-identity-item-design.md` (sub-project 1, the Identity
 item). Amends CLAUDE.md §25 (a note, like the earlier ones) and the
 extension's trust model in `docs/security-model.md`.

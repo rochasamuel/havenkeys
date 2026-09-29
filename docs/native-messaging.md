@@ -127,6 +127,9 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `passkey_create` | `url`, `topUrl`?, `rpId`, `challenge`, `userHandle`, `userName`, `displayName` (string or null), `itemId` (UUID or null), `conditional` (bool) | yes | secret; a server write |
 | `passkey_status` | `url`, `topUrl`? | yes | lookup |
 | `open_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
+| `find_identity` | `url`, `topUrl`? | yes | lookup |
+| `fill_identity` | `url`, `topUrl`?, `roles` (1-40 known roles, no duplicates), `documents` (bool) | yes | secret |
+| `open_identity` | `url`, `topUrl`? | yes | secret |
 | `start_sso` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"`), `account` (string or null) | yes | secret |
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
@@ -137,6 +140,36 @@ be omitted, which means null.
 
 `open_item` shows the desktop window with that login open in the editor; the
 item must be saved for `url`, like `fill_item`. Nothing is returned.
+
+**Identity requests.** The Identity has no saved website, so these three are
+not bound to a site the way `fill_item` is (`security-model.md` §20 explains
+why and what protects it). Results are named after their requests:
+
+* `find_identity` returns `{ title, email, roles }`: the identity's name, its
+  email (both at most 1024 and 2048 bytes) and the roles it has a value for,
+  as names only (documents included, so the menu can say "also asks for
+  CPF"). It never carries a value. An empty `roles` list is an empty identity.
+* `fill_identity` returns `{ values: [ { role, value } ] }`, in the order
+  asked, for the roles that have a value. Each value is at most 4096 bytes.
+* `open_identity` returns `{}` and shows the identity in the desktop window,
+  as `open_item` does for a login. It works when the identity is empty.
+
+Roles: `fullName`, `firstName`, `middleName`, `lastName`, `email`, `phone`,
+`birthDate`, `birthDay`, `birthMonth`, `birthYear`, `company`, `street`,
+`number`, `complement`, `addressLine1`, `addressLine2`, `neighborhood`,
+`city`, `state`, `postalCode`, `country`, `username`, `cpf`, `rg`,
+`passport`, `driversLicense`. Composed values (full name, address line 1,
+birth-date parts, phone) are built in Rust. An unknown role, a duplicate or
+0 or more than 40 roles is a malformed message.
+
+What Rust checks (`VaultService::identity_*_for_page`): the vault is unlocked
+and browser integration is on; the page URL is http(s); in a frame, `topUrl`
+is http(s) too and both are the same site, else `denied`; the identity
+exists (`not_found` otherwise). Document roles (`cpf`, `rg`, `passport`,
+`driversLicense`) are answered only when `documents` is true **and** the
+page is https, and are otherwise silently left out. Only the requested roles
+are returned. `find_identity` stops after the existence check and returns the
+title, email and role names; `open_identity` stops after the URL check.
 
 `conditional` on `check_passkey_create` and `passkey_create` marks the
 site's automatic passkey upgrade (`create()` with `mediation:

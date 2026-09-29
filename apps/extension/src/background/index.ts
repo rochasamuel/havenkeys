@@ -13,7 +13,8 @@
 
 import { t } from "../i18n";
 import { NativeClient, type NativePort } from "../messaging/native";
-import { newToken, parseContentRequest, parseInlineRequest, type BackgroundToContent, type FillPayload } from "../messaging/inline";
+import { newToken, parseContentRequest, parseIdentityRolesReply, parseInlineRequest, type BackgroundToContent, type FillPayload } from "../messaging/inline";
+import type { IdentityRole } from "@havenkeys/protocol";
 import { parsePopupRequest } from "../messaging/popup";
 import { parseSsoContentRequest, parseSsoFrameRequest, type BackgroundToSso } from "../messaging/sso";
 import { NATIVE_HOST_NAME } from "../shared/constants";
@@ -114,7 +115,18 @@ async function ssoTab(tabId: number, pageUrl: string, itemId: string) {
   return r.ok ? { ok: true as const, value: null } : r;
 }
 
-const popup = createPopupHandler(client, activeTab, fillTab, ssoTab);
+/** Popup "Fill identity": which identity fields the top frame can fill now. */
+async function scanIdentity(tabId: number): Promise<IdentityRole[]> {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ["content.js"] });
+    const reply = await chrome.tabs.sendMessage(tabId, { type: "bg_identity_roles" }, { frameId: 0 });
+    return parseIdentityRolesReply(reply);
+  } catch {
+    return [];
+  }
+}
+
+const popup = createPopupHandler(client, activeTab, fillTab, ssoTab, scanIdentity);
 
 // ------------------------------------------------------------ senders
 

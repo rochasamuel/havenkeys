@@ -251,8 +251,9 @@ convenience only.
 The browser extension does not use these commands. It reaches the core
 through the native-messaging bridge, which has its own much narrower request
 set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`, `open_item`,
-`generate_password`, `check_login`, `save_login`, and the four passkey
-requests), all origin-bound and rate-limited. See `native-messaging.md`.
+`generate_password`, `check_login`, `save_login`, the four passkey
+requests and the three identity requests, `find_identity`, `fill_identity`
+and `open_identity`), all origin-bound and rate-limited. See `native-messaging.md`.
 
 `open_item` returns nothing: when the item is a login saved for the page,
 the desktop shows its window with that login's editor open. It is in the
@@ -781,3 +782,75 @@ release and key-rotation steps.
 ## 19. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.
+
+## 20. Filling forms from the Identity
+
+Spec: `docs/superpowers/specs/2026-09-29-identity-autofill-design.md`.
+
+Every other fill is **bound to a site**: Rust releases a login only to a page
+its saved websites match. The Identity has no website. Any page, a phishing
+page included, can show a form that asks for a name and an address, and
+HavenKeys will offer to fill it there. That is accepted, because an identity
+is for filling forms on sites the user has not seen before. The protection
+comes from these rules instead:
+
+1. Nothing is filled without the user's click in the extension's own menu (an
+   iframe the page cannot read or click) or popup.
+2. Only visible, editable fields of the form the user clicked in are filled,
+   re-checked at the moment of writing; hidden fields never are. "Visible"
+   is stricter than for logins (`autofill/visibility.ts`): besides being
+   rendered with a size, the field must lie inside the page's scrollable
+   area (not `left: -9999px`), its combined opacity with its ancestors must
+   be at least 0.1, no `clip` or `clip-path` on it or an ancestor may
+   collapse it, and no `overflow: hidden`/`clip` ancestor may be collapsed
+   or cut it off. At most 16 elements are examined per field.
+3. Only the values those fields ask for leave Rust (`roles`).
+4. **Documents** (CPF, RG, passport, driver's license) need a second,
+   explicit click that names them, and only on https pages. Rust enforces
+   both: it leaves documents out unless `documents` is true and the page is
+   https.
+5. A cross-site iframe gets nothing (`denied`, checked in Rust).
+6. Existing values are never overwritten, except values HavenKeys itself
+   wrote.
+7. Identity fills never submit a form.
+
+Requests: `find_identity` (lookup class; title, email and role names, never a
+value), `fill_identity` and `open_identity` (secret class). See
+`native-messaging.md`. The extension classifies fields and picks roles, but
+that is convenience, not the boundary: Rust still answers only known roles,
+only for an http(s) page, and documents only as above. Card fields
+(`cc-*`, card and CVV words) are refused by the classifier and no card data
+exists in the identity.
+
+**What this does not protect against.** A user who clicks "Fill" on a
+phishing page gives that page the non-document values the form shows fields
+for, and the documents too if they confirm. The confirmation names the
+documents and the page's site to make that choice deliberate, but it cannot
+tell a real shop from a copy. A page can read what was written into its own
+fields, as with any form. On an http page a network attacker can read or
+alter the page, including injecting script that reads the fields and sends
+them the moment they are filled, so values filled there should be treated
+as exposed; documents are never filled there.
+
+**Known limitations of the visibility check.** A field **covered by another
+element** (a page drawing an opaque box over it) still counts as visible:
+hit testing (`elementFromPoint`) would refuse legitimate forms whose
+floating labels sit on top of their inputs, so it is not used. Colour tricks
+(text and background the same colour) and fields scrolled far into a long
+page are not detected either. The field must still belong to the form the
+user clicked in, and nothing is filled without that click.
+
+**Role probing by a compromised content script.** `cs_open_menu` carries the
+roles the content script says the form has, and whether a menu opens
+(`ok`) tells whether the identity has a value for at least one of them. A
+compromised content script (which needs an extension compromise, not just a
+hostile page) could send one role at a time and learn which roles the
+identity has a value for, never the values themselves. That is low value, and such a script could already fill
+and read the form after a click.
+
+**Firefox data-collection declaration.** `manifest/firefox.json` declares
+`authenticationInfo` (logins, passkeys, one-time codes) and
+`personallyIdentifyingInfo` (the identity's name, contact, address and
+documents) as required data collection permissions. Nothing is collected by
+a third party: the declaration states that the extension handles this data
+locally, to fill forms on the user's request.

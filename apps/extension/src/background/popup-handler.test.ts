@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Request } from "@havenkeys/protocol";
+import type { IdentityRole, Request } from "@havenkeys/protocol";
+import type { FillPayload } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
 import { parsePopupRequest } from "../messaging/popup";
 import { pageUrlForRequest } from "../shared/url";
@@ -69,7 +70,7 @@ describe("popup handler", () => {
     );
     const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login?next=x#y" }));
     const r = await h.handle({ type: "popup_state" });
-    expect(r).toEqual({ ok: true, value: { kind: "unlocked", site: "github.com", matches: [] } });
+    expect(r).toEqual({ ok: true, value: { kind: "unlocked", site: "github.com", matches: [], identity: null } });
     expect(c.seen[1]).toEqual({ type: "find_matches", url: "https://github.com/login" });
   });
 
@@ -231,5 +232,109 @@ describe("popup handler", () => {
       ok: false,
       message: "This item is not saved for this website.",
     });
+  });
+});
+
+const unlocked = { type: "status", state: "unlocked", vaultExists: true };
+
+function handlerWith(answers: Record<string, unknown>, url = "https://shop.com/") {
+  const requests: Request[] = [];
+  const client = {
+    request: (async (r: Request) => {
+      requests.push(r);
+      const a = answers[r.type];
+      if (a === undefined) throw new Error("unexpected request");
+      return a;
+    }) as never,
+  };
+  return { h: createPopupHandler(client, async () => ({ id: 1, url })), requests };
+}
+
+function identitySetup(pageRoles: IdentityRole[], summary: { roles: IdentityRole[] }, url = "https://shop.com/") {
+  const requests: Request[] = [];
+  const filled: FillPayload[] = [];
+  const tab = { id: 1, url };
+  const client = {
+    request: (async (r: Request) => {
+      requests.push(r);
+      if (r.type === "find_identity") return { type: "find_identity", title: "Samuel", email: null, ...summary };
+      if (r.type === "fill_identity") return { type: "fill_identity", values: [{ role: "fullName", value: "Samuel" }] };
+      throw new Error("unexpected request");
+    }) as never,
+  };
+  const h = createPopupHandler(
+    client,
+    async () => tab,
+    async (_tab, _url, payload) => {
+      filled.push(payload);
+      return 1;
+    },
+    undefined,
+    async () => pageRoles,
+  );
+  return { h, requests, filled, tab };
+}
+
+describe("popup identity fill", () => {
+  it("offers the identity when it has values", async () => {
+    const { h } = handlerWith({ status: unlocked, find_matches: { type: "find_matches", matches: [] }, find_identity: { type: "find_identity", title: "Samuel", email: null, roles: ["fullName"] } });
+    const r = await h.handle({ type: "popup_state" });
+    expect(r).toMatchObject({ ok: true, value: { kind: "unlocked", identity: { title: "Samuel" } } });
+  });
+
+  it("asks about documents first, then fills with the answer", async () => {
+    const { h, requests, filled } = identitySetup(["fullName", "cpf"], { roles: ["fullName", "cpf"] });
+    expect(await h.handle({ type: "popup_fill_identity", documents: null })).toEqual({
+      ok: true,
+      value: { confirm: ["cpf"], origin: "https://shop.com" },
+    });
+    expect(requests.some((x) => x.type === "fill_identity")).toBe(false);
+    expect(await h.handle({ type: "popup_fill_identity", documents: false, origin: "https://shop.com" })).toEqual({ ok: true, value: null });
+    expect(requests.at(-1)).toMatchObject({ type: "fill_identity", roles: ["fullName"], documents: false });
+    expect(filled.at(-1)).toMatchObject({ kind: "identity" });
+  });
+
+  it("says so when the page has no identity form", async () => {
+    const { h } = identitySetup([], { roles: ["fullName"] });
+    expect(await h.handle({ type: "popup_fill_identity", documents: null })).toMatchObject({ ok: false });
+  });
+
+  it("never asks for or sends documents on http", async () => {
+    const { h, requests } = identitySetup(["fullName", "cpf"], { roles: ["fullName", "cpf"] }, "http://shop.com/");
+    expect(await h.handle({ type: "popup_fill_identity", documents: true, origin: "http://shop.com" })).toEqual({ ok: true, value: null });
+    expect(requests.at(-1)).toMatchObject({ roles: ["fullName"], documents: false });
+  });
+
+  it("refuses the documents answer once the tab moved to another site", async () => {
+    const { h, requests, filled, tab } = identitySetup(["fullName", "cpf"], { roles: ["fullName", "cpf"] });
+    expect(await h.handle({ type: "popup_fill_identity", documents: null })).toMatchObject({ ok: true, value: { origin: "https://shop.com" } });
+    tab.url = "https://evil.example/checkout";
+    for (const documents of [true, false]) {
+      const r = await h.handle({ type: "popup_fill_identity", documents, origin: "https://shop.com" });
+      expect(r).toEqual({ ok: false, message: "The page changed to another site. Open HavenKeys again to fill your identity." });
+    }
+    expect(requests.some((x) => x.type === "fill_identity")).toBe(false);
+    expect(filled).toEqual([]);
+    // Same site, another path: still the same answer.
+    tab.url = "https://shop.com/other";
+    expect(await h.handle({ type: "popup_fill_identity", documents: true, origin: "https://shop.com" })).toEqual({ ok: true, value: null });
+    expect(requests.at(-1)).toMatchObject({ type: "fill_identity", documents: true });
+  });
+
+  it("parses the request strictly", () => {
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: null })).toEqual({ type: "popup_fill_identity", documents: null });
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: true, origin: "https://shop.com" })).toEqual({
+      type: "popup_fill_identity",
+      documents: true,
+      origin: "https://shop.com",
+    });
+    // An answer must name the origin it was asked for, exactly as URL serializes it.
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: true })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: false, origin: "https://shop.com/" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: false, origin: "javascript:alert(1)" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: null, origin: "https://shop.com" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: "yes" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_identity" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_identity", documents: true, url: "x" })).toBeNull();
   });
 });

@@ -201,3 +201,131 @@ describe("field menu focus", () => {
     expect(document.activeElement).not.toBe(rows[0]);
   });
 });
+
+describe("identity row", () => {
+  const ready = (identity: object, kind = "identity") => ({
+    ok: true,
+    value: { state: "ready", kind, site: "shop.com", items: [], passkeys: [], hint: null, identity },
+  });
+  const trusted = { isTrusted: true } as MouseEvent;
+
+  /** Loads with the click guard armed; returns the captured click handlers. */
+  async function setup(identity: object, kind = "identity") {
+    const handlers = captureClicks();
+    replies = [ready(identity, kind)];
+    await load();
+    // Every later request (resize, pick) succeeds, whatever order they arrive in.
+    (globalThis as unknown as { chrome: { runtime: { sendMessage: unknown } } }).chrome.runtime.sendMessage = async (m: unknown) => {
+      asked.push(m);
+      return { ok: true, value: null };
+    };
+    await vi.advanceTimersByTimeAsync(1000); // let the click guard arm
+    return handlers;
+  }
+
+  async function click(handlers: ReturnType<typeof captureClicks>, el: Element): Promise<void> {
+    handlers.get(el)?.(trusted);
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  /** Let the documents step's own click guard arm. */
+  const armStep = () => vi.advanceTimersByTimeAsync(400);
+
+  it("asks before filling documents, naming them", async () => {
+    const handlers = await setup({ title: "Samuel Rocha", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
+    const row = document.querySelector<HTMLButtonElement>("button.row")!;
+    expect(row.textContent).toContain("Samuel Rocha");
+    await click(handlers, row);
+    await armStep();
+    expect(asked.some((m) => (m as { type: string }).type === "menu_pick_identity")).toBe(false);
+    expect(document.body.textContent).toContain("shop.com also asks for: CPF");
+    const [withDocs, withoutDocs] = Array.from(document.querySelectorAll<HTMLButtonElement>("#main button"));
+    expect(withDocs!.textContent).toBe("Fill CPF too");
+    await click(handlers, withoutDocs!);
+    expect(asked.at(-1)).toEqual({ type: "menu_pick_identity", token: TOKEN, documents: false });
+  });
+
+  it("fills documents from the step's primary button", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf", "rg"], documentsAllowed: true, empty: false });
+    await click(handlers, document.querySelector("button.row")!);
+    expect(document.body.textContent).toContain("CPF and RG");
+    await armStep();
+    await click(handlers, document.querySelector("#main button")!);
+    expect(asked.at(-1)).toEqual({ type: "menu_pick_identity", token: TOKEN, documents: true });
+  });
+
+  it("re-arms the guard when the step appears: a fast second click confirms nothing", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
+    await click(handlers, document.querySelector("button.row")!);
+    const [withDocs, withoutDocs] = Array.from(document.querySelectorAll<HTMLButtonElement>("#main button"));
+    const picks = () => asked.filter((m) => (m as { type: string }).type === "menu_pick_identity");
+    await vi.advanceTimersByTimeAsync(100);
+    await click(handlers, withDocs!);
+    await click(handlers, withoutDocs!);
+    expect(picks()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(300);
+    await click(handlers, withDocs!);
+    expect(picks()).toEqual([{ type: "menu_pick_identity", token: TOKEN, documents: true }]);
+  });
+
+  it("moves focus to the step's safe button, never the documents one", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
+    const row = document.querySelector<HTMLButtonElement>("button.row")!;
+    row.focus();
+    await click(handlers, row);
+    const [withDocs, withoutDocs] = Array.from(document.querySelectorAll<HTMLButtonElement>("#main button"));
+    expect(document.activeElement).toBe(withoutDocs);
+    expect(document.activeElement).not.toBe(withDocs);
+  });
+
+  it("ignores untrusted clicks on the step's buttons", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
+    await click(handlers, document.querySelector("button.row")!);
+    await armStep();
+    const before = asked.length;
+    handlers.get(document.querySelector("#main button")!)?.({ isTrusted: false } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked.length).toBe(before);
+  });
+
+  it("says documents are not filled on http and fills without them, no step", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 2, documents: ["cpf"], documentsAllowed: false, empty: false });
+    const row = document.querySelector<HTMLButtonElement>("button.row")!;
+    expect(row.textContent).toContain("Documents are not filled on http pages");
+    await click(handlers, row);
+    expect(asked.at(-1)).toEqual({ type: "menu_pick_identity", token: TOKEN, documents: false });
+  });
+
+  it("fills straight away when the form asks for no documents", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 2, documents: [], documentsAllowed: true, empty: false });
+    await click(handlers, document.querySelector("button.row")!);
+    expect(asked.at(-1)).toEqual({ type: "menu_pick_identity", token: TOKEN, documents: false });
+  });
+
+  it("says to open HavenKeys, with no button, when the identity does not exist yet", async () => {
+    await setup({ title: "", fills: 0, documents: [], documentsAllowed: false, empty: true, missing: true });
+    expect(document.querySelectorAll("#main button")).toHaveLength(0);
+    expect(document.getElementById("main")?.textContent).toContain("Open the HavenKeys app to add your details.");
+    expect(asked.some((m) => (m as { type: string }).type === "menu_open_identity")).toBe(false);
+  });
+
+  it("opens the desktop app for an empty identity", async () => {
+    const handlers = await setup({ title: "", fills: 0, documents: [], documentsAllowed: true, empty: true, missing: false });
+    const row = document.querySelector<HTMLButtonElement>("button.row")!;
+    expect(row.textContent).toContain("Your identity is empty");
+    await click(handlers, row);
+    expect(asked.at(-1)).toEqual({ type: "menu_open_identity", token: TOKEN });
+  });
+
+  it("shows the row under a sign-up form's logins", async () => {
+    replies = [ready({ title: "Samuel", fills: 1, documents: [], documentsAllowed: true, empty: false }, "login")];
+    await load();
+    expect(document.querySelectorAll("button.row")).toHaveLength(1);
+  });
+
+  it("says so when an identity menu has no identity", async () => {
+    replies = [ready(null as unknown as object)];
+    await load();
+    expect(document.body.textContent).toContain("Nothing to fill in this form.");
+  });
+});

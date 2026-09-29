@@ -215,6 +215,47 @@ main {
   color: var(--danger);
 }
 
+.step {
+  gap: 8px;
+  align-items: stretch;
+}
+
+.step-btn {
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.step-btn:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+.step-btn.primary {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--on-brass);
+}
+
+.step-btn.primary:hover:not(:disabled) {
+  background: var(--brass-hi);
+  border-color: var(--brass-hi);
+}
+
+.step-btn:disabled {
+  opacity: 0.5;
+}
+
 /* Save prompt. As tall as its content: the page reports that height
    (save_resize) and the content script sizes the frame. */
 
