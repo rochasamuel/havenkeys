@@ -544,6 +544,23 @@ fn sso_results_validate() {
     let inconsistent =
         r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"update","itemId":null}}"#;
     assert!(Outgoing::parse(inconsistent.as_bytes()).is_none());
+    // `accounts`: optional (an older desktop omits it), at most 10, each bounded.
+    let with_accounts = r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"add","itemId":null,"accounts":["me@gmail.com"]}}"#;
+    assert!(Outgoing::parse(with_accounts.as_bytes()).is_some());
+    let without = r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"add","itemId":null}}"#;
+    assert!(Outgoing::parse(without.as_bytes()).is_some());
+    let eleven = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"check_sso","action":"add","itemId":null,"accounts":[{}]}}}}"#,
+        [r#""a@b.co""#; 11].join(",")
+    );
+    assert!(Outgoing::parse(eleven.as_bytes()).is_none());
+    let long = "a".repeat(MAX_ACCOUNT_BYTES + 1);
+    let too_long = format!(
+        r#"{{"v":1,"id":1,"result":{{"type":"check_sso","action":"add","itemId":null,"accounts":["{long}"]}}}}"#
+    );
+    assert!(Outgoing::parse(too_long.as_bytes()).is_none());
+    let empty = r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"add","itemId":null,"accounts":[""]}}"#;
+    assert!(Outgoing::parse(empty.as_bytes()).is_none());
     let m = format!(
         r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github"}}]}}}}"#
     );

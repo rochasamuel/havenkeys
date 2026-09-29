@@ -139,6 +139,7 @@ export const ptBR: Messages = {
     signInWith: (provider: string) => `Entrar com ${provider}`,
     accountLabel: "Conta",
     accountPlaceholder: "E-mail (opcional)",
+    otherAccount: "Outro e-mail…",
     titleLabel: "Nome",
     save: "Salvar",
     update: "Adicionar",

@@ -5,8 +5,8 @@
 use crate::secret::WireSecret;
 use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST,
-    MAX_MATCHES, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES,
-    MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
+    MAX_MATCHES, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES,
+    MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -497,8 +497,16 @@ impl Response {
                     && provider_origins.len() <= MAX_PROVIDER_ORIGINS
                     && provider_origins.iter().all(|o| o.len() <= MAX_URL_BYTES)
             }
-            Some(ResultBody::CheckSso { action, item_id }) => {
+            Some(ResultBody::CheckSso {
+                action,
+                item_id,
+                accounts,
+            }) => {
                 (*action == SaveAction::Update) == item_id.is_some()
+                    && accounts.len() <= MAX_PROVIDER_ACCOUNTS
+                    && accounts
+                        .iter()
+                        .all(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
             }
             _ => true,
         }
@@ -594,6 +602,10 @@ pub enum ResultBody {
     CheckSso {
         action: SaveAction,
         item_id: Option<Uuid>,
+        /// The vault's accounts for the provider, offered in the save prompt
+        /// (never secrets; empty when `unchanged`). Absent from older desktops.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        accounts: Vec<String>,
     },
     SaveSso {
         item_id: Uuid,

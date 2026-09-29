@@ -53,7 +53,16 @@ export const FRAME_TTL_MS = 5 * 60_000;
 type Session =
   | { kind: "offer"; token: string; frame: FrameRef; rows: Match[]; expires: number }
   | { kind: "notice"; token: string; frame: FrameRef; provider: SsoProvider; expires: number }
-  | { kind: "save"; token: string; pending: PendingSso; action: "add" | "update"; itemId: string | null; title: string | null; expires: number };
+  | {
+      kind: "save";
+      token: string;
+      pending: PendingSso;
+      action: "add" | "update";
+      itemId: string | null;
+      title: string | null;
+      accounts: string[];
+      expires: number;
+    };
 
 function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
@@ -151,6 +160,11 @@ export function createSsoHandler(deps: SsoDeps) {
     const isTop = frame.frameId === 0;
     state.visit(tab, frame.origin, isTop);
     if (isTop) {
+      // A save question still open follows the tab to its next page: sites
+      // often move on (a popup closes, then the dashboard loads) right as it
+      // appears, and the old page takes the balloon with it.
+      const s = sessions.get(frame.tabId);
+      if (s?.kind === "save" && asking(frame.tabId)) void deps.sendToFrame(top(frame.tabId), { type: "bg_sso_show", token: s.token });
       state.topLoad(frame.tabId, frame.origin);
       const back = state.takeReturn(frame.tabId, frame.origin);
       if (back) void ask(back);
@@ -190,6 +204,11 @@ export function createSsoHandler(deps: SsoDeps) {
     if (isAccount(account)) state.account(tab, frame.origin, account.toLowerCase(), frame.frameId === 0);
   }
 
+  /** A tab opened by another: the site's login popup, if that tab just clicked a provider button. */
+  function tabCreated(tab: TabRef): void {
+    state.opened(tab);
+  }
+
   /** A tab closed: a provider popup closing is a return, too. */
   function tabRemoved(tabId: number): void {
     const back = state.takeOnTabClosed(tabId);
@@ -198,19 +217,28 @@ export function createSsoHandler(deps: SsoDeps) {
     sessions.delete(tabId);
   }
 
+  /** The account to suggest: the provider page's own, else the site's login_hint. */
+  const suggested = (p: PendingSso) => p.account ?? p.hint;
+
+  /** A URL a tab is loading (from the browser): a login_hint for a pending capture. */
+  function tabUrl(tab: TabRef, url: string): void {
+    state.hint(tab, url);
+  }
+
   /** Back from the provider: ask whether to save, unless the vault already has it. */
   async function ask(p: PendingSso): Promise<void> {
     const gen = generation;
     let check: ResultFor<"check_sso">;
     try {
-      check = await deps.client.request({ type: "check_sso", ...frameFields(p), provider: p.provider, account: p.account });
+      check = await deps.client.request({ type: "check_sso", ...frameFields(p), provider: p.provider, account: suggested(p) });
     } catch {
       return; // locked, not running, rate limited: no prompt
     }
     if (gen !== generation || check.action === "unchanged") return; // locked meanwhile, or nothing new
     const title = check.action === "add" ? (deps.siteName?.(p.url) ?? displayHost(p.url) ?? null) : null;
     const action = check.action;
-    const s = open(p.tabId, (token, expires) => ({ kind: "save", token, pending: p, action, itemId: check.itemId, title, expires }));
+    const accounts = check.accounts;
+    const s = open(p.tabId, (token, expires) => ({ kind: "save", token, pending: p, action, itemId: check.itemId, title, accounts, expires }));
     // If the page is still loading, the send finds no listener; the balloon
     // then misses this prompt, which holds no secret and simply expires.
     void deps.sendToFrame(top(p.tabId), { type: "bg_sso_show", token: s.token });
@@ -264,7 +292,8 @@ export function createSsoHandler(deps: SsoDeps) {
           mode: "save",
           site: displayHost(s.pending.url) ?? "",
           provider: s.pending.provider,
-          account: s.pending.account,
+          account: suggested(s.pending),
+          accounts: s.accounts,
           title: s.title,
           action: s.action,
         };
@@ -329,7 +358,7 @@ export function createSsoHandler(deps: SsoDeps) {
     state.clear();
   }
 
-  return { handleContent, handleFrame, ready, noteUsername, start, tabRemoved, reset };
+  return { handleContent, handleFrame, ready, noteUsername, start, tabCreated, tabUrl, tabRemoved, reset };
 }
 
 export type SsoHandler = ReturnType<typeof createSsoHandler>;

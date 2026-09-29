@@ -8,6 +8,7 @@
 // opened, and lasts SSO_RUN_TTL_MS.
 
 import { SSO_PROVIDERS, type SsoProvider } from "@havenkeys/protocol";
+import { isAccount } from "../messaging/sso";
 
 export const PENDING_TTL_MS = 5 * 60_000;
 export const SSO_RUN_TTL_MS = 2 * 60_000;
@@ -22,7 +23,11 @@ export interface PendingSso {
   url: string;
   topUrl?: string;
   provider: SsoProvider;
+  /** Learned on the provider's own page (a chooser row, a username step). */
   account: string | null;
+  /** A `login_hint` from a URL the tab or its popup loaded after the click.
+   * The site chose it: a suggestion only, weaker than `account`. */
+  hint: string | null;
   sawProvider: boolean;
   popupTabId: number | null;
   expires: number;
@@ -79,7 +84,7 @@ export function createSsoState(now: () => number) {
 
   return {
     click(tabId: number, url: string, topUrl: string | undefined, provider: SsoProvider): void {
-      const p: PendingSso = { tabId, url, provider, account: null, sawProvider: false, popupTabId: null, expires: now() + PENDING_TTL_MS };
+      const p: PendingSso = { tabId, url, provider, account: null, hint: null, sawProvider: false, popupTabId: null, expires: now() + PENDING_TTL_MS };
       if (topUrl !== undefined) p.topUrl = topUrl;
       pendings.set(tabId, p);
     },
@@ -93,6 +98,29 @@ export function createSsoState(now: () => number) {
       if (!p || !isProviderOrigin(p, origin)) return;
       p.sawProvider = true;
       if (tab.tabId !== p.tabId) p.popupTabId = tab.tabId;
+    },
+    /** A tab opened by the clicked tab (the site's login popup). Its closing is a
+     * return even if no provider page loaded in it: a signed-in, consented
+     * provider may approve with redirects alone. */
+    opened(tab: TabRef): void {
+      if (tab.openerTabId === undefined) return;
+      const p = pending(tab.openerTabId);
+      if (p) p.popupTabId = tab.tabId;
+    },
+    /** A URL the clicked tab, or a popup it opened, is loading: note its
+     * OAuth/OpenID `login_hint`, if email-shaped. Any origin: sites often
+     * pass it through their own IdP first. */
+    hint(tab: TabRef, url: string): void {
+      const p = pending(tab.tabId) ?? (tab.openerTabId === undefined ? null : pending(tab.openerTabId));
+      if (!p) return;
+      let value: string | null;
+      try {
+        value = new URL(url).searchParams.get("login_hint");
+      } catch {
+        return;
+      }
+      const hint = value?.trim().toLowerCase();
+      if (hint && isAccount(hint)) p.hint = hint;
     },
     account(tab: TabRef, origin: string, account: string, top: boolean): boolean {
       if (!top) return false;
@@ -111,7 +139,7 @@ export function createSsoState(now: () => number) {
     },
     takeOnTabClosed(tabId: number): PendingSso | null {
       for (const p of pendings.values()) {
-        if (p.popupTabId === tabId && p.sawProvider && p.expires > now()) {
+        if (p.popupTabId === tabId && p.expires > now()) {
           pendings.delete(p.tabId);
           return p;
         }

@@ -7,7 +7,7 @@
 
 export * from "./sso";
 
-import { isSsoProvider, type SsoProvider } from "./sso";
+import { isSsoProvider, MAX_ACCOUNT_CHARS, MAX_PROVIDER_ACCOUNTS, type SsoProvider } from "./sso";
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_URL_BYTES = 4096;
@@ -143,7 +143,7 @@ export type Result =
   | { type: "passkey_status"; hasPasskey: boolean }
   | { type: "open_item" }
   | { type: "start_sso"; provider: SsoProvider; account: string | null; providerOrigins: string[]; autoChoose: boolean }
-  | { type: "check_sso"; action: SaveAction; itemId: string | null }
+  | { type: "check_sso"; action: SaveAction; itemId: string | null; accounts: string[] }
   | { type: "save_sso"; itemId: string };
 
 /** The result type that answers request type `T`. */
@@ -369,12 +369,20 @@ function parseResult(v: unknown): Result | null {
       return { type: "start_sso", provider, account, providerOrigins: origins, autoChoose };
     }
     case "check_sso": {
-      if (!hasExactKeys(v, ["type", "action", "itemId"])) return null;
+      // `accounts` is absent from older desktops.
+      if (!hasExactKeys(v, ["type", "action", "itemId", "accounts"]) && !hasExactKeys(v, ["type", "action", "itemId"])) return null;
       const { action, itemId } = v;
       if (!SAVE_ACTIONS.includes(action as SaveAction)) return null;
       if (itemId !== null && !isUuid(itemId)) return null;
       if ((action === "update") !== (itemId !== null)) return null;
-      return { type: "check_sso", action: action as SaveAction, itemId };
+      const raw = v.accounts ?? [];
+      if (!Array.isArray(raw) || raw.length > MAX_PROVIDER_ACCOUNTS) return null;
+      const accounts: string[] = [];
+      for (const a of raw) {
+        if (!isStr(a) || a.length === 0 || a.length > MAX_ACCOUNT_CHARS) return null;
+        accounts.push(a);
+      }
+      return { type: "check_sso", action: action as SaveAction, itemId, accounts };
     }
     case "save_sso":
       if (!hasExactKeys(v, ["type", "itemId"]) || !isUuid(v.itemId)) return null;

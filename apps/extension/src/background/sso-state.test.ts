@@ -41,6 +41,45 @@ describe("pending captures", () => {
     expect(s.account({ tabId: 9, openerTabId: 1 }, G, "me@gmail.com", true)).toBe(true);
     expect(s.takeOnTabClosed(9)?.account).toBe("me@gmail.com");
   });
+  it("a popup the tab opened after the click counts when it closes, even if no provider page loaded", () => {
+    // Google may approve with a redirect alone (signed in, consented, login_hint): no document on its origin.
+    const { s } = setup();
+    s.click(1, "https://typeform.com/login", undefined, "google");
+    s.opened({ tabId: 9, openerTabId: 1 });
+    expect(s.takeOnTabClosed(9)?.url).toBe("https://typeform.com/login");
+    expect(s.pending(1)).toBeNull();
+  });
+  it("a popup opened by another tab, or before any click, does not count", () => {
+    const { s } = setup();
+    s.opened({ tabId: 8, openerTabId: 1 }); // before the click
+    s.click(1, "https://typeform.com/login", undefined, "google");
+    s.opened({ tabId: 9, openerTabId: 2 }); // someone else's popup
+    s.opened({ tabId: 7 }); // no opener
+    expect(s.takeOnTabClosed(8)).toBeNull();
+    expect(s.takeOnTabClosed(9)).toBeNull();
+    expect(s.takeOnTabClosed(7)).toBeNull();
+    expect(s.pending(1)).not.toBeNull();
+  });
+  it("learns a login_hint from URLs the clicked tab or its popup loads after the click", () => {
+    const { s } = setup();
+    s.hint({ tabId: 1 }, "https://accounts.google.com/o/oauth2/auth?login_hint=early@x.com"); // before the click
+    expect(s.pending(1)).toBeNull();
+    s.click(1, "https://typeform.com/login", undefined, "google");
+    s.hint({ tabId: 1 }, "https://typeform.com/login?next=/");
+    expect(s.pending(1)?.hint).toBeNull();
+    s.hint({ tabId: 9, openerTabId: 1 }, "https://auth.typeform.com/oauth2/default/v1/authorize?idp=x&login_hint=Me%40Gmail.com");
+    expect(s.pending(1)?.hint).toBe("me@gmail.com");
+    // Not an email, too long, or someone else's tab: ignored.
+    s.hint({ tabId: 1 }, "https://x.com/?login_hint=not-an-email");
+    s.hint({ tabId: 1 }, `https://x.com/?login_hint=${"a".repeat(300)}@b.co`);
+    s.hint({ tabId: 7, openerTabId: 2 }, "https://x.com/?login_hint=other@x.com");
+    s.hint({ tabId: 1 }, "not a url");
+    expect(s.pending(1)?.hint).toBe("me@gmail.com");
+    // The provider page's own account wins over the hint; both are kept.
+    s.visit({ tabId: 1 }, G, true);
+    s.account({ tabId: 1 }, G, "chosen@gmail.com", true);
+    expect(s.pending(1)).toMatchObject({ account: "chosen@gmail.com", hint: "me@gmail.com" });
+  });
   it("expires", () => {
     const { s, advance } = setup();
     s.click(1, "https://typeform.com/", undefined, "google");

@@ -137,7 +137,7 @@ describe("offer", () => {
 
 describe("save", () => {
   it("asks on return, with the learned account, and saves for the clicked site", async () => {
-    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null }, save_sso: { type: "save_sso", itemId: ID } });
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] }, save_sso: { type: "save_sso", itemId: ID } });
     await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
     h.ready(googleFrame(), { tabId: 1 });
     await h.handleContent(googleFrame(), { tabId: 1 }, { type: "cs_sso_account", account: "me@gmail.com" });
@@ -145,12 +145,12 @@ describe("save", () => {
     await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
     const token = (sent.find((s) => s.msg.type === "bg_sso_show")!.msg as unknown as { token: string }).token;
     const view = await h.handleFrame(1, { type: "sso_state", token });
-    expect(view).toEqual({ ok: true, value: { mode: "save", site: "typeform.com", provider: "google", account: "me@gmail.com", title: "typeform.com", action: "add" } });
+    expect(view).toEqual({ ok: true, value: { mode: "save", site: "typeform.com", provider: "google", account: "me@gmail.com", accounts: [], title: "typeform.com", action: "add" } });
     expect(await h.handleFrame(1, { type: "sso_save", token, account: " me@gmail.com ", title: "Typeform" })).toEqual({ ok: true, value: null });
     expect(requests.at(-1)).toEqual({ type: "save_sso", url: "https://typeform.com/login", provider: "google", account: "me@gmail.com", itemId: null, title: "Typeform" });
   });
   it("learns the account from a username step on the provider, and asks when its popup closes", async () => {
-    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "update", itemId: ID }, save_sso: { type: "save_sso", itemId: ID } });
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "update", itemId: ID, accounts: [] }, save_sso: { type: "save_sso", itemId: ID } });
     await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
     const popup = { tabId: 5, openerTabId: 1 };
     h.ready(googleFrame(5), popup);
@@ -161,15 +161,62 @@ describe("save", () => {
     const token = (sent.find((s) => s.msg.type === "bg_sso_show")!.msg as unknown as { token: string }).token;
     expect(await h.handleFrame(1, { type: "sso_state", token })).toEqual({
       ok: true,
-      value: { mode: "save", site: "typeform.com", provider: "google", account: "me@gmail.com", title: null, action: "update" },
+      value: { mode: "save", site: "typeform.com", provider: "google", account: "me@gmail.com", accounts: [], title: null, action: "update" },
     });
     // An update never renames; an empty account means none.
     expect(await h.handleFrame(1, { type: "sso_save", token, account: "  ", title: "Ignored" })).toEqual({ ok: true, value: null });
     expect(requests.at(-1)).toEqual({ type: "save_sso", url: "https://typeform.com/login", provider: "google", account: null, itemId: ID });
     expect((await h.handleFrame(1, { type: "sso_state", token })).ok).toBe(false); // closed after saving
   });
+  it("asks when the site's login popup closes by itself, though no Google page ever loaded in it", async () => {
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    h.tabCreated({ tabId: 5, openerTabId: 1 });
+    h.tabRemoved(5);
+    await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
+    expect(requests.at(-1)).toEqual({ type: "check_sso", url: "https://typeform.com/login", provider: "google", account: null });
+  });
+  it("offers the vault's accounts, preselecting the login_hint the site sent", async () => {
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: ["me@gmail.com", "work@x.com"] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    h.tabCreated({ tabId: 5, openerTabId: 1 });
+    h.tabUrl({ tabId: 5, openerTabId: 1 }, "https://auth.typeform.com/authorize?login_hint=work%40x.com");
+    h.tabRemoved(5);
+    await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
+    expect(requests.at(-1)).toEqual({ type: "check_sso", url: "https://typeform.com/login", provider: "google", account: "work@x.com" });
+    const view = await h.handleFrame(1, { type: "sso_state", token: tokenOf(sent.find((s) => s.msg.type === "bg_sso_show")) });
+    expect(view).toEqual({
+      ok: true,
+      value: { mode: "save", site: "typeform.com", provider: "google", account: "work@x.com", accounts: ["me@gmail.com", "work@x.com"], title: "typeform.com", action: "add" },
+    });
+  });
+  it("shows the save question again on the tab's next page (popup closes, then the site moves to its dashboard)", async () => {
+    const { h, sent, advance } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    const popup = { tabId: 5, openerTabId: 1 };
+    h.ready(googleFrame(5), popup);
+    h.tabRemoved(5);
+    await vi.waitFor(() => expect(sent.filter((s) => s.msg.type === "bg_sso_show")).toHaveLength(1));
+    const token = tokenOf(sent.find((s) => s.msg.type === "bg_sso_show"));
+    const dashboard: FrameRef = { tabId: 1, frameId: 0, url: "https://admin.typeform.com/", origin: "https://admin.typeform.com" };
+    h.ready({ ...dashboard, frameId: 3 }, { tabId: 1 }); // an iframe does not show it
+    h.ready(dashboard, { tabId: 1 });
+    const shows = sent.filter((s) => s.msg.type === "bg_sso_show");
+    expect(shows).toHaveLength(2);
+    expect(shows[1]).toEqual({ frame: { tabId: 1, frameId: 0 }, msg: { type: "bg_sso_show", token } });
+    // Answered or expired: not shown again.
+    advance(FRAME_TTL_MS + 1);
+    h.ready(dashboard, { tabId: 1 });
+    expect(sent.filter((s) => s.msg.type === "bg_sso_show")).toHaveLength(2);
+  });
+  it("does not show an offer again on the next page", async () => {
+    const { h, sent } = setup({ find_matches: { type: "find_matches", matches: [match] } });
+    expect(await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_buttons", providers: ["google"] })).toMatchObject({ ok: true });
+    h.ready(top, { tabId: 1 });
+    expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(false);
+  });
   it("ignores account text from iframes and other origins", async () => {
-    const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null } });
+    const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
     await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
     h.ready(googleFrame(), { tabId: 1 });
     await h.handleContent({ ...googleFrame(), frameId: 2, topUrl: googleFrame().url }, { tabId: 1 }, { type: "cs_sso_account", account: "iframe@x.com" });
@@ -179,7 +226,7 @@ describe("save", () => {
     expect(requests.at(-1)).toMatchObject({ type: "check_sso", account: null });
   });
   it("says nothing when unchanged", async () => {
-    const { h, sent } = setup({ check_sso: { type: "check_sso", action: "unchanged", itemId: null } });
+    const { h, sent } = setup({ check_sso: { type: "check_sso", action: "unchanged", itemId: null, accounts: [] } });
     await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
     h.ready(googleFrame(), { tabId: 1 });
     h.ready({ tabId: 1, frameId: 0, url: "https://typeform.com/", origin: "https://typeform.com" }, { tabId: 1 });
@@ -214,7 +261,7 @@ describe("sessions", () => {
     expect(await h.handleFrame(1, { type: "sso_state", token: r.token })).toEqual({ ok: false, message: "This prompt has expired." });
   });
   it("a live save question outranks an offer; an expired one does not block it", async () => {
-    const { h, sent, advance } = setup({ find_matches: { matches: [match] }, check_sso: { type: "check_sso", action: "add", itemId: null } });
+    const { h, sent, advance } = setup({ find_matches: { matches: [match] }, check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
     await returnFromGoogle(h);
     await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
     expect(await h.handleContent(top, { tabId: 1 }, buttons)).toEqual({ ok: false });
@@ -229,7 +276,7 @@ describe("sessions", () => {
         await gate;
         return { matches: [match] };
       },
-      check_sso: { type: "check_sso", action: "add", itemId: null },
+      check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] },
     });
     const offered = h.handleContent(top, { tabId: 1 }, buttons);
     await returnFromGoogle(h);
@@ -261,7 +308,7 @@ describe("sessions", () => {
     const { h, requests, sent } = setup({
       check_sso: async () => {
         await gate;
-        return { type: "check_sso", action: "add", itemId: null };
+        return { type: "check_sso", action: "add", itemId: null, accounts: [] };
       },
     });
     await returnFromGoogle(h);

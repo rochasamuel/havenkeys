@@ -38,6 +38,8 @@ pub const MAX_SEARCH_QUERY_CHARS: usize = 256;
 pub const UPGRADE_WINDOW_MS: i64 = 5 * 60_000;
 /// Recent fills kept per session.
 pub const MAX_RECENT_FILLS: usize = 16;
+/// How many provider accounts the "Sign in with" save prompt is offered.
+pub const MAX_PROVIDER_ACCOUNTS: usize = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -1249,6 +1251,24 @@ impl VaultService {
             [id] => SaveAction::Update(*id),
             _ => SaveAction::Add,
         })
+    }
+
+    /// The accounts the vault holds for `provider`: the usernames of logins
+    /// whose URL rules match the provider's own sign-in page, trimmed,
+    /// lowercased, deduplicated and sorted, at most
+    /// [`MAX_PROVIDER_ACCOUNTS`]. The save prompt offers them instead of a
+    /// blank field. No secrets; the same rules decide which login a
+    /// provider page is filled with.
+    pub fn provider_accounts(&self, provider: SsoProvider) -> Result<Vec<String>> {
+        let mut out = std::collections::BTreeSet::new();
+        for origin in provider.origins() {
+            for s in self.find_matches(&format!("{origin}/"), None)? {
+                if let Some(u) = normalize_username(s.username.as_deref()) {
+                    out.insert(u);
+                }
+            }
+        }
+        Ok(out.into_iter().take(MAX_PROVIDER_ACCOUNTS).collect())
     }
 
     /// Seal a "Sign in with" login the user confirmed in the save prompt.

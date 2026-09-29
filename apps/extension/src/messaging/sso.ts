@@ -58,7 +58,8 @@ export interface SsoRowView {
 
 export type SsoView =
   | { mode: "offer"; site: string; rows: SsoRowView[] }
-  | { mode: "save"; site: string; provider: SsoProvider; account: string | null; title: string | null; action: "add" | "update" }
+  /** `accounts`: the vault's accounts for the provider (from Rust), offered as choices. */
+  | { mode: "save"; site: string; provider: SsoProvider; account: string | null; accounts: string[]; title: string | null; action: "add" | "update" }
   | { mode: "notice"; site: string; provider: SsoProvider };
 
 // ---------------------------------------------------------------- validation

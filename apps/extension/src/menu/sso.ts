@@ -63,8 +63,35 @@ function providerLine(provider: SsoProvider): HTMLElement {
   return h("div", { className: "provider" }, providerIcon(provider), h("span", { text: t.sso.signInWith(SSO_PROVIDERS[provider].name) }));
 }
 
-function field(label: string, input: HTMLInputElement): HTMLLabelElement {
-  return h("label", { className: "field" }, h("span", { text: label }), input);
+function field(label: string, ...controls: HTMLElement[]): HTMLLabelElement {
+  return h("label", { className: "field" }, h("span", { text: label }), ...controls);
+}
+
+/**
+ * The account picker when the vault has accounts for the provider: those
+ * accounts (and the suggestion, if the vault lacks it) plus "Other email…",
+ * which reveals the free-text field. Returns the value to save.
+ */
+function accountPicker(view: Extract<SsoView, { mode: "save" }>, other: HTMLInputElement): { select: HTMLSelectElement; value(): string } {
+  const choices = view.account !== null && !view.accounts.includes(view.account) ? [view.account, ...view.accounts] : view.accounts;
+  const select = document.createElement("select");
+  for (const a of choices) {
+    const o = h("option", { text: a });
+    o.value = a;
+    select.append(o);
+  }
+  const otherOption = h("option", { text: t.sso.otherAccount });
+  otherOption.value = "";
+  select.append(otherOption);
+  select.value = view.account ?? choices[0] ?? "";
+  other.value = "";
+  const sync = () => {
+    other.hidden = select.value !== "";
+    if (!other.hidden) other.focus();
+  };
+  select.addEventListener("change", sync);
+  other.hidden = true;
+  return { select, value: () => (select.value === "" ? other.value : select.value) };
 }
 
 function renderSave(view: Extract<SsoView, { mode: "save" }>, token: string): void {
@@ -78,8 +105,11 @@ function renderSave(view: Extract<SsoView, { mode: "save" }>, token: string): vo
   accountInput.autocomplete = "off";
   accountInput.spellcheck = false;
 
+  const picker = view.accounts.length > 0 ? accountPicker(view, accountInput) : null;
+  const account = () => (picker ? picker.value() : accountInput.value);
+
   let titleInput: HTMLInputElement | null = null;
-  const fields = [field(t.sso.accountLabel, accountInput)];
+  const fields = [picker ? field(t.sso.accountLabel, picker.select, accountInput) : field(t.sso.accountLabel, accountInput)];
   if (view.action === "add") {
     titleInput = document.createElement("input");
     titleInput.type = "text";
@@ -101,7 +131,7 @@ function renderSave(view: Extract<SsoView, { mode: "save" }>, token: string): vo
   async function confirm(e: Event): Promise<void> {
     if (!e.isTrusted || !guard.armed() || confirmBtn.disabled) return;
     confirmBtn.disabled = true;
-    const r = await ask<null>(saveRequest(token, accountInput.value, finalTitleInput ? finalTitleInput.value : null));
+    const r = await ask<null>(saveRequest(token, account(), finalTitleInput ? finalTitleInput.value : null));
     // On success the background closes this frame. On failure the error
     // takes the heading's place and confirm stays disabled (save.ts's
     // fail()), but Not now/Save stay in place: the user can still dismiss.

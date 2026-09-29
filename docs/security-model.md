@@ -678,7 +678,18 @@ In summary:
   from a provider's chooser or a username step is only ever a suggestion. It
   reaches Rust as a plain field on `check_sso`/`save_sso` and is validated
   there like any other input: trimmed, at most 254 characters, no control
-  characters. It never decides which origins a run may act on.
+  characters. It never decides which origins a run may act on. The same
+  holds for a `login_hint` read from a URL the clicked tab or its popup
+  loads: the site chose it.
+* **`check_sso` returns account names, never secrets.** When a save prompt
+  will be shown (`add`/`update`), Rust adds the usernames of the vault's
+  logins for that provider's sign-in page, at most 10, so the prompt can
+  offer them as choices. This happens only after a trusted click on a
+  provider button, while the vault is unlocked and browser integration is
+  on. The extension already gets the same names from `find_matches` on the
+  provider's page. They are held in background memory for the prompt's
+  life (5 minutes at most) and shown only in the extension-origin balloon,
+  which the page cannot read.
 * **`start_sso` is origin-bound exactly like `fill_item`.** The item must be
   a login with `sign_in_with` whose own website rules match the page; an
   unrelated item, a wrong origin, or a locked vault all fail the same way as

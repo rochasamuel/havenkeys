@@ -1038,6 +1038,24 @@ fn save_sso_flow() {
         r["result"],
         serde_json::json!({"type": "check_sso", "action": "unchanged", "itemId": null})
     );
+    // A new "Sign in with GitHub" is offered the vault's GitHub account
+    // (the login saved for github.com), with no secret.
+    let r = call(
+        &f,
+        serde_json::json!({"type": "check_sso", "url": "https://canva.com/", "provider": "github", "account": null}),
+    );
+    assert_eq!(
+        r["result"],
+        serde_json::json!({"type": "check_sso", "action": "add", "itemId": null, "accounts": ["octo"]})
+    );
+    let r = call(
+        &f,
+        serde_json::json!({"type": "check_sso", "url": "https://canva.com/", "provider": "apple", "account": null}),
+    );
+    assert_eq!(
+        r["result"],
+        serde_json::json!({"type": "check_sso", "action": "add", "itemId": null})
+    );
     let r = call(
         &f,
         serde_json::json!({"type": "save_sso", "url": "https://canva.com/", "provider": "apple", "account": null, "itemId": null, "title": "Canva"}),

@@ -171,6 +171,7 @@ export const en = {
     signInWith: (provider: string) => `Sign in with ${provider}`,
     accountLabel: "Account",
     accountPlaceholder: "Email (optional)",
+    otherAccount: "Other email…",
     titleLabel: "Name",
     save: "Save",
     update: "Add",
