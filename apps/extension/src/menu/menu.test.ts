@@ -168,3 +168,36 @@ describe("field menu sign-in-with rows", () => {
     expect(asked).toContainEqual({ type: "menu_pick", token: TOKEN, itemId: ITEM });
   });
 });
+
+describe("field menu focus", () => {
+  const view = (n: number) => ({
+    ok: true,
+    value: {
+      state: "ready",
+      kind: "login",
+      site: "accounts.google.com",
+      items: Array.from({ length: n }, (_, i) => ({ id: ITEM, title: `Login ${i}`, username: `u${i}@x.io`, provider: null })),
+      passkeys: [],
+      hint: null,
+    },
+  });
+
+  it("starts on the first row when focused from the page's keyboard (ArrowDown)", async () => {
+    replies = [view(8)];
+    await load();
+    window.dispatchEvent(new FocusEvent("focus"));
+    expect((document.activeElement as HTMLElement).textContent).toContain("Login 0");
+  });
+
+  it("leaves focus and scroll alone when a click focuses the frame", async () => {
+    // A click into a scrolled list: pointerdown, then the frame gains focus.
+    // Moving focus to the first row would scroll the list, so the click would
+    // land on another row and pick nothing.
+    replies = [view(8)];
+    await load();
+    const rows = document.querySelectorAll<HTMLButtonElement>("button.row");
+    rows[6]?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    window.dispatchEvent(new FocusEvent("focus"));
+    expect(document.activeElement).not.toBe(rows[0]);
+  });
+});

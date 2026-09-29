@@ -145,8 +145,21 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
 });
 
-// Focused from the page with ArrowDown: start on the first row.
+// Focused from the page with ArrowDown: start on the first row. A click also
+// focuses the frame (pointerdown comes first); then focus must stay where the
+// click lands, or moving it to the first row scrolls a long list and the
+// click ends on another row, picking nothing.
+let pointerFocus = false;
+window.addEventListener(
+  "pointerdown",
+  () => {
+    pointerFocus = true;
+    setTimeout(() => (pointerFocus = false), 0);
+  },
+  { capture: true },
+);
 window.addEventListener("focus", () => {
+  if (pointerFocus) return;
   if (!main.contains(document.activeElement)) main.querySelector<HTMLButtonElement>("button.row")?.focus();
 });
 
