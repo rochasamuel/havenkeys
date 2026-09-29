@@ -922,3 +922,84 @@ describe("suggestions off: passkey autofill still shows", () => {
     expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" })).toEqual({ ok: false });
   });
 });
+
+describe("identity menu", () => {
+  const summary = { type: "find_identity", title: "Samuel Rocha", email: "me@x.com", roles: ["fullName", "postalCode", "cpf"] };
+  const answerWith = (over: Record<string, unknown>) => (r: Request): unknown => {
+    const v = over[r.type];
+    if (v instanceof Error) throw v;
+    return v !== undefined ? v : defaultAnswer(r);
+  };
+  const idFrame = (url: string) => frame({ url, origin: new URL(url).origin });
+  const TAB = 1;
+
+  it("offers the identity with a count and the documents the form asks for", async () => {
+    const { h, requests } = setup(answerWith({ find_identity: summary }));
+    const open = await h.handleContent(idFrame("https://shop.com/checkout"), {
+      type: "cs_open_menu",
+      kind: "identity",
+      roles: ["fullName", "cpf", "city"],
+    });
+    expect(open).toMatchObject({ ok: true, rows: 1 });
+    const token = (open as { token: string }).token;
+    const view = await h.handleInline(TAB, { type: "menu_state", token });
+    expect(view).toMatchObject({
+      ok: true,
+      value: { state: "ready", kind: "identity", identity: { title: "Samuel Rocha", fills: 2, documents: ["cpf"], documentsAllowed: true, empty: false } },
+    });
+    expect(requests.map((r) => r.type)).toEqual(["find_identity"]);
+  });
+
+  it("fills without documents, then with them after confirmation", async () => {
+    const { h, requests, sent } = setup(
+      answerWith({ find_identity: summary, fill_identity: { type: "fill_identity", values: [{ role: "fullName", value: "Samuel Rocha" }] } }),
+    );
+    const open = (await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName", "cpf"] })) as { token: string };
+    await h.handleInline(TAB, { type: "menu_pick_identity", token: open.token, documents: false });
+    expect(requests.at(-1)).toMatchObject({ type: "fill_identity", roles: ["fullName"], documents: false });
+    expect(sent.at(-1)?.msg).toMatchObject({ type: "bg_fill", fill: { kind: "identity" }, submit: false, totp: false });
+
+    const again = (await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName", "cpf"] })) as { token: string };
+    await h.handleInline(TAB, { type: "menu_pick_identity", token: again.token, documents: true });
+    expect(requests.at(-1)).toMatchObject({ type: "fill_identity", roles: ["fullName", "cpf"], documents: true });
+  });
+
+  it("never asks for documents on an http page", async () => {
+    const { h, requests } = setup(answerWith({ find_identity: summary, fill_identity: { type: "fill_identity", values: [] } }));
+    const open = (await h.handleContent(idFrame("http://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName", "cpf"] })) as { token: string };
+    const view = await h.handleInline(TAB, { type: "menu_state", token: open.token });
+    expect(view).toMatchObject({ value: { identity: { documentsAllowed: false } } });
+    await h.handleInline(TAB, { type: "menu_pick_identity", token: open.token, documents: true });
+    expect(requests.at(-1)).toMatchObject({ roles: ["fullName"] });
+  });
+
+  it("shows the empty identity row when there is none, and opens it", async () => {
+    const { h, requests } = setup(answerWith({ find_identity: new BridgeError("not_found", "x"), open_identity: { type: "open_identity" } }));
+    const open = (await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName", "city"] })) as { token: string };
+    const view = await h.handleInline(TAB, { type: "menu_state", token: open.token });
+    expect(view).toMatchObject({ value: { identity: { empty: true } } });
+    expect(await h.handleInline(TAB, { type: "menu_pick_identity", token: open.token, documents: false })).toMatchObject({ ok: false });
+    await h.handleInline(TAB, { type: "menu_open_identity", token: open.token });
+    expect(requests.at(-1)?.type).toBe("open_identity");
+  });
+
+  it("adds the identity row under a sign-up form's logins", async () => {
+    const { h } = setup(answerWith({ find_matches: { type: "find_matches", matches: [] }, find_identity: summary }));
+    const open = (await h.handleContent(idFrame("https://shop.com/signup"), { type: "cs_open_menu", kind: "login", roles: ["email", "fullName"] })) as { ok: boolean; token: string };
+    expect(open.ok).toBe(true);
+    const view = await h.handleInline(TAB, { type: "menu_state", token: open.token });
+    expect(view).toMatchObject({ value: { kind: "login", items: [], identity: { fills: 1 } } });
+  });
+
+  it("stays out of the page when the identity has nothing for the form", async () => {
+    const { h } = setup(answerWith({ find_identity: { ...summary, roles: ["cpf"] } }));
+    const open = await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["city", "state"] });
+    expect(open).toEqual({ ok: false });
+  });
+
+  it("offers no identity row when browser integration is off", async () => {
+    const { h } = setup(answerWith({ find_identity: new BridgeError("integration_disabled", "x") }));
+    const open = await h.handleContent(idFrame("https://shop.com/"), { type: "cs_open_menu", kind: "identity", roles: ["fullName"] });
+    expect(open).toEqual({ ok: false });
+  });
+});

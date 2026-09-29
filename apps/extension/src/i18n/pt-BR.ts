@@ -98,6 +98,8 @@ export const ptBR: Messages = {
   },
 
   menu: {
+    identityNothing: "Nada a preencher neste formulário.",
+    identityEmptyBody: "Adicione seus dados no app HavenKeys primeiro.",
     pageTitle: "Sugestões do HavenKeys",
     lockedTitle: "O HavenKeys está bloqueado",
     lockedBody: "Desbloqueie o app HavenKeys para preencher.",

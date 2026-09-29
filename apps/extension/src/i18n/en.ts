@@ -130,6 +130,8 @@ export const en = {
   },
 
   menu: {
+    identityNothing: "Nothing to fill in this form.",
+    identityEmptyBody: "Add your details in the HavenKeys app first.",
     pageTitle: "HavenKeys suggestions",
     lockedTitle: "HavenKeys is locked",
     lockedBody: "Unlock the HavenKeys app to fill.",
