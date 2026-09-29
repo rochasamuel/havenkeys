@@ -19,12 +19,14 @@ export type SsoContentRequest =
   /** A trusted click on the saved account's row in the provider's chooser. */
   | { type: "cs_sso_account"; account: string }
   /** The user took over (typed, clicked elsewhere) after HavenKeys pressed. */
-  | { type: "cs_sso_stop" };
+  | { type: "cs_sso_stop" }
+  /** A login form is on the provider's page: complete the provider login (§3 step 3). */
+  | { type: "cs_sso_login" };
 
 export type SsoButtonsReply = { ok: true; token: string } | { ok: false };
 
 /** What a (re)loaded top frame on the provider's site should do. */
-export type SsoReady = { kind: "choose"; account: string } | null;
+export type SsoReady = { kind: "choose"; account: string } | { kind: "login" } | null;
 
 // ---------------------------------------------------------------- background → content
 
@@ -127,6 +129,8 @@ export function parseSsoContentRequest(msg: unknown): SsoContentRequest | null {
         : null;
     case "cs_sso_stop":
       return keysAre(o, ["type"]) ? { type: "cs_sso_stop" } : null;
+    case "cs_sso_login":
+      return keysAre(o, ["type"]) ? { type: "cs_sso_login" } : null;
     default:
       return null;
   }
@@ -180,7 +184,9 @@ export function parseSsoBackgroundMessage(msg: unknown): BackgroundToSso | null 
 /** What a (re)loaded top frame on the provider's site should do; anything malformed reads as null. */
 export function parseSsoReady(v: unknown): SsoReady {
   const o = obj(v);
-  if (!o || !keysAre(o, ["kind", "account"]) || o.kind !== "choose" || !isAccount(o.account)) return null;
+  if (!o) return null;
+  if (o.kind === "login") return keysAre(o, ["kind"]) ? { kind: "login" } : null;
+  if (o.kind !== "choose" || !keysAre(o, ["kind", "account"]) || !isAccount(o.account)) return null;
   return { kind: "choose", account: o.account };
 }
 

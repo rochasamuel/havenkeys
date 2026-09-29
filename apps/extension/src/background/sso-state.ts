@@ -2,9 +2,10 @@
 // saving it) and which pick is running. Pure: no chrome.*, no secrets, in
 // memory only; cleared when the vault locks.
 //
-// A run moves press → choose → end, performs at most one action on the
-// provider's page, only on an origin Rust returned with start_sso, only in
-// the run's tab or a popup that tab opened, and lasts SSO_RUN_TTL_MS.
+// A run moves press → choose → login → end. On the provider's page it
+// chooses the account once and completes one login, only on an origin Rust
+// returned with start_sso, only in the run's tab or a popup that tab
+// opened, and lasts SSO_RUN_TTL_MS.
 
 import { SSO_PROVIDERS, type SsoProvider } from "@havenkeys/protocol";
 
@@ -35,7 +36,7 @@ export interface SsoRun {
   account: string | null;
   providerOrigins: string[];
   autoChoose: boolean;
-  phase: "press" | "choose";
+  phase: "press" | "choose" | "login";
   expires: number;
 }
 
@@ -68,6 +69,12 @@ export function createSsoState(now: () => number) {
       return null;
     }
     return r;
+  }
+
+  /** The run for this tab or its opener, if the origin is one of its provider origins. */
+  function runFor(tab: TabRef, origin: string): SsoRun | null {
+    const r = run(tab.tabId) ?? (tab.openerTabId === undefined ? null : run(tab.openerTabId));
+    return r && r.providerOrigins.includes(origin) ? r : null;
   }
 
   return {
@@ -132,11 +139,21 @@ export function createSsoState(now: () => number) {
       return r;
     },
     chooseFor(tab: TabRef, origin: string): string | null {
-      const own = run(tab.tabId);
-      const r = own ?? (tab.openerTabId === undefined ? null : run(tab.openerTabId));
-      if (!r || r.phase !== "choose" || r.account === null || !r.providerOrigins.includes(origin)) return null;
-      runs.delete(r.tabId);
+      const r = runFor(tab, origin);
+      if (!r || r.phase !== "choose" || r.account === null) return null;
+      r.phase = "login";
       return r.account;
+    },
+    /** A later provider document while the run waits for its login form. */
+    loginReady(tab: TabRef, origin: string): boolean {
+      return runFor(tab, origin)?.phase === "login";
+    },
+    /** cs_sso_login: the run to complete, consumed. */
+    loginFor(tab: TabRef, origin: string): SsoRun | null {
+      const r = runFor(tab, origin);
+      if (!r || r.phase !== "login") return null;
+      runs.delete(r.tabId);
+      return r;
     },
     topLoad(tabId: number, origin: string): void {
       const r = run(tabId);
