@@ -45,6 +45,8 @@ pub struct ItemInputWire {
     pub auto_sign_in: Option<bool>,
     #[serde(default)]
     pub sign_in_with: Option<havenkeys_core::sso::SignInWith>,
+    #[serde(default)]
+    pub identity: Option<havenkeys_core::identity::IdentityFields>,
 }
 
 fn scan_expired() -> CmdError {
@@ -81,6 +83,7 @@ impl ItemInputWire {
             content: self.content,
             auto_sign_in: self.auto_sign_in,
             sign_in_with: self.sign_in_with,
+            identity: self.identity,
         })
     }
 }

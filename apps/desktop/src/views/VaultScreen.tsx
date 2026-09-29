@@ -9,6 +9,8 @@ import { useToast } from "../components/Toast";
 import { ItemList } from "./ItemList";
 import { ItemDetail } from "./ItemDetail";
 import { AccountItemDetail } from "./AccountItemDetail";
+import { IdentityDetail } from "./IdentityDetail";
+import { IdentityEditor } from "./IdentityEditor";
 import { ItemEditor } from "./ItemEditor";
 import { GeneratorView } from "./GeneratorView";
 import { SettingsView } from "./SettingsView";
@@ -51,6 +53,13 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   const [editorDirty, setEditorDirty] = useState(false);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [identityId, setIdentityId] = useState<string | null>(null);
+
+  // The account's one Identity: created on this or another device at
+  // connect, so it may appear later through a sync.
+  useEffect(() => {
+    api.identityItemId().then(setIdentityId, () => setIdentityId(null));
+  }, []);
 
   // The HavenKeys Account item is built from the account record; no secret
   // is fetched until the user reveals or copies the Secret Key.
@@ -219,6 +228,18 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     }
   }
 
+  const identity = identityId ? (items.find((i) => i.id === identityId) ?? null) : null;
+
+  // The Identity entry, not All items, is the current place while it is open.
+  const identitySelected = !isToolSection && identity !== null && selectedId === identity.id;
+
+  function openIdentity() {
+    if (!identity) return;
+    setSection("all");
+    setQuery("");
+    setPane({ kind: "view", id: identity.id });
+  }
+
   // "Show Emergency Kit" on the Account item: Settings, scrolled to the kit.
   function showKit() {
     setSection("settings");
@@ -266,7 +287,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
             <button
               key={s.id}
               className="nav-item"
-              aria-current={section === s.id ? "page" : undefined}
+              aria-current={section === s.id && !identitySelected ? "page" : undefined}
               onClick={() => setSection(s.id)}
             >
               <Icon name={s.icon} size={17} />
@@ -274,6 +295,16 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note"]}</span>
             </button>
           ))}
+          <button
+            className="nav-item"
+            aria-current={identitySelected ? "page" : undefined}
+            onClick={openIdentity}
+            disabled={!identity}
+            title={identity ? undefined : t.identity.notCreated}
+          >
+            <Icon name="idCard" size={17} />
+            <span>{t.identity.nav}</span>
+          </button>
           <p className="nav-heading">{t.vault.toolsHeading}</p>
           <button
             className="nav-item"
@@ -382,7 +413,25 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
             {pane.kind === "account" && account && (
               <AccountItemDetail account={account} onShowKit={showKit} />
             )}
-            {pane.kind === "view" && selected && (
+            {pane.kind === "view" && selected?.itemType === "identity" && (
+              <IdentityDetail
+                key={selected.id + selected.updatedAt}
+                item={selected}
+                readOnly={readOnly}
+                onEdit={() => setPane({ kind: "edit", id: selected.id })}
+              />
+            )}
+            {pane.kind === "edit" && selected?.itemType === "identity" && (
+              <IdentityEditor
+                key={"edit" + selected.id}
+                existing={selected}
+                readOnly={readOnly}
+                onCancel={() => setPane({ kind: "view", id: selected.id })}
+                onSaved={onSaved}
+                onDirtyChange={setEditorDirty}
+              />
+            )}
+            {pane.kind === "view" && selected && selected.itemType !== "identity" && (
               <ItemDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
@@ -393,7 +442,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                 onOpen={(id) => setPane({ kind: "view", id })}
               />
             )}
-            {pane.kind === "edit" && selected && (
+            {pane.kind === "edit" && selected && selected.itemType !== "identity" && (
               <ItemEditor
                 key={"edit" + selected.id}
                 existing={selected}

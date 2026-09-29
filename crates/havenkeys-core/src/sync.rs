@@ -505,6 +505,7 @@ mod tests {
             content: SecretUpdate::Keep,
             auto_sign_in: None,
             sign_in_with: None,
+            identity: None,
         }
     }
 

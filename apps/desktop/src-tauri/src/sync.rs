@@ -163,7 +163,39 @@ pub async fn connect(app: &AppHandle, auth_key: AuthKey) -> CmdResult<()> {
 
     app.state::<AppState>().set_online(session);
     let _ = app.emit(CONNECTIVITY_EVENT, true);
-    sync_now(app).await.map(|_| ())
+    sync_now(app).await?;
+    ensure_identity(app).await;
+    Ok(())
+}
+
+/// Create the account's Identity if the replica does not have it (spec
+/// 2026-09-29-identity-item §5.2). Runs after the pull, so "missing" means
+/// missing on the server too, unless another device is creating it right
+/// now: then the server refuses this write and a pull brings theirs. Never
+/// fails the caller; the next connect tries again.
+async fn ensure_identity(app: &AppHandle) {
+    let staged = {
+        let state = app.state::<AppState>();
+        let Ok(vault) = state.vault() else { return };
+        let Ok(Some(account)) = vault.account() else {
+            return;
+        };
+        match vault.stage_identity_if_missing(&account.email, AppState::now_ms()) {
+            Ok(Some(staged)) => staged,
+            _ => return,
+        }
+    };
+    match push(app, staged).await {
+        Ok(_) => {
+            let _ = app.emit(crate::state::ITEMS_CHANGED_EVENT, ());
+        }
+        Err(e) if e.code == "item_changed_elsewhere" => {
+            if sync_now(app).await.is_ok() {
+                let _ = app.emit(crate::state::ITEMS_CHANGED_EVENT, ());
+            }
+        }
+        Err(_) => {}
+    }
 }
 
 /// Reconcile the header, then pull until the replica has caught up.

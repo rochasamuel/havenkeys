@@ -1,6 +1,6 @@
 # Identity item — Design
 
-Status: proposed, 2026-09-29.
+Status: accepted, 2026-09-29.
 
 > This software has not undergone an independent security audit.
 
@@ -80,9 +80,10 @@ except `custom`. Wire names are camelCase; `deny_unknown_fields`.
 | Custom | `custom: Vec<CustomField { label, value, hidden: bool }>`, at most 50 | label 128, value 4096 |
 | Notes | `notes` | 64 KiB, as login notes |
 
-Whitespace-only values are stored as absent. Control characters other than
-newline (in `notes`, `street` and custom values) are rejected. A custom field
-with an empty label is rejected; one with an empty value is dropped.
+Whitespace-only values are stored as absent. Control characters are
+rejected, except newlines and tabs in `notes` and custom values. A custom
+field with an empty value is dropped (whatever its label); one with a value
+and an empty label is rejected.
 
 ### 4.3 Overview and search
 
@@ -165,9 +166,11 @@ Offline, nothing is created; the next connect does it.
 ### 6.1 Rust commands
 
 * `get_item`, `update_item` accept identities (no new commands).
-* `reveal_identity(id) -> IdentityFields`: the decrypted fields, only while
-  unlocked, only for an Identity item (`Denied` for others). Called when the
-  detail or the editor opens, dropped with the component (on lock too).
+* `reveal_identity(id) -> { fields, address }`: the decrypted fields and
+  the address block formatted by the core (so the UI shows exactly what
+  "Copy address" copies), only while unlocked, only for an Identity item
+  (`Denied` for others). Called when the detail or the editor opens,
+  dropped with the component (on lock too).
 * `copy_identity_field(id, field) -> CopyResult`: `field` is one of the
   typed field names above, `address` (the formatted block, §6.3) or
   `custom:<index>`. Rust reads the value and copies it with the vault's
@@ -201,7 +204,8 @@ kind. Then, in this order, one group per section with a section title
   (`street, number – complement`, `neighborhood`, `city – state`,
   `CEP postalCode`, `country`) when `country` is Brazil/Brasil/BR, and
   otherwise `street number, complement`, `city, state postalCode`, `country`;
-* the website opens through the existing `open_website` checks;
+* the website is shown as text with a copy button (`open_website` only opens
+  a login's saved websites, and widening it is not worth it here);
 * when every field is empty: "Your identity is empty" and **Fill in your
   identity**, which opens the editor;
 * footer: created/updated dates; no Delete.

@@ -78,6 +78,7 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
         content: SecretUpdate::Keep,
         auto_sign_in: None,
         sign_in_with: None,
+        identity: None,
     }
 }
 
@@ -128,6 +129,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 content: SecretUpdate::Set(SecretString::from("note body")),
                 auto_sign_in: None,
                 sign_in_with: None,
+                identity: None,
             },
             NOW,
         )
@@ -152,6 +154,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                     provider: SsoProvider::Google,
                     account: Some("me@gmail.com".into()),
                 }),
+                identity: None,
             },
             NOW,
         )

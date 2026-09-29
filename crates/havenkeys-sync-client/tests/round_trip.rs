@@ -149,6 +149,7 @@ fn login_item(title: &str, password: &str) -> ItemInput {
         content: SecretUpdate::Keep,
         auto_sign_in: None,
         sign_in_with: None,
+        identity: None,
     }
 }
 
@@ -557,5 +558,111 @@ async fn an_unreadable_item_is_retried_and_clears_once_fixed() {
     one.vault.apply_refetched(&ids, changes, NOW).unwrap();
     assert!(one.vault.unreadable_item_ids().unwrap().is_empty());
     assert_eq!(one.vault.get_item(&id).unwrap().title, "Good");
+    server.cleanup().await;
+}
+
+/// A second device on `first`'s account: signed in, header opened, replica
+/// pulled up to date.
+async fn second_device(server: &Server, first: &Device, email: &str) -> Device {
+    let client = server.client();
+    let params = client.auth_params(email).await.unwrap();
+    let auth_key = derive_auth_key(
+        &SecretString::from(PASSWORD),
+        &first.secret_key,
+        &params.kdf,
+        &first.account,
+    )
+    .unwrap();
+    let session = client
+        .login(email, &auth_key, first.account.id, Uuid::new_v4(), "Laptop")
+        .await
+        .unwrap();
+    let header = client.header(&session).await.unwrap();
+    let (prepared, _) = prepare_sign_in(
+        &header.bytes,
+        &SecretString::from(PASSWORD),
+        &first.secret_key,
+        &first.account,
+    )
+    .unwrap();
+    let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+    vault
+        .create_account_vault(
+            prepared,
+            &AccountRecord {
+                account_id: first.account.id,
+                email: email.into(),
+                server_url: server.base.clone(),
+                server_cursor: 0,
+                max_header_rev: header.revision,
+                last_synced_at: None,
+            },
+        )
+        .unwrap();
+    let pulled = client.pull(&session, 0).await.unwrap();
+    vault
+        .apply_remote_changes(pulled.cursor, pulled.changes, NOW)
+        .unwrap();
+    Device {
+        vault,
+        secret_key: SecretKey::parse(first.secret_key.to_text().expose()).unwrap(),
+        account: first.account.clone(),
+        session,
+    }
+}
+
+/// Spec 2026-09-29-identity-item §5.2: two devices that both find the
+/// identity missing both stage it; the server keeps the first and refuses
+/// the second, which then pulls the first's copy. One identity, never two.
+#[tokio::test]
+async fn two_devices_creating_the_identity_end_with_one() {
+    let server = Server::start().await;
+    let client = server.client();
+    let email = "identity@example.com";
+    let mut one = activate(&server, email).await;
+    let mut two = second_device(&server, &one, email).await;
+
+    let from_one = one
+        .vault
+        .stage_identity_if_missing(email, NOW)
+        .unwrap()
+        .expect("missing on device one");
+    let from_two = two
+        .vault
+        .stage_identity_if_missing("other@example.com", NOW)
+        .unwrap()
+        .expect("missing on device two");
+    assert_eq!(from_one.item_id, from_two.item_id, "the same derived id");
+    let id = from_one.item_id;
+
+    push(&client, &mut one, vec![from_one]).await.unwrap();
+    match client.write(&two.session, &[from_two]).await {
+        Err(SyncError::Conflict(items)) => assert_eq!(items[0].item_id, id),
+        other => panic!("expected a conflict, got {:?}", other.map(|_| ())),
+    }
+
+    let pulled = client.pull(&two.session, 0).await.unwrap();
+    two.vault
+        .apply_remote_changes(pulled.cursor, pulled.changes, NOW)
+        .unwrap();
+    assert!(two
+        .vault
+        .stage_identity_if_missing(email, NOW)
+        .unwrap()
+        .is_none());
+    let identities: Vec<_> = two
+        .vault
+        .list_items()
+        .unwrap()
+        .into_iter()
+        .filter(|i| i.item_type == ItemType::Identity)
+        .collect();
+    assert_eq!(identities.len(), 1);
+    assert_eq!(
+        identities[0].username.as_deref(),
+        Some(email),
+        "device one's copy won"
+    );
+
     server.cleanup().await;
 }

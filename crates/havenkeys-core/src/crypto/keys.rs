@@ -15,6 +15,7 @@ pub const KEY_LEN: usize = 32;
 const INFO_DATA: &[u8] = b"havenkeys/v1/data";
 const INFO_KEK_V3: &[u8] = b"havenkeys/v3/kek";
 const INFO_AUTH_V3: &[u8] = b"havenkeys/v3/auth";
+const INFO_IDENTITY_ID: &[u8] = b"havenkeys/v3/identity-item-id";
 
 /// A 256-bit symmetric key, zeroized on drop.
 pub struct Key256(Zeroizing<[u8; KEY_LEN]>);
@@ -138,10 +139,35 @@ pub fn derive_data_key(vault_key: &Key256) -> Result<Key256> {
     hkdf_expand(vault_key, None, INFO_DATA)
 }
 
+/// vault key → the item ID of the account's one Identity.
+///
+/// Every device holding the vault key computes the same ID, so the identity
+/// is created once however many devices race to create it; the server, which
+/// never has the vault key, cannot tell which item it is
+/// (spec 2026-09-29-identity-item §5.1).
+pub fn derive_identity_item_id(vault_key: &Key256) -> Result<uuid::Uuid> {
+    let hk = Hkdf::<Sha256>::new(None, vault_key.as_bytes());
+    let mut okm = [0u8; 16];
+    hk.expand(INFO_IDENTITY_ID, &mut okm)
+        .map_err(|_| Error::Kdf)?;
+    Ok(uuid::Uuid::new_v8(okm))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn identity_item_id_matches_the_independent_vector() {
+        // HKDF-SHA256(ikm = 0x09 * 32, no salt, info), first 16 bytes, v8
+        // bits set; computed with Python's hmac module.
+        let id = derive_identity_item_id(&Key256::from_bytes([9u8; 32])).unwrap();
+        assert_eq!(id.to_string(), "00f03a59-33cc-8082-a649-ca545b3b372d");
+        assert_eq!(id.get_version_num(), 8);
+        let other = derive_identity_item_id(&Key256::from_bytes([10u8; 32])).unwrap();
+        assert_ne!(id, other);
+    }
 
     #[test]
     fn random_keys_differ() {

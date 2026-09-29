@@ -836,6 +836,7 @@ fn password_history_is_bounded_and_skips_unchanged() {
             content: SecretUpdate::Keep,
             auto_sign_in: None,
             sign_in_with: None,
+            identity: None,
         };
         let staged = v.stage_update(&gh, input, now).unwrap();
         v.commit_write(staged, now).unwrap();

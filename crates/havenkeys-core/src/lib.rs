@@ -10,6 +10,7 @@ pub mod account;
 pub mod crypto;
 pub mod error;
 pub mod generator;
+pub mod identity;
 pub mod import;
 pub mod lock;
 pub mod model;

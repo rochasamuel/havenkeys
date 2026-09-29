@@ -16,6 +16,8 @@ import type {
   EmergencyKit,
   GeneratedPassword,
   GeneratorOptions,
+  IdentityCopyField,
+  IdentityView,
   ImportResult,
   ItemInput,
   ItemOverview,
@@ -109,6 +111,12 @@ export const api = {
   revealAccountSecretKey: () => call<string>("reveal_account_secret_key"),
   /** Rust copies the Account item's value and clears the clipboard later. */
   copyAccountField: (field: AccountField) => call<CopyResult>("copy_account_field", { field }),
+  /** The account's one Identity; only while unlocked. */
+  identityItemId: () => call<string>("identity_item_id"),
+  /** Every value of the identity, on opening it. */
+  revealIdentity: (id: string) => call<IdentityView>("reveal_identity", { id }),
+  /** Rust copies the value and clears the clipboard later. */
+  copyIdentityField: (id: string, field: IdentityCopyField) => call<CopyResult>("copy_identity_field", { id, field }),
 
   /** First run: the invite string from the account's operator. */
   activate: (invite: string, password: string) =>
