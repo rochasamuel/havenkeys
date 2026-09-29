@@ -13,6 +13,24 @@ use crate::vault::VaultService;
 use std::fmt;
 use uuid::Uuid;
 
+/// Longest summary title, in bytes: the native-messaging limit on a title
+/// (`havenkeys_protocol::MAX_TITLE_BYTES`). A name of three 256-character
+/// parts with accents can exceed it, and a longer title would fail the
+/// whole `find_identity` reply.
+pub const MAX_SUMMARY_TITLE_BYTES: usize = 4 * 256;
+
+/// `s` cut to at most `max` bytes, on a character boundary.
+fn truncate_bytes(mut s: String, max: usize) -> String {
+    if s.len() > max {
+        let mut end = max;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        s.truncate(end);
+    }
+    s
+}
+
 /// What the menu row needs: no values, only which roles have one.
 pub struct IdentitySummary {
     pub title: String,
@@ -64,7 +82,7 @@ impl VaultService {
             .filter(|r| fields.fill_value(*r).is_some())
             .collect();
         Ok(IdentitySummary {
-            title: overview.title.clone(),
+            title: truncate_bytes(overview.title.clone(), MAX_SUMMARY_TITLE_BYTES),
             email: overview.username.clone(),
             roles,
         })
@@ -88,5 +106,19 @@ impl VaultService {
             .filter(|r| !r.is_document() || (documents && https))
             .filter_map(|r| fields.fill_value(*r).map(|v| (*r, v)))
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_bytes;
+
+    #[test]
+    fn truncation_keeps_whole_characters() {
+        assert_eq!(truncate_bytes("abc".into(), 10), "abc");
+        assert_eq!(truncate_bytes("abc".into(), 2), "ab");
+        // "é" is two bytes: cutting inside it drops it whole.
+        assert_eq!(truncate_bytes("aé".into(), 2), "a");
+        assert_eq!(truncate_bytes("aé".into(), 3), "aé");
     }
 }

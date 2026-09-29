@@ -83,6 +83,45 @@ fn the_summary_names_the_roles_with_a_value_and_no_values() {
 }
 
 #[test]
+fn a_long_accented_name_fits_the_summary_title_limit() {
+    use havenkeys_core::identity::MAX_NAME_CHARS;
+    use havenkeys_core::identity_page::MAX_SUMMARY_TITLE_BYTES;
+    let v = with_identity();
+    let id = v.identity_item_id().unwrap();
+    let long = "é".repeat(MAX_NAME_CHARS);
+    let fields = IdentityFields {
+        first_name: some(&long),
+        middle_name: some(&long),
+        last_name: some(&long),
+        ..Default::default()
+    };
+    let input = ItemInput {
+        item_type: ItemType::Identity,
+        title: String::new(),
+        username: None,
+        urls: vec![],
+        password: SecretUpdate::Keep,
+        totp: SecretUpdate::Keep,
+        notes: SecretUpdate::Keep,
+        content: SecretUpdate::Keep,
+        auto_sign_in: None,
+        sign_in_with: None,
+        identity: Some(fields),
+    };
+    let staged = v.stage_update(&id, input, NOW + 2).unwrap();
+    let mut v = v;
+    v.commit_write(staged, 3).unwrap();
+    let s = v.identity_summary_for_page(SHOP, None).unwrap();
+    assert!(
+        s.title.len() <= MAX_SUMMARY_TITLE_BYTES,
+        "{}",
+        s.title.len()
+    );
+    assert!(s.title.len() > MAX_SUMMARY_TITLE_BYTES - 4);
+    assert!(s.title.chars().all(|c| c == 'é' || c == ' '));
+}
+
+#[test]
 fn only_the_requested_roles_come_back() {
     let v = with_identity();
     let got = values(&v, SHOP, None, &[FillRole::FullName, FillRole::City], false);
