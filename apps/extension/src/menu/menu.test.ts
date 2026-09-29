@@ -228,11 +228,15 @@ describe("identity row", () => {
     await vi.advanceTimersByTimeAsync(0);
   }
 
+  /** Let the documents step's own click guard arm. */
+  const armStep = () => vi.advanceTimersByTimeAsync(400);
+
   it("asks before filling documents, naming them", async () => {
     const handlers = await setup({ title: "Samuel Rocha", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
     const row = document.querySelector<HTMLButtonElement>("button.row")!;
     expect(row.textContent).toContain("Samuel Rocha");
     await click(handlers, row);
+    await armStep();
     expect(asked.some((m) => (m as { type: string }).type === "menu_pick_identity")).toBe(false);
     expect(document.body.textContent).toContain("shop.com also asks for: CPF");
     const [withDocs, withoutDocs] = Array.from(document.querySelectorAll<HTMLButtonElement>("#main button"));
@@ -245,13 +249,39 @@ describe("identity row", () => {
     const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf", "rg"], documentsAllowed: true, empty: false });
     await click(handlers, document.querySelector("button.row")!);
     expect(document.body.textContent).toContain("CPF and RG");
+    await armStep();
     await click(handlers, document.querySelector("#main button")!);
     expect(asked.at(-1)).toEqual({ type: "menu_pick_identity", token: TOKEN, documents: true });
+  });
+
+  it("re-arms the guard when the step appears: a fast second click confirms nothing", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
+    await click(handlers, document.querySelector("button.row")!);
+    const [withDocs, withoutDocs] = Array.from(document.querySelectorAll<HTMLButtonElement>("#main button"));
+    const picks = () => asked.filter((m) => (m as { type: string }).type === "menu_pick_identity");
+    await vi.advanceTimersByTimeAsync(100);
+    await click(handlers, withDocs!);
+    await click(handlers, withoutDocs!);
+    expect(picks()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(300);
+    await click(handlers, withDocs!);
+    expect(picks()).toEqual([{ type: "menu_pick_identity", token: TOKEN, documents: true }]);
+  });
+
+  it("moves focus to the step's safe button, never the documents one", async () => {
+    const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
+    const row = document.querySelector<HTMLButtonElement>("button.row")!;
+    row.focus();
+    await click(handlers, row);
+    const [withDocs, withoutDocs] = Array.from(document.querySelectorAll<HTMLButtonElement>("#main button"));
+    expect(document.activeElement).toBe(withoutDocs);
+    expect(document.activeElement).not.toBe(withDocs);
   });
 
   it("ignores untrusted clicks on the step's buttons", async () => {
     const handlers = await setup({ title: "Samuel", fills: 3, documents: ["cpf"], documentsAllowed: true, empty: false });
     await click(handlers, document.querySelector("button.row")!);
+    await armStep();
     const before = asked.length;
     handlers.get(document.querySelector("#main button")!)?.({ isTrusted: false } as MouseEvent);
     await vi.advanceTimersByTimeAsync(0);

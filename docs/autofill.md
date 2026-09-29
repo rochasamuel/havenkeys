@@ -1062,7 +1062,10 @@ fields are all filled gets no identity menu.
 The row shows the ID-card icon, the identity's name (or "Identity") and
 "Fills N fields". When the group has document fields and the page is https,
 clicking the row does not fill: the menu says "*site* also asks for: CPF, RG"
-with **Fill CPF and RG too** and **Fill without documents**. On an http page
+with **Fill CPF and RG too** and **Fill without documents**. The step's
+buttons ignore clicks for 400 ms after it appears (its own click guard, so a
+fast second click or Enter on the row cannot confirm the documents), and
+focus moves to **Fill without documents**. On an http page
 the question is not asked; documents stay empty and the row says so. An
 identity with no values shows "Your identity is empty" and opens it in the
 desktop app (`open_identity`). A locked vault, a disabled integration and a

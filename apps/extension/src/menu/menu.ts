@@ -105,12 +105,16 @@ function documentList(roles: readonly IdentityRole[]): string {
   return roles.map((r) => msg.menu.documentLabels[r as keyof typeof msg.menu.documentLabels] ?? r).join(msg.menu.and);
 }
 
-/** A plain action button for the documents step, under the click guard. */
-function action(text: string, primary: boolean, onPick: () => Promise<void>): HTMLButtonElement {
+/**
+ * A plain action button for the documents step, under the click guard and
+ * the step's own guard (re-armed when the step appears, so a fast second
+ * click or Enter on the row cannot land on "Fill CPF too").
+ */
+function action(text: string, primary: boolean, stepGuard: { armed(): boolean }, onPick: () => Promise<void>): HTMLButtonElement {
   const b = h("button", { className: primary ? "step-btn primary" : "step-btn", text });
   b.type = "button";
   b.addEventListener("click", (e) => {
-    if (!e.isTrusted || !guard.armed() || b.disabled) return;
+    if (!e.isTrusted || !guard.armed() || !stepGuard.armed() || b.disabled) return;
     b.disabled = true;
     void onPick().finally(() => (b.disabled = false));
   });
@@ -119,15 +123,17 @@ function action(text: string, primary: boolean, onPick: () => Promise<void>): HT
 
 function documentsStep(t: string, site: string, docs: readonly IdentityRole[]): void {
   const list = documentList(docs);
-  main.replaceChildren(
-    h(
-      "div",
-      { className: "message step" },
-      h("strong", { text: msg.menu.identityAlsoAsks(site, list) }),
-      action(msg.menu.identityFillWithDocs(list), true, () => pick({ type: "menu_pick_identity", token: t, documents: true })),
-      action(msg.menu.identityFillWithoutDocs, false, () => pick({ type: "menu_pick_identity", token: t, documents: false })),
-    ),
+  const step = h("div", { className: "message step" });
+  const stepGuard = createClickGuard(step);
+  const withDocs = action(msg.menu.identityFillWithDocs(list), true, stepGuard, () => pick({ type: "menu_pick_identity", token: t, documents: true }));
+  const withoutDocs = action(msg.menu.identityFillWithoutDocs, false, stepGuard, () =>
+    pick({ type: "menu_pick_identity", token: t, documents: false }),
   );
+  step.append(h("strong", { text: msg.menu.identityAlsoAsks(site, list) }), withDocs, withoutDocs);
+  main.replaceChildren(step);
+  // The row that had focus is gone. Keep keyboard users in the menu, on the
+  // safe choice: a second Enter must never confirm the documents.
+  withoutDocs.focus();
 }
 
 function identityRow(t: string, site: string, v: IdentityRowView): HTMLButtonElement {
