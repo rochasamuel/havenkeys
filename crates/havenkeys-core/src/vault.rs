@@ -5,6 +5,7 @@
 //! overview cache.
 
 use crate::account::AccountRef;
+use crate::card::{CardField, CardFields};
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
 use crate::crypto::keys::{
@@ -1038,6 +1039,11 @@ impl VaultService {
                                 .as_deref()
                                 .is_some_and(|a| a.to_lowercase().contains(&q))
                     })
+                    || (q.bytes().all(|b| b.is_ascii_digit())
+                        && i.card
+                            .as_ref()
+                            .and_then(|c| c.last4.as_deref())
+                            .is_some_and(|l| l.contains(&q)))
             })
             .cloned()
             .collect();
@@ -1161,7 +1167,9 @@ impl VaultService {
             .clone();
         let password = match self.load_details(id)? {
             ItemDetails::Login { password, .. } => password,
-            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) => return Err(Error::Denied),
+            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {
+                return Err(Error::Denied)
+            }
         };
         if password.is_some() {
             self.record_fill(*id, page_url, now_ms)?;
@@ -1318,6 +1326,7 @@ impl VaultService {
                     auto_sign_in: None,
                     sign_in_with,
                     identity: None,
+                    card: None,
                 }
             }
             SaveTarget::Update(id) => {
@@ -1342,6 +1351,7 @@ impl VaultService {
                     auto_sign_in: None,
                     sign_in_with,
                     identity: None,
+                    card: None,
                 };
                 return Ok(StagedSave {
                     item_id: *id,
@@ -1477,6 +1487,7 @@ impl VaultService {
             auto_sign_in: None,
             sign_in_with: None,
             identity: None,
+            card: None,
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1507,6 +1518,7 @@ impl VaultService {
             auto_sign_in: None,
             sign_in_with: existing.sign_in_with.clone(),
             identity: None,
+            card: None,
         };
         Ok(StagedSave {
             item_id: *id,
@@ -1519,7 +1531,9 @@ impl VaultService {
             ItemDetails::Login {
                 password_history, ..
             } => Ok(password_history.iter().map(|p| p.replaced_at).collect()),
-            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) => Ok(Vec::new()),
+            ItemDetails::SecureNote { .. } | ItemDetails::Identity(_) | ItemDetails::Card(_) => {
+                Ok(Vec::new())
+            }
         }
     }
 
@@ -1625,6 +1639,7 @@ impl VaultService {
                 email: Some(SecretString::from(email)),
                 ..Default::default()
             }),
+            card: None,
         };
         let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
         self.stage(overview, Some(&details), None).map(Some)
@@ -1653,6 +1668,23 @@ impl VaultService {
             return Err(Error::NotFound);
         }
         Ok(fields.custom.swap_remove(index).value)
+    }
+
+    // ------------------------------------------------------------ cards
+
+    /// A card's values (spec 2026-09-29-card-item). `Denied` for any other
+    /// kind of item. This holds the number and verification number: each
+    /// caller hands out only what its request needs.
+    pub fn card_fields(&self, id: Uuid) -> Result<CardFields> {
+        match self.load_details(&id)? {
+            ItemDetails::Card(fields) => Ok(*fields),
+            _ => Err(Error::Denied),
+        }
+    }
+
+    /// One card value, for copying or an explicit reveal. `NotFound` when empty.
+    pub fn card_value(&self, id: &Uuid, field: CardField) -> Result<SecretString> {
+        self.card_fields(*id)?.value(field).ok_or(Error::NotFound)
     }
 
     pub(crate) fn stage(
@@ -1706,6 +1738,7 @@ impl VaultService {
         let mut writes = Vec::new();
         report.logins = 0;
         report.secure_notes = 0;
+        report.cards = 0;
 
         for item in items {
             let id = Uuid::new_v4();
@@ -1750,6 +1783,7 @@ impl VaultService {
                 // stay secure notes); an identity is only ever created by
                 // `stage_identity_if_missing`.
                 ItemType::Identity => return Err(Error::Denied),
+                ItemType::Card => report.cards += 1,
             }
             writes.push(staged);
         }
@@ -1773,7 +1807,7 @@ impl VaultService {
             // Secure notes need their body; a damaged one simply isn't a duplicate.
             let details = match ov.item_type {
                 ItemType::Login | ItemType::Identity => None,
-                ItemType::SecureNote => self.load_details(&ov.id).ok(),
+                ItemType::SecureNote | ItemType::Card => self.load_details(&ov.id).ok(),
             };
             let key = dedupe_key_parts(ov, details.as_ref());
             keys.insert(key);
@@ -1827,6 +1861,7 @@ impl VaultService {
             auto_sign_in: None,
             sign_in_with: Some(sso),
             identity: None,
+            card: None,
         };
         self.stage_update(id, input, now_ms).map(Some)
     }
@@ -1907,6 +1942,21 @@ fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [
             field(&mut h, "identity");
             field(&mut h, &overview.id.to_string());
         }
+        // The same number and expiry is the same card; one without a number
+        // is told apart by its title.
+        ItemType::Card => {
+            field(&mut h, "card");
+            match details {
+                Some(ItemDetails::Card(f)) => {
+                    match &f.number {
+                        Some(n) => field(&mut h, n.expose()),
+                        None => field(&mut h, &overview.title),
+                    }
+                    field(&mut h, &f.expiry.map(|e| e.to_wire()).unwrap_or_default());
+                }
+                _ => field(&mut h, &overview.id.to_string()),
+            }
+        }
     }
     h.finalize().into()
 }
@@ -1943,6 +1993,7 @@ pub(crate) fn build_item(
         auto_sign_in,
         sign_in_with,
         identity,
+        card,
     } = input;
 
     let details = match item_type {
@@ -2012,10 +2063,43 @@ pub(crate) fn build_item(
             let fields = identity.ok_or(Error::InvalidInput("an identity needs its values"))?;
             ItemDetails::Identity(Box::new(fields.clean(now_ms)?))
         }
+        ItemType::Card => {
+            let (cur_number, cur_cvv) = match current {
+                Some(ItemDetails::Card(f)) => {
+                    let CardFields {
+                        number,
+                        verification_number,
+                        ..
+                    } = *f;
+                    (number, verification_number)
+                }
+                Some(_) => return Err(Error::Corrupted),
+                None => (None, None),
+            };
+            // `check_shape` guarantees the values are there.
+            let input = card.ok_or(Error::InvalidInput("a card needs its values"))?;
+            let fields = CardFields {
+                cardholder_name: input.cardholder_name,
+                brand: input.brand,
+                number: input.number.apply(cur_number),
+                verification_number: input.verification_number.apply(cur_cvv),
+                expiry: input.expiry,
+                notes: input.notes,
+            }
+            .clean()?;
+            ItemDetails::Card(Box::new(fields))
+        }
     };
-    // An identity's title is its name, never typed; it may be empty.
+    // An identity's title is its name, never typed; it may be empty. A card
+    // without a title is named after its brand, but only if it has a number.
     let title = match &details {
         ItemDetails::Identity(fields) => fields.display_name(),
+        ItemDetails::Card(fields) if title.trim().is_empty() => {
+            if fields.number.is_none() {
+                return Err(Error::InvalidInput("a card needs a number or a title"));
+            }
+            fields.effective_brand().display_name().to_owned()
+        }
         _ => clean_title(&title)?,
     };
 
@@ -2034,6 +2118,7 @@ pub(crate) fn build_item(
         ),
         ItemDetails::SecureNote { .. } => (false, false, false, false),
         ItemDetails::Identity(fields) => (false, false, fields.notes.is_some(), false),
+        ItemDetails::Card(fields) => (false, false, fields.notes.is_some(), false),
     };
     let identity_email = match &details {
         ItemDetails::Identity(fields) => fields.email.as_ref().map(|e| e.expose().to_owned()),
@@ -2045,13 +2130,13 @@ pub(crate) fn build_item(
         title,
         username: match item_type {
             ItemType::Login => clean_username(username.as_deref())?,
-            ItemType::SecureNote => None,
+            ItemType::SecureNote | ItemType::Card => None,
             // Shown as the list subtitle and searched, like a login's username.
             ItemType::Identity => identity_email,
         },
         urls: match item_type {
             ItemType::Login => clean_urls(&urls)?,
-            ItemType::SecureNote | ItemType::Identity => Vec::new(),
+            ItemType::SecureNote | ItemType::Identity | ItemType::Card => Vec::new(),
         },
         has_password,
         has_totp,
@@ -2060,7 +2145,11 @@ pub(crate) fn build_item(
         auto_sign_in: auto_sign_in.unwrap_or(true),
         sign_in_with: match item_type {
             ItemType::Login => crate::sso::clean_sign_in_with(sign_in_with)?,
-            ItemType::SecureNote | ItemType::Identity => None,
+            ItemType::SecureNote | ItemType::Identity | ItemType::Card => None,
+        },
+        card: match &details {
+            ItemDetails::Card(fields) => Some(fields.summary()),
+            _ => None,
         },
         created_at,
         updated_at: now_ms,

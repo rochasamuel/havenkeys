@@ -479,6 +479,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 auto_sign_in: None,
                 sign_in_with: sso,
                 identity: None,
+                card: None,
             }
         }
         "003" => {
@@ -495,6 +496,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 auto_sign_in: None,
                 sign_in_with: None,
                 identity: None,
+                card: None,
             }
         }
         other => {
@@ -531,6 +533,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 auto_sign_in: None,
                 sign_in_with: None,
                 identity: None,
+                card: None,
             }
         }
     };

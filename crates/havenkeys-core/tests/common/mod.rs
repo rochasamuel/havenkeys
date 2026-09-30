@@ -42,6 +42,7 @@ pub fn login(title: &str, username: &str, password: &str, url: &str) -> ItemInpu
         auto_sign_in: None,
         sign_in_with: None,
         identity: None,
+        card: None,
     }
 }
 
@@ -122,5 +123,6 @@ pub fn note(title: &str, content: &str) -> ItemInput {
         auto_sign_in: None,
         sign_in_with: None,
         identity: None,
+        card: None,
     }
 }

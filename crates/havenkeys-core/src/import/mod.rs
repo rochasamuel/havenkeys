@@ -32,6 +32,7 @@ pub struct ImportReport {
     pub imported: usize,
     pub logins: usize,
     pub secure_notes: usize,
+    pub cards: usize,
     /// Items of other kinds (credit cards, identities, SSH keys, …) stored as
     /// secure notes with their fields written out.
     pub converted_to_notes: usize,

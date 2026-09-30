@@ -391,6 +391,7 @@ mod tests {
             has_passkey: false,
             auto_sign_in: true,
             sign_in_with: None,
+            card: None,
             created_at: 0,
             updated_at: 0,
         };

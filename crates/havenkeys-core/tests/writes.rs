@@ -182,6 +182,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
         auto_sign_in: None,
         sign_in_with: None,
         identity: None,
+        card: None,
     };
     let imported = |title: &str, url: &str| ImportedItem {
         input: ItemInput {
@@ -202,6 +203,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
                 account: None,
             }),
             identity: None,
+            card: None,
         },
         created_at: None,
         updated_at: None,
