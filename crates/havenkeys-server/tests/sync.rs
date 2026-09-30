@@ -160,6 +160,10 @@ async fn a_stale_base_revision_refuses_the_whole_batch() {
     )
     .await;
     assert_eq!(status, 409);
+    assert_eq!(
+        body["error"],
+        json!({"code": "conflict", "message": "The stored revision has moved on."})
+    );
     let conflicts = body["conflicts"].as_array().unwrap();
     assert_eq!(conflicts.len(), 1);
     assert_eq!(conflicts[0]["itemId"], json!(item));

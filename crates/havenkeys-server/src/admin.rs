@@ -7,7 +7,7 @@
 use crate::invite::{self, Invite, INVITE_TTL_DAYS};
 use chrono::{Duration, Utc};
 use clap::Subcommand;
-use deadpool_postgres::Pool;
+use deadpool_postgres::{Object, Pool};
 use uuid::Uuid;
 
 #[derive(Subcommand, Debug)]
@@ -35,77 +35,87 @@ pub async fn run(cmd: AdminCommand, pool: &Pool) -> Result<String, String> {
     let client = pool.get().await.map_err(|_| "no database".to_string())?;
     match cmd {
         AdminCommand::NewAccount { email, server_url } => {
-            let email = crate::email::normalize(&email)?.to_string();
-            let server_url = check_server_url(&server_url)?;
-            let account = Uuid::new_v4();
-            let secret = invite::generate_secret();
-            let now = Utc::now();
-            client
-                .execute(
-                    "INSERT INTO accounts
-                       (id, email_normalized, status, invite_hash, invite_expires_at, created_at)
-                     VALUES ($1, $2, 'invited', $3, $4, $5)",
-                    &[
-                        &account,
-                        &email,
-                        &invite::hash(&secret).to_vec(),
-                        &(now + Duration::days(INVITE_TTL_DAYS)),
-                        &now,
-                    ],
-                )
-                .await
-                .map_err(|e| match e.code().map(|c| c.code().to_string()) {
-                    Some(code) if code == "23505" => {
-                        "an account with that email already exists".to_string()
-                    }
-                    _ => "could not create the account".to_string(),
-                })?;
-            Ok(invite::encode(&Invite {
-                server: server_url,
-                email,
-                account,
-                secret: secret.to_string(),
-            }))
+            new_account(&client, &email, &server_url).await
         }
-        AdminCommand::ListAccounts => {
-            let rows = client
-                .query(
-                    "SELECT id, email_normalized, status, activated_at
-                       FROM accounts ORDER BY created_at",
-                    &[],
-                )
-                .await
-                .map_err(|_| "could not list accounts".to_string())?;
-            Ok(rows
-                .iter()
-                .map(|row| {
-                    let id: Uuid = row.get(0);
-                    let email: String = row.get(1);
-                    let status: String = row.get(2);
-                    let at: Option<chrono::DateTime<Utc>> = row.get(3);
-                    format!(
-                        "{id}  {email}  {status}  {}",
-                        at.map(|t| t.to_rfc3339()).unwrap_or_default()
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n"))
-        }
-        AdminCommand::DeleteAccount { email } => {
-            let email = crate::email::normalize(&email)?;
-            let removed = client
-                .execute(
-                    "DELETE FROM accounts WHERE email_normalized = $1",
-                    &[&email],
-                )
-                .await
-                .map_err(|_| "could not delete the account".to_string())?;
-            if removed == 0 {
-                return Err("no such account".into());
-            }
-            Ok("deleted".into())
-        }
+        AdminCommand::ListAccounts => list_accounts(&client).await,
+        AdminCommand::DeleteAccount { email } => delete_account(&client, &email).await,
     }
+}
+
+/// Create an invited account and return its invite string.
+async fn new_account(client: &Object, email: &str, server_url: &str) -> Result<String, String> {
+    let email = crate::email::normalize(email)?.to_string();
+    let server_url = check_server_url(server_url)?;
+    let account = Uuid::new_v4();
+    let secret = invite::generate_secret();
+    let now = Utc::now();
+    client
+        .execute(
+            "INSERT INTO accounts
+               (id, email_normalized, status, invite_hash, invite_expires_at, created_at)
+             VALUES ($1, $2, 'invited', $3, $4, $5)",
+            &[
+                &account,
+                &email,
+                &invite::hash(&secret).to_vec(),
+                &(now + Duration::days(INVITE_TTL_DAYS)),
+                &now,
+            ],
+        )
+        .await
+        .map_err(|e| match e.code().map(|c| c.code().to_string()) {
+            Some(code) if code == "23505" => {
+                "an account with that email already exists".to_string()
+            }
+            _ => "could not create the account".to_string(),
+        })?;
+    Ok(invite::encode(&Invite {
+        server: server_url,
+        email,
+        account,
+        secret: secret.to_string(),
+    }))
+}
+
+/// One line per account: id, email, status, activation time.
+async fn list_accounts(client: &Object) -> Result<String, String> {
+    let rows = client
+        .query(
+            "SELECT id, email_normalized, status, activated_at
+               FROM accounts ORDER BY created_at",
+            &[],
+        )
+        .await
+        .map_err(|_| "could not list accounts".to_string())?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            let id: Uuid = row.get(0);
+            let email: String = row.get(1);
+            let status: String = row.get(2);
+            let at: Option<chrono::DateTime<Utc>> = row.get(3);
+            format!(
+                "{id}  {email}  {status}  {}",
+                at.map(|t| t.to_rfc3339()).unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+async fn delete_account(client: &Object, email: &str) -> Result<String, String> {
+    let email = crate::email::normalize(email)?;
+    let removed = client
+        .execute(
+            "DELETE FROM accounts WHERE email_normalized = $1",
+            &[&email],
+        )
+        .await
+        .map_err(|_| "could not delete the account".to_string())?;
+    if removed == 0 {
+        return Err("no such account".into());
+    }
+    Ok("deleted".into())
 }
 
 /// The invite carries this URL and a client will send its master-password

@@ -22,7 +22,8 @@ pub enum ApiError {
 }
 
 impl ApiError {
-    fn parts(self) -> (StatusCode, &'static str, &'static str) {
+    /// Status, code and message.
+    pub(crate) fn parts(self) -> (StatusCode, &'static str, &'static str) {
         match self {
             Self::Unauthorized => (
                 StatusCode::UNAUTHORIZED,

@@ -12,9 +12,10 @@
 
 use crate::auth::Session;
 use crate::b64::Blob;
-use crate::error::{self, ApiError};
+use crate::error::ApiError;
 use crate::json::Json;
 use crate::limits::MAX_CHANGES_PER_BATCH;
+use crate::routes::sync::change_json;
 use crate::routes::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -66,22 +67,7 @@ pub async fn write(
     session: Session,
     Json(req): Json<WriteRequest>,
 ) -> Result<Response, ApiError> {
-    if req.changes.is_empty() {
-        return Err(ApiError::InvalidRequest("changes is empty"));
-    }
-    if req.changes.len() > MAX_CHANGES_PER_BATCH {
-        return Err(ApiError::InvalidRequest("too many changes in one batch"));
-    }
-    let mut seen = HashSet::with_capacity(req.changes.len());
-    for change in &req.changes {
-        change.check()?;
-        if !seen.insert(change.item_id) {
-            // The second mention of an item has no defined base revision.
-            return Err(ApiError::InvalidRequest(
-                "an item appears twice in one batch",
-            ));
-        }
-    }
+    check_batch(&req.changes)?;
 
     let ids: Vec<Uuid> = req.changes.iter().map(|c| c.item_id).collect();
     let mut db = state.pool.get().await?;
@@ -111,34 +97,15 @@ pub async fn write(
         })
         .collect();
 
-    let mut conflicts = Vec::new();
-    for change in &req.changes {
-        match stored.get(&change.item_id) {
-            Some((revision, already_deleted)) => {
-                if change.base_revision != Some(*revision) || (*already_deleted && change.deleted) {
-                    conflicts.push(serde_json::json!({
-                        "itemId": change.item_id,
-                        "revision": revision,
-                    }));
-                }
-            }
-            None => {
-                if change.base_revision.is_some() {
-                    conflicts.push(serde_json::json!({
-                        "itemId": change.item_id,
-                        "revision": serde_json::Value::Null,
-                    }));
-                }
-            }
-        }
-    }
+    let conflicts = find_conflicts(&req.changes, &stored);
     if !conflicts.is_empty() {
         // Nothing is written: the client pulls, sees what happened, and
         // decides. Dropping the transaction rolls it back.
+        let (_, code, message) = ApiError::Conflict.parts();
         return Ok((
             StatusCode::CONFLICT,
             axum::Json(serde_json::json!({
-                "error": error::body("conflict", "The stored revision has moved on.")["error"],
+                "error": { "code": code, "message": message },
                 "conflicts": conflicts,
             })),
         )
@@ -154,33 +121,7 @@ pub async fn write(
         .get(0);
 
     for change in &req.changes {
-        if change.deleted {
-            tx.execute(
-                "INSERT INTO items (vault_id, item_id, overview, details, deleted_at, revision)
-                 VALUES ($1, $2, NULL, NULL, now(), $3)
-                 ON CONFLICT (vault_id, item_id) DO UPDATE
-                   SET overview = NULL, details = NULL, deleted_at = now(), revision = $3",
-                &[&session.vault_id, &change.item_id, &revision],
-            )
-            .await?;
-        } else {
-            let overview = &change.overview.as_ref().expect("checked above").0;
-            let details = &change.details.as_ref().expect("checked above").0;
-            tx.execute(
-                "INSERT INTO items (vault_id, item_id, overview, details, deleted_at, revision)
-                 VALUES ($1, $2, $3, $4, NULL, $5)
-                 ON CONFLICT (vault_id, item_id) DO UPDATE
-                   SET overview = $3, details = $4, deleted_at = NULL, revision = $5",
-                &[
-                    &session.vault_id,
-                    &change.item_id,
-                    overview,
-                    details,
-                    &revision,
-                ],
-            )
-            .await?;
-        }
+        apply_change(&tx, session.vault_id, change, revision).await?;
     }
     tx.commit().await?;
 
@@ -200,6 +141,89 @@ pub async fn write(
         "applied": applied,
     }))
     .into_response())
+}
+
+/// A batch holds 1 to `MAX_CHANGES_PER_BATCH` well-formed changes, each for
+/// a different item.
+fn check_batch(changes: &[Change]) -> Result<(), ApiError> {
+    if changes.is_empty() {
+        return Err(ApiError::InvalidRequest("changes is empty"));
+    }
+    if changes.len() > MAX_CHANGES_PER_BATCH {
+        return Err(ApiError::InvalidRequest("too many changes in one batch"));
+    }
+    let mut seen = HashSet::with_capacity(changes.len());
+    for change in changes {
+        change.check()?;
+        if !seen.insert(change.item_id) {
+            // The second mention of an item has no defined base revision.
+            return Err(ApiError::InvalidRequest(
+                "an item appears twice in one batch",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The changes whose base revision is not the stored one, as the 409 names
+/// them. `stored` maps each existing item to `(revision, deleted)`.
+fn find_conflicts(
+    changes: &[Change],
+    stored: &HashMap<Uuid, (i64, bool)>,
+) -> Vec<serde_json::Value> {
+    let mut conflicts = Vec::new();
+    for change in changes {
+        match stored.get(&change.item_id) {
+            Some((revision, already_deleted)) => {
+                if change.base_revision != Some(*revision) || (*already_deleted && change.deleted) {
+                    conflicts.push(serde_json::json!({
+                        "itemId": change.item_id,
+                        "revision": revision,
+                    }));
+                }
+            }
+            None => {
+                if change.base_revision.is_some() {
+                    conflicts.push(serde_json::json!({
+                        "itemId": change.item_id,
+                        "revision": serde_json::Value::Null,
+                    }));
+                }
+            }
+        }
+    }
+    conflicts
+}
+
+/// Write one checked change at `revision`: the new blobs, or a deletion.
+async fn apply_change(
+    tx: &deadpool_postgres::Transaction<'_>,
+    vault_id: Uuid,
+    change: &Change,
+    revision: i64,
+) -> Result<(), ApiError> {
+    if change.deleted {
+        tx.execute(
+            "INSERT INTO items (vault_id, item_id, overview, details, deleted_at, revision)
+             VALUES ($1, $2, NULL, NULL, now(), $3)
+             ON CONFLICT (vault_id, item_id) DO UPDATE
+               SET overview = NULL, details = NULL, deleted_at = now(), revision = $3",
+            &[&vault_id, &change.item_id, &revision],
+        )
+        .await?;
+    } else {
+        let overview = &change.overview.as_ref().expect("checked above").0;
+        let details = &change.details.as_ref().expect("checked above").0;
+        tx.execute(
+            "INSERT INTO items (vault_id, item_id, overview, details, deleted_at, revision)
+             VALUES ($1, $2, $3, $4, NULL, $5)
+             ON CONFLICT (vault_id, item_id) DO UPDATE
+               SET overview = $3, details = $4, deleted_at = NULL, revision = $5",
+            &[&vault_id, &change.item_id, overview, details, &revision],
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -233,19 +257,6 @@ pub async fn fetch(
             &[&session.vault_id, &req.item_ids],
         )
         .await?;
-    let changes: Vec<serde_json::Value> = rows
-        .iter()
-        .map(|row| {
-            let overview: Option<Vec<u8>> = row.get(2);
-            let details: Option<Vec<u8>> = row.get(3);
-            serde_json::json!({
-                "itemId": row.get::<_, Uuid>(0),
-                "revision": row.get::<_, i64>(1),
-                "overview": overview.map(Blob),
-                "details": details.map(Blob),
-                "deleted": row.get::<_, bool>(4),
-            })
-        })
-        .collect();
+    let changes: Vec<serde_json::Value> = rows.iter().map(change_json).collect();
     Ok(axum::Json(serde_json::json!({ "changes": changes })))
 }

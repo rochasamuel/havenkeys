@@ -136,10 +136,8 @@ pub async fn login(
         .as_ref()
         .map(|r| r.get::<_, Uuid>(0))
         .unwrap_or_else(|| decoy_account(&state.server_secret, &email));
-    let account_key = format!("acct:{account_id}");
-    let ip_key = format!("ip:{}", client_ip(&state, &headers, peer));
-    rate_limit::check(&db, &account_key).await?;
-    rate_limit::check(&db, &ip_key).await?;
+    let keys = rate_limit::AttemptKeys::new(account_id, &client_ip(&state, &headers, peer));
+    keys.check(&db).await?;
 
     let verifier = row
         .as_ref()
@@ -150,8 +148,7 @@ pub async fn login(
     // account exists.
     let ok = auth::verify_auth_key(verifier, auth_key).await && known;
     if !ok {
-        rate_limit::record_failure(&db, &account_key).await?;
-        rate_limit::record_failure(&db, &ip_key).await?;
+        keys.record_failure(&db).await?;
         tracing::info!(account_id = %account_id, outcome = "rejected", "login");
         return Err(ApiError::Unauthorized);
     }
@@ -173,8 +170,7 @@ pub async fn login(
     .await?;
     let (token, expires) = auth::issue_token(&db, account_id, req.device_id).await?;
 
-    rate_limit::clear(&db, &account_key).await?;
-    rate_limit::clear(&db, &ip_key).await?;
+    keys.clear(&db).await?;
     tracing::info!(account_id = %account_id, device_id = %req.device_id, outcome = "accepted", "login");
     Ok(axum::Json(serde_json::json!({
         "token": token.as_str(),
