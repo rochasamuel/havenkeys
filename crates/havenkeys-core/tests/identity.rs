@@ -22,6 +22,7 @@ fn identity_input(fields: IdentityFields) -> ItemInput {
         auto_sign_in: None,
         sign_in_with: None,
         identity: Some(fields),
+        card: None,
     }
 }
 

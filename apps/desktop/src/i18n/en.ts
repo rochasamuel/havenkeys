@@ -469,6 +469,38 @@ export const en = {
     readOnly: "Your identity cannot be deleted. Clear any value you no longer want to keep.",
   },
 
+  card: {
+    nav: "Cards",
+    kind: "Card",
+    edit: "Edit card",
+    newTitle: "New card",
+    fields: {
+      title: "Title",
+      cardholderName: "Cardholder name",
+      brand: "Type",
+      number: "Number",
+      verificationNumber: "Verification number",
+      expiry: "Expiry date",
+      notes: "Notes",
+    },
+    detectBrand: "Detect from number",
+    otherBrand: "Other",
+    expired: "Expired",
+    checkDigitWarning: "This number fails the card check digit. Check it for typos.",
+    keepNumber: "Leave empty to keep the saved number",
+    keepVerificationNumber: "Empty keeps the code",
+    numberRemoved: "The number will be removed.",
+    verificationNumberRemoved: "The code will be removed.",
+    expiryPlaceholder: "MM/YYYY",
+    expiryInvalid: "Enter the expiry date as MM/YYYY.",
+    copy: (label: string) => `Copy ${label}`,
+    show: (label: string) => `Show ${label}`,
+    hide: (label: string) => `Hide ${label}`,
+    hidden: (label: string) => `Hidden ${label}`,
+    copied: (label: string, seconds: number) => `${label} copied. The clipboard clears in ${seconds} s.`,
+    loadFailed: "Could not open this card.",
+    revealFailed: "Could not show this value.",
+  },
   kit: {
     qrLabel: "Secret Key QR code",
     loadFailed: "Could not load the Emergency Kit.",
@@ -605,10 +637,13 @@ export const en = {
     deleteFailed: "Could not delete the file.",
     /** "<strong>Imported 3 items</strong> from file: 2 logins and 1 secure note." */
     imported: (n: number) => (n === 1 ? "Imported 1 item" : `Imported ${n} items`),
-    summary: (fileName: string, logins: number, notes: number) =>
-      ` from ${fileName}: ${logins === 1 ? "1 login" : `${logins} logins`} and ${notes === 1 ? "1 secure note" : `${notes} secure notes`}.`,
+    summary: (fileName: string, logins: number, notes: number, cards: number) => {
+      const parts = [logins === 1 ? "1 login" : `${logins} logins`, notes === 1 ? "1 secure note" : `${notes} secure notes`];
+      if (cards > 0) parts.push(cards === 1 ? "1 card" : `${cards} cards`);
+      return ` from ${fileName}: ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}.`;
+    },
     convertedToNotes: (n: number) =>
-      `${n} ${n === 1 ? "item" : "items"} of other kinds (cards, identities, keys…) became secure notes with all their fields.`,
+      `${n} ${n === 1 ? "item" : "items"} of other kinds (identities, keys…) became secure notes with all their fields.`,
     skippedDuplicates: (n: number) => `${n} ${n === 1 ? "item was" : "items were"} already in your vault and skipped.`,
     skippedArchived: (n: number) => `${n} ${n === 1 ? "archived item was" : "archived items were"} left out.`,
     attachmentsSkipped: (n: number) =>

@@ -4,6 +4,7 @@
 //! * [`ItemOverview`] — decrypted at unlock and kept in memory (list/search).
 //! * [`ItemDetails`]  — secrets; decrypted per request only.
 
+use crate::card::{CardFields, CardInput, CardSummary};
 use crate::error::{Error, Result};
 use crate::identity::IdentityFields;
 use crate::passkey::Passkey;
@@ -33,6 +34,8 @@ pub enum ItemType {
     SecureNote,
     /// The account's one Identity (spec 2026-09-29-identity-item).
     Identity,
+    /// A payment card (spec 2026-09-29-card-item).
+    Card,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +82,9 @@ pub struct ItemOverview {
     /// overviews written before this field existed have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sign_in_with: Option<SignInWith>,
+    /// A card's brand, last four digits and expiry; `None` for other items.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<CardSummary>,
     /// Unix milliseconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -126,6 +132,7 @@ pub enum ItemDetails {
         content: SecretString,
     },
     Identity(Box<IdentityFields>),
+    Card(Box<CardFields>),
 }
 
 /// A password that was replaced, and when (Unix milliseconds).
@@ -156,6 +163,7 @@ impl ItemDetails {
             ItemDetails::Login { .. } => ItemType::Login,
             ItemDetails::SecureNote { .. } => ItemType::SecureNote,
             ItemDetails::Identity(_) => ItemType::Identity,
+            ItemDetails::Card(_) => ItemType::Card,
         }
     }
 }
@@ -229,6 +237,9 @@ pub struct ItemInput {
     /// identity, refused for the other types.
     #[serde(default)]
     pub identity: Option<IdentityFields>,
+    /// A card's values. Required for a card, refused for the other types.
+    #[serde(default)]
+    pub card: Option<CardInput>,
 }
 
 impl fmt::Debug for ItemInput {
@@ -416,8 +427,8 @@ pub(crate) fn check_note_content(n: &SecretString) -> Result<()> {
     Ok(())
 }
 
-/// Reject login-only fields on a secure note and vice versa, and anything
-/// but identity values on an identity.
+/// Reject login-only fields on a secure note and vice versa, anything but
+/// identity values on an identity, and anything but card values on a card.
 pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
     let identity_only = input
         .username
@@ -430,6 +441,15 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
         || !input.content.is_keep()
         || input.sign_in_with.is_some();
     match input.item_type {
+        ItemType::Card if input.card.is_none() => {
+            Err(Error::InvalidInput("a card needs its values"))
+        }
+        ItemType::Card if identity_only || input.identity.is_some() => {
+            Err(Error::InvalidInput("a card only has card values"))
+        }
+        ItemType::Login | ItemType::SecureNote | ItemType::Identity if input.card.is_some() => {
+            Err(Error::InvalidInput("only a card has card values"))
+        }
         ItemType::Identity if input.identity.is_none() => {
             Err(Error::InvalidInput("an identity needs its values"))
         }

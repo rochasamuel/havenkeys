@@ -65,6 +65,21 @@ const items = [
     updatedAt: NOW - 10 * DAY,
   },
   {
+    id: "44444444-5555-4666-8777-888888888888",
+    itemType: "card",
+    title: "Mastercard",
+    username: null,
+    urls: [],
+    hasPassword: false,
+    hasTotp: false,
+    hasNotes: true,
+    hasPasskey: false,
+    autoSignIn: true,
+    card: { brand: "mastercard", last4: "7609", expiry: "2033-11" },
+    createdAt: NOW - 20 * DAY,
+    updatedAt: NOW - 20 * DAY,
+  },
+  {
     id: "00f03a59-33cc-8082-a649-ca545b3b372d",
     itemType: "identity",
     title: "Samuel Rocha",
@@ -140,6 +155,17 @@ function baseResponses() {
     identity_item_id: IDENTITY_ID,
     reveal_identity: identity,
     copy_identity_field: { clearAfterSeconds: 30 },
+    reveal_card: {
+      cardholderName: "Samuel S Rocha",
+      brand: null,
+      expiry: "2033-11",
+      notes: "Nubank — limit raised in March.",
+      hasNumber: true,
+      hasVerificationNumber: true,
+    },
+    reveal_card_field: "5200828282827609",
+    copy_card_field: { clearAfterSeconds: 30 },
+    check_card_number: { brand: "mastercard", checkDigitOk: false },
     get_item: items[0],
     reveal_secret: "correct horse battery staple — a long passphrase note\nSecond line of the note.",
     password_history: [NOW - 40 * DAY, NOW - 200 * DAY],
@@ -176,6 +202,7 @@ function baseResponses() {
         imported: 212,
         logins: 190,
         secureNotes: 22,
+        cards: 6,
         convertedToNotes: 3,
         skippedDuplicates: 4,
         skippedArchived: 2,
@@ -412,14 +439,14 @@ export const desktopScenarios = [
     name: "identity",
     respond: {},
     act: async (page) => {
-      await page.click(nav(4));
+      await page.click(nav(5));
     },
   },
   {
     name: "identity-revealed",
     respond: {},
     act: async (page) => {
-      await page.click(nav(4));
+      await page.click(nav(5));
       await page.click(".item section:nth-of-type(2) .icon-btn >> nth=0");
       await page.click(".item .copy-btn >> nth=0");
     },
@@ -431,20 +458,62 @@ export const desktopScenarios = [
       reveal_identity: { fields: {}, address: null },
     },
     act: async (page) => {
-      await page.click(nav(4));
+      await page.click(nav(5));
     },
   },
   {
     name: "identity-editor",
     respond: {},
     act: async (page) => {
-      await page.click(nav(4));
+      await page.click(nav(5));
       await page.click(".item-head-actions .btn");
     },
   },
   {
     name: "identity-not-created",
     respond: { list_items: items.filter((i) => i.itemType !== "identity") },
+  },
+  {
+    name: "cards",
+    respond: {},
+    act: async (page) => {
+      await page.click(nav(4));
+    },
+  },
+  {
+    name: "card-detail",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-card)");
+    },
+  },
+  {
+    name: "card-revealed",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-card)");
+      await page.click(".item .icon-btn:not(.copy-btn) >> nth=0");
+    },
+  },
+  {
+    name: "card-expired",
+    respond: {
+      list_items: items.map((i) => (i.itemType === "card" ? { ...i, card: { ...i.card, expiry: "2020-01" } } : i)),
+      reveal_card: { cardholderName: null, brand: null, expiry: "2020-01", notes: null, hasNumber: true, hasVerificationNumber: false },
+    },
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-card)");
+    },
+  },
+  {
+    name: "card-editor",
+    respond: {},
+    act: async (page) => {
+      await page.click(".list-item:has(.avatar-card)");
+      await page.click(".item-head-actions .btn");
+      await page.fill(".card-number-input input", "5200 8282 8282 7600");
+      await page.waitForTimeout(400);
+    },
   },
   {
     name: "account-item",

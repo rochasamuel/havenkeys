@@ -124,7 +124,11 @@ describe("the error table", () => {
 
   it("translates only invalid-input details Rust actually has", () => {
     const sources = [...rustFiles("crates"), ...rustFiles("apps/desktop/src-tauri/src")].join("\n");
-    const details = new Set(Array.from(sources.matchAll(/InvalidInput\("([^"]*)"\)/g), (m) => m[1]));
+    // Details are literals in `InvalidInput("…")` or `const …_MSG: &str = "…"` handed to it.
+    const details = new Set([
+      ...Array.from(sources.matchAll(/InvalidInput\("([^"]*)"\)/g), (m) => m[1]),
+      ...Array.from(sources.matchAll(/const [A-Z_]+_MSG: &str = "([^"]*)";/g), (m) => m[1]),
+    ]);
     const unknown = Object.keys(ptBR.errors.invalidInput).filter((d) => !details.has(d));
     expect(unknown).toEqual([]);
   });

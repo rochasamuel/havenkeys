@@ -70,7 +70,7 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
         <div className="import-result" role="status">
           <p>
             <strong>{t.import.imported(result.report.imported)}</strong>
-            {t.import.summary(result.fileName, result.report.logins, result.report.secureNotes)}
+            {t.import.summary(result.fileName, result.report.logins, result.report.secureNotes, result.report.cards)}
           </p>
           {caveats(result.report, t).length > 0 && (
             <ul>

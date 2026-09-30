@@ -79,6 +79,7 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
         auto_sign_in: None,
         sign_in_with: None,
         identity: None,
+        card: None,
     }
 }
 
@@ -130,6 +131,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 auto_sign_in: None,
                 sign_in_with: None,
                 identity: None,
+                card: None,
             },
             NOW,
         )
@@ -155,6 +157,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                     account: Some("me@gmail.com".into()),
                 }),
                 identity: None,
+                card: None,
             },
             NOW,
         )
@@ -1296,6 +1299,7 @@ fn add_identity(f: &Fixture) -> Uuid {
             cpf: Some(SecretString::from("123.456.789-00")),
             ..Default::default()
         }),
+        card: None,
     };
     let staged = v.stage_update(&id, input, NOW + 1).unwrap();
     v.commit_write(staged, 51).unwrap();

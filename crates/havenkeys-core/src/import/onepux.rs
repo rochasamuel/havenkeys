@@ -10,12 +10,14 @@
 //!   designated login fields; the first TOTP field becomes the item's TOTP;
 //!   every other non-empty field is appended to the notes so nothing is lost.
 //! * Secure Note (003) → secure note.
-//! * Every other category (credit card, identity, SSH key, API credential, …)
+//! * Credit Card (002) → card; fields with no place on a card go to its notes.
+//! * Every other category (identity, SSH key, API credential, …)
 //!   → secure note with all fields written out as text.
 //! * Archived/deleted items, attachments and password history are skipped
 //!   and counted.
 
 use super::{ImportReport, ImportedItem};
+use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
 use crate::error::{Error, Result};
 use crate::model::{
     normalize_url, ItemInput, ItemType, MatchType, SecretUpdate, UrlRule, MAX_TITLE_CHARS,
@@ -324,6 +326,103 @@ fn collect_urls(overview: &Value, report: &mut ImportReport, extras: &mut Extras
     out
 }
 
+/// 1Password's `creditCardType` values.
+fn brand_from_1password(value: &str) -> Option<CardBrand> {
+    Some(match value.trim().to_ascii_lowercase().as_str() {
+        "visa" | "visaelectron" | "electron" => CardBrand::Visa,
+        "mc" | "mastercard" | "master" => CardBrand::Mastercard,
+        "amex" | "americanexpress" | "american express" => CardBrand::Amex,
+        "elo" => CardBrand::Elo,
+        "hipercard" | "hiper" => CardBrand::Hipercard,
+        "diners" | "dinersclub" | "diners club" | "carteblanche" => CardBrand::Diners,
+        "discover" => CardBrand::Discover,
+        "jcb" => CardBrand::Jcb,
+        "unionpay" | "china unionpay" => CardBrand::Unionpay,
+        "maestro" => CardBrand::Maestro,
+        _ => return None,
+    })
+}
+
+/// The values of a 1Password credit card that a Card holds. A field is
+/// taken only when it passes the card's own checks; anything else stays in
+/// the item's notes.
+#[derive(Default)]
+struct CardParts {
+    cardholder: Option<SecretString>,
+    brand: Option<CardBrand>,
+    number: Option<SecretString>,
+    verification: Option<SecretString>,
+    expiry: Option<CardExpiry>,
+}
+
+impl CardParts {
+    fn take(&mut self, field: &Value, value: &Value) -> bool {
+        let id = str_at(field, &["id"]).unwrap_or("");
+        let title = str_at(field, &["title"]).unwrap_or("").to_lowercase();
+        let text = || {
+            ["string", "concealed", "creditCardNumber", "creditCardType"]
+                .iter()
+                .find_map(|k| non_empty(str_at(value, &[k])))
+        };
+        if self.number.is_none() && (id == "ccnum" || value.get("creditCardNumber").is_some()) {
+            return match text().and_then(|t| card::clean_number(t).ok()) {
+                Some(n) => {
+                    self.number = Some(SecretString::new(n));
+                    true
+                }
+                None => false,
+            };
+        }
+        if self.verification.is_none() && id == "cvv" {
+            return match text().and_then(|t| card::clean_verification_number(t).ok()) {
+                Some(v) => {
+                    self.verification = Some(SecretString::new(v));
+                    true
+                }
+                None => false,
+            };
+        }
+        if self.cardholder.is_none() && id == "cardholder" {
+            return match text()
+                .map(|t| clean_line(t, MAX_CARDHOLDER_CHARS))
+                .filter(|t| !t.is_empty())
+            {
+                Some(n) => {
+                    self.cardholder = Some(SecretString::new(n));
+                    true
+                }
+                None => false,
+            };
+        }
+        if self.brand.is_none() && (id == "type" || value.get("creditCardType").is_some()) {
+            return match text().and_then(brand_from_1password) {
+                Some(b) => {
+                    self.brand = Some(b);
+                    true
+                }
+                None => false,
+            };
+        }
+        let expiry_field = id == "expiry" || (id.is_empty() && title.contains("expir"));
+        if self.expiry.is_none() && expiry_field {
+            let parsed = value
+                .get("monthYear")
+                .and_then(Value::as_i64)
+                .filter(|n| *n > 0)
+                .and_then(|n| {
+                    let year = u16::try_from(n / 100).ok()?;
+                    let month = u8::try_from(n % 100).ok()?;
+                    CardExpiry::new(year, month).ok()
+                });
+            if let Some(e) = parsed {
+                self.expiry = Some(e);
+                return true;
+            }
+        }
+        false
+    }
+}
+
 fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem> {
     let category = str_at(item, &["categoryUuid"]).unwrap_or("");
     let overview = item.get("overview").unwrap_or(&Value::Null);
@@ -346,6 +445,8 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     // the first recognized "Sign in with" provider becomes sign_in_with
     // (logins only); everything else is rendered into the notes.
     let is_login = matches!(category, "001" | "005");
+    let is_card = category == "002";
+    let mut card_parts = CardParts::default();
     if let Some(sections) = details.get("sections").and_then(Value::as_array) {
         for section in sections {
             extras.section(str_at(section, &["title"]));
@@ -355,6 +456,9 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             for field in fields {
                 let label = str_at(field, &["title"]);
                 let value = field.get("value").unwrap_or(&Value::Null);
+                if is_card && card_parts.take(field, value) {
+                    continue;
+                }
                 if is_login && totp.is_none() {
                     if let Some(t) = non_empty(str_at(value, &["totp"])) {
                         if parse_totp_input(t).is_ok() {
@@ -479,6 +583,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 auto_sign_in: None,
                 sign_in_with: sso,
                 identity: None,
+                card: None,
             }
         }
         "003" => {
@@ -495,6 +600,45 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 auto_sign_in: None,
                 sign_in_with: None,
                 identity: None,
+                card: None,
+            }
+        }
+        "002" => {
+            report.cards += 1;
+            for rule in collect_urls(overview, report, &mut extras) {
+                extras.section(None);
+                extras.push(Some("Website"), &rule.url);
+            }
+            let untitled = non_empty(str_at(overview, &["title"])).is_none();
+            ItemInput {
+                item_type: ItemType::Card,
+                // An untitled card with a number is named after its brand.
+                title: if untitled && card_parts.number.is_some() {
+                    String::new()
+                } else {
+                    title
+                },
+                username: None,
+                urls: Vec::new(),
+                password: SecretUpdate::Keep,
+                totp: SecretUpdate::Keep,
+                notes: SecretUpdate::Keep,
+                content: SecretUpdate::Keep,
+                auto_sign_in: None,
+                sign_in_with: None,
+                identity: None,
+                card: Some(CardInput {
+                    cardholder_name: card_parts.cardholder,
+                    brand: card_parts.brand,
+                    number: card_parts
+                        .number
+                        .map_or(SecretUpdate::Keep, SecretUpdate::Set),
+                    verification_number: card_parts
+                        .verification
+                        .map_or(SecretUpdate::Keep, SecretUpdate::Set),
+                    expiry: card_parts.expiry,
+                    notes: join_notes(extras.render()),
+                }),
             }
         }
         other => {
@@ -531,6 +675,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 auto_sign_in: None,
                 sign_in_with: None,
                 identity: None,
+                card: None,
             }
         }
     };
@@ -673,12 +818,82 @@ mod tests {
         }
     }
 
+    fn card_item(fields: Value, title: &str) -> Value {
+        json!({"accounts": [{"vaults": [{"items": [{
+            "uuid": "k", "categoryUuid": "002", "state": "active",
+            "overview": {"title": title},
+            "details": {"notesPlain": "old", "sections": [{"title": "", "fields": fields}]}
+        }]}]}]})
+    }
+
+    #[test]
+    fn a_1password_card_maps_every_field() {
+        let data = card_item(
+            json!([
+                {"title": "cardholder name", "id": "cardholder", "value": {"string": "Samuel S Rocha"}},
+                {"title": "type", "id": "type", "value": {"creditCardType": "mc"}},
+                {"title": "number", "id": "ccnum", "value": {"creditCardNumber": "5200 8282 8282 8210"}},
+                {"title": "verification number", "id": "cvv", "value": {"concealed": "123"}},
+                {"title": "expiry date", "id": "expiry", "value": {"monthYear": 203311}},
+                {"title": "valid from", "id": "validFrom", "value": {"monthYear": 202011}},
+                {"title": "issuing bank", "id": "bank", "value": {"string": "Nubank"}},
+                {"title": "PIN", "id": "pin", "value": {"concealed": "4321"}}
+            ]),
+            "Mastercard",
+        );
+        let parsed = parse(&make_1pux(&data, 0)).unwrap();
+        assert_eq!(parsed.report.cards, 1);
+        let c = parsed.items[0].input.card.as_ref().unwrap();
+        assert_eq!(
+            c.cardholder_name.as_ref().unwrap().expose(),
+            "Samuel S Rocha"
+        );
+        assert_eq!(c.brand, Some(crate::card::CardBrand::Mastercard));
+        assert_eq!(set_value(&c.number), Some("5200828282828210"));
+        assert_eq!(set_value(&c.verification_number), Some("123"));
+        assert_eq!(
+            c.expiry,
+            Some(crate::card::CardExpiry::new(2033, 11).unwrap())
+        );
+        let notes = c.notes.as_ref().unwrap().expose();
+        assert!(notes.starts_with("old"));
+        assert!(notes.contains("valid from: 11/2020"));
+        assert!(notes.contains("issuing bank: Nubank"));
+        assert!(notes.contains("PIN: 4321"));
+    }
+
+    #[test]
+    fn card_values_out_of_range_go_to_notes() {
+        let data = card_item(
+            json!([
+                {"title": "type", "id": "type", "value": {"creditCardType": "laser"}},
+                {"title": "number", "id": "ccnum", "value": {"creditCardNumber": "41111111111111111111"}},
+                {"title": "verification number", "id": "cvv", "value": {"concealed": "123456789"}}
+            ]),
+            "Odd card",
+        );
+        let parsed = parse(&make_1pux(&data, 0)).unwrap();
+        let item = &parsed.items[0];
+        assert_eq!(item.input.item_type, ItemType::Card);
+        let c = item.input.card.as_ref().unwrap();
+        assert!(matches!(c.number, SecretUpdate::Keep));
+        assert!(matches!(c.verification_number, SecretUpdate::Keep));
+        assert_eq!(c.brand, None);
+        let notes = c.notes.as_ref().unwrap().expose();
+        assert!(notes.contains("type: laser"));
+        assert!(notes.contains("number: 41111111111111111111"));
+        assert!(notes.contains("verification number: 123456789"));
+    }
+
     #[test]
     fn maps_items() {
         let parsed = parse(&make_1pux(&sample(), 1)).unwrap();
         let r = parsed.report;
         assert_eq!(parsed.items.len(), 4);
-        assert_eq!((r.logins, r.secure_notes, r.converted_to_notes), (2, 1, 1));
+        assert_eq!(
+            (r.logins, r.secure_notes, r.converted_to_notes, r.cards),
+            (2, 1, 0, 1)
+        );
         assert_eq!(r.skipped_archived, 1);
         assert_eq!(r.attachments_skipped, 2, "1 archive entry + 1 file field");
         assert_eq!(r.password_history_skipped, 1);
@@ -717,12 +932,18 @@ mod tests {
         );
 
         let card = &parsed.items[1];
-        assert_eq!(card.input.item_type, ItemType::SecureNote);
-        let body = set_value(&card.input.content).unwrap();
-        assert!(body.starts_with("Imported from 1Password (Credit card)"));
-        assert!(body.contains("number: 4111111111111111"));
-        assert!(body.contains("expiry date: 12/2026"));
-        assert!(!body.contains("valid from"));
+        assert_eq!(card.input.item_type, ItemType::Card);
+        assert_eq!(card.input.title, "Visa");
+        let c = card.input.card.as_ref().unwrap();
+        assert_eq!(set_value(&c.number), Some("4111111111111111"));
+        assert_eq!(
+            c.expiry,
+            Some(crate::card::CardExpiry::new(2026, 12).unwrap())
+        );
+        assert!(
+            c.notes.is_none(),
+            "nothing left over: valid from is empty, scan is a file"
+        );
 
         assert_eq!(
             set_value(&parsed.items[2].input.content),

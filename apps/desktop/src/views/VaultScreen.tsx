@@ -9,6 +9,8 @@ import { useToast } from "../components/Toast";
 import { ItemList } from "./ItemList";
 import { ItemDetail } from "./ItemDetail";
 import { AccountItemDetail } from "./AccountItemDetail";
+import { CardDetail } from "./CardDetail";
+import { CardEditor } from "./CardEditor";
 import { IdentityDetail } from "./IdentityDetail";
 import { IdentityEditor } from "./IdentityEditor";
 import { ItemEditor } from "./ItemEditor";
@@ -18,7 +20,7 @@ import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
-export type Section = "all" | "login" | "secure_note" | "generator" | "settings";
+export type Section = "all" | "login" | "secure_note" | "card" | "generator" | "settings";
 
 type Pane =
   | { kind: "empty" }
@@ -39,6 +41,7 @@ const sections: Array<{ id: Section; label: (t: Messages) => string; icon: IconN
   { id: "all", label: (t) => t.vault.allItems, icon: "grid" },
   { id: "login", label: (t) => t.vault.logins, icon: "key" },
   { id: "secure_note", label: (t) => t.vault.secureNotes, icon: "note" },
+  { id: "card", label: (t) => t.card.nav, icon: "card" },
 ];
 
 export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }: Props) {
@@ -187,7 +190,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   }
 
   const visible = useMemo(
-    () => (section === "login" || section === "secure_note" ? items.filter((i) => i.itemType === section) : items),
+    () => (section === "login" || section === "secure_note" || section === "card" ? items.filter((i) => i.itemType === section) : items),
     [items, section],
   );
   const counts = useMemo(
@@ -195,6 +198,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
       all: items.length,
       login: items.filter((i) => i.itemType === "login").length,
       secure_note: items.filter((i) => i.itemType === "secure_note").length,
+      card: items.filter((i) => i.itemType === "card").length,
     }),
     [items],
   );
@@ -292,7 +296,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
             >
               <Icon name={s.icon} size={17} />
               <span>{s.label(t)}</span>
-              <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note"]}</span>
+              <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note" | "card"]}</span>
             </button>
           ))}
           <button
@@ -431,7 +435,26 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                 onDirtyChange={setEditorDirty}
               />
             )}
-            {pane.kind === "view" && selected && selected.itemType !== "identity" && (
+            {pane.kind === "view" && selected?.itemType === "card" && (
+              <CardDetail
+                key={selected.id + selected.updatedAt}
+                item={selected}
+                readOnly={readOnly}
+                onEdit={() => setPane({ kind: "edit", id: selected.id })}
+                onDelete={() => void onDelete(selected)}
+              />
+            )}
+            {pane.kind === "edit" && selected?.itemType === "card" && (
+              <CardEditor
+                key={"edit" + selected.id}
+                existing={selected}
+                readOnly={readOnly}
+                onCancel={() => setPane({ kind: "view", id: selected.id })}
+                onSaved={onSaved}
+                onDirtyChange={setEditorDirty}
+              />
+            )}
+            {pane.kind === "view" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
               <ItemDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
@@ -442,7 +465,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                 onOpen={(id) => setPane({ kind: "view", id })}
               />
             )}
-            {pane.kind === "edit" && selected && selected.itemType !== "identity" && (
+            {pane.kind === "edit" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
               <ItemEditor
                 key={"edit" + selected.id}
                 existing={selected}
@@ -453,10 +476,19 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                 onDirtyChange={setEditorDirty}
               />
             )}
-            {pane.kind === "new" && (
+            {pane.kind === "new" && pane.itemType !== "card" && (
               <ItemEditor
                 key={"new" + pane.itemType}
                 itemType={pane.itemType}
+                readOnly={readOnly}
+                onCancel={() => setPane({ kind: "empty" })}
+                onSaved={onSaved}
+                onDirtyChange={setEditorDirty}
+              />
+            )}
+            {pane.kind === "new" && pane.itemType === "card" && (
+              <CardEditor
+                key="new-card"
                 readOnly={readOnly}
                 onCancel={() => setPane({ kind: "empty" })}
                 onSaved={onSaved}

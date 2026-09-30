@@ -11,7 +11,7 @@ export interface VaultStatus {
   unreadableItems: number;
 }
 
-export type ItemType = "login" | "secure_note" | "identity";
+export type ItemType = "login" | "secure_note" | "identity" | "card";
 export type MatchType = "exact" | "origin" | "domain";
 
 export interface UrlRule {
@@ -27,6 +27,29 @@ export interface SignInWith {
   account: string | null;
 }
 
+export type CardBrand =
+  | "visa"
+  | "mastercard"
+  | "amex"
+  | "elo"
+  | "hipercard"
+  | "diners"
+  | "discover"
+  | "jcb"
+  | "unionpay"
+  | "maestro"
+  | "other";
+
+/** "YYYY-MM" */
+export type CardExpiry = string;
+
+/** What the overview keeps of a card: never the number, only its last 4 digits. */
+export interface CardSummary {
+  brand: CardBrand;
+  last4: string | null;
+  expiry: CardExpiry | null;
+}
+
 /** Item summary. Contains no passwords, TOTP secrets or note bodies. */
 export interface ItemOverview {
   id: string;
@@ -40,6 +63,7 @@ export interface ItemOverview {
   hasPasskey: boolean;
   autoSignIn: boolean;
   signInWith?: SignInWith;
+  card?: CardSummary;
   createdAt: number;
   updatedAt: number;
 }
@@ -74,6 +98,8 @@ export interface ItemInput {
   signInWith?: SignInWith | null;
   /** An identity's values, sent in full on every save. */
   identity?: IdentityFields;
+  /** A card's values. */
+  card?: CardInput;
 }
 
 /** Something else the user wants to remember on their identity. */
@@ -125,6 +151,36 @@ export interface IdentityView {
 
 /** A typed identity value; `address` is the formatted block, `custom:<n>` a custom field. */
 export type IdentityCopyField = Exclude<keyof IdentityFields, "custom"> | "address" | `custom:${number}`;
+
+/** A card as the editor sends it; number and code are keep/set/clear. */
+export interface CardInput {
+  cardholderName?: string | null;
+  /** null: detect from the number. */
+  brand?: CardBrand | null;
+  number?: SecretUpdate;
+  verificationNumber?: SecretUpdate;
+  expiry?: CardExpiry | null;
+  notes?: string | null;
+}
+
+/** An opened card, without its number and verification number. */
+export interface CardView {
+  cardholderName: string | null;
+  /** The user's override only; null means detect the brand from the number. */
+  brand: CardBrand | null;
+  expiry: CardExpiry | null;
+  notes: string | null;
+  hasNumber: boolean;
+  hasVerificationNumber: boolean;
+}
+
+export type CardRevealField = "number" | "verificationNumber";
+export type CardCopyField = "cardholderName" | "number" | "verificationNumber" | "expiry";
+
+export interface CardNumberCheck {
+  brand: CardBrand | null;
+  checkDigitOk: boolean;
+}
 
 export type SecretField = "password" | "notes" | "content";
 export type CopyField = "username" | "password" | "totp";
@@ -178,6 +234,7 @@ export interface ImportReport {
   imported: number;
   logins: number;
   secureNotes: number;
+  cards: number;
   convertedToNotes: number;
   skippedDuplicates: number;
   skippedArchived: number;

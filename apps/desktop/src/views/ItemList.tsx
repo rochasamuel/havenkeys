@@ -3,6 +3,8 @@ import type { AccountStatus, ItemOverview, ItemType } from "../lib/types";
 import { monogram, primaryHost } from "../lib/format";
 import { ssoSubtitle } from "../lib/sso";
 import { identityTitle } from "../lib/identity";
+import { cardSubtitle } from "../lib/card";
+import { CardBrandLogo } from "../components/CardBrandLogo";
 import { Icon } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import type { Section } from "./VaultScreen";
@@ -41,6 +43,7 @@ export function ItemList({
     all: t.vault.allItems,
     login: t.vault.logins,
     secure_note: t.vault.secureNotes,
+    card: t.card.nav,
   };
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +102,15 @@ export function ItemList({
               >
                 <Icon name="note" size={16} /> {t.common.secureNote}
               </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onNew("card");
+                }}
+              >
+                <Icon name="card" size={16} /> {t.card.kind}
+              </button>
             </div>
           )}
         </div>
@@ -142,9 +154,11 @@ export function ItemList({
                 ? (item.username ?? (item.signInWith ? ssoSubtitle(item.signInWith) : null) ?? primaryHost(item))
                 : item.itemType === "identity"
                   ? item.username
-                  : null;
+                  : item.itemType === "card"
+                    ? cardSubtitle(item.card)
+                    : null;
             const sub =
-              data ?? (item.itemType === "login" ? t.common.login : item.itemType === "identity" ? t.identity.kind : t.common.secureNote);
+              data ?? (item.itemType === "login" ? t.common.login : item.itemType === "identity" ? t.identity.kind : item.itemType === "card" ? t.card.kind : t.common.secureNote);
             const title = item.itemType === "identity" ? identityTitle(item.title, t.identity.title) : item.title;
             return (
               <li key={item.id}>
@@ -158,6 +172,8 @@ export function ItemList({
                       <Icon name="note" size={15} />
                     ) : item.itemType === "identity" ? (
                       <Icon name="idCard" size={16} />
+                    ) : item.itemType === "card" ? (
+                      <CardBrandLogo brand={item.card?.brand ?? "other"} width={26} />
                     ) : (
                       monogram(item.title)
                     )}

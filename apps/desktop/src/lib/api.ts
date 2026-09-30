@@ -17,6 +17,10 @@ import type {
   GeneratedPassword,
   GeneratorOptions,
   IdentityCopyField,
+  CardCopyField,
+  CardNumberCheck,
+  CardRevealField,
+  CardView,
   IdentityView,
   ImportResult,
   ItemInput,
@@ -117,6 +121,14 @@ export const api = {
   revealIdentity: (id: string) => call<IdentityView>("reveal_identity", { id }),
   /** Rust copies the value and clears the clipboard later. */
   copyIdentityField: (id: string, field: IdentityCopyField) => call<CopyResult>("copy_identity_field", { id, field }),
+  /** A card's values without its number or verification number, on opening it. */
+  revealCard: (id: string) => call<CardView>("reveal_card", { id }),
+  /** The number or the verification number, on an explicit reveal. */
+  revealCardField: (id: string, field: CardRevealField) => call<string>("reveal_card_field", { id, field }),
+  /** Rust copies the value and clears the clipboard later. */
+  copyCardField: (id: string, field: CardCopyField) => call<CopyResult>("copy_card_field", { id, field }),
+  /** Brand and check digit of a number being typed; Rust keeps nothing. */
+  checkCardNumber: (number: string) => call<CardNumberCheck>("check_card_number", { number }),
 
   /** First run: the invite string from the account's operator. */
   activate: (invite: string, password: string) =>
