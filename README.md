@@ -40,6 +40,9 @@ What the desktop app does today:
   address, anything else in custom fields): created automatically, shown and
   edited in the desktop app, each value copyable. Filling web forms from it
   comes later
+* **Cards** (holder name, number, verification number, expiry) with the
+  network's logo, detected from the number; numbers stay masked until you
+  reveal them, and 1Password credit cards import as cards
 * A **HavenKeys Account** item pinned first in All items: your email,
   server, account ID and Secret Key, to read or copy when setting up
   another computer (read-only; never stored in the vault or sent to the

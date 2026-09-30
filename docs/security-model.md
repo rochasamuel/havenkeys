@@ -243,6 +243,10 @@ means a live server session, which a locked vault does not have.
 | `identity_item_id` | yes | no. The Identity's derived item ID |
 | `reveal_identity` | yes | **the identity's values** (and the formatted address), when its detail or editor opens. `Denied` for any item that is not an identity |
 | `copy_identity_field` | yes | no. Copies one identity value, the address block or a custom field (`custom:<n>`, n < 50) from Rust, cleared after the clipboard delay; anything else fails to parse |
+| `reveal_card` | yes | **a card's holder name, expiry, notes and chosen brand**, when its detail or editor opens; never the number or verification number (only whether they exist). `Denied` for any item that is not a card |
+| `reveal_card_field` | yes | **the card number or verification number**, one at a time, on an explicit eye click; the field is a closed enum |
+| `copy_card_field` | yes | no. Copies the holder name, number, verification number or expiry from Rust, cleared after the clipboard delay |
+| `check_card_number` | no | no. Returns the brand the number's prefix names and whether its check digit passes; keeps nothing |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
@@ -459,6 +463,19 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   409 and a pull. The extension cannot read it: `find_matches`,
   `fill_for_page` and `get_totp` refuse any item that is not a login
   (`tests/identity.rs`). Filling forms from it is a later, separate design.
+* A **Card** (holder name, brand, number, verification number, expiry,
+  notes) is a stored, synced item like a login; a vault holds any number.
+  Its overview (decrypted at unlock, for the list and search) keeps only the
+  brand, the **last four digits** (none when the number is under 12 digits)
+  and the expiry; search matches those four digits, never the number. The
+  number and verification number reach the UI only on an explicit reveal,
+  one value per call, hidden again after 30 s and on lock; copies go from
+  Rust to the clipboard. The brand is detected from the issuer prefix in
+  Rust (`card.rs`); the Luhn check is shown as a warning, never enforced. The
+  extension cannot read a card: `find_matches`, `fill_for_page` and
+  `get_totp` refuse any item that is not a login (`tests/card.rs`). Filling
+  checkouts from it is a separate design
+  (`specs/2026-09-29-card-autofill-design.md`).
 * **The Secret Key lives in the OS keychain** (Windows Credential Manager,
   macOS Keychain, the Secret Service on Linux; service `app.havenkeys`, user
   = account ID), with `device.json` as the fallback when no keychain is
