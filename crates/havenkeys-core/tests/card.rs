@@ -391,3 +391,38 @@ fn a_card_can_be_deleted() {
     v.commit_write(staged, 2).unwrap();
     assert_eq!(v.get_item(&id).err(), Some(Error::NotFound));
 }
+
+/// A re-imported card (same number and expiry) is skipped; a card with the
+/// same last 4 but another number is not. The parser's count says 2 and
+/// stage_import recounts, so a double count would show here.
+#[test]
+fn imported_cards_are_counted_and_deduplicated() {
+    use havenkeys_core::import::{ImportReport, ImportedItem};
+
+    let (mut v, _) = activated_vault();
+    create(&mut v, card_input("", mastercard()));
+    let item = |c: CardInput| ImportedItem {
+        input: card_input("", c),
+        created_at: None,
+        updated_at: None,
+    };
+    let staged = v
+        .stage_import(
+            vec![
+                item(mastercard()),
+                item(CardInput {
+                    number: SecretUpdate::Set(secret("5555555555558210")),
+                    ..mastercard()
+                }),
+            ],
+            ImportReport {
+                cards: 2,
+                ..ImportReport::default()
+            },
+            NOW,
+        )
+        .unwrap();
+    assert_eq!(staged.report.skipped_duplicates, 1);
+    assert_eq!(staged.report.cards, 1);
+    assert_eq!(staged.writes.len(), 1);
+}
