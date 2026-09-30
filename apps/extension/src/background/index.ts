@@ -19,7 +19,7 @@ import { parsePopupRequest } from "../messaging/popup";
 import { parseSsoContentRequest, parseSsoFrameRequest, type BackgroundToSso } from "../messaging/sso";
 import { NATIVE_HOST_NAME } from "../shared/constants";
 import { pageUrlForRequest } from "../shared/url";
-import { createInlineHandler, type AutoRun, type FrameRef } from "./inline-handler";
+import { createInlineHandler, type AutoRun, type FrameNode, type FrameRef } from "./inline-handler";
 import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
@@ -55,12 +55,32 @@ async function sendToFrame(target: Target, msg: BackgroundToContent | Background
   }
 }
 
-/** To every frame of a tab (a passkey result whose session was lost; see webauthn-handler.ts). */
-async function sendToTab(tabId: number, msg: BgWaResult): Promise<unknown> {
+/** To every frame of a tab (a passkey result whose session was lost, see webauthn-handler.ts; a card scan). */
+async function sendToTab(tabId: number, msg: BgWaResult | BackgroundToContent): Promise<unknown> {
   try {
     return await chrome.tabs.sendMessage(tabId, msg);
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * A tab's frames with their parents, from the browser (the card fill's
+ * frame-chain check, inline-handler.ts). Null when unknown: then no
+ * subframe gets a card.
+ */
+async function tabFrames(tabId: number): Promise<FrameNode[] | null> {
+  try {
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    if (!frames) return null;
+    return frames.map((f) => {
+      const node: FrameNode = { frameId: f.frameId, parentFrameId: f.parentFrameId, url: f.url };
+      const documentId = (f as { documentId?: string }).documentId;
+      if (typeof documentId === "string") node.documentId = documentId;
+      return node;
+    });
+  } catch {
+    return null;
   }
 }
 
@@ -85,6 +105,8 @@ const inline = createInlineHandler({
   openTab: (url) => void chrome.tabs.create({ url }).catch(() => undefined),
   suggestionsOn: getInlineSuggestions,
   startSso: (frame, itemId) => sso.start(frame, itemId),
+  sendToTab: (tabId, msg) => sendToTab(tabId, msg),
+  frames: tabFrames,
 });
 
 async function activeTab(): Promise<ActiveTab | undefined> {
