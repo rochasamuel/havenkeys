@@ -145,39 +145,31 @@ impl Bridge {
     }
 
     fn handle(&self, req: &Request) -> Result<ResultBody, ErrorCode> {
-        let class = match req {
-            Request::Status {} => None,
-            Request::Lock {} => {
-                (self.inner.on_lock)();
-                return Ok(ResultBody::Lock {});
-            }
-            Request::FindMatches { .. }
-            | Request::GeneratePassword {}
-            | Request::FindPasskeys { .. }
-            | Request::CheckPasskeyCreate { .. }
-            | Request::PasskeyStatus { .. }
-            | Request::FindIdentity { .. }
-            | Request::FindCards { .. } => Some(RequestClass::Lookup),
-            Request::FillItem { .. }
-            | Request::GetTotp { .. }
-            | Request::CheckLogin { .. }
-            | Request::SaveLogin { .. }
-            | Request::PasskeyGet { .. }
-            | Request::PasskeyCreate { .. }
-            | Request::OpenItem { .. }
-            | Request::FillIdentity { .. }
-            | Request::OpenIdentity { .. }
-            // Each follows a user action; `start_sso` has a visible effect
-            // (the provider's chooser page), and `check_sso` reveals which
-            // sites have logins.
-            | Request::StartSso { .. }
-            | Request::CheckSso { .. }
-            | Request::SaveSso { .. }
-            // `fill_card` returns a card; `save_card` writes one.
-            | Request::FillCard { .. }
-            | Request::SaveCard { .. } => Some(RequestClass::Secret),
+        if let Request::Lock {} = req {
+            (self.inner.on_lock)();
+            return Ok(ResultBody::Lock {});
+        }
+        self.check_rate_limits(req)?;
+        let dispatched = {
+            let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
+            dispatch(&mut vault, req, unix_seconds())
         };
-        if let Some(class) = class {
+        // The vault lock is released above, before the save below reaches the
+        // network: a slow or hostile server must never delay locking.
+        let result = match dispatched? {
+            Dispatched::Done(body) => Ok(body),
+            Dispatched::Write { write, result } => (self.inner.save)(write).map(|()| result),
+            Dispatched::Open { item, result } => self.open_in_desktop(item).map(|()| result),
+        };
+        if result.is_ok() && changes_items(req) {
+            (self.inner.on_items_changed)();
+        }
+        result
+    }
+
+    /// Spend `req`'s rate-limit tokens, or refuse it.
+    fn check_rate_limits(&self, req: &Request) -> Result<(), ErrorCode> {
+        if let Some(class) = request_class(req) {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
                 return Err(ErrorCode::RateLimited);
             }
@@ -195,62 +187,15 @@ impl Bridge {
                 return Err(ErrorCode::RateLimited);
             }
         }
-        let dispatched = {
-            let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
-            dispatch(&mut vault, req, unix_seconds())
-        };
-        // The vault lock is released above, before the save below reaches the
-        // network: a slow or hostile server must never delay locking.
-        let result = match dispatched {
-            Ok(Dispatched::Done(body)) => Ok(body),
-            Ok(Dispatched::Save(staged)) => {
-                let item_id = staged.item_id;
-                (self.inner.save)(staged.write).map(|()| ResultBody::SaveLogin { item_id })
-            }
-            Ok(Dispatched::SaveSso(staged)) => {
-                let item_id = staged.item_id;
-                (self.inner.save)(staged.write).map(|()| ResultBody::SaveSso { item_id })
-            }
-            Ok(Dispatched::SaveCard(staged)) => {
-                let item_id = staged.item_id;
-                (self.inner.save)(staged.write).map(|()| ResultBody::SaveCard { item_id })
-            }
-            Ok(Dispatched::CreatePasskey { write, result }) => {
-                (self.inner.save)(write).map(|()| result)
-            }
-            Ok(Dispatched::OpenItem(id)) => {
-                let hook = guard(&self.inner.on_open_item).clone();
-                match hook {
-                    Some(hook) => {
-                        hook(id);
-                        Ok(ResultBody::OpenItem {})
-                    }
-                    None => Err(ErrorCode::Internal),
-                }
-            }
-            Ok(Dispatched::OpenIdentity(id)) => {
-                let hook = guard(&self.inner.on_open_item).clone();
-                match hook {
-                    Some(hook) => {
-                        hook(id);
-                        Ok(ResultBody::OpenIdentity {})
-                    }
-                    None => Err(ErrorCode::Internal),
-                }
-            }
-            Err(e) => Err(e),
-        };
-        if matches!(
-            req,
-            Request::SaveLogin { .. }
-                | Request::PasskeyCreate { .. }
-                | Request::SaveSso { .. }
-                | Request::SaveCard { .. }
-        ) && result.is_ok()
-        {
-            (self.inner.on_items_changed)();
-        }
-        result
+        Ok(())
+    }
+
+    /// Run the open-item hook, without holding its mutex while it runs.
+    fn open_in_desktop(&self, item: Uuid) -> Result<(), ErrorCode> {
+        let hook = guard(&self.inner.on_open_item).clone();
+        let hook = hook.ok_or(ErrorCode::Internal)?;
+        hook(item);
+        Ok(())
     }
 
     /// Push an event to every connected native host. Never blocks.
@@ -368,6 +313,50 @@ impl Bridge {
     fn forget(&self, id: u64) {
         guard(&self.inner.connections).retain(|(c, _)| *c != id);
     }
+}
+
+/// Which rate-limit bucket a request spends from. `status` spends nothing;
+/// `lock` never gets here.
+fn request_class(req: &Request) -> Option<RequestClass> {
+    match req {
+        Request::Status {} | Request::Lock {} => None,
+        Request::FindMatches { .. }
+        | Request::GeneratePassword {}
+        | Request::FindPasskeys { .. }
+        | Request::CheckPasskeyCreate { .. }
+        | Request::PasskeyStatus { .. }
+        | Request::FindIdentity { .. }
+        | Request::FindCards { .. } => Some(RequestClass::Lookup),
+        Request::FillItem { .. }
+        | Request::GetTotp { .. }
+        | Request::CheckLogin { .. }
+        | Request::SaveLogin { .. }
+        | Request::PasskeyGet { .. }
+        | Request::PasskeyCreate { .. }
+        | Request::OpenItem { .. }
+        | Request::FillIdentity { .. }
+        | Request::OpenIdentity { .. }
+        // Each follows a user action; `start_sso` has a visible effect
+        // (the provider's chooser page), and `check_sso` reveals which
+        // sites have logins.
+        | Request::StartSso { .. }
+        | Request::CheckSso { .. }
+        | Request::SaveSso { .. }
+        // `fill_card` returns a card; `save_card` writes one.
+        | Request::FillCard { .. }
+        | Request::SaveCard { .. } => Some(RequestClass::Secret),
+    }
+}
+
+/// Requests that add or change an item, so the desktop list must refresh.
+fn changes_items(req: &Request) -> bool {
+    matches!(
+        req,
+        Request::SaveLogin { .. }
+            | Request::PasskeyCreate { .. }
+            | Request::SaveSso { .. }
+            | Request::SaveCard { .. }
+    )
 }
 
 #[cfg(unix)]

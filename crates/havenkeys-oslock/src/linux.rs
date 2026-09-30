@@ -6,7 +6,7 @@
 //! plain alphanumeric, otherwise logind's own "auto" is used.
 
 use std::io::Read;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const CANDIDATES: [&str; 2] = ["/usr/bin/loginctl", "/bin/loginctl"];
@@ -75,18 +75,8 @@ impl Probe {
             .stderr(Stdio::null())
             .spawn()
             .ok()?;
-        let deadline = Instant::now() + TIMEOUT;
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) if status.success() => break,
-                Ok(Some(_)) | Err(_) => return None,
-                Ok(None) if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return None;
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            }
+        if !exits_successfully_within(&mut child, TIMEOUT) {
+            return None;
         }
         let mut out = String::new();
         child
@@ -99,9 +89,51 @@ impl Probe {
     }
 }
 
+/// Wait for `child` to exit successfully. A child still running at the
+/// deadline is killed and reaped.
+fn exits_successfully_within(child: &mut Child, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Err(_) => return false,
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::{exits_successfully_within, parse};
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn waits_for_success_failure_and_the_deadline() {
+        let ok = |program: &str, args: &[&str], timeout| {
+            let mut child = Command::new(program).args(args).spawn().unwrap();
+            exits_successfully_within(&mut child, timeout)
+        };
+        assert!(ok("true", &[], Duration::from_secs(2)));
+        assert!(!ok("false", &[], Duration::from_secs(2)));
+
+        let started = Instant::now();
+        let mut child = Command::new("sleep").arg("5").spawn().unwrap();
+        assert!(!exits_successfully_within(
+            &mut child,
+            Duration::from_millis(100)
+        ));
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "stopped at the deadline"
+        );
+        assert!(child.try_wait().unwrap().is_some(), "the child was reaped");
+    }
 
     #[test]
     fn parses_loginctl_values() {

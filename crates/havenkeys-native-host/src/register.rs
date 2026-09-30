@@ -54,15 +54,17 @@ pub struct Target {
     pub manifest: PathBuf,
 }
 
+/// `<dir>/com.havenkeys.bridge.json`.
+fn manifest_in(dir: PathBuf) -> PathBuf {
+    dir.join(format!("{HOST_NAME}.json"))
+}
+
 fn chromium(browser: &'static str, profile: PathBuf) -> Target {
-    let manifest = profile
-        .join("NativeMessagingHosts")
-        .join(format!("{HOST_NAME}.json"));
     Target {
         browser,
         kind: Kind::Chromium,
+        manifest: manifest_in(profile.join("NativeMessagingHosts")),
         profiles: vec![profile],
-        manifest,
     }
 }
 
@@ -75,50 +77,44 @@ fn chromium(browser: &'static str, profile: PathBuf) -> Target {
 /// `$XDG_CONFIG_HOME/mozilla` for profiles made by Firefox 147+, or inside
 /// the snap or Flatpak sandbox. Any of those means Firefox is installed.
 pub fn linux_targets(home: &Path, config: &Path) -> Vec<Target> {
-    let mut t = vec![
+    vec![
         chromium("Google Chrome", config.join("google-chrome")),
         chromium("Google Chrome Beta", config.join("google-chrome-beta")),
         chromium("Chromium", config.join("chromium")),
         chromium("Brave", config.join("BraveSoftware/Brave-Browser")),
         chromium("Microsoft Edge", config.join("microsoft-edge")),
         chromium("Vivaldi", config.join("vivaldi")),
-    ];
-    t.push(Target {
-        browser: "Firefox",
-        kind: Kind::Firefox,
-        profiles: vec![
-            home.join(".mozilla"),
-            config.join("mozilla"),
-            home.join("snap/firefox"),
-            home.join(".var/app/org.mozilla.firefox"),
-        ],
-        manifest: home
-            .join(".mozilla/native-messaging-hosts")
-            .join(format!("{HOST_NAME}.json")),
-    });
-    t
+        Target {
+            browser: "Firefox",
+            kind: Kind::Firefox,
+            profiles: vec![
+                home.join(".mozilla"),
+                config.join("mozilla"),
+                home.join("snap/firefox"),
+                home.join(".var/app/org.mozilla.firefox"),
+            ],
+            manifest: manifest_in(home.join(".mozilla/native-messaging-hosts")),
+        },
+    ]
 }
 
 /// macOS: everything lives under `~/Library/Application Support`.
 pub fn macos_targets(home: &Path) -> Vec<Target> {
     let s = home.join("Library/Application Support");
-    let mut t = vec![
+    vec![
         chromium("Google Chrome", s.join("Google/Chrome")),
         chromium("Google Chrome Beta", s.join("Google/Chrome Beta")),
         chromium("Chromium", s.join("Chromium")),
         chromium("Brave", s.join("BraveSoftware/Brave-Browser")),
         chromium("Microsoft Edge", s.join("Microsoft Edge")),
         chromium("Vivaldi", s.join("Vivaldi")),
-    ];
-    t.push(Target {
-        browser: "Firefox",
-        kind: Kind::Firefox,
-        profiles: vec![s.join("Mozilla"), s.join("Firefox")],
-        manifest: s
-            .join("Mozilla/NativeMessagingHosts")
-            .join(format!("{HOST_NAME}.json")),
-    });
-    t
+        Target {
+            browser: "Firefox",
+            kind: Kind::Firefox,
+            profiles: vec![s.join("Mozilla"), s.join("Firefox")],
+            manifest: manifest_in(s.join("Mozilla/NativeMessagingHosts")),
+        },
+    ]
 }
 
 /// Write `contents` to `path` unless it already holds exactly that. The new
@@ -159,10 +155,7 @@ pub fn register_targets(host: &Path, targets: &[Target]) -> Vec<&'static str> {
 #[cfg(target_os = "linux")]
 pub fn register(host: &Path) -> io::Result<Vec<&'static str>> {
     let home = home()?;
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .unwrap_or_else(|| home.join(".config"));
+    let config = absolute_env_path("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config"));
     Ok(register_targets(host, &linux_targets(&home, &config)))
 }
 
@@ -173,10 +166,17 @@ pub fn register(host: &Path) -> io::Result<Vec<&'static str>> {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn home() -> io::Result<PathBuf> {
-    std::env::var_os("HOME")
+    absolute_env_path("HOME")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no home directory"))
+}
+
+/// An environment variable holding an absolute path. A relative one is
+/// ignored: it would resolve against wherever the app happened to start.
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+fn absolute_env_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no home directory"))
 }
 
 /// Windows: the manifests live in `%LOCALAPPDATA%\HavenKeys`, and each
@@ -196,9 +196,7 @@ pub fn register(host: &Path) -> io::Result<Vec<&'static str>> {
         ("Vivaldi", r"Software\Vivaldi"),
     ];
 
-    let base = std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
+    let base = absolute_env_path("LOCALAPPDATA")
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no LOCALAPPDATA"))?
         .join("HavenKeys");
     let chrome_manifest = base.join(format!("{HOST_NAME}.chrome.json"));

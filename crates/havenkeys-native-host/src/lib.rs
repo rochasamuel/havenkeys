@@ -101,29 +101,47 @@ where
         if serde_json::to_writer(&mut *canonical, &env).is_err() {
             continue;
         }
-
-        if upstream
-            .as_ref()
-            .is_some_and(|u| !u.alive.load(Ordering::SeqCst))
-        {
-            upstream = None;
+        if send_upstream(&mut upstream, &connect, &out, &canonical) {
+            continue;
         }
-        if upstream.is_none() {
-            upstream = connect().ok().and_then(|s| start_downstream(s, &out));
-        }
-        let sent = upstream
-            .as_mut()
-            .is_some_and(|u| write_frame(&mut u.send, &canonical, MAX_REQUEST_BYTES).is_ok());
-        if !sent {
-            upstream = None;
-            if !emit(
-                &out,
-                Response::err(Some(env.id), ErrorCode::DesktopUnavailable).into(),
-            ) {
-                return;
-            }
+        if !emit(
+            &out,
+            Response::err(Some(env.id), ErrorCode::DesktopUnavailable).into(),
+        ) {
+            return;
         }
     }
+}
+
+/// Send `frame` to the desktop, first reconnecting if the connection has
+/// dropped. A failed send forgets the connection, so the next request
+/// reconnects.
+fn send_upstream<W, C>(
+    upstream: &mut Option<Upstream>,
+    connect: &C,
+    out: &Output<W>,
+    frame: &[u8],
+) -> bool
+where
+    W: Write + Send + 'static,
+    C: Fn() -> io::Result<Stream>,
+{
+    if upstream
+        .as_ref()
+        .is_some_and(|u| !u.alive.load(Ordering::SeqCst))
+    {
+        *upstream = None;
+    }
+    if upstream.is_none() {
+        *upstream = connect().ok().and_then(|s| start_downstream(s, out));
+    }
+    let sent = upstream
+        .as_mut()
+        .is_some_and(|u| write_frame(&mut u.send, frame, MAX_REQUEST_BYTES).is_ok());
+    if !sent {
+        *upstream = None;
+    }
+    sent
 }
 
 /// Split the connection and forward validated desktop messages to `out` on

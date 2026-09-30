@@ -6,21 +6,20 @@
 //! stage_save_card}`); this layer adds the integration switch and maps types,
 //! and never widens what the core returns.
 
-use havenkeys_core::card::{CardBrand, CardExpiry};
+use crate::convert::{
+    core_card_role, core_provider, core_role, lock_state, save_action, strength, wire_brand,
+    wire_card_role, wire_provider, wire_role,
+};
+use havenkeys_core::card::CardExpiry;
 use havenkeys_core::card_page::{CardFrame as CoreCardFrame, CardRole as CoreCardRole, NewCard};
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::identity::FillRole;
-use havenkeys_core::origin::MatchStrength as CoreStrength;
 use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
-use havenkeys_core::sso::SsoProvider as CoreProvider;
-use havenkeys_core::vault::{
-    SaveAction as CoreSaveAction, SaveTarget, StagedSave, StagedWrite, VaultService, VaultState,
-};
+use havenkeys_core::vault::{SaveTarget, StagedWrite, VaultService};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
-    CardBrandId, CardFrameValues, CardMatch, CardRole, CardValue, ErrorCode, IdentityRole,
-    IdentityValue, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
-    ResultBody, SaveAction, SsoProvider as WireProvider, UpgradeHint, WireSecret, MAX_MATCHES,
+    CardFrameValues, CardMatch, CardValue, ErrorCode, IdentityValue, Match, PasskeyCandidate,
+    PasskeyMatch, Request, ResultBody, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -58,145 +57,6 @@ fn require_enabled(v: &VaultService) -> Result<(), ErrorCode> {
     }
 }
 
-fn lock_state(s: VaultState) -> LockState {
-    match s {
-        VaultState::Locked => LockState::Locked,
-        VaultState::Unlocking => LockState::Unlocking,
-        VaultState::Unlocked => LockState::Unlocked,
-        VaultState::Locking => LockState::Locking,
-    }
-}
-
-fn strength(s: CoreStrength) -> MatchStrength {
-    match s {
-        CoreStrength::ExactUrl => MatchStrength::ExactUrl,
-        CoreStrength::SameHost => MatchStrength::SameHost,
-        CoreStrength::SameSite => MatchStrength::SameSite,
-    }
-}
-
-fn wire_provider(p: CoreProvider) -> WireProvider {
-    match p {
-        CoreProvider::Google => WireProvider::Google,
-        CoreProvider::Microsoft => WireProvider::Microsoft,
-        CoreProvider::Github => WireProvider::Github,
-        CoreProvider::Apple => WireProvider::Apple,
-    }
-}
-
-fn core_role(r: IdentityRole) -> FillRole {
-    match r {
-        IdentityRole::FullName => FillRole::FullName,
-        IdentityRole::FirstName => FillRole::FirstName,
-        IdentityRole::MiddleName => FillRole::MiddleName,
-        IdentityRole::LastName => FillRole::LastName,
-        IdentityRole::Email => FillRole::Email,
-        IdentityRole::Phone => FillRole::Phone,
-        IdentityRole::BirthDate => FillRole::BirthDate,
-        IdentityRole::BirthDay => FillRole::BirthDay,
-        IdentityRole::BirthMonth => FillRole::BirthMonth,
-        IdentityRole::BirthYear => FillRole::BirthYear,
-        IdentityRole::Company => FillRole::Company,
-        IdentityRole::Street => FillRole::Street,
-        IdentityRole::Number => FillRole::Number,
-        IdentityRole::Complement => FillRole::Complement,
-        IdentityRole::AddressLine1 => FillRole::AddressLine1,
-        IdentityRole::AddressLine2 => FillRole::AddressLine2,
-        IdentityRole::Neighborhood => FillRole::Neighborhood,
-        IdentityRole::City => FillRole::City,
-        IdentityRole::State => FillRole::State,
-        IdentityRole::PostalCode => FillRole::PostalCode,
-        IdentityRole::Country => FillRole::Country,
-        IdentityRole::Username => FillRole::Username,
-        IdentityRole::Cpf => FillRole::Cpf,
-        IdentityRole::Rg => FillRole::Rg,
-        IdentityRole::Passport => FillRole::Passport,
-        IdentityRole::DriversLicense => FillRole::DriversLicense,
-    }
-}
-
-fn wire_role(r: FillRole) -> IdentityRole {
-    match r {
-        FillRole::FullName => IdentityRole::FullName,
-        FillRole::FirstName => IdentityRole::FirstName,
-        FillRole::MiddleName => IdentityRole::MiddleName,
-        FillRole::LastName => IdentityRole::LastName,
-        FillRole::Email => IdentityRole::Email,
-        FillRole::Phone => IdentityRole::Phone,
-        FillRole::BirthDate => IdentityRole::BirthDate,
-        FillRole::BirthDay => IdentityRole::BirthDay,
-        FillRole::BirthMonth => IdentityRole::BirthMonth,
-        FillRole::BirthYear => IdentityRole::BirthYear,
-        FillRole::Company => IdentityRole::Company,
-        FillRole::Street => IdentityRole::Street,
-        FillRole::Number => IdentityRole::Number,
-        FillRole::Complement => IdentityRole::Complement,
-        FillRole::AddressLine1 => IdentityRole::AddressLine1,
-        FillRole::AddressLine2 => IdentityRole::AddressLine2,
-        FillRole::Neighborhood => IdentityRole::Neighborhood,
-        FillRole::City => IdentityRole::City,
-        FillRole::State => IdentityRole::State,
-        FillRole::PostalCode => IdentityRole::PostalCode,
-        FillRole::Country => IdentityRole::Country,
-        FillRole::Username => IdentityRole::Username,
-        FillRole::Cpf => IdentityRole::Cpf,
-        FillRole::Rg => IdentityRole::Rg,
-        FillRole::Passport => IdentityRole::Passport,
-        FillRole::DriversLicense => IdentityRole::DriversLicense,
-    }
-}
-
-fn core_provider(p: WireProvider) -> CoreProvider {
-    match p {
-        WireProvider::Google => CoreProvider::Google,
-        WireProvider::Microsoft => CoreProvider::Microsoft,
-        WireProvider::Github => CoreProvider::Github,
-        WireProvider::Apple => CoreProvider::Apple,
-    }
-}
-
-fn core_card_role(r: CardRole) -> CoreCardRole {
-    match r {
-        CardRole::CardholderName => CoreCardRole::CardholderName,
-        CardRole::CardholderGivenName => CoreCardRole::CardholderGivenName,
-        CardRole::CardholderFamilyName => CoreCardRole::CardholderFamilyName,
-        CardRole::Number => CoreCardRole::Number,
-        CardRole::VerificationNumber => CoreCardRole::VerificationNumber,
-        CardRole::ExpiryMonth => CoreCardRole::ExpiryMonth,
-        CardRole::ExpiryYear => CoreCardRole::ExpiryYear,
-        CardRole::Brand => CoreCardRole::Brand,
-    }
-}
-
-fn wire_card_role(r: CoreCardRole) -> CardRole {
-    match r {
-        CoreCardRole::CardholderName => CardRole::CardholderName,
-        CoreCardRole::CardholderGivenName => CardRole::CardholderGivenName,
-        CoreCardRole::CardholderFamilyName => CardRole::CardholderFamilyName,
-        CoreCardRole::Number => CardRole::Number,
-        CoreCardRole::VerificationNumber => CardRole::VerificationNumber,
-        CoreCardRole::ExpiryMonth => CardRole::ExpiryMonth,
-        CoreCardRole::ExpiryYear => CardRole::ExpiryYear,
-        CoreCardRole::Brand => CardRole::Brand,
-    }
-}
-
-fn wire_brand(b: CardBrand) -> CardBrandId {
-    match b {
-        CardBrand::Visa => CardBrandId::Visa,
-        CardBrand::Mastercard => CardBrandId::Mastercard,
-        CardBrand::Amex => CardBrandId::Amex,
-        CardBrand::Elo => CardBrandId::Elo,
-        CardBrand::Hipercard => CardBrandId::Hipercard,
-        CardBrand::Diners => CardBrandId::Diners,
-        CardBrand::Discover => CardBrandId::Discover,
-        CardBrand::Jcb => CardBrandId::Jcb,
-        CardBrand::Unionpay => CardBrandId::Unionpay,
-        CardBrand::Maestro => CardBrandId::Maestro,
-        CardBrand::Other => CardBrandId::Other,
-    }
-}
-
 fn now_ms(unix_seconds: u64) -> i64 {
     i64::try_from(unix_seconds.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
@@ -211,34 +71,43 @@ fn byte_list(v: &[String]) -> Result<Vec<Vec<u8>>, ErrorCode> {
     v.iter().map(|s| bytes(s)).collect()
 }
 
+fn wire_secret(s: &SecretString) -> WireSecret {
+    WireSecret::new(s.expose().to_owned())
+}
+
+fn core_secret(s: &WireSecret) -> SecretString {
+    SecretString::new(s.expose().to_owned())
+}
+
+/// Update the login the user picked, or add one titled `title`.
+fn save_target<'a>(item_id: &'a Option<Uuid>, title: &'a Option<String>) -> SaveTarget<'a> {
+    match item_id {
+        Some(id) => SaveTarget::Update(id),
+        None => SaveTarget::New {
+            title: title.as_deref(),
+        },
+    }
+}
+
 /// What answering a request produced.
-///
-/// Saving a login cannot finish under the vault lock: the server has to
-/// accept the write first, and holding the lock across a network request
-/// would delay locking the vault. So the staged write comes back out and the
-/// caller sends it.
+// One value per request, matched at once: boxing `Write` would only add an
+// allocation. (The enum is the same size it was with one variant per save.)
+#[allow(clippy::large_enum_variant)]
 pub enum Dispatched {
+    /// The answer.
     Done(ResultBody),
-    Save(StagedSave),
-    /// A "Sign in with" login created or updated by `save_sso`. Same reason
-    /// as `Save`: the write reaches the server before the item ID is
-    /// returned.
-    SaveSso(StagedSave),
-    /// A passkey sealed into its login. `result` is returned only after the
-    /// server accepted `write`.
-    CreatePasskey {
+    /// A write the account's server must accept before `result` is returned:
+    /// a saved login, card or "Sign in with" login, or a new passkey. It
+    /// cannot finish under the vault lock, because holding the lock across a
+    /// network request would delay locking the vault, so the staged write
+    /// comes back out and the caller sends it.
+    Write {
         write: StagedWrite,
         result: ResultBody,
     },
-    /// The item may be opened in the desktop editor; the caller runs the
-    /// hook once the vault lock is released.
-    OpenItem(Uuid),
-    /// The identity may be opened in the desktop; the caller runs the
-    /// open-item hook once the vault lock is released.
-    OpenIdentity(Uuid),
-    /// A card saved from a checkout. Same reason as `Save`: the write
-    /// reaches the server before the item ID is returned.
-    SaveCard(StagedSave),
+    /// The item may be opened in the desktop; the caller runs the open-item
+    /// hook once the vault lock is released, then returns `result`.
+    Open { item: Uuid, result: ResultBody },
 }
 
 /// Answer a request. `lock` is handled by the caller, which must not hold
@@ -248,6 +117,10 @@ pub fn dispatch(
     req: &Request,
     unix_seconds: u64,
 ) -> Result<Dispatched, ErrorCode> {
+    // Everything but status and lock comes from a web page.
+    if !matches!(req, Request::Status {} | Request::Lock {}) {
+        require_enabled(v)?;
+    }
     match req {
         Request::Status {} => {
             let s = v.status().map_err(code)?;
@@ -258,7 +131,6 @@ pub fn dispatch(
         }
         Request::Lock {} => Err(ErrorCode::Internal),
         Request::FindMatches { url, top_url } => {
-            require_enabled(v)?;
             let matches = v
                 .find_matches(url, top_url.as_deref())
                 .map_err(code)?
@@ -281,17 +153,13 @@ pub fn dispatch(
             url,
             top_url,
         } => {
-            require_enabled(v)?;
             let creds = v
                 .fill_for_page(item_id, url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(item_code)?;
             let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::FillItem {
                 username: creds.username.clone(),
-                password: creds
-                    .password
-                    .as_ref()
-                    .map(|p| WireSecret::new(p.expose().to_owned())),
+                password: creds.password.as_ref().map(wire_secret),
                 auto_submit,
             }))
         }
@@ -300,23 +168,21 @@ pub fn dispatch(
             url,
             top_url,
         } => {
-            require_enabled(v)?;
             let totp = v
                 .totp_for_page(item_id, url, top_url.as_deref(), unix_seconds)
                 .map_err(item_code)?;
             let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::GetTotp {
-                code: WireSecret::new(totp.code.expose().to_owned()),
+                code: wire_secret(&totp.code),
                 period: totp.period,
                 seconds_remaining: totp.seconds_remaining,
                 auto_submit,
             }))
         }
         Request::GeneratePassword {} => {
-            require_enabled(v)?;
             let generated = generate(&GeneratorOptions::default()).map_err(code)?;
             Ok(Dispatched::Done(ResultBody::GeneratePassword {
-                password: WireSecret::new(generated.password.expose().to_owned()),
+                password: wire_secret(&generated.password),
             }))
         }
         Request::CheckLogin {
@@ -326,25 +192,18 @@ pub fn dispatch(
             password,
             current_password,
         } => {
-            require_enabled(v)?;
-            let secret = SecretString::new(password.expose().to_owned());
-            let current = current_password
-                .as_ref()
-                .map(|c| SecretString::new(c.expose().to_owned()));
-            let (action, item_id) = match v
-                .check_login(
+            let secret = core_secret(password);
+            let current = current_password.as_ref().map(core_secret);
+            let (action, item_id) = save_action(
+                v.check_login(
                     url,
                     top_url.as_deref(),
                     username.as_deref(),
                     &secret,
                     current.as_ref(),
                 )
-                .map_err(code)?
-            {
-                CoreSaveAction::Add => (SaveAction::Add, None),
-                CoreSaveAction::Update(id) => (SaveAction::Update, Some(id)),
-                CoreSaveAction::Unchanged => (SaveAction::Unchanged, None),
-            };
+                .map_err(code)?,
+            );
             Ok(Dispatched::Done(ResultBody::CheckLogin { action, item_id }))
         }
         Request::SaveLogin {
@@ -355,24 +214,22 @@ pub fn dispatch(
             item_id,
             title,
         } => {
-            require_enabled(v)?;
-            let secret = SecretString::new(password.expose().to_owned());
             let staged = v
                 .stage_save_login(
                     url,
                     top_url.as_deref(),
                     username.as_deref(),
-                    secret,
-                    match item_id {
-                        Some(id) => SaveTarget::Update(id),
-                        None => SaveTarget::New {
-                            title: title.as_deref(),
-                        },
-                    },
+                    core_secret(password),
+                    save_target(item_id, title),
                     now_ms(unix_seconds),
                 )
                 .map_err(item_code)?;
-            Ok(Dispatched::Save(staged))
+            Ok(Dispatched::Write {
+                write: staged.write,
+                result: ResultBody::SaveLogin {
+                    item_id: staged.item_id,
+                },
+            })
         }
         Request::FindPasskeys {
             url,
@@ -380,7 +237,6 @@ pub fn dispatch(
             rp_id,
             allow_credentials,
         } => {
-            require_enabled(v)?;
             let allow = byte_list(allow_credentials)?;
             let passkeys = v
                 .find_passkeys(rp_id, url, top_url.as_deref(), &allow)
@@ -404,7 +260,6 @@ pub fn dispatch(
             rp_id,
             challenge,
         } => {
-            require_enabled(v)?;
             let a = v
                 .passkey_assert(
                     item_id,
@@ -431,7 +286,6 @@ pub fn dispatch(
             exclude_credentials,
             conditional,
         } => {
-            require_enabled(v)?;
             let exclude = byte_list(exclude_credentials)?;
             let check = v
                 .check_passkey_create(
@@ -482,7 +336,6 @@ pub fn dispatch(
             item_id,
             conditional,
         } => {
-            require_enabled(v)?;
             let challenge = bytes(challenge)?;
             let user_handle = bytes(user_handle)?;
             let staged = v
@@ -510,13 +363,12 @@ pub fn dispatch(
                 public_key: encode_b64url(&r.public_key),
                 public_key_algorithm: havenkeys_protocol::COSE_ES256,
             };
-            Ok(Dispatched::CreatePasskey {
+            Ok(Dispatched::Write {
                 write: staged.write,
                 result,
             })
         }
         Request::PasskeyStatus { url, top_url } => {
-            require_enabled(v)?;
             let has_passkey = v
                 .has_passkey_for_page(url, top_url.as_deref())
                 .map_err(code)?;
@@ -527,7 +379,6 @@ pub fn dispatch(
             url,
             top_url,
         } => {
-            require_enabled(v)?;
             // The same origin binding as fill_item, without decrypting a
             // secret: the item must be one of this page's matches. An unknown
             // ID answers exactly like another site's item.
@@ -536,14 +387,15 @@ pub fn dispatch(
                 .map_err(code)?
                 .iter()
                 .any(|s| s.id == *item_id);
-            if saved_here {
-                Ok(Dispatched::OpenItem(*item_id))
-            } else {
-                Err(ErrorCode::Denied)
+            if !saved_here {
+                return Err(ErrorCode::Denied);
             }
+            Ok(Dispatched::Open {
+                item: *item_id,
+                result: ResultBody::OpenItem {},
+            })
         }
         Request::FindIdentity { url, top_url } => {
-            require_enabled(v)?;
             let s = v
                 .identity_summary_for_page(url, top_url.as_deref())
                 .map_err(code)?;
@@ -559,7 +411,6 @@ pub fn dispatch(
             roles,
             documents,
         } => {
-            require_enabled(v)?;
             let roles: Vec<FillRole> = roles.iter().copied().map(core_role).collect();
             let values = v
                 .identity_values_for_page(url, top_url.as_deref(), &roles, *documents)
@@ -567,20 +418,21 @@ pub fn dispatch(
                 .into_iter()
                 .map(|(role, value)| IdentityValue {
                     role: wire_role(role),
-                    value: WireSecret::new(value.expose().to_owned()),
+                    value: wire_secret(&value),
                 })
                 .collect();
             Ok(Dispatched::Done(ResultBody::FillIdentity { values }))
         }
         Request::OpenIdentity { url, top_url } => {
-            require_enabled(v)?;
             let id = v
                 .identity_id_for_page(url, top_url.as_deref())
                 .map_err(code)?;
-            Ok(Dispatched::OpenIdentity(id))
+            Ok(Dispatched::Open {
+                item: id,
+                result: ResultBody::OpenIdentity {},
+            })
         }
         Request::FindCards { url, top_url } => {
-            require_enabled(v)?;
             let list = v.cards_for_page(url, top_url.as_deref()).map_err(code)?;
             let cards = list
                 .cards
@@ -604,7 +456,6 @@ pub fn dispatch(
             top_url,
             frames,
         } => {
-            require_enabled(v)?;
             let roles: Vec<Vec<CoreCardRole>> = frames
                 .iter()
                 .map(|f| f.roles.iter().copied().map(core_card_role).collect())
@@ -632,7 +483,7 @@ pub fn dispatch(
                         .into_iter()
                         .map(|(role, value)| CardValue {
                             role: wire_card_role(role),
-                            value: WireSecret::new(value.expose().to_owned()),
+                            value: wire_secret(&value),
                         })
                         .collect(),
                 })
@@ -648,7 +499,6 @@ pub fn dispatch(
             verification_number,
             expiry,
         } => {
-            require_enabled(v)?;
             let staged = v
                 .stage_save_card(
                     url,
@@ -656,23 +506,25 @@ pub fn dispatch(
                     NewCard {
                         title: title.as_deref(),
                         cardholder_name: cardholder_name.as_deref(),
-                        number: SecretString::new(number.expose().to_owned()),
-                        verification_number: verification_number
-                            .as_ref()
-                            .map(|c| SecretString::new(c.expose().to_owned())),
+                        number: core_secret(number),
+                        verification_number: verification_number.as_ref().map(core_secret),
                         expiry: expiry.as_deref(),
                     },
                     now_ms(unix_seconds),
                 )
                 .map_err(code)?;
-            Ok(Dispatched::SaveCard(staged))
+            Ok(Dispatched::Write {
+                write: staged.write,
+                result: ResultBody::SaveCard {
+                    item_id: staged.item_id,
+                },
+            })
         }
         Request::StartSso {
             item_id,
             url,
             top_url,
         } => {
-            require_enabled(v)?;
             let s = v
                 .start_sso_for_page(item_id, url, top_url.as_deref())
                 .map_err(item_code)?;
@@ -694,20 +546,15 @@ pub fn dispatch(
             provider,
             account,
         } => {
-            require_enabled(v)?;
-            let (action, item_id) = match v
-                .check_sso(
+            let (action, item_id) = save_action(
+                v.check_sso(
                     url,
                     top_url.as_deref(),
                     core_provider(*provider),
                     account.as_deref(),
                 )
-                .map_err(code)?
-            {
-                CoreSaveAction::Add => (SaveAction::Add, None),
-                CoreSaveAction::Update(id) => (SaveAction::Update, Some(id)),
-                CoreSaveAction::Unchanged => (SaveAction::Unchanged, None),
-            };
+                .map_err(code)?,
+            );
             // Only a prompt that will be shown is offered the vault's accounts.
             let accounts = if action == SaveAction::Unchanged {
                 Vec::new()
@@ -729,23 +576,22 @@ pub fn dispatch(
             item_id,
             title,
         } => {
-            require_enabled(v)?;
             let staged = v
                 .stage_save_sso(
                     url,
                     top_url.as_deref(),
                     core_provider(*provider),
                     account.as_deref(),
-                    match item_id {
-                        Some(id) => SaveTarget::Update(id),
-                        None => SaveTarget::New {
-                            title: title.as_deref(),
-                        },
-                    },
+                    save_target(item_id, title),
                     now_ms(unix_seconds),
                 )
                 .map_err(item_code)?;
-            Ok(Dispatched::SaveSso(staged))
+            Ok(Dispatched::Write {
+                write: staged.write,
+                result: ResultBody::SaveSso {
+                    item_id: staged.item_id,
+                },
+            })
         }
     }
 }

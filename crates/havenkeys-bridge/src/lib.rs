@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+mod convert;
 mod dispatch;
 mod ratelimit;
 mod server;

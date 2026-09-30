@@ -104,7 +104,7 @@ impl<T: Transport> SyncClient<T> {
     /// Is the server there? Used to decide online/offline, never for
     /// authorization.
     pub async fn health(&self) -> Result<()> {
-        let response = self.send(Method::Get, "/v1/health", None, None).await?;
+        let response = self.get("/v1/health", None).await?;
         match response.status {
             200 => Ok(()),
             _ => Err(SyncError::Unavailable),
@@ -112,9 +112,7 @@ impl<T: Transport> SyncClient<T> {
     }
 
     pub async fn activate(&self, activation: Activation<'_>) -> Result<Activated> {
-        if activation.header.is_empty() || activation.header.len() > MAX_HEADER_BYTES {
-            return Err(SyncError::Refused("header is not valid"));
-        }
+        check_header(activation.header)?;
         let body = wire::ActivateBody {
             email: activation.email,
             invite: activation.invite,
@@ -124,15 +122,8 @@ impl<T: Transport> SyncClient<T> {
             header: BASE64.encode(activation.header),
             key_scheme: KEY_SCHEME,
         };
-        let response = self
-            .send(
-                Method::Post,
-                "/v1/accounts/activate",
-                None,
-                Some(json(&body)?),
-            )
-            .await?;
-        let dto: wire::ActivatedDto = self.expect_ok(response)?;
+        let response = self.post("/v1/accounts/activate", None, &body).await?;
+        let dto: wire::ActivatedDto = expect_ok(response)?;
         Ok(Activated {
             account_id: dto.account_id,
             vault_id: dto.vault_id,
@@ -144,10 +135,8 @@ impl<T: Transport> SyncClient<T> {
     /// account exists, so nothing here may be treated as proof that it does.
     pub async fn auth_params(&self, email: &str) -> Result<AuthParams> {
         let body = wire::ParamsBody { email };
-        let response = self
-            .send(Method::Post, "/v1/auth/params", None, Some(json(&body)?))
-            .await?;
-        let dto: wire::ParamsDto = self.expect_ok(response)?;
+        let response = self.post("/v1/auth/params", None, &body).await?;
+        let dto: wire::ParamsDto = expect_ok(response)?;
         Ok(AuthParams {
             account_id: dto.account_id,
             kdf: dto.kdf.try_into()?,
@@ -173,10 +162,8 @@ impl<T: Transport> SyncClient<T> {
             device_id,
             device_name,
         };
-        let response = self
-            .send(Method::Post, "/v1/auth/login", None, Some(json(&body)?))
-            .await?;
-        let dto: wire::LoginDto = self.expect_ok(response)?;
+        let response = self.post("/v1/auth/login", None, &body).await?;
+        let dto: wire::LoginDto = expect_ok(response)?;
         if dto.token.is_empty() || dto.token.len() > 128 {
             return Err(SyncError::Protocol("token"));
         }
@@ -195,15 +182,13 @@ impl<T: Transport> SyncClient<T> {
         match response.status {
             // A session that is already gone is a successful logout.
             204 | 200 | 401 => Ok(()),
-            _ => Err(self.error_for(response)),
+            _ => Err(error_for(response.status)),
         }
     }
 
     pub async fn header(&self, session: &Session) -> Result<wire::RemoteHeader> {
-        let response = self
-            .send(Method::Get, "/v1/vault/header", Some(session), None)
-            .await?;
-        let dto: wire::HeaderDto = self.expect_ok(response)?;
+        let response = self.get("/v1/vault/header", Some(session)).await?;
+        let dto: wire::HeaderDto = expect_ok(response)?;
         let header: wire::RemoteHeader = dto.try_into()?;
         if header.key_scheme < KEY_SCHEME {
             // A downgrade attempt. The core would refuse it too, but there is
@@ -222,9 +207,7 @@ impl<T: Transport> SyncClient<T> {
         session: &Session,
         change: CredentialChange<'_>,
     ) -> Result<i64> {
-        if change.header.is_empty() || change.header.len() > MAX_HEADER_BYTES {
-            return Err(SyncError::Refused("header is not valid"));
-        }
+        check_header(change.header)?;
         if change.base_header_revision < 0 {
             return Err(SyncError::Refused("header revision is not valid"));
         }
@@ -241,14 +224,9 @@ impl<T: Transport> SyncClient<T> {
             base_header_revision: change.base_header_revision,
         };
         let response = self
-            .send(
-                Method::Post,
-                "/v1/account/credentials",
-                Some(session),
-                Some(json(&body)?),
-            )
+            .post("/v1/account/credentials", Some(session), &body)
             .await?;
-        let dto: wire::CredentialsAckDto = self.expect_ok(response)?;
+        let dto: wire::CredentialsAckDto = expect_ok(response)?;
         // The server assigns base + 1 and nothing else. Anything different
         // would leave this device committing a revision the server never
         // stored.
@@ -265,14 +243,9 @@ impl<T: Transport> SyncClient<T> {
             return Err(SyncError::Refused("cursor is not valid"));
         }
         let response = self
-            .send(
-                Method::Get,
-                &format!("/v1/sync?since={since}"),
-                Some(session),
-                None,
-            )
+            .get(&format!("/v1/sync?since={since}"), Some(session))
             .await?;
-        let dto: wire::PullDto = self.expect_ok(response)?;
+        let dto: wire::PullDto = expect_ok(response)?;
         if dto.cursor < 0 {
             return Err(SyncError::Protocol("cursor"));
         }
@@ -308,12 +281,7 @@ impl<T: Transport> SyncClient<T> {
             .map(wire::ChangeDto::try_from)
             .collect::<Result<Vec<_>>>()?;
         let response = self
-            .send(
-                Method::Post,
-                "/v1/items",
-                Some(session),
-                Some(json(&wire::WriteBody { changes })?),
-            )
+            .post("/v1/items", Some(session), &wire::WriteBody { changes })
             .await?;
         if response.status == 409 {
             let dto: wire::ConflictsDto = wire::parse(&response.body)?;
@@ -323,7 +291,7 @@ impl<T: Transport> SyncClient<T> {
             }
             return Err(SyncError::Conflict(conflicts));
         }
-        let dto: wire::WriteAckDto = self.expect_ok(response)?;
+        let dto: wire::WriteAckDto = expect_ok(response)?;
         if dto.applied.len() != staged.len() {
             return Err(SyncError::Protocol(
                 "the server acknowledged a different batch",
@@ -347,14 +315,13 @@ impl<T: Transport> SyncClient<T> {
             return Err(SyncError::Refused("item list is not valid"));
         }
         let response = self
-            .send(
-                Method::Post,
+            .post(
                 "/v1/items/fetch",
                 Some(session),
-                Some(json(&wire::FetchBody { item_ids: ids })?),
+                &wire::FetchBody { item_ids: ids },
             )
             .await?;
-        let dto: wire::FetchDto = self.expect_ok(response)?;
+        let dto: wire::FetchDto = expect_ok(response)?;
         let asked: std::collections::HashSet<Uuid> = ids.iter().copied().collect();
         let mut seen = std::collections::HashSet::new();
         for change in &dto.changes {
@@ -369,10 +336,8 @@ impl<T: Transport> SyncClient<T> {
     }
 
     pub async fn devices(&self, session: &Session) -> Result<Vec<Device>> {
-        let response = self
-            .send(Method::Get, "/v1/devices", Some(session), None)
-            .await?;
-        let dto: Vec<wire::DeviceDto> = self.expect_ok(response)?;
+        let response = self.get("/v1/devices", Some(session)).await?;
+        let dto: Vec<wire::DeviceDto> = expect_ok(response)?;
         Ok(dto
             .into_iter()
             .map(|d| Device {
@@ -396,8 +361,23 @@ impl<T: Transport> SyncClient<T> {
             .await?;
         match response.status {
             200 | 204 => Ok(()),
-            _ => Err(self.error_for(response)),
+            _ => Err(error_for(response.status)),
         }
+    }
+
+    async fn get(&self, path: &str, session: Option<&Session>) -> Result<HttpResponse> {
+        self.send(Method::Get, path, session, None).await
+    }
+
+    /// POST `body` as JSON.
+    async fn post<B: serde::Serialize>(
+        &self,
+        path: &str,
+        session: Option<&Session>,
+        body: &B,
+    ) -> Result<HttpResponse> {
+        let body = serde_json::to_vec(body).map_err(|_| SyncError::Protocol("request encoding"))?;
+        self.send(Method::Post, path, session, Some(body)).await
     }
 
     async fn send(
@@ -416,30 +396,35 @@ impl<T: Transport> SyncClient<T> {
             })
             .await
     }
-
-    fn expect_ok<D: serde::de::DeserializeOwned>(&self, response: HttpResponse) -> Result<D> {
-        if response.status != 200 {
-            return Err(self.error_for(response));
-        }
-        wire::parse(&response.body)
-    }
-
-    /// Map a status to an error. The server's own message is never used: it
-    /// is attacker-controlled text, and the client has its own words for
-    /// every case it can act on.
-    fn error_for(&self, response: HttpResponse) -> SyncError {
-        match response.status {
-            401 | 403 => SyncError::Unauthorized,
-            404 => SyncError::Refused("not found"),
-            409 => SyncError::Conflict(Vec::new()),
-            413 => SyncError::Refused("too large"),
-            429 => SyncError::RateLimited,
-            400..=499 => SyncError::Refused("the request was refused"),
-            _ => SyncError::Unavailable,
-        }
-    }
 }
 
-fn json<B: serde::Serialize>(body: &B) -> Result<Vec<u8>> {
-    serde_json::to_vec(body).map_err(|_| SyncError::Protocol("request encoding"))
+/// An attested header this client is willing to send.
+fn check_header(header: &[u8]) -> Result<()> {
+    if header.is_empty() || header.len() > MAX_HEADER_BYTES {
+        return Err(SyncError::Refused("header is not valid"));
+    }
+    Ok(())
+}
+
+/// A 200 answer's body, parsed; any other status as its error.
+fn expect_ok<D: serde::de::DeserializeOwned>(response: HttpResponse) -> Result<D> {
+    if response.status != 200 {
+        return Err(error_for(response.status));
+    }
+    wire::parse(&response.body)
+}
+
+/// Map a status to an error. The server's own message is never used: it
+/// is attacker-controlled text, and the client has its own words for
+/// every case it can act on.
+fn error_for(status: u16) -> SyncError {
+    match status {
+        401 | 403 => SyncError::Unauthorized,
+        404 => SyncError::Refused("not found"),
+        409 => SyncError::Conflict(Vec::new()),
+        413 => SyncError::Refused("too large"),
+        429 => SyncError::RateLimited,
+        400..=499 => SyncError::Refused("the request was refused"),
+        _ => SyncError::Unavailable,
+    }
 }
