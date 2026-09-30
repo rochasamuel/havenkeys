@@ -159,10 +159,10 @@ function identityRow(title: string): HTMLElement {
   return row;
 }
 
-function cardRow(c: CardRowView, origin: string | undefined): HTMLElement {
+function cardRow(c: CardRowView, origin: string): HTMLElement {
   const status = h("div", { className: "row-status" });
   const fill = smallButton(t.popup.fill, t.popup.fillCardTitle);
-  fill.addEventListener("click", () => void fillFromPopup(fill, { type: "popup_fill_card", itemId: c.id, ...(origin ? { origin } : {}) }, status));
+  fill.addEventListener("click", () => void fillFromPopup(fill, { type: "popup_fill_card", itemId: c.id, origin }, status));
   const detail = [t.menu.cardRow(c.last4, c.expiry), c.expired ? t.menu.cardExpired : ""].filter(Boolean).join(" · ");
   return h(
     "li",

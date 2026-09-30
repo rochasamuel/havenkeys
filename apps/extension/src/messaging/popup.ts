@@ -19,7 +19,7 @@ export type PopupRequest =
    * page origin the list was built for; the background refuses a tab that
    * has since moved to another origin.
    */
-  | { type: "popup_fill_card"; itemId: string; origin?: string }
+  | { type: "popup_fill_card"; itemId: string; origin: string }
   /** Show this login in the desktop app's editor. */
   | { type: "popup_open_item"; itemId: string }
   /**
@@ -36,7 +36,9 @@ export type PopupState =
   | { kind: "no_vault" }
   | { kind: "locked" }
   | { kind: "disabled" }
-  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null; cards?: CardRowView[]; cardsOrigin?: string }
+  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null; cards?: undefined; cardsOrigin?: undefined }
+  /** With cards, the origin they were listed for (the fill request must name it). */
+  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null; cards: CardRowView[]; cardsOrigin: string }
   | { kind: "error"; message: string };
 
 export interface TotpView {
@@ -80,7 +82,6 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
         : null;
     case "popup_fill_card":
       if (typeof o.itemId !== "string" || !UUID.test(o.itemId)) return null;
-      if (keys.length === 2) return { type: "popup_fill_card", itemId: o.itemId };
       return keys.length === 3 && isOrigin(o.origin) ? { type: "popup_fill_card", itemId: o.itemId, origin: o.origin } : null;
     case "popup_fill_identity":
       if (o.documents === null) return keys.length === 2 ? { type: "popup_fill_identity", documents: null } : null;

@@ -383,10 +383,10 @@ describe("popup cards", () => {
 
   it("fills an offered card into the tab, and reports no card form", async () => {
     const { h, fills } = handler("https://shop.com/checkout?x=1", true);
-    expect(await h.handle({ type: "popup_fill_card", itemId: VISA })).toEqual({ ok: true, value: null });
+    expect(await h.handle({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).toEqual({ ok: true, value: null });
     expect(fills).toEqual([[9, "https://shop.com/checkout", VISA]]);
-    expect(await handler("https://shop.com/", true, 0).h.handle({ type: "popup_fill_card", itemId: VISA })).toEqual({ ok: false, message: "No card form found on this page." });
-    expect(await h.handle({ type: "popup_fill_card", itemId: "11111111-2222-4333-8444-555555555555" })).toMatchObject({ ok: false });
+    expect(await handler("https://shop.com/", true, 0).h.handle({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).toEqual({ ok: false, message: "No card form found on this page." });
+    expect(await h.handle({ type: "popup_fill_card", itemId: "11111111-2222-4333-8444-555555555555", origin: "https://shop.com" })).toMatchObject({ ok: false });
   });
 
   it("refuses a fill bound to another origin than the tab's", async () => {
@@ -397,10 +397,10 @@ describe("popup cards", () => {
   });
 
   it("parses popup_fill_card strictly", () => {
-    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA })).toEqual({ type: "popup_fill_card", itemId: VISA });
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA })).toBeNull();
     expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).not.toBeNull();
     expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com/x" })).toBeNull();
     expect(parsePopupRequest({ type: "popup_fill_card", itemId: "x" })).toBeNull();
-    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, extra: 1 })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com", extra: 1 })).toBeNull();
   });
 });

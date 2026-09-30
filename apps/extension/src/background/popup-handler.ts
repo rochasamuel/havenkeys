@@ -201,7 +201,7 @@ export function createPopupHandler(
         const url = pageUrlForRequest(tab?.url);
         if (!tab || !url || !cards) return { ok: false, message: t.errors.pageNotSupported };
         // The list was built for one origin; a tab that moved gets nothing.
-        if (req.origin !== undefined && req.origin !== new URL(url).origin) return { ok: false, message: t.errors.cardPageChanged };
+        if (req.origin !== new URL(url).origin) return { ok: false, message: t.errors.cardPageChanged };
         try {
           const offered = await client.request({ type: "find_cards", url });
           if (!offered.cards.some((c) => c.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
