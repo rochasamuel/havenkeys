@@ -73,6 +73,15 @@ const invalidInput: Record<string, string> = {
   "master password is too long": "A senha mestra é longa demais.",
   "password is too long": "A senha é longa demais.",
   "notes are too long": "As notas são longas demais.",
+  "notes contain control characters": "As notas contêm caracteres de controle.",
+  "expiry must be a month and a year from 1970 to 2099": "A validade deve ser um mês e um ano entre 1970 e 2099.",
+  "card number must be 8 to 19 digits": "O número do cartão deve ter de 8 a 19 dígitos.",
+  "verification number must be 3 to 8 digits": "O código de segurança deve ter de 3 a 8 dígitos.",
+  "cardholder name is too long or contains control characters": "O nome do titular é longo demais ou contém caracteres de controle.",
+  "a card needs a number or a title": "Um cartão precisa de um número ou de um título.",
+  "a card needs its values": "Um cartão precisa dos seus valores.",
+  "a card only has card values": "Um cartão só tem valores de cartão.",
+  "only a card has card values": "Só um cartão tem valores de cartão.",
   "note is too long": "A nota é longa demais.",
   "item too large": "O item é grande demais.",
   "search query too long": "A busca é longa demais.",
@@ -453,6 +462,37 @@ export const ptBR: Messages = {
     readOnly: "Sua identidade não pode ser excluída. Apague os valores que não quiser mais guardar.",
   },
 
+  card: {
+    nav: "Cartões",
+    kind: "Cartão",
+    edit: "Editar cartão",
+    newTitle: "Novo cartão",
+    fields: {
+      title: "Título",
+      cardholderName: "Nome do titular",
+      brand: "Bandeira",
+      number: "Número",
+      verificationNumber: "Código de segurança",
+      expiry: "Validade",
+      notes: "Notas",
+    },
+    detectBrand: "Detectar pelo número",
+    otherBrand: "Outra",
+    expired: "Vencido",
+    checkDigitWarning: "Este número não passa na verificação do cartão. Confira se há erro de digitação.",
+    keepNumber: "Deixe vazio para manter o número salvo",
+    keepVerificationNumber: "Deixe vazio para manter o código salvo",
+    expiryPlaceholder: "MM/AAAA",
+    expiryInvalid: "Informe a validade como MM/AAAA.",
+    copy: (label: string) => `Copiar ${label}`,
+    show: (label: string) => `Mostrar ${label}`,
+    hide: (label: string) => `Ocultar ${label}`,
+    hidden: (label: string) => `${label} oculto`,
+    copied: (label: string, seconds: number) =>
+      `Copiado: ${label}. A área de transferência é limpa em ${seconds} s.`,
+    loadFailed: "Não foi possível abrir este cartão.",
+    revealFailed: "Não foi possível mostrar este valor.",
+  },
   kit: {
     qrLabel: "QR code da Secret Key",
     loadFailed: "Não foi possível carregar o Emergency Kit.",
@@ -588,12 +628,15 @@ export const ptBR: Messages = {
     fileDeleted: "Arquivo de exportação excluído.",
     deleteFailed: "Não foi possível excluir o arquivo.",
     imported: (n: number) => (n === 1 ? "1 item importado" : `${n} itens importados`),
-    summary: (fileName: string, logins: number, notes: number) =>
-      ` de ${fileName}: ${logins === 1 ? "1 login" : `${logins} logins`} e ${notes === 1 ? "1 nota segura" : `${notes} notas seguras`}.`,
+    summary: (fileName: string, logins: number, notes: number, cards: number) => {
+      const parts = [logins === 1 ? "1 login" : `${logins} logins`, notes === 1 ? "1 nota segura" : `${notes} notas seguras`];
+      if (cards > 0) parts.push(cards === 1 ? "1 cartão" : `${cards} cartões`);
+      return ` de ${fileName}: ${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}.`;
+    },
     convertedToNotes: (n: number) =>
       n === 1
-        ? "1 item de outro tipo (cartões, identidades, chaves…) virou nota segura com todos os campos."
-        : `${n} itens de outros tipos (cartões, identidades, chaves…) viraram notas seguras com todos os campos.`,
+        ? "1 item de outro tipo (identidades, chaves…) virou nota segura com todos os campos."
+        : `${n} itens de outros tipos (identidades, chaves…) viraram notas seguras com todos os campos.`,
     skippedDuplicates: (n: number) =>
       n === 1 ? "1 item já estava no seu cofre e foi ignorado." : `${n} itens já estavam no seu cofre e foram ignorados.`,
     skippedArchived: (n: number) =>

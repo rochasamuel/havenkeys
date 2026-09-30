@@ -166,6 +166,7 @@ export interface CardInput {
 /** An opened card, without its number and verification number. */
 export interface CardView {
   cardholderName: string | null;
+  /** The user's override only; null means detect the brand from the number. */
   brand: CardBrand | null;
   expiry: CardExpiry | null;
   notes: string | null;
