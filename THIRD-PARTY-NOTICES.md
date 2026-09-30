@@ -144,3 +144,19 @@ commit `b711c588aa0a1cace2afb5b5a20a70810bb0433b`), licensed under
 without a valid hostname or passkey support are dropped, non-https
 documentation links are removed, and fields not used by HavenKeys are left
 out. It is embedded in the browser extension package.
+
+## Images
+
+### Card network logos
+
+`packages/ui/src/card-brand-icons.ts` holds the Visa, Mastercard, American
+Express, Elo, Hipercard, Diners Club, Discover, JCB, UnionPay and Maestro
+marks as path data taken from
+[SVG Credit Card & Payment Icons by Aaron Fagan](https://github.com/aaronfagan/svg-credit-card-payment-icons)
+(`logo/` folder, commit `6dd023ae32415ed7b01bf809f15a25613a52098c`), licensed
+under the Apache License, Version 2.0 (the text is in
+[LICENSE-APACHE](LICENSE-APACHE)). Changes: JCB's gradients are flattened to
+a single colour each, Hipercard's transparent background path is dropped,
+and colours are written as `#RRGGBB`. It is embedded in the desktop app and
+the browser extension. The marks are trademarks of their networks and are
+used only to show which network a saved card belongs to.
