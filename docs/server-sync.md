@@ -92,7 +92,7 @@ vault is account-bound from the moment it exists.
 * The Emergency Kit is a printable page with the Secret Key and a QR code of
   it. The desktop generates its payload as
   `havenkeys://kit/v1?vault=<vault id>&key=<Secret Key>` today
-  (`apps/desktop/src-tauri/src/account.rs`). The design's kit v2, which also
+  (`apps/desktop/src-tauri/src/emergency_kit.rs`). The design's kit v2, which also
   carries the account ID, email and server URL so a second device needs
   nothing else, is part of the activation/sign-in work that has not landed
   (§1).

@@ -294,6 +294,15 @@ impl AppState {
         }
     }
 
+    /// Refuse a command while the vault is locked.
+    pub fn require_unlocked(&self) -> CmdResult<()> {
+        if self.vault()?.is_unlocked() {
+            Ok(())
+        } else {
+            Err(havenkeys_core::Error::Locked.into())
+        }
+    }
+
     /// Refuse a mutating command while offline, before it touches the vault.
     pub fn require_online(&self) -> CmdResult<()> {
         if self.is_online() {

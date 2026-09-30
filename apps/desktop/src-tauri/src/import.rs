@@ -46,9 +46,7 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
     {
         let state = app.state::<AppState>();
         state.touch();
-        if !state.vault()?.is_unlocked() {
-            return Err(havenkeys_core::Error::Locked.into());
-        }
+        state.require_unlocked()?;
         // Checked before the picker opens: asking for a file and then
         // refusing to store it would waste the user's time and leave a
         // plaintext export sitting on disk for nothing.
@@ -80,14 +78,11 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
     .await
     .map_err(|_| CmdError::internal())??;
 
-    let staged = {
-        let state = app.state::<AppState>();
-        let staged =
-            state
-                .vault()?
-                .stage_import(parsed.items, parsed.report, AppState::now_ms())?;
-        staged
-    };
+    let staged = app.state::<AppState>().vault()?.stage_import(
+        parsed.items,
+        parsed.report,
+        AppState::now_ms(),
+    )?;
     let mut report = staged.report;
     let committed = sync::push_batches(&app, staged.writes).await?;
     // What the server accepted is what the vault has; the staged count was a
@@ -114,9 +109,7 @@ pub fn delete_import_file(state: tauri::State<'_, AppState>) -> CmdResult<()> {
     // Documented as requiring an unlocked vault (`security-model.md` §7), and
     // enforced here rather than left to the renderer. `lock()` also clears the
     // remembered path, so this fails with `NotFound` after a lock either way.
-    if !state.vault()?.is_unlocked() {
-        return Err(havenkeys_core::Error::Locked.into());
-    }
+    state.require_unlocked()?;
     let path = state
         .last_import
         .lock()
