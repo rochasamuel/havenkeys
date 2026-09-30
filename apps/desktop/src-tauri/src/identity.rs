@@ -4,12 +4,11 @@
 //! the three things it needs: which item the identity is, its values when
 //! the user opens it, and one value on the clipboard.
 
-use crate::commands::CopyResult;
-use crate::state::{AppState, CmdError, CmdResult};
+use crate::commands::{copy_from_vault, CopyResult};
+use crate::state::{AppState, CmdResult};
 use havenkeys_core::identity::{IdentityField, IdentityFields, MAX_CUSTOM_FIELDS};
 use havenkeys_core::SecretString;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::time::Duration;
 use tauri::State;
 use uuid::Uuid;
 
@@ -76,22 +75,9 @@ pub fn copy_identity_field(
     id: Uuid,
     field: CopyTarget,
 ) -> CmdResult<CopyResult> {
-    state.touch();
-    let (value, seconds): (SecretString, u32) = {
-        let v = state.vault()?;
-        let seconds = v.settings()?.clipboard_clear_seconds;
-        let value = match field {
-            CopyTarget::Field(f) => v.identity_value(&id, f)?,
-            CopyTarget::Custom(i) => v.identity_custom_value(&id, i)?,
-        };
-        (value, seconds)
-    };
-    state
-        .clipboard
-        .copy(value.expose(), Duration::from_secs(u64::from(seconds)))
-        .map_err(|_| CmdError::clipboard())?;
-    Ok(CopyResult {
-        clear_after_seconds: seconds,
+    copy_from_vault(&state, |v| match field {
+        CopyTarget::Field(f) => v.identity_value(&id, f),
+        CopyTarget::Custom(i) => v.identity_custom_value(&id, i),
     })
 }
 

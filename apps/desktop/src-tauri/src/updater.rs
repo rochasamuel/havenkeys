@@ -259,9 +259,7 @@ pub fn set_update_auto_check(
     enabled: bool,
 ) -> CmdResult<UpdateStatus> {
     state.touch();
-    if !state.vault()?.is_unlocked() {
-        return Err(havenkeys_core::Error::Locked.into());
-    }
+    state.require_unlocked()?;
     let next = UpdateSettings {
         auto_check: enabled,
     };

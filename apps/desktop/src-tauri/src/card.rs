@@ -5,12 +5,11 @@
 //! come one at a time, on an explicit reveal. Copies go from Rust to the
 //! clipboard.
 
-use crate::commands::CopyResult;
-use crate::state::{AppState, CmdError, CmdResult};
+use crate::commands::{copy_from_vault, CopyResult};
+use crate::state::{AppState, CmdResult};
 use havenkeys_core::card::{self, CardBrand, CardExpiry, CardField};
 use havenkeys_core::SecretString;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tauri::State;
 use uuid::Uuid;
 
@@ -103,19 +102,7 @@ pub fn copy_card_field(
     id: Uuid,
     field: CardField,
 ) -> CmdResult<CopyResult> {
-    state.touch();
-    let (value, seconds): (SecretString, u32) = {
-        let v = state.vault()?;
-        let seconds = v.settings()?.clipboard_clear_seconds;
-        (v.card_value(&id, field)?, seconds)
-    };
-    state
-        .clipboard
-        .copy(value.expose(), Duration::from_secs(u64::from(seconds)))
-        .map_err(|_| CmdError::clipboard())?;
-    Ok(CopyResult {
-        clear_after_seconds: seconds,
-    })
+    copy_from_vault(&state, |v| v.card_value(&id, field))
 }
 
 /// For the editor's live logo and warning. Nothing is kept.

@@ -49,9 +49,7 @@ pub fn set_launch_at_login(
     enabled: bool,
 ) -> CmdResult<bool> {
     state.touch();
-    if !state.vault()?.is_unlocked() {
-        return Err(havenkeys_core::Error::Locked.into());
-    }
+    state.require_unlocked()?;
     let manager = app.autolaunch();
     let result = if enabled {
         manager.enable()

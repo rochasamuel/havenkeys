@@ -134,8 +134,8 @@ describe("the error table", () => {
   });
 
   it("keeps Rust's keychain warning word for word", () => {
-    const account = readFileSync(join(root, "apps/desktop/src-tauri/src/account.rs"), "utf8");
-    const rustText = /const KEYCHAIN_NOT_CLEARED: &str = "([^"]*)";/.exec(account)?.[1];
+    const removal = readFileSync(join(root, "apps/desktop/src-tauri/src/removal.rs"), "utf8");
+    const rustText = /const KEYCHAIN_NOT_CLEARED: &str = "([^"]*)";/.exec(removal)?.[1];
     expect(rustText?.replaceAll("\\u{201c}", "“").replaceAll("\\u{201d}", "”")).toBe(en.app.keychainNotCleared);
   });
 });

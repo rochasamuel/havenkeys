@@ -9,11 +9,13 @@ mod card;
 mod clipboard;
 mod commands;
 mod device;
+mod emergency_kit;
 mod identity;
 mod import;
 mod item_input;
 mod native_host;
 mod qr_scan;
+mod removal;
 mod scan_slot;
 mod secret_store;
 mod state;
@@ -27,11 +29,11 @@ use havenkeys_core::store::Store;
 use havenkeys_core::vault::VaultService;
 use havenkeys_protocol::endpoint::Endpoint;
 use state::AppState;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::plugin::TauriPlugin;
-use tauri::{Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
 
 pub(crate) const VAULT_FILE: &str = "vault.sqlite3";
 const AUTO_LOCK_TICK: Duration = Duration::from_secs(5);
@@ -73,6 +75,108 @@ fn vault_path<R: Runtime>(app: &tauri::App<R>) -> Result<PathBuf, &'static str> 
     Ok(dir.join(VAULT_FILE))
 }
 
+/// Open the vault file. A vault this build cannot open must not take the app
+/// down with it: a panic in the setup hook leaves the user with a stack
+/// trace in a terminal they may not even be looking at. The app opens on an
+/// empty in-memory store instead, every command refuses with the returned
+/// reason, and the window says what to do.
+fn open_store(path: &Path, dir: &Path) -> Result<(Store, Option<state::CmdError>), String> {
+    match Store::open(path) {
+        Ok(store) => Ok((store, None)),
+        Err(_) => Ok((
+            Store::open_in_memory().map_err(|e| e.to_string())?,
+            Some(state::CmdError::vault_unreadable(dir)),
+        )),
+    }
+}
+
+/// Browser integration. The bridge locks through AppState so an
+/// extension-initiated lock behaves exactly like any other.
+fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
+    let lock_handle = app.clone();
+    let change_handle = app.clone();
+    let save_handle = app.clone();
+    let bridge = Bridge::with_writer(
+        vault,
+        move || {
+            if let Some(state) = lock_handle.try_state::<AppState>() {
+                state.lock(&lock_handle, "extension");
+            }
+        },
+        // A login saved from the browser: the item list must refresh
+        // (the payload is empty; the UI re-reads the list itself).
+        move || {
+            let _ = change_handle.emit(state::ITEMS_CHANGED_EVENT, ());
+        },
+        // A save from the browser is an ordinary write: the server
+        // assigns the revision, and only then is it recorded here.
+        // The bridge thread waits for it, without the vault lock.
+        move |staged| {
+            let handle = save_handle.clone();
+            tauri::async_runtime::block_on(
+                async move { sync::push(&handle, staged).await.map(|_| ()) },
+            )
+            .map_err(sync::bridge_error)
+        },
+    );
+    // "Edit in HavenKeys" from the extension popup. The bridge has
+    // already checked the item is saved for the page the popup was
+    // opened on; this only raises the window and tells the UI.
+    let open_handle = app.clone();
+    bridge.set_open_item_hook(move |id| {
+        tray::show_main_window(&open_handle);
+        let _ = open_handle.emit(state::OPEN_ITEM_EVENT, id.to_string());
+    });
+    bridge
+}
+
+/// A Secret Key an earlier version (or a keychain that was unavailable
+/// then) left in device.json moves to the keychain. Off the setup path: it
+/// may wait on the keychain.
+fn migrate_secret_key_in_background(app: AppHandle) {
+    let _ = std::thread::Builder::new()
+        .name("keychain-migrate".into())
+        .spawn(move || {
+            let state = app.state::<AppState>();
+            // Vault before device; the vault guard ends here.
+            let account = state.vault().ok().and_then(|v| v.account().ok().flatten());
+            if let Some(account) = account {
+                if let Ok(mut device) = state.device.lock() {
+                    device.migrate(account.account_id);
+                }
+            }
+        });
+}
+
+/// The auto-lock thread: every tick it locks with the OS session and the
+/// idle timer, and pulls from the server when a pull is due.
+fn start_auto_lock(handle: AppHandle) -> std::io::Result<()> {
+    std::thread::Builder::new()
+        .name("auto-lock".into())
+        .spawn(move || {
+            // Lock with the OS session (screen lock) where the
+            // platform tells us; see havenkeys-oslock.
+            let mut session = havenkeys_oslock::SessionWatcher::new();
+            loop {
+                std::thread::sleep(AUTO_LOCK_TICK);
+                let state = handle.state::<AppState>();
+                if session.poll() {
+                    state.lock(&handle, "screen_lock");
+                }
+                state.auto_lock_tick(&handle);
+                // Catch up with the server while unlocked. A locked
+                // vault has no session, so this simply does not run.
+                if state.is_online() && state.sync_due(PULL_INTERVAL) {
+                    let pull_handle = handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = sync::sync_now(&pull_handle).await;
+                    });
+                }
+            }
+        })?;
+    Ok(())
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         // First, so a second launch (the app icon while the login launch
@@ -94,59 +198,12 @@ pub fn run() {
         .setup(|app| {
             let path = vault_path(app)?;
             let dir = path.parent().ok_or("no data directory")?.to_path_buf();
-            // A vault this build cannot open must not take the app down with
-            // it: a panic in the setup hook leaves the user with a stack
-            // trace in a terminal they may not even be looking at. The app
-            // opens on an empty in-memory store, every command refuses with
-            // the reason, and the window says what to do.
-            let (store, storage_error) = match Store::open(&path) {
-                Ok(store) => (store, None),
-                Err(_) => (
-                    Store::open_in_memory().map_err(|e| e.to_string())?,
-                    Some(state::CmdError::vault_unreadable(&dir)),
-                ),
-            };
+            let (store, storage_error) = open_store(&path, &dir)?;
             let vault = Arc::new(Mutex::new(VaultService::new(store)));
             // Bounded by the keychain timeout; `Device::load` itself reads
             // only device.json.
             let device = device::Device::load(&dir, Box::new(secret_store::OsKeyStore::install()));
-
-            // Browser integration. The bridge locks through AppState so an
-            // extension-initiated lock behaves exactly like any other.
-            let lock_handle = app.handle().clone();
-            let change_handle = app.handle().clone();
-            let save_handle = app.handle().clone();
-            let bridge = Bridge::with_writer(
-                vault.clone(),
-                move || {
-                    if let Some(state) = lock_handle.try_state::<AppState>() {
-                        state.lock(&lock_handle, "extension");
-                    }
-                },
-                // A login saved from the browser: the item list must refresh
-                // (the payload is empty; the UI re-reads the list itself).
-                move || {
-                    let _ = change_handle.emit(state::ITEMS_CHANGED_EVENT, ());
-                },
-                // A save from the browser is an ordinary write: the server
-                // assigns the revision, and only then is it recorded here.
-                // The bridge thread waits for it, without the vault lock.
-                move |staged| {
-                    let handle = save_handle.clone();
-                    tauri::async_runtime::block_on(async move {
-                        sync::push(&handle, staged).await.map(|_| ())
-                    })
-                    .map_err(sync::bridge_error)
-                },
-            );
-            // "Edit in HavenKeys" from the extension popup. The bridge has
-            // already checked the item is saved for the page the popup was
-            // opened on; this only raises the window and tells the UI.
-            let open_handle = app.handle().clone();
-            bridge.set_open_item_hook(move |id| {
-                tray::show_main_window(&open_handle);
-                let _ = open_handle.emit(state::OPEN_ITEM_EVENT, id.to_string());
-            });
+            let bridge = browser_bridge(app.handle(), vault.clone());
             app.manage(AppState::new(
                 vault,
                 bridge.clone(),
@@ -154,22 +211,7 @@ pub fn run() {
                 storage_error,
                 dir.clone(),
             ));
-            // A Secret Key an earlier version (or a keychain that was
-            // unavailable then) left in device.json moves to the keychain.
-            // Off the setup path: it may wait on the keychain.
-            let migrate_handle = app.handle().clone();
-            let _ = std::thread::Builder::new()
-                .name("keychain-migrate".into())
-                .spawn(move || {
-                    let state = migrate_handle.state::<AppState>();
-                    // Vault before device; the vault guard ends here.
-                    let account = state.vault().ok().and_then(|v| v.account().ok().flatten());
-                    if let Some(account) = account {
-                        if let Ok(mut device) = state.device.lock() {
-                            device.migrate(account.account_id);
-                        }
-                    }
-                });
+            migrate_secret_key_in_background(app.handle().clone());
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
             let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));
@@ -188,30 +230,7 @@ pub fn run() {
                 tray::show_main_window(app.handle());
             }
 
-            let handle = app.handle().clone();
-            std::thread::Builder::new()
-                .name("auto-lock".into())
-                .spawn(move || {
-                    // Lock with the OS session (screen lock) where the
-                    // platform tells us; see havenkeys-oslock.
-                    let mut session = havenkeys_oslock::SessionWatcher::new();
-                    loop {
-                        std::thread::sleep(AUTO_LOCK_TICK);
-                        let state = handle.state::<AppState>();
-                        if session.poll() {
-                            state.lock(&handle, "screen_lock");
-                        }
-                        state.auto_lock_tick(&handle);
-                        // Catch up with the server while unlocked. A locked
-                        // vault has no session, so this simply does not run.
-                        if state.is_online() && state.sync_due(PULL_INTERVAL) {
-                            let pull_handle = handle.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let _ = sync::sync_now(&pull_handle).await;
-                            });
-                        }
-                    }
-                })?;
+            start_auto_lock(app.handle().clone())?;
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -252,8 +271,8 @@ pub fn run() {
             account::sign_out,
             account::list_devices,
             account::revoke_device,
-            account::remove_device,
-            account::get_emergency_kit,
+            removal::remove_device,
+            emergency_kit::get_emergency_kit,
             account::reveal_account_secret_key,
             account::copy_account_field,
             identity::identity_item_id,

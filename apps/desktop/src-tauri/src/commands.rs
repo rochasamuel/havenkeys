@@ -14,13 +14,14 @@ use crate::qr_scan;
 use crate::scan_slot::ScannedTotp;
 use crate::state::{AppState, CmdError, CmdResult};
 use crate::sync;
+use havenkeys_core::account::AccountRef;
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
-use havenkeys_core::model::{ItemOverview, SecretField, Settings};
+use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings};
 use havenkeys_core::sync::prepare_sign_in;
 use havenkeys_core::totp::TotpCode;
-use havenkeys_core::vault::{self, VaultStatus};
+use havenkeys_core::vault::{self, StagedWrite, VaultService, VaultStatus};
 use havenkeys_core::SecretString;
 use havenkeys_sync_client::{CredentialChange, SyncError};
 use serde::{Deserialize, Serialize};
@@ -50,11 +51,7 @@ pub async fn unlock_vault(
     secret_key: Option<SecretString>,
 ) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
-    let account = state
-        .vault()?
-        .account()?
-        .ok_or(havenkeys_core::Error::NoVault)?
-        .to_ref()?;
+    let account = vault_account(&state)?;
     let (stored, stored_text, definite) = {
         let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
         let (text, definite) = device.secret_key_lookup(account.id);
@@ -173,6 +170,16 @@ pub async fn unlock_vault(
     Ok(status)
 }
 
+/// The account this vault belongs to, from the local store (never from the
+/// renderer).
+fn vault_account(state: &AppState) -> CmdResult<AccountRef> {
+    Ok(state
+        .vault()?
+        .account()?
+        .ok_or(havenkeys_core::Error::NoVault)?
+        .to_ref()?)
+}
+
 /// The keychain did not give a definite answer at unlock.
 fn keychain_unavailable() -> CmdError {
     CmdError {
@@ -207,11 +214,7 @@ async fn unlock_from_server(
     epoch: u64,
 ) -> CmdResult<VaultStatus> {
     let state = app.state::<AppState>();
-    let account = state
-        .vault()?
-        .account()?
-        .ok_or(havenkeys_core::Error::NoVault)?
-        .to_ref()?;
+    let account = vault_account(&state)?;
     let local_kdf = state.vault()?.kdf()?;
     let client = sync::client(&state)?;
     // Short, because this runs on every wrong password: an unreachable server
@@ -334,11 +337,7 @@ pub async fn change_master_password(
     // Adopt a change made elsewhere first, so the base revision is current.
     sync::sync_now(&app).await?;
     let kdf = KdfParams::generate()?;
-    let account = state
-        .vault()?
-        .account()?
-        .ok_or(havenkeys_core::Error::NoVault)?
-        .to_ref()?;
+    let account = vault_account(&state)?;
     let secret_key = state
         .device
         .lock()
@@ -524,16 +523,11 @@ pub async fn delete_passkey(
     id: Uuid,
     credential_id: String,
 ) -> CmdResult<ItemOverview> {
-    let staged = {
-        let state = app.state::<AppState>();
-        state.touch();
-        state.require_online()?;
-        let staged =
-            state
-                .vault()?
-                .stage_remove_passkey(&id, &credential_id, AppState::now_ms())?;
-        staged
-    };
+    let staged = stage_write(&app, |state| {
+        Ok(state
+            .vault()?
+            .stage_remove_passkey(&id, &credential_id, AppState::now_ms())?)
+    })?;
     let item = sync::push(&app, staged)
         .await?
         .ok_or_else(CmdError::internal)?;
@@ -578,11 +572,8 @@ pub fn copy_secret(
     id: Uuid,
     field: CopyField,
 ) -> CmdResult<CopyResult> {
-    state.touch();
-    let (value, seconds) = {
-        let v = state.vault()?;
-        let seconds = v.settings()?.clipboard_clear_seconds;
-        let value = match field {
+    copy_from_vault(&state, |v| {
+        Ok(match field {
             CopyField::Username => SecretString::new(
                 v.get_item(&id)?
                     .username
@@ -591,9 +582,32 @@ pub fn copy_secret(
             ),
             CopyField::Password => v.reveal(&id, SecretField::Password)?,
             CopyField::Totp => v.totp_code(&id, AppState::unix_seconds())?.code,
-        };
-        (value, seconds)
+        })
+    })
+}
+
+/// Copy one vault value: it and the vault's clipboard delay are read under
+/// one guard, released before the clipboard is touched. Counts as activity.
+pub(crate) fn copy_from_vault(
+    state: &AppState,
+    read: impl FnOnce(&VaultService) -> havenkeys_core::Result<SecretString>,
+) -> CmdResult<CopyResult> {
+    state.touch();
+    let (value, seconds) = {
+        let v = state.vault()?;
+        let seconds = v.settings()?.clipboard_clear_seconds;
+        (read(&v)?, seconds)
     };
+    copy_to_clipboard(state, &value, seconds)
+}
+
+/// Put `value` on the clipboard, to be cleared after `seconds` if it is
+/// still there.
+pub(crate) fn copy_to_clipboard(
+    state: &AppState,
+    value: &SecretString,
+    seconds: u32,
+) -> CmdResult<CopyResult> {
     state
         .clipboard
         .copy(value.expose(), Duration::from_secs(u64::from(seconds)))
@@ -631,9 +645,7 @@ pub async fn scan_totp_qr(app: AppHandle) -> CmdResult<Vec<ScannedTotp>> {
     {
         let state = app.state::<AppState>();
         state.touch();
-        if !state.vault()?.is_unlocked() {
-            return Err(havenkeys_core::Error::Locked.into());
-        }
+        state.require_unlocked()?;
     }
     // Capture and decoding take a moment, and a Wayland portal waits for
     // the user: keep them off the main thread.
@@ -650,22 +662,10 @@ pub async fn scan_totp_qr(app: AppHandle) -> CmdResult<Vec<ScannedTotp>> {
 /// accepted it, so the replica is never ahead of the authority.
 #[tauri::command]
 pub async fn create_item(app: AppHandle, input: ItemInputWire) -> CmdResult<ItemOverview> {
-    let uses_scan = input.uses_scan();
-    let staged = {
-        let state = app.state::<AppState>();
-        state.touch();
-        state.require_online()?;
-        let input = state.resolve_item_input(input)?;
-        let staged = state.vault()?.stage_create(input, AppState::now_ms())?;
-        staged
-    };
-    let saved = sync::push(&app, staged)
-        .await?
-        .ok_or_else(CmdError::internal)?;
-    if uses_scan {
-        app.state::<AppState>().clear_totp_scan();
-    }
-    Ok(saved)
+    save_item(&app, input, |v, input| {
+        v.stage_create(input, AppState::now_ms())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -674,36 +674,51 @@ pub async fn update_item(
     id: Uuid,
     input: ItemInputWire,
 ) -> CmdResult<ItemOverview> {
+    save_item(&app, input, |v, input| {
+        v.stage_update(&id, input, AppState::now_ms())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_item(app: AppHandle, id: Uuid) -> CmdResult<()> {
+    let staged = stage_write(&app, |state| Ok(state.vault()?.stage_delete(&id)?))?;
+    sync::push(&app, staged).await.map(|_| ())
+}
+
+/// Stage a change for the server. Counts as activity and needs a session;
+/// the vault guard ends with `stage`, before anything is sent.
+fn stage_write(
+    app: &AppHandle,
+    stage: impl FnOnce(&AppState) -> CmdResult<StagedWrite>,
+) -> CmdResult<StagedWrite> {
+    let state = app.state::<AppState>();
+    state.touch();
+    state.require_online()?;
+    stage(&state)
+}
+
+/// Create or update an item: seal it with `stage`, let the server assign
+/// its revision, then record it. A scanned TOTP code it used is let go once
+/// the save has gone through.
+async fn save_item(
+    app: &AppHandle,
+    input: ItemInputWire,
+    stage: impl FnOnce(&mut VaultService, ItemInput) -> havenkeys_core::Result<StagedWrite>,
+) -> CmdResult<ItemOverview> {
     let uses_scan = input.uses_scan();
-    let staged = {
-        let state = app.state::<AppState>();
-        state.touch();
-        state.require_online()?;
+    let staged = stage_write(app, |state| {
         let input = state.resolve_item_input(input)?;
-        let staged = state
-            .vault()?
-            .stage_update(&id, input, AppState::now_ms())?;
-        staged
-    };
-    let saved = sync::push(&app, staged)
+        let staged = stage(&mut *state.vault()?, input)?;
+        Ok(staged)
+    })?;
+    let saved = sync::push(app, staged)
         .await?
         .ok_or_else(CmdError::internal)?;
     if uses_scan {
         app.state::<AppState>().clear_totp_scan();
     }
     Ok(saved)
-}
-
-#[tauri::command]
-pub async fn delete_item(app: AppHandle, id: Uuid) -> CmdResult<()> {
-    let staged = {
-        let state = app.state::<AppState>();
-        state.touch();
-        state.require_online()?;
-        let staged = state.vault()?.stage_delete(&id)?;
-        staged
-    };
-    sync::push(&app, staged).await.map(|_| ())
 }
 
 // ------------------------------------------------------------------ generator
@@ -733,13 +748,7 @@ pub fn copy_generated_password(
         .settings()
         .map(|s| s.clipboard_clear_seconds)
         .unwrap_or(DEFAULT_CLIPBOARD_CLEAR_SECS);
-    state
-        .clipboard
-        .copy(value.expose(), Duration::from_secs(u64::from(seconds)))
-        .map_err(|_| CmdError::clipboard())?;
-    Ok(CopyResult {
-        clear_after_seconds: seconds,
-    })
+    copy_to_clipboard(&state, &value, seconds)
 }
 
 // ------------------------------------------------------------------ settings
