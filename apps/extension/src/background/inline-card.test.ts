@@ -145,6 +145,15 @@ describe("card menu", () => {
     expect(sent.filter((s) => s.msg.type === "bg_close_menu").map((s) => s.frameId).sort()).toEqual([0, 3]);
   });
 
+  it("gives the top frame the frame's full URL and viewport size to find its iframe", async () => {
+    const { h, sent } = setup(findCards);
+    const anchor = { top: 5, left: 5, width: 200, height: 30 };
+    const viewport = { width: 140, height: 40 };
+    const full = `${stripe(3).url}?type=expiry#k1`;
+    await h.handleContent({ ...stripe(3), fullUrl: full }, { type: "cs_open_menu", kind: "card", cardRoles: ["number"], anchor, ancestry: DIRECT, viewport });
+    expect(sent.at(-1)).toMatchObject({ frameId: 0, msg: { type: "bg_host_menu", frameId: 3, url: full, anchor, rows: 2, viewport } });
+  });
+
   it("draws the menu in the frame itself when the top frame cannot find its iframe", async () => {
     const { h, sent } = setup(findCards, [], { hostReply: { ok: false } });
     const anchor = { top: 5, left: 5, width: 200, height: 30 };

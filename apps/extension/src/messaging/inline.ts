@@ -41,6 +41,15 @@ export interface Anchor {
   height: number;
 }
 
+/**
+ * A card frame's viewport (innerWidth x innerHeight, whole CSS px). The top
+ * frame uses it to tell apart iframes that load the same URL.
+ */
+export interface Viewport {
+  width: number;
+  height: number;
+}
+
 /** Ancestor frames a subframe may report, at most (deeper: it reports an unknown chain). */
 export const MAX_FRAME_DEPTH = 8;
 
@@ -74,7 +83,7 @@ const RUN_STEPS: readonly RunStep[] = ["username", "password", "otp"];
 
 export type ContentRequest =
   /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
-  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[]; cardRoles?: CardRole[]; anchor?: Anchor; ancestry?: Ancestry }
+  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[]; cardRoles?: CardRole[]; anchor?: Anchor; ancestry?: Ancestry; viewport?: Viewport }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null; currentPassword?: string }
   | { type: "cs_ready" }
@@ -123,11 +132,13 @@ export type BackgroundToContent =
   | { type: "bg_card_scan"; scan: string }
   /**
    * Top frame: show menu `token` over child frame `frameId`, at `anchor`
-   * inside it. Reply { ok }. `url` is the child's URL as the browser
-   * reported it (no query or fragment), to find its <iframe> where
+   * inside it. Reply { ok }. `url` is the child's full URL as the browser
+   * reported it (query and fragment kept, credentials removed) and
+   * `viewport` the size the child reported, to find its <iframe> where
    * runtime.getFrameId does not exist (Chromium; content/host-frame.ts).
+   * Only ever sent to frame 0.
    */
-  | { type: "bg_host_menu"; token: string; frameId: number; url: string; anchor: Anchor; rows: number };
+  | { type: "bg_host_menu"; token: string; frameId: number; url: string; anchor: Anchor; rows: number; viewport?: Viewport };
 
 export type FillReply = { filled: number; pressing: RunStep | null };
 
@@ -297,6 +308,13 @@ function parseAnchor(v: unknown): Anchor | null {
   return within(top, -1e5, 1e5) && within(left, -1e5, 1e5) && within(width, 0, 1e4) && within(height, 0, 1e4) ? { top, left, width, height } : null;
 }
 
+function parseViewport(v: unknown): Viewport | null {
+  const o = obj(v);
+  if (!o || !keysAre(o, ["width", "height"])) return null;
+  const { width, height } = o;
+  return within(width, 0, 1e5) && Number.isInteger(width) && within(height, 0, 1e5) && Number.isInteger(height) ? { width, height } : null;
+}
+
 /** An exact http(s) origin, as `URL.origin` writes it. */
 export function isWebOrigin(v: unknown): v is string {
   if (typeof v !== "string" || v.length === 0 || v.length > MAX_URL_BYTES) return false;
@@ -352,7 +370,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
       const kind = o.kind as MenuKind;
       const keys = Object.keys(o).filter((k) => k !== "type" && k !== "kind");
-      if (keys.some((k) => k !== "explicit" && k !== "roles" && k !== "cardRoles" && k !== "anchor" && k !== "ancestry")) return null;
+      if (keys.some((k) => k !== "explicit" && k !== "roles" && k !== "cardRoles" && k !== "anchor" && k !== "ancestry" && k !== "viewport")) return null;
       if ("explicit" in o && o.explicit !== true) return null;
       let roles: IdentityRole[] | undefined;
       if ("roles" in o) {
@@ -364,6 +382,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       let cardRoles: CardRole[] | undefined;
       let anchor: Anchor | undefined;
       let ancestry: Ancestry | undefined;
+      let viewport: Viewport | undefined;
       if (kind === "card") {
         const parsed = parseCardRoleList(o.cardRoles);
         if (!parsed) return null;
@@ -378,7 +397,12 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
           if (!a) return null;
           ancestry = a;
         }
-      } else if ("cardRoles" in o || "anchor" in o || "ancestry" in o) return null;
+        if ("viewport" in o) {
+          const v = parseViewport(o.viewport);
+          if (!v) return null;
+          viewport = v;
+        }
+      } else if ("cardRoles" in o || "anchor" in o || "ancestry" in o || "viewport" in o) return null;
       return {
         type: "cs_open_menu",
         kind,
@@ -387,6 +411,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
         ...(cardRoles ? { cardRoles } : {}),
         ...(anchor ? { anchor } : {}),
         ...(ancestry ? { ancestry } : {}),
+        ...(viewport ? { viewport } : {}),
       };
     }
     case "cs_close_menu":
@@ -550,13 +575,16 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
     case "bg_card_scan":
       return keysAre(o, ["type", "scan"]) && isToken(o.scan) ? { type: "bg_card_scan", scan: o.scan } : null;
     case "bg_host_menu": {
-      if (!keysAre(o, ["type", "token", "frameId", "url", "anchor", "rows"]) || !isToken(o.token)) return null;
+      const withViewport = keysAre(o, ["type", "token", "frameId", "url", "anchor", "rows", "viewport"]);
+      if ((!withViewport && !keysAre(o, ["type", "token", "frameId", "url", "anchor", "rows"])) || !isToken(o.token)) return null;
       const anchor = parseAnchor(o.anchor);
       const { frameId, url, rows } = o;
       if (!anchor || typeof frameId !== "number" || !Number.isInteger(frameId) || frameId < 1) return null;
       if (typeof url !== "string" || url.length === 0 || url.length > MAX_URL_BYTES) return null;
       if (typeof rows !== "number" || !Number.isInteger(rows) || rows < 1 || rows > MENU_MAX_ROWS) return null;
-      return { type: "bg_host_menu", token: o.token, frameId, url, anchor, rows };
+      if (!withViewport) return { type: "bg_host_menu", token: o.token, frameId, url, anchor, rows };
+      const viewport = parseViewport(o.viewport);
+      return viewport && { type: "bg_host_menu", token: o.token, frameId, url, anchor, rows, viewport };
     }
     default:
       return null;

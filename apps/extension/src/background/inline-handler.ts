@@ -64,6 +64,7 @@ import {
   type OpenMenuReply,
   type ReadyReply,
   type SaveView,
+  type Viewport,
 } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 import { cardRows, displayExpiry } from "./card-rows";
@@ -83,6 +84,12 @@ export interface FrameRef {
   documentId?: string;
   /** The frame's URL, stripped for sending to the desktop. */
   url: string;
+  /**
+   * An iframe's full URL (query and fragment kept, credentials removed), as
+   * the browser reported it. Only ever sent to the tab's top frame, to find
+   * the <iframe> for a hosted card menu; never to the desktop.
+   */
+  fullUrl?: string;
   /** The tab's top-level URL when this is an iframe. */
   topUrl?: string;
   /** The frame's origin; the content script checks it before filling. */
@@ -375,9 +382,11 @@ export function createInlineHandler(deps: InlineDeps) {
   /**
    * Ask the top frame to show a processor frame's menu over it (the frame
    * itself is too small). Only ever sent to frame 0; the child's id and URL
-   * come from the browser's sender data.
+   * come from the browser's sender data (the full URL where the browser gave
+   * one: iframes of one processor often differ only in query or fragment).
+   * `viewport` is the child's own report, only used to pick among iframes.
    */
-  async function hostMenu(reply: OpenMenuReply, frame: FrameRef, anchor: Anchor | null): Promise<OpenMenuReply> {
+  async function hostMenu(reply: OpenMenuReply, frame: FrameRef, anchor: Anchor | null, viewport: Viewport | null): Promise<OpenMenuReply> {
     if (!reply.ok || frame.frameId === 0 || !anchor) return reply;
     const m = menus.get(frame.tabId);
     if (!m || m.token !== reply.token) return reply;
@@ -385,16 +394,23 @@ export function createInlineHandler(deps: InlineDeps) {
       type: "bg_host_menu",
       token: reply.token,
       frameId: frame.frameId,
-      url: frame.url,
+      url: frame.fullUrl ?? frame.url,
       anchor,
       rows: reply.rows,
+      ...(viewport ? { viewport } : {}),
     });
     if (!parseHostReply(r) || menus.get(frame.tabId) !== m) return reply;
     m.host = top(frame);
     return { ...reply, hosted: true };
   }
 
-  async function openCardMenu(frame: FrameRef, roles: CardRole[], anchor: Anchor | null, ancestry: Ancestry | null): Promise<OpenMenuReply> {
+  async function openCardMenu(
+    frame: FrameRef,
+    roles: CardRole[],
+    anchor: Anchor | null,
+    ancestry: Ancestry | null,
+    viewport: Viewport | null,
+  ): Promise<OpenMenuReply> {
     // A subframe that cannot say where it sits gets no menu at all.
     if (frame.frameId !== 0 && (!ancestry || (ancestry.ancestors === null && !ancestry.directChildOfTop))) return { ok: false };
     let list: ResultFor<"find_cards">;
@@ -404,7 +420,7 @@ export function createInlineHandler(deps: InlineDeps) {
       if (e instanceof BridgeError && e.code === "locked") {
         // The unlock row carries no card data; the pick re-checks everything.
         const locked = { roles, ancestry, rows: [], insecure: false };
-        return hostMenu(register(frame, "card", true, [], [], { hint: null, help: null }, [], null, locked), frame, anchor);
+        return hostMenu(register(frame, "card", true, [], [], { hint: null, help: null }, [], null, locked), frame, anchor, viewport);
       }
       // A frame Rust denies, integration off, app gone: stay out of the page.
       return { ok: false };
@@ -415,7 +431,7 @@ export function createInlineHandler(deps: InlineDeps) {
       if (!(await ancestryAllowed(frame, ancestry, l))) return { ok: false };
     }
     const card = { roles, ancestry, rows: cardRows(list.cards, deps.now()), insecure: list.insecure };
-    return hostMenu(register(frame, "card", false, [], [], { hint: null, help: null }, [], null, card), frame, anchor);
+    return hostMenu(register(frame, "card", false, [], [], { hint: null, help: null }, [], null, card), frame, anchor, viewport);
   }
 
   /** Every frame of the tab reports its card fields for CARD_SCAN_MS. */
@@ -503,6 +519,7 @@ export function createInlineHandler(deps: InlineDeps) {
     cardRoles: CardRole[] = [],
     anchor: Anchor | null = null,
     ancestry: Ancestry | null = null,
+    viewport: Viewport | null = null,
   ): Promise<OpenMenuReply> {
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
       // The user hid the menu under login fields; saving and passkeys go on.
@@ -512,7 +529,7 @@ export function createInlineHandler(deps: InlineDeps) {
       const waiting = kind === "login" && !explicit ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
       return waiting.length === 0 ? { ok: false } : register(frame, kind, false, [], waiting, { hint: null, help: null });
     }
-    if (kind === "card") return openCardMenu(frame, cardRoles, anchor, ancestry);
+    if (kind === "card") return openCardMenu(frame, cardRoles, anchor, ancestry, viewport);
     if (kind === "identity") {
       let row: IdentityRowView | null;
       try {
@@ -724,7 +741,7 @@ export function createInlineHandler(deps: InlineDeps) {
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
     switch (req.type) {
       case "cs_open_menu":
-        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? [], req.cardRoles ?? [], req.anchor ?? null, req.ancestry ?? null);
+        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? [], req.cardRoles ?? [], req.anchor ?? null, req.ancestry ?? null, req.viewport ?? null);
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
         if (!m || m.token !== req.token) return {};

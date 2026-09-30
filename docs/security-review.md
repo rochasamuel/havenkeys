@@ -1355,7 +1355,9 @@ review above still applies unchanged.
   `webauthn-handler.ts`, `bridge.ts` and `index.ts` in full:
   * The frame URL, top URL, origin and document ID come from the browser's
     sender data (`contentFrame`), with credentials, query and fragment
-    stripped.
+    stripped. The one exception is `fullUrl` (credentials stripped, query
+    and fragment kept), which is sent only to the tab's top frame to find a
+    card iframe (`bg_host_menu`) and never to the desktop.
   * The page's `rpId` is only ever sent as `rpId`. When it is absent, the
     default is the host of the sender URL.
   * The card's site label is `displayHost` of the sender URL.

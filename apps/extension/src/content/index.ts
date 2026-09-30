@@ -173,6 +173,11 @@ function start(): void {
     return { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) };
   }
 
+  /** This frame's viewport in whole CSS px, for the top frame to tell same-URL iframes apart. */
+  function frameViewport() {
+    return { width: Math.max(0, Math.round(window.innerWidth)), height: Math.max(0, Math.round(window.innerHeight)) };
+  }
+
   const sso = createSsoContent({
     send: (m) => chrome.runtime.sendMessage(m).catch(() => undefined),
     viewport,
@@ -211,7 +216,7 @@ function start(): void {
       ...(explicit ? { explicit: true as const } : {}),
       ...(choice.roles ? { roles: choice.roles } : {}),
       ...(choice.cardRoles ? { cardRoles: choice.cardRoles } : {}),
-      ...(ancestry ? { anchor: anchorOf(field), ancestry } : {}),
+      ...(ancestry ? { anchor: anchorOf(field), ancestry, viewport: frameViewport() } : {}),
     };
     const reply = (await send(req)) as { ok?: unknown; token?: unknown; rows?: unknown; hosted?: unknown } | undefined;
     opening = false;
@@ -334,7 +339,7 @@ function start(): void {
   function hostMenu(m: Extract<BackgroundToContent, { type: "bg_host_menu" }>): boolean {
     if (window.top !== window) return false;
     const getFrameId = (chrome.runtime as { getFrameId?: (target: Element) => number }).getFrameId;
-    const el = findHostIframe(m.frameId, m.url, Array.from(document.querySelectorAll("iframe")), getFrameId);
+    const el = findHostIframe(m.frameId, m.url, Array.from(document.querySelectorAll("iframe")), getFrameId, m.viewport ?? null);
     if (!el || !isRendered(el)) return false;
     const r = el.getBoundingClientRect();
     const anchor = rect(r.left + el.clientLeft + m.anchor.left, r.top + el.clientTop + m.anchor.top, m.anchor.width, m.anchor.height);

@@ -1227,9 +1227,15 @@ identity's strict visibility test), enabled and editable.
 A processor's card iframe can be 40 px tall, so a menu drawn in it would be
 clipped. The top frame draws the menu over the iframe instead
 (`bg_host_menu`). It finds the iframe with `runtime.getFrameId` where the
-browser has it (Firefox); otherwise it takes the one iframe whose `src`
-(without query and fragment) equals the frame's URL, if exactly one matches.
-If none or several do, the menu is drawn in the frame. The pick still comes
+browser has it (Firefox). Otherwise (Chromium) it takes the iframes whose
+`src` equals the frame's full URL (split Stripe Elements, Adyen secured
+fields and Braintree hosted fields load one file per field and differ only
+in query or fragment), or, if none, those whose `src` without query and
+fragment equals it. One match: that one. Several: the one whose client size
+is the frame's reported viewport (within 2 px), if exactly one is. Otherwise
+the menu is drawn in the frame. The full URL comes from the browser's sender
+data with credentials removed and is sent only to the tab's top frame, never
+to the desktop. The pick still comes
 from an `isTrusted` click in the menu's own frame.
 
 ### The menu and the popup

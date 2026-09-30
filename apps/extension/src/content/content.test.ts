@@ -591,9 +591,12 @@ describe("card fields", () => {
     deliver({ type: "bg_close_menu", token: "d".repeat(32) });
     expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).toBeNull();
 
+    // Same path twice: the exact full URL picks one; a URL matching neither exactly finds none.
     set(`<iframe src="https://js.stripe.com/v3/card.html"></iframe><iframe src="https://js.stripe.com/v3/card.html?b"></iframe>`);
-    expect(deliver(host("e".repeat(32), 7, "https://js.stripe.com/v3/card.html"))).toEqual({ ok: false });
-    expect(document.querySelector(`iframe[src$="#${"e".repeat(32)}"]`)).toBeNull();
+    expect(deliver(host("e".repeat(32), 7, "https://js.stripe.com/v3/card.html?b"))).toEqual({ ok: true });
+    deliver({ type: "bg_close_menu", token: "e".repeat(32) });
+    expect(deliver(host("f".repeat(32), 7, "https://js.stripe.com/v3/card.html?c"))).toEqual({ ok: false });
+    expect(document.querySelector(`iframe[src$="#${"f".repeat(32)}"]`)).toBeNull();
   });
 
   describe("in a processor subframe", () => {
@@ -632,6 +635,7 @@ describe("card fields", () => {
         cardRoles: ["number", "expiryMonth", "expiryYear", "verificationNumber"],
         anchor: { top: 10, left: 10, width: 200, height: 20 },
         ancestry: CHILD,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
       });
       // The top frame draws it: no menu iframe here.
       expect(document.querySelector("iframe")).toBeNull();

@@ -18,7 +18,7 @@ import type { IdentityRole } from "@havenkeys/protocol";
 import { parsePopupRequest } from "../messaging/popup";
 import { parseSsoContentRequest, parseSsoFrameRequest, type BackgroundToSso } from "../messaging/sso";
 import { NATIVE_HOST_NAME } from "../shared/constants";
-import { pageUrlForRequest } from "../shared/url";
+import { frameUrlForHost, pageUrlForRequest } from "../shared/url";
 import { createInlineHandler, type AutoRun, type FrameRef } from "./inline-handler";
 import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
@@ -189,6 +189,8 @@ function contentFrame(sender: chrome.runtime.MessageSender): FrameRef | null {
     const topUrl = pageUrlForRequest(sender.tab.url);
     if (!topUrl) return null;
     frame.topUrl = topUrl;
+    const fullUrl = frameUrlForHost(sender.url);
+    if (fullUrl) frame.fullUrl = fullUrl;
   }
   return frame;
 }

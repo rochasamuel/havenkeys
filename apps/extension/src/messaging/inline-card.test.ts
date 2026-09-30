@@ -87,6 +87,30 @@ describe("card messages", () => {
     expect(parseContentRequest({ type: "cs_open_menu", kind: "login", ancestry: chain })).toBeNull();
   });
 
+  it("carries a card frame's viewport size, strictly, to the top frame", () => {
+    const viewport = { width: 300, height: 40 };
+    expect(parseContentRequest({ type: "cs_open_menu", kind: "card", cardRoles: ["number"], anchor, viewport })).toMatchObject({ anchor, viewport });
+    for (const bad of [
+      { width: 300 },
+      { width: 300, height: 40, extra: 1 },
+      { width: 300.5, height: 40 },
+      { width: -1, height: 40 },
+      { width: 300, height: 100001 },
+      { width: "300", height: 40 },
+      { width: Infinity, height: 40 },
+      null,
+    ]) {
+      expect(parseContentRequest({ type: "cs_open_menu", kind: "card", cardRoles: ["number"], anchor, viewport: bad }), JSON.stringify(bad)).toBeNull();
+    }
+    expect(parseContentRequest({ type: "cs_open_menu", kind: "login", viewport })).toBeNull();
+    const url = "https://js.stripe.com/v3/elements-inner.html?type=cvc#abc";
+    const host = { type: "bg_host_menu", token: T, frameId: 3, url, anchor, rows: 2 };
+    expect(parseBackgroundMessage({ ...host, viewport })).toEqual({ ...host, viewport });
+    expect(parseBackgroundMessage(host)).toEqual(host);
+    expect(parseBackgroundMessage({ ...host, viewport: { width: 1.5, height: 2 } })).toBeNull();
+    expect(parseBackgroundMessage({ ...host, viewport: null })).toBeNull();
+  });
+
   it("accepts menu_pick_card and host replies exactly", () => {
     expect(parseInlineRequest({ type: "menu_pick_card", token: T, itemId: ID })).toEqual({ type: "menu_pick_card", token: T, itemId: ID });
     expect(parseInlineRequest({ type: "menu_pick_card", token: T, itemId: "x" })).toBeNull();

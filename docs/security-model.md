@@ -946,9 +946,12 @@ limitation below).
 
 **Menu in a small iframe.** A card menu opened inside a processor's 40-px
 iframe would be clipped, so the top frame draws it over that iframe. The
-iframe is found with `runtime.getFrameId` where the browser has it, else as
-the one iframe whose `src` (without query or fragment) equals the frame's
-URL; if none or several match, the menu is drawn inside the frame. The
+iframe is found with `runtime.getFrameId` where the browser has it, else by
+its `src` (the frame's full URL from the browser's sender data, credentials
+removed, then without query or fragment) and, among several, by the size the
+frame reports; if that does not single one out, the menu is drawn inside the
+frame. The full URL goes only to the tab's top frame, never to the desktop;
+a wrong match only misplaces the menu. The
 choice still comes from a trusted click in the menu's own frame.
 
 **Save prompt.** After a form submit in the **top frame**, a card the user

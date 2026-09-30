@@ -27,6 +27,26 @@ export function pageUrlForRequest(raw: string | undefined): string | null {
   return new TextEncoder().encode(out).length <= MAX_URL_BYTES ? out : null;
 }
 
+/**
+ * An iframe's URL as the browser reported it, query and fragment kept (only
+ * credentials removed), for the top frame to find that iframe by its src
+ * (content/host-frame.ts). Never sent to the desktop: pageUrlForRequest is.
+ */
+export function frameUrlForHost(raw: string | undefined): string | null {
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  url.username = "";
+  url.password = "";
+  const out = url.toString();
+  return new TextEncoder().encode(out).length <= MAX_URL_BYTES ? out : null;
+}
+
 /** Host name for display, or null. */
 export function displayHost(pageUrl: string | null): string | null {
   if (!pageUrl) return null;
