@@ -252,6 +252,7 @@ export const en = {
     pageNotSupported: "This page can't use saved logins.",
     noLoginForm: "No login form found on this page.",
     noIdentityForm: "No form for your identity on this page.",
+    cardPageChanged: "The page changed to another site. Open HavenKeys again to fill your card.",
     identityPageChanged: "The page changed to another site. Open HavenKeys again to fill your identity.",
     hostUnavailable: "The HavenKeys native messaging host is not installed or failed to start.",
     timeout: "HavenKeys did not respond.",

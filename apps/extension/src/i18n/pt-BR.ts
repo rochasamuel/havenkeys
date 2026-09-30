@@ -219,6 +219,7 @@ export const ptBR: Messages = {
     pageNotSupported: "Esta página não pode usar logins salvos.",
     noLoginForm: "Nenhum formulário de login encontrado nesta página.",
     noIdentityForm: "Nenhum formulário para sua identidade nesta página.",
+    cardPageChanged: "A página mudou para outro site. Abra o HavenKeys de novo para preencher seu cartão.",
     identityPageChanged: "A página mudou para outro site. Abra o HavenKeys de novo para preencher sua identidade.",
     hostUnavailable: "O host de mensagens nativas do HavenKeys não está instalado ou não conseguiu iniciar.",
     timeout: "O HavenKeys não respondeu.",

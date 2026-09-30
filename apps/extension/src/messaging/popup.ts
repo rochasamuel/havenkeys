@@ -4,6 +4,7 @@
 // background worker reads the active tab's URL itself.
 
 import type { IdentityRole, Match } from "@havenkeys/protocol";
+import type { CardRowView } from "./inline";
 
 export type PopupRequest =
   | { type: "popup_state" }
@@ -13,6 +14,12 @@ export type PopupRequest =
   | { type: "popup_fill"; itemId: string }
   /** Fill this login's current one-time code into the active tab. */
   | { type: "popup_fill_totp"; itemId: string }
+  /**
+   * Fill this saved card into the active tab's card form. `origin` is the
+   * page origin the list was built for; the background refuses a tab that
+   * has since moved to another origin.
+   */
+  | { type: "popup_fill_card"; itemId: string; origin?: string }
   /** Show this login in the desktop app's editor. */
   | { type: "popup_open_item"; itemId: string }
   /**
@@ -29,7 +36,7 @@ export type PopupState =
   | { kind: "no_vault" }
   | { kind: "locked" }
   | { kind: "disabled" }
-  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null }
+  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null; cards?: CardRowView[]; cardsOrigin?: string }
   | { kind: "error"; message: string };
 
 export interface TotpView {
@@ -71,6 +78,10 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
       return keys.length === 2 && typeof o.itemId === "string" && UUID.test(o.itemId)
         ? { type: o.type, itemId: o.itemId }
         : null;
+    case "popup_fill_card":
+      if (typeof o.itemId !== "string" || !UUID.test(o.itemId)) return null;
+      if (keys.length === 2) return { type: "popup_fill_card", itemId: o.itemId };
+      return keys.length === 3 && isOrigin(o.origin) ? { type: "popup_fill_card", itemId: o.itemId, origin: o.origin } : null;
     case "popup_fill_identity":
       if (o.documents === null) return keys.length === 2 ? { type: "popup_fill_identity", documents: null } : null;
       return keys.length === 3 && typeof o.documents === "boolean" && isOrigin(o.origin)

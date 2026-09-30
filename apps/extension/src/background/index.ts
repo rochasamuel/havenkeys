@@ -127,7 +127,20 @@ async function scanIdentity(tabId: number): Promise<IdentityRole[]> {
   }
 }
 
-const popup = createPopupHandler(client, activeTab, fillTab, ssoTab, scanIdentity);
+/** Popup cards: the top frame gets the content script (the others have it where site access is granted). */
+async function injectTop(tabId: number): Promise<boolean> {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ["content.js"] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const popup = createPopupHandler(client, activeTab, fillTab, ssoTab, scanIdentity, {
+  scan: async (tabId) => (await injectTop(tabId)) && (await inline.scanCards(tabId)).length > 0,
+  fill: async (tabId, topUrl, itemId) => ((await injectTop(tabId)) ? inline.fillCard(tabId, topUrl, null, itemId) : 0),
+});
 
 // ------------------------------------------------------------ senders
 

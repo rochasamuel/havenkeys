@@ -9,7 +9,8 @@ import { SSO_PROVIDERS, type IdentityRole, type Match, type SsoProvider } from "
 import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
-import { providerIcon } from "../menu/icons";
+import { cardBrandIcon, providerIcon } from "../menu/icons";
+import type { CardRowView } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 
 const main = document.getElementById("main") as HTMLElement;
@@ -158,6 +159,21 @@ function identityRow(title: string): HTMLElement {
   return row;
 }
 
+function cardRow(c: CardRowView, origin: string | undefined): HTMLElement {
+  const status = h("div", { className: "row-status" });
+  const fill = smallButton(t.popup.fill, t.popup.fillCardTitle);
+  fill.addEventListener("click", () => void fillFromPopup(fill, { type: "popup_fill_card", itemId: c.id, ...(origin ? { origin } : {}) }, status));
+  const detail = [t.menu.cardRow(c.last4, c.expiry), c.expired ? t.menu.cardExpired : ""].filter(Boolean).join(" · ");
+  return h(
+    "li",
+    { className: c.expired ? "item card expired" : "item card" },
+    h("span", { className: "avatar card-avatar" }, cardBrandIcon(c.brand, 24)),
+    h("div", { className: "who" }, truncates(h("div", { className: "title", text: c.title || t.menu.cardFallback })), h("div", { className: "user copy", text: detail })),
+    h("div", { className: "actions" }, fill),
+    status,
+  );
+}
+
 function matchRow(m: Match): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
   const status = h("div", { className: "row-status" });
@@ -246,6 +262,10 @@ function render(state: PopupState): void {
         parts.push(h("ul", { className: "list" }, ...state.matches.map(matchRow)));
       }
       if (state.identity) parts.push(identityRow(state.identity.title));
+      if (state.cards && state.cards.length > 0) {
+        const origin = state.cardsOrigin;
+        parts.push(h("div", { className: "section-title", text: t.popup.cardsTitle }), h("ul", { className: "list" }, ...state.cards.map((c) => cardRow(c, origin))));
+      }
       main.replaceChildren(...parts);
       void offerSuggestions();
       return;
