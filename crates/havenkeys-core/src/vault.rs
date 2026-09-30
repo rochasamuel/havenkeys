@@ -187,13 +187,13 @@ pub enum SaveAction {
     Unchanged,
 }
 
-/// A login keeping `existing`'s title, username, websites and "Sign in
-/// with", every secret left as it is. Callers set what their save changes.
+/// A login keeping `existing`'s title, username and websites, every secret
+/// left as it is and no "Sign in with". Callers set what their save
+/// changes, and "Sign in with" always.
 fn login_input_from(existing: &ItemOverview) -> ItemInput {
     ItemInput {
         username: existing.username.clone(),
         urls: existing.urls.clone(),
-        sign_in_with: existing.sign_in_with.clone(),
         ..ItemInput::blank(ItemType::Login, existing.title.clone())
     }
 }
@@ -1448,10 +1448,12 @@ impl VaultService {
                 return self.stage_save_update(id, page_url, top_url, password, now_ms)
             }
         };
+        // The frame is checked before anything is copied from the form.
+        let base = new_login_for_frame(page_url, top_url, title)?;
         let input = ItemInput {
             username: username.map(str::to_owned),
             password: SecretUpdate::Set(password),
-            ..new_login_for_frame(page_url, top_url, title)?
+            ..base
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1472,6 +1474,7 @@ impl VaultService {
         let existing = self.authorize_for_page(id, page_url, top_url)?;
         let input = ItemInput {
             password: SecretUpdate::Set(password),
+            sign_in_with: existing.sign_in_with.clone(),
             ..login_input_from(existing)
         };
         Ok(StagedSave {
