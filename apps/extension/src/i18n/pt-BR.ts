@@ -104,7 +104,7 @@ export const ptBR: Messages = {
   },
 
   menu: {
-    cardFillOn: (site: string) => `Preencher em ${site}`,
+    cardFillOn: "Preencher em",
     cardRow: (last4: string | null, expiry: string | null) => [last4 ? `•••• ${last4}` : null, expiry].filter(Boolean).join(" · "),
     cardExpired: "Vencido",
     cardFallback: "Cartão",

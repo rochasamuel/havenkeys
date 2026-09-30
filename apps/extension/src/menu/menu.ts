@@ -178,6 +178,42 @@ function hintNote(title: string, detail: string): HTMLElement {
   );
 }
 
+/** Characters of the host shown at most, the leading "…" included. */
+const DEST_HOST_MAX = 32;
+
+/**
+ * The host as shown under "Fill on": whole when short, else its END (the
+ * registrable domain, the part a look-alike cannot copy) after a leading
+ * "…", cut at a label boundary when one falls inside the kept tail.
+ * `shop.com.evil.xyz` and `shop.com` must never read the same.
+ */
+function hostTail(host: string, max = DEST_HOST_MAX): string {
+  if (host.length <= max) return host;
+  let tail = host.slice(host.length - (max - 1));
+  // Snap to a label only while that keeps most of the tail ("…xyz" says little).
+  const dot = tail.indexOf(".");
+  if (dot >= 0 && tail.length - dot - 1 >= max / 2) tail = tail.slice(dot + 1);
+  return `…${tail}`;
+}
+
+/**
+ * The card menu's header: "Fill on" beside the brand, the host on its own
+ * line below. The CSS also clips that line from the start (rtl box, the
+ * host isolated as ltr), so its end stays visible at any width.
+ */
+function showDestination(host: string): void {
+  site.textContent = msg.menu.cardFillOn;
+  const head = card.firstElementChild as HTMLElement | null;
+  if (!head) return;
+  head.classList.add("dest");
+  const text = h("bdi", { text: hostTail(host) });
+  text.dir = "ltr";
+  const line = userData(h("span", { className: "dest-host" }, text));
+  line.title = host;
+  head.querySelector(".dest-host")?.remove();
+  head.append(line);
+}
+
 function render(t: string, view: MenuView): void {
   if (view.state === "locked") {
     main.replaceChildren(message(msg.menu.lockedTitle, msg.menu.lockedBody));
@@ -185,7 +221,7 @@ function render(t: string, view: MenuView): void {
   }
   if (view.state === "cards") {
     // The page the card goes to, named once in the header (spec §5.2).
-    site.textContent = msg.menu.cardFillOn(view.site);
+    showDestination(view.site);
     if (view.insecure) main.replaceChildren(message(msg.menu.cardsInsecureTitle, msg.menu.cardsInsecureBody));
     else if (view.cards.length === 0) main.replaceChildren(hintNote(msg.menu.noCardsTitle, msg.menu.noCardsBody));
     else main.replaceChildren(...view.cards.map((c) => cardRow(t, c)));

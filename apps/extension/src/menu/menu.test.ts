@@ -349,7 +349,8 @@ describe("card rows", () => {
 
   it("lists cards with their logo, last four and expiry, and names the page", async () => {
     const handlers = await setup(view([visa, { ...visa, id: "11111111-2222-4333-8444-555555555555", title: "Old", expiry: "01/20", expired: true }]));
-    expect(document.getElementById("site")!.textContent).toBe("Fill on shop.com");
+    expect(document.getElementById("site")!.textContent).toBe("Fill on");
+    expect(document.querySelector(".dest-host")!.textContent).toBe("shop.com");
     const rows = Array.from(document.querySelectorAll<HTMLButtonElement>("button.row"));
     expect(rows[0]!.textContent).toContain("•••• 1111 · 04/33");
     expect(rows[0]!.querySelector("svg")).not.toBeNull();
@@ -358,6 +359,34 @@ describe("card rows", () => {
     handlers.get(rows[0]!)?.(trusted);
     await vi.advanceTimersByTimeAsync(0);
     expect(asked.at(-1)).toEqual({ type: "menu_pick_card", token: TOKEN, itemId: ITEM });
+  });
+
+  it("keeps the end of a long look-alike host visible, on its own line", async () => {
+    const evil = "checkout.magazineluiza.com.br.pagamento-seguro.evil.xyz";
+    await setup({ ok: true, value: { state: "cards", site: evil, cards: [visa], insecure: false } });
+    const host = document.querySelector<HTMLElement>(".dest-host")!;
+    // Its own element, not inside the header's one-line label.
+    expect(document.getElementById("site")!.contains(host)).toBe(false);
+    const shown = host.textContent!;
+    expect(shown.startsWith("…")).toBe(true);
+    expect(shown.endsWith(".evil.xyz")).toBe(true);
+    expect(shown.length).toBeLessThanOrEqual(33);
+    // Cut at a label boundary: whole labels after the ellipsis.
+    expect(evil.endsWith(shown.slice(1))).toBe(true);
+    expect(evil[evil.length - shown.length]).toBe(".");
+    expect(host.title).toBe(evil);
+  });
+
+  it("keeps a long last label rather than snapping to a short tail", async () => {
+    const long = `shop.com.br.${"m".repeat(40)}.xyz`;
+    await setup({ ok: true, value: { state: "cards", site: long, cards: [visa], insecure: false } });
+    const shown = document.querySelector(".dest-host")!.textContent!;
+    expect(shown).toBe(`…${long.slice(long.length - 31)}`);
+  });
+
+  it("shows a short host whole", async () => {
+    await setup({ ok: true, value: { state: "cards", site: "magazineluiza.com.br", cards: [visa], insecure: false } });
+    expect(document.querySelector(".dest-host")!.textContent).toBe("magazineluiza.com.br");
   });
 
   it("a synthetic click on a card row sends nothing", async () => {

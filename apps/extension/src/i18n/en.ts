@@ -136,7 +136,7 @@ export const en = {
   },
 
   menu: {
-    cardFillOn: (site: string) => `Fill on ${site}`,
+    cardFillOn: "Fill on",
     cardRow: (last4: string | null, expiry: string | null) => [last4 ? `•••• ${last4}` : null, expiry].filter(Boolean).join(" · "),
     cardExpired: "Expired",
     cardFallback: "Card",

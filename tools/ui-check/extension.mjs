@@ -243,6 +243,24 @@ export const extensionScenarios = [
       }),
     },
     {
+      // A look-alike host differs only at its end: that end must show.
+      name: `menu-cards-lookalike-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 2 },
+      replies: () => ({
+        menu_state: ok({ state: "cards", site: "magazineluiza.com.br.pagamento-seguro.evil.xyz", insecure: false, cards: [visaCard, eloCard] }),
+      }),
+    },
+    {
+      // Wide letters: even the kept tail overflows, and the CSS clips its start.
+      name: `menu-cards-wide-host-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({
+        menu_state: ok({ state: "cards", site: "magazineluiza.com.br.mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm.xyz", insecure: false, cards: [visaCard] }),
+      }),
+    },
+    {
       name: `menu-cards-insecure-${width}`,
       page: "menu.html",
       frame: { kind: "menu", width, rows: 1 },
