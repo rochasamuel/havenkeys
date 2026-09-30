@@ -418,6 +418,67 @@ fn integration_switch_is_enforced() {
 }
 
 #[test]
+fn every_page_request_is_refused_while_integration_is_off() {
+    let off = || {
+        let f = fixture();
+        {
+            let mut v = f.vault.lock().unwrap();
+            let s = v.settings().unwrap();
+            v.update_settings(Settings {
+                browser_integration: false,
+                ..s
+            })
+            .unwrap();
+        }
+        f
+    };
+    let item = Uuid::from_u128(1);
+    let url = "https://github.com/";
+    let requests = [
+        serde_json::json!({"type": "find_matches", "url": url}),
+        serde_json::json!({"type": "fill_item", "itemId": item, "url": url}),
+        serde_json::json!({"type": "get_totp", "itemId": item, "url": url}),
+        serde_json::json!({"type": "generate_password"}),
+        serde_json::json!({"type": "check_login", "url": url, "username": "octo", "password": "pw"}),
+        serde_json::json!({"type": "save_login", "url": url, "username": "octo", "password": "pw", "itemId": null}),
+        serde_json::json!({"type": "find_passkeys", "url": url, "rpId": "github.com", "allowCredentials": []}),
+        serde_json::json!({"type": "passkey_get", "itemId": item, "credentialId": "AAAAAAAAAAAAAAAAAAAAAA", "url": url, "rpId": "github.com", "challenge": CHAL}),
+        serde_json::json!({"type": "check_passkey_create", "url": url, "rpId": "github.com", "userName": "octo", "excludeCredentials": [], "conditional": false}),
+        serde_json::json!({"type": "passkey_create", "url": url, "rpId": "github.com", "challenge": CHAL, "userHandle": "AQ", "userName": "octo", "displayName": null, "itemId": null, "conditional": false}),
+        serde_json::json!({"type": "passkey_status", "url": url}),
+        serde_json::json!({"type": "open_item", "itemId": item, "url": url}),
+        serde_json::json!({"type": "find_identity", "url": url}),
+        serde_json::json!({"type": "fill_identity", "url": url, "roles": ["firstName"], "documents": false}),
+        serde_json::json!({"type": "open_identity", "url": url}),
+        serde_json::json!({"type": "find_cards", "url": url}),
+        serde_json::json!({"type": "fill_card", "itemId": item, "topUrl": url, "frames": [{"url": url, "roles": ["number"]}]}),
+        serde_json::json!({"type": "save_card", "url": url, "number": "4111111111111111"}),
+        serde_json::json!({"type": "start_sso", "itemId": item, "url": url}),
+        serde_json::json!({"type": "check_sso", "url": url, "provider": "google", "account": null}),
+        serde_json::json!({"type": "save_sso", "url": url, "provider": "google", "account": null, "itemId": null}),
+    ];
+    for req in requests {
+        // A fresh bridge each time, so no request is rate limited first.
+        let f = off();
+        let before = f.changes.load(Ordering::SeqCst);
+        let r = call(&f, req.clone());
+        assert_eq!(error_code(&r), Some("integration_disabled"), "{req}");
+        assert_eq!(f.changes.load(Ordering::SeqCst), before, "{req}");
+        assert!(f.opened.lock().unwrap().is_empty(), "{req}");
+    }
+    // status and lock are not page requests.
+    let f = off();
+    assert_eq!(
+        call(&f, serde_json::json!({"type": "status"}))["result"]["state"],
+        "unlocked"
+    );
+    assert_eq!(
+        call(&f, serde_json::json!({"type": "lock"}))["result"]["type"],
+        "lock"
+    );
+}
+
+#[test]
 fn secret_requests_are_rate_limited() {
     let f = fixture();
     let mut limited = false;
