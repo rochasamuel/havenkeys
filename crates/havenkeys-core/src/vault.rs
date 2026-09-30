@@ -1979,12 +1979,7 @@ pub(crate) fn build_item(
             if let Some(n) = &notes {
                 check_notes(n)?;
             }
-            let totp = match totp {
-                SecretUpdate::Keep => cur_totp,
-                SecretUpdate::Clear => None,
-                SecretUpdate::Set(v) if v.expose().trim().is_empty() => None,
-                SecretUpdate::Set(v) => Some(totp::parse_totp_input(v.expose())?),
-            };
+            let totp = totp.apply_totp(cur_totp)?;
             ItemDetails::Login {
                 password,
                 totp,

@@ -10,7 +10,7 @@ use crate::identity::IdentityFields;
 use crate::passkey::Passkey;
 use crate::secret::SecretString;
 use crate::sso::SignInWith;
-use crate::totp::TotpConfig;
+use crate::totp::{self, TotpConfig};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
@@ -190,7 +190,7 @@ impl fmt::Debug for SecretUpdate {
 }
 
 impl SecretUpdate {
-    fn is_keep(&self) -> bool {
+    pub(crate) fn is_keep(&self) -> bool {
         matches!(self, SecretUpdate::Keep)
     }
 
@@ -201,6 +201,18 @@ impl SecretUpdate {
             SecretUpdate::Clear => None,
             SecretUpdate::Set(v) if v.is_empty() => None,
             SecretUpdate::Set(v) => Some(v),
+        }
+    }
+
+    /// Apply to a one-time-password setup: `Set` takes an `otpauth://` URI
+    /// or a bare Base32 secret; a blank `Set` clears. The one rule for the
+    /// login's TOTP and for OTP custom fields.
+    pub(crate) fn apply_totp(self, current: Option<TotpConfig>) -> Result<Option<TotpConfig>> {
+        match self {
+            SecretUpdate::Keep => Ok(current),
+            SecretUpdate::Clear => Ok(None),
+            SecretUpdate::Set(v) if v.expose().trim().is_empty() => Ok(None),
+            SecretUpdate::Set(v) => totp::parse_totp_input(v.expose()).map(Some),
         }
     }
 }

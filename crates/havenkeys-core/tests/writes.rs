@@ -286,3 +286,56 @@ fn a_staged_import_needs_an_unlocked_vault() {
         .unwrap_err();
     assert_eq!(err.code(), "locked");
 }
+
+/// Pins how an update treats the main TOTP before `apply_totp` takes over
+/// the inline match in `build_item` (spec 2026-09-30 §4.6).
+#[test]
+fn main_totp_updates_keep_clear_and_set() {
+    use havenkeys_core::model::SecretUpdate;
+    let (mut v, _) = activated_vault();
+    let mut input = login("AWS", "root", "pw", "aws.amazon.com");
+    input.totp = SecretUpdate::Set(secret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"));
+    let staged = v.stage_create(input, NOW).unwrap();
+    let id = v.commit_write(staged, 1).unwrap().unwrap().id;
+    assert_eq!(v.totp_code(&id, 59).unwrap().code.expose(), "287082");
+
+    let with = |totp: SecretUpdate| {
+        let mut i = login("AWS", "root", "pw", "aws.amazon.com");
+        i.totp = totp;
+        i
+    };
+    // Keep keeps.
+    let staged = v
+        .stage_update(&id, with(SecretUpdate::Keep), NOW + 1)
+        .unwrap();
+    v.commit_write(staged, 2).unwrap();
+    assert_eq!(v.totp_code(&id, 59).unwrap().code.expose(), "287082");
+    // A blank Set clears.
+    let staged = v
+        .stage_update(&id, with(SecretUpdate::Set(secret("   "))), NOW + 2)
+        .unwrap();
+    let ov = v.commit_write(staged, 3).unwrap().unwrap();
+    assert!(!ov.has_totp);
+    // A bad Set is refused without echoing it.
+    let err = v
+        .stage_update(
+            &id,
+            with(SecretUpdate::Set(secret("not-base32-SECRETVALUE!"))),
+            NOW + 3,
+        )
+        .unwrap_err();
+    assert!(!err.to_string().contains("SECRETVALUE"));
+    // Set, then Clear.
+    let staged = v
+        .stage_update(
+            &id,
+            with(SecretUpdate::Set(secret("JBSWY3DPEHPK3PXP"))),
+            NOW + 4,
+        )
+        .unwrap();
+    assert!(v.commit_write(staged, 4).unwrap().unwrap().has_totp);
+    let staged = v
+        .stage_update(&id, with(SecretUpdate::Clear), NOW + 5)
+        .unwrap();
+    assert!(!v.commit_write(staged, 5).unwrap().unwrap().has_totp);
+}

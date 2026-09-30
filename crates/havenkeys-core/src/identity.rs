@@ -228,7 +228,7 @@ impl FillRole {
 
 /// Which characters a field may hold.
 #[derive(Clone, Copy)]
-enum Allow {
+pub(crate) enum Allow {
     /// One line: no control characters.
     Line,
     /// Several lines: newlines and tabs allowed, no other control characters.
@@ -250,7 +250,7 @@ fn allowed(value: &str, allow: Allow) -> bool {
 }
 
 /// Trim; drop when empty; reject when too long or holding forbidden characters.
-fn clean_value(
+pub(crate) fn clean_value(
     value: Option<SecretString>,
     max_chars: usize,
     allow: Allow,
@@ -290,25 +290,32 @@ fn days_in_month(y: i64, m: i64) -> i64 {
     }
 }
 
+/// `YYYY-MM-DD` as a real calendar date: `(year, month, day)`. The one
+/// date check for identity birth dates and Date custom fields.
+pub(crate) fn parse_ymd(value: &str) -> Option<(i64, i64, i64)> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return None;
+    }
+    let num = |range: std::ops::Range<usize>| -> Option<i64> {
+        let part = &value[range];
+        if !part.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        part.parse().ok()
+    };
+    let (y, m, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
+    if y < 1 || !(1..=12).contains(&m) || d < 1 || d > days_in_month(y, m) {
+        return None;
+    }
+    Some((y, m, d))
+}
+
 /// `YYYY-MM-DD`, a real calendar date, from 1850 up to today (UTC).
 fn check_birth_date(value: &str, now_ms: i64) -> Result<()> {
     const BAD: Error = Error::InvalidInput("birth date must be a past date as YYYY-MM-DD");
-    let bytes = value.as_bytes();
-    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
-        return Err(BAD);
-    }
-    let num = |range: std::ops::Range<usize>| -> Result<i64> {
-        let part = &value[range];
-        if !part.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(BAD);
-        }
-        part.parse().map_err(|_| BAD)
-    };
-    let (y, m, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
-    if y < MIN_BIRTH_YEAR || !(1..=12).contains(&m) || d < 1 || d > days_in_month(y, m) {
-        return Err(BAD);
-    }
-    if days_from_civil(y, m, d) > now_ms.div_euclid(86_400_000) {
+    let (y, m, d) = parse_ymd(value).ok_or(BAD)?;
+    if y < MIN_BIRTH_YEAR || days_from_civil(y, m, d) > now_ms.div_euclid(86_400_000) {
         return Err(BAD);
     }
     Ok(())
