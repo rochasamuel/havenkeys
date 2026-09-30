@@ -338,3 +338,69 @@ describe("popup identity fill", () => {
     expect(parsePopupRequest({ type: "popup_fill_identity", documents: true, url: "x" })).toBeNull();
   });
 });
+
+describe("popup cards", () => {
+  const VISA = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+  const find = { type: "find_cards", insecure: false, cards: [{ id: VISA, title: "Visa", brand: "visa", last4: "1111", expiry: "2033-04" }] };
+  function handler(url: string, scan: boolean, filled = 2) {
+    const requests: Request[] = [];
+    const fills: Array<[number, string, string]> = [];
+    const client = {
+      request: async (r: Request) => {
+        requests.push(r);
+        switch (r.type) {
+          case "status":
+            return { type: "status", state: "unlocked", vaultExists: true };
+          case "find_matches":
+            return { type: "find_matches", matches: [] };
+          case "find_identity":
+            throw new BridgeError("not_found", "x");
+          case "find_cards":
+            return find;
+          default:
+            throw new Error(r.type);
+        }
+      },
+    };
+    const h = createPopupHandler(client as never, async () => ({ id: 9, url }), async () => 0, undefined, undefined, {
+      scan: async () => scan,
+      fill: async (tabId, topUrl, itemId) => {
+        fills.push([tabId, topUrl, itemId]);
+        return filled;
+      },
+    });
+    return { h, requests, fills };
+  }
+
+  it("lists cards only on https pages with card fields", async () => {
+    expect(await handler("https://shop.com/checkout", true).h.handle({ type: "popup_state" })).toMatchObject({
+      value: { kind: "unlocked", cards: [{ id: VISA, last4: "1111", expiry: "04/33", expired: false }], cardsOrigin: "https://shop.com" },
+    });
+    expect((await handler("https://shop.com/", false).h.handle({ type: "popup_state" })).ok).toBe(true);
+    expect(await handler("https://shop.com/", false).h.handle({ type: "popup_state" })).not.toMatchObject({ value: { cards: expect.anything() } });
+    expect(await handler("http://shop.com/", true).h.handle({ type: "popup_state" })).not.toMatchObject({ value: { cards: expect.anything() } });
+  });
+
+  it("fills an offered card into the tab, and reports no card form", async () => {
+    const { h, fills } = handler("https://shop.com/checkout?x=1", true);
+    expect(await h.handle({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).toEqual({ ok: true, value: null });
+    expect(fills).toEqual([[9, "https://shop.com/checkout", VISA]]);
+    expect(await handler("https://shop.com/", true, 0).h.handle({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).toEqual({ ok: false, message: "No card form found on this page." });
+    expect(await h.handle({ type: "popup_fill_card", itemId: "11111111-2222-4333-8444-555555555555", origin: "https://shop.com" })).toMatchObject({ ok: false });
+  });
+
+  it("refuses a fill bound to another origin than the tab's", async () => {
+    const { h, fills } = handler("https://shop.com/checkout", true);
+    expect(await h.handle({ type: "popup_fill_card", itemId: VISA, origin: "https://evil.com" })).toMatchObject({ ok: false });
+    expect(fills).toEqual([]);
+    expect(await h.handle({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).toEqual({ ok: true, value: null });
+  });
+
+  it("parses popup_fill_card strictly", () => {
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com" })).not.toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com/x" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: "x" })).toBeNull();
+    expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com", extra: 1 })).toBeNull();
+  });
+});

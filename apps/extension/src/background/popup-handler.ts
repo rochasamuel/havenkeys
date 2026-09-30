@@ -2,12 +2,19 @@
 // so it can be tested with a fake client.
 
 import { DOCUMENT_ROLES, type IdentityRole } from "@havenkeys/protocol";
-import type { FillPayload } from "../messaging/inline";
+import type { CardRowView, FillPayload } from "../messaging/inline";
 import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
 import { displayHost, pageUrlForRequest } from "../shared/url";
 import { t } from "../i18n";
 import type { AutoRun } from "./inline-handler";
+import { cardRows } from "./card-rows";
+
+/** Card scan and fill for the popup (multi-frame; Rust checks every frame). */
+export interface CardAccess {
+  scan(tabId: number): Promise<boolean>;
+  fill(tabId: number, topUrl: string, itemId: string): Promise<number>;
+}
 
 type Client = Pick<NativeClient, "request">;
 
@@ -65,6 +72,7 @@ export function createPopupHandler(
   fillTab: TabFiller = async () => 0,
   startSso?: SsoStarter,
   scanIdentity?: IdentityScanner,
+  cards?: CardAccess,
 ) {
   const activeTabUrl = async () => (await activeTab())?.url;
 
@@ -103,7 +111,8 @@ export function createPopupHandler(
       const status = await client.request({ type: "status" });
       if (!status.vaultExists) return { kind: "no_vault" };
       if (status.state !== "unlocked") return { kind: "locked" };
-      const url = pageUrlForRequest(await activeTabUrl());
+      const tab = await activeTab();
+      const url = pageUrlForRequest(tab?.url);
       if (!url) return { kind: "unlocked", site: null, matches: [], identity: null };
       const found = await client.request({ type: "find_matches", url });
       let identity: { title: string } | null = null;
@@ -113,7 +122,22 @@ export function createPopupHandler(
       } catch {
         identity = null;
       }
-      return { kind: "unlocked", site: displayHost(url), matches: found.matches, identity };
+      let cardList: CardRowView[] | undefined;
+      if (cards && tab && url.startsWith("https:")) {
+        try {
+          const foundCards = await client.request({ type: "find_cards", url });
+          if (foundCards.cards.length > 0 && (await cards.scan(tab.id))) cardList = cardRows(foundCards.cards, Date.now());
+        } catch {
+          cardList = undefined;
+        }
+      }
+      return {
+        kind: "unlocked",
+        site: displayHost(url),
+        matches: found.matches,
+        identity,
+        ...(cardList ? { cards: cardList, cardsOrigin: new URL(url).origin } : {}),
+      };
     } catch (e) {
       return stateForError(e);
     }
@@ -167,6 +191,22 @@ export function createPopupHandler(
           const r = await client.request({ type: "fill_identity", url, roles, documents: withDocs });
           const filled = await fillTab(tab.id, url, { kind: "identity", values: r.values });
           return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.menu.identityNothing };
+        } catch (e) {
+          return fail(e);
+        }
+      }
+      case "popup_fill_card": {
+        // Tab and URL are read here, never taken from the popup; Rust checks every frame.
+        const tab = await activeTab();
+        const url = pageUrlForRequest(tab?.url);
+        if (!tab || !url || !cards) return { ok: false, message: t.errors.pageNotSupported };
+        // The list was built for one origin; a tab that moved gets nothing.
+        if (req.origin !== new URL(url).origin) return { ok: false, message: t.errors.cardPageChanged };
+        try {
+          const offered = await client.request({ type: "find_cards", url });
+          if (!offered.cards.some((c) => c.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
+          const filled = await cards.fill(tab.id, url, req.itemId);
+          return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.errors.noCardForm };
         } catch (e) {
           return fail(e);
         }

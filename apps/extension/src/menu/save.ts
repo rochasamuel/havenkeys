@@ -3,9 +3,10 @@
 // don't. A new login's name is editable here: the page never sees this
 // frame, so the name is the user's, not the page's.
 
-import { MAX_TITLE_CHARS, SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type InlineRequest, type SaveView } from "../messaging/inline";
+import { MAX_TITLE_CHARS, SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type CardSaveView, type InlineRequest, type SaveView } from "../messaging/inline";
 import { applyDocumentLang, t } from "../i18n";
 import { ask, createClickGuard, tokenFromHash } from "./common";
+import { cardBrandIcon } from "./icons";
 
 const question = document.getElementById("question") as HTMLElement;
 const detail = document.getElementById("detail") as HTMLElement;
@@ -49,6 +50,18 @@ function show(view: SaveView): void {
   detail.classList.toggle("copy", view.username === null);
   if (view.username === null) delete detail.dataset.truncate;
   else detail.dataset.truncate = "";
+  confirmBtn.disabled = false;
+}
+
+function showCard(view: CardSaveView): void {
+  site.textContent = view.site;
+  question.textContent = t.save.cardQuestion;
+  confirmBtn.textContent = t.save.save;
+  titleField.hidden = false;
+  titleInput.value = view.title;
+  detail.classList.add("copy");
+  delete detail.dataset.truncate;
+  detail.replaceChildren(cardBrandIcon(view.card.brand, 20), document.createTextNode(t.menu.cardRow(view.card.last4, view.card.expiry)));
   confirmBtn.disabled = false;
 }
 
@@ -123,9 +136,10 @@ void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
   if (!token) return;
-  const r = await ask<SaveView>({ type: "save_state", token });
-  if (r.ok) show(r.value);
-  else fail(r.message);
+  const r = await ask<SaveView | CardSaveView>({ type: "save_state", token });
+  if (!r.ok) return fail(r.message);
+  if ("card" in r.value) showCard(r.value);
+  else show(r.value);
 }
 
 void init();

@@ -44,6 +44,8 @@ export const en = {
   },
 
   popup: {
+    cardsTitle: "Cards",
+    fillCardTitle: "Fill this card into the page",
     settings: "Settings",
     lock: "Lock HavenKeys",
     unreachable: "The extension could not be reached.",
@@ -134,6 +136,16 @@ export const en = {
   },
 
   menu: {
+    cardFillOn: "Fill on",
+    cardRow: (last4: string | null, expiry: string | null) => [last4 ? `•••• ${last4}` : null, expiry].filter(Boolean).join(" · "),
+    cardExpired: "Expired",
+    cardFallback: "Card",
+    cardsInsecureTitle: "Not a secure page",
+    cardsInsecureBody: "HavenKeys fills cards only on secure (https) pages.",
+    noCardsTitle: "No cards saved",
+    noCardsBody: "Add one in the HavenKeys app.",
+    cardNothing: "Nothing to fill in this form.",
+    cardGone: "This card is no longer in HavenKeys.",
     identityNothing: "Nothing to fill in this form.",
     identityEmptyBody: "Add your details in the HavenKeys app first.",
     identityFallback: "Your identity",
@@ -168,6 +180,7 @@ export const en = {
   },
 
   save: {
+    cardQuestion: "Save this card to HavenKeys?",
     pageTitle: "Save to HavenKeys",
     loading: "Save this login?",
     addQuestion: "Save this login to HavenKeys?",
@@ -225,6 +238,7 @@ export const en = {
 
   /** Messages the background and the frames send to the UI. */
   errors: {
+    noCardForm: "No card form found on this page.",
     unreachable: "HavenKeys could not be reached.",
     generic: "Something went wrong.",
     invalidRequest: "Invalid request.",
@@ -238,6 +252,7 @@ export const en = {
     pageNotSupported: "This page can't use saved logins.",
     noLoginForm: "No login form found on this page.",
     noIdentityForm: "No form for your identity on this page.",
+    cardPageChanged: "The page changed to another site. Open HavenKeys again to fill your card.",
     identityPageChanged: "The page changed to another site. Open HavenKeys again to fill your identity.",
     hostUnavailable: "The HavenKeys native messaging host is not installed or failed to start.",
     timeout: "HavenKeys did not respond.",

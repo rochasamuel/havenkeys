@@ -59,3 +59,21 @@ export const SUBMIT_WORDS = [
   "cadastrar",
   "salvar",
 ];
+
+/** Labels of buttons that pay for a checkout (a typed card is read on these). */
+export const PAY_WORDS = [
+  "pay",
+  "pay now",
+  "place order",
+  "complete order",
+  "complete purchase",
+  "buy now",
+  "confirm payment",
+  "pagar",
+  "finalizar",
+  "finalizar compra",
+  "finalizar pedido",
+  "comprar",
+  "confirmar pagamento",
+  "concluir compra",
+];

@@ -175,6 +175,7 @@ Each field gets a score per role. No single heuristic decides.
 | Username-only step on a form whose intent is login, for a field with any username or document word | +30 | |
 | Negative words (search, coupon, newsletter, address, name…) | −80 | 0 for postal/zip/promo/CVV… |
 | Card or address `autocomplete` tokens | disqualifies | disqualifies |
+| Strong card claims (`cc-*` autocomplete, card-number words or shape, expiry words, cvv/cvc/csc words) | refused; the card classifier owns them (see Cards) | refused; same |
 
 Keywords are compared as whole words after normalization (lowercase, accents
 removed, camelCase and punctuation split): `loginEmail` → `login email`.
@@ -1038,7 +1039,9 @@ no role (neither `company` nor `street`: whose street it is is ambiguous).
 "Estado civil" and marital status are negatives.
 
 Never an identity field: password and one-time-code fields, **card fields**
-(`cc-*` autocomplete; the words cc, card, cartao, cvv, cvc), words that mean
+(the strong card claims of the card classifier: `cc-*` autocomplete, card
+number and expiry words, cvv/cvc/csc; the ambiguous phrases "security code"
+and "titular" refuse a field only inside a card group, see Cards), words that mean
 something other than the person's data (order and account numbers, tracking,
 coupon, quantity, "nome da mae", "titular" and holder), search boxes
 (`type=search`, `role=search`), input types other than text, email, tel,
@@ -1144,7 +1147,161 @@ disabled while a request is in flight.
   §20). The documents step names the documents and the site.
 * The classifier is heuristic. A field with an unusual label may be skipped
   or, rarely, misclassified; a select with unusual option text is skipped.
-* Card data is not stored in the identity and card fields are never filled.
+* Card data is not stored in the identity; cards are filled only through the
+  card flow (Cards, below).
+
+## Cards
+
+Spec: `docs/superpowers/specs/2026-09-29-card-autofill-design.md`. Trust
+rules: `security-model.md` §21. Classifier: `autofill/card-kind.ts` (one
+field) and `autofill/card.ts` (groups); writing: `autofill/card-fill.ts`.
+The login and identity classifiers refuse strong card claims; the card
+classifier owns them, so a card field only ever gets the card menu. A card is
+not bound to a saved website: it is offered on any https checkout.
+
+### Signals
+
+Roles are `cardholderName`, `cardholderGivenName`, `cardholderFamilyName`,
+`number`, `verificationNumber`, `expiryMonth`, `expiryYear` and `brand`, plus
+`expiry` for month and year in one field.
+
+| Signal | Kind |
+|---|---|
+| `autocomplete` (last token; `section-*`, `shipping`, `billing` ignored) | `cc-name`, `cc-given-name`, `cc-family-name`, `cc-number`, `cc-csc`, `cc-exp`, `cc-exp-month`, `cc-exp-year`, `cc-type`: confidence 1 |
+| Words in `name`/`id` (0.7) or placeholder, aria-label, title, label (0.6) | English and Portuguese lists per kind: card number, cvv/cvc/csc/cvv2, name on card / nome impresso, expiry / validade / vencimento, "mm/aa", bandeira, and so on. First kind that hits wins |
+
+Rules around the words:
+
+* `autocomplete="one-time-code"`, search boxes (`role=search`), and negative
+  wording (gift card, coupon, loyalty, promo, and the installment words
+  parcela(s), installment(s), vezes, quantidade) are never card fields. An
+  installment select ("Parcelas 1x-12x") is never classified.
+* A password-type input can only be the verification number; a select can
+  only be month, year or brand.
+* A cardholder-name field that also asks for a CPF, document, birth date,
+  email or phone is not a name field ("CPF do titular").
+* An expiry word next to day or birth words ("DD/MM/AA", "nascimento") is not
+  an expiry.
+* **Ambiguous phrases** ("security code", "codigo de seguranca", "card code",
+  "cid", "titular", "cardholder") count only inside a **strong** group: one
+  that already has a number field, a CVV-word field or an expiry field. So a
+  2FA "Security code" box stays an OTP field.
+* **Weak words** count only in a strong group: month words (`month`, `mes`,
+  `mm`) give the month, year words (`year`, `ano`, `yy`, `aa`) the year, and a
+  field with `maxlength` 3 or 4 and a code word (`code`, `codigo`, `cod`) the
+  verification number, all at confidence 0.5. A select with exactly 12 month
+  options (plus at most one placeholder) is a month select; one with at least
+  10 consecutive years is a year select.
+* **Split numbers**: 3 to 5 adjacent inputs of `maxlength` 4 to 6 whose lengths
+  sum to 13 to 19 are one number, each field getting its slice.
+
+### Qualifying groups
+
+A group is the form around the field (`groupRoot`), at most 60 inputs. It
+qualifies when it has a number field, or a CVV with an expiry (or month), or
+(a processor's frame, where each iframe holds one field) every field it has
+is named by `cc-*` autocomplete alone. Fields must be visible (the
+identity's strict visibility test), enabled and editable.
+
+### The frames of one pick
+
+1. The user picks a card in the menu or popup. The background asks every
+   frame of the tab for its card fields' roles (`bg_card_roles`, 300 ms each).
+2. Each frame must be eligible: the top frame; else a frame that reported
+   its ancestry (`content/ancestry.ts`) and passes the chain rule of
+   `security-model.md` §21 (Chromium: every ancestor origin is the top page's
+   or Rust-accepted; Firefox: a processor frame only as a direct child of
+   the top page; a missing report gets nothing). A card frame nested under a
+   cross-site non-processor frame is refused.
+3. Each extra frame is vetted with one `find_cards` lookup (at most 12 per
+   pick); frames Rust denies are dropped.
+4. The clicked frame and up to 7 others go in **one** `fill_card`. Rust
+   denies the whole request if any frame is not https and same-site or a
+   processor.
+5. The background delivers each frame's values to that frame (by
+   `documentId` where the browser has one). The content script re-classifies
+   its fields and writes, then drops the message.
+
+### The hosted menu
+
+A processor's card iframe can be 40 px tall, so a menu drawn in it would be
+clipped. The top frame draws the menu over the iframe instead
+(`bg_host_menu`). It finds the iframe with `runtime.getFrameId` where the
+browser has it (Firefox). Otherwise (Chromium) it takes the iframes whose
+`src` equals the frame's full URL (split Stripe Elements, Adyen secured
+fields and Braintree hosted fields load one file per field and differ only
+in query or fragment), or, if none, those whose `src` without query and
+fragment equals it. One match: that one. Several: the one whose client size
+is the frame's reported viewport (within 2 px), if exactly one is. Otherwise
+the menu is drawn in the frame. The full URL comes from the browser's sender
+data with credentials removed and is sent only to the tab's top frame, never
+to the desktop. The pick still comes
+from an `isTrusted` click in the menu's own frame.
+
+### The menu and the popup
+
+One row per card: brand logo (on a white tile, so dark marks show in dark
+mode), title, `•••• 7609 · 11/33`, expired cards last and dimmed but
+selectable; the header says "Fill on *site*". On an http page the menu says
+HavenKeys fills cards only on secure pages, with no rows. Locked: the usual
+unlock row. No cards: an informational row. In a cross-site frame that is not
+a processor, no menu. The toolbar popup lists the cards of an https tab that
+has card fields, each with its own Fill button, bound to the origin the list
+was made for.
+
+### Writing rules (`autofill/card-fill.ts`)
+
+* Only **empty** fields, fields holding a value the site pre-selected or a
+  placeholder option, or fields whose value HavenKeys wrote (compared by a
+  fingerprint, so the plaintext is not kept).
+* Each field is re-checked just before writing. `<input>`: the native value
+  setter, then `input` and `change` events (the React value tracker as in
+  `identity-fill.ts`). Values never go in attributes and are never logged.
+* **Number**: digits only, grouped with spaces when the placeholder shows
+  groups (Amex 4-6-5); a slice field gets its part.
+* **Expiry in one field**: the format from the placeholder or `pattern`
+  (`MM/YY`, `MM/YYYY`, `MM / YY`, `MM-YY`, `MMYY`, `AA` for the year); else by
+  `maxlength` (4 `MMYY`, 5 `MM/YY`, 7 `MM/YYYY`); else `MM/YY`. The month is
+  always padded.
+* **Month** text: `11`, padded (`03`) when `maxlength` is 2 or the
+  placeholder shows `MM`. A month select matches option value or text
+  (`3`, `03`, English and Portuguese names and three-letter forms). **Year**:
+  2 or 4 digits by `maxlength`/placeholder; a select matches either.
+* **Brand select**: the option matching the brand id, its display name or a
+  common code (`VI`, `MC`, `AMEX`, `AX`, `ELO`, `HC`, `DC`, `DI`, `JCB`,
+  `CUP`), ignoring case and accents. A select with no matching option is
+  skipped; disabled and placeholder options are never chosen.
+* **CVV**: only when its length fits `maxlength`; otherwise left empty, never
+  cut.
+* **Names**: whole, or given and family name.
+* Nothing is submitted.
+
+### The typed-card reader and the save prompt
+
+On a form submit in the **top frame** only, the reader looks for a card the
+user typed: the digits in the number field(s) must equal what the user typed
+(so a filled number or one a page script wrote never counts, and a site's mask
+does not hide a typed one), pass the check digit, and come with an expiry.
+The background compares the last four digits and expiry with `find_cards`; a
+match shows nothing. Otherwise the prompt reuses the save-login frame: "Save
+card to HavenKeys?", the brand logo (display only, chosen from the number's
+prefix by a copy of Rust's table kept equal by a parity test), `•••• 7609`,
+the expiry and a title field (default: the brand name). The number is not sent
+to Rust before **Save**, which sends `save_card`; Rust detects the brand. The
+pending card is held in the background's memory for 2 minutes and dropped on
+dismiss, lock and tab close (not on navigation, since checkouts navigate on
+submit). Cards typed in processor iframes are not offered.
+
+### Limitations
+
+* Heuristic classification: a field with an unusual label or a select with
+  unusual option text is skipped; a CVV-only re-entry field labelled only
+  "Security code" (no other card field) is not detected.
+* Firefox frames have no `documentId`, so a fill there is pinned by the
+  origin check only (`security-model.md` §21).
+* Nested processor frames on Firefox are filled only as direct children of
+  the top page.
+* A phishing checkout that the user picks a card on receives that card.
 
 ## Permissions and injection
 

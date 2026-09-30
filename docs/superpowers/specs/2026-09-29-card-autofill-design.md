@@ -1,6 +1,6 @@
 # Filling checkouts from a Card — Design
 
-Status: draft, 2026-09-29.
+Status: accepted, 2026-09-29.
 Builds on `2026-09-29-card-item-design.md` (sub-project 1, the Card item).
 Amends CLAUDE.md §25 (a note, like the earlier ones) and the extension's
 trust model in `docs/security-model.md`, which today says card fields are
@@ -322,8 +322,10 @@ they take precedence over the sections above.
 2. Stripe also serves card frames from subdomains of `js.stripe.com`; the
    list has a label-safe "subdomains of" entry for it.
 3. A menu opened inside a processor iframe is drawn by the top frame over
-   that iframe (`bg_host_menu`, located with `runtime.getFrameId`), falling
-   back to the frame itself; a 40-px iframe would clip it.
+   that iframe (`bg_host_menu`, located with `runtime.getFrameId` where it
+   exists, which is Firefox only; elsewhere by the one iframe whose `src`
+   without query and fragment equals the frame's URL), falling back to the
+   frame itself; a 40-px iframe would clip it.
 4. Before `fill_card`, the background runs a `find_cards` lookup for each
    extra frame and drops the ones Rust would deny, so an unrelated frame
    with card-like inputs does not deny the whole fill.

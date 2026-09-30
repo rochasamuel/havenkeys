@@ -130,6 +130,9 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `find_identity` | `url`, `topUrl`? | yes | lookup |
 | `fill_identity` | `url`, `topUrl`?, `roles` (1-40 known roles, no duplicates), `documents` (bool) | yes | secret |
 | `open_identity` | `url`, `topUrl`? | yes | secret |
+| `find_cards` | `url`, `topUrl`? | yes | lookup |
+| `fill_card` | `itemId` (UUID), `topUrl`, `frames` (1-8 of `{ url, roles }`; each frame 1-8 known roles, no duplicates) | yes | secret |
+| `save_card` | `url`, `topUrl`?, `number`, `verificationNumber`?, `expiry`? (`MM/YY`), `cardholderName`?, `title`? | yes | secret; a server write |
 | `start_sso` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"`), `account` (string or null) | yes | secret |
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
@@ -170,6 +173,40 @@ exists (`not_found` otherwise). Document roles (`cpf`, `rg`, `passport`,
 page is https, and are otherwise silently left out. Only the requested roles
 are returned. `find_identity` stops after the existence check and returns the
 title, email and role names; `open_identity` stops after the URL check.
+
+**Card requests.** Like the Identity, a Card has no saved website
+(`security-model.md` §21 explains why and what protects it), so these three
+are not bound to a site the way `fill_item` is. `topUrl` on `find_cards` is
+present only when `url` is an iframe; on `fill_card` it is required.
+
+* `find_cards` returns `{ insecure, cards }`: at most 50 cards, each
+  `{ id, title, brand, last4, expiry }` (overview data only; `last4` and
+  `expiry` may be null). When the top page is not https, `insecure` is true
+  and `cards` is empty. The extension does at most 12 of these lookups per
+  pick, to vet frames before a fill.
+* `fill_card` returns `{ frames: [ { values: [ { role, value } ] } ] }`, one
+  entry per requested frame, in the same order, holding values only for the
+  roles that frame asked for and the card has. Each value is at most 1024
+  bytes. Roles: `cardholderName`, `cardholderGivenName`,
+  `cardholderFamilyName`, `number`, `verificationNumber`, `expiryMonth`
+  (`"1"` to `"12"`, unpadded), `expiryYear` (four digits), `brand` (the brand
+  id). An unknown role, a duplicate, 0 or more than 8 roles per frame, or 0
+  or more than 8 frames is a malformed message. The frame URLs must fit the
+  request size limit like any other field.
+* `save_card` stages a create through the normal write path and returns the
+  new item ID. The number must pass the check digit and be at most 64 bytes;
+  the verification number at most 16; `title` follows the `save_login`
+  limit. Offline it fails with `offline`.
+
+What Rust checks (`VaultService::card_for_page`, `card_page.rs`): the vault
+is unlocked and browser integration is on (the bridge's `require_enabled`);
+`topUrl` and every frame URL are https, else `denied`; each frame is
+same-site with the top page or has an origin on the processor list (§5),
+else the **whole** `fill_card` is `denied` (one bad frame denies the
+request); `itemId` names a Card, else `not_found` (the same answer for a
+missing item and another item type). Only the requested roles are returned.
+`find_cards` stops after the URL checks. `save_card` requires its frame to be
+same-site with the top page (a processor frame is not enough).
 
 `conditional` on `check_passkey_create` and `passkey_create` marks the
 site's automatic passkey upgrade (`create()` with `mediation:
@@ -214,6 +251,9 @@ carries its account when the item has no username of its own.
 {"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
 {"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
 {"v":1,"id":10,"result":{"type":"open_item"}}
+{"v":1,"id":22,"result":{"type":"find_cards","insecure":false,"cards":[{"id":"…","title":"Visa","brand":"visa","last4":"4242","expiry":"11/33"}]}}
+{"v":1,"id":23,"result":{"type":"fill_card","frames":[{"values":[{"role":"number","value":"…"},{"role":"expiryMonth","value":"11"}]}]}}
+{"v":1,"id":24,"result":{"type":"save_card","itemId":"…"}}
 {"v":1,"id":19,"result":{"type":"start_sso","provider":"google","account":"user@gmail.com","providerOrigins":["https://accounts.google.com"],"autoChoose":true}}
 {"v":1,"id":20,"result":{"type":"check_sso","action":"add","itemId":null,"accounts":["user@gmail.com"]}}
 {"v":1,"id":21,"result":{"type":"save_sso","itemId":"…"}}
@@ -308,6 +348,20 @@ For every request the bridge and core check, in this order:
    site, and a login with no TOTP all return the same `denied`, so IDs cannot
    be probed. Passkey requests are bound by the relying-party ID instead
    ([Passkeys](#passkeys)).
+   Card requests are the exception to origin binding: a Card is offered on
+   any https page, and the check is instead https, then same-site with the
+   top page or a processor frame from the fixed list in
+   `PAYMENT_FRAME_ORIGINS` (`crates/havenkeys-core/src/card_page.rs`). The
+   list, each entry confirmed from the processor's own documentation or SDK
+   source: Stripe (`https://js.stripe.com` and its subdomains, matched on a
+   whole label, so `js.stripe.com.evil.com` and `evil-js.stripe.com` are
+   denied); Adyen live checkout-shopper (`checkoutshopper-live`, `-live-us`,
+   `-live-au`, `-live-apse`, `-live-in`, `-live-nea` on `adyen.com`);
+   Braintree Hosted Fields (`https://assets.braintreegateway.com`); Mercado
+   Pago Secure Fields (`https://secure-fields.mercadopago.com`,
+   `https://api-static.mercadopago.com`). A processor origin must have the
+   default port. No test or sandbox origins. Adding an origin is a code
+   change with a test.
 6. **Secret minimization:** `find_matches` returns ID, title, username, a
    has-TOTP flag and the match strength. `fill_item` returns the username and
    password only. `get_totp` returns the current code only; the secret never

@@ -15,5 +15,5 @@
     "noEmit": true
   },
   "include": ["src"],
-  "exclude": ["src/sso-parity.test.ts", "src/identity-parity.test.ts"]
+  "exclude": ["src/sso-parity.test.ts", "src/identity-parity.test.ts", "src/card-parity.test.ts"]
 }

@@ -4,9 +4,9 @@
 
 import { SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
-import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
+import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
-import { providerIcon } from "./icons";
+import { cardBrandIcon, providerIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -159,6 +159,16 @@ function identityRow(t: string, site: string, v: IdentityRowView): HTMLElement {
   );
 }
 
+function cardRow(t: string, c: CardRowView): HTMLButtonElement {
+  const detail = [msg.menu.cardRow(c.last4, c.expiry), c.expired ? msg.menu.cardExpired : ""].filter(Boolean).join(" · ");
+  const b = row(cardBrandIcon(c.brand), c.title || msg.menu.cardFallback, detail, () => pick({ type: "menu_pick_card", token: t, itemId: c.id }), {
+    title: c.title === "",
+    detail: true,
+  });
+  if (c.expired) b.classList.add("expired");
+  return b;
+}
+
 /** A row that only informs: no button, not in the arrow-key order. */
 function hintNote(title: string, detail: string): HTMLElement {
   return h(
@@ -168,12 +178,61 @@ function hintNote(title: string, detail: string): HTMLElement {
   );
 }
 
+/** Characters of the host shown at most, the leading "…" included. */
+const DEST_HOST_MAX = 32;
+
+/**
+ * The host as shown under "Fill on": whole when short, else its END (the
+ * registrable domain, the part a look-alike cannot copy) after a leading
+ * "…", cut at a label boundary when one falls inside the kept tail.
+ * `shop.com.evil.xyz` and `shop.com` must never read the same.
+ */
+function hostTail(host: string, max = DEST_HOST_MAX): string {
+  if (host.length <= max) return host;
+  let tail = host.slice(host.length - (max - 1));
+  // Snap to a label only while that keeps most of the tail ("…xyz" says little).
+  const dot = tail.indexOf(".");
+  if (dot >= 0 && tail.length - dot - 1 >= max / 2) tail = tail.slice(dot + 1);
+  return `…${tail}`;
+}
+
+/**
+ * The card menu's header: "Fill on" beside the brand, the host on its own
+ * line below. The CSS also clips that line from the start (rtl box, the
+ * host isolated as ltr), so its end stays visible at any width.
+ */
+function showDestination(host: string): void {
+  site.textContent = msg.menu.cardFillOn;
+  const head = card.firstElementChild as HTMLElement | null;
+  if (!head) return;
+  head.classList.add("dest");
+  const text = h("bdi", { text: hostTail(host) });
+  text.dir = "ltr";
+  const line = userData(h("span", { className: "dest-host" }, text));
+  line.title = host;
+  head.querySelector(".dest-host")?.remove();
+  head.append(line);
+}
+
 function render(t: string, view: MenuView): void {
   if (view.state === "locked") {
     main.replaceChildren(message(msg.menu.lockedTitle, msg.menu.lockedBody));
     return;
   }
+  if (view.state === "cards") {
+    // The page the card goes to, named once in the header (spec §5.2).
+    showDestination(view.site);
+    if (view.insecure) main.replaceChildren(message(msg.menu.cardsInsecureTitle, msg.menu.cardsInsecureBody));
+    else if (view.cards.length === 0) main.replaceChildren(hintNote(msg.menu.noCardsTitle, msg.menu.noCardsBody));
+    else main.replaceChildren(...view.cards.map((c) => cardRow(t, c)));
+    return;
+  }
   site.textContent = view.site;
+  // Card menus are always the "cards" state; a "ready" view never carries them.
+  if (view.kind === "card") {
+    main.replaceChildren(message(msg.menu.unavailable, msg.menu.cardNothing));
+    return;
+  }
   if (view.kind === "new_password") {
     main.replaceChildren(
       row(sparkle(), msg.menu.generateTitle, msg.menu.generateBody, () => pick({ type: "menu_generate", token: t }), { title: true, detail: true }),

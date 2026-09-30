@@ -7,6 +7,7 @@
 // same as a small one (threat-model attack 7). The DOM is untrusted: its
 // strings are only compared against keyword lists.
 
+import { cardKindOf } from "./card-kind";
 import {
   classifyPasswords,
   confidenceOf,
@@ -191,7 +192,7 @@ function splitOtpRun(inputs: HTMLInputElement[]): Set<HTMLInputElement> {
 /** Classify every usable input of the group around `root`. */
 export function classifyGroup(root: ParentNode, env: Env): LoginGroup {
   const inputs = inputsIn(root)
-    .filter((el) => isFillable(el, env))
+    .filter((el) => isFillable(el, env) && !cardKindOf(el, false))
     .slice(0, MAX_GROUP_INPUTS);
   const { primary, secondary } = intentText(root, env);
   const intent = groupIntent(primary, secondary);

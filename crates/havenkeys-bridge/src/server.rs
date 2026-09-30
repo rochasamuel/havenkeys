@@ -156,7 +156,8 @@ impl Bridge {
             | Request::FindPasskeys { .. }
             | Request::CheckPasskeyCreate { .. }
             | Request::PasskeyStatus { .. }
-            | Request::FindIdentity { .. } => Some(RequestClass::Lookup),
+            | Request::FindIdentity { .. }
+            | Request::FindCards { .. } => Some(RequestClass::Lookup),
             Request::FillItem { .. }
             | Request::GetTotp { .. }
             | Request::CheckLogin { .. }
@@ -171,7 +172,10 @@ impl Bridge {
             // sites have logins.
             | Request::StartSso { .. }
             | Request::CheckSso { .. }
-            | Request::SaveSso { .. } => Some(RequestClass::Secret),
+            | Request::SaveSso { .. }
+            // `fill_card` returns a card; `save_card` writes one.
+            | Request::FillCard { .. }
+            | Request::SaveCard { .. } => Some(RequestClass::Secret),
         };
         if let Some(class) = class {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
@@ -207,6 +211,10 @@ impl Bridge {
                 let item_id = staged.item_id;
                 (self.inner.save)(staged.write).map(|()| ResultBody::SaveSso { item_id })
             }
+            Ok(Dispatched::SaveCard(staged)) => {
+                let item_id = staged.item_id;
+                (self.inner.save)(staged.write).map(|()| ResultBody::SaveCard { item_id })
+            }
             Ok(Dispatched::CreatePasskey { write, result }) => {
                 (self.inner.save)(write).map(|()| result)
             }
@@ -234,7 +242,10 @@ impl Bridge {
         };
         if matches!(
             req,
-            Request::SaveLogin { .. } | Request::PasskeyCreate { .. } | Request::SaveSso { .. }
+            Request::SaveLogin { .. }
+                | Request::PasskeyCreate { .. }
+                | Request::SaveSso { .. }
+                | Request::SaveCard { .. }
         ) && result.is_ok()
         {
             (self.inner.on_items_changed)();

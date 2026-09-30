@@ -12,6 +12,8 @@ export const ptBR: Messages = {
   },
 
   popup: {
+    cardsTitle: "Cartões",
+    fillCardTitle: "Preencher este cartão na página",
     settings: "Configurações",
     lock: "Bloquear o HavenKeys",
     unreachable: "Não foi possível acessar a extensão.",
@@ -102,6 +104,16 @@ export const ptBR: Messages = {
   },
 
   menu: {
+    cardFillOn: "Preencher em",
+    cardRow: (last4: string | null, expiry: string | null) => [last4 ? `•••• ${last4}` : null, expiry].filter(Boolean).join(" · "),
+    cardExpired: "Vencido",
+    cardFallback: "Cartão",
+    cardsInsecureTitle: "Página não segura",
+    cardsInsecureBody: "O HavenKeys só preenche cartões em páginas seguras (https).",
+    noCardsTitle: "Nenhum cartão salvo",
+    noCardsBody: "Adicione um no app HavenKeys.",
+    cardNothing: "Nada para preencher neste formulário.",
+    cardGone: "Este cartão não está mais no HavenKeys.",
     identityNothing: "Nada a preencher neste formulário.",
     identityEmptyBody: "Adicione seus dados no app HavenKeys primeiro.",
     identityFallback: "Sua identidade",
@@ -136,6 +148,7 @@ export const ptBR: Messages = {
   },
 
   save: {
+    cardQuestion: "Salvar este cartão no HavenKeys?",
     pageTitle: "Salvar no HavenKeys",
     loading: "Salvar este login?",
     addQuestion: "Salvar este login no HavenKeys?",
@@ -192,6 +205,7 @@ export const ptBR: Messages = {
   },
 
   errors: {
+    noCardForm: "Nenhum formulário de cartão nesta página.",
     unreachable: "Não foi possível acessar o HavenKeys.",
     generic: "Algo deu errado.",
     invalidRequest: "Solicitação inválida.",
@@ -205,6 +219,7 @@ export const ptBR: Messages = {
     pageNotSupported: "Esta página não pode usar logins salvos.",
     noLoginForm: "Nenhum formulário de login encontrado nesta página.",
     noIdentityForm: "Nenhum formulário para sua identidade nesta página.",
+    cardPageChanged: "A página mudou para outro site. Abra o HavenKeys de novo para preencher seu cartão.",
     identityPageChanged: "A página mudou para outro site. Abra o HavenKeys de novo para preencher sua identidade.",
     hostUnavailable: "O host de mensagens nativas do HavenKeys não está instalado ou não conseguiu iniciar.",
     timeout: "O HavenKeys não respondeu.",

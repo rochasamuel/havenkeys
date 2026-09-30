@@ -2,9 +2,12 @@
 //! (`VaultService::{find_matches, fill_for_page, totp_for_page, check_login,
 //! save_login, find_passkeys, passkey_assert, check_passkey_create,
 //! stage_passkey_create, has_passkey_for_page, start_sso_for_page, check_sso,
-//! stage_save_sso}`); this layer adds the integration switch and maps types,
+//! stage_save_sso, cards_for_page, card_values_for_page,
+//! stage_save_card}`); this layer adds the integration switch and maps types,
 //! and never widens what the core returns.
 
+use havenkeys_core::card::{CardBrand, CardExpiry};
+use havenkeys_core::card_page::{CardFrame as CoreCardFrame, CardRole as CoreCardRole, NewCard};
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::identity::FillRole;
 use havenkeys_core::origin::MatchStrength as CoreStrength;
@@ -15,9 +18,9 @@ use havenkeys_core::vault::{
 };
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
-    ErrorCode, IdentityRole, IdentityValue, LockState, Match, MatchStrength, PasskeyCandidate,
-    PasskeyMatch, Request, ResultBody, SaveAction, SsoProvider as WireProvider, UpgradeHint,
-    WireSecret, MAX_MATCHES,
+    CardBrandId, CardFrameValues, CardMatch, CardRole, CardValue, ErrorCode, IdentityRole,
+    IdentityValue, LockState, Match, MatchStrength, PasskeyCandidate, PasskeyMatch, Request,
+    ResultBody, SaveAction, SsoProvider as WireProvider, UpgradeHint, WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -152,6 +155,48 @@ fn core_provider(p: WireProvider) -> CoreProvider {
     }
 }
 
+fn core_card_role(r: CardRole) -> CoreCardRole {
+    match r {
+        CardRole::CardholderName => CoreCardRole::CardholderName,
+        CardRole::CardholderGivenName => CoreCardRole::CardholderGivenName,
+        CardRole::CardholderFamilyName => CoreCardRole::CardholderFamilyName,
+        CardRole::Number => CoreCardRole::Number,
+        CardRole::VerificationNumber => CoreCardRole::VerificationNumber,
+        CardRole::ExpiryMonth => CoreCardRole::ExpiryMonth,
+        CardRole::ExpiryYear => CoreCardRole::ExpiryYear,
+        CardRole::Brand => CoreCardRole::Brand,
+    }
+}
+
+fn wire_card_role(r: CoreCardRole) -> CardRole {
+    match r {
+        CoreCardRole::CardholderName => CardRole::CardholderName,
+        CoreCardRole::CardholderGivenName => CardRole::CardholderGivenName,
+        CoreCardRole::CardholderFamilyName => CardRole::CardholderFamilyName,
+        CoreCardRole::Number => CardRole::Number,
+        CoreCardRole::VerificationNumber => CardRole::VerificationNumber,
+        CoreCardRole::ExpiryMonth => CardRole::ExpiryMonth,
+        CoreCardRole::ExpiryYear => CardRole::ExpiryYear,
+        CoreCardRole::Brand => CardRole::Brand,
+    }
+}
+
+fn wire_brand(b: CardBrand) -> CardBrandId {
+    match b {
+        CardBrand::Visa => CardBrandId::Visa,
+        CardBrand::Mastercard => CardBrandId::Mastercard,
+        CardBrand::Amex => CardBrandId::Amex,
+        CardBrand::Elo => CardBrandId::Elo,
+        CardBrand::Hipercard => CardBrandId::Hipercard,
+        CardBrand::Diners => CardBrandId::Diners,
+        CardBrand::Discover => CardBrandId::Discover,
+        CardBrand::Jcb => CardBrandId::Jcb,
+        CardBrand::Unionpay => CardBrandId::Unionpay,
+        CardBrand::Maestro => CardBrandId::Maestro,
+        CardBrand::Other => CardBrandId::Other,
+    }
+}
+
 fn now_ms(unix_seconds: u64) -> i64 {
     i64::try_from(unix_seconds.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
@@ -191,6 +236,9 @@ pub enum Dispatched {
     /// The identity may be opened in the desktop; the caller runs the
     /// open-item hook once the vault lock is released.
     OpenIdentity(Uuid),
+    /// A card saved from a checkout. Same reason as `Save`: the write
+    /// reaches the server before the item ID is returned.
+    SaveCard(StagedSave),
 }
 
 /// Answer a request. `lock` is handled by the caller, which must not hold
@@ -530,6 +578,94 @@ pub fn dispatch(
                 .identity_id_for_page(url, top_url.as_deref())
                 .map_err(code)?;
             Ok(Dispatched::OpenIdentity(id))
+        }
+        Request::FindCards { url, top_url } => {
+            require_enabled(v)?;
+            let list = v.cards_for_page(url, top_url.as_deref()).map_err(code)?;
+            let cards = list
+                .cards
+                .into_iter()
+                .take(MAX_MATCHES)
+                .map(|c| CardMatch {
+                    id: c.id,
+                    title: c.title,
+                    brand: c.brand.map(wire_brand),
+                    last4: c.last4,
+                    expiry: c.expiry.map(CardExpiry::to_wire),
+                })
+                .collect();
+            Ok(Dispatched::Done(ResultBody::FindCards {
+                insecure: list.insecure,
+                cards,
+            }))
+        }
+        Request::FillCard {
+            item_id,
+            top_url,
+            frames,
+        } => {
+            require_enabled(v)?;
+            let roles: Vec<Vec<CoreCardRole>> = frames
+                .iter()
+                .map(|f| f.roles.iter().copied().map(core_card_role).collect())
+                .collect();
+            let core_frames: Vec<CoreCardFrame<'_>> = frames
+                .iter()
+                .zip(&roles)
+                .map(|(f, r)| CoreCardFrame {
+                    url: &f.url,
+                    roles: r,
+                })
+                .collect();
+            let per_frame = v
+                .card_values_for_page(item_id, top_url, &core_frames)
+                .map_err(code)?;
+            // One entry per requested frame, in order; the extension pairs
+            // them by position.
+            if per_frame.len() != frames.len() {
+                return Err(ErrorCode::Internal);
+            }
+            let values = per_frame
+                .into_iter()
+                .map(|frame| CardFrameValues {
+                    values: frame
+                        .into_iter()
+                        .map(|(role, value)| CardValue {
+                            role: wire_card_role(role),
+                            value: WireSecret::new(value.expose().to_owned()),
+                        })
+                        .collect(),
+                })
+                .collect();
+            Ok(Dispatched::Done(ResultBody::FillCard { frames: values }))
+        }
+        Request::SaveCard {
+            url,
+            top_url,
+            title,
+            cardholder_name,
+            number,
+            verification_number,
+            expiry,
+        } => {
+            require_enabled(v)?;
+            let staged = v
+                .stage_save_card(
+                    url,
+                    top_url.as_deref(),
+                    NewCard {
+                        title: title.as_deref(),
+                        cardholder_name: cardholder_name.as_deref(),
+                        number: SecretString::new(number.expose().to_owned()),
+                        verification_number: verification_number
+                            .as_ref()
+                            .map(|c| SecretString::new(c.expose().to_owned())),
+                        expiry: expiry.as_deref(),
+                    },
+                    now_ms(unix_seconds),
+                )
+                .map_err(code)?;
+            Ok(Dispatched::SaveCard(staged))
         }
         Request::StartSso {
             item_id,

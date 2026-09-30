@@ -20,7 +20,7 @@ use uuid::Uuid;
 pub const MAX_SUMMARY_TITLE_BYTES: usize = 4 * 256;
 
 /// `s` cut to at most `max` bytes, on a character boundary.
-fn truncate_bytes(mut s: String, max: usize) -> String {
+pub(crate) fn truncate_bytes(mut s: String, max: usize) -> String {
     if s.len() > max {
         let mut end = max;
         while !s.is_char_boundary(end) {

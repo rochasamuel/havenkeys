@@ -62,6 +62,17 @@ pub const MAX_IDENTITY_ROLES: usize = 40;
 /// Largest identity value returned (the core's longest field is 4096 characters of a custom value; filled roles are far shorter).
 pub const MAX_IDENTITY_VALUE_BYTES: usize = 4096;
 
+/// Frames one fill_card may cover (Stripe puts each card field in its own frame).
+pub const MAX_CARD_FRAMES: usize = 8;
+/// Roles one frame of a fill_card may ask for (there are eight).
+pub const MAX_CARD_ROLES: usize = 8;
+/// Largest card value returned (a cardholder name of 256 characters).
+pub const MAX_CARD_VALUE_BYTES: usize = 4 * 256;
+/// Largest card number accepted in save_card, spaces and dashes included.
+pub const MAX_CARD_NUMBER_BYTES: usize = 64;
+/// Largest verification number accepted in save_card.
+pub const MAX_CARD_CODE_BYTES: usize = 16;
+
 /// Credential IDs HavenKeys creates, and the only length it accepts.
 pub const CREDENTIAL_ID_BYTES: usize = 16;
 /// WebAuthn challenge bounds, in bytes.

@@ -222,3 +222,52 @@ describe("identity results", () => {
     for (const m of bad) expect(parseIncoming(m), JSON.stringify(m)).toBeNull();
   });
 });
+
+import { brandOf, luhnOk } from "./card";
+
+describe("card helpers", () => {
+  it("brandOf follows the table order: Elo and Hipercard before the wide ranges", () => {
+    expect(brandOf("4111111111111111")).toBe("visa");
+    expect(brandOf("5555555555554444")).toBe("mastercard");
+    expect(brandOf("2221000000000009")).toBe("mastercard");
+    expect(brandOf("378282246310005")).toBe("amex");
+    expect(brandOf("6062825624254001")).toBe("hipercard");
+    expect(brandOf("4011780000000000")).toBe("elo");
+    expect(brandOf("6362970000457013")).toBe("elo");
+    expect(brandOf("9999999999999999")).toBeNull();
+    expect(brandOf("41x1")).toBeNull();
+  });
+  it("luhnOk accepts valid numbers only", () => {
+    expect(luhnOk("4111111111111111")).toBe(true);
+    expect(luhnOk("4111111111111112")).toBe(false);
+    expect(luhnOk("4111")).toBe(false);
+  });
+});
+
+describe("card results", () => {
+  const id = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+  const result = (r: unknown) => parseIncoming({ v: 1, id: 1, result: r });
+  it("accepts exact card results", () => {
+    expect(result({ type: "find_cards", insecure: false, cards: [{ id, title: "Visa", brand: "visa", last4: "1111", expiry: "2033-11" }] })).not.toBeNull();
+    expect(result({ type: "find_cards", insecure: true, cards: [] })).not.toBeNull();
+    expect(result({ type: "fill_card", frames: [{ values: [{ role: "number", value: "4111111111111111" }] }, { values: [] }] })).not.toBeNull();
+    expect(result({ type: "save_card", itemId: id })).not.toBeNull();
+  });
+  it("rejects anything else", () => {
+    for (const bad of [
+      { type: "find_cards", insecure: true, cards: [{ id, title: "x", brand: null, last4: null, expiry: null }] },
+      { type: "find_cards", insecure: false, cards: [{ id, title: "x", brand: "nubank", last4: null, expiry: null }] },
+      { type: "find_cards", insecure: false, cards: [{ id, title: "x", brand: null, last4: "123", expiry: null }] },
+      { type: "find_cards", insecure: false, cards: [{ id, title: "x", brand: null, last4: null, expiry: "11/2033" }] },
+      { type: "find_cards", insecure: false, cards: [{ id, title: "x", brand: null, last4: null }] },
+      { type: "fill_card", frames: [{ values: [{ role: "number", value: "" }] }] },
+      { type: "fill_card", frames: [{ values: [{ role: "number", value: "1" }, { role: "number", value: "2" }] }] },
+      { type: "fill_card", frames: [{ values: [{ role: "password", value: "1" }] }] },
+      { type: "fill_card", frames: Array.from({ length: 9 }, () => ({ values: [] })) },
+      { type: "fill_card", frames: [{ values: [], extra: 1 }] },
+      { type: "save_card", itemId: "x" },
+    ]) {
+      expect(result(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+});

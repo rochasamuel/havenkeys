@@ -975,6 +975,14 @@ Extension fills fields
 > numbers need a second click naming them and only fill on https pages; a
 > cross-site frame gets nothing; nothing is overwritten or submitted.
 
+> Amended on 2026-09-29 by
+> `docs/superpowers/specs/2026-09-29-card-autofill-design.md`: after the
+> user picks a card in the menu or popup, HavenKeys fills that checkout's
+> card fields on any https site (not bound to a saved website), including
+> the card frames of a fixed list of payment processors in Rust. Nothing is
+> filled on http pages, nothing is overwritten or submitted, and a card
+> typed into a checkout is saved only after the user confirms.
+
 Do not autofill automatically on page load.
 
 ---

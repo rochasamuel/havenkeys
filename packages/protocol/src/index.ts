@@ -7,8 +7,10 @@
 
 export * from "./sso";
 export * from "./identity";
+export * from "./card";
 
 import { isSsoProvider, MAX_ACCOUNT_CHARS, MAX_PROVIDER_ACCOUNTS, type SsoProvider } from "./sso";
+import { isCardBrand, isCardRole, MAX_CARD_FRAMES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, type CardFrameRequest, type CardMatch, type CardRole, type CardValue } from "./card";
 import { isIdentityRole, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, type IdentityRole, type IdentityValue } from "./identity";
 
 export const PROTOCOL_VERSION = 1;
@@ -82,7 +84,20 @@ export type Request =
     }
   | { type: "find_identity"; url: string; topUrl?: string }
   | { type: "fill_identity"; url: string; topUrl?: string; roles: IdentityRole[]; documents: boolean }
-  | { type: "open_identity"; url: string; topUrl?: string };
+  | { type: "open_identity"; url: string; topUrl?: string }
+  | { type: "find_cards"; url: string; topUrl?: string }
+  | { type: "fill_card"; itemId: string; topUrl: string; frames: CardFrameRequest[] }
+  | {
+      type: "save_card";
+      url: string;
+      topUrl?: string;
+      title?: string;
+      cardholderName?: string;
+      number: string;
+      verificationNumber?: string;
+      /** YYYY-MM. */
+      expiry?: string;
+    };
 
 export type RequestType = Request["type"];
 
@@ -152,7 +167,10 @@ export type Result =
   | { type: "save_sso"; itemId: string }
   | { type: "find_identity"; title: string; email: string | null; roles: IdentityRole[] }
   | { type: "fill_identity"; values: IdentityValue[] }
-  | { type: "open_identity" };
+  | { type: "open_identity" }
+  | { type: "find_cards"; insecure: boolean; cards: CardMatch[] }
+  | { type: "fill_card"; frames: Array<{ values: CardValue[] }> }
+  | { type: "save_card"; itemId: string };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -295,6 +313,31 @@ function parseIdentityValue(v: unknown): IdentityValue | null {
   if (!isObj(v) || !hasExactKeys(v, ["role", "value"])) return null;
   if (!isIdentityRole(v.role) || !isStr(v.value) || v.value.length === 0 || utf8Length(v.value) > MAX_IDENTITY_VALUE_BYTES) return null;
   return { role: v.role, value: v.value };
+}
+
+const EXPIRY = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function parseCardMatch(v: unknown): CardMatch | null {
+  if (!isObj(v) || !hasExactKeys(v, ["id", "title", "brand", "last4", "expiry"])) return null;
+  const { id, title, brand, last4, expiry } = v;
+  if (!isUuid(id) || !isStr(title) || utf8Length(title) > 4 * 256) return null;
+  if (brand !== null && !isCardBrand(brand)) return null;
+  if (last4 !== null && !(isStr(last4) && /^[0-9]{4}$/.test(last4))) return null;
+  if (expiry !== null && !(isStr(expiry) && EXPIRY.test(expiry))) return null;
+  return { id, title, brand, last4, expiry };
+}
+
+function parseCardFrameValues(v: unknown): { values: CardValue[] } | null {
+  if (!isObj(v) || !hasExactKeys(v, ["values"]) || !Array.isArray(v.values) || v.values.length > MAX_CARD_ROLES) return null;
+  const values: CardValue[] = [];
+  for (const x of v.values) {
+    if (!isObj(x) || !hasExactKeys(x, ["role", "value"]) || !isCardRole(x.role) || !isStr(x.value)) return null;
+    if (x.value.length === 0 || utf8Length(x.value) > MAX_CARD_VALUE_BYTES) return null;
+    const role: CardRole = x.role;
+    if (values.some((y) => y.role === role)) return null;
+    values.push({ role, value: x.value });
+  }
+  return { values };
 }
 
 function parseList<T>(v: unknown, one: (x: unknown) => T | null): T[] | null {
@@ -444,6 +487,25 @@ function parseResult(v: unknown): Result | null {
     }
     case "open_identity":
       return hasExactKeys(v, ["type"]) ? { type: "open_identity" } : null;
+    case "find_cards": {
+      if (!hasExactKeys(v, ["type", "insecure", "cards"]) || !isBool(v.insecure)) return null;
+      const cards = parseList(v.cards, parseCardMatch);
+      if (!cards || (v.insecure && cards.length > 0)) return null;
+      return { type: "find_cards", insecure: v.insecure, cards };
+    }
+    case "fill_card": {
+      if (!hasExactKeys(v, ["type", "frames"]) || !Array.isArray(v.frames) || v.frames.length > MAX_CARD_FRAMES) return null;
+      const frames: Array<{ values: CardValue[] }> = [];
+      for (const f of v.frames) {
+        const p = parseCardFrameValues(f);
+        if (!p) return null;
+        frames.push(p);
+      }
+      return { type: "fill_card", frames };
+    }
+    case "save_card":
+      if (!hasExactKeys(v, ["type", "itemId"]) || !isUuid(v.itemId)) return null;
+      return { type: "save_card", itemId: v.itemId };
     default:
       return null;
   }

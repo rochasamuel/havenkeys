@@ -3,6 +3,7 @@
 
 use havenkeys_bridge::Bridge;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
+use havenkeys_core::card::{CardExpiry, CardInput};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, Settings, UrlRule};
 use havenkeys_core::sso::{SignInWith, SsoProvider};
@@ -434,6 +435,300 @@ fn secret_requests_are_rate_limited() {
     for _ in 0..10 {
         fill(&f, Uuid::new_v4(), "https://github.com/");
     }
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+}
+
+/// Give the fixture's vault a Visa with a CVV.
+fn add_card(f: &Fixture) -> Uuid {
+    let mut v = f.vault.lock().unwrap();
+    let input = ItemInput {
+        item_type: ItemType::Card,
+        title: "Visa".into(),
+        username: None,
+        urls: vec![],
+        password: SecretUpdate::Keep,
+        totp: SecretUpdate::Keep,
+        notes: SecretUpdate::Keep,
+        content: SecretUpdate::Keep,
+        auto_sign_in: None,
+        sign_in_with: None,
+        identity: None,
+        card: Some(CardInput {
+            cardholder_name: Some(SecretString::from("Samuel Rocha")),
+            brand: None,
+            number: SecretUpdate::Set(SecretString::from("4111111111111111")),
+            verification_number: SecretUpdate::Set(SecretString::from("123")),
+            expiry: Some(CardExpiry {
+                year: 2033,
+                month: 11,
+            }),
+            notes: None,
+        }),
+    };
+    let staged = v.stage_create(input, NOW).unwrap();
+    v.commit_write(staged, 60).unwrap().unwrap().id
+}
+
+fn fill_card(f: &Fixture, id: Uuid, top: &str, frames: serde_json::Value) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({"type": "fill_card", "itemId": id, "topUrl": top, "frames": frames}),
+    )
+}
+
+#[test]
+fn cards_are_found_and_filled_across_processor_frames() {
+    let f = fixture();
+    let id = add_card(&f);
+    let found = call(
+        &f,
+        serde_json::json!({"type": "find_cards", "url": "https://shop.com/checkout"}),
+    );
+    assert_eq!(found["result"]["insecure"], false);
+    assert_eq!(
+        found["result"]["cards"],
+        serde_json::json!([{"id": id, "title": "Visa", "brand": "visa", "last4": "1111", "expiry": "2033-11"}])
+    );
+    assert!(!found.to_string().contains("4111111111111111"));
+    let r = fill_card(
+        &f,
+        id,
+        "https://shop.com/checkout",
+        serde_json::json!([
+            {"url": "https://shop.com/checkout", "roles": ["cardholderName"]},
+            {"url": "https://js.stripe.com/v3/elements-inner-card.html", "roles": ["number", "expiryMonth", "expiryYear", "verificationNumber"]}
+        ]),
+    );
+    assert_eq!(
+        r["result"]["frames"],
+        serde_json::json!([
+            {"values": [{"role": "cardholderName", "value": "Samuel Rocha"}]},
+            {"values": [
+                {"role": "number", "value": "4111111111111111"},
+                {"role": "expiryMonth", "value": "11"},
+                {"role": "expiryYear", "value": "2033"},
+                {"role": "verificationNumber", "value": "123"}
+            ]}
+        ])
+    );
+}
+
+/// Attacks: an http checkout, a look-alike processor host, and evil.com
+/// framing a real checkout.
+#[test]
+fn cards_are_denied_to_insecure_and_foreign_frames() {
+    let f = fixture();
+    let id = add_card(&f);
+    let http = call(
+        &f,
+        serde_json::json!({"type": "find_cards", "url": "http://shop.com/"}),
+    );
+    assert_eq!(
+        http["result"],
+        serde_json::json!({"type": "find_cards", "insecure": true, "cards": []})
+    );
+    let one = |url: &str| serde_json::json!([{"url": url, "roles": ["number"]}]);
+    assert_eq!(
+        error_code(&fill_card(
+            &f,
+            id,
+            "http://shop.com/",
+            one("http://shop.com/")
+        )),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&fill_card(
+            &f,
+            id,
+            "https://shop.com/",
+            one("https://js.stripe.com.evil.com/")
+        )),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&fill_card(
+            &f,
+            id,
+            "https://evil.com/",
+            one("https://shop.com/checkout")
+        )),
+        Some("denied")
+    );
+}
+
+/// Look-alike processor frames are refused; the real host is accepted in
+/// its normalized spellings.
+#[test]
+fn processor_frame_lookalikes_are_denied() {
+    let f = fixture();
+    let id = add_card(&f);
+    let one = |url: &str| serde_json::json!([{"url": url, "roles": ["number"]}]);
+    let top = "https://shop.com/";
+    for bad in [
+        "https://evilstripe.com/",
+        "https://js.stripe.com@evil.com/",
+        "https://js.\u{455}tripe.com/",
+    ] {
+        assert_eq!(
+            error_code(&fill_card(&f, id, top, one(bad))),
+            Some("denied"),
+            "{bad}"
+        );
+    }
+    for good in ["https://js.stripe.com:443/", "https://JS.STRIPE.COM/"] {
+        let r = fill_card(&f, id, top, one(good));
+        assert_eq!(
+            r["result"]["frames"],
+            serde_json::json!([{"values": [{"role": "number", "value": "4111111111111111"}]}]),
+            "{good}"
+        );
+    }
+}
+
+#[test]
+fn fill_card_answers_not_found_for_logins_and_unknown_ids() {
+    let f = fixture();
+    add_card(&f);
+    let frames = serde_json::json!([{"url": "https://shop.com/", "roles": ["number"]}]);
+    assert_eq!(
+        error_code(&fill_card(
+            &f,
+            f.github,
+            "https://shop.com/",
+            frames.clone()
+        )),
+        Some("not_found")
+    );
+    assert_eq!(
+        error_code(&fill_card(&f, Uuid::new_v4(), "https://shop.com/", frames)),
+        Some("not_found")
+    );
+}
+
+/// Regression: login requests never hand out a card.
+#[test]
+fn login_requests_never_return_a_card() {
+    let f = fixture();
+    let id = add_card(&f);
+    assert_eq!(
+        error_code(&fill(&f, id, "https://shop.com/")),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&totp(&f, id, "https://shop.com/")),
+        Some("denied")
+    );
+    let m = find(&f, "https://shop.com/");
+    assert_eq!(m["result"]["matches"], serde_json::json!([]));
+}
+
+#[test]
+fn save_card_writes_through_the_server_and_needs_it() {
+    let offline = fixture();
+    let req = serde_json::json!({"type": "save_card", "url": "https://shop.com/", "number": "4000 0566 5566 5556", "expiry": "2030-01"});
+    assert_eq!(error_code(&call(&offline, req.clone())), Some("offline"));
+
+    let f = online_fixture();
+    let before = f.changes.load(Ordering::SeqCst);
+    let r = call(&f, req);
+    let id = r["result"]["itemId"].as_str().expect("saved").to_owned();
+    assert_eq!(f.changes.load(Ordering::SeqCst), before + 1);
+    let found = call(
+        &f,
+        serde_json::json!({"type": "find_cards", "url": "https://shop.com/"}),
+    );
+    assert!(found.to_string().contains(&id));
+
+    let bad = call(
+        &f,
+        serde_json::json!({"type": "save_card", "url": "https://shop.com/", "number": "4111111111111112"}),
+    );
+    assert_eq!(error_code(&bad), Some("invalid_input"));
+}
+
+#[test]
+fn card_requests_respect_lock_integration_and_rate_limits() {
+    let f = fixture();
+    let id = add_card(&f);
+    let frames = serde_json::json!([{"url": "https://shop.com/", "roles": ["number"]}]);
+    for _ in 0..10 {
+        fill_card(&f, id, "https://shop.com/", frames.clone());
+    }
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+
+    let g = fixture();
+    add_card(&g);
+    g.vault
+        .lock()
+        .unwrap()
+        .update_settings(Settings {
+            browser_integration: false,
+            ..Settings::default()
+        })
+        .unwrap();
+    let r = call(
+        &g,
+        serde_json::json!({"type": "find_cards", "url": "https://shop.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("integration_disabled"));
+    g.vault.lock().unwrap().lock();
+    let r = call(
+        &g,
+        serde_json::json!({"type": "find_cards", "url": "https://shop.com/"}),
+    );
+    assert_eq!(error_code(&r), Some("locked"));
+}
+
+/// Rate classes: `find_cards` is a Lookup (60-burst, leaves the Secret
+/// bucket alone); `fill_card` and `save_card` are Secret (burst of 10).
+#[test]
+fn card_requests_use_the_right_rate_class() {
+    let find_req = serde_json::json!({"type": "find_cards", "url": "https://shop.com/"});
+
+    let f = fixture();
+    for _ in 0..30 {
+        call(&f, find_req.clone());
+    }
+    // 30 lookups did not touch the Secret bucket.
+    assert_ne!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+    let mut limited = false;
+    for _ in 0..40 {
+        limited |= error_code(&call(&f, find_req.clone())) == Some("rate_limited");
+    }
+    assert!(limited, "find_cards is limited at the Lookup burst");
+
+    let f = fixture();
+    let id = add_card(&f);
+    let frames = serde_json::json!([{"url": "https://shop.com/", "roles": ["number"]}]);
+    for _ in 0..10 {
+        fill_card(&f, id, "https://shop.com/", frames.clone());
+    }
+    assert_eq!(
+        error_code(&fill_card(&f, id, "https://shop.com/", frames)),
+        Some("rate_limited")
+    );
+    // find_cards is not blocked by an exhausted Secret bucket.
+    assert_ne!(
+        error_code(&call(&f, find_req.clone())),
+        Some("rate_limited")
+    );
+
+    let f = fixture();
+    let save_req = serde_json::json!({"type": "save_card", "url": "https://shop.com/", "number": "4111111111111111"});
+    for _ in 0..10 {
+        call(&f, save_req.clone());
+    }
+    assert_eq!(error_code(&call(&f, save_req)), Some("rate_limited"));
     assert_eq!(
         error_code(&fill(&f, f.github, "https://github.com/")),
         Some("rate_limited")
@@ -1125,6 +1420,34 @@ mod socket {
         let r = roundtrip(&mut s, b"{not json");
         assert_eq!(r["error"]["code"], "malformed");
         let r = roundtrip(&mut s, &request(2, serde_json::json!({"type":"status"})));
+        assert_eq!(r["result"]["state"], "unlocked");
+    }
+
+    /// Eight frames with long URLs (8 x ~4 KB) exceed `MAX_REQUEST_BYTES`
+    /// (16 KiB). The limit is enforced on the length header by the frame
+    /// reader, so the request is refused as `too_large` before it is read or
+    /// parsed, with no panic and the server still healthy.
+    #[test]
+    fn fill_card_with_eight_long_frames_is_rejected_as_too_large() {
+        let f = fixture();
+        let id = add_card(&f);
+        let (_dir, ep) = serve(&f);
+        let long = format!("https://js.stripe.com/{}", "a".repeat(4000));
+        let frames: Vec<_> = (0..8)
+            .map(|_| serde_json::json!({"url": long, "roles": ["number"]}))
+            .collect();
+        let body = request(
+            1,
+            serde_json::json!({"type": "fill_card", "itemId": id, "topUrl": "https://shop.com/", "frames": frames}),
+        );
+        assert!(body.len() > MAX_REQUEST_BYTES);
+        let mut s = ep.connect().unwrap();
+        write_frame(&mut s, &body, usize::MAX).unwrap();
+        let resp = read_frame(&mut s, MAX_RESPONSE_BYTES).unwrap().unwrap();
+        let r: serde_json::Value = serde_json::from_slice(&resp).unwrap();
+        assert_eq!(r["error"]["code"], "too_large");
+        let mut s2 = ep.connect().unwrap();
+        let r = roundtrip(&mut s2, &request(2, serde_json::json!({"type": "status"})));
         assert_eq!(r["result"]["state"], "unlocked");
     }
 

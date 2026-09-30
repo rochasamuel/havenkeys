@@ -473,8 +473,8 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   Rust to the clipboard. The brand is detected from the issuer prefix in
   Rust (`card.rs`); the Luhn check is shown as a warning, never enforced. The
   extension cannot read a card: `find_matches`, `fill_for_page` and
-  `get_totp` refuse any item that is not a login (`tests/card.rs`). Filling
-  checkouts from it is a separate design
+  `get_totp` refuse any item that is not a login (`tests/card.rs`). Checkouts
+  are filled only through the card requests of §21
   (`specs/2026-09-29-card-autofill-design.md`).
 * **The Secret Key lives in the OS keychain** (Windows Credential Manager,
   macOS Keychain, the Secret Service on Linux; service `app.havenkeys`, user
@@ -538,6 +538,11 @@ See `native-messaging.md` for the full protocol. In summary:
   stored in the encrypted settings blob and enforced in Rust. The automatic
   passkey upgrade has its own switch in the same blob, `auto_passkey_upgrade`
   (on by default; §15).
+* Cards add three requests, `find_cards`, `fill_card` and `save_card`
+  (§21). A card leaves Rust only in answer to `fill_card`, only for the roles
+  asked, and only to https frames that are same-site with the top page or on
+  the processor list; `save_card` is the only write, and a card typed on a
+  page reaches Rust only after the user's click on the save prompt.
 * Passkeys add one more write, `passkey_create`, and four lookups or
   signatures (§15). Toward the browser they carry only public WebAuthn data
   (credential IDs, public keys, signatures, authenticator data).
@@ -835,9 +840,9 @@ Requests: `find_identity` (lookup class; title, email and role names, never a
 value), `fill_identity` and `open_identity` (secret class). See
 `native-messaging.md`. The extension classifies fields and picks roles, but
 that is convenience, not the boundary: Rust still answers only known roles,
-only for an http(s) page, and documents only as above. Card fields
-(`cc-*`, card and CVV words) are refused by the classifier and no card data
-exists in the identity.
+only for an http(s) page, and documents only as above. Card fields are
+refused by the identity classifier; cards are filled only through the card
+flow below (§21), and no card data exists in the identity.
 
 **What this does not protect against.** A user who clicks "Fill" on a
 phishing page gives that page the non-document values the form shows fields
@@ -866,8 +871,111 @@ identity has a value for, never the values themselves. That is low value, and su
 and read the form after a click.
 
 **Firefox data-collection declaration.** `manifest/firefox.json` declares
-`authenticationInfo` (logins, passkeys, one-time codes) and
+`authenticationInfo` (logins, passkeys, one-time codes),
 `personallyIdentifyingInfo` (the identity's name, contact, address and
-documents) as required data collection permissions. Nothing is collected by
-a third party: the declaration states that the extension handles this data
-locally, to fill forms on the user's request.
+documents) and `financialAndPaymentInfo` (saved cards filled into
+checkouts, and a typed card offered for saving) as required data collection
+permissions. Nothing is collected by a third party: the declaration states
+that the extension handles this data locally, to fill forms on the user's
+request.
+
+## 21. Filling checkouts from a Card
+
+Spec: `docs/superpowers/specs/2026-09-29-card-autofill-design.md`.
+
+Like the Identity, a Card is **not bound to a site**: it is offered on any
+https checkout, because a card is for paying sites the user has not saved.
+A phishing checkout can show a card form and HavenKeys will offer to fill
+it. The protection comes from these rules instead:
+
+1. Nothing is filled without the user's click in the extension's own menu (an
+   iframe the page cannot read or click) or popup. The popup's Fill card is
+   bound to the origin of the list the user saw: if the tab moved to another
+   origin, Rust is never asked.
+2. Only visible, editable card fields of the checkout the user clicked in
+   are filled, re-checked at the moment of writing, with the same strict
+   visibility test as the identity; hidden fields never are.
+3. The top page is **https**. Each frame filled is https **and** same-site
+   as the top page or has an origin on the processor list below. Rust
+   checks this for every frame of a `fill_card`, and one bad frame denies
+   the whole request.
+4. Only the values the form's fields ask for leave Rust (`roles`, at most 8
+   per frame, 8 frames).
+5. Existing values are never overwritten, unless HavenKeys wrote them.
+6. A card fill never submits a form.
+7. Nothing is saved without the user's click on the save prompt.
+
+Requests: `find_cards` (lookup class; title, brand, last four digits and
+expiry, never the number or CVV), `fill_card` and `save_card` (secret class).
+See `native-messaging.md`. The extension classifies fields and picks roles,
+but that is convenience, not the boundary: Rust answers only known roles for
+https frames as above, and `find_matches`, `fill_item` and `get_totp` still
+refuse a Card.
+
+**Payment processors.** A card frame served from another site (Stripe
+Elements, Adyen, Braintree, Mercado Pago) is the normal way checkouts are
+built, and a cross-site frame otherwise gets nothing. `PAYMENT_FRAME_ORIGINS`
+in Rust lists the exact https origins each processor documents for its card
+fields: Stripe `js.stripe.com` (and subdomains, matched on a whole label),
+the Adyen live checkout-shopper regions, Braintree's
+`assets.braintreegateway.com`, and Mercado Pago's `secure-fields` and
+`api-static` origins. No test or sandbox origins; a new entry needs a code
+change and a test. Pagar.me, PagSeguro and Cielo are left out because their
+documented integrations keep the card inputs on the merchant's own page,
+which the same-site rule already covers.
+
+**Which frames get a card.** Rust compares each frame only with the top
+page, so the extension also refuses nesting. It has no `webNavigation`
+permission (minimal permissions), so eligibility comes from a report each
+candidate frame's content script sends (`content/ancestry.ts`), taken by the
+background as data to check, never as authority:
+
+* Chromium: `location.ancestorOrigins`. Every ancestor must be the top
+  page's origin or accepted by Rust as a processor or same-site frame.
+* Firefox (no `ancestorOrigins`): a processor frame only if it is a direct
+  child of the top page.
+* A missing or malformed report means a subframe gets nothing.
+
+So a card frame nested under a cross-site frame that is not a processor
+(an ad iframe embedding Stripe) is refused. Before `fill_card`, the
+background vets each extra frame with a `find_cards` lookup (at most 12 per
+pick) and drops the ones Rust would deny, so an unrelated frame with
+card-like inputs does not deny the whole fill. A frame whose document
+changed since the roles were collected drops its values (Chromium; see the
+limitation below).
+
+**Menu in a small iframe.** A card menu opened inside a processor's 40-px
+iframe would be clipped, so the top frame draws it over that iframe. The
+iframe is found with `runtime.getFrameId` where the browser has it, else by
+its `src` (the frame's full URL from the browser's sender data, credentials
+removed, then without query or fragment) and, among several, by the size the
+frame reports; if that does not single one out, the menu is drawn inside the
+frame. The full URL goes only to the tab's top frame, never to the desktop;
+a wrong match only misplaces the menu. The
+choice still comes from a trusted click in the menu's own frame.
+
+**Save prompt.** After a form submit in the **top frame**, a card the user
+typed (the digits typed equal the field's digits; a number HavenKeys filled
+or a page script wrote never counts) with a valid check digit and an expiry,
+which no saved card matches by last four digits and expiry, opens "Save card
+to HavenKeys?". The number is not sent to Rust before **Save**. Until then it
+is held in the background's memory only, for 2 minutes, and dropped on
+dismiss, lock, tab close and expiry (it survives navigation, because
+checkouts navigate on submit). Cards typed into processor iframes are not
+offered for saving.
+
+**What this does not protect against.** A user who picks a card on a phishing
+checkout gives that page the card, CVV included; the menu header names the
+page's site to make the pick deliberate, but it cannot tell a real shop from
+a copy. A page can read what was written into its own fields. On an http page
+nothing is filled (Rust denies it and the menu says why).
+
+**Known limitations.**
+
+* Firefox frames have no `documentId`, so a fill there is pinned to the
+  frame only by the origin check: a frame that navigates to another origin
+  between the role scan and the write is stopped by the origin check, not by
+  a document identity.
+* The visibility check has the limits described in §20 (a covered field
+  still counts as visible).
+* Firefox data-collection declaration: see §20 (`financialAndPaymentInfo`).

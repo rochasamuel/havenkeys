@@ -82,6 +82,36 @@ body {
   white-space: nowrap;
 }
 
+/* Card menu: "Fill on" beside the brand, the host on a line of its own.
+   A look-alike host differs at its END (shop.com.evil.xyz), so the line
+   clips from the start: an rtl box ellipsizes on the left, and the host
+   inside it is an isolated ltr run, so its dots do not reorder. */
+.head.dest {
+  height: auto;
+  min-height: 34px;
+  flex-wrap: wrap;
+  row-gap: 1px;
+  padding: 7px 11px 6px;
+}
+
+.dest-host {
+  flex: 1 1 100%;
+  min-width: 0;
+  direction: rtl;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dest-host bdi {
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
 main {
   flex: 1;
   overflow-y: auto;
@@ -161,6 +191,22 @@ main {
 .avatar-icon {
   background: var(--brass-soft);
   color: var(--brass-ink);
+}
+
+.row.expired {
+  opacity: 0.6;
+}
+
+.avatar-icon .card-brand-icon {
+  width: 24px;
+  height: 16px;
+}
+
+#detail .card-brand-icon {
+  width: 20px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 6px;
 }
 
 .who {

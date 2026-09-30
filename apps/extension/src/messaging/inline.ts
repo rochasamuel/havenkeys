@@ -14,17 +14,63 @@
 import {
   CREDENTIAL_ID_BYTES,
   isB64Url,
+  isCardRole,
   isIdentityRole,
   isUuid,
+  MAX_CARD_ROLES,
+  MAX_CARD_VALUE_BYTES,
   MAX_IDENTITY_ROLES,
   MAX_IDENTITY_VALUE_BYTES,
+  MAX_URL_BYTES,
+  type CardBrandId,
+  type CardRole,
+  type CardValue,
   type IdentityRole,
   type IdentityValue,
   type SsoProvider,
 } from "@havenkeys/protocol";
 import type { PasskeyRow } from "../webauthn/messages";
 
-export type MenuKind = "login" | "otp" | "new_password" | "identity";
+export type MenuKind = "login" | "otp" | "new_password" | "identity" | "card";
+
+/** A field's box in its own frame's viewport (card menus a processor frame asks the top frame to host). */
+export interface Anchor {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * A card frame's viewport (innerWidth x innerHeight, whole CSS px). The top
+ * frame uses it to tell apart iframes that load the same URL.
+ */
+export interface Viewport {
+  width: number;
+  height: number;
+}
+
+/** Ancestor frames a subframe may report, at most (deeper: it reports an unknown chain). */
+export const MAX_FRAME_DEPTH = 8;
+
+/**
+ * Where a subframe sits, as its content script sees it (content/ancestry.ts):
+ * its ancestors' origins, nearest first, the top page's last; or, where the
+ * browser cannot tell (Firefox, a cross-origin parent), only whether its
+ * parent is the top page. Card menus and card scans carry it: Rust compares
+ * a frame with the top page only, and the background uses this to drop a
+ * card frame nested inside a frame Rust would not accept (an ad's).
+ */
+export type Ancestry = { ancestors: string[] } | { ancestors: null; directChildOfTop: boolean };
+
+/** A card the user typed into a checkout (autofill/card-fill.ts readCardSubmission). */
+export interface SubmittedCardWire {
+  number: string;
+  /** YYYY-MM. */
+  expiry: string;
+  verificationNumber: string | null;
+  cardholderName: string | null;
+}
 
 /** Steps of an automatic sign-in, in order. */
 export type RunStep = "username" | "password" | "otp";
@@ -37,16 +83,20 @@ const RUN_STEPS: readonly RunStep[] = ["username", "password", "otp"];
 
 export type ContentRequest =
   /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
-  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[] }
+  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[]; cardRoles?: CardRole[]; anchor?: Anchor; ancestry?: Ancestry; viewport?: Viewport }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null; currentPassword?: string }
   | { type: "cs_ready" }
   /** The next step's field appeared in this frame during a sign-in run. */
   | { type: "cs_run_step"; kind: NextStep }
   /** The run should end here: the user took over, a stop condition, or nothing appeared. */
-  | { type: "cs_run_stop" };
+  | { type: "cs_run_stop" }
+  /** This frame's card fields, answering bg_card_scan. */
+  | { type: "cs_card_fields"; scan: string; roles: CardRole[]; ancestry?: Ancestry }
+  /** The user submitted a card they typed (top frame only). */
+  | { type: "cs_card_submit"; card: SubmittedCardWire };
 
-export type OpenMenuReply = { ok: true; token: string; rows: number } | { ok: false };
+export type OpenMenuReply = { ok: true; token: string; rows: number; hosted?: true } | { ok: false };
 export type ReadyReply = { saveToken: string | null; watch: NextStep | null };
 
 // ---------------------------------------------------------------- background → content
@@ -55,7 +105,8 @@ export type FillPayload =
   | { kind: "login"; username: string | null; password: string | null }
   | { kind: "otp"; code: string }
   | { kind: "generated"; password: string }
-  | { kind: "identity"; values: IdentityValue[] };
+  | { kind: "identity"; values: IdentityValue[] }
+  | { kind: "card"; values: CardValue[] };
 
 export type BackgroundToContent =
   /**
@@ -76,7 +127,18 @@ export type BackgroundToContent =
   | { type: "bg_close_save"; token: string }
   | { type: "bg_run_end" }
   /** Popup: which identity roles has this (top) frame's first identity form? */
-  | { type: "bg_identity_roles" };
+  | { type: "bg_identity_roles" }
+  /** Every frame: report your card fields with cs_card_fields. */
+  | { type: "bg_card_scan"; scan: string }
+  /**
+   * Top frame: show menu `token` over child frame `frameId`, at `anchor`
+   * inside it. Reply { ok }. `url` is the child's full URL as the browser
+   * reported it (query and fragment kept, credentials removed) and
+   * `viewport` the size the child reported, to find its <iframe> where
+   * runtime.getFrameId does not exist (Chromium; content/host-frame.ts).
+   * Only ever sent to frame 0.
+   */
+  | { type: "bg_host_menu"; token: string; frameId: number; url: string; anchor: Anchor; rows: number; viewport?: Viewport };
 
 export type FillReply = { filled: number; pressing: RunStep | null };
 
@@ -90,6 +152,7 @@ export type InlineRequest =
   | { type: "menu_open_help"; token: string }
   /** Fill the identity; `documents`: the user confirmed the document fields. */
   | { type: "menu_pick_identity"; token: string; documents: boolean }
+  | { type: "menu_pick_card"; token: string; itemId: string }
   /** Open the identity in the desktop app (the menu's empty-identity row). */
   | { type: "menu_open_identity"; token: string }
   | { type: "menu_close"; token: string }
@@ -137,11 +200,31 @@ export interface IdentityRowView {
   missing: boolean;
 }
 
+/** A card row in the menu. No number beyond the last four digits. */
+export interface CardRowView {
+  id: string;
+  title: string;
+  brand: CardBrandId | null;
+  last4: string | null;
+  /** MM/YY. */
+  expiry: string | null;
+  expired: boolean;
+}
+
+/** The card save prompt. */
+export interface CardSaveView {
+  site: string;
+  /** The suggested name: the brand's. */
+  title: string;
+  card: { brand: CardBrandId | null; last4: string; expiry: string };
+}
+
 export type IdentityRolesReply = { roles: IdentityRole[] };
 
 export type MenuView =
   | { state: "locked" }
-  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null; identity: IdentityRowView | null };
+  | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null; identity: IdentityRowView | null }
+  | { state: "cards"; site: string; cards: CardRowView[]; insecure: boolean };
 
 export interface SaveView {
   action: "add" | "update";
@@ -190,7 +273,7 @@ function keysAre(o: Obj, keys: readonly string[]): boolean {
 }
 
 const isToken = (v: unknown): v is string => typeof v === "string" && TOKEN.test(v);
-const MENU_KINDS: readonly MenuKind[] = ["login", "otp", "new_password", "identity"];
+const MENU_KINDS: readonly MenuKind[] = ["login", "otp", "new_password", "identity", "card"];
 
 function boundedOrNull(v: unknown, max: number): v is string | null {
   return v === null || (typeof v === "string" && v.length > 0 && v.length <= max);
@@ -206,6 +289,74 @@ function parseRoleList(v: unknown): IdentityRole[] | null {
   return out;
 }
 
+function parseCardRoleList(v: unknown): CardRole[] | null {
+  if (!Array.isArray(v) || v.length === 0 || v.length > MAX_CARD_ROLES) return null;
+  const out: CardRole[] = [];
+  for (const r of v) {
+    if (!isCardRole(r) || out.includes(r)) return null;
+    out.push(r);
+  }
+  return out;
+}
+
+const within = (x: unknown, lo: number, hi: number): x is number => typeof x === "number" && Number.isFinite(x) && x >= lo && x <= hi;
+
+function parseAnchor(v: unknown): Anchor | null {
+  const o = obj(v);
+  if (!o || !keysAre(o, ["top", "left", "width", "height"])) return null;
+  const { top, left, width, height } = o;
+  return within(top, -1e5, 1e5) && within(left, -1e5, 1e5) && within(width, 0, 1e4) && within(height, 0, 1e4) ? { top, left, width, height } : null;
+}
+
+function parseViewport(v: unknown): Viewport | null {
+  const o = obj(v);
+  if (!o || !keysAre(o, ["width", "height"])) return null;
+  const { width, height } = o;
+  return within(width, 0, 1e5) && Number.isInteger(width) && within(height, 0, 1e5) && Number.isInteger(height) ? { width, height } : null;
+}
+
+/** An exact http(s) origin, as `URL.origin` writes it. */
+export function isWebOrigin(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_URL_BYTES) return false;
+  try {
+    const u = new URL(v);
+    return (u.protocol === "https:" || u.protocol === "http:") && u.origin === v;
+  } catch {
+    return false;
+  }
+}
+
+export function parseAncestry(v: unknown): Ancestry | null {
+  const o = obj(v);
+  if (!o) return null;
+  if (keysAre(o, ["ancestors"])) {
+    const a = o.ancestors;
+    if (!Array.isArray(a) || a.length === 0 || a.length > MAX_FRAME_DEPTH || !a.every(isWebOrigin)) return null;
+    return { ancestors: [...(a as string[])] };
+  }
+  if (keysAre(o, ["ancestors", "directChildOfTop"]) && o.ancestors === null && typeof o.directChildOfTop === "boolean") {
+    return { ancestors: null, directChildOfTop: o.directChildOfTop };
+  }
+  return null;
+}
+
+function parseSubmittedCard(v: unknown): SubmittedCardWire | null {
+  const o = obj(v);
+  if (!o || !keysAre(o, ["number", "expiry", "verificationNumber", "cardholderName"])) return null;
+  const { number, expiry, verificationNumber, cardholderName } = o;
+  if (typeof number !== "string" || !/^[0-9]{12,19}$/.test(number)) return null;
+  if (typeof expiry !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(expiry)) return null;
+  if (verificationNumber !== null && !(typeof verificationNumber === "string" && /^[0-9]{3,8}$/.test(verificationNumber))) return null;
+  if (!boundedOrNull(cardholderName, 256)) return null;
+  return { number, expiry, verificationNumber, cardholderName };
+}
+
+/** The top frame's answer to bg_host_menu. */
+export function parseHostReply(v: unknown): boolean {
+  const o = obj(v);
+  return !!o && keysAre(o, ["ok"]) && o.ok === true;
+}
+
 export function parseIdentityRolesReply(v: unknown): IdentityRole[] {
   const o = obj(v);
   return (o && keysAre(o, ["roles"]) && parseRoleList(o.roles)) || [];
@@ -219,7 +370,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
       const kind = o.kind as MenuKind;
       const keys = Object.keys(o).filter((k) => k !== "type" && k !== "kind");
-      if (keys.some((k) => k !== "explicit" && k !== "roles")) return null;
+      if (keys.some((k) => k !== "explicit" && k !== "roles" && k !== "cardRoles" && k !== "anchor" && k !== "ancestry" && k !== "viewport")) return null;
       if ("explicit" in o && o.explicit !== true) return null;
       let roles: IdentityRole[] | undefined;
       if ("roles" in o) {
@@ -228,11 +379,39 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
         if (!parsed) return null;
         roles = parsed;
       } else if (kind === "identity") return null;
+      let cardRoles: CardRole[] | undefined;
+      let anchor: Anchor | undefined;
+      let ancestry: Ancestry | undefined;
+      let viewport: Viewport | undefined;
+      if (kind === "card") {
+        const parsed = parseCardRoleList(o.cardRoles);
+        if (!parsed) return null;
+        cardRoles = parsed;
+        if ("anchor" in o) {
+          const a = parseAnchor(o.anchor);
+          if (!a) return null;
+          anchor = a;
+        }
+        if ("ancestry" in o) {
+          const a = parseAncestry(o.ancestry);
+          if (!a) return null;
+          ancestry = a;
+        }
+        if ("viewport" in o) {
+          const v = parseViewport(o.viewport);
+          if (!v) return null;
+          viewport = v;
+        }
+      } else if ("cardRoles" in o || "anchor" in o || "ancestry" in o || "viewport" in o) return null;
       return {
         type: "cs_open_menu",
         kind,
         ...(o.explicit === true ? { explicit: true as const } : {}),
         ...(roles ? { roles } : {}),
+        ...(cardRoles ? { cardRoles } : {}),
+        ...(anchor ? { anchor } : {}),
+        ...(ancestry ? { ancestry } : {}),
+        ...(viewport ? { viewport } : {}),
       };
     }
     case "cs_close_menu":
@@ -256,6 +435,20 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
         : null;
     case "cs_run_stop":
       return keysAre(o, ["type"]) ? { type: "cs_run_stop" } : null;
+    case "cs_card_fields": {
+      const withAncestry = keysAre(o, ["type", "scan", "roles", "ancestry"]);
+      if ((!withAncestry && !keysAre(o, ["type", "scan", "roles"])) || !isToken(o.scan)) return null;
+      const roles = parseCardRoleList(o.roles);
+      if (!roles) return null;
+      if (!withAncestry) return { type: "cs_card_fields", scan: o.scan, roles };
+      const ancestry = parseAncestry(o.ancestry);
+      return ancestry && { type: "cs_card_fields", scan: o.scan, roles, ancestry };
+    }
+    case "cs_card_submit": {
+      if (!keysAre(o, ["type", "card"])) return null;
+      const card = parseSubmittedCard(o.card);
+      return card && { type: "cs_card_submit", card };
+    }
     default:
       return null;
   }
@@ -280,6 +473,8 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
       return keysAre(o, ["type", "token", "documents"]) && typeof o.documents === "boolean"
         ? { type: "menu_pick_identity", token, documents: o.documents }
         : null;
+    case "menu_pick_card":
+      return keysAre(o, ["type", "token", "itemId"]) && isUuid(o.itemId) ? { type: "menu_pick_card", token, itemId: o.itemId } : null;
     case "menu_open_identity":
       return keysAre(o, ["type", "token"]) ? { type: "menu_open_identity", token } : null;
     case "menu_resize":
@@ -331,6 +526,18 @@ function parseFill(v: unknown): FillPayload | null {
       }
       return { kind: "identity", values };
     }
+    case "card": {
+      if (!keysAre(o, ["kind", "values"]) || !Array.isArray(o.values) || o.values.length > MAX_CARD_ROLES) return null;
+      const values: CardValue[] = [];
+      for (const x of o.values) {
+        const v = obj(x);
+        if (!v || !keysAre(v, ["role", "value"]) || !isCardRole(v.role) || typeof v.value !== "string") return null;
+        const role: CardRole = v.role;
+        if (v.value.length === 0 || v.value.length > MAX_CARD_VALUE_BYTES || values.some((y) => y.role === role)) return null;
+        values.push({ role, value: v.value });
+      }
+      return { kind: "card", values };
+    }
     default:
       return null;
   }
@@ -346,7 +553,7 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       if (o.token !== null && !isToken(o.token)) return null;
       if (typeof o.submit !== "boolean" || typeof o.totp !== "boolean") return null;
       const fill = parseFill(o.fill);
-      if (fill?.kind === "identity" && (o.submit || o.totp)) return null;
+      if ((fill?.kind === "identity" || fill?.kind === "card") && (o.submit || o.totp)) return null;
       return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill, submit: o.submit, totp: o.totp };
     }
     case "bg_resize_menu":
@@ -365,6 +572,20 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       return keysAre(o, ["type"]) ? { type: "bg_run_end" } : null;
     case "bg_identity_roles":
       return keysAre(o, ["type"]) ? { type: "bg_identity_roles" } : null;
+    case "bg_card_scan":
+      return keysAre(o, ["type", "scan"]) && isToken(o.scan) ? { type: "bg_card_scan", scan: o.scan } : null;
+    case "bg_host_menu": {
+      const withViewport = keysAre(o, ["type", "token", "frameId", "url", "anchor", "rows", "viewport"]);
+      if ((!withViewport && !keysAre(o, ["type", "token", "frameId", "url", "anchor", "rows"])) || !isToken(o.token)) return null;
+      const anchor = parseAnchor(o.anchor);
+      const { frameId, url, rows } = o;
+      if (!anchor || typeof frameId !== "number" || !Number.isInteger(frameId) || frameId < 1) return null;
+      if (typeof url !== "string" || url.length === 0 || url.length > MAX_URL_BYTES) return null;
+      if (typeof rows !== "number" || !Number.isInteger(rows) || rows < 1 || rows > MENU_MAX_ROWS) return null;
+      if (!withViewport) return { type: "bg_host_menu", token: o.token, frameId, url, anchor, rows };
+      const viewport = parseViewport(o.viewport);
+      return viewport && { type: "bg_host_menu", token: o.token, frameId, url, anchor, rows, viewport };
+    }
     default:
       return null;
   }
