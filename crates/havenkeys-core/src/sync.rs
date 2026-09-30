@@ -209,12 +209,7 @@ impl VaultService {
     /// The header this device would publish to its account's server. Requires
     /// an unlocked key scheme 3 vault.
     pub fn encode_account_header(&self) -> Result<Vec<u8>> {
-        let local = self.store.header()?.ok_or(Error::NoVault)?;
-        if local.key_scheme != KeyScheme::AccountBound {
-            return Err(Error::InvalidInput(
-                "this vault is not linked to an account",
-            ));
-        }
+        let local = self.account_bound_header()?;
         encode_header(&self.session()?.data_key, &local)
     }
 
@@ -228,12 +223,7 @@ impl VaultService {
     /// header replayed after a master-password change would otherwise make
     /// the previous password work again.
     pub fn adopt_account_header(&mut self, remote: &[u8]) -> Result<bool> {
-        let local = self.store.header()?.ok_or(Error::NoVault)?;
-        if local.key_scheme != KeyScheme::AccountBound {
-            return Err(Error::InvalidInput(
-                "this vault is not linked to an account",
-            ));
-        }
+        let local = self.account_bound_header()?;
         let file = parse_header(remote)?;
         if file.body.vault_id != local.vault_id {
             return Err(Error::InvalidInput("that header is for a different vault"));
@@ -265,8 +255,19 @@ impl VaultService {
         Ok(true)
     }
 
+    /// The local header, refused unless it is account-bound.
+    fn account_bound_header(&self) -> Result<HeaderRecord> {
+        let local = self.store.header()?.ok_or(Error::NoVault)?;
+        if local.key_scheme != KeyScheme::AccountBound {
+            return Err(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ));
+        }
+        Ok(local)
+    }
+
     /// The account record, or an error when this vault is not linked to one.
-    fn require_account(&self) -> Result<AccountRecord> {
+    pub(crate) fn require_account(&self) -> Result<AccountRecord> {
         self.store.account()?.ok_or(Error::InvalidInput(
             "this vault is not linked to an account",
         ))
@@ -385,12 +386,12 @@ impl VaultService {
                 deletions.push(change.item_id);
                 continue;
             }
-            let (Some(ov), Some(det)) = (change.overview, change.details) else {
-                report.skipped_items += 1;
-                unreadable.push((change.item_id, change.revision));
-                continue;
+            // A missing blob is as unreadable as one that does not open.
+            let checked = match (change.overview, change.details) {
+                (Some(ov), Some(det)) => self.check_item_bytes(vault_id, change.item_id, ov, det),
+                _ => None,
             };
-            match self.check_item_bytes(vault_id, change.item_id, ov, det) {
+            match checked {
                 Some(((id, ov, det), overview)) => {
                     if self.session()?.overviews.contains_key(&id) {
                         report.updated += 1;
