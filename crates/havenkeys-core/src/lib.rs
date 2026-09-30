@@ -10,6 +10,7 @@ pub mod account;
 pub mod card;
 pub mod card_page;
 pub mod crypto;
+pub mod custom_field;
 pub mod error;
 pub mod generator;
 pub mod identity;
