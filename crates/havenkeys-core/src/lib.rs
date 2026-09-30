@@ -8,6 +8,7 @@
 
 pub mod account;
 pub mod card;
+pub mod card_page;
 pub mod crypto;
 pub mod error;
 pub mod generator;
