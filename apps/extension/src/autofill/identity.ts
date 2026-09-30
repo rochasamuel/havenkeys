@@ -6,6 +6,7 @@
 // Bounded like login groups: at most MAX_GROUP_INPUTS elements per group.
 
 import { DOCUMENT_ROLES, MAX_IDENTITY_ROLES, type IdentityRole } from "@havenkeys/protocol";
+import { cardKindOf } from "./card-kind";
 import { groupRoot, MAX_GROUP_INPUTS, type Env } from "./group";
 import { hasAny, MAX_HINT_CHARS, normalize } from "./text";
 
@@ -139,6 +140,8 @@ export function identityRoleOf(el: IdentityElement): { role: IdentityRole; confi
   // new-password on address fields to keep the browser's autofill away, so
   // only card and one-time-code tokens refuse a text field here.
   if (/\b(cc-|one-time-code)/.test(ac)) return null;
+  // Whatever the card classifier claims is a card field, not an identity one.
+  if (!(el instanceof HTMLTextAreaElement) && cardKindOf(el, false)) return null;
   const attrs = normalize(`${attr(el, "name")} ${attr(el, "id")}`);
   const text = normalize(`${attr(el, "placeholder")} ${attr(el, "aria-label")} ${attr(el, "title")} ${labelText(el)}`, MAX_HINT_CHARS * 3);
   if (hasAny(`${attrs} ${text}`, NEGATIVE) || attr(el, "role") === "search" || el.closest('[role="search"]')) return null;
