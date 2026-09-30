@@ -7,7 +7,7 @@
 
 use crate::error::{Error, Result};
 use crate::identity::FillRole;
-use crate::origin::{site_of, PageUrl};
+use crate::origin::{same_site, PageUrl};
 use crate::secret::SecretString;
 use crate::vault::VaultService;
 use std::fmt;
@@ -51,9 +51,8 @@ fn checked_page(page_url: &str, top_url: Option<&str>) -> Result<PageUrl> {
     let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
     if let Some(top) = top_url {
         let top = PageUrl::parse(top).ok_or(Error::Denied)?;
-        match (site_of(&page), site_of(&top)) {
-            (Some(a), Some(b)) if a == b => {}
-            _ => return Err(Error::Denied),
+        if !same_site(&page, &top) {
+            return Err(Error::Denied);
         }
     }
     Ok(page)
@@ -99,7 +98,7 @@ impl VaultService {
     ) -> Result<Vec<(FillRole, SecretString)>> {
         let id = self.identity_item_id()?;
         let page = checked_page(page_url, top_url)?;
-        let https = page.url().scheme() == "https";
+        let https = page.is_https();
         let fields = self.reveal_identity(&id)?;
         Ok(roles
             .iter()

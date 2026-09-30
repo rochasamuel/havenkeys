@@ -10,9 +10,9 @@ use crate::card::{
     check_digit_ok, clean_number, detect_brand, CardBrand, CardExpiry, CardFields, CardInput,
 };
 use crate::error::{Error, Result};
-use crate::identity_page::truncate_bytes;
+use crate::identity_page::{truncate_bytes, MAX_SUMMARY_TITLE_BYTES};
 use crate::model::{clean_title, ItemInput, ItemType, SecretUpdate};
-use crate::origin::{host_key, site_of, PageUrl};
+use crate::origin::{host_key, same_site, PageUrl};
 use crate::secret::SecretString;
 use crate::vault::{StagedSave, VaultService};
 use std::fmt;
@@ -62,24 +62,18 @@ pub fn is_payment_frame(page: &PageUrl) -> bool {
     let Some(host) = host_key(url) else {
         return false;
     };
+    // A non-empty label, a dot, then the parent: `b.js.stripe.com`, never
+    // `evil-js.stripe.com`.
     PAYMENT_FRAME_PARENTS.iter().any(|parent| {
-        host.len() > parent.len() + 1
-            && host.ends_with(parent)
-            && host.as_bytes()[host.len() - parent.len() - 1] == b'.'
+        host.strip_suffix(parent)
+            .and_then(|rest| rest.strip_suffix('.'))
+            .is_some_and(|label| !label.is_empty())
     })
-}
-
-fn is_https(page: &PageUrl) -> bool {
-    page.url().scheme() == "https"
-}
-
-fn same_site(a: &PageUrl, b: &PageUrl) -> bool {
-    matches!((site_of(a), site_of(b)), (Some(x), Some(y)) if x == y)
 }
 
 /// May `frame`, in a tab showing `top`, be served a card?
 fn frame_allowed(frame: &PageUrl, top: &PageUrl) -> bool {
-    is_https(frame) && (same_site(frame, top) || is_payment_frame(frame))
+    frame.is_https() && (same_site(frame, top) || is_payment_frame(frame))
 }
 
 /// What a checkout field asks for (spec §4). The extension shapes the value
@@ -166,7 +160,7 @@ impl VaultService {
         self.session()?;
         let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
         let top = PageUrl::parse(top_url.unwrap_or(page_url)).ok_or(Error::Denied)?;
-        if !is_https(&top) {
+        if !top.is_https() {
             return Ok(CardList {
                 insecure: true,
                 cards: Vec::new(),
@@ -184,10 +178,7 @@ impl VaultService {
                 let summary = o.card.clone();
                 CardOffer {
                     id: o.id,
-                    title: truncate_bytes(
-                        o.title.clone(),
-                        crate::identity_page::MAX_SUMMARY_TITLE_BYTES,
-                    ),
+                    title: truncate_bytes(o.title.clone(), MAX_SUMMARY_TITLE_BYTES),
                     brand: summary.as_ref().map(|s| s.brand),
                     last4: summary.as_ref().and_then(|s| s.last4.clone()),
                     expiry: summary.and_then(|s| s.expiry),
@@ -210,7 +201,7 @@ impl VaultService {
     ) -> Result<Vec<Vec<(CardRole, SecretString)>>> {
         self.session()?;
         let top = PageUrl::parse(top_url).ok_or(Error::Denied)?;
-        if !is_https(&top) {
+        if !top.is_https() {
             return Err(Error::Denied);
         }
         for frame in frames {
@@ -248,12 +239,12 @@ impl VaultService {
     ) -> Result<StagedSave> {
         self.session()?;
         let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
-        if !is_https(&page) {
+        if !page.is_https() {
             return Err(Error::Denied);
         }
         if let Some(top) = top_url {
             let top = PageUrl::parse(top).ok_or(Error::Denied)?;
-            if !is_https(&top) || !same_site(&page, &top) {
+            if !top.is_https() || !same_site(&page, &top) {
                 return Err(Error::Denied);
             }
         }
@@ -296,5 +287,61 @@ impl VaultService {
             item_id: write.item_id,
             write,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn page(url: &str) -> PageUrl {
+        PageUrl::parse(url).unwrap()
+    }
+
+    #[test]
+    fn same_site_table() {
+        for (a, b, want) in [
+            ("https://a.example.com/", "https://b.example.com/", true),
+            ("https://example.com/", "http://example.com/", true),
+            ("https://alice.github.io/", "https://bob.github.io/", false),
+            ("https://github.io/", "https://github.io/", true),
+            ("http://192.168.1.1/", "http://192.168.1.1:8080/", true),
+            ("http://192.168.1.1/", "http://192.168.1.2/", false),
+            (
+                "https://example.com/",
+                "https://example.com.evil.com/",
+                false,
+            ),
+            ("https://nas.internal/", "https://evil.internal/", false),
+        ] {
+            assert_eq!(same_site(&page(a), &page(b)), want, "{a} {b}");
+        }
+    }
+
+    #[test]
+    fn payment_frame_table() {
+        for (url, want) in [
+            ("https://js.stripe.com/", true),
+            ("https://b.js.stripe.com/x", true),
+            ("https://a.b.js.stripe.com/", true),
+            ("https://js.stripe.com./", false),
+            ("https://evil-js.stripe.com/", false),
+            ("https://xjs.stripe.com/", false),
+            ("https://stripe.com/", false),
+            ("https://js.stripe.com.evil.com/", false),
+            ("http://b.js.stripe.com/", false),
+            ("https://b.js.stripe.com:443/", true),
+            ("https://b.js.stripe.com:8443/", false),
+            ("https://api-static.mercadopago.com/", true),
+            ("https://x.api-static.mercadopago.com/", false),
+        ] {
+            assert_eq!(is_payment_frame(&page(url)), want, "{url}");
+        }
+    }
+
+    #[test]
+    fn https_is_the_scheme_only() {
+        assert!(page("https://example.com:8443/").is_https());
+        assert!(!page("http://example.com/").is_https());
     }
 }
