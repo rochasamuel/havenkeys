@@ -15,14 +15,39 @@
 // * A sign-in run (signin-run.ts) starts only from a pick whose fill Rust
 //   marked autoSubmit, is bound to that tab, frame and origin, and every
 //   continuation fill is re-requested from the desktop for the frame's URL.
+// * Cards are not site-bound (spec 2026-09-29-card-autofill §2): a pick
+//   fills the clicked frame and the tab's other card frames that Rust
+//   accepts (find_cards per frame, then one fill_card that Rust re-checks
+//   frame by frame). Rust compares each frame with the top page only, so a
+//   subframe is also dropped unless every frame between it and the top page
+//   is one Rust would accept (webNavigation's frame tree): a payment
+//   processor's frame inside an ad's frame gets nothing. Each frame gets
+//   only its own values, pinned to the document that reported its fields.
+//   Typed cards wait for the user's save in memory only, for at most
+//   CARD_SAVE_TTL_MS; the number goes to Rust only on Save.
 
 import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
-import { DOCUMENT_ROLES, SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
+import {
+  brandOf,
+  CARD_BRAND_NAMES,
+  DOCUMENT_ROLES,
+  luhnOk,
+  MAX_CARD_FRAMES,
+  SSO_PROVIDERS,
+  type CardBrandId,
+  type CardRole,
+  type IdentityRole,
+} from "@havenkeys/protocol";
 import { BridgeError } from "../messaging/native";
 import { t } from "../i18n";
 import {
   MENU_MAX_ROWS,
   parseFillReply,
+  parseHostReply,
+  type Anchor,
+  type CardRowView,
+  type CardSaveView,
+  type SubmittedCardWire,
   type BackgroundToContent,
   type ContentRequest,
   type FillPayload,
@@ -37,7 +62,8 @@ import {
   type ReadyReply,
   type SaveView,
 } from "../messaging/inline";
-import { displayHost } from "../shared/url";
+import { displayHost, pageUrlForRequest } from "../shared/url";
+import { cardRows, displayExpiry } from "./card-rows";
 import type { BgWaResize, BgWaResult, PasskeyRow } from "../webauthn/messages";
 import type { PasskeySite } from "./passkey-sites";
 import { createRuns, nextStep } from "./signin-run";
@@ -84,9 +110,61 @@ export interface InlineDeps {
   suggestionsOn?(): Promise<boolean>;
   /** Starts a "Sign in with" run for a login saved with a provider (sso-handler.ts). */
   startSso?(frame: FrameRef, itemId: string): Promise<InlineReply<null>>;
+  /** Send to every frame of a tab (the card scan). */
+  sendToTab?(tabId: number, msg: BackgroundToContent): Promise<unknown>;
+  /** Wait `ms` (the card scan's window). Absent: setTimeout. */
+  wait?(ms: number): Promise<void>;
+  /**
+   * The tab's frames, from the browser (webNavigation.getAllFrames); null
+   * when unknown. Absent or null: no subframe gets a card.
+   */
+  frames?(tabId: number): Promise<FrameNode[] | null>;
+}
+
+/** A frame of a tab as the browser lists it. */
+export interface FrameNode {
+  frameId: number;
+  /** -1 for the top frame. */
+  parentFrameId: number;
+  /** The full URL (query and fragment included). */
+  url: string;
+  documentId?: string;
 }
 
 export const MENU_TTL_MS = 5 * 60_000;
+export const CARD_SCAN_MS = 300;
+export const CARD_SAVE_TTL_MS = 120_000;
+export const MAX_SCAN_REPORTS = 16;
+/** Frames between a card frame and the top page, at most (deeper: dropped). */
+export const MAX_FRAME_DEPTH = 8;
+
+/** A frame's card fields, as it reported them (cs_card_fields). */
+export interface CardReport {
+  frame: FrameRef;
+  roles: CardRole[];
+}
+
+/** A frame to fill: its roles, and the menu token for the frame the user clicked in. */
+export interface CardTarget {
+  frame: FrameRef;
+  token: string | null;
+  roles: CardRole[];
+}
+
+interface CardMenu {
+  roles: CardRole[];
+  rows: CardRowView[];
+  insecure: boolean;
+}
+
+interface PendingCardSave {
+  token: string;
+  frame: FrameRef;
+  card: SubmittedCardWire;
+  brand: CardBrandId | null;
+  title: string;
+  expires: number;
+}
 export const SAVE_TTL_MS = 3 * 60_000;
 export const USERNAME_TTL_MS = 5 * 60_000;
 
@@ -102,6 +180,9 @@ interface MenuSession {
   /** The form's identity roles (from the content script). */
   roles: IdentityRole[];
   identity: IdentityRowView | null;
+  card: CardMenu | null;
+  /** The top frame showing this menu for a processor frame. */
+  host: Pick<FrameRef, "tabId" | "frameId"> | null;
   expires: number;
 }
 
@@ -126,6 +207,8 @@ function fail(e: unknown): { ok: false; message: string } {
 export function createInlineHandler(deps: InlineDeps) {
   const menus = new Map<number, MenuSession>(); // by tab
   const saves = new Map<number, PendingSave>(); // by tab
+  const cardSaves = new Map<number, PendingCardSave>(); // by tab
+  const scans = new Map<string, { tabId: number; reports: CardReport[] }>(); // by scan token
   const recentUsernames = new Map<number, { origin: string; username: string; expires: number }>();
   const runs = createRuns(deps.now);
 
@@ -142,6 +225,7 @@ export function createInlineHandler(deps: InlineDeps) {
     if (!m) return;
     menus.delete(tabId);
     void deps.sendToFrame(m.frame, { type: "bg_close_menu", token: m.token });
+    if (m.host) void deps.sendToFrame(m.host, { type: "bg_close_menu", token: m.token });
   }
 
   function dropSave(tabId: number, notify: boolean): void {
@@ -169,6 +253,25 @@ export function createInlineHandler(deps: InlineDeps) {
     if (!s || s.token !== token) return null;
     if (s.expires <= deps.now()) {
       dropSave(tabId, true);
+      return null;
+    }
+    return s;
+  }
+
+  function dropCardSave(tabId: number, notify: boolean): void {
+    const s = cardSaves.get(tabId);
+    if (!s) return;
+    cardSaves.delete(tabId);
+    // Strings cannot be wiped in JS; dropping the only reference is the most we can do.
+    s.card = { number: "", expiry: "", verificationNumber: null, cardholderName: null };
+    if (notify) void deps.sendToFrame(top(s.frame), { type: "bg_close_save", token: s.token });
+  }
+
+  function liveCardSave(tabId: number, token: string): PendingCardSave | null {
+    const s = cardSaves.get(tabId);
+    if (!s || s.token !== token) return null;
+    if (s.expires <= deps.now()) {
+      dropCardSave(tabId, true);
       return null;
     }
     return s;
@@ -218,7 +321,189 @@ export function createInlineHandler(deps: InlineDeps) {
     };
   }
 
-  async function openMenu(frame: FrameRef, kind: MenuKind, explicit: boolean, roles: IdentityRole[] = []): Promise<OpenMenuReply> {
+  // ------------------------------------------------------------ cards
+
+  /** Rust would serve a card to a frame at `url` under `topUrl` (a lookup: no values). Cached per fill. */
+  function cardUrlAllowed(url: string, topUrl: string | undefined, cache: Map<string, Promise<boolean>>): Promise<boolean> {
+    const key = `${url} ${topUrl ?? ""}`;
+    let p = cache.get(key);
+    if (!p) {
+      p = deps.client
+        .request({ type: "find_cards", ...(topUrl === undefined ? { url } : { url, topUrl }) })
+        .then((r) => !r.insecure)
+        .catch(() => false);
+      cache.set(key, p);
+    }
+    return p;
+  }
+
+  const sameOrigin = (a: string, b: string): boolean => {
+    try {
+      return new URL(a).origin === new URL(b).origin;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Rust compares a frame with the top page only. Here every frame between
+   * `frame` and the top page must be one Rust would also accept (same
+   * origin as the top page, or a find_cards lookup that is not denied), per
+   * the browser's frame tree; and the frame must still be the document that
+   * asked. The top frame always passes; no tree: no subframe does.
+   */
+  async function chainAllowed(frame: FrameRef, tree: FrameNode[] | null, cache: Map<string, Promise<boolean>>): Promise<boolean> {
+    if (frame.frameId === 0) return true;
+    const topUrl = frame.topUrl;
+    if (!tree || topUrl === undefined) return false;
+    const byId = new Map(tree.map((n) => [n.frameId, n]));
+    const root = byId.get(0);
+    if (!root || pageUrlForRequest(root.url) !== topUrl) return false; // the tab moved on
+    const self = byId.get(frame.frameId);
+    if (!self || pageUrlForRequest(self.url) !== frame.url) return false;
+    if (frame.documentId !== undefined && self.documentId !== undefined && self.documentId !== frame.documentId) return false;
+    let parent = self.parentFrameId;
+    for (let depth = 0; parent !== 0; depth++) {
+      const node = depth < MAX_FRAME_DEPTH ? byId.get(parent) : undefined;
+      if (!node) return false;
+      const url = pageUrlForRequest(node.url);
+      if (!url) return false; // about:blank, srcdoc, data: … whose origin we cannot tell
+      if (!sameOrigin(url, topUrl) && !(await cardUrlAllowed(url, topUrl, cache))) return false;
+      parent = node.parentFrameId;
+    }
+    return true;
+  }
+
+  async function frameTree(tabId: number): Promise<FrameNode[] | null> {
+    try {
+      return (await deps.frames?.(tabId)) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Ask the top frame to show a processor frame's menu over it (the frame
+   * itself is too small). Only ever sent to frame 0; the child's id and URL
+   * come from the browser's sender data.
+   */
+  async function hostMenu(reply: OpenMenuReply, frame: FrameRef, anchor: Anchor | null): Promise<OpenMenuReply> {
+    if (!reply.ok || frame.frameId === 0 || !anchor) return reply;
+    const m = menus.get(frame.tabId);
+    if (!m || m.token !== reply.token) return reply;
+    const r = await deps.sendToFrame(top(frame), {
+      type: "bg_host_menu",
+      token: reply.token,
+      frameId: frame.frameId,
+      url: frame.url,
+      anchor,
+      rows: reply.rows,
+    });
+    if (!parseHostReply(r) || menus.get(frame.tabId) !== m) return reply;
+    m.host = top(frame);
+    return { ...reply, hosted: true };
+  }
+
+  async function openCardMenu(frame: FrameRef, roles: CardRole[], anchor: Anchor | null): Promise<OpenMenuReply> {
+    let list: ResultFor<"find_cards">;
+    try {
+      list = await deps.client.request({ type: "find_cards", ...frameFields(frame) });
+    } catch (e) {
+      if (e instanceof BridgeError && e.code === "locked") {
+        // The unlock row carries no card data.
+        return hostMenu(register(frame, "card", true, [], [], { hint: null, help: null }, [], null, { roles, rows: [], insecure: false }), frame, anchor);
+      }
+      // A frame Rust denies, integration off, app gone: stay out of the page.
+      return { ok: false };
+    }
+    if (frame.frameId !== 0 && !(await chainAllowed(frame, await frameTree(frame.tabId), new Map()))) return { ok: false };
+    const card = { roles, rows: cardRows(list.cards, deps.now()), insecure: list.insecure };
+    return hostMenu(register(frame, "card", false, [], [], { hint: null, help: null }, [], null, card), frame, anchor);
+  }
+
+  /** Every frame of the tab reports its card fields for CARD_SCAN_MS. */
+  async function scanCards(tabId: number): Promise<CardReport[]> {
+    if (!deps.sendToTab) return [];
+    const scan = deps.newToken();
+    scans.set(scan, { tabId, reports: [] });
+    void deps.sendToTab(tabId, { type: "bg_card_scan", scan }).catch(() => undefined);
+    await (deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(CARD_SCAN_MS);
+    const s = scans.get(scan);
+    scans.delete(scan);
+    return s?.reports ?? [];
+  }
+
+  /**
+   * Fill a card into the clicked frame (if any) and the tab's other card
+   * frames that are on the same top page and that Rust accepts, each with
+   * an acceptable frame chain. One fill_card; each frame gets its own
+   * values, pinned to its document.
+   */
+  async function fillCard(tabId: number, topUrl: string, clicked: CardTarget | null, itemId: string): Promise<number> {
+    endRun(tabId);
+    const reports = await scanCards(tabId);
+    const tree = await frameTree(tabId);
+    const cache = new Map<string, Promise<boolean>>();
+    const targets: CardTarget[] = [];
+    // The clicked frame passed Rust's lookup when its menu opened.
+    if (clicked && clicked.roles.length > 0 && (await chainAllowed(clicked.frame, tree, cache))) targets.push(clicked);
+    for (const r of reports) {
+      if (targets.length >= MAX_CARD_FRAMES) break;
+      if (r.frame.tabId !== tabId || targets.some((x) => x.frame.frameId === r.frame.frameId)) continue;
+      if ((r.frame.topUrl ?? r.frame.url) !== topUrl) continue;
+      if (!(await chainAllowed(r.frame, tree, cache))) continue;
+      if (!(await cardUrlAllowed(r.frame.url, r.frame.topUrl, cache))) continue;
+      targets.push({ frame: r.frame, token: null, roles: r.roles });
+    }
+    if (targets.length === 0) return 0;
+    const res = await deps.client.request({ type: "fill_card", itemId, topUrl, frames: targets.map((x) => ({ url: x.frame.url, roles: x.roles })) });
+    let n = 0;
+    for (const [i, x] of targets.entries()) {
+      const values = res.frames[i]?.values ?? [];
+      if (values.length > 0) n += (await sendFill(x.frame, x.token, { kind: "card", values }, false, false)).filled;
+    }
+    return n;
+  }
+
+  /** A card the user typed in the top frame: ask to save it unless it is already saved. */
+  async function submitCard(frame: FrameRef, card: SubmittedCardWire): Promise<void> {
+    if (frame.frameId !== 0 || !frame.url.startsWith("https:") || !luhnOk(card.number)) return;
+    let list: ResultFor<"find_cards">;
+    try {
+      // A lookup by URL only: the number stays here until the user says Save.
+      list = await deps.client.request({ type: "find_cards", url: frame.url });
+    } catch {
+      return;
+    }
+    if (list.insecure) return;
+    const last4 = card.number.slice(-4);
+    if (list.cards.some((c) => c.last4 === last4 && c.expiry === card.expiry)) return;
+    dropSave(frame.tabId, true);
+    dropCardSave(frame.tabId, true);
+    const brand = brandOf(card.number);
+    const token = deps.newToken();
+    cardSaves.set(frame.tabId, {
+      token,
+      frame,
+      card,
+      brand,
+      title: brand && brand !== "other" ? CARD_BRAND_NAMES[brand] : t.menu.cardFallback,
+      expires: deps.now() + CARD_SAVE_TTL_MS,
+    });
+    setTimeout(() => {
+      if (cardSaves.get(frame.tabId)?.token === token) dropCardSave(frame.tabId, true);
+    }, CARD_SAVE_TTL_MS);
+    void deps.sendToFrame(top(frame), { type: "bg_show_save", token });
+  }
+
+  async function openMenu(
+    frame: FrameRef,
+    kind: MenuKind,
+    explicit: boolean,
+    roles: IdentityRole[] = [],
+    cardRoles: CardRole[] = [],
+    anchor: Anchor | null = null,
+  ): Promise<OpenMenuReply> {
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
       // The user hid the menu under login fields; saving and passkeys go on.
       // A site's passkey autofill (a conditional get() waiting in this frame)
@@ -227,6 +512,7 @@ export function createInlineHandler(deps: InlineDeps) {
       const waiting = kind === "login" && !explicit ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
       return waiting.length === 0 ? { ok: false } : register(frame, kind, false, [], waiting, { hint: null, help: null });
     }
+    if (kind === "card") return openCardMenu(frame, cardRoles, anchor);
     if (kind === "identity") {
       let row: IdentityRowView | null;
       try {
@@ -272,12 +558,32 @@ export function createInlineHandler(deps: InlineDeps) {
     { hint, help }: { hint: MenuHint | null; help: string | null },
     roles: IdentityRole[] = [],
     identity: IdentityRowView | null = null,
+    card: CardMenu | null = null,
   ): OpenMenuReply {
     closeMenu(frame.tabId);
     const token = deps.newToken();
-    menus.set(frame.tabId, { token, frame, kind, locked, items, passkeys, hint, help, roles, identity, expires: deps.now() + MENU_TTL_MS });
+    menus.set(frame.tabId, {
+      token,
+      frame,
+      kind,
+      locked,
+      items,
+      passkeys,
+      hint,
+      help,
+      roles,
+      identity,
+      card,
+      host: null,
+      expires: deps.now() + MENU_TTL_MS,
+    });
     const offered = items.length + passkeys.length + (hint ? 1 : 0) + (identity ? 1 : 0);
-    const rows = locked || kind === "new_password" || kind === "identity" ? 1 : Math.max(1, Math.min(offered, MENU_MAX_ROWS));
+    const rows =
+      locked || kind === "new_password" || kind === "identity"
+        ? 1
+        : kind === "card"
+          ? Math.max(1, Math.min(card && !card.insecure ? card.rows.length : 1, MENU_MAX_ROWS))
+          : Math.max(1, Math.min(offered, MENU_MAX_ROWS));
     return { ok: true, token, rows };
   }
 
@@ -343,6 +649,7 @@ export function createInlineHandler(deps: InlineDeps) {
     const shownUsername = username ?? (check.itemId === null ? null : await savedUsername(frame, check.itemId));
 
     dropSave(frame.tabId, true);
+    dropCardSave(frame.tabId, true); // one prompt per tab
     const token = deps.newToken();
     saves.set(frame.tabId, {
       token,
@@ -367,6 +674,10 @@ export function createInlineHandler(deps: InlineDeps) {
   function ready(frame: FrameRef): ReadyReply {
     const watch = runs.watchFor(frame);
     if (frame.frameId !== 0) return { saveToken: null, watch };
+    // A pending card is offered again after the checkout navigates, like a login.
+    const c = cardSaves.get(frame.tabId);
+    if (c && c.expires > deps.now()) return { saveToken: c.token, watch };
+    dropCardSave(frame.tabId, false);
     const s = saves.get(frame.tabId);
     if (!s || s.expires <= deps.now()) {
       dropSave(frame.tabId, false);
@@ -413,12 +724,29 @@ export function createInlineHandler(deps: InlineDeps) {
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
     switch (req.type) {
       case "cs_open_menu":
-        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? []);
+        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? [], req.cardRoles ?? [], req.anchor ?? null);
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
-        if (m && m.token === req.token && m.frame.frameId === frame.frameId) menus.delete(frame.tabId);
+        if (!m || m.token !== req.token) return {};
+        if (m.host && (m.frame.frameId === frame.frameId || m.host.frameId === frame.frameId)) {
+          // A hosted menu has two frames showing it: close the other one too.
+          closeMenu(frame.tabId);
+        } else if (m.frame.frameId === frame.frameId) {
+          menus.delete(frame.tabId);
+        }
         return {};
       }
+      case "cs_card_fields": {
+        // The tab and frame are the browser's; one report per frame, a bounded number per scan.
+        const s = scans.get(req.scan);
+        if (s && s.tabId === frame.tabId && s.reports.length < MAX_SCAN_REPORTS && !s.reports.some((r) => r.frame.frameId === frame.frameId)) {
+          s.reports.push({ frame, roles: req.roles });
+        }
+        return {};
+      }
+      case "cs_card_submit":
+        await submitCard(frame, req.card);
+        return {};
       case "cs_submit":
         await submit(frame, req.username, req.password, req.currentPassword);
         return {};
@@ -435,19 +763,35 @@ export function createInlineHandler(deps: InlineDeps) {
 
   // ------------------------------------------------------------ menu and save frames
 
-  async function handleInline(tabId: number, req: InlineRequest): Promise<InlineReply<MenuView | SaveView | null>> {
+  async function handleInline(tabId: number, req: InlineRequest): Promise<InlineReply<MenuView | SaveView | CardSaveView | null>> {
     switch (req.type) {
       case "menu_state": {
         const m = liveMenu(tabId, req.token);
         if (!m) return { ok: false, message: t.errors.menuExpired };
         if (m.locked) return { ok: true, value: { state: "locked" } };
+        if (m.kind === "card" && m.card) {
+          // The top page's site: that is who is paid.
+          const site = displayHost(m.frame.topUrl ?? m.frame.url) ?? "";
+          return { ok: true, value: { state: "cards", site, cards: m.card.insecure ? [] : m.card.rows, insecure: m.card.insecure } };
+        }
         const site = displayHost(m.frame.url) ?? "";
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity } };
       }
-      // Temporary: card menus arrive with the card handler (Task 8).
-      case "menu_pick_card":
-        return { ok: false, message: t.errors.generic };
+      case "menu_pick_card": {
+        const m = liveMenu(tabId, req.token);
+        if (!m || m.locked || m.kind !== "card" || !m.card) return { ok: false, message: t.errors.menuExpired };
+        // Only cards this menu offered (never on an http page); Rust re-checks every frame anyway.
+        if (m.card.insecure || !m.card.rows.some((c) => c.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
+        closeMenu(tabId);
+        try {
+          const filled = await fillCard(tabId, m.frame.topUrl ?? m.frame.url, { frame: m.frame, token: m.token, roles: m.card.roles }, req.itemId);
+          return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.menu.cardNothing };
+        } catch (e) {
+          if (e instanceof BridgeError && e.code === "not_found") return { ok: false, message: t.menu.cardGone };
+          return fail(e);
+        }
+      }
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
         if (!m || m.locked) return { ok: false, message: t.errors.menuExpired };
@@ -541,15 +885,40 @@ export function createInlineHandler(deps: InlineDeps) {
       case "menu_resize": {
         const m = liveMenu(tabId, req.token);
         if (!m) return { ok: false, message: t.errors.menuExpired };
-        void deps.sendToFrame(m.frame, { type: "bg_resize_menu", token: m.token, height: req.height });
+        void deps.sendToFrame(m.host ?? m.frame, { type: "bg_resize_menu", token: m.token, height: req.height });
         return { ok: true, value: null };
       }
       case "save_state": {
+        const c = liveCardSave(tabId, req.token);
+        if (c) {
+          const card = { brand: c.brand, last4: c.card.number.slice(-4), expiry: displayExpiry(c.card.expiry) ?? "" };
+          return { ok: true, value: { site: displayHost(c.frame.url) ?? "", title: c.title, card } };
+        }
         const s = liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
         return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title } };
       }
       case "save_confirm": {
+        const c = liveCardSave(tabId, req.token);
+        if (c) {
+          const title = req.title?.trim() || c.title;
+          try {
+            await deps.client.request({
+              type: "save_card",
+              url: c.frame.url,
+              title,
+              number: c.card.number,
+              expiry: c.card.expiry,
+              ...(c.card.verificationNumber ? { verificationNumber: c.card.verificationNumber } : {}),
+              ...(c.card.cardholderName ? { cardholderName: c.card.cardholderName } : {}),
+            });
+          } catch (e) {
+            return fail(e);
+          } finally {
+            dropCardSave(tabId, true);
+          }
+          return { ok: true, value: null };
+        }
         const s = liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
         // A cleared name field falls back to the suggestion; the desktop checks the rest.
@@ -571,10 +940,11 @@ export function createInlineHandler(deps: InlineDeps) {
         return { ok: true, value: null };
       }
       case "save_dismiss":
+        if (liveCardSave(tabId, req.token)) dropCardSave(tabId, true);
         if (liveSave(tabId, req.token)) dropSave(tabId, true);
         return { ok: true, value: null };
       case "save_resize": {
-        const s = liveSave(tabId, req.token);
+        const s = liveCardSave(tabId, req.token) ?? liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
         void deps.sendToFrame(top(s.frame), { type: "bg_resize_save", token: s.token, height: req.height });
         return { ok: true, value: null };
@@ -588,6 +958,8 @@ export function createInlineHandler(deps: InlineDeps) {
   function reset(): void {
     for (const tabId of [...menus.keys()]) closeMenu(tabId);
     for (const tabId of [...saves.keys()]) dropSave(tabId, true);
+    for (const tabId of [...cardSaves.keys()]) dropCardSave(tabId, true);
+    scans.clear();
     recentUsernames.clear();
     for (const r of runs.clear()) void deps.sendToFrame({ tabId: r.tabId, frameId: r.frameId }, { type: "bg_run_end" });
   }
@@ -596,11 +968,12 @@ export function createInlineHandler(deps: InlineDeps) {
   function forgetTab(tabId: number): void {
     menus.delete(tabId);
     dropSave(tabId, false);
+    dropCardSave(tabId, false);
     recentUsernames.delete(tabId);
     runs.end(tabId);
   }
 
-  return { handleContent, handleInline, pickFill, reset, forgetTab };
+  return { handleContent, handleInline, pickFill, fillCard, scanCards, reset, forgetTab };
 }
 
 export type InlineHandler = ReturnType<typeof createInlineHandler>;

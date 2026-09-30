@@ -97,7 +97,7 @@ function created(r: ResultFor<"passkey_create">): CreatedCredential {
   };
 }
 
-export interface WebAuthnDeps extends InlineDeps {
+export interface WebAuthnDeps extends Omit<InlineDeps, "sendToTab"> {
   client: Client;
   /** Send to every frame of a tab; only the bridge holding the token acts on it. */
   sendToTab(tabId: number, msg: BgWaResult): Promise<unknown>;

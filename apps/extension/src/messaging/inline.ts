@@ -21,6 +21,7 @@ import {
   MAX_CARD_VALUE_BYTES,
   MAX_IDENTITY_ROLES,
   MAX_IDENTITY_VALUE_BYTES,
+  MAX_URL_BYTES,
   type CardBrandId,
   type CardRole,
   type CardValue,
@@ -107,8 +108,13 @@ export type BackgroundToContent =
   | { type: "bg_identity_roles" }
   /** Every frame: report your card fields with cs_card_fields. */
   | { type: "bg_card_scan"; scan: string }
-  /** Top frame: show menu `token` over child frame `frameId`, at `anchor` inside it. Reply { ok }. */
-  | { type: "bg_host_menu"; token: string; frameId: number; anchor: Anchor; rows: number };
+  /**
+   * Top frame: show menu `token` over child frame `frameId`, at `anchor`
+   * inside it. Reply { ok }. `url` is the child's URL as the browser
+   * reported it (no query or fragment), to find its <iframe> where
+   * runtime.getFrameId does not exist (Chromium; content/host-frame.ts).
+   */
+  | { type: "bg_host_menu"; token: string; frameId: number; url: string; anchor: Anchor; rows: number };
 
 export type FillReply = { filled: number; pressing: RunStep | null };
 
@@ -495,12 +501,13 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
     case "bg_card_scan":
       return keysAre(o, ["type", "scan"]) && isToken(o.scan) ? { type: "bg_card_scan", scan: o.scan } : null;
     case "bg_host_menu": {
-      if (!keysAre(o, ["type", "token", "frameId", "anchor", "rows"]) || !isToken(o.token)) return null;
+      if (!keysAre(o, ["type", "token", "frameId", "url", "anchor", "rows"]) || !isToken(o.token)) return null;
       const anchor = parseAnchor(o.anchor);
-      const { frameId, rows } = o;
+      const { frameId, url, rows } = o;
       if (!anchor || typeof frameId !== "number" || !Number.isInteger(frameId) || frameId < 1) return null;
+      if (typeof url !== "string" || url.length === 0 || url.length > MAX_URL_BYTES) return null;
       if (typeof rows !== "number" || !Number.isInteger(rows) || rows < 1 || rows > MENU_MAX_ROWS) return null;
-      return { type: "bg_host_menu", token: o.token, frameId, anchor, rows };
+      return { type: "bg_host_menu", token: o.token, frameId, url, anchor, rows };
     }
     default:
       return null;

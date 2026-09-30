@@ -48,9 +48,13 @@ describe("card messages", () => {
     expect(parseBackgroundMessage({ type: "bg_fill", origin: "https://a.com", token: null, fill, submit: true, totp: false })).toBeNull();
     expect(parseBackgroundMessage({ type: "bg_fill", origin: "https://a.com", token: null, fill: { kind: "card", values: [{ role: "number", value: "" }] }, submit: false, totp: false })).toBeNull();
     expect(parseBackgroundMessage({ type: "bg_card_scan", scan: T })).toEqual({ type: "bg_card_scan", scan: T });
-    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, anchor, rows: 2 })).not.toBeNull();
-    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 0, anchor, rows: 2 })).toBeNull();
-    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, anchor, rows: 9 })).toBeNull();
+    const url = "https://js.stripe.com/v3/elements-inner.html";
+    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, url, anchor, rows: 2 })).toEqual({ type: "bg_host_menu", token: T, frameId: 3, url, anchor, rows: 2 });
+    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, anchor, rows: 2 })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, url: 7, anchor, rows: 2 })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, url: "x".repeat(9000), anchor, rows: 2 })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 0, url, anchor, rows: 2 })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, url, anchor, rows: 9 })).toBeNull();
   });
 
   it("accepts menu_pick_card and host replies exactly", () => {
