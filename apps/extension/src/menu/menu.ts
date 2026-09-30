@@ -4,9 +4,9 @@
 
 import { SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
-import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
+import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
-import { providerIcon } from "./icons";
+import { cardBrandIcon, providerIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -159,6 +159,16 @@ function identityRow(t: string, site: string, v: IdentityRowView): HTMLElement {
   );
 }
 
+function cardRow(t: string, c: CardRowView): HTMLButtonElement {
+  const detail = [msg.menu.cardRow(c.last4, c.expiry), c.expired ? msg.menu.cardExpired : ""].filter(Boolean).join(" · ");
+  const b = row(cardBrandIcon(c.brand), c.title || msg.menu.cardFallback, detail, () => pick({ type: "menu_pick_card", token: t, itemId: c.id }), {
+    title: c.title === "",
+    detail: true,
+  });
+  if (c.expired) b.classList.add("expired");
+  return b;
+}
+
 /** A row that only informs: no button, not in the arrow-key order. */
 function hintNote(title: string, detail: string): HTMLElement {
   return h(
@@ -173,10 +183,18 @@ function render(t: string, view: MenuView): void {
     main.replaceChildren(message(msg.menu.lockedTitle, msg.menu.lockedBody));
     return;
   }
+  if (view.state === "cards") {
+    // The page the card goes to, named once in the header (spec §5.2).
+    site.textContent = msg.menu.cardFillOn(view.site);
+    if (view.insecure) main.replaceChildren(message(msg.menu.cardsInsecureTitle, msg.menu.cardsInsecureBody));
+    else if (view.cards.length === 0) main.replaceChildren(hintNote(msg.menu.noCardsTitle, msg.menu.noCardsBody));
+    else main.replaceChildren(...view.cards.map((c) => cardRow(t, c)));
+    return;
+  }
   site.textContent = view.site;
-  // Temporary: the card rows are rendered by Task 10.
-  if (view.state === "cards" || view.kind === "card") {
-    main.replaceChildren();
+  // Card menus are always the "cards" state; a "ready" view never carries them.
+  if (view.kind === "card") {
+    main.replaceChildren(message(msg.menu.unavailable, msg.menu.cardNothing));
     return;
   }
   if (view.kind === "new_password") {

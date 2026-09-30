@@ -120,3 +120,14 @@ describe("save prompt size", () => {
     expect(asked).toContainEqual({ type: "save_resize", token: TOKEN, height: 34 + 150 });
   });
 });
+
+describe("card save prompt", () => {
+  it("shows the card's logo, last four and expiry with an editable name", async () => {
+    await openPrompt({ site: "shop.com", title: "Visa", card: { brand: "visa", last4: "5556", expiry: "01/30" } });
+    expect(document.getElementById("question")!.textContent).toBe("Save this card to HavenKeys?");
+    expect(document.getElementById("detail")!.textContent).toContain("•••• 5556 · 01/30");
+    expect(document.querySelector("#detail svg")).not.toBeNull();
+    expect(titleField().hidden).toBe(false);
+    expect(titleInput().value).toBe("Visa");
+  });
+});

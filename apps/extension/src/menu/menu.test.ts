@@ -329,3 +329,78 @@ describe("identity row", () => {
     expect(document.body.textContent).toContain("Nothing to fill in this form.");
   });
 });
+
+describe("card rows", () => {
+  const trusted = { isTrusted: true } as MouseEvent;
+  const view = (cards: object[], insecure = false) => ({ ok: true, value: { state: "cards", site: "shop.com", cards, insecure } });
+  const visa = { id: ITEM, title: "Visa", brand: "visa", last4: "1111", expiry: "04/33", expired: false };
+
+  async function setup(v: object) {
+    const handlers = captureClicks();
+    replies = [v];
+    await load();
+    (globalThis as unknown as { chrome: { runtime: { sendMessage: unknown } } }).chrome.runtime.sendMessage = async (m: unknown) => {
+      asked.push(m);
+      return { ok: true, value: null };
+    };
+    await vi.advanceTimersByTimeAsync(1000);
+    return handlers;
+  }
+
+  it("lists cards with their logo, last four and expiry, and names the page", async () => {
+    const handlers = await setup(view([visa, { ...visa, id: "11111111-2222-4333-8444-555555555555", title: "Old", expiry: "01/20", expired: true }]));
+    expect(document.getElementById("site")!.textContent).toBe("Fill on shop.com");
+    const rows = Array.from(document.querySelectorAll<HTMLButtonElement>("button.row"));
+    expect(rows[0]!.textContent).toContain("•••• 1111 · 04/33");
+    expect(rows[0]!.querySelector("svg")).not.toBeNull();
+    expect(rows[1]!.classList.contains("expired")).toBe(true);
+    expect(rows[1]!.textContent).toContain("Expired");
+    handlers.get(rows[0]!)?.(trusted);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked.at(-1)).toEqual({ type: "menu_pick_card", token: TOKEN, itemId: ITEM });
+  });
+
+  it("a synthetic click on a card row sends nothing", async () => {
+    await setup(view([visa]));
+    document.querySelector<HTMLButtonElement>("button.row")!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asked.some((m) => (m as { type: string }).type === "menu_pick_card")).toBe(false);
+  });
+
+  it("draws the logo on a white tile, at the card's aspect ratio; other brands get the generic card", async () => {
+    await setup(view([visa, { ...visa, id: "11111111-2222-4333-8444-555555555555", brand: "other" }, { ...visa, id: "11111111-2222-4333-8444-666666666666", brand: null }]));
+    const svgs = Array.from(document.querySelectorAll<SVGSVGElement>("button.row svg"));
+    expect(svgs).toHaveLength(3);
+    for (const s of svgs) {
+      expect(s.getAttribute("viewBox")).toBe("0 0 780 500");
+      expect(s.getAttribute("width")).toBe("24");
+      expect(s.getAttribute("height")).toBe(String(Math.round((24 * 500) / 780)));
+      const tile = s.firstElementChild!;
+      expect(tile.tagName).toBe("rect");
+      expect(tile.getAttribute("fill")).toBe("#ffffff");
+      expect(tile.getAttribute("width")).toBe("780");
+    }
+    const { CARD_BRAND_ICONS, GENERIC_CARD_ICON } = await import("@havenkeys/ui/card-brand-icons");
+    expect(svgs[0]!.childElementCount).toBe(CARD_BRAND_ICONS.visa.shapes.length + 1);
+    expect(svgs[1]!.childElementCount).toBe(GENERIC_CARD_ICON.shapes.length + 1);
+    expect(svgs[2]!.innerHTML).toBe(svgs[1]!.innerHTML);
+  });
+
+  it("explains http pages without buttons", async () => {
+    await setup(view([], true));
+    expect(document.body.textContent).toContain("HavenKeys fills cards only on secure (https) pages.");
+    expect(document.querySelector("button.row")).toBeNull();
+  });
+
+  it("says when no card is saved, without buttons", async () => {
+    await setup(view([]));
+    expect(document.body.textContent).toContain("No cards saved");
+    expect(document.querySelector("button.row")).toBeNull();
+  });
+
+  it("shows the locked message when the vault is locked", async () => {
+    await setup({ ok: true, value: { state: "locked" } });
+    expect(document.querySelector("button.row")).toBeNull();
+    expect(document.getElementById("main")!.textContent).not.toBe("");
+  });
+});
