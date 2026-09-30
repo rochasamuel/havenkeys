@@ -311,3 +311,40 @@ prompt, in both languages and themes.
   refused"; the processor list and why.
 * CLAUDE.md §25: an amendment note pointing here.
 * `README.md`: one line in the extension's feature list.
+
+## 10. Revisions from planning
+
+Found while writing `docs/superpowers/plans/2026-09-29-card-autofill.md`;
+they take precedence over the sections above.
+
+1. `fill_card` values are ≤ 1024 bytes (a 256-character accented
+   cardholder name exceeds 512).
+2. Stripe also serves card frames from subdomains of `js.stripe.com`; the
+   list has a label-safe "subdomains of" entry for it.
+3. A menu opened inside a processor iframe is drawn by the top frame over
+   that iframe (`bg_host_menu`, located with `runtime.getFrameId`), falling
+   back to the frame itself; a 40-px iframe would clip it.
+4. Before `fill_card`, the background runs a `find_cards` lookup for each
+   extra frame and drops the ones Rust would deny, so an unrelated frame
+   with card-like inputs does not deny the whole fill.
+5. "No cards saved" is informational: no request opens the desktop app
+   without an item.
+6. There is no save-prompt exclusion list; that condition is dropped.
+7. A pending card survives navigation for its 2 minutes (checkouts navigate
+   on submit), as pending logins do.
+8. The save prompt is offered for cards typed in the top frame only (the
+   background cannot tell same-site frames apart without the public-suffix
+   list).
+9. "Fill on *site*" is shown once, in the menu header.
+10. The popup lists the cards, each with its own Fill button.
+11. The typed-number check compares digits only, so masked/reformatting
+    number fields still get the save prompt.
+
+Confirmed processor origins: Stripe (`https://js.stripe.com` and
+subdomains), Adyen live (`checkoutshopper-live`, `-live-us`, `-live-au`,
+`-live-apse`, `-live-in`, `-live-nea` `.adyen.com`), Braintree
+(`https://assets.braintreegateway.com`), Mercado Pago
+(`https://secure-fields.mercadopago.com`,
+`https://api-static.mercadopago.com`). Pagar.me, PagSeguro and Cielo are
+left out: their documented integrations keep card inputs on the merchant's
+page, which the same-site rule covers.

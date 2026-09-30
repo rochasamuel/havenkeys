@@ -82,11 +82,10 @@ their ranges sit inside the ranges that Visa, Mastercard and Discover
 cover. The table of ranges is data in `card.rs`, with its source cited in a
 comment, and each range has a test.
 
-On save:
-
-* `brand` given → kept (the user's override);
-* `brand` absent and a number present → `detect_brand`, else `other`;
-* no number → `brand` as given, or absent.
+`brand` stores only the user's choice. When it is absent, the brand shown
+and filled (`CardFields::effective_brand()`) is `detect_brand(number)`, else
+`other`; it is computed when the summary is built, so "Detect from number"
+keeps working after later edits.
 
 `card::check_digit_ok(digits) -> bool` is the Luhn check. It is only
 reported, never enforced.
@@ -140,9 +139,9 @@ create is `Clear`.
 
 ### 5.1 Rust commands
 
-* `get_item` returns a card's cardholder name, brand, expiry, notes and
-  the summary, and `hasNumber` / `hasVerificationNumber` flags; never the
-  number or CVV.
+* `reveal_card(id)` returns a card's cardholder name, brand, expiry,
+  notes, and `hasNumber` / `hasVerificationNumber` flags; never the number
+  or CVV (as `reveal_identity`; `get_item` only returns the overview).
 * `reveal_card_field(id, field)`: `field` is `number` or
   `verificationNumber`. Only while unlocked, only for a Card (`Denied`
   otherwise).
@@ -169,7 +168,7 @@ Header: the brand logo on a light tile (as in 1Password), the title, and
 
 * **cardholder name**;
 * **type**: the logo and the brand's name;
-* **number**: `5200 •••• •••• 7609`; the eye reveals it grouped for its
+* **number**: `•••• •••• •••• 7609` (the overview keeps only the last 4); the eye reveals it grouped for its
   brand (Amex and Diners 14-digit 4-6-5 / 4-6-4, the rest in fours);
 * **verification number**: masked; the eye reveals it;
 * **expiry date**: `11/2033`, with an **Expired** badge when the month
@@ -208,7 +207,7 @@ One entry per brand in §4.2 except `other`, which uses a generic card glyph
 
 The path data is taken from a source whose licence allows redistribution.
 The plan checks the licence of each logo before importing it and records
-source and licence in `THIRD_PARTY_NOTICES.md`. A brand with no such source
+source and licence in `THIRD-PARTY-NOTICES.md`. A brand with no such source
 gets the generic glyph and its name, and the plan says which. The logos
 only identify the card's network, next to its name.
 
@@ -289,4 +288,4 @@ Then `cargo test`, `cargo clippy -D warnings`, `cargo fmt --check`, `tsc`,
 * `docs/security-model.md`: the card item, what is in the overview (last 4
   and expiry), that the number and CVV reach the UI only on reveal.
 * `README.md`: one line in the desktop feature list.
-* `THIRD_PARTY_NOTICES.md`: the logos' sources and licences.
+* `THIRD-PARTY-NOTICES.md`: the logos' sources and licences.
