@@ -68,6 +68,10 @@ impl PageUrl {
     pub(crate) fn url(&self) -> &Url {
         &self.url
     }
+
+    pub(crate) fn is_https(&self) -> bool {
+        self.url.scheme() == "https"
+    }
 }
 
 /// Host with a single trailing dot removed (`example.com.` is the same DNS
@@ -104,6 +108,12 @@ pub(crate) fn registrable_domain_of(host: &str) -> Option<String> {
 pub(crate) fn site_of(page: &PageUrl) -> Option<String> {
     let host = host_key(page.url())?;
     Some(registrable_domain_of(&host).unwrap_or(host))
+}
+
+/// Both pages have a site, and it is the same one. The scheme is not part
+/// of a site.
+pub(crate) fn same_site(a: &PageUrl, b: &PageUrl) -> bool {
+    matches!((site_of(a), site_of(b)), (Some(x), Some(y)) if x == y)
 }
 
 fn scheme_allowed(rule: &Url, page: &Url) -> bool {

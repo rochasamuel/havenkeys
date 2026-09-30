@@ -242,6 +242,27 @@ pub struct ItemInput {
     pub card: Option<CardInput>,
 }
 
+impl ItemInput {
+    /// An item of `item_type` with nothing set: no username, websites or
+    /// secrets, every secret left as it is.
+    pub(crate) fn blank(item_type: ItemType, title: String) -> ItemInput {
+        ItemInput {
+            item_type,
+            title,
+            username: None,
+            urls: Vec::new(),
+            password: SecretUpdate::Keep,
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: None,
+            identity: None,
+            card: None,
+        }
+    }
+}
+
 impl fmt::Debug for ItemInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ItemInput")

@@ -117,10 +117,7 @@ pub fn parse(blob: &[u8]) -> Result<ParsedBlob<'_>> {
     }
     let version = blob[0];
     let algorithm = blob[1];
-    if version != BLOB_V1 {
-        return Err(Error::UnsupportedVersion);
-    }
-    if algorithm != ALG_AES_256_GCM {
+    if version != BLOB_V1 || algorithm != ALG_AES_256_GCM {
         return Err(Error::UnsupportedVersion);
     }
     let nonce: &[u8; NONCE_LEN] = blob[2..HEADER_LEN]

@@ -8,16 +8,14 @@
 //! for a new passkey.
 
 use super::{
-    assert, authorize_rp, clean_site_name, register, Assertion, B64Url, NewUser, Registration,
-    CREDENTIAL_ID_LEN, MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN, MAX_USER_HANDLE_BYTES,
-    MIN_CHALLENGE_BYTES,
+    assert, authorize_rp, clean_site_name, register, Assertion, B64Url, NewUser, Passkey,
+    Registration, CREDENTIAL_ID_LEN, MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN,
+    MAX_USER_HANDLE_BYTES, MIN_CHALLENGE_BYTES,
 };
 use crate::error::{Error, Result};
-use crate::model::{
-    ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule,
-};
+use crate::model::{ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, UrlRule};
 use crate::origin::{site_of, PageUrl};
-use crate::vault::{build_item, StagedWrite, Suggestion, VaultService};
+use crate::vault::{build_item, Session, StagedWrite, Suggestion, VaultService};
 use serde::Serialize;
 use std::fmt;
 use uuid::Uuid;
@@ -128,7 +126,51 @@ fn fold(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
+/// Logins whose overview says they hold a passkey.
+fn passkey_logins(session: &Session) -> impl Iterator<Item = &ItemOverview> {
+    session
+        .overviews
+        .values()
+        .filter(|o| o.item_type == ItemType::Login && o.has_passkey)
+}
+
+/// A new login for a passkey created on `page_url`: titled by its host,
+/// with the page's origin as its one whole-site rule and the site's account
+/// name, if any, as its username.
+fn new_login_for_passkey(
+    page_url: &str,
+    user_name: String,
+    now_ms: i64,
+) -> Result<(ItemOverview, ItemDetails)> {
+    let page = PageUrl::parse(page_url).ok_or(Error::Denied)?;
+    let (title, origin) = page.title_and_origin().ok_or(Error::Denied)?;
+    let input = ItemInput {
+        username: Some(user_name).filter(|u| !u.is_empty()),
+        urls: vec![UrlRule {
+            url: origin,
+            match_type: MatchType::Domain,
+        }],
+        ..ItemInput::blank(ItemType::Login, title)
+    };
+    build_item(Uuid::new_v4(), input, None, now_ms, now_ms)
+}
+
 impl VaultService {
+    /// The first login with a passkey for which `pred` holds. A login whose
+    /// details do not open is skipped, not fatal.
+    fn find_login_with_passkey(&self, pred: impl Fn(&Passkey) -> bool) -> Result<Option<Uuid>> {
+        let session = self.session()?;
+        let candidates: Vec<Uuid> = passkey_logins(session).map(|o| o.id).collect();
+        for id in candidates {
+            if let Ok(ItemDetails::Login { passkeys, .. }) = self.load_details(&id) {
+                if passkeys.iter().any(&pred) {
+                    return Ok(Some(id));
+                }
+            }
+        }
+        Ok(None)
+    }
+
     /// The login that already holds a passkey for `rp_id` + `user_handle`,
     /// if any, anywhere in the vault. WebAuthn overwrites a credential
     /// source that shares an authenticator, rpId and user handle with an
@@ -140,24 +182,7 @@ impl VaultService {
     /// for the same account. A login whose details do not open is skipped,
     /// not fatal, matching `find_passkeys`.
     fn find_passkey_holder(&self, rp_id: &str, user_handle: &[u8]) -> Result<Option<Uuid>> {
-        let session = self.session()?;
-        let candidates: Vec<Uuid> = session
-            .overviews
-            .values()
-            .filter(|o| o.item_type == ItemType::Login && o.has_passkey)
-            .map(|o| o.id)
-            .collect();
-        for id in candidates {
-            if let Ok(ItemDetails::Login { passkeys, .. }) = self.load_details(&id) {
-                if passkeys
-                    .iter()
-                    .any(|p| p.rp_id == rp_id && p.user_handle.0 == user_handle)
-                {
-                    return Ok(Some(id));
-                }
-            }
-        }
-        Ok(None)
+        self.find_login_with_passkey(|p| p.rp_id == rp_id && p.user_handle.0 == user_handle)
     }
 
     /// Load a login for editing, stamping `updated_at` and carrying the
@@ -186,10 +211,7 @@ impl VaultService {
     ) -> Result<Vec<PasskeyMatch>> {
         let session = self.session()?;
         let ctx = authorize_rp(rp_id, page_url, top_url)?;
-        let holders: Vec<(Uuid, String)> = session
-            .overviews
-            .values()
-            .filter(|o| o.item_type == ItemType::Login && o.has_passkey)
+        let holders: Vec<(Uuid, String)> = passkey_logins(session)
             .map(|o| (o.id, o.title.clone()))
             .collect();
         let mut out = Vec::new();
@@ -376,44 +398,23 @@ impl VaultService {
         if req.conditional && holder.is_some() {
             return Err(Error::Denied);
         }
-        let (mut overview, mut details, base) = if let Some(id) = holder {
-            self.load_login_for_edit(id, now_ms)?
-        } else {
-            match req.item_id {
-                Some(id) => {
-                    let offered = self
-                        .find_matches(req.page_url, req.top_url)?
-                        .iter()
-                        .any(|s| s.id == id);
-                    if !offered {
-                        return Err(Error::Denied);
-                    }
-                    self.load_login_for_edit(id, now_ms)?
+        // The existing holder wins over the login the caller named; a named
+        // login must be one this page is offered.
+        let (mut overview, mut details, base) = match (holder, req.item_id) {
+            (Some(id), _) => self.load_login_for_edit(id, now_ms)?,
+            (None, Some(id)) => {
+                let offered = self
+                    .find_matches(req.page_url, req.top_url)?
+                    .iter()
+                    .any(|s| s.id == id);
+                if !offered {
+                    return Err(Error::Denied);
                 }
-                None => {
-                    let page = PageUrl::parse(req.page_url).ok_or(Error::Denied)?;
-                    let (title, origin) = page.title_and_origin().ok_or(Error::Denied)?;
-                    let input = ItemInput {
-                        item_type: ItemType::Login,
-                        title,
-                        username: Some(user_name).filter(|u| !u.is_empty()),
-                        urls: vec![UrlRule {
-                            url: origin,
-                            match_type: MatchType::Domain,
-                        }],
-                        password: SecretUpdate::Keep,
-                        totp: SecretUpdate::Keep,
-                        notes: SecretUpdate::Keep,
-                        content: SecretUpdate::Keep,
-                        auto_sign_in: None,
-                        sign_in_with: None,
-                        identity: None,
-                        card: None,
-                    };
-                    let (overview, details) =
-                        build_item(Uuid::new_v4(), input, None, now_ms, now_ms)?;
-                    (overview, details, None)
-                }
+                self.load_login_for_edit(id, now_ms)?
+            }
+            (None, None) => {
+                let (overview, details) = new_login_for_passkey(req.page_url, user_name, now_ms)?;
+                (overview, details, None)
             }
         };
         let ItemDetails::Login { passkeys, .. } = &mut details else {
@@ -451,25 +452,9 @@ impl VaultService {
     /// `authorize_rp` for the page)? Nothing else about it is returned. A
     /// login whose details do not open is skipped.
     pub fn has_passkey_for_page(&self, page_url: &str, top_url: Option<&str>) -> Result<bool> {
-        let session = self.session()?;
-        let holders: Vec<Uuid> = session
-            .overviews
-            .values()
-            .filter(|o| o.item_type == ItemType::Login && o.has_passkey)
-            .map(|o| o.id)
-            .collect();
-        for id in holders {
-            let Ok(ItemDetails::Login { passkeys, .. }) = self.load_details(&id) else {
-                continue;
-            };
-            if passkeys
-                .iter()
-                .any(|p| authorize_rp(&p.rp_id, page_url, top_url).is_ok())
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Ok(self
+            .find_login_with_passkey(|p| authorize_rp(&p.rp_id, page_url, top_url).is_ok())?
+            .is_some())
     }
 
     /// Public details of a login's passkeys, for the desktop app.

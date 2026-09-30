@@ -169,7 +169,8 @@ impl std::fmt::Debug for Suggestion {
     }
 }
 
-/// What [`VaultService::stage_save_login`] writes.
+/// What [`VaultService::stage_save_login`] and
+/// [`VaultService::stage_save_sso`] write.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveTarget<'a> {
     /// A new login. `title`: the user's, from the save prompt; else the host.
@@ -184,6 +185,40 @@ pub enum SaveAction {
     Add,
     Update(Uuid),
     Unchanged,
+}
+
+/// A login keeping `existing`'s title, username and websites, every secret
+/// left as it is and no "Sign in with". Callers set what their save
+/// changes, and "Sign in with" always.
+fn login_input_from(existing: &ItemOverview) -> ItemInput {
+    ItemInput {
+        username: existing.username.clone(),
+        urls: existing.urls.clone(),
+        ..ItemInput::blank(ItemType::Login, existing.title.clone())
+    }
+}
+
+/// A new login saved from a frame: the user's title from the save prompt,
+/// else the host, and one whole-site rule for the frame's own site (never
+/// the top page's).
+fn new_login_for_frame(
+    page_url: &str,
+    top_url: Option<&str>,
+    title: Option<&str>,
+) -> Result<ItemInput> {
+    let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
+    let (host, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
+    let title = match title {
+        Some(t) => clean_title(t)?,
+        None => host,
+    };
+    Ok(ItemInput {
+        urls: vec![UrlRule {
+            url: origin,
+            match_type: MatchType::Domain,
+        }],
+        ..ItemInput::blank(ItemType::Login, title)
+    })
 }
 
 fn normalize_username(u: Option<&str>) -> Option<String> {
@@ -606,7 +641,6 @@ impl VaultService {
         Ok(self.store.header()?.map(|h| h.created_at))
     }
 
-    /// The vault's ID (not secret; it names the vault to the account's server).
     /// The revision of the header stored locally. A device publishes
     /// `revision + 1` when it changes the wrap, and adopts a higher one the
     /// server serves (after checking its attestation).
@@ -619,6 +653,7 @@ impl VaultService {
         Ok(self.store.header()?.map(|h| h.kdf))
     }
 
+    /// The vault's ID (not secret; it names the vault to the account's server).
     pub fn vault_id(&self) -> Result<Option<Uuid>> {
         Ok(self.store.header()?.map(|h| h.vault_id))
     }
@@ -824,11 +859,7 @@ impl VaultService {
         }
         let local = self.store.header()?.ok_or(Error::NoVault)?;
         let floor = self
-            .store
-            .account()?
-            .ok_or(Error::InvalidInput(
-                "this vault is not linked to an account",
-            ))?
+            .require_account()?
             .max_header_rev
             .max(local.revision as i64);
         let h = &prepared.header;
@@ -931,25 +962,20 @@ impl VaultService {
         {
             return Err(Error::Busy);
         }
-        if self.store.account()?.is_none() {
-            return Err(Error::InvalidInput(
-                "this vault is not linked to an account",
-            ));
-        }
+        self.require_account()?;
         if revision != current.revision.saturating_add(1) {
             return Err(Error::Corrupted);
         }
-        let new_revision = revision;
         self.store.update_key_wrap(
             &rekeyed.kdf,
             &rekeyed.wrapped_vault_key,
             rekeyed.key_scheme,
-            new_revision,
+            revision,
         )?;
         // A local password change raises the rollback floor too, so a
         // hostile server cannot later replay the header this device just
         // replaced.
-        self.store.raise_max_header_rev(new_revision as i64)?;
+        self.store.raise_max_header_rev(revision as i64)?;
         Ok(())
     }
 
@@ -1304,54 +1330,23 @@ impl VaultService {
             account: account.map(str::to_owned),
         });
         let input = match target {
-            SaveTarget::New { title } => {
-                let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-                let (host, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
-                let title = match title {
-                    Some(t) => clean_title(t)?,
-                    None => host,
-                };
-                ItemInput {
-                    item_type: ItemType::Login,
-                    title,
-                    username: None,
-                    urls: vec![UrlRule {
-                        url: origin,
-                        match_type: MatchType::Domain,
-                    }],
-                    password: SecretUpdate::Keep,
-                    totp: SecretUpdate::Keep,
-                    notes: SecretUpdate::Keep,
-                    content: SecretUpdate::Keep,
-                    auto_sign_in: None,
-                    sign_in_with,
-                    identity: None,
-                    card: None,
-                }
-            }
+            SaveTarget::New { title } => ItemInput {
+                sign_in_with,
+                ..new_login_for_frame(page_url, top_url, title)?
+            },
             SaveTarget::Update(id) => {
                 // An update only ever fills in an account: saving none over
                 // a login would erase the one it has.
                 if account.is_none_or(|a| a.trim().is_empty()) {
                     return Err(Error::InvalidInput("account is required"));
                 }
-                let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+                let existing = self.authorize_for_page(id, page_url, top_url)?;
                 if existing.sign_in_with.as_ref().map(|s| s.provider) != Some(provider) {
                     return Err(Error::Denied);
                 }
                 let input = ItemInput {
-                    item_type: ItemType::Login,
-                    title: existing.title.clone(),
-                    username: existing.username.clone(),
-                    urls: existing.urls.clone(),
-                    password: SecretUpdate::Keep,
-                    totp: SecretUpdate::Keep,
-                    notes: SecretUpdate::Keep,
-                    content: SecretUpdate::Keep,
-                    auto_sign_in: None,
                     sign_in_with,
-                    identity: None,
-                    card: None,
+                    ..login_input_from(existing)
                 };
                 return Ok(StagedSave {
                     item_id: *id,
@@ -1427,17 +1422,6 @@ impl VaultService {
         Ok(update.map_or(SaveAction::Add, SaveAction::Update))
     }
 
-    /// What saving a login the user just submitted on the page would do —
-    /// without doing it.
-    ///
-    /// Saving is a write, and writes need a server to accept them (spec
-    /// 2026-09-20 §8.4). This always refuses with `Error::Offline`, and
-    /// touches neither the store nor the overview cache: a device with no
-    /// sync client must not fabricate a server revision for a row the
-    /// server never numbered. Origin binding is still checked first, so a
-    /// save for the wrong site or for an item that does not match the page
-    /// is `Denied`, exactly as before; only a save that would otherwise have
-    /// succeeded is `Offline`.
     /// Seal the login a browser form just submitted, ready to send.
     ///
     /// Same authorization as any other write from the extension: an update
@@ -1464,30 +1448,12 @@ impl VaultService {
                 return self.stage_save_update(id, page_url, top_url, password, now_ms)
             }
         };
-        // Saved for the frame the form was in, as a whole-site rule. The
-        // title is the user's, from the save prompt, or else the host.
-        let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-        let (host, origin) = page.site_title_and_origin().ok_or(Error::Denied)?;
-        let title = match title {
-            Some(t) => clean_title(t)?,
-            None => host,
-        };
+        // The frame is checked before anything is copied from the form.
+        let base = new_login_for_frame(page_url, top_url, title)?;
         let input = ItemInput {
-            item_type: ItemType::Login,
-            title,
             username: username.map(str::to_owned),
-            urls: vec![UrlRule {
-                url: origin,
-                match_type: MatchType::Domain,
-            }],
             password: SecretUpdate::Set(password),
-            totp: SecretUpdate::Keep,
-            notes: SecretUpdate::Keep,
-            content: SecretUpdate::Keep,
-            auto_sign_in: None,
-            sign_in_with: None,
-            identity: None,
-            card: None,
+            ..base
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
@@ -1505,20 +1471,11 @@ impl VaultService {
         password: SecretString,
         now_ms: i64,
     ) -> Result<StagedSave> {
-        let existing = self.authorize_for_page(id, page_url, top_url)?.clone();
+        let existing = self.authorize_for_page(id, page_url, top_url)?;
         let input = ItemInput {
-            item_type: ItemType::Login,
-            title: existing.title.clone(),
-            username: existing.username.clone(),
-            urls: existing.urls.clone(),
             password: SecretUpdate::Set(password),
-            totp: SecretUpdate::Keep,
-            notes: SecretUpdate::Keep,
-            content: SecretUpdate::Keep,
-            auto_sign_in: None,
             sign_in_with: existing.sign_in_with.clone(),
-            identity: None,
-            card: None,
+            ..login_input_from(existing)
         };
         Ok(StagedSave {
             item_id: *id,
@@ -1846,22 +1803,13 @@ impl VaultService {
             Ok(ItemDetails::Login { notes: Some(n), .. }) if n.expose().trim().eq_ignore_ascii_case(&legacy)
         );
         let input = ItemInput {
-            item_type: ItemType::Login,
-            title: existing.title.clone(),
-            username: existing.username.clone(),
-            urls: existing.urls.clone(),
-            password: SecretUpdate::Keep,
-            totp: SecretUpdate::Keep,
             notes: if clear_notes {
                 SecretUpdate::Clear
             } else {
                 SecretUpdate::Keep
             },
-            content: SecretUpdate::Keep,
-            auto_sign_in: None,
             sign_in_with: Some(sso),
-            identity: None,
-            card: None,
+            ..login_input_from(&existing)
         };
         self.stage_update(id, input, now_ms).map(Some)
     }
@@ -2164,6 +2112,75 @@ mod tests {
     use crate::crypto::kdf::test_params;
 
     const PASSWORD: &str = "correct horse battery staple";
+    const NOT_LINKED: Error = Error::InvalidInput("this vault is not linked to an account");
+
+    fn linked_vault() -> (VaultService, SecretKey, AccountRef) {
+        let account = AccountRef::new(
+            Uuid::from_u128(7),
+            NormalizedEmail::parse("user@example.com").unwrap(),
+        );
+        let made =
+            prepare_new_account_vault(&SecretString::from(PASSWORD), &account, test_params(), 0)
+                .unwrap();
+        let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+        vault
+            .create_account_vault(
+                made.prepared,
+                &AccountRecord {
+                    account_id: account.id,
+                    email: "user@example.com".into(),
+                    server_url: "https://vault.example.com".into(),
+                    server_cursor: 0,
+                    max_header_rev: 0,
+                    last_synced_at: None,
+                },
+            )
+            .unwrap();
+        (vault, made.secret_key, account)
+    }
+
+    #[test]
+    fn commit_rekey_is_refused_when_the_account_row_vanishes_mid_rekey() {
+        let (mut vault, sk, account) = linked_vault();
+        let ticket = vault.begin_rekey().unwrap();
+        let rekeyed = ticket.derive_for_account(
+            &SecretString::from(PASSWORD),
+            &SecretString::from("a much longer new password"),
+            test_params(),
+            &sk,
+            &account,
+        );
+        vault
+            .store
+            .conn()
+            .execute("DELETE FROM account", [])
+            .unwrap();
+        assert_eq!(
+            vault.commit_rekey(ticket, rekeyed, 1).unwrap_err(),
+            NOT_LINKED
+        );
+        assert_eq!(vault.header_revision().unwrap(), Some(0));
+    }
+
+    #[test]
+    fn adopt_and_unlock_is_refused_without_an_account_row() {
+        let (mut vault, _, account) = linked_vault();
+        vault.lock();
+        vault
+            .store
+            .conn()
+            .execute("DELETE FROM account", [])
+            .unwrap();
+        let other =
+            prepare_new_account_vault(&SecretString::from(PASSWORD), &account, test_params(), 0)
+                .unwrap();
+        let epoch = vault.epoch();
+        assert_eq!(
+            vault.adopt_and_unlock(other.prepared, epoch).unwrap_err(),
+            NOT_LINKED
+        );
+        assert!(!vault.is_unlocked());
+    }
 
     /// An account-bound vault whose account row is missing (a hand-edited
     /// database; `create_account_vault` makes it unreachable otherwise) must

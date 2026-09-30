@@ -52,6 +52,30 @@ fn same_site(a: &str, b: &str) -> bool {
     }
 }
 
+/// `(cross_origin, top_origin)` for a frame on `host` at `origin`, framed in
+/// the page at `top_url`, if any. The top-level page must be a secure
+/// context and the same site as the frame.
+fn top_frame(host: &str, origin: &str, top_url: Option<&str>) -> Result<(bool, Option<String>)> {
+    let Some(t) = top_url else {
+        return Ok((false, None));
+    };
+    let top_page = PageUrl::parse(t).ok_or(Error::Denied)?;
+    let top = top_page.url();
+    if !secure_context(top) {
+        return Err(Error::Denied);
+    }
+    let top_host = host_key(top).ok_or(Error::Denied)?;
+    if !same_site(host, &top_host) {
+        return Err(Error::Denied);
+    }
+    let top_origin = top.origin().ascii_serialization();
+    if top_origin == origin {
+        Ok((false, None))
+    } else {
+        Ok((true, Some(top_origin)))
+    }
+}
+
 /// May the page at `page_url` (framed in `top_url`, if any) use `rp_id`?
 ///
 /// * the page is a secure context;
@@ -80,26 +104,7 @@ pub fn authorize_rp(rp_id: &str, page_url: &str, top_url: Option<&str>) -> Resul
         }
     }
     let origin = frame.origin().ascii_serialization();
-    let (cross_origin, top_origin) = match top_url {
-        None => (false, None),
-        Some(t) => {
-            let top_page = PageUrl::parse(t).ok_or(Error::Denied)?;
-            let top = top_page.url();
-            if !secure_context(top) {
-                return Err(Error::Denied);
-            }
-            let top_host = host_key(top).ok_or(Error::Denied)?;
-            if !same_site(&host, &top_host) {
-                return Err(Error::Denied);
-            }
-            let top_origin = top.origin().ascii_serialization();
-            if top_origin == origin {
-                (false, None)
-            } else {
-                (true, Some(top_origin))
-            }
-        }
-    };
+    let (cross_origin, top_origin) = top_frame(&host, &origin, top_url)?;
     Ok(RpContext {
         rp_id,
         origin,
@@ -181,6 +186,34 @@ mod tests {
             "https://github.com/",
             None,
         );
+    }
+
+    #[test]
+    fn top_frame_edge_cases() {
+        denied("github.com", "https://github.com/", Some("file:///x"));
+        denied(
+            "github.com",
+            "https://github.com/",
+            Some("https://127.0.0.1/"),
+        );
+        // No registrable domain: same host required; another port is
+        // cross-origin.
+        let c = authorize_rp(
+            "localhost",
+            "http://localhost:1/",
+            Some("http://localhost:2/"),
+        )
+        .unwrap();
+        assert!(c.cross_origin);
+        assert_eq!(c.top_origin.as_deref(), Some("http://localhost:2"));
+        let same = authorize_rp(
+            "github.com",
+            "https://github.com/a",
+            Some("https://github.com/b"),
+        )
+        .unwrap();
+        assert!(!same.cross_origin);
+        assert_eq!(same.top_origin, None);
     }
 
     #[test]

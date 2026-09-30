@@ -1344,3 +1344,132 @@ fn a_failing_import_upgrade_does_not_abort_the_import() {
     assert_eq!(staged.report.logins, 1);
     assert_eq!(staged.writes.len(), 1);
 }
+
+#[test]
+fn save_sso_new_is_bound_to_the_frame_and_checks_the_title() {
+    let (mut v, _) = sso_vault();
+    let new = |v: &havenkeys_core::vault::VaultService, page: &str, top: Option<&str>, title| {
+        v.stage_save_sso(
+            page,
+            top,
+            SsoProvider::Google,
+            Some("me@gmail.com"),
+            SaveTarget::New { title },
+            NOW,
+        )
+    };
+    assert_eq!(
+        new(&v, "file:///etc/passwd", None, None).err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        new(&v, "https://www.example.com/", Some("not a url"), None).err(),
+        Some(Error::Denied)
+    );
+    assert!(matches!(
+        new(&v, "https://www.example.com/", None, Some("   ")),
+        Err(Error::InvalidInput(_))
+    ));
+    let staged = new(&v, "https://www.example.com/x", None, None).unwrap();
+    assert_eq!(staged.item_id, staged.write.item_id);
+    let ov = v.commit_write(staged.write, 7).unwrap().unwrap();
+    assert_eq!(ov.title, "example.com");
+    assert_eq!(ov.username, None);
+    assert!(!ov.has_password && !ov.has_totp && !ov.has_notes);
+    assert!(ov.auto_sign_in);
+    assert_eq!(ov.urls.len(), 1);
+    assert_eq!(ov.urls[0].url, "https://www.example.com/");
+    assert_eq!(
+        ov.urls[0].match_type,
+        havenkeys_core::model::MatchType::Domain
+    );
+    let sso = ov.sign_in_with.as_ref().unwrap();
+    assert_eq!(sso.provider, SsoProvider::Google);
+    assert_eq!(sso.account.as_deref(), Some("me@gmail.com"));
+}
+
+/// Check order: a missing account beats the origin check; the lock beats
+/// everything but the empty-password check in stage_save_login. An update
+/// keeps everything but the account.
+#[test]
+fn save_check_order_is_pinned() {
+    let (mut v, id) = sso_vault();
+    assert!(matches!(
+        v.stage_save_sso(
+            "https://evil.com/",
+            None,
+            SsoProvider::Google,
+            None,
+            SaveTarget::Update(&id),
+            NOW
+        ),
+        Err(Error::InvalidInput(_))
+    ));
+    let before = v.get_item(&id).unwrap();
+    let staged = v
+        .stage_save_sso(
+            "https://typeform.com/",
+            None,
+            SsoProvider::Google,
+            Some("new@gmail.com"),
+            SaveTarget::Update(&id),
+            NOW,
+        )
+        .unwrap();
+    assert_eq!(staged.item_id, id);
+    let ov = v.commit_write(staged.write, 9).unwrap().unwrap();
+    assert_eq!(
+        (
+            ov.title.as_str(),
+            ov.username.as_deref(),
+            ov.urls.len(),
+            ov.auto_sign_in
+        ),
+        (
+            before.title.as_str(),
+            before.username.as_deref(),
+            before.urls.len(),
+            before.auto_sign_in
+        )
+    );
+    assert_eq!(
+        ov.sign_in_with.as_ref().unwrap().account.as_deref(),
+        Some("new@gmail.com")
+    );
+    v.lock();
+    assert_eq!(
+        v.stage_save_sso(
+            "file:///x",
+            None,
+            SsoProvider::Google,
+            Some("a"),
+            SaveTarget::New { title: None },
+            NOW
+        )
+        .err(),
+        Some(Error::Locked)
+    );
+    assert!(matches!(
+        v.stage_save_login(
+            "file:///x",
+            None,
+            None,
+            secret(""),
+            SaveTarget::New { title: None },
+            NOW
+        ),
+        Err(Error::InvalidInput(_))
+    ));
+    assert_eq!(
+        v.stage_save_login(
+            "file:///x",
+            None,
+            None,
+            secret("x"),
+            SaveTarget::New { title: None },
+            NOW
+        )
+        .err(),
+        Some(Error::Locked)
+    );
+}
