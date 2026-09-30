@@ -68,6 +68,9 @@ fn create_then_sign_in() {
     assert!(item.has_passkey);
     assert_eq!(item.title, "github.com");
     assert_eq!(item.username.as_deref(), Some("octo"));
+    assert_eq!(item.urls.len(), 1);
+    assert_eq!(item.urls[0].url, "https://github.com/");
+    assert_eq!(item.urls[0].match_type, MatchType::Domain);
 
     let found = v.find_passkeys("github.com", GH, None, &[]).unwrap();
     assert_eq!(found.len(), 1);
@@ -89,6 +92,21 @@ fn create_then_sign_in() {
         &[3; 32],
     )
     .unwrap();
+}
+
+#[test]
+fn locked_is_reported_before_origin_checks() {
+    let (mut v, _) = activated_vault();
+    v.lock();
+    assert_eq!(
+        v.find_passkeys("github.com", "https://evil.com/", None, &[])
+            .err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        v.has_passkey_for_page("not a url", None).err(),
+        Some(Error::Locked)
+    );
 }
 
 #[test]

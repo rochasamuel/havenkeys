@@ -412,25 +412,6 @@ fn fill<T>(slot: &mut Option<T>, value: Option<T>) -> bool {
     }
 }
 
-/// An item of `item_type` with nothing set: no username, websites or
-/// secrets, every secret left as it is.
-fn blank(item_type: ItemType, title: String) -> ItemInput {
-    ItemInput {
-        item_type,
-        title,
-        username: None,
-        urls: Vec::new(),
-        password: SecretUpdate::Keep,
-        totp: SecretUpdate::Keep,
-        notes: SecretUpdate::Keep,
-        content: SecretUpdate::Keep,
-        auto_sign_in: None,
-        sign_in_with: None,
-        identity: None,
-        card: None,
-    }
-}
-
 fn set_or_keep(value: Option<SecretString>) -> SecretUpdate {
     value.map_or(SecretUpdate::Keep, SecretUpdate::Set)
 }
@@ -600,14 +581,14 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 totp: set_or_keep(totp),
                 notes: set_or_keep(join_notes(extras.render())),
                 sign_in_with: sso,
-                ..blank(ItemType::Login, title)
+                ..ItemInput::blank(ItemType::Login, title)
             }
         }
         "003" => {
             report.secure_notes += 1;
             ItemInput {
                 content: SecretUpdate::Set(join_notes(extras.render()).unwrap_or_default()),
-                ..blank(ItemType::SecureNote, title)
+                ..ItemInput::blank(ItemType::SecureNote, title)
             }
         }
         "002" => {
@@ -632,7 +613,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                     expiry: card_parts.expiry,
                     notes: join_notes(extras.render()),
                 }),
-                ..blank(ItemType::Card, title)
+                ..ItemInput::blank(ItemType::Card, title)
             }
         }
         other => {
@@ -659,7 +640,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             body.zeroize();
             ItemInput {
                 content: SecretUpdate::Set(content),
-                ..blank(ItemType::SecureNote, title)
+                ..ItemInput::blank(ItemType::SecureNote, title)
             }
         }
     };
