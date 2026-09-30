@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn accepts_look_alike_digits() {
-        let k = SecretKey::from_fixed([0u8; 16]);
+        let k = SecretKey::from_bytes([0u8; SECRET_KEY_LEN]);
         let t = k.to_text().expose().to_owned(); // all 'A's plus check
         let typed = t.replacen("H1", "h1", 1);
         assert!(SecretKey::parse(&typed).is_ok());
@@ -163,11 +163,5 @@ mod tests {
     fn debug_is_redacted() {
         let k = SecretKey::generate().unwrap();
         assert_eq!(format!("{k:?}"), "SecretKey(<redacted>)");
-    }
-
-    impl SecretKey {
-        fn from_fixed(b: [u8; 16]) -> Self {
-            Self(Zeroizing::new(b))
-        }
     }
 }

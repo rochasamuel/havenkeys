@@ -44,11 +44,12 @@ impl fmt::Debug for Key256 {
     }
 }
 
-fn hkdf_expand(ikm: &Key256, salt: Option<&[u8]>, info: &[u8]) -> Result<Key256> {
-    let hk = Hkdf::<Sha256>::new(salt, ikm.as_bytes());
+/// HKDF-SHA256 to one 256-bit output, zeroized on drop.
+fn hkdf_sha256(salt: Option<&[u8]>, ikm: &[u8], info: &[u8]) -> Result<Zeroizing<[u8; KEY_LEN]>> {
+    let hk = Hkdf::<Sha256>::new(salt, ikm);
     let mut okm = Zeroizing::new([0u8; KEY_LEN]);
     hk.expand(info, okm.as_mut()).map_err(|_| Error::Kdf)?;
-    Ok(Key256(okm))
+    Ok(okm)
 }
 
 /// Proof that the holder knows the master password and the Secret Key, sent
@@ -98,10 +99,7 @@ fn account_bound(
     let mut ikm = Zeroizing::new([0u8; KEY_LEN + SECRET_KEY_LEN]);
     ikm[..KEY_LEN].copy_from_slice(master_key.as_bytes());
     ikm[KEY_LEN..].copy_from_slice(secret_key.as_bytes());
-    let hk = Hkdf::<Sha256>::new(Some(account_salt(account).as_ref()), ikm.as_ref());
-    let mut okm = Zeroizing::new([0u8; KEY_LEN]);
-    hk.expand(info, okm.as_mut()).map_err(|_| Error::Kdf)?;
-    Ok(okm)
+    hkdf_sha256(Some(account_salt(account).as_ref()), ikm.as_ref(), info)
 }
 
 /// master key + Secret Key → key-encryption key, bound to the account
@@ -111,12 +109,7 @@ pub fn derive_kek_v3(
     secret_key: &SecretKey,
     account: &AccountRef,
 ) -> Result<Key256> {
-    Ok(Key256(account_bound(
-        master_key,
-        secret_key,
-        account,
-        INFO_KEK_V3,
-    )?))
+    account_bound(master_key, secret_key, account, INFO_KEK_V3).map(Key256)
 }
 
 /// master key + Secret Key → the server auth key (key scheme 3). Same input
@@ -126,17 +119,12 @@ pub fn derive_auth_key_from_master(
     secret_key: &SecretKey,
     account: &AccountRef,
 ) -> Result<AuthKey> {
-    Ok(AuthKey(account_bound(
-        master_key,
-        secret_key,
-        account,
-        INFO_AUTH_V3,
-    )?))
+    account_bound(master_key, secret_key, account, INFO_AUTH_V3).map(AuthKey)
 }
 
 /// vault key → data key used for item and settings blobs.
 pub fn derive_data_key(vault_key: &Key256) -> Result<Key256> {
-    hkdf_expand(vault_key, None, INFO_DATA)
+    hkdf_sha256(None, vault_key.as_bytes(), INFO_DATA).map(Key256)
 }
 
 /// vault key → the item ID of the account's one Identity.
@@ -208,6 +196,17 @@ mod tests {
         assert_eq!(
             hex(auth.as_bytes()),
             "b586a25c57588b9b1cea48ea057e622edf4d5bcfc366e8ebf7738c1f78ce91b0"
+        );
+    }
+
+    #[test]
+    fn data_key_matches_the_independent_vector() {
+        // HKDF-SHA256(ikm = 0x09 * 32, no salt, info = "havenkeys/v1/data"),
+        // 32 bytes; computed with Python's hmac module.
+        let data = derive_data_key(&Key256::from_bytes([9u8; 32])).unwrap();
+        assert_eq!(
+            hex(data.as_bytes()),
+            "30ab54695a48584d577a00260aacaf995674778a1fb588b4b7745656f1d6d234"
         );
     }
 
