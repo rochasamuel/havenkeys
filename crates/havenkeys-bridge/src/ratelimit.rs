@@ -11,10 +11,11 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RequestClass {
     /// `find_matches`, `find_passkeys`, `check_passkey_create`,
-    /// `passkey_status`: no secrets, but reveals which sites have logins or
+    /// `passkey_status`, `find_cards`: no secrets, but reveals which sites have logins or
     /// passkeys.
     Lookup,
-    /// `fill_item`, `get_totp`, `passkey_get`, `passkey_create`: return a
+    /// `fill_item`, `get_totp`, `passkey_get`, `passkey_create`, `fill_card`,
+    /// `save_card`: return a
     /// secret (a password, TOTP code, WebAuthn assertion, or a new
     /// passkey's registration); `open_item`, which has a visible effect (it
     /// raises the desktop window).
