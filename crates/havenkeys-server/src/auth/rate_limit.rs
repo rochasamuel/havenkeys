@@ -8,6 +8,7 @@
 
 use crate::error::ApiError;
 use deadpool_postgres::Object;
+use uuid::Uuid;
 
 const MAX_FAILURES: i32 = 5;
 const WINDOW_MINUTES: i32 = 15;
@@ -74,6 +75,42 @@ pub async fn clear(db: &Object, key: &str) -> Result<(), ApiError> {
     db.execute("DELETE FROM login_attempts WHERE key = $1", &[&key])
         .await?;
     Ok(())
+}
+
+/// The counter for one source address.
+pub fn ip_key(ip: &str) -> String {
+    format!("ip:{ip}")
+}
+
+/// The two counters a check of the auth key spends, the account's and the
+/// caller's address's: checked, charged and cleared together, account first.
+pub struct AttemptKeys {
+    account: String,
+    ip: String,
+}
+
+impl AttemptKeys {
+    pub fn new(account_id: Uuid, ip: &str) -> Self {
+        Self {
+            account: format!("acct:{account_id}"),
+            ip: ip_key(ip),
+        }
+    }
+
+    pub async fn check(&self, db: &Object) -> Result<(), ApiError> {
+        check(db, &self.account).await?;
+        check(db, &self.ip).await
+    }
+
+    pub async fn record_failure(&self, db: &Object) -> Result<(), ApiError> {
+        record_failure(db, &self.account).await?;
+        record_failure(db, &self.ip).await
+    }
+
+    pub async fn clear(&self, db: &Object) -> Result<(), ApiError> {
+        clear(db, &self.account).await?;
+        clear(db, &self.ip).await
+    }
 }
 
 #[cfg(test)]

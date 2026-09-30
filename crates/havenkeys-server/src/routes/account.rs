@@ -17,8 +17,8 @@ use crate::auth::{self, rate_limit, Session};
 use crate::b64::Blob;
 use crate::error::ApiError;
 use crate::json::Json;
-use crate::limits::MAX_HEADER_BYTES;
-use crate::routes::accounts::KdfDto;
+use crate::routes::accounts::{check_header, KdfDto};
+use crate::routes::auth::client_ip;
 use crate::routes::AppState;
 use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
@@ -42,9 +42,7 @@ pub async fn change_credentials(
     session: Session,
     Json(req): Json<CredentialChange>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
-    if req.header.is_empty() || req.header.len() > MAX_HEADER_BYTES {
-        return Err(ApiError::InvalidRequest("header is not valid"));
-    }
+    check_header(&req.header)?;
     if req.base_header_revision < 0 {
         return Err(ApiError::InvalidRequest("baseHeaderRevision is not valid"));
     }
@@ -53,13 +51,8 @@ pub async fn change_credentials(
     let new = auth::decode_auth_key(&req.new_auth_key)?;
 
     let mut db = state.pool.get().await?;
-    let account_key = format!("acct:{}", session.account_id);
-    let ip_key = format!(
-        "ip:{}",
-        crate::routes::auth::client_ip(&state, &headers, peer)
-    );
-    rate_limit::check(&db, &account_key).await?;
-    rate_limit::check(&db, &ip_key).await?;
+    let keys = rate_limit::AttemptKeys::new(session.account_id, &client_ip(&state, &headers, peer));
+    keys.check(&db).await?;
 
     // Verified before the transaction, like login: Argon2id takes tens of
     // milliseconds and no row lock should be held through it. The verifier is
@@ -73,8 +66,7 @@ pub async fn change_credentials(
         .and_then(|r| r.get::<_, Option<String>>(0))
         .ok_or(ApiError::Unauthorized)?;
     if !auth::verify_auth_key(stored.clone(), current).await {
-        rate_limit::record_failure(&db, &account_key).await?;
-        rate_limit::record_failure(&db, &ip_key).await?;
+        keys.record_failure(&db).await?;
         tracing::info!(account_id = %session.account_id, outcome = "rejected", "credential change");
         return Err(ApiError::Unauthorized);
     }
@@ -129,8 +121,7 @@ pub async fn change_credentials(
     .await?;
     tx.commit().await?;
 
-    rate_limit::clear(&db, &account_key).await?;
-    rate_limit::clear(&db, &ip_key).await?;
+    keys.clear(&db).await?;
     tracing::info!(account_id = %session.account_id, header_revision = next, "credentials changed");
     Ok(axum::Json(serde_json::json!({ "headerRevision": next })))
 }

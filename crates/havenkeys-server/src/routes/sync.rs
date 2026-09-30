@@ -49,20 +49,7 @@ pub async fn pull(
 
     let page = trim_to_revision_boundary(&rows);
     let has_more = page.len() < rows.len();
-    let changes: Vec<serde_json::Value> = page
-        .iter()
-        .map(|row| {
-            let overview: Option<Vec<u8>> = row.get(2);
-            let details: Option<Vec<u8>> = row.get(3);
-            serde_json::json!({
-                "itemId": row.get::<_, Uuid>(0),
-                "revision": row.get::<_, i64>(1),
-                "overview": overview.map(Blob),
-                "details": details.map(Blob),
-                "deleted": row.get::<_, bool>(4),
-            })
-        })
-        .collect();
+    let changes: Vec<serde_json::Value> = page.iter().map(change_json).collect();
 
     // With no rows left, the cursor jumps to the vault's own revision: an
     // idle client converges instead of asking for the same range forever.
@@ -82,6 +69,20 @@ pub async fn pull(
         "hasMore": has_more,
         "changes": changes,
     })))
+}
+
+/// One change as a client reads it, from a row of
+/// `item_id, revision, overview, details, deleted`.
+pub(crate) fn change_json(row: &tokio_postgres::Row) -> serde_json::Value {
+    let overview: Option<Vec<u8>> = row.get(2);
+    let details: Option<Vec<u8>> = row.get(3);
+    serde_json::json!({
+        "itemId": row.get::<_, Uuid>(0),
+        "revision": row.get::<_, i64>(1),
+        "overview": overview.map(Blob),
+        "details": details.map(Blob),
+        "deleted": row.get::<_, bool>(4),
+    })
 }
 
 /// Cut the fetched rows at the last complete revision that fits in a page.

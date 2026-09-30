@@ -12,6 +12,7 @@ use crate::error::ApiError;
 use crate::invite;
 use crate::json::Json;
 use crate::limits::MAX_HEADER_BYTES;
+use crate::routes::auth::client_ip;
 use crate::routes::AppState;
 use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
@@ -21,11 +22,11 @@ use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 /// A cheap look at the invite before any expensive work: does this account
-/// exist, is it still waiting to be activated, is the secret right and is it
-/// still in date? The authoritative check happens again under the row lock.
-async fn tx_invite_is_plausible(
+/// exist and accept it? The authoritative check happens again under the row
+/// lock.
+async fn invite_is_plausible(
     db: &deadpool_postgres::Object,
-    invite: &crate::invite::Invite,
+    invite: &invite::Invite,
     email: &str,
 ) -> Result<bool, ApiError> {
     let row = db
@@ -35,17 +36,30 @@ async fn tx_invite_is_plausible(
             &[&invite.account, &email],
         )
         .await?;
-    let Some(row) = row else { return Ok(false) };
+    Ok(row.is_some_and(|row| invite_accepted(&row, &invite.secret)))
+}
+
+/// Does this account row (`status, invite_hash, invite_expires_at`) accept
+/// `secret`? It must still be waiting to be activated, the secret's hash
+/// must match (compared in constant time), and the invite must be in date.
+fn invite_accepted(row: &tokio_postgres::Row, secret: &str) -> bool {
     let status: String = row.get(0);
-    let Some(stored): Option<Vec<u8>> = row.get(1) else {
-        return Ok(false);
-    };
+    let stored: Option<Vec<u8>> = row.get(1);
     let expires: Option<chrono::DateTime<chrono::Utc>> = row.get(2);
-    let offered = crate::invite::hash(&invite.secret);
-    Ok(status == "invited"
-        && stored.len() == offered.len()
-        && stored.ct_eq(offered.as_slice()).unwrap_u8() == 1
-        && expires.is_some_and(|t| t >= chrono::Utc::now()))
+    let offered = invite::hash(secret);
+    status == "invited"
+        && stored.is_some_and(|stored| {
+            stored.len() == offered.len() && stored.ct_eq(offered.as_slice()).unwrap_u8() == 1
+        })
+        && expires.is_some_and(|t| t >= chrono::Utc::now())
+}
+
+/// An attested header this server will store.
+pub(crate) fn check_header(header: &Blob) -> Result<(), ApiError> {
+    if header.is_empty() || header.len() > MAX_HEADER_BYTES {
+        return Err(ApiError::InvalidRequest("header is not valid"));
+    }
+    Ok(())
 }
 
 /// Accepted Argon2id cost, matching `havenkeys-core::crypto::kdf`. The client
@@ -125,9 +139,7 @@ pub async fn activate(
     if req.key_scheme != KEY_SCHEME {
         return Err(ApiError::InvalidRequest("unsupported key scheme"));
     }
-    if req.header.is_empty() || req.header.len() > MAX_HEADER_BYTES {
-        return Err(ApiError::InvalidRequest("header is not valid"));
-    }
+    check_header(&req.header)?;
     let salt = req.kdf.check()?;
     let auth_key = auth::decode_auth_key(&req.auth_key)?;
 
@@ -138,12 +150,9 @@ pub async fn activate(
     // ask for at will. Two guards: the attempt is rate limited per address,
     // and the invite is checked — a cheap SHA-256 and one indexed row —
     // before any hashing happens.
-    let ip_key = format!(
-        "ip:{}",
-        crate::routes::auth::client_ip(&state, &headers, peer)
-    );
+    let ip_key = rate_limit::ip_key(&client_ip(&state, &headers, peer));
     rate_limit::check(&db, &ip_key).await?;
-    let plausible = tx_invite_is_plausible(&db, &parsed, &email).await?;
+    let plausible = invite_is_plausible(&db, &parsed, &email).await?;
     if !plausible {
         rate_limit::record_failure(&db, &ip_key).await?;
         return Err(BAD_INVITE);
@@ -166,20 +175,7 @@ pub async fn activate(
         )
         .await?
         .ok_or(BAD_INVITE)?;
-
-    let status: String = row.get(0);
-    let stored_hash: Option<Vec<u8>> = row.get(1);
-    let expires: Option<chrono::DateTime<chrono::Utc>> = row.get(2);
-    if status != "invited" {
-        return Err(BAD_INVITE);
-    }
-    let stored_hash = stored_hash.ok_or(BAD_INVITE)?;
-    let offered = invite::hash(&parsed.secret);
-    if stored_hash.len() != offered.len() || stored_hash.ct_eq(offered.as_slice()).unwrap_u8() != 1
-    {
-        return Err(BAD_INVITE);
-    }
-    if expires.map(|t| t < chrono::Utc::now()).unwrap_or(true) {
+    if !invite_accepted(&row, &parsed.secret) {
         return Err(BAD_INVITE);
     }
 
