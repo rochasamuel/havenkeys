@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBackgroundMessage, parseContentRequest, parseHostReply, parseInlineRequest } from "./inline";
+import { MAX_FRAME_DEPTH, parseBackgroundMessage, parseContentRequest, parseHostReply, parseInlineRequest } from "./inline";
 
 const T = "a".repeat(32);
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -55,6 +55,36 @@ describe("card messages", () => {
     expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, url: "x".repeat(9000), anchor, rows: 2 })).toBeNull();
     expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 0, url, anchor, rows: 2 })).toBeNull();
     expect(parseBackgroundMessage({ type: "bg_host_menu", token: T, frameId: 3, url, anchor, rows: 9 })).toBeNull();
+  });
+
+  it("carries a subframe's ancestry on card menus and scan answers, strictly", () => {
+    const chain = { ancestors: ["https://pay.shop.com", "https://shop.com"] };
+    const unknown = { ancestors: null, directChildOfTop: true };
+    expect(parseContentRequest({ type: "cs_open_menu", kind: "card", cardRoles: ["number"], ancestry: chain })).toMatchObject({ ancestry: chain });
+    expect(parseContentRequest({ type: "cs_open_menu", kind: "card", cardRoles: ["number"], ancestry: unknown })).toMatchObject({ ancestry: unknown });
+    expect(parseContentRequest({ type: "cs_card_fields", scan: T, roles: ["number"], ancestry: chain })).toEqual({ type: "cs_card_fields", scan: T, roles: ["number"], ancestry: chain });
+    expect(parseContentRequest({ type: "cs_card_fields", scan: T, roles: ["number"] })).toEqual({ type: "cs_card_fields", scan: T, roles: ["number"] });
+    const nine = Array.from({ length: MAX_FRAME_DEPTH + 1 }, (_, i) => `https://a${i}.com`);
+    for (const ancestry of [
+      { ancestors: [] },
+      { ancestors: nine },
+      { ancestors: ["https://shop.com/path"] },
+      { ancestors: ["https://shop.com/"] },
+      { ancestors: ["null"] },
+      { ancestors: ["ftp://shop.com"] },
+      { ancestors: ["HTTPS://SHOP.COM"] },
+      { ancestors: [7] },
+      { ancestors: null },
+      { ancestors: null, directChildOfTop: "yes" },
+      { ancestors: ["https://shop.com"], directChildOfTop: true },
+      { ancestors: ["https://shop.com"], extra: 1 },
+      "https://shop.com",
+    ]) {
+      expect(parseContentRequest({ type: "cs_open_menu", kind: "card", cardRoles: ["number"], ancestry }), JSON.stringify(ancestry)).toBeNull();
+      expect(parseContentRequest({ type: "cs_card_fields", scan: T, roles: ["number"], ancestry }), JSON.stringify(ancestry)).toBeNull();
+    }
+    // Only card menus carry it.
+    expect(parseContentRequest({ type: "cs_open_menu", kind: "login", ancestry: chain })).toBeNull();
   });
 
   it("accepts menu_pick_card and host replies exactly", () => {

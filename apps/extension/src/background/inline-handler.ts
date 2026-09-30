@@ -20,9 +20,11 @@
 //   accepts (find_cards per frame, then one fill_card that Rust re-checks
 //   frame by frame). Rust compares each frame with the top page only, so a
 //   subframe is also dropped unless every frame between it and the top page
-//   is one Rust would accept (webNavigation's frame tree): a payment
-//   processor's frame inside an ad's frame gets nothing. Each frame gets
-//   only its own values, pinned to the document that reported its fields.
+//   is one Rust would accept, by the frame's own ancestry report (no
+//   report, no card): a payment processor's frame inside an ad's frame
+//   gets nothing. One pick makes at most MAX_CARD_LOOKUPS lookups. Each
+//   frame gets only its own values, pinned to the document that reported
+//   its fields (documentId, Chromium; Firefox checks the origin only).
 //   Typed cards wait for the user's save in memory only, for at most
 //   CARD_SAVE_TTL_MS; the number goes to Rust only on Save.
 
@@ -45,6 +47,7 @@ import {
   parseFillReply,
   parseHostReply,
   type Anchor,
+  type Ancestry,
   type CardRowView,
   type CardSaveView,
   type SubmittedCardWire,
@@ -62,7 +65,7 @@ import {
   type ReadyReply,
   type SaveView,
 } from "../messaging/inline";
-import { displayHost, pageUrlForRequest } from "../shared/url";
+import { displayHost } from "../shared/url";
 import { cardRows, displayExpiry } from "./card-rows";
 import type { BgWaResize, BgWaResult, PasskeyRow } from "../webauthn/messages";
 import type { PasskeySite } from "./passkey-sites";
@@ -114,45 +117,35 @@ export interface InlineDeps {
   sendToTab?(tabId: number, msg: BackgroundToContent): Promise<unknown>;
   /** Wait `ms` (the card scan's window). Absent: setTimeout. */
   wait?(ms: number): Promise<void>;
-  /**
-   * The tab's frames, from the browser (webNavigation.getAllFrames); null
-   * when unknown. Absent or null: no subframe gets a card.
-   */
-  frames?(tabId: number): Promise<FrameNode[] | null>;
-}
-
-/** A frame of a tab as the browser lists it. */
-export interface FrameNode {
-  frameId: number;
-  /** -1 for the top frame. */
-  parentFrameId: number;
-  /** The full URL (query and fragment included). */
-  url: string;
-  documentId?: string;
 }
 
 export const MENU_TTL_MS = 5 * 60_000;
 export const CARD_SCAN_MS = 300;
 export const CARD_SAVE_TTL_MS = 120_000;
 export const MAX_SCAN_REPORTS = 16;
-/** Frames between a card frame and the top page, at most (deeper: dropped). */
-export const MAX_FRAME_DEPTH = 8;
+/** find_cards lookups one card pick may make (frames and their ancestors); then the remaining frames are dropped. */
+export const MAX_CARD_LOOKUPS = MAX_CARD_FRAMES + 4;
 
 /** A frame's card fields, as it reported them (cs_card_fields). */
 export interface CardReport {
   frame: FrameRef;
   roles: CardRole[];
+  /** The frame's own account of its ancestors; required for a subframe. */
+  ancestry?: Ancestry;
 }
 
-/** A frame to fill: its roles, and the menu token for the frame the user clicked in. */
+/** A frame to fill: its roles, the menu token for the frame the user clicked in, and its ancestry. */
 export interface CardTarget {
   frame: FrameRef;
   token: string | null;
   roles: CardRole[];
+  ancestry?: Ancestry;
 }
 
 interface CardMenu {
   roles: CardRole[];
+  /** What the clicked frame reported with cs_open_menu (a subframe's only). */
+  ancestry: Ancestry | null;
   rows: CardRowView[];
   insecure: boolean;
 }
@@ -323,63 +316,60 @@ export function createInlineHandler(deps: InlineDeps) {
 
   // ------------------------------------------------------------ cards
 
-  /** Rust would serve a card to a frame at `url` under `topUrl` (a lookup: no values). Cached per fill. */
-  function cardUrlAllowed(url: string, topUrl: string | undefined, cache: Map<string, Promise<boolean>>): Promise<boolean> {
-    const key = `${url} ${topUrl ?? ""}`;
-    let p = cache.get(key);
+  /** find_cards lookups of one menu or pick: cached by URL, at most MAX_CARD_LOOKUPS sent. */
+  interface Lookups {
+    cache: Map<string, Promise<boolean>>;
+    left: number;
+  }
+  const newLookups = (): Lookups => ({ cache: new Map(), left: MAX_CARD_LOOKUPS });
+  const lookupKey = (url: string, topUrl: string | undefined) => `${url} ${topUrl ?? ""}`;
+
+  /** Rust would serve a card to a frame at `url` under `topUrl` (a lookup: no values). False once the budget is spent. */
+  function cardUrlAllowed(url: string, topUrl: string | undefined, l: Lookups): Promise<boolean> {
+    const key = lookupKey(url, topUrl);
+    let p = l.cache.get(key);
     if (!p) {
+      if (l.left <= 0) return Promise.resolve(false);
+      l.left -= 1;
       p = deps.client
         .request({ type: "find_cards", ...(topUrl === undefined ? { url } : { url, topUrl }) })
         .then((r) => !r.insecure)
         .catch(() => false);
-      cache.set(key, p);
+      l.cache.set(key, p);
     }
     return p;
   }
 
-  const sameOrigin = (a: string, b: string): boolean => {
+  const originOf = (url: string): string | null => {
     try {
-      return new URL(a).origin === new URL(b).origin;
+      return new URL(url).origin;
     } catch {
-      return false;
+      return null;
     }
   };
 
   /**
-   * Rust compares a frame with the top page only. Here every frame between
-   * `frame` and the top page must be one Rust would also accept (same
-   * origin as the top page, or a find_cards lookup that is not denied), per
-   * the browser's frame tree; and the frame must still be the document that
-   * asked. The top frame always passes; no tree: no subframe does.
+   * Rust compares a frame with the top page only, so a card frame inside
+   * another frame (a processor's inside an ad's) would pass there. The
+   * frame's own report of its ancestors (content/ancestry.ts) must show
+   * that every frame between it and the top page is the top page's origin
+   * or one Rust would also accept (same-site or a processor). Where the
+   * browser could not tell the chain (Firefox, cross-origin parent), only a
+   * frame that is a direct child of the top page and that Rust accepts
+   * itself passes. The top frame always passes; no report: no subframe.
    */
-  async function chainAllowed(frame: FrameRef, tree: FrameNode[] | null, cache: Map<string, Promise<boolean>>): Promise<boolean> {
+  async function ancestryAllowed(frame: FrameRef, ancestry: Ancestry | null | undefined, l: Lookups): Promise<boolean> {
     if (frame.frameId === 0) return true;
     const topUrl = frame.topUrl;
-    if (!tree || topUrl === undefined) return false;
-    const byId = new Map(tree.map((n) => [n.frameId, n]));
-    const root = byId.get(0);
-    if (!root || pageUrlForRequest(root.url) !== topUrl) return false; // the tab moved on
-    const self = byId.get(frame.frameId);
-    if (!self || pageUrlForRequest(self.url) !== frame.url) return false;
-    if (frame.documentId !== undefined && self.documentId !== undefined && self.documentId !== frame.documentId) return false;
-    let parent = self.parentFrameId;
-    for (let depth = 0; parent !== 0; depth++) {
-      const node = depth < MAX_FRAME_DEPTH ? byId.get(parent) : undefined;
-      if (!node) return false;
-      const url = pageUrlForRequest(node.url);
-      if (!url) return false; // about:blank, srcdoc, data: … whose origin we cannot tell
-      if (!sameOrigin(url, topUrl) && !(await cardUrlAllowed(url, topUrl, cache))) return false;
-      parent = node.parentFrameId;
+    const topOrigin = topUrl === undefined ? null : originOf(topUrl);
+    if (!ancestry || topUrl === undefined || topOrigin === null) return false;
+    if (ancestry.ancestors === null) return ancestry.directChildOfTop && (await cardUrlAllowed(frame.url, topUrl, l));
+    // Nearest first: the last one is the top page (else the tab moved on).
+    if (ancestry.ancestors.at(-1) !== topOrigin) return false;
+    for (const origin of ancestry.ancestors) {
+      if (origin !== topOrigin && !(await cardUrlAllowed(`${origin}/`, topUrl, l))) return false;
     }
     return true;
-  }
-
-  async function frameTree(tabId: number): Promise<FrameNode[] | null> {
-    try {
-      return (await deps.frames?.(tabId)) ?? null;
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -404,20 +394,27 @@ export function createInlineHandler(deps: InlineDeps) {
     return { ...reply, hosted: true };
   }
 
-  async function openCardMenu(frame: FrameRef, roles: CardRole[], anchor: Anchor | null): Promise<OpenMenuReply> {
+  async function openCardMenu(frame: FrameRef, roles: CardRole[], anchor: Anchor | null, ancestry: Ancestry | null): Promise<OpenMenuReply> {
+    // A subframe that cannot say where it sits gets no menu at all.
+    if (frame.frameId !== 0 && (!ancestry || (ancestry.ancestors === null && !ancestry.directChildOfTop))) return { ok: false };
     let list: ResultFor<"find_cards">;
     try {
       list = await deps.client.request({ type: "find_cards", ...frameFields(frame) });
     } catch (e) {
       if (e instanceof BridgeError && e.code === "locked") {
-        // The unlock row carries no card data.
-        return hostMenu(register(frame, "card", true, [], [], { hint: null, help: null }, [], null, { roles, rows: [], insecure: false }), frame, anchor);
+        // The unlock row carries no card data; the pick re-checks everything.
+        const locked = { roles, ancestry, rows: [], insecure: false };
+        return hostMenu(register(frame, "card", true, [], [], { hint: null, help: null }, [], null, locked), frame, anchor);
       }
       // A frame Rust denies, integration off, app gone: stay out of the page.
       return { ok: false };
     }
-    if (frame.frameId !== 0 && !(await chainAllowed(frame, await frameTree(frame.tabId), new Map()))) return { ok: false };
-    const card = { roles, rows: cardRows(list.cards, deps.now()), insecure: list.insecure };
+    if (frame.frameId !== 0) {
+      const l = newLookups();
+      l.cache.set(lookupKey(frame.url, frame.topUrl), Promise.resolve(!list.insecure));
+      if (!(await ancestryAllowed(frame, ancestry, l))) return { ok: false };
+    }
+    const card = { roles, ancestry, rows: cardRows(list.cards, deps.now()), insecure: list.insecure };
     return hostMenu(register(frame, "card", false, [], [], { hint: null, help: null }, [], null, card), frame, anchor);
   }
 
@@ -436,27 +433,29 @@ export function createInlineHandler(deps: InlineDeps) {
   /**
    * Fill a card into the clicked frame (if any) and the tab's other card
    * frames that are on the same top page and that Rust accepts, each with
-   * an acceptable frame chain. One fill_card; each frame gets its own
-   * values, pinned to its document.
+   * an acceptable ancestry. At most MAX_CARD_LOOKUPS lookups; once spent,
+   * the remaining frames are dropped. One fill_card; each frame gets its
+   * own values, pinned to its document.
    */
   async function fillCard(tabId: number, topUrl: string, clicked: CardTarget | null, itemId: string): Promise<number> {
     endRun(tabId);
     const reports = await scanCards(tabId);
-    const tree = await frameTree(tabId);
-    const cache = new Map<string, Promise<boolean>>();
+    const l = newLookups();
     const targets: CardTarget[] = [];
-    // The clicked frame passed Rust's lookup when its menu opened.
-    if (clicked && clicked.roles.length > 0 && (await chainAllowed(clicked.frame, tree, cache))) targets.push(clicked);
+    // The clicked frame passed Rust's lookup when its menu opened; its ancestry is re-checked.
+    if (clicked && clicked.roles.length > 0 && (await ancestryAllowed(clicked.frame, clicked.ancestry, l))) targets.push(clicked);
     for (const r of reports) {
-      if (targets.length >= MAX_CARD_FRAMES) break;
+      if (targets.length >= MAX_CARD_FRAMES || l.left <= 0) break;
       if (r.frame.tabId !== tabId || targets.some((x) => x.frame.frameId === r.frame.frameId)) continue;
       if ((r.frame.topUrl ?? r.frame.url) !== topUrl) continue;
-      if (!(await chainAllowed(r.frame, tree, cache))) continue;
-      if (!(await cardUrlAllowed(r.frame.url, r.frame.topUrl, cache))) continue;
+      if (!(await ancestryAllowed(r.frame, r.ancestry, l))) continue;
+      if (!(await cardUrlAllowed(r.frame.url, r.frame.topUrl, l))) continue;
       targets.push({ frame: r.frame, token: null, roles: r.roles });
     }
     if (targets.length === 0) return 0;
     const res = await deps.client.request({ type: "fill_card", itemId, topUrl, frames: targets.map((x) => ({ url: x.frame.url, roles: x.roles })) });
+    // One answer per frame, in order; anything else could hand a frame another's values.
+    if (res.frames.length !== targets.length) throw new Error("fill_card answered for a different number of frames");
     let n = 0;
     for (const [i, x] of targets.entries()) {
       const values = res.frames[i]?.values ?? [];
@@ -503,6 +502,7 @@ export function createInlineHandler(deps: InlineDeps) {
     roles: IdentityRole[] = [],
     cardRoles: CardRole[] = [],
     anchor: Anchor | null = null,
+    ancestry: Ancestry | null = null,
   ): Promise<OpenMenuReply> {
     if (deps.suggestionsOn && !(await deps.suggestionsOn())) {
       // The user hid the menu under login fields; saving and passkeys go on.
@@ -512,7 +512,7 @@ export function createInlineHandler(deps: InlineDeps) {
       const waiting = kind === "login" && !explicit ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
       return waiting.length === 0 ? { ok: false } : register(frame, kind, false, [], waiting, { hint: null, help: null });
     }
-    if (kind === "card") return openCardMenu(frame, cardRoles, anchor);
+    if (kind === "card") return openCardMenu(frame, cardRoles, anchor, ancestry);
     if (kind === "identity") {
       let row: IdentityRowView | null;
       try {
@@ -724,7 +724,7 @@ export function createInlineHandler(deps: InlineDeps) {
   async function handleContent(frame: FrameRef, req: ContentRequest): Promise<unknown> {
     switch (req.type) {
       case "cs_open_menu":
-        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? [], req.cardRoles ?? [], req.anchor ?? null);
+        return openMenu(frame, req.kind, req.explicit === true, req.roles ?? [], req.cardRoles ?? [], req.anchor ?? null, req.ancestry ?? null);
       case "cs_close_menu": {
         const m = menus.get(frame.tabId);
         if (!m || m.token !== req.token) return {};
@@ -740,7 +740,7 @@ export function createInlineHandler(deps: InlineDeps) {
         // The tab and frame are the browser's; one report per frame, a bounded number per scan.
         const s = scans.get(req.scan);
         if (s && s.tabId === frame.tabId && s.reports.length < MAX_SCAN_REPORTS && !s.reports.some((r) => r.frame.frameId === frame.frameId)) {
-          s.reports.push({ frame, roles: req.roles });
+          s.reports.push({ frame, roles: req.roles, ...(req.ancestry ? { ancestry: req.ancestry } : {}) });
         }
         return {};
       }
@@ -785,7 +785,8 @@ export function createInlineHandler(deps: InlineDeps) {
         if (m.card.insecure || !m.card.rows.some((c) => c.id === req.itemId)) return { ok: false, message: t.errors.unknownItem };
         closeMenu(tabId);
         try {
-          const filled = await fillCard(tabId, m.frame.topUrl ?? m.frame.url, { frame: m.frame, token: m.token, roles: m.card.roles }, req.itemId);
+          const clicked: CardTarget = { frame: m.frame, token: m.token, roles: m.card.roles, ...(m.card.ancestry ? { ancestry: m.card.ancestry } : {}) };
+          const filled = await fillCard(tabId, m.frame.topUrl ?? m.frame.url, clicked, req.itemId);
           return filled > 0 ? { ok: true, value: null } : { ok: false, message: t.menu.cardNothing };
         } catch (e) {
           if (e instanceof BridgeError && e.code === "not_found") return { ok: false, message: t.menu.cardGone };

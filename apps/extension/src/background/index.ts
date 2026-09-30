@@ -19,7 +19,7 @@ import { parsePopupRequest } from "../messaging/popup";
 import { parseSsoContentRequest, parseSsoFrameRequest, type BackgroundToSso } from "../messaging/sso";
 import { NATIVE_HOST_NAME } from "../shared/constants";
 import { pageUrlForRequest } from "../shared/url";
-import { createInlineHandler, type AutoRun, type FrameNode, type FrameRef } from "./inline-handler";
+import { createInlineHandler, type AutoRun, type FrameRef } from "./inline-handler";
 import { findPasskeySite } from "./passkey-sites";
 import { createPopupHandler, type ActiveTab } from "./popup-handler";
 import { syncContentScripts } from "./registration";
@@ -64,26 +64,6 @@ async function sendToTab(tabId: number, msg: BgWaResult | BackgroundToContent): 
   }
 }
 
-/**
- * A tab's frames with their parents, from the browser (the card fill's
- * frame-chain check, inline-handler.ts). Null when unknown: then no
- * subframe gets a card.
- */
-async function tabFrames(tabId: number): Promise<FrameNode[] | null> {
-  try {
-    const frames = await chrome.webNavigation.getAllFrames({ tabId });
-    if (!frames) return null;
-    return frames.map((f) => {
-      const node: FrameNode = { frameId: f.frameId, parentFrameId: f.parentFrameId, url: f.url };
-      const documentId = (f as { documentId?: string }).documentId;
-      if (typeof documentId === "string") node.documentId = documentId;
-      return node;
-    });
-  } catch {
-    return null;
-  }
-}
-
 const passkeys = createWebAuthnHandler({ client, sendToFrame, sendToTab, now: Date.now, newToken });
 const sso = createSsoHandler({
   client,
@@ -106,7 +86,6 @@ const inline = createInlineHandler({
   suggestionsOn: getInlineSuggestions,
   startSso: (frame, itemId) => sso.start(frame, itemId),
   sendToTab: (tabId, msg) => sendToTab(tabId, msg),
-  frames: tabFrames,
 });
 
 async function activeTab(): Promise<ActiveTab | undefined> {

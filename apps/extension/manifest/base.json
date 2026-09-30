@@ -8,8 +8,7 @@
     "nativeMessaging",
     "activeTab",
     "scripting",
-    "storage",
-    "webNavigation"
+    "storage"
   ],
   "host_permissions": [
     "https://*/*",

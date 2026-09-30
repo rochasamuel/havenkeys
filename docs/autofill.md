@@ -1149,8 +1149,7 @@ disabled while a request is in flight.
 ## Permissions and injection
 
 * Requested at install: `nativeMessaging`, `activeTab`, `scripting`,
-  `storage`, `webNavigation` (the card fill's frame tree, 2026-09-29), and
-  the host permissions `https://*/*` and `http://*/*`
+  `storage`, and the host permissions `https://*/*` and `http://*/*`
   (changed 2026-09-28; before, the host permissions were optional and off).
   With the host grant, the background registers the content script for the
   granted patterns in all frames, so save prompts, passkeys and in-page

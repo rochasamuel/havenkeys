@@ -41,6 +41,19 @@ export interface Anchor {
   height: number;
 }
 
+/** Ancestor frames a subframe may report, at most (deeper: it reports an unknown chain). */
+export const MAX_FRAME_DEPTH = 8;
+
+/**
+ * Where a subframe sits, as its content script sees it (content/ancestry.ts):
+ * its ancestors' origins, nearest first, the top page's last; or, where the
+ * browser cannot tell (Firefox, a cross-origin parent), only whether its
+ * parent is the top page. Card menus and card scans carry it: Rust compares
+ * a frame with the top page only, and the background uses this to drop a
+ * card frame nested inside a frame Rust would not accept (an ad's).
+ */
+export type Ancestry = { ancestors: string[] } | { ancestors: null; directChildOfTop: boolean };
+
 /** A card the user typed into a checkout (autofill/card-fill.ts readCardSubmission). */
 export interface SubmittedCardWire {
   number: string;
@@ -61,7 +74,7 @@ const RUN_STEPS: readonly RunStep[] = ["username", "password", "otp"];
 
 export type ContentRequest =
   /** `explicit`: the user clicked the field's HavenKeys icon, so answer even with no matches. */
-  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[]; cardRoles?: CardRole[]; anchor?: Anchor }
+  | { type: "cs_open_menu"; kind: MenuKind; explicit?: true; roles?: IdentityRole[]; cardRoles?: CardRole[]; anchor?: Anchor; ancestry?: Ancestry }
   | { type: "cs_close_menu"; token: string }
   | { type: "cs_submit"; username: string | null; password: string | null; currentPassword?: string }
   | { type: "cs_ready" }
@@ -70,7 +83,7 @@ export type ContentRequest =
   /** The run should end here: the user took over, a stop condition, or nothing appeared. */
   | { type: "cs_run_stop" }
   /** This frame's card fields, answering bg_card_scan. */
-  | { type: "cs_card_fields"; scan: string; roles: CardRole[] }
+  | { type: "cs_card_fields"; scan: string; roles: CardRole[]; ancestry?: Ancestry }
   /** The user submitted a card they typed (top frame only). */
   | { type: "cs_card_submit"; card: SubmittedCardWire };
 
@@ -284,6 +297,31 @@ function parseAnchor(v: unknown): Anchor | null {
   return within(top, -1e5, 1e5) && within(left, -1e5, 1e5) && within(width, 0, 1e4) && within(height, 0, 1e4) ? { top, left, width, height } : null;
 }
 
+/** An exact http(s) origin, as `URL.origin` writes it. */
+export function isWebOrigin(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_URL_BYTES) return false;
+  try {
+    const u = new URL(v);
+    return (u.protocol === "https:" || u.protocol === "http:") && u.origin === v;
+  } catch {
+    return false;
+  }
+}
+
+export function parseAncestry(v: unknown): Ancestry | null {
+  const o = obj(v);
+  if (!o) return null;
+  if (keysAre(o, ["ancestors"])) {
+    const a = o.ancestors;
+    if (!Array.isArray(a) || a.length === 0 || a.length > MAX_FRAME_DEPTH || !a.every(isWebOrigin)) return null;
+    return { ancestors: [...(a as string[])] };
+  }
+  if (keysAre(o, ["ancestors", "directChildOfTop"]) && o.ancestors === null && typeof o.directChildOfTop === "boolean") {
+    return { ancestors: null, directChildOfTop: o.directChildOfTop };
+  }
+  return null;
+}
+
 function parseSubmittedCard(v: unknown): SubmittedCardWire | null {
   const o = obj(v);
   if (!o || !keysAre(o, ["number", "expiry", "verificationNumber", "cardholderName"])) return null;
@@ -314,7 +352,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       if (!MENU_KINDS.includes(o.kind as MenuKind)) return null;
       const kind = o.kind as MenuKind;
       const keys = Object.keys(o).filter((k) => k !== "type" && k !== "kind");
-      if (keys.some((k) => k !== "explicit" && k !== "roles" && k !== "cardRoles" && k !== "anchor")) return null;
+      if (keys.some((k) => k !== "explicit" && k !== "roles" && k !== "cardRoles" && k !== "anchor" && k !== "ancestry")) return null;
       if ("explicit" in o && o.explicit !== true) return null;
       let roles: IdentityRole[] | undefined;
       if ("roles" in o) {
@@ -325,6 +363,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
       } else if (kind === "identity") return null;
       let cardRoles: CardRole[] | undefined;
       let anchor: Anchor | undefined;
+      let ancestry: Ancestry | undefined;
       if (kind === "card") {
         const parsed = parseCardRoleList(o.cardRoles);
         if (!parsed) return null;
@@ -334,7 +373,12 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
           if (!a) return null;
           anchor = a;
         }
-      } else if ("cardRoles" in o || "anchor" in o) return null;
+        if ("ancestry" in o) {
+          const a = parseAncestry(o.ancestry);
+          if (!a) return null;
+          ancestry = a;
+        }
+      } else if ("cardRoles" in o || "anchor" in o || "ancestry" in o) return null;
       return {
         type: "cs_open_menu",
         kind,
@@ -342,6 +386,7 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
         ...(roles ? { roles } : {}),
         ...(cardRoles ? { cardRoles } : {}),
         ...(anchor ? { anchor } : {}),
+        ...(ancestry ? { ancestry } : {}),
       };
     }
     case "cs_close_menu":
@@ -366,9 +411,13 @@ export function parseContentRequest(msg: unknown): ContentRequest | null {
     case "cs_run_stop":
       return keysAre(o, ["type"]) ? { type: "cs_run_stop" } : null;
     case "cs_card_fields": {
-      if (!keysAre(o, ["type", "scan", "roles"]) || !isToken(o.scan)) return null;
+      const withAncestry = keysAre(o, ["type", "scan", "roles", "ancestry"]);
+      if ((!withAncestry && !keysAre(o, ["type", "scan", "roles"])) || !isToken(o.scan)) return null;
       const roles = parseCardRoleList(o.roles);
-      return roles && { type: "cs_card_fields", scan: o.scan, roles };
+      if (!roles) return null;
+      if (!withAncestry) return { type: "cs_card_fields", scan: o.scan, roles };
+      const ancestry = parseAncestry(o.ancestry);
+      return ancestry && { type: "cs_card_fields", scan: o.scan, roles, ancestry };
     }
     case "cs_card_submit": {
       if (!keysAre(o, ["type", "card"])) return null;

@@ -343,7 +343,6 @@ macros appear in the core crate.
 | `scripting` | yes | Inject the content script into that tab for a popup fill, and register the content script and passkey scripts for the granted hosts |
 | `https://*/*`, `http://*/*` | yes (`host_permissions`) | Save/update prompts, passkeys and in-page suggestions need scripts in the pages the user visits. Granted at install. The user can withdraw it in the browser's site-access controls; the scripts are then unregistered, and the options page and popup offer **Allow**. Narrowing it to chosen sites currently turns the scripts off everywhere (fails closed; `autofill.md` §Permissions) |
 | `storage` | yes | One boolean in `chrome.storage.local`: whether in-page suggestions (the field icon and menu) are shown. Nothing else is stored |
-| `webNavigation` | yes | Card fills only: `getAllFrames` for the tab where a card menu opens in an iframe or a card is picked, to see which frames contain a card frame. Rust compares each frame with the top page only, so the background drops a card frame (e.g. a payment processor's) nested inside a frame Rust would not accept (e.g. an ad's). No navigation events are listened to; nothing is stored |
 
 Why site access is asked for at install (changed 2026-09-28, spec
 `2026-09-28-extension-defaults-design.md`): offering to save a new or
@@ -361,7 +360,7 @@ preference (options page, on by default); turning it off does not stop save
 prompts or passkeys.
 
 Not requested: `<all_urls>` as a required permission, `tabs`,
-`clipboardWrite`, `cookies`, `webRequest`, `notifications`.
+`clipboardWrite`, `cookies`, `webRequest`, `webNavigation`, `notifications`.
 `externally_connectable` is empty, so web pages and other extensions cannot
 message the extension.
 
