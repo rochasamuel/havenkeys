@@ -1,7 +1,7 @@
 // Display helpers for the Card item (spec 2026-09-29-card-item). Rust
 // validates and stores; this only decides what to show.
 
-import type { CardBrand, CardExpiry, CardSummary } from "./types";
+import type { CardBrand, CardExpiry, CardSummary, SecretUpdate } from "./types";
 
 /** The networks' own names; `other` is translated (t.card.otherBrand). */
 export const BRAND_NAMES: Record<Exclude<CardBrand, "other">, string> = {
@@ -21,6 +21,25 @@ export const BRAND_NAMES: Record<Exclude<CardBrand, "other">, string> = {
 export const CARD_BRAND_CHOICES = Object.keys(BRAND_NAMES) as Array<Exclude<CardBrand, "other">>;
 
 export const digitsOnly = (s: string) => s.replace(/[\s-]/g, "");
+
+/** Strips separators first, then caps: a pasted "4111 - 1111 - ..." must not lose digits to a raw maxLength. */
+export const capDigits = (s: string, max: number) => digitsOnly(s).slice(0, max);
+
+/** The editor's payload for the number or the verification number. */
+export function cardSecretUpdate(typed: string, cleared: boolean, normalize: (s: string) => string = (s) => s.trim()): SecretUpdate {
+  if (cleared) return { op: "clear" };
+  const value = normalize(typed);
+  return value ? { op: "set", value } : { op: "keep" };
+}
+
+/**
+ * True when a saved title is just the brand name Rust filled in for a card
+ * saved without one ("Card" for other), so the editor can start it empty and
+ * let Rust derive it again from the new number or brand.
+ */
+export function isDerivedTitle(title: string, brand: CardBrand): boolean {
+  return title === (brand === "other" ? "Card" : BRAND_NAMES[brand]);
+}
 
 /** Groups as printed on the card: Amex 4-6-5, 14-digit Diners 4-6-4, the rest in fours. */
 export function groupNumber(digits: string, brand: CardBrand | null): string {

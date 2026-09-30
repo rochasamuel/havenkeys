@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { CardBrand, CardInput, CardNumberCheck, ItemOverview } from "../lib/types";
-import { BRAND_NAMES, CARD_BRAND_CHOICES, digitsOnly, formatExpiry, groupNumber, parseExpiryInput } from "../lib/card";
+import { BRAND_NAMES, CARD_BRAND_CHOICES, capDigits, cardSecretUpdate, digitsOnly, formatExpiry, isDerivedTitle, groupNumber, parseExpiryInput } from "../lib/card";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -24,9 +24,11 @@ interface Draft {
   verificationNumber: string;
   expiry: string;
   notes: string;
+  clearNumber: boolean;
+  clearVerificationNumber: boolean;
 }
 
-const EMPTY: Draft = { title: "", cardholderName: "", brand: "", number: "", verificationNumber: "", expiry: "", notes: "" };
+const EMPTY: Draft = { title: "", cardholderName: "", brand: "", number: "", verificationNumber: "", expiry: "", notes: "", clearNumber: false, clearVerificationNumber: false };
 
 /**
  * Create or edit a card. The saved number and code are never loaded: left
@@ -39,6 +41,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
   const [check, setCheck] = useState<CardNumberCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [has, setHas] = useState({ number: false, verificationNumber: false });
 
   useEffect(() => {
     if (!existing) return;
@@ -46,9 +49,11 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
     api.revealCard(existing.id).then(
       (v) => {
         if (cancelled) return;
+        setHas({ number: v.hasNumber, verificationNumber: v.hasVerificationNumber });
         const d: Draft = {
           ...EMPTY,
-          title: existing.title,
+          // A title Rust derived from the brand starts empty, so it follows a new number or brand.
+          title: isDerivedTitle(existing.title, existing.card?.brand ?? "other") ? "" : existing.title,
           cardholderName: v.cardholderName ?? "",
           brand: v.brand ?? "",
           expiry: v.expiry ? formatExpiry(v.expiry) : "",
@@ -91,7 +96,23 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
   }, [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-  const set = (key: keyof Draft, value: string) => setDraft((d) => (d ? { ...d, [key]: value } : d));
+  const set = (key: keyof Draft, value: string | boolean) => setDraft((d) => (d ? { ...d, [key]: value } : d));
+  const clearRow = (key: "clearNumber" | "clearVerificationNumber", label: string, removed: string) => (
+    <div className="edit-secret">
+      <span className="muted">{removed}</span>
+      <span className="edit-secret-actions">
+        <button type="button" className="btn btn-small" aria-label={`${t.common.undo}: ${label}`} onClick={() => set(key, false)}>
+          {t.common.undo}
+        </button>
+      </span>
+    </div>
+  );
+  const removeButton = (key: "clearNumber" | "clearVerificationNumber", label: string) => (
+    <button type="button" className="btn btn-small btn-quiet-danger" aria-label={`${t.common.remove}: ${label}`}
+      onClick={() => set(key, true)}>
+      {t.common.remove}
+    </button>
+  );
   const shownBrand: CardBrand = draft?.brand || check?.brand || existing?.card?.brand || "other";
   const titlePlaceholder = shownBrand === "other" ? t.card.kind : BRAND_NAMES[shownBrand];
   const showWarning = check !== null && digits.length >= 12 && !check.checkDigitOk;
@@ -110,8 +131,8 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
     const card: CardInput = {
       cardholderName: draft.cardholderName.trim() || null,
       brand: draft.brand || null,
-      number: digits ? { op: "set", value: digits } : { op: "keep" },
-      verificationNumber: draft.verificationNumber.trim() ? { op: "set", value: draft.verificationNumber.trim() } : { op: "keep" },
+      number: cardSecretUpdate(draft.number, draft.clearNumber, digitsOnly),
+      verificationNumber: cardSecretUpdate(draft.verificationNumber, draft.clearVerificationNumber),
       expiry: expiry.value,
       notes: draft.notes.trim() ? draft.notes : null,
     };
@@ -157,12 +178,17 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
           </label>
           <label className="row edit-row">
             <span className="edit-label">{f.number}</span>
-            <span className="card-number-input">
-              <input className="edit-input mono" inputMode="numeric" value={display} maxLength={23}
-                placeholder={existing ? t.card.keepNumber : undefined}
-                onChange={(e) => set("number", e.target.value)} autoComplete="off" spellCheck={false} />
-              {digits && <CardBrandLogo brand={shownBrand} width={30} />}
-            </span>
+            {draft.clearNumber ? (
+              clearRow("clearNumber", f.number, t.card.numberRemoved)
+            ) : (
+              <span className="card-number-input">
+                <input className="edit-input mono" inputMode="numeric" value={display}
+                  placeholder={existing ? t.card.keepNumber : undefined}
+                  onChange={(e) => set("number", capDigits(e.target.value, 19))} autoComplete="off" spellCheck={false} />
+                {digits && <CardBrandLogo brand={shownBrand} width={30} />}
+                {existing && has.number && !digits && removeButton("clearNumber", f.number)}
+              </span>
+            )}
           </label>
           {showWarning && (
             <p className="field-warning" role="status">
@@ -183,9 +209,16 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
           </label>
           <label className="row edit-row">
             <span className="edit-label">{f.verificationNumber}</span>
-            <input className="edit-input mono" type="password" inputMode="numeric" value={draft.verificationNumber}
-              maxLength={8} placeholder={existing ? t.card.keepVerificationNumber : undefined}
-              onChange={(e) => set("verificationNumber", e.target.value)} autoComplete="off" />
+            {draft.clearVerificationNumber ? (
+              clearRow("clearVerificationNumber", f.verificationNumber, t.card.verificationNumberRemoved)
+            ) : (
+              <span className="card-number-input">
+                <input className="edit-input mono" type="password" inputMode="numeric" value={draft.verificationNumber}
+                  placeholder={existing ? t.card.keepVerificationNumber : undefined}
+                  onChange={(e) => set("verificationNumber", capDigits(e.target.value, 8))} autoComplete="off" />
+                {existing && has.verificationNumber && !draft.verificationNumber && removeButton("clearVerificationNumber", f.verificationNumber)}
+              </span>
+            )}
           </label>
           <label className="row edit-row">
             <span className="edit-label">{f.expiry}</span>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardSubtitle, digitsOnly, formatExpiry, groupNumber, isExpired, maskedNumber, parseExpiryInput } from "./card";
+import { capDigits, cardSecretUpdate, cardSubtitle, digitsOnly, isDerivedTitle, formatExpiry, groupNumber, isExpired, maskedNumber, parseExpiryInput } from "./card";
 
 describe("numbers", () => {
   it("keeps digits only", () => {
@@ -43,5 +43,39 @@ describe("cardSubtitle", () => {
     expect(cardSubtitle({ brand: "visa", last4: null, expiry: "2033-11" })).toBe("11/2033");
     expect(cardSubtitle({ brand: "other", last4: null, expiry: null })).toBeNull();
     expect(cardSubtitle(undefined)).toBeNull();
+  });
+});
+
+describe("editor payloads", () => {
+  it("caps pasted digits after the separators are stripped", () => {
+    expect(capDigits("4111 - 1111 - 1111 - 1111", 19)).toBe("4111111111111111");
+    expect(capDigits("1".repeat(30), 19)).toHaveLength(19);
+  });
+  it("keeps an untouched secret", () => {
+    expect(cardSecretUpdate("", false)).toEqual({ op: "keep" });
+    expect(cardSecretUpdate("   ", false)).toEqual({ op: "keep" });
+  });
+  it("sets a typed number as digits", () => {
+    expect(cardSecretUpdate("5200 8282 8282 8210", false, digitsOnly)).toEqual({ op: "set", value: "5200828282828210" });
+  });
+  it("sets a typed code trimmed", () => {
+    expect(cardSecretUpdate(" 123 ", false)).toEqual({ op: "set", value: "123" });
+  });
+  it("clears when removed, whatever was typed", () => {
+    expect(cardSecretUpdate("", true)).toEqual({ op: "clear" });
+    expect(cardSecretUpdate("5200", true, digitsOnly)).toEqual({ op: "clear" });
+  });
+});
+
+describe("derived titles", () => {
+  it("recognises the brand name Rust stored", () => {
+    expect(isDerivedTitle("Mastercard", "mastercard")).toBe(true);
+    expect(isDerivedTitle("American Express", "amex")).toBe(true);
+    expect(isDerivedTitle("Card", "other")).toBe(true);
+  });
+  it("keeps a title the user chose", () => {
+    expect(isDerivedTitle("Nubank", "mastercard")).toBe(false);
+    expect(isDerivedTitle("Visa", "mastercard")).toBe(false);
+    expect(isDerivedTitle("Mastercard", "other")).toBe(false);
   });
 });
