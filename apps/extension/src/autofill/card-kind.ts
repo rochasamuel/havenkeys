@@ -39,6 +39,16 @@ const WORDS: Array<[CardFieldKind, readonly string[]]> = [
   ["brand", ["card type", "bandeira", "card brand"]],
 ];
 
+/**
+ * Phrases that also name fields of a login or identity form (a 2FA "security
+ * code", a customer "cid", a bare "titular"). They claim a field only inside
+ * a group that already has a number, CVV-word or expiry field (strong).
+ */
+const AMBIGUOUS = new Set(["cid", "security code", "codigo de seguranca", "cod seguranca", "card code", "titular", "cardholder", "card holder", "holder name", "nome do titular"]);
+
+/** Expiry words also appear in birth-date placeholders ("DD/MM/AA"). */
+const NOT_AN_EXPIRY = ["dd", "dia", "day", "nascimento", "birth", "bday", "birthday"];
+
 /** Weak words: only in a group that already has a number, CVV or expiry field. */
 const MONTH_WORDS = ["month", "mes", "mm"];
 const YEAR_WORDS = ["year", "ano", "yy", "yyyy", "aa", "aaaa"];
@@ -124,6 +134,8 @@ export function cardKindOf(el: CardElement, strong: boolean): { kind: CardFieldK
   const text = normalize(`${attr(el, "placeholder")} ${attr(el, "aria-label")} ${attr(el, "title")} ${labelText(el)}`, MAX_HINT_CHARS * 3);
   const all = `${attrs} ${text}`;
   if (hasAny(all, NEGATIVE)) return null;
+  // A one-time code is never a card field.
+  if (attr(el, "autocomplete").toLowerCase().split(/\s+/).includes("one-time-code")) return null;
 
   // A password box only ever holds the CVV; a select holds month, year or brand.
   const allowed = (k: CardFieldKind): boolean =>
@@ -131,10 +143,12 @@ export function cardKindOf(el: CardElement, strong: boolean): { kind: CardFieldK
 
   const fromAc = autocompleteKind(el);
   if (fromAc) return allowed(fromAc) ? { kind: fromAc, confidence: 1, byAutocomplete: true } : null;
-  for (const [kind, words] of WORDS) {
+  for (const [kind, all_words] of WORDS) {
+    const words = strong ? all_words : all_words.filter((w) => !AMBIGUOUS.has(w));
     const confidence = hasAny(attrs, words) ? 0.7 : hasAny(text, words) ? 0.6 : 0;
     if (confidence === 0) continue;
     if (kind === "cardholderName" && hasAny(all, NOT_A_NAME)) return null;
+    if (kind === "expiry" && hasAny(all, NOT_AN_EXPIRY)) return null;
     return allowed(kind) ? { kind, confidence, byAutocomplete: false } : null;
   }
   if (!strong) return null;

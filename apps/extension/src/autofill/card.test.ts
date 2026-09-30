@@ -136,4 +136,34 @@ describe("card classifier", () => {
     page(`<form><input id="ph" type="tel" name="phone"></form>`);
     expect(identityRoleOf($("#ph"))?.role).toBe("phone");
   });
+
+  it("a 2FA security-code field stays a one-time code, not a card field", () => {
+    page(`<form><label for="c">Security code</label><input id="c" name="code" autocomplete="one-time-code"><button>Verify</button></form>`);
+    expect(groupFor($("#c"), env).kind).toBe("otp");
+    expect(cardGroupFor($("#c"), env)).toBeNull();
+    page(`<form><label for="c">Código de segurança</label><input id="c" name="code" autocomplete="one-time-code"></form>`);
+    expect(groupFor($("#c"), env).kind).toBe("otp");
+    page(`<form><label for="c">Security code</label><input id="c" type="password" name="code"></form>`);
+    expect(groupFor($("#c"), env).kind).not.toBe("unknown");
+  });
+
+  it("ambiguous words claim a field only inside a strong card group", () => {
+    page(`<form><label for="u">Titular</label><input id="u" name="username"><input id="p" type="password"><button>Entrar</button></form>`);
+    expect(groupFor($("#u"), env).kind).toBe("username");
+    page(`<form><label for="i">Customer</label><input id="i" name="cid"></form>`);
+    expect(identityRoleOf($("#i"))).toBeNull(); // no role by words, but not refused by card
+    page(`<form><input id="n" aria-label="Card number"><label for="s">Security code</label><input id="s"><label for="t">Titular</label><input id="t"></form>`);
+    expect(kinds("#n")).toEqual([["n", "number"], ["s", "verificationNumber"], ["t", "cardholderName"]]);
+    page(`<form><input id="n" name="cid" aria-label="Customer ID"><input id="e" aria-label="Email" type="email"></form>`);
+    expect(cardGroupFor($("#n"), env)).toBeNull();
+  });
+
+  it("a birth-date placeholder DD/MM/AA is not an expiry", () => {
+    page(`<form><input id="b" name="dt" placeholder="DD/MM/AA"></form>`);
+    expect(cardGroupFor($("#b"), env)).toBeNull();
+    page(`<form><input id="b" name="nasc" placeholder="Data de nascimento MM/AA"></form>`);
+    expect(cardGroupFor($("#b"), env)).toBeNull();
+    page(`<form><input id="b" name="dt" placeholder="DD/MM/YY" autocomplete="bday"></form>`);
+    expect(identityRoleOf($("#b"))?.role).toBe("birthDate");
+  });
 });
