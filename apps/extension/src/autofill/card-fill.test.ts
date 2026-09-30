@@ -189,3 +189,99 @@ describe("readCardSubmission", () => {
     expect(readCardSubmission(cardGroupFor($("#num"), env)!)).toBeNull();
   });
 });
+
+describe("fix round 1", () => {
+  const V2: CardValue[] = [
+    { role: "cardholderName", value: "Ana Lima" },
+    { role: "number", value: "5555555555554444" },
+    { role: "verificationNumber", value: "456" },
+    { role: "expiryMonth", value: "11" },
+    { role: "expiryYear", value: "2034" },
+  ];
+
+  it("refills every field after a site's mask reformatted the first fill", () => {
+    page(`<form><input id="num" autocomplete="cc-number"><input id="exp" autocomplete="cc-exp" placeholder="MMYY"><input id="cvv" autocomplete="cc-csc"><input id="n" autocomplete="cc-name"></form>`);
+    $("#num").addEventListener("input", (e) => {
+      const t = e.target as HTMLInputElement;
+      t.value = (t.value.replace(/\D/g, "").match(/.{1,4}/g) ?? []).join(" ");
+    });
+    $("#exp").addEventListener("input", (e) => {
+      const t = e.target as HTMLInputElement;
+      const d = t.value.replace(/\D/g, "");
+      t.value = d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+    });
+    const g = cardGroupFor($("#num"), env)!;
+    fillCard(g, VALUES, env);
+    expect($("#num").value).toBe("4111 1111 1111 1111");
+    expect($("#exp").value).toBe("04/33");
+    fillCard(g, V2, env);
+    expect($("#num").value).toBe("5555 5555 5555 4444");
+    expect($("#exp").value).toBe("11/34");
+    expect($("#cvv").value).toBe("456");
+    expect($("#n").value).toBe("Ana Lima");
+  });
+
+  it("derives the combined expiry format from pattern", () => {
+    const f = (p: string) => expiryFor(input(`pattern="${p}"`), "4", "2033");
+    expect(f("\\d{2}/\\d{2}")).toBe("04/33");
+    expect(f("\\d{2}/\\d{4}")).toBe("04/2033");
+    expect(f("[0-9]{2}/[0-9]{2}")).toBe("04/33");
+    expect(f("\\d{2}\\s?/\\s?\\d{2}")).toBe("04/33");
+    expect(f("\\d{2}-\\d{2}")).toBe("04-33");
+    expect(f("\\d{4}")).toBe("0433");
+    expect(f("\\d{6}")).toBe("042033");
+  });
+
+  it("falls back to the maxlength rule when the shown format does not fit", () => {
+    expect(expiryFor(input(`placeholder="MM/AA" maxlength="4"`), "4", "2033")).toBe("0433");
+    expect(expiryFor(input(`placeholder="MM/YYYY" maxlength="5"`), "4", "2033")).toBe("04/33");
+    expect(expiryFor(input(`pattern="\\d{2}/\\d{4}" maxlength="5"`), "4", "2033")).toBe("04/33");
+    expect(expiryFor(input(`placeholder="MMAA"`), "11", "2033")).toBe("1133");
+  });
+
+  it("treats a site's pre-selected option as empty, but a real first option as a value", () => {
+    page(`<form><input id="num" autocomplete="cc-number"><select id="y" autocomplete="cc-exp-year"><option value="">Ano</option><option>2030</option><option selected>2031</option><option>2033</option></select>
+      <select id="m" autocomplete="cc-exp-month"><option>1</option><option>4</option></select></form>`);
+    fillCard(cardGroupFor($("#num"), env)!, VALUES, env);
+    expect($<HTMLSelectElement>("#y").value).toBe("2033");
+    expect($<HTMLSelectElement>("#m").value).toBe("1");
+  });
+
+  it("reads January and the first year at index 0, and a month by its name", () => {
+    page(`<form><input id="num" autocomplete="cc-number"><select id="m" autocomplete="cc-exp-month"><option value="3">April</option><option value="0">January</option></select>
+      <select id="y" autocomplete="cc-exp-year"><option>2033</option><option>2034</option></select></form>`);
+    $("#num").value = "4111111111111111";
+    markUserEdit($("#num"));
+    expect(readCardSubmission(cardGroupFor($("#num"), env)!)?.expiry).toBe("2033-04");
+    $<HTMLSelectElement>("#m").selectedIndex = 1;
+    expect(readCardSubmission(cardGroupFor($("#num"), env)!)?.expiry).toBe("2033-01");
+  });
+
+  it("joins given and family name fields when read", () => {
+    page(`<form><input id="num" autocomplete="cc-number"><input id="exp" autocomplete="cc-exp"><input id="g" autocomplete="cc-given-name"><input id="f" autocomplete="cc-family-name"></form>`);
+    for (const [s, v] of [["#num", "4111111111111111"], ["#exp", "04/33"]] as const) {
+      $(s).value = v;
+      markUserEdit($(s));
+    }
+    $("#g").value = "Samuel";
+    $("#f").value = "Rocha";
+    expect(readCardSubmission(cardGroupFor($("#num"), env)!)?.cardholderName).toBe("Samuel Rocha");
+  });
+
+  it("groups an Amex number 4-6-5 and cuts a text year to 2 digits", () => {
+    page(`<form><input id="num" placeholder="0000 000000 00000" autocomplete="cc-number"><input id="y" autocomplete="cc-exp-year" maxlength="2"></form>`);
+    fillCard(cardGroupFor($("#num"), env)!, [{ role: "number", value: "371449635398431" }, { role: "expiryYear", value: "2033" }], env);
+    expect($("#num").value).toBe("3714 496353 98431");
+    expect($("#y").value).toBe("33");
+  });
+
+  it("knows brand codes and 3-letter Portuguese months", () => {
+    page(`<select id="b"><option value="">--</option><option value="AMEX">Amex</option><option value="HC">Hiper</option></select>
+      <select id="a"><option value="">--</option><option value="AX">x</option></select>
+      <select id="m"><option value="">--</option><option>Mar</option><option>Abr</option></select>`);
+    expect(matchCardOption($("#b"), "brand", "amex")).toBe(1);
+    expect(matchCardOption($("#b"), "brand", "hipercard")).toBe(2);
+    expect(matchCardOption($("#a"), "brand", "amex")).toBe(1);
+    expect(matchCardOption($("#m"), "expiryMonth", "4")).toBe(2);
+  });
+});

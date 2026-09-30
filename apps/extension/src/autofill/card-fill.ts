@@ -50,12 +50,39 @@ const BRAND_ALIASES: Record<string, readonly string[]> = {
 
 const hint = (el: Element) => `${el.getAttribute("placeholder") ?? ""}`.slice(0, 200).toLowerCase();
 
-/** Month and year in one field, in the format its placeholder shows; else by maxlength; else MM/YY. */
+/**
+ * The shape a `pattern` such as `\d{2}\s?/\s?\d{2}` or `[0-9]{4}` asks for:
+ * the separator ("" for none) and whether the year has 4 digits. Simple
+ * digit patterns only; anything else gives null.
+ */
+function patternShape(el: HTMLInputElement): { sep: string; long: boolean } | null {
+  const raw = (el.getAttribute("pattern") ?? "").slice(0, 100);
+  const flat = raw
+    .replace(/^\^|\$$/g, "")
+    .replace(/\\s\??/g, "")
+    .replace(/\\([/.-])/g, "$1")
+    .replace(/(?:\\d|\[0-9\])\{(\d)\}/g, (_, n: string) => "d".repeat(Number(n)))
+    .replace(/\\d|\[0-9\]/g, "d");
+  const m = /^(dd)([/.-]?)(dd|dddd)$/.exec(flat);
+  return m ? { sep: m[2] ?? "", long: (m[3] ?? "").length === 4 } : null;
+}
+
+/** Month and year in one field: the placeholder's format, else the pattern's, else by maxlength, else MM/YY. */
 export function expiryFor(el: HTMLInputElement, month: string, year: string): string {
   const mm = month.padStart(2, "0");
   const yy = year.slice(-2);
+  const fits = (s: string) => el.maxLength < 0 || s.length <= el.maxLength;
   const m = /mm(\s*[/.-]\s*|)(yyyy|aaaa|yy|aa)(?![a-z])/.exec(hint(el));
-  if (m) return `${mm}${m[1] ?? ""}${(m[2] ?? "").length === 4 ? year : yy}`;
+  if (m) {
+    const s = `${mm}${m[1] ?? ""}${(m[2] ?? "").length === 4 ? year : yy}`;
+    if (fits(s)) return s;
+  } else {
+    const p = patternShape(el);
+    if (p) {
+      const s = `${mm}${p.sep}${p.long ? year : yy}`;
+      if (fits(s)) return s;
+    }
+  }
   switch (el.maxLength) {
     case 4:
       return `${mm}${yy}`;
@@ -136,6 +163,53 @@ function valueFor(f: CardField, byRole: ReadonlyMap<CardRole, string>): string |
   }
 }
 
+/** Compare-through key: card numbers, codes and expiries by digits, so a site's mask keeps the same key. */
+function keyOf(kind: CardField["kind"], v: string): string {
+  switch (kind) {
+    case "number":
+    case "verificationNumber":
+    case "expiry":
+      return v.replace(/\D/g, "");
+    case "expiryMonth": {
+      const d = v.replace(/\D/g, "");
+      return d === "" ? v : String(Number(d));
+    }
+    case "expiryYear": {
+      const d = v.replace(/\D/g, "");
+      return d === "" ? v : d.slice(-2);
+    }
+    default:
+      return v;
+  }
+}
+
+/** A short non-cryptographic hash (cyrb53): only to recognise our own value again, not to protect it. */
+function hash(s: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${s.length}:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+
+function fingerprint(el: CardElement, kind: CardField["kind"]): string {
+  return hash(el instanceof HTMLSelectElement ? `#${el.selectedIndex}` : keyOf(kind, el.value));
+}
+
+/** Does this option name a real month, year or brand (not "Month", "Ano", "Select")? */
+function optionMeansSomething(o: HTMLOptionElement, kind: CardField["kind"]): boolean {
+  const texts = [o.value, o.textContent ?? ""];
+  if (kind === "brand") {
+    return texts.some((t) => Object.values(BRAND_ALIASES).some((a) => a.includes(normalize(t))));
+  }
+  return texts.some((t) => /\d/.test(t) || monthOf(t) !== null);
+}
+
 function announce(el: CardElement): void {
   el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -148,8 +222,8 @@ function write(f: CardField, value: string): boolean {
     const i = matchCardOption(el, f.kind, value);
     if (i < 0) return false;
     el.selectedIndex = i;
-    written.set(el, String(i));
     announce(el);
+    remember(f);
     return true;
   }
   // Never cut a value to fit: a wrong card number or code is worse than an empty field.
@@ -157,28 +231,49 @@ function write(f: CardField, value: string): boolean {
   el.focus({ preventScroll: true });
   if (inputSetter) inputSetter.call(el, value);
   else el.value = value;
-  written.set(el, value);
   announce(el);
+  // After announcing: a site's mask may reformat the value in its input handler.
+  remember(f);
   return true;
 }
 
-function mine(el: CardElement): boolean {
-  const current = el instanceof HTMLSelectElement ? String(el.selectedIndex) : el.value;
-  return written.get(el) === current;
+/** Keeps only a fingerprint, so the plaintext is never held longer than `el.value` holds it. */
+function remember(f: CardField): void {
+  written.set(f.el, fingerprint(f.el, f.kind));
 }
 
-function isEmpty(el: CardElement): boolean {
-  if (el instanceof HTMLSelectElement) return el.selectedIndex <= 0 || el.value === "";
+function mine(f: CardField): boolean {
+  const known = written.get(f.el);
+  if (known === undefined) return false;
+  if (known === fingerprint(f.el, f.kind)) return true;
+  written.delete(f.el);
+  return false;
+}
+
+/** Nothing there, a placeholder option, or a value the site itself pre-selected. */
+function isEmpty(f: CardField): boolean {
+  const el = f.el;
+  if (el instanceof HTMLSelectElement) {
+    const o = el.options[el.selectedIndex];
+    if (!o || el.value === "" || o.disabled || o.defaultSelected) return true;
+    return el.selectedIndex === 0 && !optionMeansSomething(o, f.kind);
+  }
   return el.value === "";
 }
 
-function fillableNow(el: CardElement, env: Env): boolean {
-  return el.isConnected && isCardFillable(el, env) && (isEmpty(el) || mine(el));
+function fillableNow(f: CardField, env: Env): boolean {
+  const el = f.el;
+  if (!el.isConnected || !isCardFillable(el, env)) return false;
+  if (isEmpty(f)) {
+    written.delete(el);
+    return true;
+  }
+  return mine(f);
 }
 
 /** The roles worth asking for: those of fields we could write right now. */
 export function cardRolesToFill(group: CardGroup, env: Env): CardRole[] {
-  return cardRolesOf(group.fields.filter((f) => fillableNow(f.el, env)));
+  return cardRolesOf(group.fields.filter((f) => fillableNow(f, env)));
 }
 
 /** Fill the group's fields from `values`. Returns how many were written. */
@@ -187,7 +282,7 @@ export function fillCard(group: CardGroup, values: readonly CardValue[], env: En
   let n = 0;
   for (const f of group.fields) {
     const value = valueFor(f, byRole);
-    if (value === undefined || !fillableNow(f.el, env)) continue;
+    if (value === undefined || !fillableNow(f, env)) continue;
     if (write(f, value)) n++;
   }
   return n;
@@ -219,10 +314,14 @@ function yearOf(raw: string): number | null {
   return null;
 }
 
-function selectedText(el: CardElement): string {
+function selectedText(el: CardElement, kind: CardField["kind"]): string {
   if (el instanceof HTMLSelectElement) {
     const o = el.options[el.selectedIndex];
-    return el.selectedIndex > 0 && o ? `${o.value || o.textContent || ""}` : "";
+    if (!o || o.disabled) return "";
+    const text = o.textContent ?? "";
+    // A month named in words wins over a 0-based value ("3" for April).
+    if (kind === "expiryMonth" && /[a-z]/i.test(text) && monthOf(text) !== null) return text;
+    return o.value || text;
   }
   return el.value;
 }
@@ -240,8 +339,8 @@ function readExpiry(group: CardGroup): string | null {
   } else {
     const m = group.fields.find((f) => f.kind === "expiryMonth");
     const y = group.fields.find((f) => f.kind === "expiryYear");
-    month = m ? monthOf(selectedText(m.el)) : null;
-    year = y ? yearOf(selectedText(y.el)) : null;
+    month = m ? monthOf(selectedText(m.el, "expiryMonth")) : null;
+    year = y ? yearOf(selectedText(y.el, "expiryYear")) : null;
   }
   if (month === null || year === null || month < 1 || month > 12 || year < 2000 || year > 2099) return null;
   return `${year}-${String(month).padStart(2, "0")}`;
@@ -260,7 +359,8 @@ export function readCardSubmission(group: CardGroup): SubmittedCard | null {
   const expiry = readExpiry(group);
   if (!expiry) return null;
   const cvv = group.fields.find((f) => f.kind === "verificationNumber")?.el.value.trim() ?? "";
-  const name = group.fields.find((f) => f.kind === "cardholderName")?.el.value.trim() ?? "";
+  const value = (kind: CardField["kind"]) => group.fields.find((f) => f.kind === kind)?.el.value.trim() ?? "";
+  const name = value("cardholderName") || `${value("cardholderGivenName")} ${value("cardholderFamilyName")}`.trim();
   return {
     number,
     expiry,
