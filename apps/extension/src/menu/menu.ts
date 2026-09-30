@@ -174,6 +174,11 @@ function render(t: string, view: MenuView): void {
     return;
   }
   site.textContent = view.site;
+  // Temporary: the card rows are rendered by Task 10.
+  if (view.state === "cards" || view.kind === "card") {
+    main.replaceChildren();
+    return;
+  }
   if (view.kind === "new_password") {
     main.replaceChildren(
       row(sparkle(), msg.menu.generateTitle, msg.menu.generateBody, () => pick({ type: "menu_generate", token: t }), { title: true, detail: true }),

@@ -404,6 +404,8 @@ function start(): void {
     const none: FillReply = { filled: 0, pressing: null };
     // The frame may have navigated since the desktop matched its URL.
     if (m.origin !== location.origin) return none;
+    // Temporary: the card fill arrives with the card menu wiring (Task 9).
+    if (m.fill.kind === "card") return none;
     const env = defaultEnv();
     // An identity fills the identity group of the picked field (or the page's
     // first one for a popup fill), never the login group.

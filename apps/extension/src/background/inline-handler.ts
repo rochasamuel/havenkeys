@@ -445,6 +445,9 @@ export function createInlineHandler(deps: InlineDeps) {
         const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity } };
       }
+      // Temporary: card menus arrive with the card handler (Task 8).
+      case "menu_pick_card":
+        return { ok: false, message: t.errors.generic };
       case "menu_pick": {
         const m = liveMenu(tabId, req.token);
         if (!m || m.locked) return { ok: false, message: t.errors.menuExpired };
