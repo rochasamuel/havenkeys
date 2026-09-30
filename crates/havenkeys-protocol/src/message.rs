@@ -4,10 +4,11 @@
 
 use crate::secret::WireSecret;
 use crate::{
-    COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CHALLENGE_BYTES, MAX_CREDENTIAL_LIST,
-    MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES, MAX_PROVIDER_ACCOUNTS,
-    MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES,
-    MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
+    COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CARD_CODE_BYTES, MAX_CARD_FRAMES,
+    MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, MAX_CHALLENGE_BYTES,
+    MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES,
+    MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES,
+    MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -206,6 +207,36 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top_url: Option<String>,
     },
+    /// Cards any https page may be offered: overview data only, never a
+    /// number or code. `insecure`: the tab's page is not https.
+    FindCards {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
+    /// One card's values for the tab's card fields, one entry per frame.
+    /// Every frame must be https and same-site as `top_url`, or a payment
+    /// processor's (the core decides); one bad frame denies the request.
+    FillCard {
+        item_id: Uuid,
+        top_url: String,
+        frames: Vec<CardFrame>,
+    },
+    /// Save a card typed into a checkout after the user confirmed it. A server write.
+    SaveCard {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cardholder_name: Option<String>,
+        number: WireSecret,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        verification_number: Option<WireSecret>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expiry: Option<String>,
+    },
 }
 
 /// A form field's role for an identity fill. Mirrors
@@ -260,6 +291,107 @@ impl fmt::Debug for IdentityValue {
 fn roles_unique(roles: &[IdentityRole]) -> bool {
     let mut seen = HashSet::new();
     roles.iter().all(|r| seen.insert(*r))
+}
+
+/// A checkout field's role for a card fill. Mirrors
+/// havenkeys_core::card_page::CardRole; the bridge maps between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CardRole {
+    CardholderName,
+    CardholderGivenName,
+    CardholderFamilyName,
+    Number,
+    VerificationNumber,
+    ExpiryMonth,
+    ExpiryYear,
+    Brand,
+}
+
+/// A card network. Mirrors havenkeys_core::card::CardBrand.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CardBrandId {
+    Visa,
+    Mastercard,
+    Amex,
+    Elo,
+    Hipercard,
+    Diners,
+    Discover,
+    Jcb,
+    Unionpay,
+    Maestro,
+    Other,
+}
+
+/// One frame of a fill_card: its URL (from the browser) and its fields' roles.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CardFrame {
+    pub url: String,
+    pub roles: Vec<CardRole>,
+}
+
+/// A card offered to a page. No number beyond the last four digits.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CardMatch {
+    pub id: Uuid,
+    pub title: String,
+    #[serde(deserialize_with = "required")]
+    pub brand: Option<CardBrandId>,
+    #[serde(deserialize_with = "required")]
+    pub last4: Option<String>,
+    /// `YYYY-MM`.
+    #[serde(deserialize_with = "required")]
+    pub expiry: Option<String>,
+}
+
+impl fmt::Debug for CardMatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CardMatch")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
+}
+
+/// One card value for a fill.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CardValue {
+    pub role: CardRole,
+    pub value: WireSecret,
+}
+
+impl fmt::Debug for CardValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CardValue")
+            .field("role", &self.role)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The values for one frame of a fill_card.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CardFrameValues {
+    pub values: Vec<CardValue>,
+}
+
+fn card_roles_unique(roles: &[CardRole]) -> bool {
+    let mut seen = HashSet::new();
+    roles.iter().all(|r| seen.insert(*r))
+}
+
+/// `YYYY-MM` in shape (the core checks the month).
+fn expiry_shape_ok(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 7
+        && b[4] == b'-'
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| i == 4 || c.is_ascii_digit())
 }
 
 /// Requires the key to be present, unlike a bare `Option<T>` field (whose
@@ -338,12 +470,20 @@ impl Request {
             Request::FindIdentity { .. } => "find_identity",
             Request::FillIdentity { .. } => "fill_identity",
             Request::OpenIdentity { .. } => "open_identity",
+            Request::FindCards { .. } => "find_cards",
+            Request::FillCard { .. } => "fill_card",
+            Request::SaveCard { .. } => "save_card",
         }
     }
 
-    fn urls(&self) -> [Option<&str>; 2] {
+    fn urls(&self) -> Vec<&str> {
         match self {
-            Request::Status {} | Request::Lock {} | Request::GeneratePassword {} => [None, None],
+            Request::Status {} | Request::Lock {} | Request::GeneratePassword {} => Vec::new(),
+            Request::FillCard {
+                top_url, frames, ..
+            } => std::iter::once(top_url.as_str())
+                .chain(frames.iter().map(|f| f.url.as_str()))
+                .collect(),
             Request::FindMatches { url, top_url }
             | Request::FillItem { url, top_url, .. }
             | Request::GetTotp { url, top_url, .. }
@@ -360,7 +500,12 @@ impl Request {
             | Request::SaveSso { url, top_url, .. }
             | Request::FindIdentity { url, top_url }
             | Request::FillIdentity { url, top_url, .. }
-            | Request::OpenIdentity { url, top_url } => [Some(url), top_url.as_deref()],
+            | Request::OpenIdentity { url, top_url }
+            | Request::FindCards { url, top_url }
+            | Request::SaveCard { url, top_url, .. } => [Some(url.as_str()), top_url.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect(),
         }
     }
 
@@ -368,7 +513,6 @@ impl Request {
         let urls_ok = self
             .urls()
             .into_iter()
-            .flatten()
             .all(|u| !u.is_empty() && u.len() <= MAX_URL_BYTES);
         let secret_ok =
             |s: &WireSecret| !s.expose().is_empty() && s.expose().len() <= MAX_SECRET_BYTES;
@@ -451,7 +595,38 @@ impl Request {
             }
             _ => true,
         };
-        urls_ok && login_ok && passkey_ok && identity_ok
+        let card_ok = match self {
+            Request::FillCard { frames, .. } => {
+                !frames.is_empty()
+                    && frames.len() <= MAX_CARD_FRAMES
+                    && frames.iter().all(|f| {
+                        !f.roles.is_empty()
+                            && f.roles.len() <= MAX_CARD_ROLES
+                            && card_roles_unique(&f.roles)
+                    })
+            }
+            Request::SaveCard {
+                title,
+                cardholder_name,
+                number,
+                verification_number,
+                expiry,
+                ..
+            } => {
+                title_ok(title, &None)
+                    && !number.expose().is_empty()
+                    && number.expose().len() <= MAX_CARD_NUMBER_BYTES
+                    && verification_number.as_ref().is_none_or(|c| {
+                        !c.expose().is_empty() && c.expose().len() <= MAX_CARD_CODE_BYTES
+                    })
+                    && cardholder_name
+                        .as_ref()
+                        .is_none_or(|n| !n.is_empty() && n.len() <= MAX_CARD_VALUE_BYTES)
+                    && expiry.as_deref().is_none_or(expiry_shape_ok)
+            }
+            _ => true,
+        };
+        urls_ok && login_ok && passkey_ok && identity_ok && card_ok
     }
 }
 
@@ -617,6 +792,29 @@ impl Response {
                             && v.value.expose().len() <= MAX_IDENTITY_VALUE_BYTES
                     })
             }
+            Some(ResultBody::FindCards { insecure, cards }) => {
+                cards.len() <= MAX_MATCHES
+                    && !(*insecure && !cards.is_empty())
+                    && cards.iter().all(|c| {
+                        c.title.len() <= MAX_TITLE_BYTES
+                            && c.last4.as_deref().is_none_or(|l| {
+                                l.len() == 4 && l.bytes().all(|b| b.is_ascii_digit())
+                            })
+                            && c.expiry.as_deref().is_none_or(expiry_shape_ok)
+                    })
+            }
+            Some(ResultBody::FillCard { frames }) => {
+                frames.len() <= MAX_CARD_FRAMES
+                    && frames.iter().all(|f| {
+                        let roles: Vec<CardRole> = f.values.iter().map(|v| v.role).collect();
+                        f.values.len() <= MAX_CARD_ROLES
+                            && card_roles_unique(&roles)
+                            && f.values.iter().all(|v| {
+                                !v.value.expose().is_empty()
+                                    && v.value.expose().len() <= MAX_CARD_VALUE_BYTES
+                            })
+                    })
+            }
             _ => true,
         }
     }
@@ -729,6 +927,16 @@ pub enum ResultBody {
         values: Vec<IdentityValue>,
     },
     OpenIdentity {},
+    FindCards {
+        insecure: bool,
+        cards: Vec<CardMatch>,
+    },
+    FillCard {
+        frames: Vec<CardFrameValues>,
+    },
+    SaveCard {
+        item_id: Uuid,
+    },
 }
 
 /// What saving a submitted login would do.
@@ -765,6 +973,9 @@ impl fmt::Debug for ResultBody {
             ResultBody::FindIdentity { .. } => "find_identity",
             ResultBody::FillIdentity { .. } => "fill_identity",
             ResultBody::OpenIdentity {} => "open_identity",
+            ResultBody::FindCards { .. } => "find_cards",
+            ResultBody::FillCard { .. } => "fill_card",
+            ResultBody::SaveCard { .. } => "save_card",
         };
         write!(f, "ResultBody({kind})")
     }

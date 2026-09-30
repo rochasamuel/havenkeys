@@ -706,3 +706,81 @@ fn identity_values_never_debug_print() {
     };
     assert!(!format!("{v:?}").contains("123"));
 }
+
+#[test]
+fn card_requests_parse_and_are_bounded() {
+    let ok = [
+        r#"{"v":1,"id":1,"request":{"type":"find_cards","url":"https://shop.com/"}}"#.to_owned(),
+        format!(
+            r#"{{"v":1,"id":2,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{{"url":"https://shop.com/","roles":["cardholderName"]}},{{"url":"https://js.stripe.com/v3/","roles":["number","expiryMonth","expiryYear","verificationNumber"]}}]}}}}"#
+        ),
+        r#"{"v":1,"id":3,"request":{"type":"save_card","url":"https://shop.com/","number":"4111 1111 1111 1111","expiry":"2030-01"}}"#.to_owned(),
+        r#"{"v":1,"id":4,"request":{"type":"save_card","url":"https://shop.com/","title":"Visa","cardholderName":"Samuel","number":"4111111111111111","verificationNumber":"123","expiry":"2030-01"}}"#.to_owned(),
+    ];
+    for s in &ok {
+        let env = parse(s).unwrap_or_else(|_| panic!("{s}"));
+        assert!(matches!(
+            env.request.kind(),
+            "find_cards" | "fill_card" | "save_card"
+        ));
+    }
+    let frame = r#"{"url":"https://shop.com/","roles":["number"]}"#;
+    let nine = [frame; 9].join(",");
+    let bad = [
+        format!(r#"{{"v":1,"id":5,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[]}}}}"#),
+        format!(r#"{{"v":1,"id":6,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{nine}]}}}}"#),
+        format!(r#"{{"v":1,"id":7,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{{"url":"https://shop.com/","roles":[]}}]}}}}"#),
+        format!(r#"{{"v":1,"id":8,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{{"url":"https://shop.com/","roles":["number","number"]}}]}}}}"#),
+        format!(r#"{{"v":1,"id":9,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{{"url":"https://shop.com/","roles":["password"]}}]}}}}"#),
+        format!(r#"{{"v":1,"id":10,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{{"url":"","roles":["number"]}}]}}}}"#),
+        format!(r#"{{"v":1,"id":11,"request":{{"type":"fill_card","itemId":"{ITEM}","topUrl":"https://shop.com/","frames":[{{"url":"https://shop.com/","roles":["number"],"x":1}}]}}}}"#),
+        r#"{"v":1,"id":12,"request":{"type":"save_card","url":"https://shop.com/","number":""}}"#.to_owned(),
+        r#"{"v":1,"id":13,"request":{"type":"save_card","url":"https://shop.com/","number":"4111111111111111","expiry":"01/2030"}}"#.to_owned(),
+        r#"{"v":1,"id":14,"request":{"type":"save_card","url":"https://shop.com/","number":"4111111111111111","verificationNumber":"12345678901234567"}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":15,"request":{{"type":"save_card","url":"https://shop.com/","number":"{}"}}}}"#, "4".repeat(65)),
+        r#"{"v":1,"id":16,"request":{"type":"save_card","url":"https://shop.com/","number":"4111111111111111","title":""}}"#.to_owned(),
+        r#"{"v":1,"id":17,"request":{"type":"find_cards","url":"https://shop.com/","itemId":"x"}}"#.to_owned(),
+    ];
+    for s in &bad {
+        assert!(parse(s).is_err(), "{s}");
+    }
+}
+
+#[test]
+fn card_results_are_validated() {
+    let valid = [
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"find_cards","insecure":false,"cards":[{{"id":"{ITEM}","title":"Visa","brand":"visa","last4":"1111","expiry":"2033-04"}}]}}}}"#),
+        r#"{"v":1,"id":2,"result":{"type":"find_cards","insecure":true,"cards":[]}}"#.to_owned(),
+        r#"{"v":1,"id":3,"result":{"type":"fill_card","frames":[{"values":[{"role":"number","value":"4111111111111111"}]},{"values":[]}]}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":4,"result":{{"type":"save_card","itemId":"{ITEM}"}}}}"#),
+        format!(r#"{{"v":1,"id":5,"result":{{"type":"find_cards","insecure":false,"cards":[{{"id":"{ITEM}","title":"x","brand":null,"last4":null,"expiry":null}}]}}}}"#),
+    ];
+    for s in &valid {
+        assert!(Outgoing::parse(s.as_bytes()).is_some(), "{s}");
+    }
+    let long = "x".repeat(MAX_CARD_VALUE_BYTES + 1);
+    let invalid = [
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"find_cards","insecure":true,"cards":[{{"id":"{ITEM}","title":"x","brand":null,"last4":null,"expiry":null}}]}}}}"#),
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"find_cards","insecure":false,"cards":[{{"id":"{ITEM}","title":"x","brand":"visa","last4":"41111","expiry":null}}]}}}}"#),
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"find_cards","insecure":false,"cards":[{{"id":"{ITEM}","title":"x","brand":"visa","last4":null,"expiry":"04/2033"}}]}}}}"#),
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"find_cards","insecure":false,"cards":[{{"id":"{ITEM}","title":"x","brand":"nubank","last4":null,"expiry":null}}]}}}}"#),
+        r#"{"v":1,"id":1,"result":{"type":"fill_card","frames":[{"values":[{"role":"number","value":""}]}]}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"fill_card","frames":[{"values":[{"role":"number","value":"1"},{"role":"number","value":"2"}]}]}}"#.to_owned(),
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"fill_card","frames":[{{"values":[{{"role":"number","value":"{long}"}}]}}]}}}}"#),
+        format!(r#"{{"v":1,"id":1,"result":{{"type":"fill_card","frames":[{}]}}}}"#, [r#"{"values":[]}"#; 9].join(",")),
+    ];
+    for s in &invalid {
+        assert!(Outgoing::parse(s.as_bytes()).is_none(), "{s}");
+    }
+}
+
+#[test]
+fn card_values_and_requests_never_debug_print() {
+    let v = CardValue {
+        role: CardRole::Number,
+        value: WireSecret::new("4111111111111111".into()),
+    };
+    assert!(!format!("{v:?}").contains("4111"));
+    let env = parse(r#"{"v":1,"id":1,"request":{"type":"save_card","url":"https://shop.com/","number":"4111111111111111"}}"#).unwrap();
+    assert!(!format!("{env:?}").contains("4111"));
+}
