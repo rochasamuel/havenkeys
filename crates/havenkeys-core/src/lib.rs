@@ -7,6 +7,7 @@
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 pub mod account;
+pub mod card;
 pub mod crypto;
 pub mod error;
 pub mod generator;
