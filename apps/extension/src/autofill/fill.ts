@@ -35,6 +35,16 @@ export function markUserEdit(el: HTMLInputElement): void {
   sources.set(el, { source: "user", value: el.value });
 }
 
+/**
+ * The user typed the field's current value, compared through `key`: a site
+ * that reformats as the user types (a card mask adding spaces) keeps the
+ * same digits. Page-script values never count.
+ */
+export function typedByUser(el: HTMLInputElement, key: (v: string) => string): boolean {
+  const s = sources.get(el);
+  return s !== undefined && s.source === "user" && key(s.value) === key(el.value);
+}
+
 const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
 /** Fill one field. Returns false (and writes nothing) if it is not fillable. */
