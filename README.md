@@ -76,6 +76,9 @@ What the browser extension does:
 * Fills sign-up and checkout forms from your Identity (name, email, phone,
   address). Documents such as CPF are filled only after you confirm them, and
   only on https pages
+* Fills checkouts from your saved Cards (https pages only, payment
+  processors' card frames included) after you pick one, and offers to save a
+  card you typed into a checkout once you confirm
 * Passkeys, on the sites the extension has access to (all by default): save a passkey a site offers to a login
   in HavenKeys, and sign in with it from a chooser or from the field menu.
   The private key is created, stored and used only in the desktop's Rust

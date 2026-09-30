@@ -54,6 +54,11 @@ function identityRow(over) {
   return { title: "Samuel Rocha", fills: 5, documents: [], documentsAllowed: true, empty: false, missing: false, ...over };
 }
 
+const visaCard = { id: ID1, title: "Visa personal", brand: "visa", last4: "4242", expiry: "11/33", expired: false };
+const eloCard = { id: ID2, title: "Elo Nubank", brand: "elo", last4: "7609", expiry: "03/32", expired: false };
+const discoverCard = { id: ID3, title: "Discover", brand: "discover", last4: "1117", expiry: "06/34", expired: false };
+const expiredCard = { id: "33333333-4444-4555-8666-777777777777", title: "Mastercard (old)", brand: "mastercard", last4: "0004", expiry: "01/22", expired: true };
+
 function menuView(over) {
   return { state: "ready", kind: "login", site: "github.com", items: menuItems.slice(0, 2), passkeys: [], hint: null, identity: null, ...over };
 }
@@ -159,6 +164,22 @@ export const extensionScenarios = [
     },
   },
   {
+    name: "popup-cards",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({
+      popup_state: ok({
+        kind: "unlocked",
+        site: "shop.example.com",
+        matches: [],
+        identity: null,
+        cards: [visaCard, eloCard],
+        cardsOrigin: "https://shop.example.com",
+      }),
+    }),
+  },
+  {
     name: "popup-identity-with-logins",
     page: "popup.html",
     frame: { kind: "popup" },
@@ -212,6 +233,26 @@ export const extensionScenarios = [
       page: "menu.html",
       frame: { kind: "menu", width, rows: 1 },
       replies: () => ({ menu_state: ok(menuView({ kind: "new_password", items: [] })) }),
+    },
+    {
+      name: `menu-cards-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 4 },
+      replies: () => ({
+        menu_state: ok({ state: "cards", site: "shop.example.com", insecure: false, cards: [visaCard, eloCard, discoverCard, expiredCard] }),
+      }),
+    },
+    {
+      name: `menu-cards-insecure-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({ menu_state: ok({ state: "cards", site: "shop.example.com", insecure: true, cards: [] }) }),
+    },
+    {
+      name: `menu-no-cards-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({ menu_state: ok({ state: "cards", site: "shop.example.com", insecure: false, cards: [] }) }),
     },
     {
       name: `menu-identity-${width}`,
@@ -311,6 +352,14 @@ export const extensionScenarios = [
     page: "save.html",
     frame: { kind: "save" },
     replies: () => ({ save_state: ok({ action: "add", site: "github.com", username: "octocat@example.com" }) }),
+  },
+  {
+    name: "save-card",
+    page: "save.html",
+    frame: { kind: "save" },
+    replies: () => ({
+      save_state: ok({ site: "shop.example.com", title: "Mastercard", card: { brand: "mastercard", last4: "7609", expiry: "11/33" } }),
+    }),
   },
   {
     name: "save-update-long",
