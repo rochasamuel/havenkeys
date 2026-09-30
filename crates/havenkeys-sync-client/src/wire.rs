@@ -301,25 +301,8 @@ impl TryFrom<RemoteChangeDto> for RemoteChange {
         if dto.revision < 0 {
             return Err(SyncError::Protocol("item revision"));
         }
-        let decode = |value: Option<String>| -> Result<Option<Vec<u8>>> {
-            match value {
-                None => Ok(None),
-                Some(raw) => {
-                    if raw.len() > MAX_BLOB_LEN / 3 * 4 + 4 {
-                        return Err(SyncError::TooLarge);
-                    }
-                    let bytes = BASE64
-                        .decode(raw.as_bytes())
-                        .map_err(|_| SyncError::Protocol("blob encoding"))?;
-                    if bytes.len() > MAX_BLOB_LEN {
-                        return Err(SyncError::TooLarge);
-                    }
-                    Ok(Some(bytes))
-                }
-            }
-        };
-        let overview = decode(dto.overview)?;
-        let details = decode(dto.details)?;
+        let overview = decode_blob(dto.overview)?;
+        let details = decode_blob(dto.details)?;
         if dto.deleted && (overview.is_some() || details.is_some()) {
             return Err(SyncError::Protocol("a deletion carrying blobs"));
         }
@@ -334,6 +317,23 @@ impl TryFrom<RemoteChangeDto> for RemoteChange {
             deleted: dto.deleted,
         })
     }
+}
+
+/// A base64 blob from the server, bounded before and after decoding.
+fn decode_blob(value: Option<String>) -> Result<Option<Vec<u8>>> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    if raw.len() > MAX_BLOB_LEN / 3 * 4 + 4 {
+        return Err(SyncError::TooLarge);
+    }
+    let bytes = BASE64
+        .decode(raw.as_bytes())
+        .map_err(|_| SyncError::Protocol("blob encoding"))?;
+    if bytes.len() > MAX_BLOB_LEN {
+        return Err(SyncError::TooLarge);
+    }
+    Ok(Some(bytes))
 }
 
 #[derive(Deserialize)]

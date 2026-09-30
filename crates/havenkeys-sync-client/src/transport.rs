@@ -24,12 +24,12 @@ pub enum Method {
 }
 
 impl Method {
-    fn as_str(self) -> &'static str {
+    fn to_reqwest(self) -> reqwest::Method {
         match self {
-            Self::Get => "GET",
-            Self::Post => "POST",
-            Self::Put => "PUT",
-            Self::Delete => "DELETE",
+            Self::Get => reqwest::Method::GET,
+            Self::Post => reqwest::Method::POST,
+            Self::Put => reqwest::Method::PUT,
+            Self::Delete => reqwest::Method::DELETE,
         }
     }
 }
@@ -77,8 +77,7 @@ impl HttpTransport {
     pub fn new(base_url: &str) -> Result<Self> {
         let base = url::Url::parse(base_url.trim_end_matches('/'))
             .map_err(|_| SyncError::InvalidServerUrl)?;
-        let host = base.host_str().unwrap_or_default().to_string();
-        let local = host == "localhost" || host == "127.0.0.1" || host == "[::1]";
+        let local = matches!(base.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
         match base.scheme() {
             "https" => {}
             "http" if local => {}
@@ -115,11 +114,7 @@ impl Transport for HttpTransport {
 
         let mut builder = self
             .client
-            .request(
-                reqwest::Method::from_bytes(request.method.as_str().as_bytes())
-                    .map_err(|_| SyncError::Protocol("method"))?,
-                url,
-            )
+            .request(request.method.to_reqwest(), url)
             .header("accept", "application/json");
         if let Some(token) = &request.token {
             builder = builder.bearer_auth(token.as_str());
@@ -132,18 +127,22 @@ impl Transport for HttpTransport {
 
         let mut response = builder.send().await.map_err(|_| SyncError::Unavailable)?;
         let status = response.status().as_u16();
-
-        // Read in chunks and stop at the cap. `Content-Length` is the
-        // server's claim about itself, so it decides nothing here.
-        let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| SyncError::Unavailable)? {
-            if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
-                return Err(SyncError::TooLarge);
-            }
-            body.extend_from_slice(&chunk);
-        }
+        let body = read_capped(&mut response).await?;
         Ok(HttpResponse { status, body })
     }
+}
+
+/// Read the body in chunks and stop at the cap. `Content-Length` is the
+/// server's claim about itself, so it decides nothing here.
+async fn read_capped(response: &mut reqwest::Response) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| SyncError::Unavailable)? {
+        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(SyncError::TooLarge);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 #[cfg(test)]
