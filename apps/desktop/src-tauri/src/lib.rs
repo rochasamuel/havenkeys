@@ -5,6 +5,7 @@
 
 mod account;
 mod autostart;
+mod card;
 mod clipboard;
 mod commands;
 mod device;
@@ -258,6 +259,10 @@ pub fn run() {
             identity::identity_item_id,
             identity::reveal_identity,
             identity::copy_identity_field,
+            card::reveal_card,
+            card::reveal_card_field,
+            card::copy_card_field,
+            card::check_card_number,
             commands::sync_now,
             commands::resync_vault,
             commands::reveal_previous_password,

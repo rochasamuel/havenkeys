@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-card-number"
+description = "Enables the check_card_number command without any pre-configured scope."
+commands.allow = ["check_card_number"]
+
+[[permission]]
+identifier = "deny-check-card-number"
+description = "Denies the check_card_number command without any pre-configured scope."
+commands.deny = ["check_card_number"]
