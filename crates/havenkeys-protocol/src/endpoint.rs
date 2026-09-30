@@ -48,21 +48,7 @@ impl Endpoint {
         if let Some(p) = override_from_env() {
             return Ok(Self::at(PathBuf::from(p)));
         }
-        let base = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .or_else(|| {
-                // macOS: per-user, mode 0700, set by launchd for GUI apps.
-                cfg!(target_os = "macos")
-                    .then(|| std::env::var_os("TMPDIR").map(PathBuf::from))
-                    .flatten()
-                    .filter(|p| p.is_absolute())
-            })
-            .or_else(|| {
-                std::env::var_os("HOME")
-                    .map(|h| PathBuf::from(h).join(".cache"))
-                    .filter(|p| p.is_absolute())
-            })
+        let base = runtime_dir()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no runtime directory"))?;
         Ok(Self::at(base.join("havenkeys").join("bridge.sock")))
     }
@@ -145,6 +131,27 @@ impl Endpoint {
     pub fn connect(&self) -> io::Result<Stream> {
         Stream::connect(self.name()?)
     }
+}
+
+/// The per-user directory the socket's directory goes in:
+/// `$XDG_RUNTIME_DIR`, else `$TMPDIR` on macOS (per-user, mode 0700, set by
+/// launchd for GUI apps), else `~/.cache`.
+#[cfg(unix)]
+fn runtime_dir() -> Option<PathBuf> {
+    let absolute = |name: &str| {
+        std::env::var_os(name)
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+    };
+    absolute("XDG_RUNTIME_DIR")
+        .or_else(|| {
+            if cfg!(target_os = "macos") {
+                absolute("TMPDIR")
+            } else {
+                None
+            }
+        })
+        .or_else(|| absolute("HOME").map(|home| home.join(".cache")))
 }
 
 /// Our effective UID.

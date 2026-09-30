@@ -13,6 +13,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
+use std::hash::Hash;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -288,11 +289,6 @@ impl fmt::Debug for IdentityValue {
     }
 }
 
-fn roles_unique(roles: &[IdentityRole]) -> bool {
-    let mut seen = HashSet::new();
-    roles.iter().all(|r| seen.insert(*r))
-}
-
 /// A checkout field's role for a card fill. Mirrors
 /// havenkeys_core::card_page::CardRole; the bridge maps between them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -379,11 +375,6 @@ pub struct CardFrameValues {
     pub values: Vec<CardValue>,
 }
 
-fn card_roles_unique(roles: &[CardRole]) -> bool {
-    let mut seen = HashSet::new();
-    roles.iter().all(|r| seen.insert(*r))
-}
-
 /// `YYYY-MM` in shape (the core checks the month).
 fn expiry_shape_ok(s: &str) -> bool {
     let b = s.as_bytes();
@@ -419,6 +410,22 @@ fn b64url_ok(s: &str, min: usize, max: usize) -> bool {
     b64url_len(s).is_some_and(|n| (min..=max).contains(&n))
 }
 
+/// Not empty, and at most `max` bytes.
+fn text_ok(s: &str, max: usize) -> bool {
+    !s.is_empty() && s.len() <= max
+}
+
+/// A password in a request.
+fn secret_ok(s: &WireSecret) -> bool {
+    text_ok(s.expose(), MAX_SECRET_BYTES)
+}
+
+/// No value appears twice.
+fn all_unique<T: Eq + Hash>(items: impl IntoIterator<Item = T>) -> bool {
+    let mut seen = HashSet::new();
+    items.into_iter().all(|item| seen.insert(item))
+}
+
 fn credential_ok(s: &str) -> bool {
     b64url_ok(s, CREDENTIAL_ID_BYTES, CREDENTIAL_ID_BYTES)
 }
@@ -428,7 +435,7 @@ fn credential_list_ok(v: &[String]) -> bool {
 }
 
 fn rp_ok(s: &str) -> bool {
-    !s.is_empty() && s.len() <= MAX_RP_ID_BYTES
+    text_ok(s, MAX_RP_ID_BYTES)
 }
 
 fn name_ok(s: &str) -> bool {
@@ -436,15 +443,14 @@ fn name_ok(s: &str) -> bool {
 }
 
 fn account_ok(a: &Option<String>) -> bool {
-    a.as_ref()
-        .is_none_or(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
+    a.as_deref().is_none_or(|a| text_ok(a, MAX_ACCOUNT_BYTES))
 }
 
 /// A title only names a new item; an update keeps its own.
 fn title_ok(title: &Option<String>, item_id: &Option<Uuid>) -> bool {
     title
-        .as_ref()
-        .is_none_or(|t| item_id.is_none() && !t.is_empty() && t.len() <= MAX_TITLE_BYTES)
+        .as_deref()
+        .is_none_or(|t| item_id.is_none() && text_ok(t, MAX_TITLE_BYTES))
 }
 
 impl Request {
@@ -510,13 +516,12 @@ impl Request {
     }
 
     fn field_sizes_ok(&self) -> bool {
-        let urls_ok = self
-            .urls()
-            .into_iter()
-            .all(|u| !u.is_empty() && u.len() <= MAX_URL_BYTES);
-        let secret_ok =
-            |s: &WireSecret| !s.expose().is_empty() && s.expose().len() <= MAX_SECRET_BYTES;
-        let login_ok = match self {
+        self.urls().into_iter().all(|u| text_ok(u, MAX_URL_BYTES)) && self.own_fields_ok()
+    }
+
+    /// Each request's fields other than its URLs.
+    fn own_fields_ok(&self) -> bool {
+        match self {
             Request::CheckLogin {
                 username,
                 password,
@@ -525,9 +530,7 @@ impl Request {
             } => {
                 secret_ok(password)
                     && current_password.as_ref().is_none_or(secret_ok)
-                    && username
-                        .as_ref()
-                        .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
+                    && username.as_deref().is_none_or(name_ok)
             }
             Request::SaveLogin {
                 username,
@@ -538,9 +541,7 @@ impl Request {
             } => {
                 secret_ok(password)
                     && title_ok(title, item_id)
-                    && username
-                        .as_ref()
-                        .is_none_or(|u| u.len() <= MAX_USERNAME_BYTES)
+                    && username.as_deref().is_none_or(name_ok)
             }
             Request::CheckSso { account, .. } => account_ok(account),
             Request::SaveSso {
@@ -549,9 +550,6 @@ impl Request {
                 item_id,
                 ..
             } => account_ok(account) && title_ok(title, item_id),
-            _ => true,
-        };
-        let passkey_ok = match self {
             Request::FindPasskeys {
                 rp_id,
                 allow_credentials,
@@ -587,22 +585,16 @@ impl Request {
                     && name_ok(user_name)
                     && display_name.as_deref().is_none_or(name_ok)
             }
-            _ => true,
-        };
-        let identity_ok = match self {
             Request::FillIdentity { roles, .. } => {
-                !roles.is_empty() && roles.len() <= MAX_IDENTITY_ROLES && roles_unique(roles)
+                !roles.is_empty() && roles.len() <= MAX_IDENTITY_ROLES && all_unique(roles)
             }
-            _ => true,
-        };
-        let card_ok = match self {
             Request::FillCard { frames, .. } => {
                 !frames.is_empty()
                     && frames.len() <= MAX_CARD_FRAMES
                     && frames.iter().all(|f| {
                         !f.roles.is_empty()
                             && f.roles.len() <= MAX_CARD_ROLES
-                            && card_roles_unique(&f.roles)
+                            && all_unique(&f.roles)
                     })
             }
             Request::SaveCard {
@@ -614,19 +606,17 @@ impl Request {
                 ..
             } => {
                 title_ok(title, &None)
-                    && !number.expose().is_empty()
-                    && number.expose().len() <= MAX_CARD_NUMBER_BYTES
-                    && verification_number.as_ref().is_none_or(|c| {
-                        !c.expose().is_empty() && c.expose().len() <= MAX_CARD_CODE_BYTES
-                    })
-                    && cardholder_name
+                    && text_ok(number.expose(), MAX_CARD_NUMBER_BYTES)
+                    && verification_number
                         .as_ref()
-                        .is_none_or(|n| !n.is_empty() && n.len() <= MAX_CARD_VALUE_BYTES)
+                        .is_none_or(|c| text_ok(c.expose(), MAX_CARD_CODE_BYTES))
+                    && cardholder_name
+                        .as_deref()
+                        .is_none_or(|n| text_ok(n, MAX_CARD_VALUE_BYTES))
                     && expiry.as_deref().is_none_or(expiry_shape_ok)
             }
             _ => true,
-        };
-        urls_ok && login_ok && passkey_ok && identity_ok && card_ok
+        }
     }
 }
 
@@ -769,9 +759,7 @@ impl Response {
             }) => {
                 (*action == SaveAction::Update) == item_id.is_some()
                     && accounts.len() <= MAX_PROVIDER_ACCOUNTS
-                    && accounts
-                        .iter()
-                        .all(|a| !a.is_empty() && a.len() <= MAX_ACCOUNT_BYTES)
+                    && accounts.iter().all(|a| text_ok(a, MAX_ACCOUNT_BYTES))
             }
             Some(ResultBody::FindIdentity {
                 title,
@@ -781,16 +769,14 @@ impl Response {
                 title.len() <= MAX_TITLE_BYTES
                     && email.as_ref().is_none_or(|e| e.len() <= MAX_USERNAME_BYTES)
                     && roles.len() <= MAX_IDENTITY_ROLES
-                    && roles_unique(roles)
+                    && all_unique(roles)
             }
             Some(ResultBody::FillIdentity { values }) => {
-                let roles: Vec<IdentityRole> = values.iter().map(|v| v.role).collect();
                 values.len() <= MAX_IDENTITY_ROLES
-                    && roles_unique(&roles)
-                    && values.iter().all(|v| {
-                        !v.value.expose().is_empty()
-                            && v.value.expose().len() <= MAX_IDENTITY_VALUE_BYTES
-                    })
+                    && all_unique(values.iter().map(|v| v.role))
+                    && values
+                        .iter()
+                        .all(|v| text_ok(v.value.expose(), MAX_IDENTITY_VALUE_BYTES))
             }
             Some(ResultBody::FindCards { insecure, cards }) => {
                 cards.len() <= MAX_MATCHES
@@ -806,13 +792,11 @@ impl Response {
             Some(ResultBody::FillCard { frames }) => {
                 frames.len() <= MAX_CARD_FRAMES
                     && frames.iter().all(|f| {
-                        let roles: Vec<CardRole> = f.values.iter().map(|v| v.role).collect();
                         f.values.len() <= MAX_CARD_ROLES
-                            && card_roles_unique(&roles)
-                            && f.values.iter().all(|v| {
-                                !v.value.expose().is_empty()
-                                    && v.value.expose().len() <= MAX_CARD_VALUE_BYTES
-                            })
+                            && all_unique(f.values.iter().map(|v| v.role))
+                            && f.values
+                                .iter()
+                                .all(|v| text_ok(v.value.expose(), MAX_CARD_VALUE_BYTES))
                     })
             }
             _ => true,
