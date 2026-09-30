@@ -38,26 +38,35 @@ impl Probe {
         if ok == 0 || buffer.is_null() {
             return None;
         }
-        let state = if len as usize >= size_of::<WTSINFOEXW>() {
-            // SAFETY: the buffer holds at least one WTSINFOEXW (checked
-            // above); read it unaligned so no alignment is assumed.
-            let info = unsafe { ptr::read_unaligned(buffer.cast::<WTSINFOEXW>()) };
-            if info.Level == 1 {
-                // SAFETY: Level 1 means the level-1 union member is active.
-                let flags = unsafe { info.Data.WTSInfoExLevel1.SessionFlags } as u32;
-                match flags {
-                    WTS_SESSIONSTATE_LOCK => Some(true),
-                    WTS_SESSIONSTATE_UNLOCK => Some(false),
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        // SAFETY: `buffer` is the system's allocation of `len` bytes, live
+        // until it is freed on the next line.
+        let state = unsafe { lock_state(buffer, len) };
         // SAFETY: `buffer` came from WTSQuerySessionInformationW and is freed once.
         unsafe { WTSFreeMemory(buffer.cast()) };
         state
+    }
+}
+
+/// The lock flag in a `WTSSessionInfoEx` answer.
+///
+/// # Safety
+///
+/// `buffer` must point to `len` readable bytes.
+unsafe fn lock_state(buffer: *const u16, len: u32) -> Option<bool> {
+    if (len as usize) < size_of::<WTSINFOEXW>() {
+        return None;
+    }
+    // SAFETY: the buffer holds at least one WTSINFOEXW (checked above); read
+    // it unaligned so no alignment is assumed.
+    let info = unsafe { ptr::read_unaligned(buffer.cast::<WTSINFOEXW>()) };
+    if info.Level != 1 {
+        return None;
+    }
+    // SAFETY: Level 1 means the level-1 union member is active.
+    let flags = unsafe { info.Data.WTSInfoExLevel1.SessionFlags } as u32;
+    match flags {
+        WTS_SESSIONSTATE_LOCK => Some(true),
+        WTS_SESSIONSTATE_UNLOCK => Some(false),
+        _ => None,
     }
 }

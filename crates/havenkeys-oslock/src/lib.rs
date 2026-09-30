@@ -22,6 +22,25 @@ mod linux;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(target_os = "linux")]
+use linux::Probe;
+#[cfg(windows)]
+use windows::Probe;
+
+#[cfg(not(any(target_os = "linux", windows)))]
+struct Probe;
+
+#[cfg(not(any(target_os = "linux", windows)))]
+impl Probe {
+    fn new() -> Self {
+        Probe
+    }
+
+    fn locked(&mut self) -> Option<bool> {
+        None
+    }
+}
+
 /// Turns a stream of lock-state observations into "lock now" events.
 ///
 /// Fires when the session is seen locked after it was last seen unlocked or
@@ -68,25 +87,6 @@ impl SessionWatcher {
     pub fn poll(&mut self) -> bool {
         let state = self.probe.locked();
         self.edge.observe(state)
-    }
-}
-
-#[cfg(target_os = "linux")]
-use linux::Probe;
-#[cfg(windows)]
-use windows::Probe;
-
-#[cfg(not(any(target_os = "linux", windows)))]
-struct Probe;
-
-#[cfg(not(any(target_os = "linux", windows)))]
-impl Probe {
-    fn new() -> Self {
-        Probe
-    }
-
-    fn locked(&mut self) -> Option<bool> {
-        None
     }
 }
 
