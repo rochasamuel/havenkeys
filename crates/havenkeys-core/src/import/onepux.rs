@@ -365,43 +365,21 @@ impl CardParts {
                 .find_map(|k| non_empty(str_at(value, &[k])))
         };
         if self.number.is_none() && (id == "ccnum" || value.get("creditCardNumber").is_some()) {
-            return match text().and_then(|t| card::clean_number(t).ok()) {
-                Some(n) => {
-                    self.number = Some(SecretString::new(n));
-                    true
-                }
-                None => false,
-            };
+            let number = text().and_then(|t| card::clean_number(t).ok());
+            return fill(&mut self.number, number.map(SecretString::new));
         }
         if self.verification.is_none() && id == "cvv" {
-            return match text().and_then(|t| card::clean_verification_number(t).ok()) {
-                Some(v) => {
-                    self.verification = Some(SecretString::new(v));
-                    true
-                }
-                None => false,
-            };
+            let code = text().and_then(|t| card::clean_verification_number(t).ok());
+            return fill(&mut self.verification, code.map(SecretString::new));
         }
         if self.cardholder.is_none() && id == "cardholder" {
-            return match text()
+            let name = text()
                 .map(|t| clean_line(t, MAX_CARDHOLDER_CHARS))
-                .filter(|t| !t.is_empty())
-            {
-                Some(n) => {
-                    self.cardholder = Some(SecretString::new(n));
-                    true
-                }
-                None => false,
-            };
+                .filter(|t| !t.is_empty());
+            return fill(&mut self.cardholder, name.map(SecretString::new));
         }
         if self.brand.is_none() && (id == "type" || value.get("creditCardType").is_some()) {
-            return match text().and_then(brand_from_1password) {
-                Some(b) => {
-                    self.brand = Some(b);
-                    true
-                }
-                None => false,
-            };
+            return fill(&mut self.brand, text().and_then(brand_from_1password));
         }
         let expiry_field = id == "expiry" || (id.is_empty() && title.contains("expir"));
         if self.expiry.is_none() && expiry_field {
@@ -421,6 +399,80 @@ impl CardParts {
         }
         false
     }
+}
+
+/// Put `value` in `slot` if there is one. Whether it was taken.
+fn fill<T>(slot: &mut Option<T>, value: Option<T>) -> bool {
+    match value {
+        Some(v) => {
+            *slot = Some(v);
+            true
+        }
+        None => false,
+    }
+}
+
+/// An item of `item_type` with nothing set: no username, websites or
+/// secrets, every secret left as it is.
+fn blank(item_type: ItemType, title: String) -> ItemInput {
+    ItemInput {
+        item_type,
+        title,
+        username: None,
+        urls: Vec::new(),
+        password: SecretUpdate::Keep,
+        totp: SecretUpdate::Keep,
+        notes: SecretUpdate::Keep,
+        content: SecretUpdate::Keep,
+        auto_sign_in: None,
+        sign_in_with: None,
+        identity: None,
+        card: None,
+    }
+}
+
+fn set_or_keep(value: Option<SecretString>) -> SecretUpdate {
+    value.map_or(SecretUpdate::Keep, SecretUpdate::Set)
+}
+
+/// A login's username and password from `loginFields`: the fields
+/// designated as such first, then the first text/email and password
+/// fields. Any other field with a value goes to `extras`, except
+/// checkboxes, radio buttons, buttons and images, which are UI state.
+fn login_fields(fields: &[Value], extras: &mut Extras) -> (Option<String>, Option<SecretString>) {
+    let mut username: Option<String> = None;
+    let mut password: Option<SecretString> = None;
+    // Designated fields first.
+    for f in fields {
+        let value = non_empty(str_at(f, &["value"]));
+        match (str_at(f, &["designation"]), value) {
+            (Some("username"), Some(v)) if username.is_none() => username = Some(v.to_owned()),
+            (Some("password"), Some(v)) if password.is_none() => {
+                password = Some(SecretString::from(v))
+            }
+            _ => {}
+        }
+    }
+    // Fallbacks, then keep the rest as extra lines.
+    extras.section(None);
+    for f in fields {
+        let Some(value) = non_empty(str_at(f, &["value"])) else {
+            continue;
+        };
+        let designation = str_at(f, &["designation"]);
+        if matches!(designation, Some("username") | Some("password")) {
+            continue;
+        }
+        let field_type = str_at(f, &["fieldType"]).unwrap_or("");
+        if username.is_none() && matches!(field_type, "T" | "E") {
+            username = Some(value.to_owned());
+        } else if password.is_none() && field_type == "P" {
+            password = Some(SecretString::from(value));
+        } else if !matches!(field_type, "C" | "R" | "B" | "I") {
+            extras.push(non_empty(str_at(f, &["name"])), value);
+        }
+    }
+    (username, password)
 }
 
 fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem> {
@@ -526,42 +578,11 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
 
     let input = match category {
         "001" | "005" => {
-            let mut username: Option<String> = None;
-            let mut password: Option<SecretString> = None;
-            if let Some(fields) = details.get("loginFields").and_then(Value::as_array) {
-                // Designated fields first.
-                for f in fields {
-                    let value = non_empty(str_at(f, &["value"]));
-                    match (str_at(f, &["designation"]), value) {
-                        (Some("username"), Some(v)) if username.is_none() => {
-                            username = Some(v.to_owned())
-                        }
-                        (Some("password"), Some(v)) if password.is_none() => {
-                            password = Some(SecretString::from(v))
-                        }
-                        _ => {}
-                    }
-                }
-                // Fallbacks, then keep the rest as extra lines.
-                extras.section(None);
-                for f in fields {
-                    let Some(value) = non_empty(str_at(f, &["value"])) else {
-                        continue;
-                    };
-                    let designation = str_at(f, &["designation"]);
-                    if matches!(designation, Some("username") | Some("password")) {
-                        continue;
-                    }
-                    let field_type = str_at(f, &["fieldType"]).unwrap_or("");
-                    if username.is_none() && matches!(field_type, "T" | "E") {
-                        username = Some(value.to_owned());
-                    } else if password.is_none() && field_type == "P" {
-                        password = Some(SecretString::from(value));
-                    } else if !matches!(field_type, "C" | "R" | "B" | "I") {
-                        extras.push(non_empty(str_at(f, &["name"])), value);
-                    }
-                }
-            }
+            let (username, mut password) =
+                match details.get("loginFields").and_then(Value::as_array) {
+                    Some(fields) => login_fields(fields, &mut extras),
+                    None => (None, None),
+                };
             // "Password" category keeps its value in details.password.
             if password.is_none() {
                 if let Some(p) = non_empty(str_at(details, &["password"])) {
@@ -569,38 +590,24 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 }
             }
             report.logins += 1;
+            // Field order matters: `collect_urls` may add lines to the notes.
             ItemInput {
-                item_type: ItemType::Login,
-                title,
                 username: username
                     .map(|u| clean_line(&u, MAX_USERNAME_CHARS))
                     .filter(|u| !u.is_empty()),
                 urls: collect_urls(overview, report, &mut extras),
-                password: password.map_or(SecretUpdate::Keep, SecretUpdate::Set),
-                totp: totp.map_or(SecretUpdate::Keep, SecretUpdate::Set),
-                notes: join_notes(extras.render()).map_or(SecretUpdate::Keep, SecretUpdate::Set),
-                content: SecretUpdate::Keep,
-                auto_sign_in: None,
+                password: set_or_keep(password),
+                totp: set_or_keep(totp),
+                notes: set_or_keep(join_notes(extras.render())),
                 sign_in_with: sso,
-                identity: None,
-                card: None,
+                ..blank(ItemType::Login, title)
             }
         }
         "003" => {
             report.secure_notes += 1;
             ItemInput {
-                item_type: ItemType::SecureNote,
-                title,
-                username: None,
-                urls: Vec::new(),
-                password: SecretUpdate::Keep,
-                totp: SecretUpdate::Keep,
-                notes: SecretUpdate::Keep,
                 content: SecretUpdate::Set(join_notes(extras.render()).unwrap_or_default()),
-                auto_sign_in: None,
-                sign_in_with: None,
-                identity: None,
-                card: None,
+                ..blank(ItemType::SecureNote, title)
             }
         }
         "002" => {
@@ -610,35 +617,22 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 extras.push(Some("Website"), &rule.url);
             }
             let untitled = non_empty(str_at(overview, &["title"])).is_none();
+            // An untitled card with a number is named after its brand.
+            let title = if untitled && card_parts.number.is_some() {
+                String::new()
+            } else {
+                title
+            };
             ItemInput {
-                item_type: ItemType::Card,
-                // An untitled card with a number is named after its brand.
-                title: if untitled && card_parts.number.is_some() {
-                    String::new()
-                } else {
-                    title
-                },
-                username: None,
-                urls: Vec::new(),
-                password: SecretUpdate::Keep,
-                totp: SecretUpdate::Keep,
-                notes: SecretUpdate::Keep,
-                content: SecretUpdate::Keep,
-                auto_sign_in: None,
-                sign_in_with: None,
-                identity: None,
                 card: Some(CardInput {
                     cardholder_name: card_parts.cardholder,
                     brand: card_parts.brand,
-                    number: card_parts
-                        .number
-                        .map_or(SecretUpdate::Keep, SecretUpdate::Set),
-                    verification_number: card_parts
-                        .verification
-                        .map_or(SecretUpdate::Keep, SecretUpdate::Set),
+                    number: set_or_keep(card_parts.number),
+                    verification_number: set_or_keep(card_parts.verification),
                     expiry: card_parts.expiry,
                     notes: join_notes(extras.render()),
                 }),
+                ..blank(ItemType::Card, title)
             }
         }
         other => {
@@ -664,18 +658,8 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             let content = SecretString::new(body.clone());
             body.zeroize();
             ItemInput {
-                item_type: ItemType::SecureNote,
-                title,
-                username: None,
-                urls: Vec::new(),
-                password: SecretUpdate::Keep,
-                totp: SecretUpdate::Keep,
-                notes: SecretUpdate::Keep,
                 content: SecretUpdate::Set(content),
-                auto_sign_in: None,
-                sign_in_with: None,
-                identity: None,
-                card: None,
+                ..blank(ItemType::SecureNote, title)
             }
         }
     };

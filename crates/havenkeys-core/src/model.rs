@@ -430,7 +430,7 @@ pub(crate) fn check_note_content(n: &SecretString) -> Result<()> {
 /// Reject login-only fields on a secure note and vice versa, anything but
 /// identity values on an identity, and anything but card values on a card.
 pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
-    let identity_only = input
+    let login_fields = input
         .username
         .as_deref()
         .is_some_and(|u| !u.trim().is_empty())
@@ -438,8 +438,9 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
         || !input.password.is_keep()
         || !input.totp.is_keep()
         || !input.notes.is_keep()
-        || !input.content.is_keep()
         || input.sign_in_with.is_some();
+    // What a login or a secure note may hold, and an identity or card not.
+    let identity_only = login_fields || !input.content.is_keep();
     match input.item_type {
         ItemType::Card if input.card.is_none() => {
             Err(Error::InvalidInput("a card needs its values"))
@@ -462,21 +463,9 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
         ItemType::Login if !input.content.is_keep() => {
             Err(Error::InvalidInput("logins do not have note content"))
         }
-        ItemType::SecureNote
-            if input
-                .username
-                .as_deref()
-                .is_some_and(|u| !u.trim().is_empty())
-                || !input.urls.is_empty()
-                || !input.password.is_keep()
-                || !input.totp.is_keep()
-                || !input.notes.is_keep()
-                || input.sign_in_with.is_some() =>
-        {
-            Err(Error::InvalidInput(
-                "secure notes only have a title and content",
-            ))
-        }
+        ItemType::SecureNote if login_fields => Err(Error::InvalidInput(
+            "secure notes only have a title and content",
+        )),
         _ => Ok(()),
     }
 }
@@ -641,6 +630,125 @@ mod tests {
         let o: ItemOverview = serde_json::from_str(json).unwrap();
         assert!(o.sign_in_with.is_none());
         assert!(!serde_json::to_string(&o).unwrap().contains("signInWith"));
+    }
+
+    /// Which error each kind of mismatched input gets, and that matching
+    /// inputs pass. Arm order matters: the first rule that applies wins.
+    #[test]
+    fn check_shape_answers() {
+        let shape = |json: serde_json::Value| {
+            let input: ItemInput = serde_json::from_value(json).unwrap();
+            match check_shape(&input) {
+                Ok(()) => "ok",
+                Err(Error::InvalidInput(m)) => m,
+                Err(_) => "other",
+            }
+        };
+        let card = serde_json::json!({});
+        let identity = serde_json::json!({});
+        let set = serde_json::json!({"op": "set", "value": "x"});
+        let cases = [
+            (serde_json::json!({"itemType": "login", "title": "t"}), "ok"),
+            (
+                serde_json::json!({"itemType": "login", "title": "t", "username": "u", "password": set, "totp": set, "notes": set}),
+                "ok",
+            ),
+            (
+                serde_json::json!({"itemType": "login", "title": "t", "content": set}),
+                "logins do not have note content",
+            ),
+            (
+                serde_json::json!({"itemType": "login", "title": "t", "card": card}),
+                "only a card has card values",
+            ),
+            (
+                serde_json::json!({"itemType": "login", "title": "t", "identity": identity}),
+                "only an identity has identity values",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "content": set}),
+                "ok",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "username": "  "}),
+                "ok",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "username": "u"}),
+                "secure notes only have a title and content",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "urls": [{"url": "https://a.com", "matchType": "domain"}]}),
+                "secure notes only have a title and content",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "password": set}),
+                "secure notes only have a title and content",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "totp": set}),
+                "secure notes only have a title and content",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "notes": set}),
+                "secure notes only have a title and content",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "card": card}),
+                "only a card has card values",
+            ),
+            (
+                serde_json::json!({"itemType": "secure_note", "title": "t", "identity": identity}),
+                "only an identity has identity values",
+            ),
+            (
+                serde_json::json!({"itemType": "identity", "title": "t", "identity": identity}),
+                "ok",
+            ),
+            (
+                serde_json::json!({"itemType": "identity", "title": "t"}),
+                "an identity needs its values",
+            ),
+            (
+                serde_json::json!({"itemType": "identity", "title": "t", "identity": identity, "content": set}),
+                "an identity only has identity values",
+            ),
+            (
+                serde_json::json!({"itemType": "identity", "title": "t", "identity": identity, "username": "u"}),
+                "an identity only has identity values",
+            ),
+            (
+                serde_json::json!({"itemType": "identity", "title": "t", "identity": identity, "signInWith": {"provider": "google"}}),
+                "an identity only has identity values",
+            ),
+            (
+                serde_json::json!({"itemType": "identity", "title": "t", "identity": identity, "card": card}),
+                "only a card has card values",
+            ),
+            (
+                serde_json::json!({"itemType": "card", "title": "t", "card": card}),
+                "ok",
+            ),
+            (
+                serde_json::json!({"itemType": "card", "title": "t"}),
+                "a card needs its values",
+            ),
+            (
+                serde_json::json!({"itemType": "card", "title": "t", "card": card, "notes": set}),
+                "a card only has card values",
+            ),
+            (
+                serde_json::json!({"itemType": "card", "title": "t", "card": card, "content": set}),
+                "a card only has card values",
+            ),
+            (
+                serde_json::json!({"itemType": "card", "title": "t", "card": card, "identity": identity}),
+                "a card only has card values",
+            ),
+        ];
+        for (json, expected) in cases {
+            assert_eq!(shape(json.clone()), expected, "{json}");
+        }
     }
 
     #[test]
