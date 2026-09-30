@@ -5,10 +5,20 @@
 // hostile page would synthesize, so these tests also show that page script
 // cannot open menus or trigger fills.
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markUserEdit } from "../autofill/fill";
 import { OTP_SETTLE_MS } from "../autofill/submit";
 import { SCAN_DEBOUNCE_MS } from "./sso";
+
+/**
+ * jsdom runs every test as the top frame. A test sets `childAncestry` to
+ * play a subframe that reports this ancestry (content/ancestry.ts).
+ */
+const frames = vi.hoisted(() => ({ childAncestry: null as unknown }));
+vi.mock("./ancestry", async (orig) => {
+  const real = await orig<typeof import("./ancestry")>();
+  return { ...real, frameAncestry: () => (frames.childAncestry as ReturnType<typeof real.frameAncestry>) ?? real.frameAncestry() };
+});
 
 type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }, reply: (r: unknown) => void) => boolean | void;
 
@@ -499,5 +509,182 @@ describe("identity fills", () => {
   it("answers the popup's role scan", () => {
     document.body.innerHTML = `<form><input name="nome" aria-label="Nome completo"><input name="cpf" aria-label="CPF"></form>`;
     expect(deliver({ type: "bg_identity_roles" })).toEqual({ roles: ["fullName", "cpf"] });
+  });
+});
+
+describe("card fields", () => {
+  const set = (html: string) => (document.body.innerHTML = html);
+  const f = (sel: string) => document.querySelector(sel) as HTMLInputElement;
+  const kindFor = async (el: HTMLInputElement) => (await import("./index")).menuKindFor(el);
+  const CHECKOUT = `<form><input id="num" autocomplete="cc-number"><input id="exp" autocomplete="cc-exp" placeholder="MM/AA"><input id="cvv" autocomplete="cc-csc" maxlength="4"><button type="submit">Pagar</button></form>`;
+  const cardFill = (token: string | null) => ({
+    type: "bg_fill",
+    origin: location.origin,
+    token,
+    fill: { kind: "card", values: [{ role: "number", value: "4111111111111111" }, { role: "expiryMonth", value: "4" }, { role: "expiryYear", value: "2033" }] },
+    submit: false,
+    totp: false,
+  });
+  const host = (token: string, frameId: number, url: string, rows = 1) => ({
+    type: "bg_host_menu",
+    token,
+    frameId,
+    url,
+    anchor: { top: 0, left: 0, width: 200, height: 20 },
+    rows,
+  });
+  const runtime = () => chrome.runtime as unknown as { getFrameId?: (el: Element) => number };
+  const CHILD = { ancestors: ["https://shop.example"] };
+
+  it("opens the card menu on a card field, with the roles it can fill", async () => {
+    set(CHECKOUT);
+    expect(await kindFor(f("#num"))).toEqual({ kind: "card", cardRoles: ["number", "expiryMonth", "expiryYear", "verificationNumber"] });
+  });
+
+  it("fills a card for a fill on this origin, without a token (another frame of the tab)", () => {
+    set(CHECKOUT);
+    const reply = deliver(cardFill(null));
+    expect(reply).toEqual({ filled: 2, pressing: null });
+    expect(f("#exp").value).toBe("04/33");
+    expect(document.documentElement.outerHTML).not.toContain("4111");
+  });
+
+  it("refuses a card fill for another origin, or for a menu it never opened", () => {
+    set(CHECKOUT);
+    expect(deliver({ ...cardFill(null), origin: "https://evil.example" })).toEqual({ filled: 0, pressing: null });
+    expect(deliver(cardFill("a".repeat(32)))).toEqual({ filled: 0, pressing: null });
+    expect(f("#num").value).toBe("");
+  });
+
+  it("reports its card fields to a scan", () => {
+    set(CHECKOUT);
+    sent.length = 0;
+    deliver({ type: "bg_card_scan", scan: "c".repeat(32) });
+    expect(sent).toContainEqual({ type: "cs_card_fields", scan: "c".repeat(32), roles: ["number", "expiryMonth", "expiryYear", "verificationNumber"] });
+  });
+
+  it("says nothing to a scan without card fields", () => {
+    sent.length = 0;
+    deliver({ type: "bg_card_scan", scan: "c".repeat(32) });
+    expect(sent).toEqual([]);
+  });
+
+  it("hosts a child frame's menu over that frame's iframe", () => {
+    set(`<iframe id="stripe"></iframe>`);
+    runtime().getFrameId = (el) => (el.id === "stripe" ? 7 : -1);
+    try {
+      const reply = deliver(host("d".repeat(32), 7, "https://js.stripe.com/v3/card.html", 2));
+      expect(reply).toEqual({ ok: true });
+      expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).not.toBeNull();
+      expect(deliver(host("e".repeat(32), 9, "https://js.stripe.com/v3/card.html"))).toEqual({ ok: false });
+      deliver({ type: "bg_close_menu", token: "d".repeat(32) });
+      expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).toBeNull();
+    } finally {
+      delete runtime().getFrameId;
+    }
+  });
+
+  it("without getFrameId (Chromium), hosts over the one iframe whose src is the frame's URL", () => {
+    set(`<iframe id="stripe" src="https://js.stripe.com/v3/card.html#frame"></iframe><iframe src="https://other.example/"></iframe>`);
+    expect(deliver(host("d".repeat(32), 7, "https://js.stripe.com/v3/card.html"))).toEqual({ ok: true });
+    expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).not.toBeNull();
+    deliver({ type: "bg_close_menu", token: "d".repeat(32) });
+    expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).toBeNull();
+
+    set(`<iframe src="https://js.stripe.com/v3/card.html"></iframe><iframe src="https://js.stripe.com/v3/card.html?b"></iframe>`);
+    expect(deliver(host("e".repeat(32), 7, "https://js.stripe.com/v3/card.html"))).toEqual({ ok: false });
+    expect(document.querySelector(`iframe[src$="#${"e".repeat(32)}"]`)).toBeNull();
+  });
+
+  describe("in a processor subframe", () => {
+    beforeEach(() => {
+      frames.childAncestry = CHILD;
+    });
+    afterEach(() => {
+      frames.childAncestry = null;
+      openReply = undefined;
+    });
+
+    it("reports its ancestry with its card fields", () => {
+      set(CHECKOUT);
+      sent.length = 0;
+      deliver({ type: "bg_card_scan", scan: "c".repeat(32) });
+      expect(sent).toContainEqual({
+        type: "cs_card_fields",
+        scan: "c".repeat(32),
+        roles: ["number", "expiryMonth", "expiryYear", "verificationNumber"],
+        ancestry: CHILD,
+      });
+    });
+
+    it("asks with its anchor and ancestry, lets the top frame draw a hosted menu, and fills the picked field", async () => {
+      set(CHECKOUT);
+      sent.length = 0;
+      const token = "9".repeat(32);
+      openReply = { ok: true, token, rows: 1, hosted: true };
+      const num = f("#num");
+      num.focus();
+      for (const l of windowListeners.get("pointerdown") ?? []) l({ isTrusted: true, composedPath: () => [num] } as unknown as Event);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(sent).toContainEqual({
+        type: "cs_open_menu",
+        kind: "card",
+        cardRoles: ["number", "expiryMonth", "expiryYear", "verificationNumber"],
+        anchor: { top: 10, left: 10, width: 200, height: 20 },
+        ancestry: CHILD,
+      });
+      // The top frame draws it: no menu iframe here.
+      expect(document.querySelector("iframe")).toBeNull();
+      // Focus leaving for the top frame's menu does not close it.
+      num.blur();
+      for (const l of windowListeners.get("focusout") ?? []) l({ isTrusted: true, composedPath: () => [num] } as unknown as Event);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(sent.some((m) => (m as { type: string }).type === "cs_close_menu")).toBe(false);
+      // The pick closes it here (bg_close_menu); the token-bound fill finds the field.
+      deliver({ type: "bg_close_menu", token });
+      expect(deliver(cardFill(token))).toEqual({ filled: 2, pressing: null });
+      expect(f("#num").value).toBe("4111111111111111");
+    });
+  });
+
+  it("a top-frame card menu asks without an anchor or ancestry", async () => {
+    set(CHECKOUT);
+    sent.length = 0;
+    const token = "8".repeat(32);
+    openReply = { ok: true, token, rows: 1 };
+    const num = f("#num");
+    num.focus();
+    for (const l of windowListeners.get("pointerdown") ?? []) l({ isTrusted: true, composedPath: () => [num] } as unknown as Event);
+    await new Promise((r) => setTimeout(r, 10));
+    openReply = undefined;
+    expect(sent).toContainEqual({ type: "cs_open_menu", kind: "card", cardRoles: ["number", "expiryMonth", "expiryYear", "verificationNumber"] });
+    expect(document.querySelector(`iframe[src$="#${token}"]`)).not.toBeNull();
+    deliver({ type: "bg_close_menu", token });
+    expect(document.querySelector(`iframe[src$="#${token}"]`)).toBeNull();
+  });
+
+  it("offers to save a masked number the user typed, and not one a page script wrote", async () => {
+    set(CHECKOUT);
+    sent.length = 0;
+    const typed = (sel: string, v: string) => {
+      f(sel).value = v;
+      markUserEdit(f(sel));
+    };
+    typed("#num", "4000056655665556");
+    f("#num").value = "4000 0566 5566 5556"; // the site's mask
+    typed("#exp", "01/30");
+    document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true }));
+    expect(sent).toContainEqual({
+      type: "cs_card_submit",
+      card: { number: "4000056655665556", expiry: "2030-01", verificationNumber: null, cardholderName: null },
+    });
+
+    set(CHECKOUT);
+    sent.length = 0;
+    f("#num").value = "4000056655665556"; // page script
+    typed("#exp", "01/30");
+    await new Promise((r) => setTimeout(r, 1100)); // past the 1 s submit debounce
+    document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true }));
+    expect(sent.some((m) => (m as { type: string }).type === "cs_card_submit")).toBe(false);
   });
 });

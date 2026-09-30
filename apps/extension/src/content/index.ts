@@ -21,18 +21,26 @@
 // * Sign in with: provider buttons are looked for (bounded, see
 //   content/sso.ts) only while suggestions are on; the balloon they allow is
 //   an offer, and nothing is pressed without the user's pick.
+// * Cards: a card field gets the card menu; a processor frame's menu is
+//   drawn by the top frame over that frame (bg_host_menu); every frame
+//   answers a card scan with its roles; a card the user typed is reported
+//   on submit, top frame only. A subframe attaches its ancestry
+//   (content/ancestry.ts) to its card menu request and scan reply, or the
+//   background gives it nothing. Card fills never submit.
 // * Nothing is logged, stored, or written anywhere but field values.
 
 import { isLoginRole, isNewPasswordRole } from "../autofill/classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit, valueSource } from "../autofill/fill";
-import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable } from "../autofill/group";
+import { cardFieldsForFill, cardGroupFor, findCardGroup } from "../autofill/card";
+import { cardRolesToFill, fillCard, readCardSubmission } from "../autofill/card-fill";
+import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
 import { findSubmitButton, hasChallenge, pressWhenReady, type PressStep } from "../autofill/submit";
 import { findIdentityGroup, identityGroupFor } from "../autofill/identity";
 import { fillIdentity, rolesToFill } from "../autofill/identity-fill";
-import { hasAny, normalize, SUBMIT_WORDS } from "../autofill/text";
+import { hasAny, normalize, PAY_WORDS, SUBMIT_WORDS } from "../autofill/text";
 import { watchNext, type WatchKind } from "../autofill/watch";
-import type { IdentityRole } from "@havenkeys/protocol";
+import type { CardRole, IdentityRole } from "@havenkeys/protocol";
 import {
   parseBackgroundMessage,
   TOKEN,
@@ -43,7 +51,9 @@ import {
   type NextStep,
 } from "../messaging/inline";
 import { parseSsoBackgroundMessage, parseSsoReady } from "../messaging/sso";
+import { frameAncestry } from "./ancestry";
 import { InlineFrame, menuBox, saveBox, type Box } from "./frames";
+import { findHostIframe } from "./host-frame";
 import { FieldIcon, iconBox } from "./icon";
 import { createSsoContent } from "./sso";
 import { getInlineSuggestions, onInlineSuggestionsChanged } from "../shared/prefs";
@@ -63,7 +73,9 @@ const ICON_TRACK_MS = 500;
 const SUBMIT_DEBOUNCE_MS = 1000;
 
 interface OpenMenu {
-  frame: InlineFrame;
+  /** Null while the top frame draws this frame's menu (a hosted card menu). */
+  frame: InlineFrame | null;
+  token: string;
   field: HTMLInputElement;
   rows: number;
   /** The height the menu page reported for its content (bg_resize_menu), once it has. */
@@ -89,8 +101,13 @@ function inputFrom(e: Event): HTMLInputElement | null {
  * Which menu a field gets, and the identity roles of its form that could be
  * filled now (none when everything is already filled: nothing to ask for).
  */
-export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; roles?: IdentityRole[] } | null {
+export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; roles?: IdentityRole[]; cardRoles?: CardRole[] } | null {
   const env = defaultEnv();
+  const card = cardGroupFor(field, env);
+  if (card) {
+    const cardRoles = cardRolesToFill(card, env);
+    return cardRoles.length > 0 ? { kind: "card", cardRoles } : null;
+  }
   const { group, kind } = groupFor(field, env);
   const loginIntent = group.intent === "login";
   const identity = loginIntent ? null : identityGroupFor(field, env);
@@ -138,16 +155,22 @@ function start(): void {
 
   function closeMenu(tellBackground: boolean): void {
     if (!menu) return;
-    const { frame, field } = menu;
+    const { frame, field, token } = menu;
     menu = null;
-    frame.remove();
-    picked = { token: frame.token, field, until: Date.now() + PICK_WINDOW_MS };
-    if (tellBackground) void send({ type: "cs_close_menu", token: frame.token });
+    frame?.remove();
+    picked = { token, field, until: Date.now() + PICK_WINDOW_MS };
+    if (tellBackground) void send({ type: "cs_close_menu", token });
     if (icon && deepActiveElement() !== icon.field) hideIcon();
   }
 
   function viewport() {
     return { width: document.documentElement.clientWidth || innerWidth, height: innerHeight };
+  }
+
+  /** Where `field` sits in this frame's viewport, for a menu the top frame draws. */
+  function anchorOf(field: HTMLInputElement) {
+    const r = field.getBoundingClientRect();
+    return { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) };
   }
 
   const sso = createSsoContent({
@@ -165,6 +188,7 @@ function start(): void {
       closeMenu(true);
       return;
     }
+    if (!menu.frame) return;
     menu.frame.place(menuBox(menu.field.getBoundingClientRect(), menu.rows, viewport(), menu.height));
   }
 
@@ -177,14 +201,19 @@ function start(): void {
     // Suggestions off: only a login field may still ask, for the passkeys of
     // a site's passkey autofill (the background offers nothing else).
     if (!suggestions && (explicit || kind !== "login")) return;
+    // A card menu in a subframe says where the frame sits (null in the top
+    // frame) and where the field is, so the top frame can draw the menu.
+    const ancestry = kind === "card" ? frameAncestry() : null;
     opening = true;
     const req: ContentRequest = {
       type: "cs_open_menu",
       kind,
       ...(explicit ? { explicit: true as const } : {}),
       ...(choice.roles ? { roles: choice.roles } : {}),
+      ...(choice.cardRoles ? { cardRoles: choice.cardRoles } : {}),
+      ...(ancestry ? { anchor: anchorOf(field), ancestry } : {}),
     };
-    const reply = (await send(req)) as { ok?: unknown; token?: unknown; rows?: unknown } | undefined;
+    const reply = (await send(req)) as { ok?: unknown; token?: unknown; rows?: unknown; hosted?: unknown } | undefined;
     opening = false;
     if (!reply || reply.ok !== true || typeof reply.token !== "string" || !TOKEN.test(reply.token)) {
       if (!explicit) empty.add(field);
@@ -199,10 +228,16 @@ function start(): void {
     }
     closeMenu(true);
     const token = reply.token;
+    if (reply.hosted === true) {
+      // The top frame draws it. Focus moving into it is not a close; the
+      // pick (bg_close_menu) or a click elsewhere here is.
+      menu = { frame: null, token, field, rows, height: null };
+      return;
+    }
     const frame = new InlineFrame("menu.html", token, menuBox(field.getBoundingClientRect(), rows, viewport()), () => {
-      if (menu?.frame.token === token) closeMenu(true);
+      if (menu?.token === token) closeMenu(true);
     });
-    menu = { frame, field, rows, height: null };
+    menu = { frame, token, field, rows, height: null };
   }
 
   // ------------------------------------------------------------ field icon
@@ -278,6 +313,44 @@ function start(): void {
     });
   }
 
+  // ------------------------------------------------------------ hosted card menus
+
+  /** A menu the top frame shows for a child frame (a processor's small card iframe). */
+  let hosted: { frame: InlineFrame; anchor: DOMRect; rows: number; height: number | null } | null = null;
+
+  function closeHosted(tell: boolean): void {
+    if (!hosted) return;
+    const token = hosted.frame.token;
+    hosted.frame.remove();
+    hosted = null;
+    if (tell) void send({ type: "cs_close_menu", token });
+  }
+
+  function rect(left: number, top: number, width: number, height: number): DOMRect {
+    return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
+  }
+
+  /** Show menu `m.token` over the iframe of child frame `m.frameId`. False when that iframe is not found here. */
+  function hostMenu(m: Extract<BackgroundToContent, { type: "bg_host_menu" }>): boolean {
+    if (window.top !== window) return false;
+    const getFrameId = (chrome.runtime as { getFrameId?: (target: Element) => number }).getFrameId;
+    const el = findHostIframe(m.frameId, m.url, Array.from(document.querySelectorAll("iframe")), getFrameId);
+    if (!el || !isRendered(el)) return false;
+    const r = el.getBoundingClientRect();
+    const anchor = rect(r.left + el.clientLeft + m.anchor.left, r.top + el.clientTop + m.anchor.top, m.anchor.width, m.anchor.height);
+    closeHosted(true);
+    const token = m.token;
+    hosted = {
+      frame: new InlineFrame("menu.html", token, menuBox(anchor, m.rows, viewport()), () => {
+        if (hosted?.frame.token === token) closeHosted(true);
+      }),
+      anchor,
+      rows: m.rows,
+      height: null,
+    };
+    return true;
+  }
+
   // ------------------------------------------------------------ submissions
 
   function captureFrom(root: ParentNode, force = false): void {
@@ -292,6 +365,32 @@ function start(): void {
         ? { type: "cs_submit", username: sub.username, password: sub.password }
         : { type: "cs_submit", username: sub.username, password: sub.password, currentPassword: sub.currentPassword },
     );
+  }
+
+  let lastCardSubmit = 0;
+
+  /** A card the user typed in `root`, offered for saving. Top frame only (spec §5.6, §10.8). */
+  function captureCard(root: ParentNode): void {
+    if (window.top !== window) return;
+    const now = Date.now();
+    if (now - lastCardSubmit < SUBMIT_DEBOUNCE_MS) return;
+    const g = findCardGroup(root, defaultEnv());
+    // Only a number the user typed (readCardSubmission checks provenance).
+    const card = g ? readCardSubmission(g) : null;
+    if (!card) return;
+    lastCardSubmit = now;
+    void send({ type: "cs_card_submit", card });
+  }
+
+  /** The card group a pay button belongs to: its form, or the nearest container holding card fields. */
+  function cardRootForButton(button: Element): ParentNode | null {
+    const form = button.closest("form");
+    if (form) return form;
+    let node: Element | null = button.parentElement;
+    for (let i = 0; node && i < 6; i++, node = node.parentElement) {
+      if (findCardGroup(node, defaultEnv())) return node;
+    }
+    return null;
   }
 
   /** The group a submit button belongs to: its form, or the nearest container with a login field. */
@@ -404,9 +503,19 @@ function start(): void {
     const none: FillReply = { filled: 0, pressing: null };
     // The frame may have navigated since the desktop matched its URL.
     if (m.origin !== location.origin) return none;
-    // Temporary: the card fill arrives with the card menu wiring (Task 9).
-    if (m.fill.kind === "card") return none;
     const env = defaultEnv();
+    // A card fills the picked field's card group, or (another frame of the
+    // tab, or the popup) this frame's card fields. Never submits.
+    if (m.fill.kind === "card") {
+      let target: typeof picked = null;
+      if (m.token !== null) {
+        target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
+        picked = null;
+        if (!target || !target.field.isConnected) return none;
+      }
+      const g = target ? cardGroupFor(target.field, env) : cardFieldsForFill(document, env);
+      return { filled: g ? fillCard(g, m.fill.values, env) : 0, pressing: null };
+    }
     // An identity fills the identity group of the picked field (or the page's
     // first one for a popup fill), never the login group.
     if (m.fill.kind === "identity") {
@@ -456,6 +565,7 @@ function start(): void {
       if (!e.isTrusted) return;
       if (runActive) endLocalRun(true); // the user took over
       sso.onTrustedInput();
+      if (hosted && e.composedPath()[0] !== hosted.frame.el) closeHosted(true);
       // The icon's own click handler toggles the menu.
       if (icon && e.composedPath()[0] === icon.view.el) return;
       const input = inputFrom(e);
@@ -486,11 +596,12 @@ function start(): void {
           closeMenu(true);
           return;
         case "ArrowDown":
-          if (input && menu?.field === input) menu.frame.focus();
+          if (input && menu?.field === input) menu.frame?.focus();
           else if (input) void maybeOpen(input);
           return;
         case "Enter":
           if (input && (input.type === "password" || input.form)) captureFrom(input.form ?? groupRoot(input));
+          if (input?.form) captureCard(input.form);
           return;
       }
     },
@@ -501,7 +612,7 @@ function start(): void {
     "focusin",
     (e) => {
       // Focus moving into our own menu (a click or ArrowDown) keeps it open.
-      if (menu && e.composedPath()[0] === menu.frame.el) return;
+      if (menu?.frame && e.composedPath()[0] === menu.frame.el) return;
       const input = inputFrom(e);
       if (menu && input !== menu.field) closeMenu(true);
       if (input) showIcon(input);
@@ -542,7 +653,10 @@ function start(): void {
     "submit",
     (e) => {
       const form = e.composedPath()[0];
-      if (form instanceof HTMLFormElement) captureFrom(form);
+      if (form instanceof HTMLFormElement) {
+        captureFrom(form);
+        captureCard(form);
+      }
     },
     opts,
   );
@@ -554,6 +668,14 @@ function start(): void {
       if (icon && e.composedPath()[0] === icon.view.el) return;
       const target = e.composedPath()[0];
       if (target instanceof Element) sso.onTrustedClick(target);
+      const button = (target as Element | undefined)?.closest?.('button, input[type="submit"], input[type="image"], [role="button"]');
+      if (button) {
+        const label = normalize(`${button.textContent ?? ""} ${button.getAttribute("aria-label") ?? ""}`);
+        if (isSubmitLike(button) || hasAny(label, PAY_WORDS)) {
+          const root = cardRootForButton(button);
+          if (root) captureCard(root);
+        }
+      }
       const el = (target as Element | undefined)?.closest?.('button, input[type="submit"], input[type="image"], [role="button"]');
       if (!el || !isSubmitLike(el)) return;
       const root = rootForButton(el);
@@ -563,6 +685,8 @@ function start(): void {
   );
 
   const reposition = () => {
+    // A hosted menu's anchor is stale once the page scrolls or resizes.
+    if (hosted) closeHosted(true);
     if ((!menu && !icon) || rafPending) return;
     rafPending = true;
     requestAnimationFrame(() => {
@@ -578,6 +702,7 @@ function start(): void {
   window.addEventListener("hashchange", () => closeMenu(true), opts);
   window.addEventListener("pagehide", () => {
     closeMenu(true);
+    closeHosted(true);
     hideIcon();
     closeSave();
     sso.teardown();
@@ -623,17 +748,35 @@ function start(): void {
       }
       case "bg_close_menu":
         // Escape in the menu, or a pick: either way the user is done with it here.
-        if (menu?.frame.token === m.token) {
+        // A hosted menu's child frame keeps the field as `picked` for its fill.
+        if (menu?.token === m.token) {
           dismissed.add(menu.field);
           closeMenu(false);
         }
+        if (hosted?.frame.token === m.token) closeHosted(false);
         return false;
       case "bg_resize_menu":
         // Wrapped rows: grow or shrink to what the menu page laid out.
-        if (menu?.frame.token === m.token) {
+        if (menu?.frame && menu.token === m.token) {
           menu.height = m.height;
           placeMenu();
         }
+        if (hosted?.frame.token === m.token) {
+          hosted.height = m.height;
+          hosted.frame.place(menuBox(hosted.anchor, hosted.rows, viewport(), m.height));
+        }
+        return false;
+      case "bg_card_scan": {
+        const env = defaultEnv();
+        const g = cardFieldsForFill(document, env);
+        const roles = g ? cardRolesToFill(g, env) : [];
+        if (roles.length === 0) return false;
+        const ancestry = frameAncestry();
+        void send({ type: "cs_card_fields", scan: m.scan, roles, ...(ancestry ? { ancestry } : {}) });
+        return false;
+      }
+      case "bg_host_menu":
+        sendResponse({ ok: hostMenu(m) });
         return false;
       case "bg_show_save":
         showSave(m.token);
