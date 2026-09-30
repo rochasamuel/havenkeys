@@ -36,19 +36,26 @@ function RevealableField(props: {
   const toast = useToast();
   const [value, setValue] = useState<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  const pending = useRef(false);
   useEffect(() => () => window.clearTimeout(timer.current), []);
   const shown = value !== null;
   async function toggle() {
+    // A second click while the value is being fetched is ignored.
+    if (pending.current) return;
     window.clearTimeout(timer.current);
     if (shown) {
       setValue(null);
       return;
     }
+    pending.current = true;
     try {
       setValue(await api.revealCardField(props.id, props.field));
+      window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => setValue(null), 30_000);
     } catch (e) {
       toast(errorMessage(e, t, t.card.revealFailed), "error");
+    } finally {
+      pending.current = false;
     }
   }
   return (
