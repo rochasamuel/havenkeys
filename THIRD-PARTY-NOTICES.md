@@ -157,6 +157,7 @@ marks as path data taken from
 under the Apache License, Version 2.0 (the text is in
 [LICENSE-APACHE](LICENSE-APACHE)). Changes: JCB's gradients are flattened to
 a single colour each, Hipercard's transparent background path is dropped,
+Elo's unfilled path is given an explicit `#000000` fill (the SVG default),
 and colours are written as `#RRGGBB`. It is embedded in the desktop app and
 the browser extension. The marks are trademarks of their networks and are
 used only to show which network a saved card belongs to.

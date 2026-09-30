@@ -5,8 +5,9 @@
 // Source: aaronfagan/svg-credit-card-payment-icons, `logo/` folder, commit
 // 6dd023ae32415ed7b01bf809f15a25613a52098c, Apache-2.0 (see
 // THIRD-PARTY-NOTICES.md). Changes: JCB's gradients flattened to their end
-// colour, Hipercard's transparent background path dropped, colours written
-// as uppercase #RRGGBB. The generic card is HavenKeys' own.
+// colour, Hipercard's transparent background path dropped, Elo's unfilled
+// path given an explicit #000000 fill (the SVG default), colours written as
+// uppercase #RRGGBB. The generic card is HavenKeys' own.
 
 import type { ProviderIcon } from "./provider-icons";
 

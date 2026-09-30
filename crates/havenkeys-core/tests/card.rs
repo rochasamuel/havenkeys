@@ -361,6 +361,14 @@ fn page_requests_never_yield_a_card() {
         .unwrap();
     let identity_id = staged.item_id;
     v.commit_write(staged, 2).unwrap();
+    let identity_title = v
+        .list_items()
+        .unwrap()
+        .into_iter()
+        .find(|i| i.id == identity_id)
+        .unwrap()
+        .title
+        .clone();
     for page in [
         "https://github.com/login",
         "https://shop.example/checkout",
@@ -371,14 +379,12 @@ fn page_requests_never_yield_a_card() {
             Some(Error::Denied | Error::NotFound)
         ));
         assert_eq!(v.identity_id_for_page(page, None).ok(), Some(identity_id));
-        if let Ok(summary) = v.identity_summary_for_page(page, None) {
-            assert_ne!(summary.title, "Mastercard");
-        }
+        let summary = v.identity_summary_for_page(page, None).unwrap();
+        assert_eq!(summary.title, identity_title);
         let all = havenkeys_core::identity::FillRole::ALL;
-        if let Ok(values) = v.identity_values_for_page(page, None, &all, true) {
-            for (_, value) in values {
-                assert!(!value.expose().contains("5200") && !value.expose().contains("Samuel S"));
-            }
+        let values = v.identity_values_for_page(page, None, &all, true).unwrap();
+        for (_, value) in values {
+            assert!(!value.expose().contains("5200") && !value.expose().contains("Samuel S"));
         }
     }
 }
