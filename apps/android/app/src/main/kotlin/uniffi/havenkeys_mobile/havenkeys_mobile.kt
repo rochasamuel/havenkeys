@@ -1209,7 +1209,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_tick() and 0xFFFF) != 2713) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_touch() and 0xFFFF) != 31107) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_touch() and 0xFFFF) != 34495) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_constructor_mobilevault_new() and 0xFFFF) != 34508) {
@@ -2138,7 +2138,8 @@ public interface MobileVaultInterface {
     fun `tick`()
     
     /**
-     * The user did something: reset the idle timer.
+     * The user did something: reset the idle timer. The app calls this for
+     * real interaction only; reads never touch (see `items.rs`).
      */
     fun `touch`()
     
@@ -2787,7 +2788,8 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
-     * The user did something: reset the idle timer.
+     * The user did something: reset the idle timer. The app calls this for
+     * real interaction only; reads never touch (see `items.rs`).
      */override fun `touch`()
         = 
     callWithHandle {
