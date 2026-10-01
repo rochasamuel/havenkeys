@@ -198,9 +198,10 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 44 of them, which is the whole
-surface. `build.rs` declares this list, the capability file grants exactly it,
-and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
+Every command the renderer can call — all 57 of them, which is the whole
+surface. `build.rs` declares this list, `lib.rs` registers it, the capability
+file grants exactly it, and `src/lib/commands.test.ts` fails if they (or the
+commands `api.ts` calls) ever disagree. "Online"
 means a live server session, which a locked vault does not have.
 
 | Command | Requires unlocked | Returns secrets |
