@@ -35,10 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentType
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -145,7 +142,6 @@ private fun UnlockForm(
                 label = stringResource(R.string.unlock_password_hint),
                 enabled = !state.busy,
                 isError = state.errorCode != null,
-                contentType = ContentType.Password,
                 imeAction = if (state.needsSecretKey) ImeAction.Next else ImeAction.Done,
                 onDone = submit,
             )
@@ -207,7 +203,7 @@ private fun UnlockHeader(needsSecretKey: Boolean) {
     }
 }
 
-/** Masked until shown; a keyboard that neither suggests nor learns. */
+/** Masked until shown; a keyboard that neither suggests nor learns; never offered to autofill (CLAUDE.md §9). */
 @Composable
 private fun MaskedField(
     value: String,
@@ -216,7 +212,6 @@ private fun MaskedField(
     enabled: Boolean,
     isError: Boolean = false,
     placeholder: String? = null,
-    contentType: ContentType? = null,
     imeAction: ImeAction = ImeAction.Done,
     onDone: () -> Unit = {},
 ) {
@@ -245,9 +240,7 @@ private fun MaskedField(
                 }
             }
         },
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (contentType != null) Modifier.semantics { this.contentType = contentType } else Modifier),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 

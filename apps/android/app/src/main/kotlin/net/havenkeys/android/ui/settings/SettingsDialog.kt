@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.components.SecureDialogWindow
 import net.havenkeys.android.ui.components.errorText
 
 enum class SettingsDialog { BIOMETRIC_PASSWORD, SIGN_OUT, REMOVE }
@@ -87,6 +88,7 @@ private fun PasswordDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
         title = { Text(stringResource(R.string.settings_biometric)) },
         text = {
             Column {
+                SecureDialogWindow()
                 Text(stringResource(R.string.settings_biometric_password), modifier = Modifier.padding(bottom = 12.dp))
                 OutlinedTextField(
                     value = password,
@@ -134,6 +136,7 @@ private fun RemoveDialog(state: SettingsUiState, onDismiss: () -> Unit, onRemove
         title = { Text(stringResource(R.string.settings_remove_title)) },
         text = {
             Column {
+                SecureDialogWindow()
                 Text(stringResource(R.string.settings_remove_note), modifier = Modifier.padding(bottom = 12.dp))
                 OutlinedTextField(
                     value = typed,

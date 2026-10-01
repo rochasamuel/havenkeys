@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
+import android.view.View
 import android.view.WindowManager
 import android.view.autofill.AutofillManager
 import android.view.inputmethod.InlineSuggestionsRequest
@@ -37,6 +38,12 @@ class AutofillAuthActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // The master password and the Secret Key are typed here: no autofill
+        // service may read them or offer to save them (CLAUDE.md §9).
+        window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        // A fill is confirmed here: a tap that passed through another app's
+        // overlay is not the user's (tapjacking).
+        window.decorView.filterTouchesWhenObscured = true
         val tapped = tappedRequest() ?: return cancel()
         val mode = intent.getStringExtra(DatasetFactory.EXTRA_MODE)
         val itemId = intent.getStringExtra(DatasetFactory.EXTRA_ITEM_ID)

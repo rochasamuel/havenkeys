@@ -2,6 +2,7 @@ package net.havenkeys.android.autofill
 
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
 import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
+import net.havenkeys.android.ui.components.SecureDialogWindow
 import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.AutofillMatch
@@ -52,6 +54,12 @@ class AutofillSearchActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // The master password and the Secret Key are typed here: no autofill
+        // service may read them or offer to save them (CLAUDE.md §9).
+        window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        // A fill is confirmed here: a tap that passed through another app's
+        // overlay is not the user's (tapjacking).
+        window.decorView.filterTouchesWhenObscured = true
         val tapped = tappedRequest() ?: return cancel()
         val packageName = tapped.screen.packageName
         val app = CallerApp(packageName, appLabel(packageName))
@@ -192,6 +200,7 @@ private fun ConfirmUse(
         // is the app's own choice and could name anything, even this login.
         text = {
             Column {
+                SecureDialogWindow(ignoreObscuredTouches = true)
                 Text(stringResource(R.string.autofill_use_in_app, title, app.packageName))
                 if (!app.label.isNullOrBlank() && app.label != app.packageName) {
                     Text(

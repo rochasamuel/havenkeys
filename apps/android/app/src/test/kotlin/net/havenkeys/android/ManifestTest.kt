@@ -3,6 +3,7 @@ package net.havenkeys.android
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -65,14 +66,55 @@ class ManifestTest {
         )
     }
 
+    private val sources = File("src/main/kotlin").walk().filter { it.extension == "kt" }.toList()
+
+    private val activities: List<File> by lazy {
+        val activity = Regex("""class\s+\w+\s*(\([^)]*\))?\s*:\s*(FragmentActivity|ComponentActivity|Activity)\(\)""")
+        sources.filter { activity.containsMatchIn(it.readText()) }.also {
+            assertTrue("found ${it.size} activities", it.size >= 3)
+        }
+    }
+
     @Test
     fun everyActivitySetsFlagSecure() {
-        val activity = Regex("""class\s+\w+\s*(\([^)]*\))?\s*:\s*(FragmentActivity|ComponentActivity|Activity)\(\)""")
-        val sources = File("src/main/kotlin").walk().filter { it.extension == "kt" }.toList()
-        val activities = sources.filter { activity.containsMatchIn(it.readText()) }
-        assertTrue("found ${activities.size} activities", activities.size >= 3)
         for (file in activities) {
             assertTrue("${file.name} must set FLAG_SECURE", file.readText().contains("FLAG_SECURE"))
         }
+    }
+
+    /** The master password and the Secret Key never reach a third-party autofill service (CLAUDE.md §9). */
+    @Test
+    fun everyActivityKeepsItsFieldsFromAutofill() {
+        for (file in activities) {
+            assertTrue(
+                "${file.name} must exclude its window from autofill",
+                file.readText().contains("importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS"),
+            )
+        }
+        for (file in sources.filter { "AlertDialog(" in it.readText() && "OutlinedTextField(" in it.readText() }) {
+            assertTrue(
+                "${file.name}: a dialog with a text field needs SecureDialogWindow",
+                "SecureDialogWindow(" in file.readText(),
+            )
+        }
+        for (file in sources) {
+            assertFalse(
+                "${file.name} must not hint a password to autofill",
+                Regex("""ContentType\.(Password|NewPassword)""").containsMatchIn(file.readText()),
+            )
+        }
+    }
+
+    @Test
+    fun theAutofillActivitiesIgnoreObscuredTaps() {
+        for (name in listOf("AutofillAuthActivity.kt", "AutofillSearchActivity.kt")) {
+            val text = activities.single { it.name == name }.readText()
+            assertTrue("$name must filter obscured touches", "filterTouchesWhenObscured = true" in text)
+        }
+        val search = activities.single { it.name == "AutofillSearchActivity.kt" }.readText()
+        assertTrue(
+            "the binding dialog must filter obscured touches",
+            "SecureDialogWindow(ignoreObscuredTouches = true)" in search,
+        )
     }
 }

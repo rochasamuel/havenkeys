@@ -46,11 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentType
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -235,7 +232,6 @@ private fun TypeStep(
             onValueChange = { password = it },
             label = stringResource(R.string.onboarding_master_password),
             enabled = !state.busy,
-            contentType = ContentType.Password,
         )
         ErrorLine(state.errorCode)
         SubmitButton(
@@ -275,7 +271,6 @@ private fun InviteStep(
             hint = stringResource(if (tooShort) R.string.onboarding_too_short else R.string.onboarding_password_hint),
             isError = tooShort,
             enabled = !state.busy,
-            contentType = ContentType.NewPassword,
         )
         SecretInput(
             value = repeat,
@@ -284,7 +279,6 @@ private fun InviteStep(
             hint = if (mismatch) stringResource(R.string.onboarding_mismatch) else null,
             isError = mismatch,
             enabled = !state.busy,
-            contentType = ContentType.NewPassword,
         )
         ErrorLine(state.errorCode)
         SubmitButton(
@@ -308,7 +302,6 @@ private fun KitPasswordStep(state: OnboardingUiState, onSignIn: (password: Strin
             onValueChange = { password = it },
             label = stringResource(R.string.onboarding_master_password),
             enabled = !state.busy,
-            contentType = ContentType.Password,
         )
         ErrorLine(state.errorCode)
         SubmitButton(
@@ -349,8 +342,8 @@ private fun LabelledValue(label: String, value: String) {
 
 /**
  * A field for a secret: masked until the user shows it, a keyboard that
- * neither suggests nor learns, and no autofill hint unless [contentType]
- * names one.
+ * neither suggests nor learns, and no autofill hint: the activity keeps it
+ * from any autofill service (CLAUDE.md §9).
  */
 @Composable
 private fun SecretInput(
@@ -360,7 +353,6 @@ private fun SecretInput(
     enabled: Boolean,
     hint: String? = null,
     isError: Boolean = false,
-    contentType: ContentType? = null,
 ) {
     var shown by remember { mutableStateOf(false) }
     OutlinedTextField(
@@ -386,9 +378,7 @@ private fun SecretInput(
                 }
             }
         },
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (contentType != null) Modifier.semantics { this.contentType = contentType } else Modifier),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
