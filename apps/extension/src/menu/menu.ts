@@ -6,7 +6,7 @@ import { SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
-import { cardBrandIcon, providerIcon } from "./icons";
+import { cardBrandIcon, idCardIcon, providerIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -36,24 +36,6 @@ function sparkle(): SVGSVGElement {
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(ns, "path");
   path.setAttribute("d", "M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M6 6l2.6 2.6M15.4 15.4 18 18M6 18l2.6-2.6M15.4 8.6 18 6");
-  path.setAttribute("fill", "none");
-  path.setAttribute("stroke", "currentColor");
-  path.setAttribute("stroke-width", "1.6");
-  path.setAttribute("stroke-linecap", "round");
-  svg.append(path);
-  return svg;
-}
-
-/** The identity row's glyph: an ID card in the 1.6-stroke icon set. */
-function idCard(): SVGSVGElement {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "16");
-  svg.setAttribute("height", "16");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(ns, "path");
-  path.setAttribute("d", "M4.5 6h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM9 12a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 9 12zM6 15.5c.5-1.3 1.6-2 3-2s2.5.7 3 2M14 10h3.5M14 13.5h3.5");
   path.setAttribute("fill", "none");
   path.setAttribute("stroke", "currentColor");
   path.setAttribute("stroke-width", "1.6");
@@ -140,7 +122,7 @@ function identityRow(t: string, site: string, v: IdentityRowView): HTMLElement {
   // No identity on this device yet: nothing to open, so no button.
   if (v.missing) return hintNote(msg.menu.identityEmptyTitle, msg.menu.identityMissingBody);
   if (v.empty) {
-    return row(idCard(), msg.menu.identityEmptyTitle, msg.menu.identityEmptyBody, () => pick({ type: "menu_open_identity", token: t }), {
+    return row(idCardIcon(), msg.menu.identityEmptyTitle, msg.menu.identityEmptyBody, () => pick({ type: "menu_open_identity", token: t }), {
       title: true,
       detail: true,
     });
@@ -148,7 +130,7 @@ function identityRow(t: string, site: string, v: IdentityRowView): HTMLElement {
   const askFirst = v.documents.length > 0 && v.documentsAllowed;
   const detail = v.documents.length > 0 && !v.documentsAllowed ? msg.menu.identityNoDocsHttp : msg.menu.identityFills(v.fills);
   return row(
-    idCard(),
+    idCardIcon(),
     v.title || msg.menu.identityFallback,
     detail,
     async () => {

@@ -443,6 +443,10 @@ button.code:hover {
   opacity: 0.6;
 }
 
+.identity-avatar {
+  cursor: default;
+}
+
 .card-avatar {
   display: inline-flex;
   align-items: center;

@@ -9,7 +9,7 @@ import { SSO_PROVIDERS, type IdentityRole, type Match, type SsoProvider } from "
 import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
-import { cardBrandIcon, providerIcon } from "../menu/icons";
+import { cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
 import type { CardRowView } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 
@@ -126,11 +126,12 @@ function userLine(m: Match): HTMLElement {
 
 function identityRow(title: string): HTMLElement {
   const status = h("div", { className: "row-status" });
-  const fill = smallButton(t.popup.fillIdentity, t.popup.fillIdentityTitle);
+  const fill = smallButton(t.popup.fill, t.popup.fillIdentityTitle);
   const row = h(
-    "div",
+    "li",
     { className: "item identity" },
-    h("div", { className: "who" }, truncates(h("div", { className: "title", text: title || t.menu.identityFallback })), h("div", { className: "user copy", text: t.popup.identityKind })),
+    h("span", { className: "avatar identity-avatar" }, idCardIcon(20)),
+    h("div", { className: "who" }, truncates(h("div", { className: "title", text: title || t.menu.identityFallback })), h("div", { className: "user copy", text: t.popup.identityDetail })),
     h("div", { className: "actions" }, fill),
     status,
   );
@@ -261,7 +262,9 @@ function render(state: PopupState): void {
       } else {
         parts.push(h("ul", { className: "list" }, ...state.matches.map(matchRow)));
       }
-      if (state.identity) parts.push(identityRow(state.identity.title));
+      if (state.identity) {
+        parts.push(h("div", { className: "section-title", text: t.popup.identityTitle }), h("ul", { className: "list" }, identityRow(state.identity.title)));
+      }
       if (state.cards && state.cards.length > 0) {
         const origin = state.cardsOrigin;
         parts.push(h("div", { className: "section-title", text: t.popup.cardsTitle }), h("ul", { className: "list" }, ...state.cards.map((c) => cardRow(c, origin))));

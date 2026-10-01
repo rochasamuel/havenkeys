@@ -57,9 +57,9 @@ export const en = {
     codeTitle: "Show the one-time code",
     fillCodeTitle: "Fill this code into the page",
     edit: "Edit in HavenKeys",
-    fillIdentity: "Fill identity",
+    identityTitle: "Identity",
+    identityDetail: "Name, address and contact details",
     fillIdentityTitle: "Fill your identity into this page’s form",
-    identityKind: "Identity",
     identityAsks: (site: string, docs: string) => `${site} also asks for ${docs}.`,
     pill: {
       offline: "Offline",

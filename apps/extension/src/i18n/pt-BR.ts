@@ -25,9 +25,9 @@ export const ptBR: Messages = {
     codeTitle: "Mostrar o código de verificação",
     fillCodeTitle: "Preencher a página com este código",
     edit: "Editar no HavenKeys",
-    fillIdentity: "Preencher identidade",
+    identityTitle: "Identidade",
+    identityDetail: "Nome, endereço e contatos",
     fillIdentityTitle: "Preencher sua identidade no formulário desta página",
-    identityKind: "Identidade",
     identityAsks: (site: string, docs: string) => `${site} também pede ${docs}.`,
     pill: {
       offline: "Offline",

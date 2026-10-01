@@ -51,3 +51,21 @@ export function cardBrandIcon(brand: CardBrandId | null, size = 24): SVGSVGEleme
   const icon = brand && brand !== "other" && brand in CARD_BRAND_ICONS ? CARD_BRAND_ICONS[brand as keyof typeof CARD_BRAND_ICONS] : GENERIC_CARD_ICON;
   return drawIcon(icon, size, "card-brand-icon", Math.round((size * 500) / 780), true);
 }
+
+/** The identity row's glyph: an ID card in the 1.6-stroke icon set. */
+export function idCardIcon(size = 16): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M4.5 6h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM9 12a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 9 12zM6 15.5c.5-1.3 1.6-2 3-2s2.5.7 3 2M14 10h3.5M14 13.5h3.5");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.6");
+  path.setAttribute("stroke-linecap", "round");
+  svg.append(path);
+  return svg;
+}
