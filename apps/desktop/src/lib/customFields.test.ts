@@ -31,11 +31,22 @@ const views: SectionView[] = [
   },
 ];
 
+const NAMES = {
+  text: "Text",
+  url: "URL",
+  email: "Email",
+  address: "Address",
+  date: "Date",
+  otp: "One-time password",
+  password: "Password",
+  phone: "Phone",
+};
+
 const keys = (s: EditSection[]) => s.map((x) => x.fields.map((f) => f.id ?? f.label));
 
 describe("customFields", () => {
   it("never sends sections that were not loaded, so Rust keeps them", () => {
-    expect(sectionsInput(null)).toBeUndefined();
+    expect(sectionsInput(null, NAMES)).toBeUndefined();
   });
 
   it("opens existing secrets as keep and empty ones as empty", () => {
@@ -49,7 +60,7 @@ describe("customFields", () => {
 
   it("builds the save payload with ids, trimmed labels and secret updates", () => {
     const s = fromViews(views);
-    const out = sectionsInput(s)!;
+    const out = sectionsInput(s, NAMES)!;
     expect(out[0]).toEqual({
       id: "s1",
       title: "Bank",
@@ -68,9 +79,14 @@ describe("customFields", () => {
 
   it("new fields have no id and go to the last section", () => {
     const s = addField(fromViews(views), newField("email", " Mail "));
-    const out = sectionsInput(s)!;
+    const out = sectionsInput(s, NAMES)!;
     expect(out[1]!.fields[1]).toEqual({ label: "Mail", value: { type: "email", value: "" } });
     expect(addField([], newField("text", "x"))).toHaveLength(1);
+  });
+
+  it("falls back to the type name for a blank label", () => {
+    const out = sectionsInput(addField([], newField("otp", "  ")), NAMES)!;
+    expect(out[0]!.fields[0]!.label).toBe("One-time password");
   });
 
   it("moves a field within a section and across section edges, keeping its secret", () => {

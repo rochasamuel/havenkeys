@@ -161,15 +161,19 @@ function valueInput(f: EditField): FieldValueInput {
   }
 }
 
-/** The save's `sections`. `null` (never loaded, or loading failed) sends nothing, so Rust keeps them. */
-export function sectionsInput(sections: EditSection[] | null): SectionInput[] | undefined {
+/** The save's `sections`. A blank label becomes the type's name, which the editor shows as its placeholder.
+ * `null` (never loaded, or loading failed) sends nothing, so Rust keeps them. */
+export function sectionsInput(
+  sections: EditSection[] | null,
+  typeNames: Record<FieldType, string>,
+): SectionInput[] | undefined {
   if (sections === null) return undefined;
   return sections.map((s) => ({
     ...(s.id ? { id: s.id } : {}),
     title: s.title.trim() || null,
     fields: s.fields.map((f) => ({
       ...(f.id ? { id: f.id } : {}),
-      label: f.label.trim(),
+      label: f.label.trim() || typeNames[f.type],
       value: valueInput(f),
     })),
   }));

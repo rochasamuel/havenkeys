@@ -7,7 +7,7 @@
 
 use crate::error::{Error, Result};
 use crate::identity::{clean_value, parse_ymd, Allow};
-use crate::model::{check_notes, check_password, normalize_url, SecretUpdate, MAX_TITLE_CHARS};
+use crate::model::{check_password, normalize_url, SecretUpdate, MAX_NOTES_BYTES, MAX_TITLE_CHARS};
 use crate::secret::SecretString;
 use crate::totp::{self, TotpCode, TotpConfig};
 use serde::{Deserialize, Serialize};
@@ -513,7 +513,9 @@ pub(crate) fn clean_plain(value: &FieldValueInput) -> Result<FieldValue> {
     };
     Ok(match value {
         FieldValueInput::Text(v) => {
-            check_notes(v)?;
+            if v.expose().len() > MAX_NOTES_BYTES {
+                return Err(Error::InvalidInput("a text field is too long"));
+            }
             FieldValue::Text(v.clone())
         }
         FieldValueInput::Url(v) if v.expose().trim().is_empty() => {

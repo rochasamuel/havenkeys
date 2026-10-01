@@ -158,7 +158,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             notes: textUpdate,
             autoSignIn,
             signInWith: signIn ? { provider: signIn.provider, account: signIn.account?.trim() || null } : null,
-            sections: sectionsInput(sections),
+            sections: sectionsInput(sections, t.fields.types),
           }
         : { itemType, title, content: textUpdate };
 
