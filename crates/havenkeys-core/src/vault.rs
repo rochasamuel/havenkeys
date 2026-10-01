@@ -399,6 +399,10 @@ impl BundleTicket {
         enrolled_at_ms: i64,
         boot_count: i64,
     ) -> Result<UnlockBundle> {
+        // An unknown boot count (negative) would bind the bundle to no boot.
+        if boot_count < 0 {
+            return Err(Error::BundleRefused);
+        }
         if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
             return Err(Error::UnlockFailed);
         }

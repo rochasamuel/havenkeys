@@ -173,6 +173,29 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn an_unknown_boot_count_enrolls_nothing_and_unlocks_nothing() {
+        let (client, _events, server, _dir) = signed_in().await;
+        let err = client
+            .create_unlock_bundle(SecretString::from(PASSWORD), -1)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, "bundle_refused");
+        let bundle = client
+            .create_unlock_bundle(SecretString::from(PASSWORD), 0)
+            .await
+            .unwrap();
+        client.lock("user");
+        let err = client
+            .unlock_with_bundle(bundle.clone(), -1)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, "bundle_refused");
+        server.release_login.notify_one();
+        let status = client.unlock_with_bundle(bundle, 0).await.unwrap();
+        assert_eq!(status.state, VaultState::Unlocked);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn a_wrong_password_enrolls_nothing() {
         let (client, _events, _server, _dir) = signed_in().await;
         let err = client

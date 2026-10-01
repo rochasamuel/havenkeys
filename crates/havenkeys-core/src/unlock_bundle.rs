@@ -80,10 +80,14 @@ impl UnlockBundle {
     }
 
     /// Refuses a bundle older than 14 days, one dated in the future (a clock
-    /// set back must not stretch the window), and one from another boot.
+    /// set back must not stretch the window), and one from another boot. An
+    /// unknown boot count (negative) on either side matches no boot.
     pub fn check_fresh(&self, now_ms: i64, boot_count: i64) -> Result<()> {
         let age = now_ms.saturating_sub(self.enrolled_at_ms);
-        if !(0..=BUNDLE_MAX_AGE_MS).contains(&age) || boot_count != self.boot_count {
+        if !(0..=BUNDLE_MAX_AGE_MS).contains(&age)
+            || boot_count < 0
+            || boot_count != self.boot_count
+        {
             return Err(Error::BundleRefused);
         }
         Ok(())
@@ -187,6 +191,26 @@ mod tests {
         );
         assert_eq!(b.check_fresh(NOW - 1, 7), Err(Error::BundleRefused));
         assert_eq!(b.check_fresh(NOW, 8), Err(Error::BundleRefused));
+    }
+
+    #[test]
+    fn an_unknown_boot_count_is_refused() {
+        let (v, sk) = vault();
+        let err = v
+            .begin_bundle()
+            .unwrap()
+            .derive(&SecretString::from(PASSWORD), &sk, &account(), NOW, -1)
+            .unwrap_err();
+        assert_eq!(err, Error::BundleRefused);
+        // A stored -1 (from a bundle built before this check) matches no boot.
+        let (vault_key, auth_key) = enrolled(&v, &sk, 0).into_keys();
+        let stored = UnlockBundle::new(vault_key, auth_key, NOW, -1);
+        assert_eq!(stored.check_fresh(NOW, -1), Err(Error::BundleRefused));
+        assert_eq!(
+            enrolled(&v, &sk, 7).check_fresh(NOW, -1),
+            Err(Error::BundleRefused)
+        );
+        assert!(enrolled(&v, &sk, 0).check_fresh(NOW, 0).is_ok());
     }
 
     #[test]
