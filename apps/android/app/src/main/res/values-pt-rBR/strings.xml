@@ -25,6 +25,8 @@
     <string name="biometric_prompt_title">Desbloquear o HavenKeys</string>
     <string name="biometric_cancel">Usar senha mestra</string>
     <string name="unlock_busy">Desbloqueando…</string>
+    <string name="unlock_secret_key">Secret Key</string>
+    <string name="unlock_enter_password_and_key">Digite sua senha mestra e a Secret Key do seu Emergency Kit. Este aparelho guarda a Secret Key depois que você desbloquear.</string>
     <string name="biometric_enroll_title">Ativar desbloqueio com digital ou rosto</string>
     <string name="biometric_enroll_cancel">Cancelar</string>
 

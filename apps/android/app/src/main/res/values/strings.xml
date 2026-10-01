@@ -29,6 +29,9 @@
     <string name="biometric_prompt_title">Unlock HavenKeys</string>
     <string name="biometric_cancel">Use master password</string>
     <string name="unlock_busy">Unlocking…</string>
+    <string name="unlock_secret_key">Secret Key</string>
+    <string name="unlock_secret_key_placeholder" translatable="false">H1-XXXX-XXXX-…</string>
+    <string name="unlock_enter_password_and_key">Enter your master password and the Secret Key from your Emergency Kit. This device remembers the Secret Key after you unlock.</string>
     <string name="biometric_enroll_title">Turn on unlock with fingerprint or face</string>
     <string name="biometric_enroll_cancel">Cancel</string>
 

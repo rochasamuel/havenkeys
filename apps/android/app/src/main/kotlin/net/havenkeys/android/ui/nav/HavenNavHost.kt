@@ -82,6 +82,10 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
         composable(Routes.VAULT) { VaultPlaceholder(container) }
     }
 
+    // A back stack restored from before a process kill must not outlive the lock.
+    LaunchedEffect(navController, first) {
+        routeToForce(navController.currentDestination?.route, first)?.let(navController::replaceAll)
+    }
     // The lock wipe: no screen that showed vault data stays in the back stack.
     LaunchedEffect(navController) {
         root.lockedSignal.collect { target ->
@@ -93,12 +97,6 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
 
 private fun NavHostController.replaceAll(route: String) =
     navigate(route) { popUpTo(graph.id) { inclusive = true } }
-
-private fun routeOf(start: Start) = when (start) {
-    Start.ONBOARDING -> Routes.ONBOARDING
-    Start.UNLOCK -> Routes.UNLOCK
-    Start.VAULT -> Routes.VAULT
-}
 
 /** Unlock → vault and the lock wipe take the seal's time; reduced motion cuts instantly. */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.spec(motion: HavenMotion): FiniteAnimationSpec<Float> {

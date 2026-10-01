@@ -58,8 +58,9 @@ import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.theme.HavenTheme
 
 /**
- * The master password lives only in this composition (`remember`, never
- * `rememberSaveable`) and is cleared as soon as it is submitted.
+ * The master password and the Secret Key live only in this composition
+ * (`remember`, never `rememberSaveable`) and are cleared as soon as they are
+ * submitted.
  */
 @Composable
 fun UnlockScreen(
@@ -72,7 +73,6 @@ fun UnlockScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    var password by remember { mutableStateOf("") }
     var prompting by remember { mutableStateOf(false) }
     var autoOffered by rememberSaveable { mutableStateOf(false) }
     val promptTitle = stringResource(R.string.biometric_prompt_title)
@@ -91,12 +91,6 @@ fun UnlockScreen(
             }
         }
     }
-    val submit = {
-        if (password.isNotEmpty() && !state.busy) {
-            viewModel.unlockPassword(password)
-            password = ""
-        }
-    }
 
     LaunchedEffect(state.unlocked) { if (state.unlocked) onUnlocked() }
     LaunchedEffect(Unit) {
@@ -110,9 +104,7 @@ fun UnlockScreen(
 
     UnlockForm(
         state = state,
-        password = password,
-        onPasswordChange = { password = it },
-        onSubmit = submit,
+        onSubmit = viewModel::unlockPassword,
         onBiometric = biometric,
         modifier = modifier,
     )
@@ -121,12 +113,21 @@ fun UnlockScreen(
 @Composable
 private fun UnlockForm(
     state: UnlockUiState,
-    password: String,
-    onPasswordChange: (String) -> Unit,
-    onSubmit: () -> Unit,
+    onSubmit: (password: String, secretKey: String?) -> Unit,
     onBiometric: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var password by remember { mutableStateOf("") }
+    var secretKey by remember { mutableStateOf("") }
+    val ready = password.isNotEmpty() && (!state.needsSecretKey || secretKey.isNotBlank()) && !state.busy
+    val submit = {
+        if (ready) {
+            onSubmit(password, if (state.needsSecretKey) secretKey else null)
+            password = ""
+            secretKey = ""
+        }
+    }
+
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier
@@ -137,67 +138,94 @@ private fun UnlockForm(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Icon(
-                Icons.Outlined.Lock,
-                contentDescription = null,
-                tint = HavenTheme.colors.brass,
-                modifier = Modifier.size(40.dp),
-            )
-            Text(
-                stringResource(R.string.unlock_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = HavenTheme.colors.textStrong,
-            )
-            PasswordField(
+            UnlockHeader(state.needsSecretKey)
+            MaskedField(
                 value = password,
-                onValueChange = onPasswordChange,
+                onValueChange = { password = it },
+                label = stringResource(R.string.unlock_password_hint),
                 enabled = !state.busy,
                 isError = state.errorCode != null,
-                onDone = onSubmit,
+                contentType = ContentType.Password,
+                imeAction = if (state.needsSecretKey) ImeAction.Next else ImeAction.Done,
+                onDone = submit,
             )
-            state.errorCode?.let { code ->
-                Text(
-                    stringResource(errorText(code)),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth(),
+            if (state.needsSecretKey) {
+                MaskedField(
+                    value = secretKey,
+                    onValueChange = { secretKey = it },
+                    label = stringResource(R.string.unlock_secret_key),
+                    enabled = !state.busy,
+                    placeholder = stringResource(R.string.unlock_secret_key_placeholder),
+                    onDone = submit,
                 )
             }
-            Button(
-                onClick = onSubmit,
-                enabled = password.isNotEmpty() && !state.busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(if (state.busy) R.string.unlock_busy else R.string.unlock_button))
-            }
-            if (state.offerBiometric) {
-                OutlinedButton(
-                    onClick = onBiometric,
-                    enabled = !state.busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text(stringResource(R.string.unlock_biometric))
-                }
-            }
+            UnlockActions(state, ready, submit, onBiometric)
         }
     }
 }
 
 @Composable
-private fun PasswordField(
+private fun UnlockActions(state: UnlockUiState, ready: Boolean, onSubmit: () -> Unit, onBiometric: () -> Unit) {
+    state.errorCode?.let { code ->
+        Text(
+            stringResource(errorText(code)),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    Button(onClick = onSubmit, enabled = ready, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(if (state.busy) R.string.unlock_busy else R.string.unlock_button))
+    }
+    if (state.offerBiometric) {
+        OutlinedButton(onClick = onBiometric, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Fingerprint, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.unlock_biometric))
+        }
+    }
+}
+
+@Composable
+private fun UnlockHeader(needsSecretKey: Boolean) {
+    Icon(
+        Icons.Outlined.Lock,
+        contentDescription = null,
+        tint = HavenTheme.colors.brass,
+        modifier = Modifier.size(40.dp),
+    )
+    Text(
+        stringResource(R.string.unlock_title),
+        style = MaterialTheme.typography.titleLarge,
+        color = HavenTheme.colors.textStrong,
+    )
+    if (needsSecretKey) {
+        Text(
+            stringResource(R.string.unlock_enter_password_and_key),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Masked until shown; a keyboard that neither suggests nor learns. */
+@Composable
+private fun MaskedField(
     value: String,
     onValueChange: (String) -> Unit,
+    label: String,
     enabled: Boolean,
-    isError: Boolean,
-    onDone: () -> Unit,
+    isError: Boolean = false,
+    placeholder: String? = null,
+    contentType: ContentType? = null,
+    imeAction: ImeAction = ImeAction.Done,
+    onDone: () -> Unit = {},
 ) {
     var shown by remember { mutableStateOf(false) }
-    val label = stringResource(R.string.unlock_password_hint)
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
         singleLine = true,
         enabled = enabled,
         isError = isError,
@@ -205,7 +233,7 @@ private fun PasswordField(
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Password,
             autoCorrectEnabled = false,
-            imeAction = ImeAction.Done,
+            imeAction = imeAction,
         ),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         trailingIcon = {
@@ -219,7 +247,7 @@ private fun PasswordField(
         },
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { contentType = ContentType.Password },
+            .then(if (contentType != null) Modifier.semantics { this.contentType = contentType } else Modifier),
     )
 }
 

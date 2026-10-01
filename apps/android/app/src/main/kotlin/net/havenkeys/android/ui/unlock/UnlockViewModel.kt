@@ -10,9 +10,13 @@ import kotlinx.coroutines.launch
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultRepository
 
-/** Holds no secret: the password and the bundle go straight to Rust. */
+/**
+ * Holds no secret: the password, the Secret Key and the bundle go straight
+ * to Rust. [needsSecretKey] only says the device lacks its Secret Key.
+ */
 data class UnlockUiState(
     val busy: Boolean = false,
+    val needsSecretKey: Boolean = false,
     val errorCode: String? = null,
     val offerBiometric: Boolean = false,
     val unlocked: Boolean = false,
@@ -27,9 +31,25 @@ class UnlockViewModel(
     private val _state = MutableStateFlow(UnlockUiState(offerBiometric = biometricAvailable && hasBundle()))
     val state: StateFlow<UnlockUiState> = _state.asStateFlow()
 
-    fun unlockPassword(password: String) {
+    init {
+        viewModelScope.launch {
+            val status = vault.status()
+            if (status is Outcome.Ok && status.value.needsSecretKey) _state.update { it.copy(needsSecretKey = true) }
+        }
+    }
+
+    /** [secretKey] is the Emergency Kit's, typed when this device lacks it; blank means none. */
+    fun unlockPassword(password: String, secretKey: String? = null) {
         _state.update { it.copy(busy = true, errorCode = null) }
-        viewModelScope.launch { finish(vault.unlockPassword(password)) }
+        val typed = secretKey?.trim()?.takeIf { it.isNotEmpty() }
+        viewModelScope.launch {
+            val result = vault.unlockPassword(password, typed)
+            // As on the desktop: the device turned out not to have the key, so ask for it.
+            if (result is Outcome.Failed && result.code == SECRET_KEY_REQUIRED) {
+                _state.update { it.copy(needsSecretKey = true) }
+            }
+            finish(result)
+        }
     }
 
     /** [bundle] is zeroed when the call ends, however it ends. */
@@ -60,5 +80,6 @@ class UnlockViewModel(
 
     private companion object {
         const val BUNDLE_REFUSED = "bundle_refused"
+        const val SECRET_KEY_REQUIRED = "secret_key_required"
     }
 }

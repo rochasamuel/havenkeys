@@ -4,9 +4,18 @@ use havenkeys_core::{SecretBytes, SecretString};
 
 #[uniffi::export]
 impl MobileVault {
-    pub fn unlock_password(&self, password: String) -> MobileResult<Status> {
+    /// `secret_key` is the Emergency Kit's key, typed when this device lacks
+    /// it (`Status::needs_secret_key`); the device keeps it after unlocking.
+    pub fn unlock_password(
+        &self,
+        password: String,
+        secret_key: Option<String>,
+    ) -> MobileResult<Status> {
         let client = self.client.clone();
-        self.block_on(client.unlock(SecretString::new(password), None))?;
+        self.block_on(client.unlock(
+            SecretString::new(password),
+            secret_key.map(SecretString::new),
+        ))?;
         self.status()
     }
 
@@ -29,7 +38,7 @@ impl MobileVault {
 
 #[cfg(test)]
 mod tests {
-    use crate::vault::tests::{unlocked, wait_for, PASSWORD};
+    use crate::vault::tests::{mobile, unlocked, wait_for, PASSWORD};
     use crate::vault::LockState;
 
     #[test]
@@ -37,8 +46,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (vault, _) = unlocked(dir.path());
         vault.lock();
-        assert!(vault.unlock_password("wrong password!".into()).is_err());
-        let s = vault.unlock_password(PASSWORD.into()).unwrap();
+        assert!(vault
+            .unlock_password("wrong password!".into(), None)
+            .is_err());
+        let s = vault.unlock_password(PASSWORD.into(), None).unwrap();
         assert!(matches!(s.state, LockState::Unlocked));
     }
 
@@ -68,5 +79,41 @@ mod tests {
         let (vault, _) = unlocked(dir.path());
         vault.lock();
         assert!(vault.create_unlock_bundle(PASSWORD.into(), 1).is_err());
+    }
+
+    fn code(r: crate::MobileResult<crate::vault::Status>) -> String {
+        match r.err().unwrap() {
+            crate::MobileError::Failed { code, .. } => code,
+        }
+    }
+
+    #[test]
+    fn a_device_without_the_secret_key_unlocks_with_the_typed_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let (vault, _) = mobile(dir.path());
+        let key = havenkeys_client::testing::seed_account_vault(&vault.client, PASSWORD);
+        vault.lock();
+        vault
+            .client
+            .device()
+            .unwrap()
+            .forget(havenkeys_client::testing::ACCOUNT);
+        assert!(vault.status().unwrap().needs_secret_key);
+
+        assert_eq!(
+            code(vault.unlock_password(PASSWORD.into(), None)),
+            "secret_key_required"
+        );
+        let other = havenkeys_core::crypto::secret_key::SecretKey::generate().unwrap();
+        assert!(vault
+            .unlock_password(PASSWORD.into(), Some(other.to_text().expose().to_owned()))
+            .is_err());
+        assert!(matches!(vault.status().unwrap().state, LockState::Locked));
+
+        let s = vault
+            .unlock_password(PASSWORD.into(), Some(key.to_text().expose().to_owned()))
+            .unwrap();
+        assert!(matches!(s.state, LockState::Unlocked));
+        assert!(!s.needs_secret_key);
     }
 }

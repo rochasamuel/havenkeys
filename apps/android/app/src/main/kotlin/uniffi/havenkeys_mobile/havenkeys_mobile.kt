@@ -951,7 +951,7 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_create_unlock_bundle(`ptr`: Long,`password`: RustBuffer.ByValue,`bootCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_unlock_password(`ptr`: Long,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_unlock_password(`ptr`: Long,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_unlock_with_bundle(`ptr`: Long,`bundle`: RustBuffer.ByValue,`bootCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1188,7 +1188,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_create_unlock_bundle() and 0xFFFF) != 11120) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_password() and 0xFFFF) != 37664) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_password() and 0xFFFF) != 3378) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_with_bundle() and 0xFFFF) != 42943) {
@@ -2112,7 +2112,11 @@ public interface MobileVaultInterface {
      */
     fun `createUnlockBundle`(`password`: kotlin.String, `bootCount`: kotlin.Long): kotlin.ByteArray
     
-    fun `unlockPassword`(`password`: kotlin.String): Status
+    /**
+     * `secret_key` is the Emergency Kit's key, typed when this device lacks
+     * it (`Status::needs_secret_key`); the device keeps it after unlocking.
+     */
+    fun `unlockPassword`(`password`: kotlin.String, `secretKey`: kotlin.String?): Status
     
     fun `unlockWithBundle`(`bundle`: kotlin.ByteArray, `bootCount`: kotlin.Long): Status
     
@@ -2677,14 +2681,19 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
 
     
-    @Throws(MobileException::class)override fun `unlockPassword`(`password`: kotlin.String): Status {
+    /**
+     * `secret_key` is the Emergency Kit's key, typed when this device lacks
+     * it (`Status::needs_secret_key`); the device keeps it after unlocking.
+     */
+    @Throws(MobileException::class)override fun `unlockPassword`(`password`: kotlin.String, `secretKey`: kotlin.String?): Status {
             return FfiConverterTypeStatus.lift(
     callWithHandle {
     uniffiRustCallWithError(MobileException) { _status ->
     UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_unlock_password(
         it,
         
-        FfiConverterString.lower(`password`),_status)
+        FfiConverterString.lower(`password`),
+        FfiConverterOptionalString.lower(`secretKey`),_status)
 }
     }
     )

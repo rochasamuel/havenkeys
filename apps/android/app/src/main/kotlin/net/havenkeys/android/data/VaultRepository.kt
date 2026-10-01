@@ -10,7 +10,8 @@ import uniffi.havenkeys_mobile.TotpNow
 
 interface VaultRepository {
     suspend fun status(): Outcome<Status>
-    suspend fun unlockPassword(password: String): Outcome<Status>
+    /** [secretKey] only when the device lacks it (`Status.needsSecretKey`). */
+    suspend fun unlockPassword(password: String, secretKey: String? = null): Outcome<Status>
     suspend fun createUnlockBundle(password: String, bootCount: Long): Outcome<ByteArray>
     suspend fun unlockWithBundle(bundle: ByteArray, bootCount: Long): Outcome<Status>
     fun lock()
@@ -27,7 +28,8 @@ interface VaultRepository {
 
 class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
     override suspend fun status() = rust { vault.status() }
-    override suspend fun unlockPassword(password: String) = rust { vault.unlockPassword(password) }
+    override suspend fun unlockPassword(password: String, secretKey: String?) =
+        rust { vault.unlockPassword(password, secretKey) }
     override suspend fun createUnlockBundle(password: String, bootCount: Long) =
         rust { vault.createUnlockBundle(password, bootCount) }
     override suspend fun unlockWithBundle(bundle: ByteArray, bootCount: Long) = rust {

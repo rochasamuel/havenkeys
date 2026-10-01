@@ -11,3 +11,17 @@ object Routes {
     const val DEVICES = "devices"
     const val AUTOFILL_SETUP = "autofill-setup"
 }
+
+internal fun routeOf(start: Start): String = when (start) {
+    Start.ONBOARDING -> Routes.ONBOARDING
+    Start.UNLOCK -> Routes.UNLOCK
+    Start.VAULT -> Routes.VAULT
+}
+
+/**
+ * After a process kill the navigation state comes back (say, an item) while
+ * the new process is locked and no lock event will come. Returns the route
+ * to replace the whole back stack with, or null when [current] may stay.
+ */
+internal fun routeToForce(current: String?, start: Start): String? =
+    if (start != Start.VAULT && current != routeOf(start)) routeOf(start) else null
