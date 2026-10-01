@@ -2,6 +2,7 @@ package net.havenkeys.android.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -26,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.theme.HavenTheme
 
-/** The vault's top bar: where you are, whether writes can reach the server, and Lock. */
+/** The vault's top bar: where you are, whether writes can reach the server, Lock, then any [actions]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HavenTopBar(
@@ -35,6 +36,7 @@ fun HavenTopBar(
     onLock: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -50,6 +52,7 @@ fun HavenTopBar(
             IconButton(onClick = onLock) {
                 Icon(Icons.Outlined.Lock, contentDescription = stringResource(R.string.vault_lock_now))
             }
+            actions()
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.background,

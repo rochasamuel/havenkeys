@@ -29,10 +29,18 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
+import net.havenkeys.android.ui.autofillsetup.AutofillSetupScreen
+import net.havenkeys.android.ui.generator.GeneratorScreen
+import net.havenkeys.android.ui.generator.GeneratorViewModel
 import net.havenkeys.android.ui.item.ItemScreen
 import net.havenkeys.android.ui.item.ItemViewModel
 import net.havenkeys.android.ui.onboarding.OnboardingScreen
 import net.havenkeys.android.ui.onboarding.OnboardingViewModel
+import net.havenkeys.android.ui.settings.DevicesScreen
+import net.havenkeys.android.ui.settings.DevicesViewModel
+import net.havenkeys.android.ui.settings.SettingsNavigation
+import net.havenkeys.android.ui.settings.SettingsScreen
+import net.havenkeys.android.ui.settings.SettingsViewModel
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.unlock.UnlockScreen
@@ -86,6 +94,7 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
                 )
             }
             vaultScreens(container, navController, shared, motion)
+            toolScreens(container, navController, activity)
         }
     }
 
@@ -128,6 +137,8 @@ private fun NavGraphBuilder.vaultScreens(
             },
             onOpen = { id -> navController.navigate(Routes.item(id)) },
             onLock = container.vaultRepository::lock,
+            onGenerator = { navController.navigate(Routes.GENERATOR) },
+            onSettings = { navController.navigate(Routes.SETTINGS) },
             titleModifier = { id -> Modifier.sharedTitle(shared, id, visibility, motion) },
         )
     }
@@ -144,6 +155,61 @@ private fun NavGraphBuilder.vaultScreens(
             onLock = container.vaultRepository::lock,
             titleModifier = Modifier.sharedTitle(shared, id, this, motion),
         )
+    }
+}
+
+/** Generator, Settings and the screens Settings leads to. No route carries an argument. */
+private fun NavGraphBuilder.toolScreens(
+    container: AppContainer,
+    navController: NavHostController,
+    activity: FragmentActivity,
+) {
+    val back: () -> Unit = { navController.popBackStack() }
+    val lock: () -> Unit = container.vaultRepository::lock
+    composable(Routes.GENERATOR) {
+        val online by container.events.online.collectAsStateWithLifecycle()
+        GeneratorScreen(
+            viewModel = viewModel { GeneratorViewModel(container.vaultRepository, container.settingsRepository) },
+            clipboard = container.clipboard,
+            online = online,
+            onBack = back,
+            onLock = lock,
+        )
+    }
+    composable(Routes.SETTINGS) {
+        val online by container.events.online.collectAsStateWithLifecycle()
+        SettingsScreen(
+            viewModel = viewModel {
+                SettingsViewModel(
+                    container.settingsRepository,
+                    container.accountRepository,
+                    container.vaultRepository,
+                    biometricEnrolled = container::hasBiometricUnlock,
+                )
+            },
+            activity = activity,
+            container = container,
+            online = online,
+            navigation = SettingsNavigation(
+                onBack = back,
+                onLock = lock,
+                onDevices = { navController.navigate(Routes.DEVICES) },
+                onAutofillSetup = { navController.navigate(Routes.AUTOFILL_SETUP) },
+            ),
+        )
+    }
+    composable(Routes.DEVICES) {
+        val online by container.events.online.collectAsStateWithLifecycle()
+        DevicesScreen(
+            viewModel = viewModel { DevicesViewModel(container.accountRepository, container.events) },
+            online = online,
+            onBack = back,
+            onLock = lock,
+        )
+    }
+    composable(Routes.AUTOFILL_SETUP) {
+        val online by container.events.online.collectAsStateWithLifecycle()
+        AutofillSetupScreen(online = online, onBack = back, onLock = lock)
     }
 }
 

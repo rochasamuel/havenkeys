@@ -98,8 +98,13 @@ class FakeVaultRepository : VaultRepository {
         return totpNow
     }
 
-    override suspend fun generate(options: GeneratorOptions): Outcome<Generated> =
-        Outcome.Ok(Generated("x".repeat(options.length.toInt()), 100.0))
+    var generatedWith: GeneratorOptions? = null
+    var generated: Outcome<Generated>? = null
+
+    override suspend fun generate(options: GeneratorOptions): Outcome<Generated> {
+        generatedWith = options
+        return generated ?: Outcome.Ok(Generated("x".repeat(options.length.toInt()), 100.0))
+    }
 }
 
 class FakeAccountRepository : AccountRepository {
@@ -144,7 +149,10 @@ class FakeAccountRepository : AccountRepository {
         return sync
     }
 
-    override suspend fun devices() = deviceList
+    override suspend fun devices(): Outcome<List<DeviceInfo>> {
+        calls += "devices"
+        return deviceList
+    }
 
     override suspend fun revoke(id: String): Outcome<Unit> {
         calls += "revoke:$id"
@@ -157,7 +165,7 @@ class FakeAccountRepository : AccountRepository {
     }
 
     override suspend fun removeDevice(confirmation: String): Outcome<Unit> {
-        calls += "removeDevice"
+        calls += "removeDevice:$confirmation"
         return done
     }
 }

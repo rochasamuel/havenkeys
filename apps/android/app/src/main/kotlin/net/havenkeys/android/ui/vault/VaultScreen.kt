@@ -2,6 +2,7 @@ package net.havenkeys.android.ui.vault
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +14,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -24,6 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -55,12 +65,14 @@ fun VaultScreen(
     viewModel: VaultViewModel,
     onOpen: (id: String) -> Unit,
     onLock: () -> Unit,
+    onGenerator: () -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     titleModifier: @Composable (id: String) -> Modifier = { Modifier },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
-        topBar = { HavenTopBar(title = stringResource(R.string.vault_title), online = state.online, onLock = onLock) },
+        topBar = { VaultTopBar(state.online, onLock, onGenerator, onSettings) },
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier,
     ) { padding ->
@@ -113,6 +125,44 @@ fun VaultScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun VaultTopBar(online: Boolean, onLock: () -> Unit, onGenerator: () -> Unit, onSettings: () -> Unit) {
+    HavenTopBar(
+        title = stringResource(R.string.vault_title),
+        online = online,
+        onLock = onLock,
+        actions = { VaultMenu(onGenerator, onSettings) },
+    )
+}
+
+@Composable
+private fun VaultMenu(onGenerator: () -> Unit, onSettings: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.vault_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.generator_title)) },
+                leadingIcon = { Icon(Icons.Outlined.Password, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onGenerator()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.settings_title)) },
+                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onSettings()
+                },
+            )
         }
     }
 }

@@ -143,4 +143,76 @@
     <string name="onboarding_sign_in">Sign in</string>
     <string name="onboarding_signing_in">Signing in…</string>
     <string name="onboarding_sign_in_note">Signing in downloads your vault and decrypts it here. The server never sees your password or your Secret Key.</string>
+    <!-- Generator -->
+    <string name="generator_title">Password generator</string>
+    <string name="generator_lede">Made on this phone from the system’s secure random source. Nothing is saved until you use it.</string>
+    <string name="generator_regenerate">Regenerate</string>
+    <string name="generator_copy">Copy</string>
+    <string name="generator_copied">Password copied. The clipboard clears in %1$d s.</string>
+    <string name="generator_failed">Could not generate a password.</string>
+    <string name="generator_length">Length</string>
+    <string name="generator_characters">Characters</string>
+    <string name="generator_uppercase">Uppercase</string>
+    <string name="generator_lowercase">Lowercase</string>
+    <string name="generator_digits">Numbers</string>
+    <string name="generator_symbols">Symbols</string>
+    <string name="generator_avoid_ambiguous">Avoid look-alikes</string>
+    <string name="generator_weak">Weak</string>
+    <string name="generator_fair">Fair</string>
+    <string name="generator_strong">Strong</string>
+    <string name="generator_excellent">Excellent</string>
+    <string name="generator_strength">%1$s · about %2$d bits</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="vault_more">More</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_auto_lock">Lock automatically</string>
+    <string name="settings_never">Never</string>
+    <string name="settings_after_minutes">After %1$d minutes</string>
+    <string name="settings_after_hour">After 1 hour</string>
+    <string name="settings_clipboard">Clear copied items</string>
+    <string name="settings_after_seconds">After %1$d seconds</string>
+    <string name="settings_lock_on_screen_off">Lock when the screen turns off</string>
+    <string name="settings_biometric">Unlock with fingerprint or face</string>
+    <string name="settings_biometric_note">Asks for your master password again after 14 days or when the phone restarts.</string>
+    <string name="settings_biometric_password">Enter your master password to turn on unlock with fingerprint or face.</string>
+    <string name="settings_turn_on">Turn on</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_autofill">Autofill</string>
+    <string name="settings_confirm_before_filling">Confirm before filling</string>
+    <string name="settings_confirm_before_filling_note">When on, HavenKeys opens and checks each fill before Android receives the login. When off, Android holds the matching logins while it shows them, and fills only the one you tap.</string>
+    <string name="settings_asset_links">Check website–app links</string>
+    <string name="settings_asset_links_note">Suggests a website’s login in its own app (Digital Asset Links). This contacts the websites saved in your vault.</string>
+    <string name="settings_autofill_setup">Autofill setup</string>
+    <string name="settings_account">Account</string>
+    <string name="settings_devices">Devices</string>
+    <string name="settings_sign_out">Sign out and lock</string>
+    <string name="settings_sign_out_confirm">Sign this phone out?</string>
+    <string name="settings_remove_title">Remove this device</string>
+    <string name="settings_remove_note">Takes this phone off the account and returns HavenKeys to its first-run screen. Your vault stays on the server. Signing in again needs your master password and the Secret Key from your Emergency Kit.</string>
+    <string name="settings_type_to_confirm">Type %1$s to confirm</string>
+    <string name="settings_type_email">Type your account email to confirm</string>
+    <string name="settings_remove_mismatch">That is not this account’s email.</string>
+    <string name="settings_remove_failed">Could not remove this device.</string>
+    <string name="settings_save_failed">Could not save settings.</string>
+
+    <!-- Devices -->
+    <string name="devices_title">Devices</string>
+    <string name="devices_this_phone">This phone</string>
+    <string name="devices_last_seen">Last seen %1$s</string>
+    <string name="devices_never_seen">Last seen never</string>
+    <string name="devices_revoke">Revoke</string>
+    <string name="devices_revoke_confirm">Sign %1$s out and end its session?</string>
+    <string name="devices_revoke_this">Sign this phone out?</string>
+    <string name="devices_empty">No devices.</string>
+
+    <!-- Autofill setup -->
+    <string name="autofill_setup_title">Autofill setup</string>
+    <string name="autofill_setup_on">HavenKeys is your autofill service.</string>
+    <string name="autofill_setup_off">HavenKeys is not your autofill service yet. Android suggests logins only from the service you choose.</string>
+    <string name="autofill_setup_open">Choose HavenKeys for autofill</string>
+    <string name="autofill_setup_unavailable">Android’s autofill settings could not be opened on this phone.</string>
+    <string name="autofill_setup_chrome_title">In Chrome</string>
+    <string name="autofill_setup_chrome">Chrome fills with its own password manager unless told otherwise. In Chrome, open Settings → Autofill services and choose “Autofill using another service”, then restart Chrome.</string>
 </resources>

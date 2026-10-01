@@ -109,7 +109,7 @@ fun SecretField(
 }
 
 /** Digits and symbols in their own colours, as on the desktop, so 0/O and l/1 read apart. */
-private fun colourised(value: String, colors: HavenColors): AnnotatedString = buildAnnotatedString {
+internal fun colourised(value: String, colors: HavenColors): AnnotatedString = buildAnnotatedString {
     for (c in value) {
         when {
             c.isDigit() -> withStyle(SpanStyle(color = colors.digit)) { append(c) }
