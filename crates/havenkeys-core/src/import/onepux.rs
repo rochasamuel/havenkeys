@@ -20,7 +20,7 @@ use super::{ImportReport, ImportedItem};
 use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
 use crate::custom_field::{
     clean_plain, AddressValue, FieldInput, FieldKind, FieldValueInput, SectionInput, MAX_FIELDS,
-    MAX_LABEL_CHARS, MAX_SECTIONS,
+    MAX_LABEL_CHARS, MAX_SECTIONS, MAX_TOTAL_BYTES,
 };
 use crate::error::{Error, Result};
 use crate::model::{
@@ -230,6 +230,9 @@ impl Drop for Extras {
 struct LoginSections {
     sections: Vec<SectionInput>,
     count: usize,
+    /// Bytes of titles, labels and values so far, counted strictly (at least
+    /// what the vault counts) against `MAX_TOTAL_BYTES`.
+    bytes: usize,
 }
 
 impl LoginSections {
@@ -238,6 +241,7 @@ impl LoginSections {
             .map(|t| clean_line(t, MAX_LABEL_CHARS))
             .filter(|t| !t.is_empty())
             .map(SecretString::new);
+        self.bytes += title.as_ref().map_or(0, |t| t.expose().len());
         self.sections.push(SectionInput {
             id: None,
             title,
@@ -263,6 +267,11 @@ impl LoginSections {
             .map(|l| clean_line(l, MAX_LABEL_CHARS))
             .filter(|l| !l.is_empty())
             .unwrap_or_else(|| default_label(value.kind()).to_owned());
+        let added = label.len() + value_bytes(&value);
+        if self.bytes + added > MAX_TOTAL_BYTES {
+            return false;
+        }
+        self.bytes += added;
         section.fields.push(FieldInput {
             id: None,
             label: SecretString::new(label),
@@ -280,6 +289,38 @@ impl LoginSections {
             .collect();
         (!sections.is_empty()).then_some(sections)
     }
+}
+
+fn value_bytes(value: &FieldValueInput) -> usize {
+    match value {
+        FieldValueInput::Text(v)
+        | FieldValueInput::Url(v)
+        | FieldValueInput::Email(v)
+        | FieldValueInput::Phone(v)
+        | FieldValueInput::Date(v) => v.expose().len(),
+        FieldValueInput::Address(a) => a.formatted().expose().len(),
+        FieldValueInput::Password(SecretUpdate::Set(v))
+        | FieldValueInput::Otp(SecretUpdate::Set(v)) => v.expose().len(),
+        FieldValueInput::Password(_) | FieldValueInput::Otp(_) => 0,
+    }
+}
+
+/// `candidate` if it passes its type's checks, else `fallback` as Text if
+/// that passes, else `None` (the caller keeps the value in the notes).
+fn validated(
+    candidate: FieldValueInput,
+    fallback: impl FnOnce() -> Option<String>,
+) -> Option<FieldValueInput> {
+    let passes = match &candidate {
+        FieldValueInput::Otp(SecretUpdate::Set(t)) => parse_totp_input(t.expose()).is_ok(),
+        FieldValueInput::Password(SecretUpdate::Set(p)) => check_password(p).is_ok(),
+        other => clean_plain(other).is_ok(),
+    };
+    if passes {
+        return Some(candidate);
+    }
+    let as_text = FieldValueInput::Text(SecretString::new(fallback()?));
+    clean_plain(&as_text).is_ok().then_some(as_text)
 }
 
 fn default_label(kind: FieldKind) -> &'static str {
@@ -336,16 +377,7 @@ fn custom_field_from(value: &Value, report: &mut ImportReport) -> Option<FieldVa
         )?))),
         _ => FieldValueInput::Text(SecretString::new(render_value(value, report)?)),
     };
-    let passes = match &candidate {
-        FieldValueInput::Otp(SecretUpdate::Set(t)) => parse_totp_input(t.expose()).is_ok(),
-        FieldValueInput::Password(SecretUpdate::Set(p)) => check_password(p).is_ok(),
-        other => clean_plain(other).is_ok(),
-    };
-    if passes {
-        return Some(candidate);
-    }
-    let as_text = FieldValueInput::Text(SecretString::new(render_value(value, report)?));
-    clean_plain(&as_text).is_ok().then_some(as_text)
+    validated(candidate, || render_value(value, report))
 }
 /// The notes line the importer wrote for a "Sign in with" login before
 /// sign-in-with existed. A re-import clears notes that are exactly this.
@@ -584,12 +616,14 @@ fn login_fields(
         } else if !matches!(field_type, "C" | "R" | "B" | "I") {
             let name = non_empty(str_at(f, &["name"]));
             let v = SecretString::from(value);
-            let fv = if field_type == "P" {
+            let candidate = if field_type == "P" {
                 FieldValueInput::Password(SecretUpdate::Set(v))
             } else {
                 FieldValueInput::Text(v)
             };
-            if !sections.push(name, fv) {
+            let kept = validated(candidate, || Some(value.to_owned()))
+                .is_some_and(|fv| sections.push(name, fv));
+            if !kept {
                 report.fields_to_notes += 1;
                 extras.push(name, value);
             }
