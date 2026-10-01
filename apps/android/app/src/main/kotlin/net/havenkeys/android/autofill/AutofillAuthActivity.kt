@@ -86,8 +86,10 @@ internal fun Activity.tappedRequest(): TappedRequest? {
         AutofillManager.EXTRA_ASSIST_STRUCTURE,
         AssistStructure::class.java,
     )
-    val screen = structure?.let { StructureParser().parse(it) }?.takeIf { it.packageName == callingPackage }
-    val form = screen?.takeIf { it.packageName.isNotEmpty() }?.let { LoginFormFinder.find(it.fields) }
+    val screen = structure
+        ?.let { StructureParser().parse(it) }
+        ?.takeIf { structureNamesCaller(it.packageName, callingPackage) }
+    val form = screen?.let { LoginFormFinder.find(it.fields) }
     if (screen == null || form == null) return null
     val target = TargetFacts(
         screen.packageName,
@@ -107,6 +109,14 @@ internal fun Activity.tappedRequest(): TappedRequest? {
     }
     return TappedRequest(screen, form, target, inlineRequest)
 }
+
+/**
+ * The mitigation for our mutable PendingIntents: the structure Android
+ * attaches can be replaced by the app that starts us, which also receives our
+ * answer, so it counts only when it names that same, known app.
+ */
+internal fun structureNamesCaller(structurePackage: String, callingPackage: String?): Boolean =
+    structurePackage.isNotEmpty() && structurePackage == callingPackage
 
 /** Runs [then] once the vault is unlocked, showing the unlock screen first when it is locked. */
 internal fun FragmentActivity.unlockThen(container: AppContainer, then: () -> Unit) {

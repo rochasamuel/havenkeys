@@ -219,6 +219,7 @@
     <string name="autofill_search">Search HavenKeys…</string>
     <string name="autofill_code">One-time code</string>
     <string name="autofill_use_in_app">Use %1$s in %2$s?</string>
+    <string name="autofill_app_label">The app calls itself “%1$s”. Only the package name above says which app this is.</string>
     <string name="autofill_use">Use</string>
     <string name="autofill_cancel">Cancel</string>
     <string name="autofill_filled_once">Filled once — connect to save this app for next time.</string>

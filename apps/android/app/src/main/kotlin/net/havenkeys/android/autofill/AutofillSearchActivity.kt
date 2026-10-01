@@ -53,13 +53,14 @@ class AutofillSearchActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         val tapped = tappedRequest() ?: return cancel()
-        val appLabel = appLabel(tapped.screen.packageName)
+        val packageName = tapped.screen.packageName
+        val app = CallerApp(packageName, appLabel(packageName))
         unlockThen(container) {
             setContent {
                 HavenTheme {
                     SearchScreen(
                         search = container.autofillRepository::search,
-                        appLabel = appLabel,
+                        app = app,
                         onConfirmed = { match -> bindAndFill(tapped, match) },
                     )
                 }
@@ -80,10 +81,11 @@ class AutofillSearchActivity : FragmentActivity() {
             }
         }
 
-    private fun appLabel(packageName: String): String = try {
+    /** Chosen by the app itself, so only ever shown beside its package name. */
+    private fun appLabel(packageName: String): String? = try {
         packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
     } catch (@Suppress("SwallowedException") e: PackageManager.NameNotFoundException) {
-        packageName
+        null
     }
 
     private companion object {
@@ -91,11 +93,14 @@ class AutofillSearchActivity : FragmentActivity() {
     }
 }
 
+/** The app being filled: [packageName] identifies it; [label] is the app's own choice. */
+private data class CallerApp(val packageName: String, val label: String?)
+
 /** [onConfirmed] answers an error code, or null once it has filled. */
 @Composable
 private fun SearchScreen(
     search: suspend (String) -> Outcome<List<AutofillMatch>>,
-    appLabel: String,
+    app: CallerApp,
     onConfirmed: suspend (AutofillMatch) -> String?,
 ) {
     var query by remember { mutableStateOf("") }
@@ -137,7 +142,7 @@ private fun SearchScreen(
     picked?.let { match ->
         ConfirmUse(
             title = match.title,
-            appLabel = appLabel,
+            app = app,
             busy = busy,
             onConfirm = {
                 busy = true
@@ -176,14 +181,28 @@ private fun Results(
 @Composable
 private fun ConfirmUse(
     title: String,
-    appLabel: String,
+    app: CallerApp,
     busy: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        text = { Text(stringResource(R.string.autofill_use_in_app, title, appLabel)) },
+        // The package name is what identifies the app (spec §7.2); the label
+        // is the app's own choice and could name anything, even this login.
+        text = {
+            Column {
+                Text(stringResource(R.string.autofill_use_in_app, title, app.packageName))
+                if (!app.label.isNullOrBlank() && app.label != app.packageName) {
+                    Text(
+                        stringResource(R.string.autofill_app_label, app.label),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
         confirmButton = {
             TextButton(enabled = !busy, onClick = onConfirm) { Text(stringResource(R.string.autofill_use)) }
         },
