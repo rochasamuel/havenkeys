@@ -8,7 +8,7 @@ import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
-import { Field, IconButton } from "./ItemDetail";
+import { Field, IconButton } from "../components/Field";
 
 interface Props {
   item: ItemOverview;
