@@ -2,38 +2,43 @@ package net.havenkeys.android.ui.nav
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
-import net.havenkeys.android.R
-import net.havenkeys.android.ui.components.HavenTopBar
+import net.havenkeys.android.ui.item.ItemScreen
+import net.havenkeys.android.ui.item.ItemViewModel
 import net.havenkeys.android.ui.onboarding.OnboardingScreen
 import net.havenkeys.android.ui.onboarding.OnboardingViewModel
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.unlock.UnlockScreen
 import net.havenkeys.android.ui.unlock.UnlockViewModel
+import net.havenkeys.android.ui.vault.VaultScreen
+import net.havenkeys.android.ui.vault.VaultViewModel
 
 @Composable
 fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
@@ -49,37 +54,39 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val motion = HavenTheme.motion
-    NavHost(
-        navController = navController,
-        startDestination = routeOf(first),
-        modifier = modifier,
-        enterTransition = { fadeIn(spec(motion)) },
-        exitTransition = { fadeOut(spec(motion)) },
-        popEnterTransition = { fadeIn(spec(motion)) },
-        popExitTransition = { fadeOut(spec(motion)) },
-    ) {
-        composable(Routes.ONBOARDING) {
-            OnboardingScreen(
-                viewModel = viewModel { OnboardingViewModel(container.accountRepository) },
-                onDone = { scope.launch { navController.replaceAll(routeOf(root.current())) } },
-            )
+    SharedTransitionLayout(modifier) {
+        val shared = this
+        NavHost(
+            navController = navController,
+            startDestination = routeOf(first),
+            enterTransition = { fadeIn(spec(motion)) },
+            exitTransition = { fadeOut(spec(motion)) },
+            popEnterTransition = { fadeIn(spec(motion)) },
+            popExitTransition = { fadeOut(spec(motion)) },
+        ) {
+            composable(Routes.ONBOARDING) {
+                OnboardingScreen(
+                    viewModel = viewModel { OnboardingViewModel(container.accountRepository) },
+                    onDone = { scope.launch { navController.replaceAll(routeOf(root.current())) } },
+                )
+            }
+            composable(Routes.UNLOCK) {
+                UnlockScreen(
+                    viewModel = viewModel {
+                        UnlockViewModel(
+                            container.vaultRepository,
+                            biometricAvailable = container.biometricGate.available(activity),
+                            hasBundle = container::hasBiometricUnlock,
+                            deleteBundle = container::forgetBiometricUnlock,
+                        )
+                    },
+                    activity = activity,
+                    container = container,
+                    onUnlocked = { navController.replaceAll(Routes.VAULT) },
+                )
+            }
+            vaultScreens(container, navController, shared, motion)
         }
-        composable(Routes.UNLOCK) {
-            UnlockScreen(
-                viewModel = viewModel {
-                    UnlockViewModel(
-                        container.vaultRepository,
-                        biometricAvailable = container.biometricGate.available(activity),
-                        hasBundle = container::hasBiometricUnlock,
-                        deleteBundle = container::forgetBiometricUnlock,
-                    )
-                },
-                activity = activity,
-                container = container,
-                onUnlocked = { navController.replaceAll(Routes.VAULT) },
-            )
-        }
-        composable(Routes.VAULT) { VaultPlaceholder(container) }
     }
 
     // A back stack restored from before a process kill must not outlive the
@@ -106,17 +113,55 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.spec(motion: Haven
     return if (sealed) motion.sealSpec() else motion.snapSpec()
 }
 
-/** Stands in for the vault list until it exists (Task 20); only offers Lock. */
+/** The vault list and an item; their titles share an element across the move. */
+private fun NavGraphBuilder.vaultScreens(
+    container: AppContainer,
+    navController: NavHostController,
+    shared: SharedTransitionScope,
+    motion: HavenMotion,
+) {
+    composable(Routes.VAULT) {
+        val visibility = this
+        VaultScreen(
+            viewModel = viewModel {
+                VaultViewModel(container.vaultRepository, container.accountRepository, container.events)
+            },
+            onOpen = { id -> navController.navigate(Routes.item(id)) },
+            onLock = container.vaultRepository::lock,
+            titleModifier = { id -> Modifier.sharedTitle(shared, id, visibility, motion) },
+        )
+    }
+    composable(Routes.ITEM, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
+        val id = requireNotNull(it.arguments?.getString(Routes.ITEM_ID))
+        val online by container.events.online.collectAsStateWithLifecycle()
+        ItemScreen(
+            viewModel = viewModel {
+                ItemViewModel(container.vaultRepository, container.settingsRepository, container.events, id)
+            },
+            clipboard = container.clipboard,
+            online = online,
+            onBack = { navController.popBackStack() },
+            onLock = container.vaultRepository::lock,
+            titleModifier = Modifier.sharedTitle(shared, id, this, motion),
+        )
+    }
+}
+
+/** The item's title moves from its list row to its screen; reduced motion cuts instead. */
 @Composable
-private fun VaultPlaceholder(container: AppContainer) {
-    val online by container.events.online.collectAsStateWithLifecycle()
-    Scaffold(
-        topBar = {
-            HavenTopBar(
-                title = stringResource(R.string.app_name),
-                online = online,
-                onLock = container.vaultRepository::lock,
-            )
-        },
-    ) { padding -> Surface(Modifier.padding(padding).fillMaxSize()) {} }
+private fun Modifier.sharedTitle(
+    shared: SharedTransitionScope,
+    id: String,
+    visibility: AnimatedVisibilityScope,
+    motion: HavenMotion,
+): Modifier = if (motion.reduced) {
+    this
+} else {
+    with(shared) {
+        this@sharedTitle.sharedBounds(
+            rememberSharedContentState(key = "title-$id"),
+            visibility,
+            resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(),
+        )
+    }
 }

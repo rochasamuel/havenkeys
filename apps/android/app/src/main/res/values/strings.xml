@@ -39,6 +39,25 @@
     <string name="vault_lock_now">Lock now</string>
     <string name="vault_offline">Offline, read-only</string>
     <string name="item_passkey">Passkey</string>
+    <string name="vault_title">Vault</string>
+    <string name="vault_search">Search vault</string>
+    <string name="vault_search_hint">Search looks at titles, usernames and websites.</string>
+    <string name="vault_filter_all">All items</string>
+    <string name="vault_filter_logins">Logins</string>
+    <string name="vault_filter_notes">Secure notes</string>
+    <string name="vault_filter_cards">Cards</string>
+    <string name="vault_filter_identities">Identity</string>
+    <string name="vault_filter_passkeys">Passkeys</string>
+    <string name="vault_offline_banner">Offline — the vault is read-only until it reconnects.</string>
+    <string name="vault_empty">Your vault is empty</string>
+    <string name="vault_empty_hint">New items you add appear here.</string>
+    <string name="vault_no_matches">No matches</string>
+    <string name="item_back">Back</string>
+    <string name="item_code_failed">Could not generate a code.</string>
+    <plurals name="item_seconds_remaining">
+        <item quantity="one">%d second remaining</item>
+        <item quantity="other">%d seconds remaining</item>
+    </plurals>
 
     <!-- Field actions; %1$s is the field's label, never its value -->
     <string name="copy">Copy %1$s</string>

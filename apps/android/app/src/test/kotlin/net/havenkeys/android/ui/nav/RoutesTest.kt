@@ -29,4 +29,10 @@ class RoutesTest {
         assertNull(routeToForce(Routes.ITEM, Start.VAULT))
         assertNull(routeToForce(Routes.VAULT, Start.VAULT))
     }
+
+    @Test
+    fun anItemRouteCarriesOnlyTheId() {
+        assertEquals("item/{id}", Routes.ITEM)
+        assertEquals("item/0b6f6c1e-5d1a-4a8e-9a43-2f0f3c1b7d10", Routes.item("0b6f6c1e-5d1a-4a8e-9a43-2f0f3c1b7d10"))
+    }
 }

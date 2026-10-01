@@ -33,6 +33,26 @@
     <string name="vault_lock_now">Bloquear agora</string>
     <string name="vault_offline">Offline, somente leitura</string>
     <string name="item_passkey">Chave de acesso</string>
+    <string name="vault_title">Cofre</string>
+    <string name="vault_search">Buscar no cofre</string>
+    <string name="vault_search_hint">A busca considera títulos, usuários e sites.</string>
+    <string name="vault_filter_all">Todos os itens</string>
+    <string name="vault_filter_logins">Logins</string>
+    <string name="vault_filter_notes">Notas seguras</string>
+    <string name="vault_filter_cards">Cartões</string>
+    <string name="vault_filter_identities">Identidade</string>
+    <string name="vault_filter_passkeys">Chaves de acesso</string>
+    <string name="vault_offline_banner">Offline — o cofre fica somente leitura até reconectar.</string>
+    <string name="vault_empty">Seu cofre está vazio</string>
+    <string name="vault_empty_hint">Os novos itens que você adicionar aparecem aqui.</string>
+    <string name="vault_no_matches">Nenhum resultado</string>
+    <string name="item_back">Voltar</string>
+    <string name="item_code_failed">Não foi possível gerar um código.</string>
+    <plurals name="item_seconds_remaining">
+        <item quantity="one">%d segundo restante</item>
+        <item quantity="many">%d segundos restantes</item>
+        <item quantity="other">%d segundos restantes</item>
+    </plurals>
 
     <string name="copy">Copiar %1$s</string>
     <string name="copied">Copiado: %1$s. A área de transferência é limpa em %2$d s.</string>

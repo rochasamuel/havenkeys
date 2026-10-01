@@ -30,12 +30,22 @@ import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 
-/** One vault item in a list: what it is, its title and its non-secret subtitle. */
+/**
+ * One vault item in a list: what it is, its title and its non-secret
+ * subtitle. [titleModifier] lets the title travel to the item's screen.
+ */
 @Composable
-fun ItemRow(summary: ItemSummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ItemRow(
+    summary: ItemSummary,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    titleModifier: Modifier = Modifier,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     ListItem(
-        headlineContent = { Text(summary.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        headlineContent = {
+            Text(summary.title, titleModifier, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        },
         supportingContent = (summary.subtitle ?: summary.website)?.let { line ->
             { Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         },

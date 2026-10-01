@@ -5,11 +5,14 @@ object Routes {
     const val ONBOARDING = "onboarding"
     const val UNLOCK = "unlock"
     const val VAULT = "vault"
-    const val ITEM = "item/{id}"
+    const val ITEM_ID = "id"
+    const val ITEM = "item/{$ITEM_ID}"
     const val GENERATOR = "generator"
     const val SETTINGS = "settings"
     const val DEVICES = "devices"
     const val AUTOFILL_SETUP = "autofill-setup"
+
+    fun item(id: String) = "item/$id"
 }
 
 internal fun routeOf(start: Start): String = when (start) {

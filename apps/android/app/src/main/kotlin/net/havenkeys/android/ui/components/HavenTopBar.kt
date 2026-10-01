@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,9 +29,22 @@ import net.havenkeys.android.ui.theme.HavenTheme
 /** The vault's top bar: where you are, whether writes can reach the server, and Lock. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HavenTopBar(title: String, online: Boolean, onLock: () -> Unit, modifier: Modifier = Modifier) {
+fun HavenTopBar(
+    title: String,
+    online: Boolean,
+    onLock: () -> Unit,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.item_back))
+                }
+            }
+        },
         actions = {
             if (!online) OfflineBadge()
             IconButton(onClick = onLock) {
@@ -42,6 +56,7 @@ fun HavenTopBar(title: String, online: Boolean, onLock: () -> Unit, modifier: Mo
             scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             titleContentColor = HavenTheme.colors.textStrong,
             actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
         modifier = modifier,
     )

@@ -4,6 +4,7 @@ import java.io.IOException
 import java.security.GeneralSecurityException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import net.havenkeys.android.clipboard.SensitiveClipboard
 import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.AutofillRepository
 import net.havenkeys.android.data.RustAccountRepository
@@ -31,6 +32,7 @@ class AppContainer(app: HavenApp, cipher: KeystoreCipher) {
     val autofillRepository: AutofillRepository = RustAutofillRepository(vault)
     val biometricKeys = BiometricKeys(app)
     val biometricGate = BiometricGate()
+    val clipboard = SensitiveClipboard(app, app.appScope)
 
     /** Deletes the biometric key and bundle; a Keystore that does not answer is not an error here. */
     fun forgetBiometricUnlock() = keystoreDelete { biometricKeys.delete() }

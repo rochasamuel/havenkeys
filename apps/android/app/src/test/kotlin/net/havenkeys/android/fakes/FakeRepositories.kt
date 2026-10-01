@@ -93,7 +93,10 @@ class FakeVaultRepository : VaultRepository {
         return revealed
     }
 
-    override suspend fun totp(id: String) = totpNow
+    override suspend fun totp(id: String): Outcome<TotpNow> {
+        calls += "totp"
+        return totpNow
+    }
 
     override suspend fun generate(options: GeneratorOptions): Outcome<Generated> =
         Outcome.Ok(Generated("x".repeat(options.length.toInt()), 100.0))
