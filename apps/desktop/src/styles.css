@@ -111,6 +111,13 @@ button {
   cursor: default;
 }
 
+/* WebView2 (Windows) adds its own reveal and clear buttons to inputs; the
+   app has its own eye, so a password field showed two. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 :focus-visible {
   outline: none;
   box-shadow: var(--focus);
