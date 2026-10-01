@@ -16,8 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import net.havenkeys.android.data.NativeTls
-import uniffi.havenkeys_mobile.CipherException
-import uniffi.havenkeys_mobile.KeystoreCipher
+import net.havenkeys.android.security.SecretKeyCipher
 
 class HavenApp : Application() {
     lateinit var container: AppContainer
@@ -29,7 +28,7 @@ class HavenApp : Application() {
     override fun onCreate() {
         super.onCreate()
         NativeTls.init(this)
-        container = AppContainer(this, NoKeystoreCipher())
+        container = AppContainer(this, SecretKeyCipher())
         registerReceiver(
             object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
@@ -58,11 +57,4 @@ class HavenApp : Application() {
     private companion object {
         const val SYNC_CHECK_MS = 30_000L
     }
-}
-
-/** Refuses to seal or open anything until the Keystore-backed cipher replaces it. */
-private class NoKeystoreCipher : KeystoreCipher {
-    override fun seal(plaintext: ByteArray): ByteArray = throw CipherException.Failed()
-
-    override fun open(sealed: ByteArray): ByteArray = throw CipherException.Failed()
 }
