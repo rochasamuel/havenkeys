@@ -293,8 +293,12 @@ impl LoginSections {
 
 fn value_bytes(value: &FieldValueInput) -> usize {
     match value {
+        // The vault stores the normalised URL, which can be longer than what
+        // was read (a trailing `/`, a scheme), so count whichever is more.
+        FieldValueInput::Url(v) => normalize_url(v.expose())
+            .map_or(0, |n| n.len())
+            .max(v.expose().len()),
         FieldValueInput::Text(v)
-        | FieldValueInput::Url(v)
         | FieldValueInput::Email(v)
         | FieldValueInput::Phone(v)
         | FieldValueInput::Date(v) => v.expose().len(),
