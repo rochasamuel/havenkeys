@@ -49,9 +49,10 @@ val rustlsPlatformVerifierVersion: String = providers
     .fileContents(rootProject.layout.projectDirectory.file("../../Cargo.lock"))
     .asText
     .map { lock ->
-        Regex("""name = "rustls-platform-verifier-android"\s+version = "([^"]+)"""")
-            .find(lock)?.groupValues?.get(1)
-            ?: error("rustls-platform-verifier-android not found in Cargo.lock")
+        val versions = Regex("""name = "rustls-platform-verifier-android"\s+version = "([^"]+)"""")
+            .findAll(lock).map { it.groupValues[1] }.toList()
+        versions.singleOrNull()
+            ?: error("expected one rustls-platform-verifier-android in Cargo.lock, found ${versions.size}")
     }
     .get()
 
