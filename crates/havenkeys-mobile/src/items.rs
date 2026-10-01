@@ -347,6 +347,9 @@ impl MobileVault {
 mod tests {
     use super::*;
     use crate::vault::tests::unlocked;
+    use havenkeys_core::card::CardInput;
+    use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
+    use havenkeys_core::identity::IdentityFields;
     use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
     use havenkeys_core::SecretString;
 
@@ -465,5 +468,191 @@ mod tests {
                 avoid_ambiguous: false
             })
             .is_err());
+    }
+
+    fn blank(item_type: ItemType, title: &str) -> ItemInput {
+        ItemInput {
+            item_type,
+            title: title.into(),
+            username: None,
+            urls: vec![],
+            password: SecretUpdate::Keep,
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: None,
+            identity: None,
+            card: None,
+            sections: None,
+        }
+    }
+
+    fn create(v: &MobileVault, input: ItemInput) -> String {
+        let mut vault = v.client.vault().unwrap();
+        let staged = vault.stage_create(input, 1).unwrap();
+        let id = staged.item_id;
+        vault.commit_write(staged, 1).unwrap();
+        id.to_string()
+    }
+
+    fn custom_key(view: &ItemView, n: usize) -> String {
+        view.fields
+            .iter()
+            .filter(|f| f.key.starts_with("custom."))
+            .nth(n)
+            .unwrap()
+            .key
+            .clone()
+    }
+
+    #[test]
+    fn a_custom_otp_field_reveals_its_code_never_its_secret() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let field = |label: &str, value| FieldInput {
+            id: None,
+            label: SecretString::from(label),
+            value,
+        };
+        let mut input = blank(ItemType::Login, "Bank");
+        input.sections = Some(vec![SectionInput {
+            id: None,
+            title: None,
+            fields: vec![
+                field(
+                    "PIN",
+                    FieldValueInput::Password(SecretUpdate::Set(SecretString::from("4821pin"))),
+                ),
+                field(
+                    "2FA",
+                    FieldValueInput::Otp(SecretUpdate::Set(SecretString::from("JBSWY3DPEHPK3PXP"))),
+                ),
+            ],
+        }]);
+        let id = create(&v, input);
+        let view = v.item_view(id.clone()).unwrap();
+        let custom: Vec<_> = view
+            .fields
+            .iter()
+            .filter(|f| f.key.starts_with("custom."))
+            .collect();
+        assert_eq!(custom.len(), 2);
+        assert!(custom
+            .iter()
+            .all(|f| matches!(f.kind, FieldKind::Secret) && f.value.is_none()));
+        assert_eq!(
+            v.reveal(id.clone(), custom_key(&view, 0)).unwrap(),
+            "4821pin"
+        );
+        let code = v.reveal(id.clone(), custom_key(&view, 1)).unwrap();
+        assert_eq!(code.len(), 6);
+        assert!(code.chars().all(|c| c.is_ascii_digit()));
+        assert_ne!(code, "JBSWY3DPEHPK3PXP");
+        assert!(v
+            .reveal(id, format!("custom.{}", uuid::Uuid::new_v4()))
+            .is_err());
+    }
+
+    #[test]
+    fn notes_and_secure_note_content_reveal() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let mut login = blank(ItemType::Login, "Site");
+        login.notes = SecretUpdate::Set(SecretString::from("login notes"));
+        let login_id = create(&v, login);
+        assert_eq!(
+            v.reveal(login_id.clone(), "notes".into()).unwrap(),
+            "login notes"
+        );
+        assert!(v.reveal(login_id, "content".into()).is_err());
+        let mut note = blank(ItemType::SecureNote, "Memo");
+        note.content = SecretUpdate::Set(SecretString::from("the body"));
+        let note_id = create(&v, note);
+        assert_eq!(
+            v.reveal(note_id.clone(), "content".into()).unwrap(),
+            "the body"
+        );
+        let view = v.item_view(note_id).unwrap();
+        assert!(view.fields.iter().all(|f| f.value.is_none()));
+    }
+
+    #[test]
+    fn card_and_identity_fields_reveal_one_value_each() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let mut card = blank(ItemType::Card, "Visa");
+        card.card = Some(CardInput {
+            cardholder_name: Some(SecretString::from("ANA SOUZA")),
+            number: SecretUpdate::Set(SecretString::from("4111111111111111")),
+            verification_number: SecretUpdate::Set(SecretString::from("123")),
+            ..Default::default()
+        });
+        let card_id = create(&v, card);
+        assert_eq!(
+            v.reveal(card_id.clone(), "card.number".into()).unwrap(),
+            "4111111111111111"
+        );
+        assert_eq!(
+            v.reveal(card_id.clone(), "card.code".into()).unwrap(),
+            "123"
+        );
+        assert_eq!(
+            v.reveal(card_id.clone(), "card.holder".into()).unwrap(),
+            "ANA SOUZA"
+        );
+        assert!(v.reveal(card_id.clone(), "password".into()).is_err());
+        let view = v.item_view(card_id).unwrap();
+        assert!(view.fields.iter().all(|f| f.value.is_none()));
+
+        // The one identity is created by the core under a derived id.
+        let identity_id = {
+            let mut vault = v.client.vault().unwrap();
+            let staged = vault
+                .stage_identity_if_missing("ana@example.com", 1)
+                .unwrap()
+                .unwrap();
+            let id = staged.item_id;
+            vault.commit_write(staged, 1).unwrap();
+            let mut update = blank(ItemType::Identity, "");
+            update.identity = Some(IdentityFields {
+                first_name: Some(SecretString::from("Ana")),
+                passport: Some(SecretString::from("AB123456")),
+                ..Default::default()
+            });
+            let staged = vault.stage_update(&id, update, 2).unwrap();
+            vault.commit_write(staged, 2).unwrap();
+            id.to_string()
+        };
+        assert_eq!(
+            v.reveal(identity_id.clone(), "identity.first_name".into())
+                .unwrap(),
+            "Ana"
+        );
+        assert_eq!(
+            v.reveal(identity_id.clone(), "identity.passport".into())
+                .unwrap(),
+            "AB123456"
+        );
+        assert!(v
+            .reveal(identity_id.clone(), "identity.bogus".into())
+            .is_err());
+        assert!(v
+            .reveal(identity_id.clone(), "identity.cpf".into())
+            .is_err());
+        let view = v.item_view(identity_id).unwrap();
+        let passport = view
+            .fields
+            .iter()
+            .find(|f| f.key == "identity.passport")
+            .unwrap();
+        assert!(matches!(passport.kind, FieldKind::Secret));
+        let name = view
+            .fields
+            .iter()
+            .find(|f| f.key == "identity.first_name")
+            .unwrap();
+        assert!(matches!(name.kind, FieldKind::Text));
+        assert!(view.fields.iter().all(|f| f.value.is_none()));
     }
 }
