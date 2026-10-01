@@ -13,6 +13,7 @@ pub mod device;
 mod error;
 mod events;
 pub mod key_store;
+mod removal;
 mod sync;
 
 pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};

@@ -29,8 +29,7 @@ impl HavenClient {
     /// Map a failure, and drop the session when the server says it is gone,
     /// so the device falls back to read-only instead of retrying with a dead
     /// token. A refused session is announced as signed out, not just offline.
-    // pub until Task 6
-    pub fn failed(&self, err: SyncError) -> ClientError {
+    pub(crate) fn failed(&self, err: SyncError) -> ClientError {
         if matches!(err, SyncError::Unauthorized | SyncError::Unavailable) {
             let dropped = self.go_offline();
             if dropped && err == SyncError::Unauthorized {

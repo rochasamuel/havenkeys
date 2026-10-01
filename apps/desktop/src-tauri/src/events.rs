@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// the first-run screen. Carries `Removed`.
 pub const REMOVED_EVENT: &str = "vault://removed";
 
-pub const KEYCHAIN_NOT_CLEARED: &str = "This computer was removed, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry \u{201c}app.havenkeys\u{201d} yourself.";
+const KEYCHAIN_NOT_CLEARED: &str = "This computer was removed, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry \u{201c}app.havenkeys\u{201d} yourself.";
 
 #[derive(Clone, Serialize)]
 struct LockedPayload {
@@ -22,9 +22,9 @@ struct LockedPayload {
 /// The `vault://removed` payload.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Removed {
+struct Removed {
     /// Set when the Secret Key may still be in the system keychain.
-    pub keychain_warning: Option<&'static str>,
+    keychain_warning: Option<&'static str>,
 }
 
 pub struct DesktopEvents {

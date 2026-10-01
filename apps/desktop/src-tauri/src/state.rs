@@ -15,8 +15,7 @@ use havenkeys_core::lock::LockManager;
 use havenkeys_core::model::ItemInput;
 use havenkeys_core::vault::VaultService;
 use havenkeys_protocol::Event;
-use havenkeys_sync_client::Session;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -40,17 +39,10 @@ pub struct AppState {
     /// The last QR scan's codes, waiting to be saved (scan_slot.rs).
     totp_scan: Mutex<ScanSlot>,
     origin: Instant,
-    /// The app's data folder: where `vault.sqlite3` and `device.json` live.
-    data_dir: PathBuf,
 }
 
 impl AppState {
-    pub fn new(
-        client: Arc<HavenClient>,
-        vault: Arc<Mutex<VaultService>>,
-        bridge: Bridge,
-        data_dir: PathBuf,
-    ) -> Self {
+    pub fn new(client: Arc<HavenClient>, vault: Arc<Mutex<VaultService>>, bridge: Bridge) -> Self {
         Self {
             client,
             vault,
@@ -60,13 +52,7 @@ impl AppState {
             last_import: Mutex::new(None),
             totp_scan: Mutex::new(ScanSlot::default()),
             origin: Instant::now(),
-            data_dir,
         }
-    }
-
-    /// The app's data folder: where `vault.sqlite3` and `device.json` live.
-    pub fn data_dir(&self) -> &Path {
-        &self.data_dir
     }
 
     /// Hold a scan's codes. The vault guard is held throughout so this is
@@ -104,14 +90,6 @@ impl AppState {
 
     pub fn is_online(&self) -> bool {
         self.client.is_online()
-    }
-
-    pub fn session(&self) -> CmdResult<Session> {
-        self.client.session()
-    }
-
-    pub fn device_id(&self) -> CmdResult<uuid::Uuid> {
-        self.client.device_id()
     }
 
     pub fn require_unlocked(&self) -> CmdResult<()> {

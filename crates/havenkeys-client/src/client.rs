@@ -99,8 +99,7 @@ impl HavenClient {
         }
     }
 
-    // pub until Task 6
-    pub fn set_online(&self, session: Session) {
+    pub(crate) fn set_online(&self, session: Session) {
         if let Ok(mut c) = self.connectivity.lock() {
             *c = Connectivity::Online(session);
         }
@@ -157,8 +156,7 @@ impl HavenClient {
         }
     }
 
-    // pub until Task 6
-    pub fn mark_sync_attempt(&self) {
+    pub(crate) fn mark_sync_attempt(&self) {
         if let Ok(mut last) = self.last_sync_attempt.lock() {
             *last = Some(self.origin.elapsed());
         }

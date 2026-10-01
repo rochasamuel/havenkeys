@@ -222,7 +222,7 @@ pub fn run() {
                 },
             );
             let bridge = browser_bridge(app.handle(), vault.clone());
-            app.manage(AppState::new(client, vault, bridge.clone(), dir.clone()));
+            app.manage(AppState::new(client, vault, bridge.clone()));
             migrate_secret_key_in_background(app.handle().clone());
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.

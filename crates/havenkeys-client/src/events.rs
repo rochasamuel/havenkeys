@@ -1,8 +1,11 @@
 use havenkeys_core::sync::SyncReport;
 
-/// What the shell is told. Implementations must return quickly and must not
-/// take the vault: `unlocked` and `locked` run while it is held, so that a
-/// concurrent lock can never be overtaken by an unlock announcement.
+/// What the shell is told. Implementations must return quickly.
+///
+/// `unlocked` is called while the vault guard is held, so that a concurrent
+/// lock can never be overtaken by an unlock announcement: it must not block
+/// and must not touch the vault. `locked` is called just after the guard is
+/// released, so an implementation may not assume the vault is still locked.
 pub trait ClientEvents: Send + Sync {
     /// The vault opened; start the auto-lock clock.
     fn unlocked(&self, auto_lock_minutes: u32);
