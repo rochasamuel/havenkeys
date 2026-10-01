@@ -134,12 +134,12 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
             "open" => show_main_window(app),
             "lock" => {
                 if let Some(state) = app.try_state::<AppState>() {
-                    state.lock(app, "user");
+                    state.lock("user");
                 }
             }
             "quit" => {
                 if let Some(state) = app.try_state::<AppState>() {
-                    state.lock(app, "exit");
+                    state.lock("exit");
                 }
                 app.exit(0);
             }

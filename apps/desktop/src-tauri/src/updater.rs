@@ -201,7 +201,7 @@ async fn install(app: &AppHandle) -> CmdResult<()> {
         return Err(fail_install(app));
     };
 
-    app.state::<AppState>().lock(app, "update");
+    app.state::<AppState>().lock("update");
     if let Ok(mut m) = updates.machine.lock() {
         m.installing();
     }

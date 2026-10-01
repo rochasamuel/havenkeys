@@ -77,10 +77,8 @@ pub(crate) fn failed(app: &AppHandle, err: SyncError) -> CmdError {
 /// Drop the session. Returns whether one was held.
 pub fn go_offline(app: &AppHandle) -> bool {
     if let Some(state) = app.try_state::<AppState>() {
-        if state.go_offline() {
-            let _ = app.emit(CONNECTIVITY_EVENT, false);
-            return true;
-        }
+        // The client announces the change itself.
+        return state.client().go_offline();
     }
     false
 }
@@ -97,11 +95,7 @@ pub fn client(state: &AppState) -> CmdResult<Client> {
 }
 
 pub fn client_for(state: &AppState, url: &str) -> CmdResult<Client> {
-    state.sync_client(url, || {
-        HttpTransport::new(url)
-            .map(|t| Arc::new(SyncClient::new(t)))
-            .map_err(CmdError::from)
-    })
+    state.client().server_for(url)
 }
 
 /// Sign in to the account with a freshly derived auth key, then catch up.
@@ -133,7 +127,7 @@ pub async fn connect(app: &AppHandle, auth_key: AuthKey) -> CmdResult<()> {
         })?;
     drop(auth_key);
 
-    app.state::<AppState>().set_online(session);
+    app.state::<AppState>().client().set_online(session);
     let _ = app.emit(CONNECTIVITY_EVENT, true);
     sync_now(app).await?;
     ensure_identity(app).await;
@@ -176,7 +170,7 @@ pub async fn sync_now(app: &AppHandle) -> CmdResult<SyncReport> {
         let state = app.state::<AppState>();
         // Recorded up front, so a failing server is retried on the same
         // spacing rather than on every tick.
-        state.mark_sync_attempt();
+        state.client().mark_sync_attempt();
         (state.session()?, client(&state)?)
     };
     let mut report = SyncReport::default();
@@ -255,7 +249,7 @@ pub async fn sync_now(app: &AppHandle) -> CmdResult<SyncReport> {
         report.deleted += page.deleted;
     }
 
-    app.state::<AppState>().mark_sync_attempt();
+    app.state::<AppState>().client().mark_sync_attempt();
     let _ = app.emit(SYNCED_EVENT, report);
     Ok(report)
 }

@@ -69,11 +69,7 @@ fn device_status_blocking(state: &AppState) -> CmdResult<DeviceStatus> {
     let uses_secret_key = key_scheme.is_some_and(KeyScheme::uses_secret_key);
     let (needs_secret_key, secret_key_storage) = match account {
         Some(a) => {
-            let status = state
-                .device
-                .lock()
-                .map_err(|_| CmdError::internal())?
-                .key_status(a.account_id);
+            let status = state.client().device()?.key_status(a.account_id);
             (uses_secret_key && status.missing, status.storage)
         }
         None => (false, Storage::None),
@@ -160,7 +156,7 @@ pub async fn activate_account(
     // otherwise be gone with it, leaving the vault unopenable forever. A key
     // stored for an activation that never completed is harmless.
     {
-        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+        let mut device = state.client().device()?;
         device
             .set_secret_key(account.id, &made.secret_key)
             .map_err(|_| CmdError::file())?;
@@ -233,9 +229,8 @@ pub async fn sign_in(
     let secret_key = match typed {
         Some(k) => k,
         None => state
-            .device
-            .lock()
-            .map_err(|_| CmdError::internal())?
+            .client()
+            .device()?
             .secret_key(account.id)
             .ok_or(havenkeys_core::Error::SecretKeyRequired)?,
     };
@@ -282,13 +277,13 @@ pub async fn sign_in(
     let record = new_account_record(&account, server_url, header_revision);
     let minutes = create_vault(&state, prepared, &record)?;
     {
-        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+        let mut device = state.client().device()?;
         device
             .set_secret_key(account.id, &secret_key)
             .map_err(|_| CmdError::file())?;
     }
     state.arm_auto_lock(minutes);
-    state.set_online(session);
+    state.client().set_online(session);
     state.notify_unlocked();
     let status = state.vault()?.status()?;
     let _ = app.emit(sync::CONNECTIVITY_EVENT, true);
@@ -381,7 +376,7 @@ pub async fn sign_out(app: AppHandle) -> CmdResult<()> {
     if let (Ok(session), Ok(client)) = (state.session(), sync::client(&state)) {
         let _ = client.logout(&session).await;
     }
-    state.lock(&app, "user");
+    state.lock("user");
     let _ = app.emit(sync::CONNECTIVITY_EVENT, false);
     Ok(())
 }
@@ -434,7 +429,7 @@ fn account_value(state: &AppState, field: AccountField) -> CmdResult<(SecretStri
         let v = state.vault()?;
         (unlocked_account(&v)?, v.settings()?.clipboard_clear_seconds)
     };
-    let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+    let mut device = state.client().device()?;
     Ok((account_field(&account, &mut device, field)?, seconds))
 }
 

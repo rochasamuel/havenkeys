@@ -7,24 +7,11 @@ use crate::state::{AppState, CmdError, CmdResult};
 use crate::sync;
 use havenkeys_core::account::NormalizedEmail;
 use havenkeys_core::store::Store;
-use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// This vault reopened empty after "remove this device": the UI returns to
-/// the first-run screen. Carries `Removed`.
-pub const REMOVED_EVENT: &str = "vault://removed";
-
-/// The `vault://removed` payload.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Removed {
-    /// Set when the Secret Key may still be in the system keychain.
-    keychain_warning: Option<&'static str>,
-}
-
-const KEYCHAIN_NOT_CLEARED: &str = "This computer was removed, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry \u{201c}app.havenkeys\u{201d} yourself.";
+use crate::events::{Removed, KEYCHAIN_NOT_CLEARED, REMOVED_EVENT};
 
 /// Normalized comparison, so case and surrounding spaces do not matter.
 fn confirms(typed: &str, email: &str) -> bool {
@@ -145,8 +132,8 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
         (Ok(session), Ok(client), Ok(device_id)) => Some((session, client, device_id)),
         _ => None,
     };
-    state.lock(&app, "user");
-    state.forget_sync_client();
+    state.lock("user");
+    state.client().forget_server();
     let _ = app.emit(sync::CONNECTIVITY_EVENT, false);
 
     let path = state.data_dir().join(crate::VAULT_FILE);
@@ -194,11 +181,7 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
     // wait on D-Bus or a keyring prompt.
     let account_id = account.account_id;
     let forgot = off_main_thread(app.clone(), move |state| {
-        let forgotten = state
-            .device
-            .lock()
-            .map_err(|_| CmdError::internal())?
-            .forget(account_id);
+        let forgotten = state.client().device()?.forget(account_id);
         Ok((
             forgotten.keychain_cleared,
             forgotten.saved.map_err(|_| CmdError::file()),

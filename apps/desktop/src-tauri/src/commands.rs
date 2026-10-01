@@ -53,7 +53,7 @@ pub async fn unlock_vault(
     let state = app.state::<AppState>();
     let account = vault_account(&state)?;
     let (stored, stored_text, definite) = {
-        let mut device = state.device.lock().map_err(|_| CmdError::internal())?;
+        let mut device = state.client().device()?;
         let (text, definite) = device.secret_key_lookup(account.id);
         let key = text
             .as_ref()
@@ -104,7 +104,7 @@ pub async fn unlock_vault(
         Ok(v) => v,
         Err(_) => {
             // The KDF task died; make sure we do not stay in UNLOCKING.
-            state.lock(&app, "error");
+            state.lock("error");
             return Err(CmdError::internal());
         }
     };
@@ -184,7 +184,7 @@ fn vault_account(state: &AppState) -> CmdResult<AccountRef> {
 fn remember_typed_secret_key(state: &AppState, account: Uuid, key_text: Option<SecretString>) {
     if let Some(text) = key_text {
         if let Ok(k) = SecretKey::parse(text.expose()) {
-            if let Ok(mut d) = state.device.lock() {
+            if let Ok(mut d) = state.client().device() {
                 let _ = d.set_secret_key(account, &k);
             }
         }
@@ -268,7 +268,7 @@ async fn unlock_from_server(
         // the vault lock first) always drops it afterwards.
         state.arm_auto_lock(minutes);
         state.notify_unlocked();
-        state.set_online(session);
+        state.client().set_online(session);
         status
     };
     let _ = app.emit(sync::CONNECTIVITY_EVENT, true);
@@ -303,8 +303,8 @@ pub async fn resync_vault(app: AppHandle) -> CmdResult<havenkeys_core::sync::Syn
 }
 
 #[tauri::command]
-pub fn lock_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    state.lock(&app, "user");
+pub fn lock_vault(state: State<'_, AppState>) -> CmdResult<()> {
+    state.lock("user");
     Ok(())
 }
 
@@ -331,9 +331,8 @@ pub async fn change_master_password(
     let kdf = KdfParams::generate()?;
     let account = vault_account(&state)?;
     let secret_key = state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
+        .client()
+        .device()?
         .secret_key(account.id)
         .ok_or(havenkeys_core::Error::SecretKeyRequired)?;
     // The account's address, for the re-check below: `account` moves into

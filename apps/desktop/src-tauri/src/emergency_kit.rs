@@ -44,9 +44,8 @@ fn emergency_kit(state: &AppState) -> CmdResult<EmergencyKit> {
         )
     };
     let secret_key = state
-        .device
-        .lock()
-        .map_err(|_| CmdError::internal())?
+        .client()
+        .device()?
         .secret_key_text(account.account_id)
         .ok_or(havenkeys_core::Error::NotFound)?;
     // v2 carries the account, the address and the server, because a new

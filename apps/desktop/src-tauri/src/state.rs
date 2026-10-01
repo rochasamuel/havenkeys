@@ -8,20 +8,17 @@ use crate::clipboard::ClipboardGuard;
 use crate::item_input::ItemInputWire;
 use crate::qr_scan::ScannedCode;
 use crate::scan_slot::{ScanSlot, ScannedTotp};
-use crate::sync::Client;
 use havenkeys_bridge::Bridge;
-use havenkeys_client::device::Device;
+use havenkeys_client::HavenClient;
 pub use havenkeys_client::{ClientError as CmdError, ClientResult as CmdResult};
 use havenkeys_core::lock::LockManager;
 use havenkeys_core::model::ItemInput;
 use havenkeys_core::vault::VaultService;
 use havenkeys_protocol::Event;
 use havenkeys_sync_client::Session;
-use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
 
 pub const LOCKED_EVENT: &str = "vault://locked";
 /// Items were added or changed from outside the UI (the browser extension).
@@ -29,19 +26,10 @@ pub const ITEMS_CHANGED_EVENT: &str = "vault://items-changed";
 /// The browser extension asked to edit this item (payload: its UUID).
 pub const OPEN_ITEM_EVENT: &str = "vault://open-item";
 
-/// Whether this device has a server session. Independent of the lock state:
-/// a locked vault is never online, and an unlocked one may be offline
-/// (spec 2026-09-20 §8.6).
-pub enum Connectivity {
-    Offline,
-    /// The token lives here and nowhere else — never on disk — and is
-    /// dropped (and zeroized) when the vault locks or the device goes
-    /// offline.
-    Online(Session),
-}
-
 pub struct AppState {
-    /// Shared with the browser bridge, which answers extension requests.
+    client: Arc<HavenClient>,
+    /// The same vault the client holds, for the auto-lock tick, which must
+    /// keep working on a poisoned mutex.
     vault: Arc<Mutex<VaultService>>,
     bridge: Bridge,
     lock_manager: Mutex<LockManager>,
@@ -51,55 +39,26 @@ pub struct AppState {
     pub last_import: Mutex<Option<PathBuf>>,
     /// The last QR scan's codes, waiting to be saved (scan_slot.rs).
     totp_scan: Mutex<ScanSlot>,
-    /// This computer's ID and Secret Key (`device.json`).
-    pub device: Mutex<Device>,
-    /// Whether this device currently has a server session.
-    connectivity: Mutex<Connectivity>,
-    /// The HTTP client for this vault's server, kept because building one
-    /// sets up a TLS stack. Keyed by URL so a re-pointed vault cannot keep
-    /// talking to the old server.
-    sync_client: Mutex<Option<(String, Client)>>,
-    /// When a pull was last attempted, so the periodic one keeps its spacing
-    /// whether or not the attempt worked. Real sync times live in the
-    /// account record.
-    last_sync_attempt: Mutex<Option<Duration>>,
-    /// Set when the vault file on this computer could not be opened. The app
-    /// still starts — it has to, or there is nowhere to show the reason —
-    /// and every command that touches the vault refuses with this.
-    storage_error: Option<CmdError>,
     origin: Instant,
     /// The app's data folder: where `vault.sqlite3` and `device.json` live.
     data_dir: PathBuf,
 }
 
-#[derive(Clone, Serialize)]
-struct LockedPayload {
-    reason: &'static str,
-}
-
 impl AppState {
-    /// `storage_error` is set when the vault file could not be opened: the
-    /// app then runs on an empty in-memory store so the window can open and
-    /// say so, and every command refuses before touching it.
     pub fn new(
+        client: Arc<HavenClient>,
         vault: Arc<Mutex<VaultService>>,
         bridge: Bridge,
-        device: Device,
-        storage_error: Option<CmdError>,
         data_dir: PathBuf,
     ) -> Self {
         Self {
+            client,
             vault,
             bridge,
             lock_manager: Mutex::new(LockManager::new(None)),
             clipboard: ClipboardGuard::default(),
             last_import: Mutex::new(None),
             totp_scan: Mutex::new(ScanSlot::default()),
-            device: Mutex::new(device),
-            connectivity: Mutex::new(Connectivity::Offline),
-            sync_client: Mutex::new(None),
-            last_sync_attempt: Mutex::new(None),
-            storage_error,
             origin: Instant::now(),
             data_dir,
         }
@@ -135,109 +94,32 @@ impl AppState {
         slot.clear();
     }
 
-    /// Drop the cached HTTP client, so a stale one for an old server is
-    /// never reused after this device is removed from its account.
-    pub fn forget_sync_client(&self) {
-        if let Ok(mut cached) = self.sync_client.lock() {
-            *cached = None;
-        }
+    pub fn client(&self) -> &Arc<HavenClient> {
+        &self.client
     }
 
     pub fn vault(&self) -> CmdResult<MutexGuard<'_, VaultService>> {
-        // Checked here rather than in each command: this is the one door
-        // every one of them goes through.
-        if let Some(err) = &self.storage_error {
-            return Err(err.clone());
-        }
-        self.vault.lock().map_err(|_| CmdError::internal())
+        self.client.vault()
     }
 
-    /// Does this device currently have a server session?
     pub fn is_online(&self) -> bool {
-        matches!(
-            self.connectivity.lock().as_deref(),
-            Ok(Connectivity::Online(_))
-        )
+        self.client.is_online()
     }
 
-    /// The session for an authenticated request, or `Offline`.
     pub fn session(&self) -> CmdResult<Session> {
-        match self.connectivity.lock().as_deref() {
-            Ok(Connectivity::Online(session)) => Ok(session.clone()),
-            _ => Err(havenkeys_core::Error::Offline.into()),
-        }
-    }
-
-    pub fn set_online(&self, session: Session) {
-        if let Ok(mut c) = self.connectivity.lock() {
-            *c = Connectivity::Online(session);
-        }
-    }
-
-    /// Drop the session. Returns whether this changed anything, so the caller
-    /// only tells the UI when it did.
-    pub fn go_offline(&self) -> bool {
-        match self.connectivity.lock() {
-            Ok(mut c) => {
-                let was_online = matches!(*c, Connectivity::Online(_));
-                *c = Connectivity::Offline;
-                was_online
-            }
-            Err(_) => false,
-        }
+        self.client.session()
     }
 
     pub fn device_id(&self) -> CmdResult<uuid::Uuid> {
-        Ok(self.device.lock().map_err(|_| CmdError::internal())?.id)
+        self.client.device_id()
     }
 
-    /// The cached HTTP client for `url`, building one on first use.
-    pub fn sync_client(
-        &self,
-        url: &str,
-        build: impl FnOnce() -> CmdResult<Client>,
-    ) -> CmdResult<Client> {
-        let mut cached = self.sync_client.lock().map_err(|_| CmdError::internal())?;
-        if let Some((cached_url, client)) = cached.as_ref() {
-            if cached_url == url {
-                return Ok(client.clone());
-            }
-        }
-        let client = build()?;
-        *cached = Some((url.to_string(), client.clone()));
-        Ok(client)
-    }
-
-    pub fn mark_sync_attempt(&self) {
-        if let Ok(mut last) = self.last_sync_attempt.lock() {
-            *last = Some(self.mono());
-        }
-    }
-
-    /// Is a periodic pull due? Also true when none has been attempted yet.
-    pub fn sync_due(&self, interval: Duration) -> bool {
-        match self.last_sync_attempt.lock() {
-            Ok(last) => last.is_none_or(|at| self.mono().saturating_sub(at) >= interval),
-            Err(_) => false,
-        }
-    }
-
-    /// Refuse a command while the vault is locked.
     pub fn require_unlocked(&self) -> CmdResult<()> {
-        if self.vault()?.is_unlocked() {
-            Ok(())
-        } else {
-            Err(havenkeys_core::Error::Locked.into())
-        }
+        self.client.require_unlocked()
     }
 
-    /// Refuse a mutating command while offline, before it touches the vault.
     pub fn require_online(&self) -> CmdResult<()> {
-        if self.is_online() {
-            Ok(())
-        } else {
-            Err(havenkeys_core::Error::Offline.into())
-        }
+        self.client.require_online()
     }
 
     /// Monotonic time since start (does not advance during suspend on Linux/macOS).
@@ -252,7 +134,7 @@ impl AppState {
     }
 
     pub fn now_ms() -> i64 {
-        i64::try_from(Self::wall().as_millis()).unwrap_or(i64::MAX)
+        havenkeys_client::now_ms()
     }
 
     pub fn unix_seconds() -> u64 {
@@ -281,21 +163,14 @@ impl AppState {
         }
     }
 
-    /// Lock the vault, clear our clipboard contents and notify the UI.
-    pub fn lock(&self, app: &AppHandle, reason: &'static str) {
-        let was_open = match self.vault.lock() {
-            Ok(mut v) => v.lock(),
-            // A poisoned mutex means a panic mid-operation; make sure the
-            // session is still dropped.
-            Err(poisoned) => poisoned.into_inner().lock(),
-        };
+    pub fn notify_locked(&self) {
+        self.bridge.notify(Event::Locked {});
+    }
+
+    /// What locking clears on the desktop side. Called by `DesktopEvents`
+    /// on every lock, whether or not the vault was open.
+    pub fn clear_after_lock(&self) {
         self.clipboard.clear_if_owned(None);
-        // Locked means no session: the token is dropped (and zeroized) here,
-        // so a locked vault cannot reach the server at all (design §6).
-        self.go_offline();
-        if let Ok(mut last) = self.last_sync_attempt.lock() {
-            *last = None;
-        }
         // The path of the last imported `.1pux` is only there so the UI can
         // offer to delete it after an import. A locked vault has no import in
         // progress, so the offer — and the ability to act on it — goes away.
@@ -304,14 +179,14 @@ impl AppState {
         }
         // Scanned TOTP codes waiting to be saved are vault secrets too.
         self.clear_totp_scan();
-        if was_open {
-            self.bridge.notify(Event::Locked {});
-            let _ = app.emit(LOCKED_EVENT, LockedPayload { reason });
-        }
+    }
+
+    pub fn lock(&self, reason: &'static str) {
+        self.client.lock(reason);
     }
 
     /// Called periodically by the auto-lock thread.
-    pub fn auto_lock_tick(&self, app: &AppHandle) {
+    pub fn auto_lock_tick(&self) {
         let reason = {
             // Treat a poisoned mutex like a normal one: auto-lock must keep working.
             let vault = self.vault.lock().unwrap_or_else(|p| p.into_inner());
@@ -322,7 +197,7 @@ impl AppState {
             lm.tick(self.mono(), Self::wall())
         };
         if let Some(reason) = reason {
-            self.lock(app, reason.as_str());
+            self.lock(reason.as_str());
         }
     }
 }

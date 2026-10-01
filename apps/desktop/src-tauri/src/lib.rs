@@ -10,6 +10,7 @@ mod clipboard;
 mod commands;
 mod custom_field;
 mod emergency_kit;
+mod events;
 mod identity;
 mod import;
 mod item_input;
@@ -100,7 +101,7 @@ fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
         vault,
         move || {
             if let Some(state) = lock_handle.try_state::<AppState>() {
-                state.lock(&lock_handle, "extension");
+                state.lock("extension");
             }
         },
         // A login saved from the browser: the item list must refresh
@@ -141,7 +142,7 @@ fn migrate_secret_key_in_background(app: AppHandle) {
             // Vault before device; the vault guard ends here.
             let account = state.vault().ok().and_then(|v| v.account().ok().flatten());
             if let Some(account) = account {
-                if let Ok(mut device) = state.device.lock() {
+                if let Ok(mut device) = state.client().device() {
                     device.migrate(account.account_id);
                 }
             }
@@ -161,12 +162,12 @@ fn start_auto_lock(handle: AppHandle) -> std::io::Result<()> {
                 std::thread::sleep(AUTO_LOCK_TICK);
                 let state = handle.state::<AppState>();
                 if session.poll() {
-                    state.lock(&handle, "screen_lock");
+                    state.lock("screen_lock");
                 }
-                state.auto_lock_tick(&handle);
+                state.auto_lock_tick();
                 // Catch up with the server while unlocked. A locked
                 // vault has no session, so this simply does not run.
-                if state.is_online() && state.sync_due(PULL_INTERVAL) {
+                if state.is_online() && state.client().sync_due(PULL_INTERVAL) {
                     let pull_handle = handle.clone();
                     tauri::async_runtime::spawn(async move {
                         let _ = sync::sync_now(&pull_handle).await;
@@ -206,14 +207,21 @@ pub fn run() {
                 &dir,
                 Box::new(secret_store::OsKeyStore::install()),
             );
-            let bridge = browser_bridge(app.handle(), vault.clone());
-            app.manage(AppState::new(
-                vault,
-                bridge.clone(),
+            let events = Arc::new(events::DesktopEvents {
+                app: app.handle().clone(),
+            });
+            let client = havenkeys_client::HavenClient::new(
+                vault.clone(),
                 device,
                 storage_error,
-                dir.clone(),
-            ));
+                events,
+                havenkeys_client::ClientConfig {
+                    device_name: "Desktop",
+                    vault_path: path.clone(),
+                },
+            );
+            let bridge = browser_bridge(app.handle(), vault.clone());
+            app.manage(AppState::new(client, vault, bridge.clone(), dir.clone()));
             migrate_secret_key_in_background(app.handle().clone());
             // Failure (another instance running, unsafe socket directory)
             // disables browser integration but not the app.
@@ -250,7 +258,7 @@ pub fn run() {
             WindowEvent::Destroyed => {
                 let app = window.app_handle();
                 if let Some(state) = app.try_state::<AppState>() {
-                    state.lock(app, "exit");
+                    state.lock("exit");
                 }
             }
             _ => {}
@@ -320,7 +328,7 @@ pub fn run() {
     app.run(|handle, event| {
         if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
             if let Some(state) = handle.try_state::<AppState>() {
-                state.lock(handle, "exit");
+                state.lock("exit");
             }
         }
     });

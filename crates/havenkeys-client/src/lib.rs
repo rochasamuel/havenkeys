@@ -7,11 +7,15 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+mod client;
 pub mod device;
 mod error;
+mod events;
 pub mod key_store;
 
+pub use client::{ClientConfig, HavenClient, ServerClient};
 pub use error::{ClientError, ClientResult};
+pub use events::ClientEvents;
 
 /// Wall-clock time in Unix milliseconds.
 pub fn now_ms() -> i64 {
