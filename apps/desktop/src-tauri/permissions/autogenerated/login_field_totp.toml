@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-login-field-totp"
+description = "Enables the login_field_totp command without any pre-configured scope."
+commands.allow = ["login_field_totp"]
+
+[[permission]]
+identifier = "deny-login-field-totp"
+description = "Denies the login_field_totp command without any pre-configured scope."
+commands.deny = ["login_field_totp"]

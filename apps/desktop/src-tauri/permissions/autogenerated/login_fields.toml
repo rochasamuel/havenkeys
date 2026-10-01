@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-login-fields"
+description = "Enables the login_fields command without any pre-configured scope."
+commands.allow = ["login_fields"]
+
+[[permission]]
+identifier = "deny-login-fields"
+description = "Denies the login_fields command without any pre-configured scope."
+commands.deny = ["login_fields"]
