@@ -101,8 +101,8 @@ vault is account-bound from the moment it exists.
 
 ## 4. Online, offline and read-only
 
-`AppState` tracks connectivity independently of the lock state
-(`apps/desktop/src-tauri/src/state.rs`):
+`HavenClient` tracks connectivity independently of the lock state
+(`crates/havenkeys-client/src/client.rs`):
 
 ```text
 Offline   no server session: reads work, every mutating command refuses
@@ -112,16 +112,17 @@ Online    a live server session: reads and writes
 A locked vault is never online. An unlocked one may still be offline — the
 two states are orthogonal, which is why this is a separate flag rather than
 a third lock state. Every mutating Tauri command checks
-`HavenClient::require_online` (`crates/havenkeys-client/src/client.rs`) before doing anything else and returns
+`HavenClient::require_online` before doing anything else and returns
 `Error::Offline` ("HavenKeys is offline — the vault is read-only until it
 reconnects.") when it fails. The desktop shows a persistent banner while
 unlocked and offline, and disables the controls that would otherwise fail
 (`apps/desktop/src/App.tsx`, `VaultScreen.tsx`).
 
-Because there is no sync client yet (§1), `Connectivity` has no path to
-`Online` in this build — it is always `Offline`. That is not a placeholder;
-it is the real, correct behaviour of a device with no server session. The
-device status the desktop reads (`device_status`) reports it as
+A device goes `Online` when it signs in to the server after an unlock,
+activation or sign-in (`HavenClient::connect`), and only if the vault is
+still unlocked once the login answers; a lock always drops the session.
+Until then — and whenever the server cannot be reached — it is `Offline`,
+and the device status the desktop reads (`device_status`) reports
 `online: false` so the UI can show the banner from the very first unlock.
 
 Losing connectivity mid-session is designed to drop to `Offline` without
