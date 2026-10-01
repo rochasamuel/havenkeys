@@ -2090,17 +2090,22 @@ domain is never trusted; a locked vault returns nothing; a stale, other-boot
 or tampered unlock bundle is refused. The largest open item is not a flaw
 but a gap: none of it has been exercised on Android (AN2).
 
+The final whole-branch review found two Medium issues, both fixed: reads
+reset the idle timer, so background refreshes kept the vault unlocked
+(AN7), and the master password fields were offered to third-party autofill
+services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
+
 | # | Severity | Component | Finding | Status |
 |---|---|---|---|---|
-| AN1 | Low | App (`AppContainer`, `HavenApp.appScope`) | App-wide event collectors have no exception handler: a Keystore `ProviderException` while deleting a key, or a `ClipboardManager` failure while clearing, ends the process | Open (deferred) |
+| AN1 | Low | App (`AppContainer`, `HavenApp.appScope`) | App-wide event collectors have no exception handler: a Keystore `ProviderException` while deleting a key, or a `ClipboardManager` failure while clearing, ends the process | **Fixed** (`4beb735`) |
 | AN2 | Info | Whole app | Nothing has run on a device or emulator: instrumented `KeystoreTest`, the QR scanner, BiometricPrompt, the navigation lock wipe, `FLAG_SECURE`, the clipboard flags, the `AutofillService` end to end, `getCallingPackage()` in the fill activities, package visibility | Open: manual checklist |
-| AN3 | Low | Autofill (gated rows) | With "Confirm before filling" on and the vault unlocked, the app being filled can fire its rows' IntentSenders without a tap and HavenKeys answers without showing anything | Accepted, documented (Rust returns only that caller's matched logins) |
+| AN3 | Low | Autofill (gated rows) | With "Confirm before filling" on and the vault unlocked, the app being filled can fire its rows' IntentSenders without a tap, and swap the item ID and mode they carry, and HavenKeys answers without showing anything | Accepted, documented (Rust returns only that caller's matched logins) |
 | AN4 | Info | CI | `.github/workflows/android.yml` has never run on GitHub | Open |
 | AN5 | Low | Network / Digital Asset Links | User-installed CAs are trusted; whoever holds one can intercept the server connection and forge `assetlinks.json`, so a malicious app named after a site can be offered that site's logins | Accepted, documented |
-| AN6 | Low | UI (binding prompt, unlock) | No protection against touches through another app's overlay (`filterTouchesWhenObscured` / `setHideOverlayWindows`); matters mainly on Android 9–11 | Open |
-| AN7 | Low | Item screen / mobile API | The live TOTP code is fetched once a second and `totp()` resets the idle timer, so auto-lock does not fire while a login with TOTP is open with the screen on | Open |
+| AN6 | Low | UI (binding prompt, unlock) | No protection against touches through another app's overlay (`filterTouchesWhenObscured` / `setHideOverlayWindows`); matters mainly on Android 9–11 | **Fixed** (`d11030a`) for the autofill activities and the binding prompt |
+| AN7 | Medium | Mobile API / auto-lock | Every read (`list_items`, `search`, `item_view`, `reveal`, `totp`) reset the idle timer, and the app calls them on its own (a sync's `items_changed` every 30 s while in the foreground, the TOTP countdown every second), so auto-lock never fired with the screen on | **Fixed** (`eee642f`) |
 | AN8 | Low | Settings → Devices | Revoking this phone from its own Devices list leaves its biometric bundle in place (Sign out deletes it) | Open |
-| AN9 | Low | Mobile API / auto-lock | Secret-returning calls check the lock state, not the auto-lock clock; after the process thaws, a fill can be answered before the overdue 5-second tick locks | Open |
+| AN9 | Low | Mobile API / auto-lock | Secret-returning calls check the lock state, not the auto-lock clock; after the process thaws, a fill can be answered before the overdue 5-second tick locks | **Fixed** (`eee642f`) |
 | AN10 | Info | Autofill (package visibility) | No `<queries>` and no `QUERY_ALL_PACKAGES`: if Android 11+ hides the app being filled, it gets no certificates and nothing is filled for it | Open: pending a device test (fails closed) |
 | AN11 | Info | Auto-lock | Rust's monotonic clock excludes deep sleep on Android, so the core's suspend detection probably locks the vault after any sleep longer than 30 s, even with auto-lock off | Open: to observe on a device (fails closed) |
 | AN12 | Info | App (`VaultEventsHub`) | Events go through a `SharedFlow` with `DROP_OLDEST`; a slow collector could miss `SignedOut`/`Removed` and keep Keystore keys | Accepted |
@@ -2110,10 +2115,16 @@ but a gap: none of it has been exercised on Android (AN2).
 | AN16 | Info | "Search HavenKeys…" offline | Offline, a confirmed "Use <login> in <package>?" fills any login once without storing a binding | Accepted (the confirmation is the authorization) |
 | AN17 | Info | Onboarding / unlock | The master password's minimum length (10) is checked by the UI only, on desktop and Android | Accepted |
 | AN18 | Info | Dependencies | `yoke-derive` 0.8.3 in `Cargo.lock` has been yanked (already so on `main`) | Open |
+| AN19 | Medium | Unlock, onboarding (master password, Secret Key) | The master password fields carried `ContentType.Password`/`NewPassword`, so a third-party autofill service (Google Autofill, another password manager) was offered the master password and the Secret Key and could offer to save them | **Fixed** (`d11030a`) |
+| AN20 | Low | Network (`havenkeys-sync-client`) | A release build of the phone app accepted `http://localhost` as a server address | **Fixed** (`a129cff`) |
+| AN21 | Low | Settings (`settings.rs`) | A device-settings blob that exists but does not open turned "Confirm before filling" off (the default) | **Fixed** (`a129cff`) |
+| AN22 | Low | Vault list (`items.rs`) | The list's website came from string splitting and kept a saved URL's userinfo (`https://user:pw@host/` showed `user:pw@host`) | **Fixed** (`a129cff`) |
+| AN23 | Info | Secret Key file (`SecretKeyCipher`) | Two first uses at once could each generate the Keystore key, leaving a seal under a replaced key | **Fixed** (`4beb735`) |
+| AN24 | Info | Item screen | Revealed values were remembered by position, so after a reload added or removed a field a shown value could appear in another row | **Fixed** (`4beb735`) |
 
 ## Details
 
-### AN1. App-wide collectors can end the process (Low, open)
+### AN1. App-wide collectors can end the process (Low, fixed)
 **Component:** `AppContainer.kt` (`wipeKeysOnExit`, `clearClipboardOnLock`),
 launched in `HavenApp.appScope` (`SupervisorJob`, no
 `CoroutineExceptionHandler`). **Attack scenario:** not an attack; a failure.
@@ -2123,8 +2134,16 @@ exception escapes the collector and, with no handler, crashes the app.
 **Effect:** fail-closed for the vault (it lives only in memory), but a crash
 during sign-out or removal can leave the biometric key, the bundle or the
 Secret Key's Keystore key behind until the next sign-out. **Mitigation
-proposed:** catch `RuntimeException` in those two collectors. **Remaining
-limitation:** until then, as described.
+(fixed in `4beb735`):** Keystore calls go through `keystoreOr`, which
+answers a fallback on `GeneralSecurityException`, `IOException` or any
+`RuntimeException` (the biometric check answers false, a delete does
+nothing), and `SensitiveClipboard.clearIfOurs` catches `RuntimeException`
+around the clipboard; nothing is logged. Covered by `KeystoreWipeTest`
+(`aKeystoreThatThrowsAnswersTheFallback`,
+`aFailedDeleteDoesNotStopTheCollector`) and `ClipboardLockTest`
+(`aClipboardThatThrowsDoesNotEndTheCaller`). **Remaining limitation:** a
+failed delete leaves the key until the next sign-out or removal, as before,
+but no longer ends the process.
 
 ### AN2. Nothing has run on Android (Info, open)
 **Component:** all of `apps/android`. No emulator system image was installed
@@ -2146,12 +2165,17 @@ biometric unlock), but that is a claim to check, not a result.
 scenario:** a malicious app that HavenKeys matched (a binding the user made,
 or a site that vouches for it) holds the IntentSender of each gated row and
 fires it without the user tapping; with the vault unlocked, the activity
-calls `autofill_fill` and returns the login. **Mitigation:** the activity
+calls `autofill_fill` and returns the login. The IntentSender's Intent is
+mutable, and `Intent.fillIn` merges the sender's extras, so the app can also
+replace `EXTRA_ITEM_ID` and `EXTRA_MODE`: it can ask for any of its matched
+logins, or a code instead of a password. **Mitigation:** the activity
 accepts the structure only when it names the calling package, and Rust
 returns only logins matched to that package and certificate — the same set
-direct fill would have put in the framework. **Remaining limitation:**
-"Confirm before filling" keeps values out of the autofill framework until a
-row is used; it is not a per-fill prompt while unlocked. The spec's
+direct fill would have put in the framework, whatever item ID or mode the
+Intent names. **Remaining limitation:** "Confirm before filling" keeps
+values out of the autofill framework until a row is used; it does not
+restore per-fill authorization and is not a per-fill prompt while unlocked:
+the matched app can obtain its own matched logins without the user. The spec's
 description ("tapping opens a minimal HavenKeys activity") matches the code;
 the checklist's "each fill asks" should be read that way
 (`docs/android.md`).
@@ -2176,24 +2200,41 @@ server with its own CA works as it does in the phone's browser. **Remaining
 limitation:** as described. A narrower option, not taken: trust only system
 CAs for the Digital Asset Links fetch.
 
-### AN6. Overlays (Low, open)
+### AN6. Overlays (Low, fixed)
 **Component:** `AutofillSearchActivity` ("Use <login> in <package>?"),
 `AutofillAuthActivity`, `MainActivity`. **Attack scenario:** an app with
 "display over other apps" draws a window over the binding prompt and gets
 the user to tap "Use" while believing they tapped something else, binding a
 login to that app. Android 12+ blocks touches through most untrusted
-overlays; Android 9–11 do not. **Mitigation proposed:**
-`setHideOverlayWindows(true)` (Android 12+) or filtering obscured touches on
-the confirm button. **Remaining limitation:** none implemented.
+overlays; Android 9–11 do not. **Mitigation (fixed in `d11030a`):**
+`AutofillAuthActivity` and `AutofillSearchActivity` set
+`filterTouchesWhenObscured` on their window, and the binding dialog, which
+has a window of its own, sets it through
+`SecureDialogWindow(ignoreObscuredTouches = true)`; a tap that passed
+through another app's window is dropped. `ManifestTest` checks both.
+**Remaining limitation:** `MainActivity` (unlock, the vault) does not filter
+obscured touches, so legitimate overlays (screen filters, accessibility)
+keep working there; nothing in it binds or fills for another app. Not yet
+observed on a device.
 
-### AN7. TOTP refresh holds the idle timer (Low, open)
-**Component:** `ItemViewModel.totpTicks` (once a second, while the screen is
-visible) and `MobileVault::totp`, which calls `touch()`. **Scenario:** a
-login with TOTP left open on a phone whose screen stays on (charging dock,
-"stay awake") never reaches the idle timeout. This is desktop finding #1
-again, on Android. The screen-off lock (on by default) and the collection
-stopping when the activity stops limit it. **Mitigation proposed:** a
-`totp` call that does not touch the timer for the live display.
+### AN7. Reads held the idle timer (Medium, fixed)
+**Component:** `MobileVault::{list_items, search, item_view, reveal, totp}`,
+each of which called `touch()`. **Scenario:** the app calls these on its
+own, not only when the user acts: `HavenApp` runs `sync_if_due` every 30
+seconds while in the foreground, every sync emits `items_changed`, and the
+vault list and item screen reload on it; the item screen also asks for the
+live TOTP code once a second. With the screen on (charging dock, "stay
+awake"), and with any screen open, the idle timeout was never reached; a
+server that changed one item now and then would do the same. This is
+desktop finding #1 again, on Android, and wider. **Mitigation (fixed in
+`eee642f`):** no read touches the timer (the rationale is commented in
+`items.rs`, as on the desktop); `MainActivity.onUserInteraction` remains the
+signal for taps, and the vault search box reports typing, which a soft
+keyboard does not route through `onUserInteraction`. Covered by
+`items::tests::reads_do_not_postpone_the_auto_lock` and
+`VaultViewModelTest.typingInTheSearchCountsAsActivityButLoadingDoesNot`.
+**Remaining limitation:** typing in a dialog's text field (enrolling
+biometrics, removing the vault) is not reported as activity.
 
 ### AN8. Revoking this phone keeps its bundle (Low, open)
 **Component:** `DevicesViewModel.revoke`, `wipeKeysOnExit`. Sign out emits
@@ -2203,7 +2244,7 @@ bundle's auth key at the next online bundle unlock, which locks with
 `bundle_refused` and deletes it. **Remaining limitation:** offline, the
 bundle still opens the local replica until it expires (14 days or a reboot).
 
-### AN9. A fill right after the process thaws (Low, open)
+### AN9. A fill right after the process thaws (Low, fixed)
 **Component:** `MobileVault` (`require_unlocked`), `LockClock`. Auto-lock is
 a Rust thread ticking every 5 seconds, plus a check when the app returns to
 the foreground. When Android freezes the cached process, the thread does not
@@ -2211,9 +2252,19 @@ run. **Scenario:** the auto-lock deadline passes while the process is
 frozen; the user focuses a login field in another app; Android binds the
 `AutofillService`, and `autofill_matches`/`autofill_fill` (which check only
 that the vault is unlocked) may answer before the overdue tick locks.
-**Mitigation proposed:** run the auto-lock check (`tick`) at the start of
-every secret-returning call. **Remaining limitation:** a window of up to one
-tick after a freeze; not observed, because nothing ran on a device.
+**Mitigation (fixed in `eee642f`):** every vault read starts with
+`MobileVault::unlocked`, which applies an overdue auto-lock and then
+requires the vault to be unlocked: `autofill_matches`, `autofill_fill`,
+`autofill_totp`, `autofill_search`, `autofill_bind_and_fill`, `reveal`,
+`totp`, `item_view`, `list_items`, `search` and `create_unlock_bundle`.
+`LockClock::touch` checks whether the lock is due first, so a late touch
+locks an overdue vault instead of rescuing it. The autofill planner shows
+"Unlock HavenKeys" when Rust locked on the way (`locked`). Covered by
+`an_overdue_vault_locks_before_any_fill`,
+`an_overdue_vault_locks_before_any_read`, `an_overdue_vault_enrolls_nothing`,
+`a_late_touch_locks_an_overdue_vault_instead_of_rescuing_it` and
+`FillPlannerTest.aVaultRustLocksOnTheWayAsksToUnlockFirst`. **Remaining
+limitation:** none known for these calls; not observed on a device.
 
 ### AN10. Package visibility (Info, open)
 **Component:** `CallerIdentity.kt`, `AndroidManifest.xml`. Android 11+
@@ -2271,6 +2322,64 @@ still apply.
 yanked. It is the same on `main`, so not introduced here; a
 `cargo update -p yoke-derive` is the likely fix.
 
+### AN19. The master password reached third-party autofill (Medium, fixed)
+**Component:** `UnlockScreen.kt`, `OnboardingScreen.kt` (master password,
+new password, Secret Key), `SettingsDialog.kt` (the password asked to turn
+on biometric unlock). **Attack scenario:** the unlock and onboarding fields
+were marked `ContentType.Password`/`NewPassword`, so the device's autofill
+service — Google Autofill, or another password manager the user picked for
+other apps — was given the structure of the screen where the master password
+and the Secret Key are typed and could offer to save them to its own cloud.
+That breaks CLAUDE.md §9 ("never expose it… never persist it"). The plan
+asked for these hints (Task 18); this ruling overrides it. **Mitigation
+(fixed in `d11030a`):** no secret input carries an autofill hint; every
+activity sets `importantForAutofill = IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS`
+on its window, and every dialog with a text field does the same on its own
+window (`SecureDialogWindow`). `ManifestTest` checks every activity, every
+dialog with a text field, and that no source names
+`ContentType.Password`/`NewPassword`. **Remaining limitation:** read from
+Android's documentation, not observed on a device (manual checklist).
+
+### AN20. `http://localhost` in a release build (Low, fixed)
+**Component:** `havenkeys-sync-client` `HttpTransport::new`. Android's
+release network config forbids cleartext, but Rust's sockets do not go
+through it, and the transport accepted `http://localhost`,
+`http://127.0.0.1` and `http://[::1]` in every build. On a phone, anything
+listening on a loopback port (another app) could then receive the session
+token if the user typed such an address. **Mitigation (fixed in
+`a129cff`):** on Android and iOS, plain HTTP to loopback is accepted only
+when the native library is a debug build (`debug_assertions`);
+`scripts/build-android.sh --release` refuses it. The desktop keeps it in
+every build, as before. Covered by
+`transport::tests::plain_http_to_localhost_follows_the_build` and
+`mobile_release_builds_refuse_localhost_http`.
+
+### AN21. Unreadable device settings turned "Confirm before filling" off (Low, fixed)
+**Component:** `settings.rs`. A device-settings blob that exists but does
+not open (damaged, replaced) fell back to the defaults, where "Confirm
+before filling" is off. **Mitigation (fixed in `a129cff`):** a blob that
+does not open, or a vault that cannot be read, answers the defaults with
+"Confirm before filling" on; only a phone that never wrote its settings gets
+the plain defaults. Covered by
+`an_unreadable_settings_blob_keeps_confirm_before_filling_on`.
+
+### AN22. Userinfo in the vault list (Low, fixed)
+**Component:** `items.rs` `url_host`. A saved URL such as
+`https://user:pw@host/` showed `user:pw@host` as the item's website in the
+list. **Mitigation (fixed in `a129cff`):** the website is parsed with `url`
+and shown as `host_str()` (plus a non-default port). Covered by
+`the_website_shown_is_the_host_never_the_userinfo`.
+
+### AN23. Concurrent Keystore key creation (Info, fixed)
+`SecretKeyCipher.key()` now runs under the same lock as `delete()`, so two
+first uses cannot each generate a key (`4beb735`). Keystore code; not
+JVM-testable, covered by reading.
+
+### AN24. Revealed values and row positions (Info, fixed)
+The item screen's rows are keyed by field key, so a revealed value stays
+with its own field when a reload adds or removes one (`4beb735`). Compose
+behaviour; covered by reading.
+
 ## Audits and full verification
 
 Run on 2026-10-01 (WSL2, Linux 6.6.87.2-microsoft-standard-WSL2), at the
@@ -2306,10 +2415,10 @@ suites came from `scripts/test-server.sh`'s container
   else.
 * Typed secrets are `remember`ed, never `rememberSaveable`d, and no
   ViewModel `UiState` holds a password, Secret Key, revealed value or code.
-* Every `havenkeys-mobile` call that returns a secret goes through
-  `require_unlocked` or a vault session check and, for autofill, re-derives
-  the target from the facts on every call. `autofill_search` returns no
-  secret.
+* Every `havenkeys-mobile` call that reads the vault starts with
+  `MobileVault::unlocked` (an overdue auto-lock applies first, then the
+  lock state is checked) and, for autofill, re-derives the target from the
+  facts on every call. `autofill_search` returns no secret.
 
 ## Verified properties (host tests)
 
@@ -2346,6 +2455,10 @@ None of these has been run.
 - [ ] TOTP: OTP field after a login offers the code.
 - [ ] Recents thumbnail is blank; screenshots are blocked.
 - [ ] Airplane mode: unlock, reveal, TOTP and autofill work; sync shows offline.
+- [ ] With Google Autofill (or another password manager) as the device's autofill service for other apps: HavenKeys' unlock, onboarding and biometric-enroll fields get no suggestion, and Google Autofill does not offer to save the master password or the Secret Key (AN19).
+- [ ] An app with "display over other apps" covering the binding prompt or a gated row's activity: the tap through it is ignored (AN6).
+- [ ] With the screen kept on and a TOTP login open, the vault locks at the auto-lock time (AN7); after the app sat frozen past the deadline, the next fill shows "Unlock HavenKeys" (AN9).
+- [ ] Before the first release: build a release APK with R8 and smoke-test it on a phone (unlock, sync, reveal, autofill), so R8 has not stripped anything JNI or JNA reaches by reflection.
 
 "Each fill asks" means each row opens HavenKeys (AN3). Also owed: one run of
 `connectedGithubDebugAndroidTest` on an emulator or phone, and the package

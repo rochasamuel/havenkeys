@@ -117,8 +117,10 @@ cargo test -p havenkeys-core                          # bundle, app targets, ass
 ## Running against a local server
 
 The server address must be `https://`, except `http://localhost` (or
-`127.0.0.1`), which Rust's transport accepts in every build. On a phone,
-`localhost` is the phone itself; `adb reverse` forwards it to your machine.
+`127.0.0.1`), which Rust's transport accepts only when the native library
+is a debug build (`scripts/build-android.sh` without `--release`); a release
+build refuses plain HTTP everywhere. On a phone, `localhost` is the phone
+itself; `adb reverse` forwards it to your machine.
 
 1. Start a server (`docs/deployment.md` §7). It listens on port 8080.
 2. Make an invite: `havenkeys-server admin new-account --email you@example.com`
@@ -151,7 +153,8 @@ $ANDROID_HOME/emulator/emulator -avd havenkeys
 ```
 
 With an emulator, `adb reverse` works as above; the host is also reachable
-as `10.0.2.2`, but Rust refuses plain HTTP to anything but `localhost`, so
+as `10.0.2.2`, but Rust refuses plain HTTP to anything but `localhost` (and,
+in a release build, to `localhost` too), so
 use `adb reverse`. To test biometric unlock, enrol a
 fingerprint in the emulator's settings and touch it with
 `adb -e emu finger touch 1`. The privileged-browser and Digital Asset Links
@@ -206,6 +209,10 @@ None of these has been run. Record results in `docs/security-review.md`
 - [ ] TOTP: OTP field after a login offers the code.
 - [ ] Recents thumbnail is blank; screenshots are blocked.
 - [ ] Airplane mode: unlock, reveal, TOTP and autofill work; sync shows offline.
+- [ ] With Google Autofill (or another password manager) as the device's autofill service for other apps: HavenKeys' unlock, onboarding and biometric-enroll fields get no suggestion, and Google Autofill does not offer to save the master password or the Secret Key.
+- [ ] An app with "display over other apps" covering the binding prompt or a gated row's activity: the tap through it is ignored.
+- [ ] With the screen kept on and a TOTP login open, the vault locks at the auto-lock time; after the app sat frozen past the deadline, the next fill shows "Unlock HavenKeys".
+- [ ] Before the first release: build a release APK with R8 (`scripts/build-android.sh --release`, then `./gradlew assembleGithubRelease`) and smoke-test it on a phone — unlock, sync, reveal, autofill — so R8 has not stripped anything JNI or JNA (UniFFI, `rustls-platform-verifier`) reaches by reflection.
 
 On "Confirm before filling on: each fill asks": with the setting on, each
 row opens HavenKeys, which unlocks first if the vault is locked; while it is

@@ -32,7 +32,7 @@ this design is Android-only below the Kotlin layer.
 | UI toolkit | Fully native: Jetpack Compose on Android, SwiftUI on iOS | Flutter (the autofill and passkey screens must be native anyway, so it would mean two UI toolkits per platform and one more layer — Dart — holding secrets) |
 | Native binding | UniFFI (Kotlin now, Swift later), called directly | flutter_rust_bridge; a channel layer between UI and native |
 | Unlock | Master password; biometric unlock via Keystore after opt-in; password again every 14 days and after reboot | Password only; biometric with no re-entry |
-| Unlocked autofill | Matched items' values handed to the Android autofill framework; "Confirm before filling" restores per-fill authentication | Always authenticate each dataset |
+| Unlocked autofill | Matched items' values handed to the Android autofill framework; "Confirm before filling" keeps values out of the framework until a row is used (the matched app can still fire its own rows; not per-fill authorization) | Always authenticate each dataset |
 | App ↔ site association | Encrypted app bindings (package + signing cert) plus Digital Asset Links verification | Package name alone; trusting `webDomain` from any app |
 | Auto sign-in (pressing buttons) | Not on Android | An Accessibility Service |
 | Distribution | Signed APK on GitHub Releases, Play-ready (`github` and `play` flavors) | Play Store first |
@@ -270,7 +270,10 @@ signing certificate SHA-256 and the structure's `webDomain`:
 * **"Confirm before filling" on, or locked:** each dataset is
   authentication-gated. Tapping opens a minimal HavenKeys activity (biometric
   if locked), which calls `autofill_fill(id, target)`; Rust re-checks the
-  target and returns username and password only.
+  target and returns username and password only. The app being filled can
+  fire a row itself and swap the item it names; Rust still answers only its
+  own matched logins, so this is not per-fill authorization
+  (`security-review.md` AN3).
 * Inline suggestions (keyboard chips) on Android 11+, dropdown otherwise.
 * Nothing is filled without a tap.
 

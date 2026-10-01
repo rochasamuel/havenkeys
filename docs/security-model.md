@@ -1120,8 +1120,15 @@ This is the one documented relaxation of CLAUDE.md §33.
   unlocked the activity shows nothing: "confirm" means HavenKeys checks this
   fill, not that the user is asked again.
 * The app being filled holds each gated row's IntentSender and can fire it
-  without a tap. Rust still returns only items matched to that same caller
-  (§22.5), so the most it gets is what direct fill would have offered it.
+  without a tap; the Intent is mutable and `Intent.fillIn` merges extras, so
+  it can also swap the item ID and mode the row carries. Rust still returns
+  only items matched to that same caller (§22.5), whatever the Intent names,
+  so the most it gets is what direct fill would have offered it. "Confirm
+  before filling" therefore keeps values out of the autofill framework until
+  a row is used; it does not restore per-fill authorization against the
+  matched app itself (`security-review.md` AN3).
+* An unreadable device-settings blob (damaged, replaced) is read as
+  "Confirm before filling" on: a bad blob never turns it off.
 * Locked, the response is one "Unlock HavenKeys" row that names no login.
 * Nothing is filled without a tap on a row. Saving logins from Autofill
   comes in M2; `onSaveRequest` refuses.
@@ -1206,12 +1213,17 @@ hosts whose registrable domain's first label appears in the package name
 
 * The core `LockManager` and its auto-lock choices (never, 5, 15, 30, 60
   minutes), ticked every 5 seconds by a Rust thread and checked again when
-  the app returns to the foreground. Input in the main activity and the
-  calls a user makes there (list, search, open, reveal, TOTP) reset the idle
-  timer; Autofill does not. The item screen asks for its live TOTP code once
-  a second, and each request resets the timer, so the idle lock does not fire
-  while a login with TOTP is open with the screen on (`security-review.md`
-  AN7).
+  the app returns to the foreground. Only the user resets the idle timer:
+  taps in the main activity (`onUserInteraction`) and typing in the vault
+  search. No read does (list, search, open, reveal, TOTP), because the app
+  also makes them on its own — a sync's `items_changed` reloads every 30
+  seconds in the foreground, the item screen's TOTP code every second — and
+  counting those would keep the vault unlocked forever (`security-review.md`
+  AN7, desktop #1). Autofill does not reset it either.
+* Every vault read, autofill call and biometric enrolment first applies an
+  overdue auto-lock (`MobileVault::unlocked`), so a process that sat frozen
+  past the deadline answers nothing before locking; a late touch locks an
+  overdue vault instead of rescuing it (AN9).
 * Lock when the screen turns off: a setting, on by default.
 * The `LockManager` also locks when the wall clock jumps more than 30 seconds
   past the monotonic clock. Rust's monotonic clock on Android does not count
@@ -1235,11 +1247,14 @@ hosts whose registrable domain's first label appears in the package name
   JNI, with Android's CA store (system and user-installed CAs). If its JNI
   initialisation fails, the bundled roots are used: every certificate is
   still verified, only user-installed CAs are missed.
-* Plain HTTP: Rust's transport refuses it to anything but `localhost`,
-  `127.0.0.1` and `[::1]`, in every build; the Digital Asset Links fetch is
-  HTTPS only. `network_security_config.xml` says the same for Android's own
-  stack (cleartext forbidden; debug builds allow `localhost` and `127.0.0.1`
-  for `adb reverse`), so the two agree; it does not govern Rust's sockets.
+* Plain HTTP: a release build of the native library refuses it everywhere,
+  `localhost` included; a debug build (`scripts/build-android.sh` without
+  `--release`) accepts it only to `localhost`, `127.0.0.1` and `[::1]`, for
+  `adb reverse` (`security-review.md` AN20). The Digital Asset Links fetch
+  is HTTPS only. `network_security_config.xml` says the same for Android's
+  own stack (release: cleartext forbidden; debug: `localhost` and
+  `127.0.0.1` allowed); it does not govern Rust's sockets, so Rust enforces
+  its own rule. The desktop keeps `localhost` HTTP in every build.
 * **User-installed CAs are trusted, on purpose:** a self-hosted server signed
   by the user's own CA must work, as it does in the phone's browser. The
   cost: anyone whose CA the user installed (or a device policy installed) can
@@ -1292,6 +1307,17 @@ only. `ManifestTest` checks the source manifest only.
 
 * `FLAG_SECURE` on every activity: no screenshots or screen recording, and a
   blank recents thumbnail. Debug-only library activities do not set it.
+* No autofill service sees HavenKeys' own fields: every activity sets
+  `importantForAutofill = IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS` on
+  its window, every dialog with a text field does the same on its own
+  window (`SecureDialogWindow`), and no input carries an autofill hint. The
+  master password and the Secret Key are never offered to, or saved by,
+  Google Autofill or another password manager (CLAUDE.md §9;
+  `security-review.md` AN19).
+* The autofill activities and the app-binding prompt drop taps that pass
+  through another app's window (`filterTouchesWhenObscured`, AN6).
+  `MainActivity` does not, so screen filters and accessibility overlays keep
+  working there.
 * `allowBackup="false"`, and backup and data-extraction rules that exclude
   every domain, for cloud backup and device-to-device transfer.
 * Release builds are minified and shrunk with R8.
@@ -1343,6 +1369,8 @@ only. `ManifestTest` checks the source manifest only.
   in place (Sign out deletes it). The next online bundle unlock is refused
   by the server and deletes it then.
 * The Keystore cleanup on sign-out and removal runs from an app-wide event
-  collector; an unexpected runtime exception there (a Keystore
-  `ProviderException`, a `ClipboardManager` failure) is not caught and can end
-  the process (`security-review.md` AN1).
+  collector; a Keystore or clipboard failure there is caught silently, so a
+  failed delete leaves its key until the next sign-out or removal
+  (`security-review.md` AN1).
+* "Confirm before filling" does not stop the matched app from firing its
+  own gated rows while the vault is unlocked (§22.4, AN3).

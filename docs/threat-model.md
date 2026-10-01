@@ -575,13 +575,20 @@ covers each item.
   fill to that package's certificates. *Residual:* an app can only ask for
   its own logins.
 * **Gated rows fired without a tap.** With "Confirm before filling" on, the
-  app being filled holds each row's IntentSender and can fire it itself.
-  While the vault is unlocked, the activity answers without showing
-  anything. *Mitigation:* Rust returns only items matched to that same
-  caller, exactly as for direct fill. *Residual:* "Confirm before filling"
-  keeps the values out of the autofill framework until a row is used; it
-  does not stop the matched app from obtaining its own matched logins while
+  app being filled holds each row's IntentSender and can fire it itself,
+  and, because the Intent is mutable and `Intent.fillIn` merges extras, swap
+  the item ID and mode it carries. While the vault is unlocked, the activity
+  answers without showing anything. *Mitigation:* Rust returns only items
+  matched to that same caller, exactly as for direct fill, whatever item the
+  Intent names. *Residual:* "Confirm before filling" keeps the values out of
+  the autofill framework until a row is used; it does not restore per-fill
+  authorization: the matched app can obtain its own matched logins while
   the vault is unlocked (`security-review.md` AN3).
+* **Third-party autofill reading the master password.** The device's
+  autofill service (Google Autofill, another password manager) is a
+  different app. *Mitigation:* every HavenKeys window is excluded from
+  autofill and no input carries a hint, so the master password and the
+  Secret Key are neither offered to it nor saved by it (AN19).
 * **Phishing through an app's label.** An app chooses its own name. The
   binding prompt ("Use GitHub in com.github.android?") names the package;
   the label is shown below it, marked as the app's own claim.
@@ -615,10 +622,12 @@ covers each item.
   after the vault's delay and on lock. Android 10+ keeps background apps
   from reading the clipboard, but the foreground app, the keyboard and a
   clipboard-reading accessibility service can. See `security-model.md` §22.10.
-* **Overlays.** HavenKeys sets `FLAG_SECURE` (no screenshots, blank recents),
-  but does not filter touches under another app's overlay; on Android 9–11 an
-  app allowed to draw over others could disguise the "Use" button of the
-  binding prompt (`security-review.md` AN6).
+* **Overlays.** HavenKeys sets `FLAG_SECURE` (no screenshots, blank recents).
+  On Android 9–11 an app allowed to draw over others could disguise the
+  "Use" button of the binding prompt; the autofill activities and the
+  binding prompt drop touches that pass through another app's window
+  (`filterTouchesWhenObscured`, `security-review.md` AN6). The main activity
+  does not filter them.
 
 ## 4. Out of scope (not defended)
 
