@@ -5,6 +5,7 @@ import java.security.GeneralSecurityException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import net.havenkeys.android.clipboard.SensitiveClipboard
+import net.havenkeys.android.clipboard.clearClipboardOnLock
 import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.AutofillRepository
 import net.havenkeys.android.data.RustAccountRepository
@@ -53,6 +54,7 @@ class AppContainer(app: HavenApp, cipher: KeystoreCipher) {
                 deleteSecretKey = { keystoreDelete { SecretKeyCipher.delete() } },
             )
         }
+        app.appScope.launch { clearClipboardOnLock(events.events, clipboard::clearIfOurs) }
     }
 }
 
