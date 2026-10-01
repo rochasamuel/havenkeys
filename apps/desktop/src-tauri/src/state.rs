@@ -192,7 +192,7 @@ impl AppState {
             return Err(havenkeys_core::Error::Locked.into());
         }
         let mut slot = self.totp_scan.lock().map_err(|_| CmdError::internal())?;
-        Ok(slot.replace(codes, Instant::now())?)
+        Ok(slot.add(codes, Instant::now())?)
     }
 
     /// The core's `ItemInput` for a renderer request, with a scanned token

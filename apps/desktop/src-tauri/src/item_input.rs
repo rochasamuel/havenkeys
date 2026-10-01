@@ -140,7 +140,7 @@ mod tests {
     fn slot_with(uri: &str, now: Instant) -> (ScanSlot, String) {
         let mut slot = ScanSlot::default();
         let token = slot
-            .replace(
+            .add(
                 vec![ScannedCode {
                     uri: SecretString::new(uri.into()),
                     issuer: None,
@@ -179,6 +179,48 @@ mod tests {
                 assert_eq!(v.expose(), "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP")
             }
             _ => panic!("expected Otp(Set)"),
+        }
+    }
+
+    #[test]
+    fn two_scans_resolve_in_one_save() {
+        let now = Instant::now();
+        let (mut slot, login_token) = slot_with("otpauth://totp/a?secret=JBSWY3DPEHPK3PXP", now);
+        let field_token = slot
+            .add(
+                vec![ScannedCode {
+                    uri: SecretString::new("otpauth://totp/b?secret=GEZDGNBVGY3TQOJQ".into()),
+                    issuer: None,
+                    account: None,
+                }],
+                now,
+            )
+            .unwrap()
+            .remove(0)
+            .token;
+        let mut input = wire_with_sections(json!({ "op": "scanned", "value": field_token }));
+        input.totp =
+            serde_json::from_value(json!({ "op": "scanned", "value": login_token })).unwrap();
+        let input = input.resolve(&slot, now).unwrap();
+        match &input.totp {
+            SecretUpdate::Set(v) => assert!(v.expose().contains("totp/a")),
+            _ => panic!("expected Set"),
+        }
+        match &input.sections.unwrap()[0].fields[0].value {
+            havenkeys_core::custom_field::FieldValueInput::Otp(SecretUpdate::Set(v)) => {
+                assert!(v.expose().contains("totp/b"))
+            }
+            _ => panic!("expected Otp(Set)"),
+        }
+    }
+
+    #[test]
+    fn a_section_otp_that_is_set_or_kept_uses_no_scan() {
+        for otp in [
+            json!({ "op": "set", "value": "JBSWY3DPEHPK3PXP" }),
+            json!({ "op": "keep" }),
+        ] {
+            assert!(!wire_with_sections(otp).uses_scan());
         }
     }
 
