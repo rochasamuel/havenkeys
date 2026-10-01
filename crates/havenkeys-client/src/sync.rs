@@ -249,17 +249,19 @@ fn revision_for(applied: &[(Uuid, i64)], item_id: Uuid) -> ClientResult<i64> {
 #[cfg(test)]
 mod tests {
     use crate::client::tests::client_in;
+    use crate::client::HavenClient;
+    use crate::stub_server::{StubAccount, StubServer};
     use havenkeys_core::account::{AccountRef, NormalizedEmail};
     use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+    use havenkeys_core::crypto::keys::AuthKey;
     use havenkeys_core::store::AccountRecord;
     use havenkeys_core::vault::prepare_new_account_vault;
     use havenkeys_core::SecretString;
     use uuid::Uuid;
 
-    #[tokio::test]
-    async fn connect_on_a_locked_vault_stays_offline() {
-        let dir = tempfile::tempdir().unwrap();
-        let (client, _) = client_in(dir.path());
+    /// Give `client` an unlocked account vault pointing at `server_url`, and
+    /// return the auth key `connect` signs in with.
+    fn open_account_vault(client: &HavenClient, server_url: &str) -> AuthKey {
         let account = AccountRef::new(
             Uuid::from_u128(1),
             NormalizedEmail::parse("user@example.com").unwrap(),
@@ -280,19 +282,57 @@ mod tests {
                 &AccountRecord {
                     account_id: account.id,
                     email: "user@example.com".into(),
-                    // Nothing listens here: a request would fail as offline,
-                    // not as locked.
-                    server_url: "http://127.0.0.1:9".into(),
+                    server_url: server_url.into(),
                     server_cursor: 0,
                     max_header_rev: 0,
                     last_synced_at: None,
                 },
             )
             .unwrap();
+        made.auth_key
+    }
+
+    #[tokio::test]
+    async fn connect_on_a_locked_vault_stays_offline() {
+        let dir = tempfile::tempdir().unwrap();
+        let (client, _) = client_in(dir.path());
+        // Nothing listens here: a request would fail as offline, not as
+        // locked.
+        let auth_key = open_account_vault(&client, "http://127.0.0.1:9");
         client.lock("user");
 
-        let err = client.connect(made.auth_key).await.unwrap_err();
+        let err = client.connect(auth_key).await.unwrap_err();
         assert_eq!(err.code, "locked");
         assert!(!client.is_online());
+    }
+
+    #[tokio::test]
+    async fn a_lock_during_login_drops_the_new_session() {
+        let server = StubServer::start(StubAccount {
+            account_id: Uuid::from_u128(1),
+            vault_id: Uuid::from_u128(2),
+            kdf: KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap(),
+            header: Vec::new(),
+            header_revision: 0,
+        })
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let (client, events) = client_in(dir.path());
+        let auth_key = open_account_vault(&client, &server.url);
+
+        let connecting = tokio::spawn({
+            let client = client.clone();
+            async move { client.connect(auth_key).await }
+        });
+        // The vault was unlocked when `connect` started, so only the check
+        // after the login can catch this lock.
+        server.login_entered.notified().await;
+        client.lock("auto");
+        server.release_login.notify_one();
+
+        let err = connecting.await.unwrap().unwrap_err();
+        assert_eq!(err.code, "locked");
+        assert!(!client.is_online());
+        assert!(!events.seen().iter().any(|e| e == "online:true"));
     }
 }

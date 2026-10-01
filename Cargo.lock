@@ -2522,6 +2522,7 @@ name = "havenkeys-client"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "data-encoding",
  "deadpool-postgres",
  "havenkeys-client",
  "havenkeys-core",

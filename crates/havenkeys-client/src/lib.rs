@@ -14,6 +14,8 @@ mod error;
 mod events;
 pub mod key_store;
 mod removal;
+#[cfg(test)]
+mod stub_server;
 mod sync;
 
 pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
