@@ -822,6 +822,11 @@ release and key-rotation steps.
 
 See `threat-model.md` §4 and `security-review.md`.
 
+- **Custom fields and older releases.** A device running a HavenKeys release
+  from before login custom fields ignores a login's custom fields and drops
+  them if it rewrites that login (any save, including a browser password
+  update). Update every device before using custom fields.
+
 ## 20. Filling forms from the Identity
 
 Spec: `docs/superpowers/specs/2026-09-29-identity-autofill-design.md`.
