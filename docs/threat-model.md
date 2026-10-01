@@ -21,6 +21,8 @@ adversaries it does **not** defend against.
 | Auth key | Critical if reused elsewhere, but it unwraps nothing | Derived at unlock from the master password and the Secret Key; sent to the server over TLS, stored there only as an Argon2id hash. |
 | Session token | High while valid (24 h) | Server memory and the desktop's memory only. Never on disk; dropped when the vault locks. |
 | Account email, device names, item count, change times | Low, but visible to the server | Plaintext in the server's Postgres. |
+| Android unlock bundle (vault key + auth key, enrolment time, boot count) | Critical | Only when biometric unlock is on. Sealed by a Keystore AES-256-GCM key that every use must unlock with a strong biometric; `noBackupFilesDir/unlock-bundle.bin`. Refused after 14 days or a reboot (`security-model.md` §22.2). |
+| Android Secret Key file | High (half of what opens a copy of the vault) | `filesDir/secret-key-<account>.bin`, sealed by a Keystore key that needs no user authentication. Never written in plaintext. |
 
 ## 2. Trust boundaries
 
@@ -70,6 +72,14 @@ adversaries it does **not** defend against.
 * **The passkey page script** (`webauthn/page.ts`) runs in the page's own
   JavaScript world, on granted hosts only, so it is exactly as trusted as
   the page: not at all. It holds no secrets and decides nothing; see T8.
+* **The Android app** (`apps/android`, spec
+  `2026-10-01-android-app-design.md`) is a second shell over the same core,
+  through `havenkeys-mobile`. Its Kotlin code is partially trusted, like the
+  desktop renderer: it collects facts from Android and talks to the Keystore
+  and BiometricPrompt, but Rust decides every match, target and fill. The
+  app being filled, everything in its `AssistStructure` and any WebView it
+  hosts are untrusted. Android itself (the autofill framework, the package
+  manager's signing certificates, the Keystore) is trusted. See T12.
 
 ## 3. Adversaries we defend against
 
@@ -529,6 +539,87 @@ messages in `native-messaging.md` §"Sign in with", the mechanism in
   text is still validated in Rust (254 characters, no control characters)
   and is only ever a suggestion the user can edit before saving.
 
+### T12 — The Android app
+The Android app (`docs/android.md`; `security-model.md` §22) holds the same
+vault as the desktop and fills logins in other apps and in browsers through
+Android Autofill. Nothing in this section has been run on a phone or an
+emulator yet; the manual checklist in `security-review.md` ("Android M1")
+covers each item.
+
+* **A malicious app with a borrowed package name.** Anyone can install an
+  app called `com.github.android`. *Mitigation:* Rust identifies an app by
+  its package name **and** the SHA-256 of its signing certificates, which
+  Android's package manager reports (`CallerIdentity.kt`); an app binding or
+  a Digital Asset Links statement matches only that pair. A package Android
+  will not describe gives no certificates, and Rust refuses a target without
+  one. *Residual:* none known for a sideloaded copy; an app whose real
+  signing key was stolen is that app, as far as Android and HavenKeys can
+  tell.
+* **A WebView reporting another site's domain.** An app controls its own
+  WebView and the `webDomain` it reports. *Mitigation:* only a browser on
+  the fixed privileged list (`crates/havenkeys-core/data/android-browsers.json`,
+  package and release certificate) is trusted to report a domain; every
+  other caller is an app target, whose `webDomain` is ignored
+  (`app_target.rs::classify`). *Residual:* none for matching; an app can
+  still show a convincing login page and ask the user to type a password.
+* **A non-privileged "browser".** A browser that is not on the list, or a
+  listed package signed by someone else, is an app target: it gets logins
+  only through a binding the user made or a site's Digital Asset Links file.
+  *Residual:* such browsers fill nothing by domain; the list is refreshed
+  by hand (`scripts/update-android-browsers.sh`).
+* **A forged assist structure.** The authentication rows use mutable
+  PendingIntents, so the app being filled starts HavenKeys' fill activity
+  and could replace the structure Android attaches. *Mitigation:* the
+  activities use the structure only when its package equals
+  `getCallingPackage()` (`structureNamesCaller`), and Rust then binds the
+  fill to that package's certificates. *Residual:* an app can only ask for
+  its own logins.
+* **Gated rows fired without a tap.** With "Confirm before filling" on, the
+  app being filled holds each row's IntentSender and can fire it itself.
+  While the vault is unlocked, the activity answers without showing
+  anything. *Mitigation:* Rust returns only items matched to that same
+  caller, exactly as for direct fill. *Residual:* "Confirm before filling"
+  keeps the values out of the autofill framework until a row is used; it
+  does not stop the matched app from obtaining its own matched logins while
+  the vault is unlocked (`security-review.md` AN3).
+* **Phishing through an app's label.** An app chooses its own name. The
+  binding prompt ("Use GitHub in com.github.android?") names the package;
+  the label is shown below it, marked as the app's own claim.
+* **A stolen phone.** Locked, it holds only ciphertext, the Keystore-sealed
+  Secret Key file and, if enabled, the Keystore-sealed unlock bundle; the
+  Keystore keys require an unlocked device. Unlocked and with HavenKeys
+  unlocked, the thief has what the user has. *Stated cost of biometric
+  unlock:* someone who passes this phone's strong biometric check gets what
+  the master password gives — the vault and a server session — on this phone
+  only, for up to 14 days and until the next reboot. Adding a fingerprint or
+  face invalidates the key. The master password is never stored.
+* **A stale or tampered bundle.** Rust refuses a bundle older than 14 days,
+  dated in the future, made in another boot, made or used with an unknown
+  boot count, or not exactly the version-1 layout; the Keystore's GCM tag
+  refuses modified ciphertext; a server that refuses the bundle's auth key
+  (password changed, device revoked) locks the vault with
+  `bundle_refused`. Each refusal deletes the bundle and asks for the
+  password (`security-model.md` §22.2). *Residual:* offline, a bundle whose
+  password was changed elsewhere still opens the local replica until it
+  expires, as the old password does on the desktop (`security-review.md` #8).
+* **A hostile `assetlinks.json`.** A site in the vault can name any app.
+  *Mitigation:* fetched over HTTPS only, from plain DNS names only, no
+  redirects, at most 128 KiB, at most 256 statements, parsed statement by
+  statement in Rust. A site vouching for an app gets that app only the logins
+  saved for that site — which the site's owner could phish anyway.
+  *Residual:* a network attacker with a CA the phone trusts (user-installed
+  CAs are trusted on purpose, §22.9) can forge the file; combined with a
+  malicious app whose package name contains the site's name, that app is
+  offered the site's logins (`security-review.md` AN5).
+* **Clipboard readers.** A copied secret is marked sensitive and cleared
+  after the vault's delay and on lock. Android 10+ keeps background apps
+  from reading the clipboard, but the foreground app, the keyboard and a
+  clipboard-reading accessibility service can. See `security-model.md` §22.10.
+* **Overlays.** HavenKeys sets `FLAG_SECURE` (no screenshots, blank recents),
+  but does not filter touches under another app's overlay; on Android 9–11 an
+  app allowed to draw over others could disguise the "Use" button of the
+  binding prompt (`security-review.md` AN6).
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can
@@ -561,6 +652,13 @@ messages in `native-messaging.md` §"Sign in with", the mechanism in
 * **A weak master password.**
 * **Clipboard managers / other applications reading the clipboard** during the
   clear window.
+* **A rooted or otherwise compromised Android phone, and apps granted
+  Accessibility.** An accessibility service can read every screen and type
+  into it, HavenKeys' included; root can read process memory. HavenKeys does
+  not detect either.
+* **The Android autofill framework and the keyboard.** Both are part of the
+  operating system the user chose; with direct fill the framework holds the
+  matched logins' values for one fill session (`security-model.md` §22.4).
 
 ## 5. Abuse cases tracked as regression tests
 
@@ -594,3 +692,10 @@ messages in `native-messaging.md` §"Sign in with", the mechanism in
 | A1s | `start_sso` for an item that does not match the page, is not a login, or has no `sign_in_with`, or a locked vault | DENIED/`locked`; no secret, no provider origins for a wrong page | `crates/havenkeys-core/tests/security.rs` (`start_sso_is_origin_bound_and_returns_no_secret`), `crates/havenkeys-bridge/tests/bridge.rs` (`start_sso_attacks_are_denied`) |
 | A2s | A run tries to click a chooser row on an origin not in the provider's exact list, or in a frame/tab that is neither the run's own nor its opener popup | Refused; nothing clicked | `apps/extension/src/background/sso-state.test.ts`, `content/sso.test.ts` |
 | A3s | `save_sso` with `itemId` targets a login that does not match the page or does not already sign in with that provider | DENIED | `crates/havenkeys-core/tests/security.rs` (`save_sso_adds_without_a_password_and_updates_only_the_account`) |
+| A1a | Android: a page on evil.com in a privileged browser asks for github.com's login | Nothing matched; fill DENIED | `crates/havenkeys-mobile/tests/regressions.rs` (`attack_1_a_page_on_evil_com_gets_nothing_for_github`) |
+| A2a | Android: an app with GitHub's package name and another certificate, or a WebView claiming `github.com`, asks for an item by ID | DENIED | `regressions.rs` (`attack_2_an_arbitrary_item_id_needs_a_matching_target`), `crates/havenkeys-core/src/app_fill.rs` (`the_same_package_signed_by_someone_else_gets_nothing`), `app_target.rs` (`an_app_claiming_a_web_domain_is_still_an_app`, `chrome_signed_by_someone_else_is_an_app`) |
+| A3a | Android: vault locked, fill, TOTP or reveal requested | `locked` | `regressions.rs` (`attack_3_a_locked_vault_fills_nothing`), `app_fill.rs` (`a_locked_vault_fills_no_app`) |
+| A5a | Android: malformed item IDs, oversized package names, certificate lists or domains | Refused, no panic | `regressions.rs` (`attack_5_malformed_ids_and_targets_are_refused_without_a_panic`), `app_target.rs` (`bad_identities_are_refused`, `a_domain_that_would_change_the_url_is_refused`) |
+| A20 | Stale, other-boot, unknown-boot, future-dated, tampered or truncated unlock bundle | `bundle_refused` / unlock fails | `crates/havenkeys-core/src/unlock_bundle.rs` tests, `regressions.rs` (`a_stale_or_tampered_bundle_is_refused`), `crates/havenkeys-mobile/src/unlock.rs` |
+| A21 | Hostile `assetlinks.json`: redirect, oversized, malformed, other package or certificate, IP or `localhost` host | No vouching; one bad statement voids only itself | `crates/havenkeys-core/src/asset_links.rs` tests, `crates/havenkeys-mobile/src/asset_links_fetch.rs` tests, `crates/havenkeys-core/tests/fuzz.rs` (`fuzz_asset_links_parser`) |
+| A22 | The app being filled replaces the assist structure to name another app | Structure ignored, nothing filled | `apps/android/app/src/test/.../autofill/StructureNamesCallerTest.kt` (unit test of the check only; the activity flow is unverified on a device) |

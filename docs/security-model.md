@@ -18,7 +18,9 @@ This document describes *how* HavenKeys enforces the properties listed in
    app updates from GitHub Releases (§18). The only other outbound
    connections the desktop app makes are to the account server you
    configure: on unlock, every 60 seconds while unlocked, and on every write
-   (§13). Reads work offline from the local encrypted replica.
+   (§13). Reads work offline from the local encrypted replica. The Android
+   app adds one more, for sites already in the vault: their
+   `assetlinks.json` (§22.7), behind a setting that is on by default.
 
 ## 2. What is protected
 
@@ -1001,3 +1003,346 @@ nothing is filled (Rust denies it and the menu says why).
 * The visibility check has the limits described in §20 (a covered field
   still counts as visible).
 * Firefox data-collection declaration: see §20 (`financialAndPaymentInfo`).
+
+## 22. Android app
+
+Spec: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Building
+and running: `docs/android.md`. Threats: `threat-model.md` T12.
+
+**Nothing in `apps/android` has run on a phone or an emulator yet.** What
+this section says about Android's behaviour (the Keystore, BiometricPrompt,
+the autofill framework, package visibility, `FLAG_SECURE`, the clipboard)
+describes the code and Android's documentation, not a test on a device. The
+manual checklist is in `security-review.md` ("Android M1").
+
+### 22.1 Boundaries
+
+* `crates/havenkeys-mobile` is the only Rust surface Kotlin can call
+  (UniFFI). It never returns keys, blobs, whole vault objects or a TOTP
+  secret, and every call that returns a secret checks the lock state, the
+  item and the fill target in Rust.
+* Kotlin collects facts from Android — the screen's structure, the caller's
+  package name and signing certificates, the boot count — and talks to the
+  Keystore and BiometricPrompt. It never decides whether an item may be
+  filled.
+* There is one `MobileVault` per process. The app's screens and the
+  `AutofillService` share it, so one unlock opens both and one lock closes
+  both. The vault exists only in memory: the process dying locks it.
+
+### 22.2 Unlock and the biometric unlock bundle
+
+The master password unlocks as on the desktop (key scheme 3, `crypto.md`).
+It is needed after sign-in, after a reboot, every 14 days, and whenever the
+unlock bundle is refused.
+
+Biometric unlock is opt-in (Settings), with the master password entered once.
+Rust derives the keys from it, checks it by unwrapping the vault key, and
+returns the **unlock bundle**, 81 bytes
+(`crates/havenkeys-core/src/unlock_bundle.rs`):
+
+```text
+version (1) ‖ vault key (32) ‖ auth key (32) ‖ enrolled_at_ms (i64 BE) ‖ boot_count (i64 BE)
+```
+
+Kotlin seals it with a fresh Keystore key and zeroes its copy
+(`security/BiometricKeys.kt`). The file is `noBackupFilesDir/unlock-bundle.bin`:
+the GCM IV (12 bytes) followed by the ciphertext and tag. The key:
+
+* AES-256-GCM, alias `havenkeys.unlock`, StrongBox when the phone has it,
+  the TEE otherwise;
+* `setUserAuthenticationRequired(true)`, `BIOMETRIC_STRONG` only, with no
+  validity window: every use needs a BiometricPrompt bound to that cipher
+  (`CryptoObject`). On Android 9–10, `setUserAuthenticationValidityDurationSeconds(-1)`
+  gives the same per-use rule. The prompt does not offer the device PIN;
+  its other button is "Use master password";
+* `setInvalidatedByBiometricEnrollment(true)`: adding a fingerprint or face
+  destroys it;
+* `setUnlockedDeviceRequired(true)`: unusable while the phone is locked.
+
+**Unlocking:** BiometricPrompt → the Keystore decrypts → the bytes go
+straight to `unlock_with_bundle` → Kotlin zeroes its array, however the
+call ends. Rust then refuses the bundle, and the unlock screen deletes it and
+asks for the password, when:
+
+* it is older than 14 days, or dated in the future (a clock set back must
+  not stretch the window);
+* the boot count differs (`Settings.Global.BOOT_COUNT`): a reboot ends it;
+* the boot count is unknown (negative), at enrolment or at use. A phone that
+  does not report `BOOT_COUNT` cannot turn biometric unlock on at all;
+* it is not exactly the version-1 layout, or its vault key does not open the
+  vault;
+* the server refuses its auth key (the master password changed on another
+  device, or this device was revoked). That arrives after the vault opened,
+  as a lock with reason `bundle_refused`; the app deletes the bundle and its
+  key on that event.
+
+A Keystore key invalidated by a new enrolment, or a file that does not open,
+is handled the same way: biometric unlock ends and the password is asked for.
+The bundle is deleted when it is refused, not proactively at day 14.
+
+**Why the auth key is in the bundle:** a biometric unlock must be able to
+sign in to the server and write. This is the one place the auth key is
+persisted, Keystore-sealed (`crypto.md`, "Unlock bundle").
+
+**Stated cost:** someone who passes this phone's strong biometric check gets
+what the master password gives — the vault and a server session — on this
+phone only. The master password is never stored.
+
+### 22.3 The Secret Key file
+
+On Android the Secret Key lives in `filesDir/secret-key-<account>.bin`,
+written by Rust (`crates/havenkeys-mobile/src/key_file.rs`) and sealed by a
+second Keystore key (`security/SecretKeyCipher.kt`: AES-256-GCM, alias
+`havenkeys.secret_key`, `setUnlockedDeviceRequired(true)`, no user
+authentication — the Secret Key alone opens nothing). Kotlin only encrypts
+and decrypts bytes. There is **no plaintext fallback**: the desktop's
+`device.json` fallback is turned off (`without_file_fallback`), and a cipher
+that fails writes nothing (tested). Sign out keeps the file, as the desktop
+keeps its keychain entry, so the next unlock needs no Emergency Kit; Remove
+device forgets it and deletes its Keystore key.
+
+### 22.4 Direct fill and "Confirm before filling"
+
+This is the one documented relaxation of CLAUDE.md §33.
+
+* **Direct fill** (default; "Confirm before filling" off) while unlocked:
+  the fill response carries one dataset per login Rust matched to the
+  requesting app or page — at most 5 — each with its username and password
+  (or, for a code-only step, its current TOTP code). The Android autofill
+  framework, part of the operating system, holds those values for that fill
+  session; the requesting app receives only the dataset the user taps.
+* **"Confirm before filling" on**, or the vault locked: each row is
+  authentication-gated and carries no value. Tapping it starts HavenKeys'
+  `AutofillAuthActivity`, which unlocks first if needed (password or
+  biometrics) and then calls `autofill_fill(id, target)` or
+  `autofill_totp(id, target)`; Rust re-checks the target and returns only
+  that login's username and password, or its code. While the vault is
+  unlocked the activity shows nothing: "confirm" means HavenKeys checks this
+  fill, not that the user is asked again.
+* The app being filled holds each gated row's IntentSender and can fire it
+  without a tap. Rust still returns only items matched to that same caller
+  (§22.5), so the most it gets is what direct fill would have offered it.
+* Locked, the response is one "Unlock HavenKeys" row that names no login.
+* Nothing is filled without a tap on a row. Saving logins from Autofill
+  comes in M2; `onSaveRequest` refuses.
+* An OTP-only form (no username or password field) is offered the codes of
+  the matched logins that have TOTP, never their passwords.
+
+### 22.5 Fill targets: browsers and apps
+
+Rust decides the target on every call (`crates/havenkeys-core/src/app_target.rs`)
+from the caller's package name, its signing certificates' SHA-256, and the
+structure's `webDomain` and scheme:
+
+* **Browser target:** the package and one of its certificates are on the
+  privileged list, `crates/havenkeys-core/data/android-browsers.json` — the
+  list Google's Credential Manager uses, release signatures only, refreshed
+  by hand with `scripts/update-android-browsers.sh` and reviewed before
+  committing. The reported domain and scheme become a page URL, matched by
+  `origin.rs` exactly as the extension's page URL is. No scheme, no domain,
+  or a domain containing `/ \ @ ? #` or a space gets nothing; an http page
+  stays http, so it does not get an https login.
+* **App target:** every other caller, WebViews inside apps included — the
+  app controls its WebView, so its `webDomain` is ignored. An app matches a
+  login only through an app binding (§22.6) or a Digital Asset Links
+  statement (§22.7).
+* HavenKeys never fills itself.
+* The certificates come from `PackageManager` (`signingInfo.apkContentsSigners`).
+  A package Android will not describe gives none, and Rust refuses a target
+  without one. **Package visibility is unverified:** the manifest declares
+  no `<queries>` and does not request `QUERY_ALL_PACKAGES`. If Android 11+
+  hides the app being filled from HavenKeys, it gets no certificates and
+  nothing is filled — the safe side, but autofill would not work for it. This
+  is pending a test on a device.
+
+### 22.6 App bindings and "Search HavenKeys…"
+
+For an app target with a login field, the dropdown always ends with "Search
+HavenKeys…". It opens `AutofillSearchActivity` (unlocking first if needed),
+which searches logins by title, username and website (no secrets). Picking
+one asks "Use <login> in <package>?". The prompt names the app by its
+**package name**; the app's label is shown below it, marked as the app's own
+claim, because an app can call itself anything.
+
+Confirming calls `autofill_bind_and_fill`. Online, Rust stores an app
+binding — package name plus certificate SHA-256, one per signing
+certificate, at most 32 per login — inside the login's encrypted
+details (an item write), then fills through the normal app match. Offline,
+nothing is stored: the user's confirmation is that one fill's authorization,
+and the toast says "Filled once". A browser target is never bound.
+
+Like gated rows, the search row's IntentSender is held by the app being
+filled. Both activities accept the structure Android attaches only when its
+package equals `getCallingPackage()` (`structureNamesCaller`), because the
+app that starts them could replace it; Rust then binds the fill to that
+package's certificates. Whether `getCallingPackage()` is non-null in this
+flow on real Android versions is unverified.
+
+### 22.7 Digital Asset Links
+
+When an app target asks for a fill and the setting "Check website–app links"
+is on (default), Rust (`crates/havenkeys-mobile/src/asset_links_fetch.rs`)
+fetches `https://<host>/.well-known/assetlinks.json` for the vault's login
+hosts whose registrable domain's first label appears in the package name
+(`com.github.android` → `github.com`), at most 8 hosts per request:
+
+* HTTPS only; plain DNS names only (no IPs, no `localhost`, no single-label
+  names); redirects are not followed; 3-second timeout; at most 128 KiB and
+  256 statements; parsed statement by statement in Rust, so one bad statement
+  voids only itself.
+* A statement counts when its relation is
+  `delegate_permission/common.handle_all_urls` or `common.get_login_creds`,
+  and it names the package and one of its certificates. The site then
+  vouches for the app, which is offered the logins saved for that site.
+* The cache is sealed with the vault's data key in a device-local slot
+  (`local_blob`, schema 6; never synced): a file is kept 7 days, a failure 1
+  hour, 256 hosts at most. Nothing is fetched while locked.
+* The requests go out with the user agent `havenkeys`. They tell each site
+  (and anyone watching the network) that this phone holds a login for it and
+  that an app with a matching name asked for a fill, at most once a week per
+  site. Turning the setting off stops every fetch; bindings still work.
+
+### 22.8 Locking
+
+* The core `LockManager` and its auto-lock choices (never, 5, 15, 30, 60
+  minutes), ticked every 5 seconds by a Rust thread and checked again when
+  the app returns to the foreground. Input in the main activity and the
+  calls a user makes there (list, search, open, reveal, TOTP) reset the idle
+  timer; Autofill does not. The item screen asks for its live TOTP code once
+  a second, and each request resets the timer, so the idle lock does not fire
+  while a login with TOTP is open with the screen on (`security-review.md`
+  AN7).
+* Lock when the screen turns off: a setting, on by default.
+* The `LockManager` also locks when the wall clock jumps more than 30 seconds
+  past the monotonic clock. Rust's monotonic clock on Android does not count
+  deep sleep, so a phone that slept for more than 30 seconds probably locks
+  on the next tick even with auto-lock set to never. Not yet observed on a
+  device.
+* Locking zeroes the Rust session and drops the server token. Every screen
+  observes the lock: navigation returns to Unlock and revealed values go
+  with their composables.
+* Release builds use `panic = "abort"`: a Rust panic ends the process, and
+  the in-memory vault with it (fail-closed).
+
+### 22.9 Network
+
+* The only outbound connections in M1: the user's server, and the Digital
+  Asset Links fetches (§22.7). No analytics, no crash reporting, no updater
+  (the spec's GitHub update check is not part of M1).
+* All of HavenKeys' connections are made by Rust (reqwest, rustls), not by
+  Android's network stack. TLS certificates are checked by
+  `rustls-platform-verifier`, which asks Android's own trust manager over
+  JNI, with Android's CA store (system and user-installed CAs). If its JNI
+  initialisation fails, the bundled roots are used: every certificate is
+  still verified, only user-installed CAs are missed.
+* Plain HTTP: Rust's transport refuses it to anything but `localhost`,
+  `127.0.0.1` and `[::1]`, in every build; the Digital Asset Links fetch is
+  HTTPS only. `network_security_config.xml` says the same for Android's own
+  stack (cleartext forbidden; debug builds allow `localhost` and `127.0.0.1`
+  for `adb reverse`), so the two agree; it does not govern Rust's sockets.
+* **User-installed CAs are trusted, on purpose:** a self-hosted server signed
+  by the user's own CA must work, as it does in the phone's browser. The
+  cost: anyone whose CA the user installed (or a device policy installed) can
+  intercept the server connection — it sees ciphertext, the auth key at
+  sign-in and the session token, not the vault — and forge
+  `assetlinks.json` answers (`security-review.md` AN5). How the verifier
+  treats user CAs has not been checked on a device.
+
+### 22.10 Clipboard
+
+* Copy is an explicit tap. The clip is marked sensitive
+  (`android.content.extra.IS_SENSITIVE`), which hides it from the clipboard
+  preview and keyboard suggestions on Android 13+.
+* It is cleared after the vault's delay, and on lock, sign-out and removal,
+  if it is still HavenKeys' clip.
+* Android 10+ hides the clipboard from apps in the background, so HavenKeys
+  usually cannot tell whether the user copied something else since. It
+  clears anyway — the safe side for a secret, which may remove a newer copy
+  made in another app.
+* The timer lives in the process. If the process dies before it fires and no
+  lock event ran, the clip stays.
+* The foreground app, the keyboard and accessibility services can read the
+  clipboard while it holds the value.
+
+### 22.11 Permissions, exported components and hardening
+
+| Permission | Why |
+|---|---|
+| `INTERNET` | The user's server and `assetlinks.json` |
+| `USE_BIOMETRIC` | Biometric unlock (BiometricPrompt) |
+| `CAMERA` | Scanning the Emergency Kit's QR code; requested when scanning. `android.hardware.camera` is not required |
+
+No other permission is declared (`ManifestTest` checks the set). In
+particular there is no `QUERY_ALL_PACKAGES`, no `REQUEST_INSTALL_PACKAGES`
+and no accessibility service.
+
+**Exported components** in the source manifest: the launcher activity
+(`MainActivity`) and `HavenAutofillService`, guarded by
+`android.permission.BIND_AUTOFILL_SERVICE` so only the system can bind it.
+`AutofillAuthActivity` and `AutofillSearchActivity` are not exported; only
+HavenKeys' own PendingIntents reach them. There is no provider and no
+manifest receiver (the screen-off receiver is registered at run time).
+Libraries add components to the **merged** manifest: androidx
+`ProfileInstallReceiver` (exported, guarded by `android.permission.DUMP`,
+which only the system and the shell hold) in every build, and
+`PreviewActivity` and `androidx.activity.ComponentActivity` in debug builds
+only. `ManifestTest` checks the source manifest only.
+
+**Hardening:**
+
+* `FLAG_SECURE` on every activity: no screenshots or screen recording, and a
+  blank recents thumbnail. Debug-only library activities do not set it.
+* `allowBackup="false"`, and backup and data-extraction rules that exclude
+  every domain, for cloud backup and device-to-device transfer.
+* Release builds are minified and shrunk with R8.
+* Chrome is listed as a compatibility package in `autofill_service.xml` for
+  versions before Chrome's own autofill-service support; no other browser is.
+
+### 22.12 Secrets in Kotlin, and memory
+
+* Repositories and ViewModel state hold overviews only (titles, usernames,
+  websites). A revealed value lives in the `remember`ed state of the
+  composable showing it and is cleared after 30 seconds, when it leaves the
+  screen, when the app goes to the background, and on lock. Never in a
+  ViewModel, navigation argument, `SavedStateHandle`, Intent extra or
+  `rememberSaveable`. Intents carry only a mode and an item ID; fill values
+  go only into datasets.
+* Typed secrets (master password, Secret Key, invite) go from the text field
+  straight to Rust. Password fields use the password keyboard with
+  autocorrect off.
+* `MobileException` carries a stable code and a fixed sentence, never a
+  secret. Types that hold a value override `toString()`.
+* **Limitations.** The JVM cannot wipe a `String`: the master password, a
+  typed Secret Key, revealed values and fill values stay in the Java heap
+  until garbage collection. The decrypted bundle passes briefly through a
+  `ByteArray` that is zeroed at once, but the JVM, the Keystore provider and
+  UniFFI's buffers may hold copies we cannot reach. Camera frames of the
+  Emergency Kit's QR code (which contains the Secret Key) are not zeroed.
+  These join the limits in §8.
+
+### 22.13 Logging and build supply chain
+
+* Nothing logs. detekt's `ForbiddenImport`/`ForbiddenMethodCall` forbid
+  `android.util.Log`, `println`, `print` and `printStackTrace`. Because
+  detekt 1.23's type resolution cannot read Kotlin 2.4 metadata, a Gradle
+  task, `forbidLogging`, also scans every Kotlin source as text and fails the
+  build on any logging call; `detekt` depends on it. The Rust crate denies
+  `print!`/`eprint!`/`dbg!`.
+* Gradle dependency verification (`apps/android/gradle/verification-metadata.xml`,
+  SHA-256) pins every dependency, including the `rustls-platform-verifier`
+  AAR, which comes from a mutable GitHub Maven branch; every dependency bump
+  regenerates it. CI validates the Gradle wrapper's checksum. The generated
+  UniFFI bindings are committed, and CI fails if a rebuild changes them.
+
+### 22.14 Known limitations
+
+* Everything in this section is unverified on a device (above).
+* The master password's minimum length (10) is checked by the UI, on the
+  desktop and on Android; Rust does not enforce it.
+* Revoking this phone from its own Devices list leaves its biometric bundle
+  in place (Sign out deletes it). The next online bundle unlock is refused
+  by the server and deletes it then.
+* The Keystore cleanup on sign-out and removal runs from an app-wide event
+  collector; an unexpected runtime exception there (a Keystore
+  `ProviderException`, a `ClipboardManager` failure) is not caught and can end
+  the process (`security-review.md` AN1).

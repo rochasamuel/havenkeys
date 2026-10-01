@@ -33,6 +33,10 @@ docker rm -f havenkeys-test-pg      # when you are done with it
 Running the server itself, and the backup drill that has to pass before it
 holds a real vault, are in `docs/deployment.md`.
 
+The Android app needs a JDK 17, the Android SDK and NDK, three Rust Android
+targets and `cargo-ndk`; `docs/android.md` lists them, with the exports the
+commands below assume.
+
 ## Commands
 
 | Task | Command |
@@ -58,6 +62,10 @@ holds a real vault, are in `docs/deployment.md`.
 | Rust policy (advisories, licences, sources) | `cargo deny check` |
 | JS advisories | `pnpm audit` |
 | Check the Windows-only code from Linux | `cargo clippy -p havenkeys-oslock --target x86_64-pc-windows-gnu -- -D warnings` |
+| Mobile API tests, with the Android attack regressions | `cargo test -p havenkeys-mobile --features testing` |
+| Android: Rust library + Kotlin bindings | `scripts/build-android.sh` (`--release` for release builds); commit the bindings it changes |
+| Android: lint, unit tests, Android lint, release APK | `cd apps/android && ./gradlew detekt testGithubDebugUnitTest lintGithubDebug assembleGithubRelease` |
+| Android: refresh the privileged browser list | `scripts/update-android-browsers.sh`, then review the diff |
 
 Install the audit tools with `cargo install cargo-audit cargo-deny --locked`.
 
@@ -245,6 +253,9 @@ pnpm ui:check --app=desktop   # one app: extension | desktop
 
 ## Releases and updates
 
+This section is about the desktop app. Android releases, and the custody of
+their signing key, are in `docs/android.md`.
+
 See `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md` for the
 full design and `docs/security-model.md` §18 / `docs/threat-model.md` T10 for
 the security side.
@@ -317,6 +328,7 @@ exactly, and no nightly toolchain or `cargo-fuzz` is needed:
 | TOTP input / `otpauth://` URIs | `crates/havenkeys-core/tests/fuzz.rs` |
 | Website rules, page URLs, domain matching, generated look-alike hosts | `crates/havenkeys-core/tests/fuzz.rs` |
 | Item JSON from the UI | `crates/havenkeys-core/tests/fuzz.rs` |
+| Digital Asset Links files (`assetlinks.json`) | `crates/havenkeys-core/tests/fuzz.rs` |
 | 1Password `.1pux` archives and their JSON | `crates/havenkeys-core/src/import/onepux.rs` |
 | Extension-side protocol validator | `packages/protocol/src/fuzz.test.ts` |
 | Extension message validators, URL stripping, field classification over random DOM | `apps/extension/src/fuzz.test.ts` |

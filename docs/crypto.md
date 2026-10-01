@@ -47,7 +47,9 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
         ├── item overview blobs   (title, username, URLs, flags, timestamps)
         ├── item details blobs    (password, TOTP config, notes, note content, password history,
         │                          identity values, custom-field `sections`)
-        └── settings blob         (auto-lock, clipboard timeout; device-local, unsynced)
+        ├── settings blob         (auto-lock, clipboard timeout; device-local, unsynced)
+        └── local blobs           (Android only: the phone's own settings and the
+                                   Digital Asset Links cache; device-local, unsynced)
 ```
 
 A login's custom fields (`sections`: section titles, field labels and values,
@@ -76,6 +78,8 @@ Why this shape:
   errors or does not answer is never taken as "no key" (unlock asks to retry
   rather than for the Emergency Kit). See `server-sync.md` §7 for the
   trade-off this fallback keeps.
+  On Android the key is a file in app-private storage, sealed by an Android
+  Keystore key, with no plaintext fallback (`security-model.md` §22.3).
 * **HKDF domain separation** (`info` strings) ensures the KEK, the auth key
   and the data key can never collide with each other or with future keys.
 * **The Identity's item ID is derived from the vault key**
@@ -180,6 +184,47 @@ feeding the KEK derivation.
   header the new account serves. Re-pointing a vault at another account or
   server needs its own path that resets both, and does not exist yet.
 
+## Unlock bundle (Android)
+
+Biometric unlock on Android (`security-model.md` §22.2) persists the two
+keys a master-password unlock produces, sealed by the phone's Keystore. The
+layout, built and judged in `crates/havenkeys-core/src/unlock_bundle.rs`, is
+81 bytes:
+
+```text
+offset  size  field
+0       1     version         = 0x01
+1       32    vault key
+33      32    auth key
+65      8     enrolled_at_ms  (i64, big-endian, Unix ms)
+73      8     boot_count      (i64, big-endian, Settings.Global.BOOT_COUNT)
+```
+
+* **Made only from the master password.** `BundleTicket::derive` runs the
+  normal key scheme 3 derivation (Argon2id, then HKDF with the Secret Key)
+  and unwraps the vault key from the header, so a wrong password makes no
+  bundle. A lock while Argon2id runs wins: nothing is returned for a vault
+  that closed meanwhile.
+* **No HavenKeys cipher of its own.** Rust hands the plaintext to the app,
+  which encrypts it with AES-256-GCM under a Keystore key that every use must
+  unlock with a strong biometric (StrongBox when available). The file is the
+  Keystore's 12-byte IV followed by ciphertext and tag. Integrity therefore
+  comes from the Keystore's GCM; Rust additionally refuses anything but
+  exactly 81 bytes starting with version 1, and a vault key that does not
+  open the vault fails the unlock.
+* **Freshness is checked in Rust:** a bundle older than 14 days
+  (`BUNDLE_MAX_AGE_MS`), dated in the future, or from another boot is
+  refused, and a negative (unknown) boot count matches no boot, at enrolment
+  or at use.
+* **A documented exception.** Elsewhere the auth key is derived at unlock and
+  never persisted. Here it is persisted, Keystore-sealed, so a biometric
+  unlock can open a server session and write. It still unwraps nothing; the
+  vault key next to it is what opens the vault. If the master password
+  changed on another device the server refuses the auth key, the vault locks
+  with `bundle_refused`, and the bundle is deleted.
+* `UnlockBundle`'s `Debug` prints `UnlockBundle(<redacted>)`; the encoded
+  bytes are a zeroize-on-drop `SecretBytes`.
+
 ## Argon2id parameters
 
 Defaults are above RFC 9106 §4's "second recommended option" (64 MiB, t=3),
@@ -253,6 +298,8 @@ AAD = "havenkeys" || 0x00 || blob_version || algorithm || purpose || 0x00 || con
 | `item-details` | vault ID, item ID |
 | `settings` | vault ID |
 | `sync-header` | vault ID (the account header a device publishes and reads, `crates/havenkeys-core/src/sync.rs`) |
+| `device-settings` | vault ID (Android: the phone's own settings, `local_blob` table) |
+| `asset-links` | vault ID (Android: the Digital Asset Links cache, `local_blob` table) |
 
 Consequences: a blob copied into another item row, another role, or another
 vault fails authentication. Header bytes (version, algorithm) are authenticated

@@ -38,6 +38,14 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > used only in the Rust core; the relying-party ID is checked in Rust against
 > the page URL the browser reports.
 
+> Amended on 2026-10-01 by
+> `docs/superpowers/specs/2026-10-01-android-app-design.md`: an Android app
+> is in scope (iOS later, over the same Rust API). It is a full client of the
+> user's server. While unlocked, Android Autofill may receive the values of
+> the logins Rust matched to the requesting app or page ("direct fill"),
+> which relaxes §33 for the operating system's autofill framework only;
+> "Confirm before filling" restores per-fill authorization.
+
 ---
 
 # 1. Core philosophy

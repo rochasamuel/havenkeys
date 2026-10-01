@@ -2058,3 +2058,295 @@ there too (`autofill.md`, "Known limitation"). A visible CAPTCHA stops the
 run before anything is pressed. Phone prompts, security keys, passkeys and
 "stay signed in?" screens are not recognized as a login form at all, so the
 run simply stops and the user finishes by hand.
+
+---
+
+# Security Review: Android M1
+
+**Date:** 2026-10-01
+**Scope:** branch `android-m1`: `crates/havenkeys-mobile`, the Android parts
+of `crates/havenkeys-core` (`unlock_bundle.rs`, `app_target.rs`,
+`app_fill.rs`, `asset_links.rs`, `local.rs`, `data/android-browsers.json`),
+`crates/havenkeys-client/src/bundle.rs`, the `platform-verifier` feature of
+`crates/havenkeys-sync-client`, and `apps/android` (manifest, network and
+backup configuration, `security/`, `autofill/`, `clipboard/`, `data/`, the
+UI's secret handling, the Gradle build and CI). Design:
+`docs/superpowers/specs/2026-10-01-android-app-design.md`.
+**Method:** self-review of the code against the spec and the global
+constraints of the implementation plan, the per-task reviews made while it
+was built, and the commands below. **Nothing in `apps/android` has run on a
+phone or an emulator**: every Android behaviour below is read from the code
+and Android's documentation, and the manual checklist at the end is still
+open.
+
+> This is an internal review, not an independent security audit.
+
+## Summary
+
+No critical or high-severity issue was found in the code. The central
+properties hold in the host tests: Rust decides every target, match and fill;
+an app is identified by package **and** signing certificate; a WebView's
+domain is never trusted; a locked vault returns nothing; a stale, other-boot
+or tampered unlock bundle is refused. The largest open item is not a flaw
+but a gap: none of it has been exercised on Android (AN2).
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| AN1 | Low | App (`AppContainer`, `HavenApp.appScope`) | App-wide event collectors have no exception handler: a Keystore `ProviderException` while deleting a key, or a `ClipboardManager` failure while clearing, ends the process | Open (deferred) |
+| AN2 | Info | Whole app | Nothing has run on a device or emulator: instrumented `KeystoreTest`, the QR scanner, BiometricPrompt, the navigation lock wipe, `FLAG_SECURE`, the clipboard flags, the `AutofillService` end to end, `getCallingPackage()` in the fill activities, package visibility | Open: manual checklist |
+| AN3 | Low | Autofill (gated rows) | With "Confirm before filling" on and the vault unlocked, the app being filled can fire its rows' IntentSenders without a tap and HavenKeys answers without showing anything | Accepted, documented (Rust returns only that caller's matched logins) |
+| AN4 | Info | CI | `.github/workflows/android.yml` has never run on GitHub | Open |
+| AN5 | Low | Network / Digital Asset Links | User-installed CAs are trusted; whoever holds one can intercept the server connection and forge `assetlinks.json`, so a malicious app named after a site can be offered that site's logins | Accepted, documented |
+| AN6 | Low | UI (binding prompt, unlock) | No protection against touches through another app's overlay (`filterTouchesWhenObscured` / `setHideOverlayWindows`); matters mainly on Android 9–11 | Open |
+| AN7 | Low | Item screen / mobile API | The live TOTP code is fetched once a second and `totp()` resets the idle timer, so auto-lock does not fire while a login with TOTP is open with the screen on | Open |
+| AN8 | Low | Settings → Devices | Revoking this phone from its own Devices list leaves its biometric bundle in place (Sign out deletes it) | Open |
+| AN9 | Low | Mobile API / auto-lock | Secret-returning calls check the lock state, not the auto-lock clock; after the process thaws, a fill can be answered before the overdue 5-second tick locks | Open |
+| AN10 | Info | Autofill (package visibility) | No `<queries>` and no `QUERY_ALL_PACKAGES`: if Android 11+ hides the app being filled, it gets no certificates and nothing is filled for it | Open: pending a device test (fails closed) |
+| AN11 | Info | Auto-lock | Rust's monotonic clock excludes deep sleep on Android, so the core's suspend detection probably locks the vault after any sleep longer than 30 s, even with auto-lock off | Open: to observe on a device (fails closed) |
+| AN12 | Info | App (`VaultEventsHub`) | Events go through a `SharedFlow` with `DROP_OLDEST`; a slow collector could miss `SignedOut`/`Removed` and keep Keystore keys | Accepted |
+| AN13 | Info | App memory | The master password, typed Secret Key, revealed and fill values are JVM `String`s; the Kit's QR camera frames are not zeroed | Accepted, documented |
+| AN14 | Info | Manifest | Libraries add components to the merged manifest (`ProfileInstallReceiver`, exported and `DUMP`-guarded, in every build; `PreviewActivity` and `ComponentActivity` in debug builds); `ManifestTest` checks the source manifest only | Accepted, documented |
+| AN15 | Info | Digital Asset Links (privacy) | A fill request in an app makes HavenKeys contact up to 8 vault sites named like the app, telling them (and the network) that the phone holds a login there | Accepted, setting to turn off |
+| AN16 | Info | "Search HavenKeys…" offline | Offline, a confirmed "Use <login> in <package>?" fills any login once without storing a binding | Accepted (the confirmation is the authorization) |
+| AN17 | Info | Onboarding / unlock | The master password's minimum length (10) is checked by the UI only, on desktop and Android | Accepted |
+| AN18 | Info | Dependencies | `yoke-derive` 0.8.3 in `Cargo.lock` has been yanked (already so on `main`) | Open |
+
+## Details
+
+### AN1. App-wide collectors can end the process (Low, open)
+**Component:** `AppContainer.kt` (`wipeKeysOnExit`, `clearClipboardOnLock`),
+launched in `HavenApp.appScope` (`SupervisorJob`, no
+`CoroutineExceptionHandler`). **Attack scenario:** not an attack; a failure.
+`keystoreDelete` catches `GeneralSecurityException` and `IOException`, but a
+Keystore `ProviderException` (a `RuntimeException`) or a `ClipboardManager`
+exception escapes the collector and, with no handler, crashes the app.
+**Effect:** fail-closed for the vault (it lives only in memory), but a crash
+during sign-out or removal can leave the biometric key, the bundle or the
+Secret Key's Keystore key behind until the next sign-out. **Mitigation
+proposed:** catch `RuntimeException` in those two collectors. **Remaining
+limitation:** until then, as described.
+
+### AN2. Nothing has run on Android (Info, open)
+**Component:** all of `apps/android`. No emulator system image was installed
+on the build machine and no phone was attached. The JVM unit tests (157)
+cover parsing, classification, planning, the structure-caller check, the
+clipboard decision, ViewModels and the manifest; the Rust tests cover every
+security decision. Not exercised: the Keystore (`KeystoreTest` is compiled,
+never run), BiometricPrompt and its `CryptoObject`, the camera QR scanner,
+the navigation lock wipe, `FLAG_SECURE`, the clipboard's sensitive flag and
+clearing, the `AutofillService` with real apps and browsers, whether
+`getCallingPackage()` is non-null when Android starts the fill activities,
+and package visibility (AN10). **Mitigation:** the manual checklist below
+and one run of `connectedGithubDebugAndroidTest`. **Remaining limitation:**
+any of these may fail on a real phone; most fail closed (no fill, no
+biometric unlock), but that is a claim to check, not a result.
+
+### AN3. Gated rows can be fired by the app being filled (Low, accepted)
+**Component:** `DatasetFactory.sender`, `AutofillAuthActivity`. **Attack
+scenario:** a malicious app that HavenKeys matched (a binding the user made,
+or a site that vouches for it) holds the IntentSender of each gated row and
+fires it without the user tapping; with the vault unlocked, the activity
+calls `autofill_fill` and returns the login. **Mitigation:** the activity
+accepts the structure only when it names the calling package, and Rust
+returns only logins matched to that package and certificate — the same set
+direct fill would have put in the framework. **Remaining limitation:**
+"Confirm before filling" keeps values out of the autofill framework until a
+row is used; it is not a per-fill prompt while unlocked. The spec's
+description ("tapping opens a minimal HavenKeys activity") matches the code;
+the checklist's "each fill asks" should be read that way
+(`docs/android.md`).
+
+### AN4. CI has not run (Info, open)
+The workflow is written and its actions are pinned by SHA, but no push has
+triggered it on GitHub. The commands it runs were run locally (below).
+
+### AN5. User-installed CAs and Digital Asset Links (Low, accepted)
+**Component:** `rustls-platform-verifier` (Android's CA store, user CAs
+included), `res/xml/network_security_config.xml` (the same for Android's own
+stack), `asset_links_fetch.rs`. **Attack scenario:** a CA the user
+installed (or a device policy pushed) is held by an attacker on the network
+path. They can read the server connection's metadata, the auth key at
+sign-in and the session token (not the vault: everything is ciphertext), and
+answer `https://github.com/.well-known/assetlinks.json` with a file that
+vouches for their own app; if that app's package name contains `github`
+and the user focuses a login field in it, it is offered GitHub's logins
+(direct fill after one tap). **Mitigation:** none beyond Android's warnings
+when a user CA is installed; the trade-off is deliberate, so a self-hosted
+server with its own CA works as it does in the phone's browser. **Remaining
+limitation:** as described. A narrower option, not taken: trust only system
+CAs for the Digital Asset Links fetch.
+
+### AN6. Overlays (Low, open)
+**Component:** `AutofillSearchActivity` ("Use <login> in <package>?"),
+`AutofillAuthActivity`, `MainActivity`. **Attack scenario:** an app with
+"display over other apps" draws a window over the binding prompt and gets
+the user to tap "Use" while believing they tapped something else, binding a
+login to that app. Android 12+ blocks touches through most untrusted
+overlays; Android 9–11 do not. **Mitigation proposed:**
+`setHideOverlayWindows(true)` (Android 12+) or filtering obscured touches on
+the confirm button. **Remaining limitation:** none implemented.
+
+### AN7. TOTP refresh holds the idle timer (Low, open)
+**Component:** `ItemViewModel.totpTicks` (once a second, while the screen is
+visible) and `MobileVault::totp`, which calls `touch()`. **Scenario:** a
+login with TOTP left open on a phone whose screen stays on (charging dock,
+"stay awake") never reaches the idle timeout. This is desktop finding #1
+again, on Android. The screen-off lock (on by default) and the collection
+stopping when the activity stops limit it. **Mitigation proposed:** a
+`totp` call that does not touch the timer for the live display.
+
+### AN8. Revoking this phone keeps its bundle (Low, open)
+**Component:** `DevicesViewModel.revoke`, `wipeKeysOnExit`. Sign out emits
+`signed_out` and deletes the biometric key and bundle; revoking the current
+device from the list does not. **Mitigation:** the server refuses the
+bundle's auth key at the next online bundle unlock, which locks with
+`bundle_refused` and deletes it. **Remaining limitation:** offline, the
+bundle still opens the local replica until it expires (14 days or a reboot).
+
+### AN9. A fill right after the process thaws (Low, open)
+**Component:** `MobileVault` (`require_unlocked`), `LockClock`. Auto-lock is
+a Rust thread ticking every 5 seconds, plus a check when the app returns to
+the foreground. When Android freezes the cached process, the thread does not
+run. **Scenario:** the auto-lock deadline passes while the process is
+frozen; the user focuses a login field in another app; Android binds the
+`AutofillService`, and `autofill_matches`/`autofill_fill` (which check only
+that the vault is unlocked) may answer before the overdue tick locks.
+**Mitigation proposed:** run the auto-lock check (`tick`) at the start of
+every secret-returning call. **Remaining limitation:** a window of up to one
+tick after a freeze; not observed, because nothing ran on a device.
+
+### AN10. Package visibility (Info, open)
+**Component:** `CallerIdentity.kt`, `AndroidManifest.xml`. Android 11+
+filters which packages an app can see. The autofill caller may be visible to
+the active autofill service, but this has not been checked. If it is not,
+`certDigests` returns nothing, Rust refuses the target, and that app (or
+browser) gets no autofill. `QUERY_ALL_PACKAGES` was not added without evidence that it is
+needed. **Remaining limitation:** fails closed; pending the checklist.
+
+### AN11. Sleep and the suspend detector (Info, open)
+**Component:** `LockClock` (`Instant`), core `LockManager::tick`. The
+`LockManager` locks when wall time advances more than 30 seconds beyond
+monotonic time. On Android, Rust's `Instant` uses `CLOCK_MONOTONIC`, which
+stops in deep sleep, so a phone that sleeps probably locks HavenKeys at the
+next tick even with "Lock when the screen turns off" off and auto-lock set
+to never. Safe, possibly surprising; to be confirmed on a device.
+
+### AN12. Lossy event flow (Info, accepted)
+**Component:** `VaultEventsHub` (`replay = 1`, `extraBufferCapacity = 16`,
+`DROP_OLDEST`). Rust's events are posted without suspending; a collector more
+than 17 events behind loses the oldest. The Keystore and clipboard
+collectors do almost no work and events are rare, so this is not expected in
+practice.
+
+### AN13. JVM memory (Info, accepted)
+See `security-model.md` §22.12: strings cannot be wiped; the bundle's
+`ByteArray` is zeroed but copies may exist; the Kit's camera frames are not
+zeroed.
+
+### AN14. Library components in the merged manifest (Info, accepted)
+`androidx.profileinstaller.ProfileInstallReceiver` is exported in every
+build but requires `android.permission.DUMP` (signature|privileged), so only
+the system and `adb shell` can reach it. `PreviewActivity` (Compose tooling)
+and `androidx.activity.ComponentActivity` (Compose test manifest) are in
+debug builds only. `ManifestTest` reads the source manifest; a check of the
+merged release manifest would catch a future library adding more.
+
+### AN15. Digital Asset Links requests (Info, accepted)
+See `security-model.md` §22.7. The setting turns them off.
+
+### AN16. Offline "Search HavenKeys…" (Info, accepted)
+Online, confirming stores a binding and the fill goes through the normal app
+match. Offline nothing can be stored, so `autofill_bind_and_fill` reads the
+chosen login directly. The prompt names the package, and only HavenKeys'
+own activity can confirm it; overlays are AN6.
+
+### AN17. Password length (Info, accepted)
+The 10-character minimum when activating is a UI check
+(`OnboardingScreen.kt`, and the desktop's own); a client calling Rust
+directly could set a shorter password. Argon2id cost and the Secret Key
+still apply.
+
+### AN18. Yanked `yoke-derive` (Info, open)
+`cargo deny check` and `cargo audit` warn that `yoke-derive` 0.8.3 is
+yanked. It is the same on `main`, so not introduced here; a
+`cargo update -p yoke-derive` is the likely fix.
+
+## Audits and full verification
+
+Run on 2026-10-01 (WSL2, Linux 6.6.87.2-microsoft-standard-WSL2), at the
+tip of `android-m1` plus this documentation commit. Postgres for the server
+suites came from `scripts/test-server.sh`'s container
+(`HAVENKEYS_TEST_DATABASE_URL` set).
+
+| Command | Result |
+|---|---|
+| `cargo test --workspace` (with `HAVENKEYS_TEST_DATABASE_URL`) | 805 passed, 0 failed, across 53 test targets, server and sync-client suites against Postgres included |
+| `cargo test -p havenkeys-mobile --features testing` | 42 passed (37 unit, 5 in `tests/regressions.rs`), 0 failed; re-run after the fix below |
+| `cargo clippy --workspace --all-targets -- -D warnings` | First run **failed**: an unused `#[must_use]` `Forgotten` in a test in `crates/havenkeys-mobile/src/unlock.rs`. Fixed in a separate commit (the test now asserts the forget was saved); then clean |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok`. Warnings: `yoke-derive` 0.8.3 yanked (AN18), one licence allowance and six advisory ignores that match nothing |
+| `cargo audit` | No vulnerabilities; 3 allowed warnings: `proc-macro-error` (unmaintained) and `glib` `VariantStrIter` (unsound), both through the desktop's GTK stack as in every earlier review, and the yanked `yoke-derive` |
+| `pnpm test` | **1 failure** of 872 tests: the extension's timing check "attack 7: thousands of inputs cost a bounded amount of work" took 509–548 ms against a 500 ms budget, in three runs here. This branch does not touch the extension; the same file passes (42/42) when run alone. Desktop 97, protocol 27, UI 8, web 14 passed |
+| `scripts/build-android.sh --release` (`ANDROID_NDK_HOME=…/ndk/30.0.16248370`) | Built `arm64-v8a`, `armeabi-v7a`, `x86_64`; bindings regenerated with no change |
+| `./gradlew detekt testGithubDebugUnitTest lintGithubDebug assembleGithubRelease` | BUILD SUCCESSFUL. `forbidLogging` and detekt passed; 157 JVM unit tests, 0 failed (re-run with `--rerun-tasks`); `lintGithubDebug` passed; `app-github-release-unsigned.apk` built (R8, about 29 MB). The Kotlin compiler warns of two unused expressions in `AppContainer.kt` (`Unit` in `keystoreDelete`'s catch blocks) |
+| `scripts/build-android.sh` (debug, afterwards) | Built; committed bindings unchanged |
+| Instrumented tests (`connectedGithubDebugAndroidTest`) | **Not run**: no emulator or device |
+
+## Secret-logging and trust-boundary review
+
+* No Kotlin logging: `forbidLogging` passed (no `android.util.Log`,
+  `println`, `print`, `printStackTrace`, `System.out/err` in any source),
+  detekt's `ForbiddenImport`/`ForbiddenMethodCall` are on, and the Rust crate
+  denies print macros. `jni`'s `LogErrorAndDefault` in `android_tls.rs` goes
+  through the `log` crate, which has no logger installed in the app.
+* `MobileError` carries a code and a fixed sentence; `CipherError` displays
+  "keystore failure"; `UnlockBundle` and `AppIdentity` redact `Debug`;
+  `DatasetPlan` and `Outcome.Ok` keep values out of `toString()`.
+* Intents carry only a mode and an item ID. Fill values go into `Dataset`s
+  and the `EXTRA_AUTHENTICATION_RESULT` the autofill API requires, nowhere
+  else.
+* Typed secrets are `remember`ed, never `rememberSaveable`d, and no
+  ViewModel `UiState` holds a password, Secret Key, revealed value or code.
+* Every `havenkeys-mobile` call that returns a secret goes through
+  `require_unlocked` or a vault session check and, for autofill, re-derives
+  the target from the facts on every call. `autofill_search` returns no
+  secret.
+
+## Verified properties (host tests)
+
+* A privileged browser's page on `evil.com` gets nothing for `github.com`;
+  an http page stays http (`regressions.rs` attack 1, `app_target.rs`).
+* An app with GitHub's package name and another certificate, and a WebView
+  claiming `github.com`, get nothing; Chrome's package signed by someone else
+  is an app (`regressions.rs` attack 2, `app_fill.rs`, `app_target.rs`).
+* A locked vault fills, reveals and answers TOTP for nothing (attack 3).
+* Malformed IDs and oversized targets are refused without a panic (attack 5).
+* A bundle older than 14 days, from the future, from another boot, with an
+  unknown boot count, truncated or tampered is refused; a wrong master
+  password enrols nothing (`unlock_bundle.rs`, `regressions.rs`).
+* `assetlinks.json`: redirects are not followed, oversized answers and
+  non-DNS hosts are refused, one bad statement voids only itself, other
+  relations, packages and certificates do not vouch, the cache keeps files a
+  week and failures an hour and is bounded (`asset_links.rs`,
+  `asset_links_fetch.rs`, `fuzz_asset_links_parser`).
+* A Keystore cipher that fails never leaves the Secret Key in plaintext on
+  disk (`key_file.rs`).
+* A structure that does not name the calling package is ignored
+  (`StructureNamesCallerTest`).
+
+## Manual checklist (verification pending)
+
+None of these has been run.
+
+- [ ] Real phone, Android 14+: sign in by scanning the kit; unlock with password; enroll fingerprint; unlock with fingerprint; reboot → password required; add a fingerprint → bundle refused, password required.
+- [ ] Chrome (Autofill using another service) and Firefox: login on github.com fills after a tap; github.com.evil.com (hosts file or a test domain) offers nothing; an http page does not get an https login.
+- [ ] GitHub app: offered through Digital Asset Links or after "Search HavenKeys…" binding; a sideloaded app with the same package name and another key gets nothing.
+- [ ] Google app (WebView sign-in): its WebView's domain is not trusted.
+- [ ] Locked vault: "Unlock HavenKeys" appears; nothing fills without unlocking.
+- [ ] Confirm before filling on: each fill asks; off: one tap fills.
+- [ ] TOTP: OTP field after a login offers the code.
+- [ ] Recents thumbnail is blank; screenshots are blocked.
+- [ ] Airplane mode: unlock, reveal, TOTP and autofill work; sync shows offline.
+
+"Each fill asks" means each row opens HavenKeys (AN3). Also owed: one run of
+`connectedGithubDebugAndroidTest` on an emulator or phone, and the package
+visibility check (AN10).

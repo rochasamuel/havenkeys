@@ -12,6 +12,8 @@ havenkeys/
 │   ├── havenkeys-sync-client/ HTTP against that server; treats every answer as hostile
 │   ├── havenkeys-client/      account, session and sync for every app: activation, unlock,
 │   │                          sync, writes, devices, removal (no Tauri, no UI)
+│   ├── havenkeys-mobile/      UniFFI API for the Android app (and later iOS): intent-level calls,
+│   │                          Keystore-sealed Secret Key file, Digital Asset Links fetch
 │   └── havenkeys-core/        Rust security core (no UI, no Tauri, no network)
 │       └── src/
 │           ├── crypto/        kdf.rs, keys.rs, blob.rs — composition of audited primitives
@@ -27,6 +29,11 @@ havenkeys/
 │           ├── import/        1Password .1pux importer (hostile-input parsing)
 │           ├── account.rs     account identity: email normalization for key derivation
 │           ├── sync.rs        account header attestation + applying a server pull (no network)
+│           ├── unlock_bundle.rs  Android biometric unlock bundle: layout and freshness
+│           ├── app_target.rs  Android fill targets: privileged browsers vs apps
+│           ├── app_fill.rs    filling Android apps: app bindings, vouched sites
+│           ├── asset_links.rs Digital Asset Links parsing and cache (the fetch is mobile's)
+│           ├── local.rs       device-local encrypted slots that never sync
 │           └── error.rs       secret-free error type
 ├── apps/
 │   ├── desktop/
@@ -34,8 +41,10 @@ havenkeys/
 │   │   └── src-tauri/         Thin Tauri shell: commands, clipboard, auto-lock ticker
 │   │                          (custom fields: login_fields, reveal_login_field,
 │   │                          login_field_totp, copy_login_field, open_login_field_url)
-│   └── extension/             MV3 extension: background worker, popup, content script,
-│                              autofill engine, in-page menu/save frames, options, messaging
+│   ├── extension/             MV3 extension: background worker, popup, content script,
+│   │                          autofill engine, in-page menu/save frames, options, messaging
+│   └── android/               Android app (Kotlin, Jetpack Compose): screens, AutofillService,
+│                              Keystore and BiometricPrompt; calls only havenkeys-mobile
 ├── packages/
 │   └── protocol/              TypeScript mirror of the wire protocol + validators
 ├── scripts/                   native host registration
@@ -47,6 +56,61 @@ The core crate is deliberately independent of Tauri so that:
 * it can be audited and tested in isolation (`cargo test -p havenkeys-core`),
 * the bridge can link the same code without Tauri,
 * UI changes cannot accidentally change security behaviour.
+
+## Android app
+
+Spec: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Building:
+`docs/android.md`. Security: `security-model.md` §22.
+
+```text
+┌──────────────────────── apps/android (one process) ────────────────────────┐
+│  ui/<feature>/  Compose screen + ViewModel (overviews only; a revealed      │
+│                 value lives in the composable showing it)                   │
+│  autofill/      HavenAutofillService, StructureParser, FieldClassifier,     │
+│                 FillPlanner, DatasetFactory, auth and search activities     │
+│  security/      Keystore keys (Secret Key file, unlock bundle),             │
+│                 BiometricGate, boot count                                   │
+│  data/          VaultRepository, AccountRepository, SettingsRepository,    │
+│                 AutofillRepository — the only door to Rust                  │
+│  AppContainer   manual wiring; one MobileVault for the process              │
+└─────────────────────────────────┬──────────────────────────────────────────┘
+                                  │ UniFFI (generated Kotlin, committed)
+┌─────────────────────────────────▼──────────────────────────────────────────┐
+│ havenkeys-mobile: MobileVault — status, onboarding, unlock (password,       │
+│ bundle), list/search/view/reveal/TOTP, generator, autofill_matches/fill/    │
+│ totp/search/bind_and_fill, settings, sync, devices, sign out, remove        │
+│        │                                │                                   │
+│ havenkeys-client (account, sync)   asset_links_fetch (HTTPS, assetlinks.json)│
+│        │                                                                    │
+│ havenkeys-core (crypto, vault, matching, app targets, bundle) → SQLite file │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+* **Layers** follow Android's recommended architecture: a `@Composable`
+  screen and a `ViewModel` per feature exposing one immutable `UiState` as a
+  `StateFlow`; repositories as interfaces with one implementation over the
+  UniFFI API and fakes for tests; unidirectional data flow; coroutines, with
+  Rust calls on `Dispatchers.IO` and results as a sealed `Outcome`, not
+  exceptions; Navigation Compose; manual wiring in `AppContainer`, no DI
+  framework. The repositories store nothing of their own: storage and
+  offline behaviour belong to Rust. Room, DataStore and SharedPreferences
+  are not used for anything from the vault.
+* **One vault per process.** The screens and the `AutofillService` run in
+  the app's default process and share one `MobileVault`, so one unlock
+  opens both and one lock closes both. Rust's events (locked, unlocked,
+  connectivity, signed out, items changed, removed) reach Kotlin through a
+  callback on Rust's own thread and are posted to flows that every
+  ViewModel observes.
+* **Storage** is the same schema-6 replica as the desktop, in the app's
+  `filesDir`, plus the Keystore-sealed Secret Key file there and, when
+  biometric unlock is on, the sealed bundle in `noBackupFilesDir`.
+* **Sync** is `havenkeys-client`'s: a pull on unlock, on pull-to-refresh, and
+  while the app is in the foreground (checked every 30 seconds, pulled when
+  60 seconds have passed). Nothing syncs while locked. Editing is not in M1.
+* **Calls block.** `havenkeys-mobile` runs a small Tokio runtime of its own
+  (two workers) and blocks the calling thread; the app always calls it off
+  the main thread. An autofill request is answered within 4 seconds or with
+  nothing; a late answer is dropped.
 
 ## The server and the local replica
 
@@ -130,8 +194,9 @@ SQLite (bundled via `rusqlite`), one file per vault at the platform data
 directory (`$XDG_DATA_HOME/com.havenkeys.desktop/vault.sqlite3` on Linux),
 created with mode `0600` on Unix. This is a read-only replica of the
 server's account, not an independently authoritative vault
-(`docs/server-sync.md`). Schema v4 (`Store::init` refuses to open anything
-older, with a message that the vault predates accounts):
+(`docs/server-sync.md`). Schema v6 (`Store::init` migrates a v5 file by
+adding `local_blob`, and refuses anything older, with a message that the
+vault predates accounts):
 
 ```sql
 CREATE TABLE vault_header (
@@ -162,6 +227,14 @@ CREATE TABLE account (
 CREATE TABLE settings (
   id   INTEGER PRIMARY KEY CHECK (id = 1),
   blob BLOB NOT NULL                    -- EncryptedBlob: settings JSON (device-local, unsynced)
+);
+CREATE TABLE unreadable_items (
+  id       TEXT PRIMARY KEY NOT NULL,   -- a pulled item that did not open, kept for a retry
+  revision INTEGER NOT NULL
+);
+CREATE TABLE local_blob (
+  name TEXT PRIMARY KEY NOT NULL,       -- Android: "device_settings", "asset_links"
+  blob BLOB NOT NULL                    -- EncryptedBlob under the data key; never synced
 );
 ```
 

@@ -1,7 +1,7 @@
 # HavenKeys
 
 A personal password manager: a Tauri desktop app with a Rust security core,
-a browser extension, and a small server you run yourself. Your vault lives on
+a browser extension, an Android app, and a small server you run yourself. Your vault lives on
 your own server, encrypted with keys it never sees. Reads work offline;
 changes need the server.
 
@@ -25,6 +25,7 @@ changes need the server.
 | Account server (`havenkeys-server`) | Implemented and tested against Postgres; deployed ([docs/deployment.md](docs/deployment.md)). The backup restore drill (§5) and real cross-device use are not yet done — see [docs/roadmap.md](docs/roadmap.md) §3 |
 | Marketing/download website (havenkeys.net) | Implemented; static site on Vercel, download page reads GitHub Releases ([docs/website.md](docs/website.md)) |
 | Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
+| Android app | **Status: Android M1.** Implemented and unit-tested; not yet run on a phone or emulator ([docs/android.md](docs/android.md), manual checklist in [docs/security-review.md](docs/security-review.md), Android M1) |
 
 What the desktop app does today:
 
@@ -93,6 +94,28 @@ What the browser extension does:
 * Logins are only ever offered on the sites they are saved for, and that is
   checked in Rust
 
+What the Android app does (M1; not yet run on a device):
+
+* Sign in by scanning the Emergency Kit's QR code (or typing it), or
+  activate from an invite
+* Unlock with the master password, or with a fingerprint or face once turned
+  on in Settings. The master password is asked for again after 14 days, after
+  a restart, and when a fingerprint or face is added
+* Auto-lock (never / 5 / 15 / 30 / 60 min) and lock when the screen turns off
+  (on by default)
+* Browse and search the vault offline; reveal one field at a time; copy with
+  automatic clearing; live TOTP codes; password generator
+* Android Autofill for logins and TOTP codes, in browsers (Chrome, Firefox
+  and the other browsers Google's privileged list names, by the page's
+  domain, checked in Rust) and in apps (by the app's package and signing
+  certificate: a binding you confirm, or the website's Digital Asset Links
+  file). Nothing is filled without a tap. "Confirm before filling" keeps the
+  logins' values away from Android until you pick one
+* No screenshots of HavenKeys, no backups of its data, English and Brazilian
+  Portuguese
+* Creating and editing items, saving from Autofill, passkeys, and cards and
+  identities in Autofill come later
+
 Setting up the first computer needs an invite from whoever runs the server
 (`havenkeys-server admin new-account`); see
 [docs/deployment.md](docs/deployment.md). A second computer needs the email,
@@ -125,6 +148,7 @@ Read these before trusting it with anything:
 * [Deployment](docs/deployment.md): running the server, upgrading it together with the desktops (§6.1), and the backup restore drill that has to pass before you trust it
 * [Native messaging](docs/native-messaging.md): browser ↔ desktop protocol and its checks
 * [Autofill](docs/autofill.md): field detection, matching rules, in-page UI security
+* [Android](docs/android.md): building and running the Android app, and its manual checklist
 * [Security review](docs/security-review.md): findings from reviewing this implementation
 * [Reporting a vulnerability](SECURITY.md): please report privately, not in a public issue
 * [Development](docs/development.md): building, testing, auditing
@@ -169,9 +193,11 @@ crates/havenkeys-native-host/   Native messaging host launched by the browser (r
 crates/havenkeys-server/        The account server: blind relay for encrypted items, Postgres, admin CLI
 crates/havenkeys-sync-client/   HTTP client for that server; treats every answer as hostile
 crates/havenkeys-client/        Account, session and sync for every app: activation, unlock, sync, writes, devices, removal (no Tauri, no UI)
+crates/havenkeys-mobile/        UniFFI API the Android app calls (and later iOS): every secret checked in Rust
 apps/desktop/src-tauri/         Tauri shell: command allowlist, clipboard, auto-lock timer
 apps/desktop/src/               React + TypeScript UI (no cryptography)
 apps/extension/                 MV3 browser extension (background worker, popup)
+apps/android/                   Android app: Kotlin, Jetpack Compose, AutofillService
 packages/protocol/              TypeScript mirror of the wire protocol with strict validators
 packages/ui/                    Shared design tokens (desktop, extension, and a future mobile app)
 scripts/                        Native host registration (Linux/macOS, Windows)
