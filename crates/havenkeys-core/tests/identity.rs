@@ -23,6 +23,7 @@ fn identity_input(fields: IdentityFields) -> ItemInput {
         sign_in_with: None,
         identity: Some(fields),
         card: None,
+        sections: None,
     }
 }
 
@@ -146,6 +147,38 @@ fn an_update_round_trips_every_value_and_updates_the_overview() {
     // Search finds it by name and by email, like any item.
     assert_eq!(vault.search("rocha").unwrap().len(), 1);
     assert_eq!(vault.search("samuel@").unwrap().len(), 1);
+}
+
+#[test]
+fn birth_dates_are_real_past_calendar_dates() {
+    let (mut vault, _) = activated_vault();
+    let id = created(&mut vault);
+    let try_date = |vault: &mut VaultService, date: &str| {
+        let fields = IdentityFields {
+            birth_date: some(date),
+            ..Default::default()
+        };
+        vault
+            .stage_update(&id, identity_input(fields), NOW)
+            .map(|_| ())
+    };
+    for ok in ["2000-02-29", "1850-01-01"] {
+        assert!(try_date(&mut vault, ok).is_ok(), "{ok} should be accepted");
+    }
+    for bad in [
+        "1900-02-29",
+        "2000-13-01",
+        "2000-1-01",
+        "20000-01-01",
+        "1849-12-31",
+        "abcd-ef-gh",
+        "2030-01-01",
+    ] {
+        assert!(
+            matches!(try_date(&mut vault, bad), Err(Error::InvalidInput(_))),
+            "{bad} should be refused"
+        );
+    }
 }
 
 #[test]

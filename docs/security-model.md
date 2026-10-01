@@ -198,9 +198,10 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 39 of them, which is the whole
-surface. `build.rs` declares this list, the capability file grants exactly it,
-and `src/lib/commands.test.ts` fails if the three ever disagree. "Online"
+Every command the renderer can call — all 57 of them, which is the whole
+surface. `build.rs` declares this list, `lib.rs` registers it, the capability
+file grants exactly it, and `src/lib/commands.test.ts` fails if they (or the
+commands `api.ts` calls) ever disagree. "Online"
 means a live server session, which a locked vault does not have.
 
 | Command | Requires unlocked | Returns secrets |
@@ -246,18 +247,34 @@ means a live server session, which a locked vault does not have.
 | `reveal_card` | yes | **a card's holder name, expiry, notes and chosen brand**, when its detail or editor opens; never the number or verification number (only whether they exist). `Denied` for any item that is not a card |
 | `reveal_card_field` | yes | **the card number or verification number**, one at a time, on an explicit eye click; the field is a closed enum |
 | `copy_card_field` | yes | no. Copies the holder name, number, verification number or expiry from Rust, cleared after the clipboard delay |
+| `login_fields` | yes | **the plain values of a login's custom fields** (text, URL, email, phone, date, address parts) and flags: a Password field returns only `hasValue`, an OTP field only `hasOtp`. `NotFound` for an item that is not a login |
+| `reveal_login_field` | yes | **one Password custom field's value**, on an explicit eye click, in the detail view and in the editor for a kept value. By field id; any other field type is refused |
+| `login_field_totp` | yes | **the current code** of one OTP custom field, never its secret |
+| `copy_login_field` | yes | no. Copies one field's value from Rust, read from the vault by field id, cleared after the clipboard delay |
+| `open_login_field_url` | yes | no. Rust reads the URL field's saved value by field id, re-normalises it and opens it only if it is http(s); the renderer supplies no URL |
 | `check_card_number` | no | no. Returns the brand the number's prefix names and whether its check digit passes; keeps nothing |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
 convenience only.
 
+Custom fields (a login's titled sections of typed fields) are desktop-only and
+live in the login's encrypted details blob, not in its overview. The renderer
+receives plain values and flags through `login_fields`; a Password field's
+value comes only through `reveal_login_field`, and an OTP field's secret never
+leaves Rust (only codes, via `login_field_totp`). Copies and URL opens read the
+value from the vault by field id, so the renderer never supplies the text or
+URL. A save's field ids are checked against the same login: an id may appear
+once and only if it belongs to that login, and keeping a value requires the
+same type. Labels, titles and values are never put in error text or logs.
+
 The browser extension does not use these commands. It reaches the core
 through the native-messaging bridge, which has its own much narrower request
 set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`, `open_item`,
 `generate_password`, `check_login`, `save_login`, the four passkey
 requests and the three identity requests, `find_identity`, `fill_identity`
-and `open_identity`), all origin-bound and rate-limited. See `native-messaging.md`.
+and `open_identity`), all origin-bound and rate-limited. No request can name
+a custom field, so none can read, fill or open one. See `native-messaging.md`.
 
 `open_item` returns nothing: when the item is a login saved for the page,
 the desktop shows its window with that login's editor open. It is in the
@@ -804,6 +821,11 @@ release and key-rotation steps.
 ## 19. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.
+
+- **Custom fields and older releases.** A device running a HavenKeys release
+  from before login custom fields ignores a login's custom fields and drops
+  them if it rewrites that login (any save, including a browser password
+  update). Update every device before using custom fields.
 
 ## 20. Filling forms from the Identity
 

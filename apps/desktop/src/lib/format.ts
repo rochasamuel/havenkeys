@@ -40,3 +40,11 @@ export function strengthLevel(bits: number): Strength {
   if (bits < 110) return "strong";
   return "excellent";
 }
+
+/** A `YYYY-MM-DD` day in the UI locale; read as UTC so no zone moves it. */
+export function formatDay(iso: string, locale: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(locale, { dateStyle: "medium", timeZone: "UTC" });
+}

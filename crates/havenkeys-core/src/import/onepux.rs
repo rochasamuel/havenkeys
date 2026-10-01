@@ -18,10 +18,14 @@
 
 use super::{ImportReport, ImportedItem};
 use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
+use crate::custom_field::{
+    clean_plain, AddressValue, FieldInput, FieldKind, FieldValueInput, SectionInput, MAX_FIELDS,
+    MAX_LABEL_CHARS, MAX_SECTIONS, MAX_TOTAL_BYTES,
+};
 use crate::error::{Error, Result};
 use crate::model::{
-    normalize_url, ItemInput, ItemType, MatchType, SecretUpdate, UrlRule, MAX_TITLE_CHARS,
-    MAX_URLS, MAX_USERNAME_CHARS,
+    check_password, normalize_url, ItemInput, ItemType, MatchType, SecretUpdate, UrlRule,
+    MAX_TITLE_CHARS, MAX_URLS, MAX_USERNAME_CHARS,
 };
 use crate::secret::SecretString;
 use crate::sso::{SignInWith, SsoProvider, MAX_ACCOUNT_CHARS};
@@ -220,6 +224,165 @@ impl Drop for Extras {
     }
 }
 
+/// A login's custom fields built from its 1Password sections and extra form
+/// fields (spec 2026-09-30-login-custom-fields §6).
+#[derive(Default)]
+struct LoginSections {
+    sections: Vec<SectionInput>,
+    count: usize,
+    /// Bytes of titles, labels and values so far, counted strictly (at least
+    /// what the vault counts) against `MAX_TOTAL_BYTES`.
+    bytes: usize,
+}
+
+impl LoginSections {
+    fn start(&mut self, title: Option<&str>) {
+        let title = non_empty(title)
+            .map(|t| clean_line(t, MAX_LABEL_CHARS))
+            .filter(|t| !t.is_empty())
+            .map(SecretString::new);
+        self.bytes += title.as_ref().map_or(0, |t| t.expose().len());
+        self.sections.push(SectionInput {
+            id: None,
+            title,
+            fields: Vec::new(),
+        });
+    }
+
+    /// Add a field to the current section; false when the login is full, so
+    /// the caller keeps the value in the notes.
+    fn push(&mut self, label: Option<&str>, value: FieldValueInput) -> bool {
+        let used = self
+            .sections
+            .iter()
+            .filter(|s| !s.fields.is_empty())
+            .count();
+        let Some(section) = self.sections.last_mut() else {
+            return false;
+        };
+        if self.count >= MAX_FIELDS || (section.fields.is_empty() && used >= MAX_SECTIONS) {
+            return false;
+        }
+        let label = non_empty(label)
+            .map(|l| clean_line(l, MAX_LABEL_CHARS))
+            .filter(|l| !l.is_empty())
+            .unwrap_or_else(|| default_label(value.kind()).to_owned());
+        let added = label.len() + value_bytes(&value);
+        if self.bytes + added > MAX_TOTAL_BYTES {
+            return false;
+        }
+        self.bytes += added;
+        section.fields.push(FieldInput {
+            id: None,
+            label: SecretString::new(label),
+            value,
+        });
+        self.count += 1;
+        true
+    }
+
+    fn finish(self) -> Option<Vec<SectionInput>> {
+        let sections: Vec<SectionInput> = self
+            .sections
+            .into_iter()
+            .filter(|s| !s.fields.is_empty())
+            .collect();
+        (!sections.is_empty()).then_some(sections)
+    }
+}
+
+fn value_bytes(value: &FieldValueInput) -> usize {
+    match value {
+        // The vault stores the normalised URL, which can be longer than what
+        // was read (a trailing `/`, a scheme), so count whichever is more.
+        FieldValueInput::Url(v) => normalize_url(v.expose())
+            .map_or(0, |n| n.len())
+            .max(v.expose().len()),
+        FieldValueInput::Text(v)
+        | FieldValueInput::Email(v)
+        | FieldValueInput::Phone(v)
+        | FieldValueInput::Date(v) => v.expose().len(),
+        FieldValueInput::Address(a) => a.formatted().expose().len(),
+        FieldValueInput::Password(SecretUpdate::Set(v))
+        | FieldValueInput::Otp(SecretUpdate::Set(v)) => v.expose().len(),
+        FieldValueInput::Password(_) | FieldValueInput::Otp(_) => 0,
+    }
+}
+
+/// `candidate` if it passes its type's checks, else `fallback` as Text if
+/// that passes, else `None` (the caller keeps the value in the notes).
+fn validated(
+    candidate: FieldValueInput,
+    fallback: impl FnOnce() -> Option<String>,
+) -> Option<FieldValueInput> {
+    let passes = match &candidate {
+        FieldValueInput::Otp(SecretUpdate::Set(t)) => parse_totp_input(t.expose()).is_ok(),
+        FieldValueInput::Password(SecretUpdate::Set(p)) => check_password(p).is_ok(),
+        other => clean_plain(other).is_ok(),
+    };
+    if passes {
+        return Some(candidate);
+    }
+    let as_text = FieldValueInput::Text(SecretString::new(fallback()?));
+    clean_plain(&as_text).is_ok().then_some(as_text)
+}
+
+fn default_label(kind: FieldKind) -> &'static str {
+    match kind {
+        FieldKind::Text => "Text",
+        FieldKind::Url => "URL",
+        FieldKind::Email => "Email",
+        FieldKind::Phone => "Phone",
+        FieldKind::Date => "Date",
+        FieldKind::Address => "Address",
+        FieldKind::Password => "Password",
+        FieldKind::Otp => "One-time password",
+    }
+}
+
+/// A 1Password section value as a custom field. `None` for kinds with
+/// nothing to keep (files are counted by `render_value`). A value that does
+/// not pass its type's checks becomes Text; one that is not valid text
+/// either is `None`, and the caller keeps it in the notes.
+fn custom_field_from(value: &Value, report: &mut ImportReport) -> Option<FieldValueInput> {
+    let obj = value.as_object()?;
+    let (kind, v) = obj.iter().next()?;
+    let text = |t: Option<&str>| non_empty(t).map(SecretString::from);
+    let candidate = match kind.as_str() {
+        "file" => return None,
+        "concealed" => FieldValueInput::Password(SecretUpdate::Set(text(v.as_str())?)),
+        "totp" => FieldValueInput::Otp(SecretUpdate::Set(text(v.as_str())?)),
+        "email" => FieldValueInput::Email(text(str_at(v, &["email_address"]).or(v.as_str()))?),
+        "phone" => FieldValueInput::Phone(text(v.as_str())?),
+        "url" => FieldValueInput::Url(text(v.as_str())?),
+        "date" => FieldValueInput::Date(SecretString::new(format_date(v.as_i64()?))),
+        "address" => {
+            let part = |k: &str| text(str_at(v, &[k]));
+            let a = AddressValue {
+                street: part("street"),
+                city: part("city"),
+                state: part("state"),
+                postal_code: part("zip"),
+                country: part("country"),
+                ..AddressValue::default()
+            };
+            if a.street.is_none()
+                && a.city.is_none()
+                && a.state.is_none()
+                && a.postal_code.is_none()
+                && a.country.is_none()
+            {
+                return None;
+            }
+            FieldValueInput::Address(Box::new(a))
+        }
+        "sshKey" => FieldValueInput::Password(SecretUpdate::Set(SecretString::new(render_value(
+            value, report,
+        )?))),
+        _ => FieldValueInput::Text(SecretString::new(render_value(value, report)?)),
+    };
+    validated(candidate, || render_value(value, report))
+}
 /// The notes line the importer wrote for a "Sign in with" login before
 /// sign-in-with existed. A re-import clears notes that are exactly this.
 pub(crate) fn legacy_sso_note(name: &str) -> String {
@@ -420,7 +583,12 @@ fn set_or_keep(value: Option<SecretString>) -> SecretUpdate {
 /// designated as such first, then the first text/email and password
 /// fields. Any other field with a value goes to `extras`, except
 /// checkboxes, radio buttons, buttons and images, which are UI state.
-fn login_fields(fields: &[Value], extras: &mut Extras) -> (Option<String>, Option<SecretString>) {
+fn login_fields(
+    fields: &[Value],
+    extras: &mut Extras,
+    sections: &mut LoginSections,
+    report: &mut ImportReport,
+) -> (Option<String>, Option<SecretString>) {
     let mut username: Option<String> = None;
     let mut password: Option<SecretString> = None;
     // Designated fields first.
@@ -450,7 +618,19 @@ fn login_fields(fields: &[Value], extras: &mut Extras) -> (Option<String>, Optio
         } else if password.is_none() && field_type == "P" {
             password = Some(SecretString::from(value));
         } else if !matches!(field_type, "C" | "R" | "B" | "I") {
-            extras.push(non_empty(str_at(f, &["name"])), value);
+            let name = non_empty(str_at(f, &["name"]));
+            let v = SecretString::from(value);
+            let candidate = if field_type == "P" {
+                FieldValueInput::Password(SecretUpdate::Set(v))
+            } else {
+                FieldValueInput::Text(v)
+            };
+            let kept = validated(candidate, || Some(value.to_owned()))
+                .is_some_and(|fv| sections.push(name, fv));
+            if !kept {
+                report.fields_to_notes += 1;
+                extras.push(name, value);
+            }
         }
     }
     (username, password)
@@ -471,6 +651,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     }
 
     let mut extras = Extras::default();
+    let mut fields = LoginSections::default();
     let mut totp: Option<SecretString> = None;
     let mut sso: Option<SignInWith> = None;
 
@@ -483,10 +664,13 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     if let Some(sections) = details.get("sections").and_then(Value::as_array) {
         for section in sections {
             extras.section(str_at(section, &["title"]));
-            let Some(fields) = section.get("fields").and_then(Value::as_array) else {
+            if is_login {
+                fields.start(str_at(section, &["title"]));
+            }
+            let Some(section_fields) = section.get("fields").and_then(Value::as_array) else {
                 continue;
             };
-            for field in fields {
+            for field in section_fields {
                 let label = str_at(field, &["title"]);
                 let value = field.get("value").unwrap_or(&Value::Null);
                 if is_card && card_parts.take(field, value) {
@@ -514,6 +698,14 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                             account,
                         });
                         continue;
+                    }
+                }
+                if is_login {
+                    if let Some(fv) = custom_field_from(value, report) {
+                        if fields.push(label, fv) {
+                            continue;
+                        }
+                        report.fields_to_notes += 1;
                     }
                 }
                 if let Some(text) = render_value(value, report) {
@@ -559,9 +751,10 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
 
     let input = match category {
         "001" | "005" => {
+            fields.start(None);
             let (username, mut password) =
                 match details.get("loginFields").and_then(Value::as_array) {
-                    Some(fields) => login_fields(fields, &mut extras),
+                    Some(form) => login_fields(form, &mut extras, &mut fields, report),
                     None => (None, None),
                 };
             // "Password" category keeps its value in details.password.
@@ -581,6 +774,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                 totp: set_or_keep(totp),
                 notes: set_or_keep(join_notes(extras.render())),
                 sign_in_with: sso,
+                sections: fields.finish(),
                 ..ItemInput::blank(ItemType::Login, title)
             }
         }
@@ -655,6 +849,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::custom_field::{FieldKind, FieldValueInput, MAX_FIELDS};
     use serde_json::json;
     use std::io::Write;
 
@@ -783,6 +978,101 @@ mod tests {
         }
     }
 
+    fn login_with(fields: Value) -> Value {
+        json!({"accounts": [{"attrs": {}, "vaults": [{"attrs": {"name": "P"}, "items": [{
+            "uuid": "a", "categoryUuid": "001", "state": "active",
+            "overview": {"title": "Bank"},
+            "details": {
+                "loginFields": [
+                    {"value": "me", "name": "u", "fieldType": "T", "designation": "username"},
+                    {"value": "pw", "name": "p", "fieldType": "P", "designation": "password"},
+                    {"value": "branch-7", "name": "branch", "fieldType": "T"},
+                    {"value": "4321", "name": "pin", "fieldType": "P"}
+                ],
+                "sections": [{"title": "More", "fields": fields}]
+            }
+        }]}]}]})
+    }
+
+    fn only_login(data: Value) -> (ImportedItem, ImportReport) {
+        let mut parsed = parse(&make_1pux(&data, 0)).unwrap();
+        (parsed.items.remove(0), parsed.report)
+    }
+
+    #[test]
+    fn every_field_kind_maps_to_its_type() {
+        let (item, _) = only_login(login_with(json!([
+            {"title": "Note", "value": {"string": "hello"}},
+            {"title": "Mail", "value": {"email": {"email_address": "a@b.c"}}},
+            {"title": "Tel", "value": {"phone": "+55 11 5555"}},
+            {"title": "Site", "value": {"url": "https://bank.example"}},
+            {"title": "Opened", "value": {"date": 1_700_000_000}},
+            {"title": "Home", "value": {"address": {"street": "Rua A", "city": "Recife", "zip": "50000"}}},
+            {"title": "", "value": {"totp": "JBSWY3DPEHPK3PXP"}},
+            {"title": "Backup", "value": {"totp": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"}},
+            {"title": "Card exp", "value": {"monthYear": 202612}},
+            {"title": "Key", "value": {"sshKey": {"privateKey": "-----BEGIN KEY-----"}}}
+        ])));
+        let s = item.input.sections.as_ref().unwrap();
+        let kinds: Vec<FieldKind> = s[0].fields.iter().map(|f| f.value.kind()).collect();
+        assert_eq!(
+            kinds,
+            [
+                FieldKind::Text,
+                FieldKind::Email,
+                FieldKind::Phone,
+                FieldKind::Url,
+                FieldKind::Date,
+                FieldKind::Address,
+                FieldKind::Otp,
+                FieldKind::Text,
+                FieldKind::Password,
+            ],
+            "the first TOTP stays the login's own"
+        );
+        assert!(set_value(&item.input.totp).is_some());
+        assert!(
+            matches!(&s[0].fields[4].value, FieldValueInput::Date(d) if d.expose() == "2023-11-14")
+        );
+        match &s[0].fields[5].value {
+            FieldValueInput::Address(a) => {
+                assert_eq!(a.postal_code.as_ref().unwrap().expose(), "50000");
+                assert_eq!(a.city.as_ref().unwrap().expose(), "Recife");
+            }
+            _ => panic!("address"),
+        }
+        // Extra form fields: an untitled section after the 1Password ones.
+        let form = &s[1];
+        assert!(form.title.is_none());
+        assert_eq!(form.fields[0].label.expose(), "branch");
+        assert_eq!(form.fields[0].value.kind(), FieldKind::Text);
+        assert_eq!(form.fields[1].value.kind(), FieldKind::Password);
+    }
+
+    #[test]
+    fn odd_values_become_text_and_overflow_goes_to_notes() {
+        let mut fields: Vec<Value> = vec![
+            json!({"title": "Bad otp", "value": {"totp": "not base32 !!"}}),
+            json!({"title": "Bad site", "value": {"url": "javascript:alert(1)"}}),
+            json!({"title": "Far", "value": {"date": 400_000_000_000i64}}),
+        ];
+        for i in 0..110 {
+            fields.push(json!({"title": format!("f{i}"), "value": {"string": format!("v{i}")}}));
+        }
+        let (item, report) = only_login(login_with(Value::Array(fields)));
+        let s = item.input.sections.as_ref().unwrap();
+        let first: Vec<FieldKind> = s[0].fields.iter().take(3).map(|f| f.value.kind()).collect();
+        assert_eq!(first, [FieldKind::Text, FieldKind::Text, FieldKind::Text]);
+        let total: usize = s.iter().map(|x| x.fields.len()).sum();
+        assert_eq!(total, MAX_FIELDS);
+        assert!(report.fields_to_notes > 0);
+        let notes = set_value(&item.input.notes).unwrap();
+        assert!(
+            notes.contains("f109: v109"),
+            "overflow is kept in the notes"
+        );
+    }
+
     fn card_item(fields: Value, title: &str) -> Value {
         json!({"accounts": [{"vaults": [{"items": [{
             "uuid": "k", "categoryUuid": "002", "state": "active",
@@ -881,7 +1171,19 @@ mod tests {
         assert_eq!(sso.account, None);
         let notes = set_value(&gh.input.notes).unwrap();
         assert!(notes.starts_with("old notes"));
-        assert!(notes.contains("[Security]\nRecovery code: RC-123"));
+        assert!(
+            !notes.contains("RC-123"),
+            "section fields are custom fields now"
+        );
+        let sections = gh.input.sections.as_ref().expect("login sections");
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].title.as_ref().unwrap().expose(), "Security");
+        assert_eq!(sections[0].fields.len(), 1, "TOTP and sso are taken first");
+        assert_eq!(sections[0].fields[0].label.expose(), "Recovery code");
+        assert!(matches!(
+            &sections[0].fields[0].value,
+            FieldValueInput::Password(SecretUpdate::Set(v)) if v.expose() == "RC-123"
+        ));
         assert!(
             !notes.contains("Sign in with Google"),
             "ssoLogin no longer falls through to notes"

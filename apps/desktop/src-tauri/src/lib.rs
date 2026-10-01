@@ -8,6 +8,7 @@ mod autostart;
 mod card;
 mod clipboard;
 mod commands;
+mod custom_field;
 mod device;
 mod emergency_kit;
 mod identity;
@@ -282,6 +283,11 @@ pub fn run() {
             card::reveal_card_field,
             card::copy_card_field,
             card::check_card_number,
+            custom_field::login_fields,
+            custom_field::reveal_login_field,
+            custom_field::login_field_totp,
+            custom_field::copy_login_field,
+            custom_field::open_login_field_url,
             commands::sync_now,
             commands::resync_vault,
             commands::reveal_previous_password,

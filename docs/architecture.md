@@ -19,6 +19,7 @@ havenkeys/
 │           ├── vault.rs       VaultService: lock state machine, sessions, item ops
 │           ├── lock.rs        LockManager: auto-lock policy (pure, clock-injected)
 │           ├── generator.rs   CSPRNG password generator
+│           ├── custom_field.rs login custom fields: typed sections, limits, save checks
 │           ├── totp.rs        RFC 6238 + otpauth:// parsing
 │           ├── origin.rs      URL parsing and domain matching (PSL-based)
 │           ├── import/        1Password .1pux importer (hostile-input parsing)
@@ -29,6 +30,8 @@ havenkeys/
 │   ├── desktop/
 │   │   ├── src/               React + TypeScript UI (no crypto)
 │   │   └── src-tauri/         Thin Tauri shell: commands, clipboard, auto-lock ticker
+│   │                          (custom fields: login_fields, reveal_login_field,
+│   │                          login_field_totp, copy_login_field, open_login_field_url)
 │   └── extension/             MV3 extension: background worker, popup, content script,
 │                              autofill engine, in-page menu/save frames, options, messaging
 ├── packages/

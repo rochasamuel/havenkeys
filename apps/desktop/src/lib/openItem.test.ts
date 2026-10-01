@@ -41,6 +41,7 @@ const base: EditorSnapshot = {
   notes: { mode: "keep" },
   autoSignIn: true,
   signInWith: null,
+  sections: null,
 };
 
 describe("isDirty", () => {
@@ -55,5 +56,11 @@ describe("isDirty", () => {
     expect(isDirty(base, { ...base, totp: { mode: "clear" } })).toBe(true);
     expect(isDirty(base, { ...base, notes: { mode: "set", value: "n" } })).toBe(true);
     expect(isDirty(base, { ...base, autoSignIn: false })).toBe(true);
+  });
+
+  it("sees a custom field edit", () => {
+    const initial = { ...base, sections: [] };
+    expect(isDirty(initial, { ...initial, sections: [] })).toBe(false);
+    expect(isDirty(initial, { ...initial, sections: [{ key: "k", title: "x", fields: [] }] })).toBe(true);
   });
 });

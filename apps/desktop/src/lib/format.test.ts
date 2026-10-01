@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, groupCode, monogram, primaryHost, strengthLevel } from "./format";
+import { formatDate, formatDay, groupCode, monogram, primaryHost, strengthLevel } from "./format";
 import { toApiError } from "./api";
 import type { ItemOverview } from "./types";
 
@@ -67,5 +67,16 @@ describe("toApiError", () => {
     const e = toApiError("invalid args `password` = hunter2");
     expect(e.code).toBe("internal");
     expect(e.message).not.toContain("hunter2");
+  });
+});
+
+describe("formatDay", () => {
+  it("formats a calendar day without shifting it by time zone", () => {
+    expect(formatDay("2026-09-30", "en-US")).toBe("Sep 30, 2026");
+    expect(formatDay("2026-01-01", "pt-BR")).toBe("1 de jan. de 2026");
+  });
+  it("returns the text as it is when it is not a date", () => {
+    expect(formatDay("", "en-US")).toBe("");
+    expect(formatDay("soon", "en-US")).toBe("soon");
   });
 });

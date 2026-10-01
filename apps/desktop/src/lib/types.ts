@@ -86,6 +86,8 @@ export type SecretUpdate =
   | { op: "scanned"; value: string };
 
 export interface ItemInput {
+  /** A login's custom fields, whole layout in order. Absent: kept as they are. */
+  sections?: SectionInput[];
   itemType: ItemType;
   title: string;
   username?: string | null;
@@ -100,6 +102,48 @@ export interface ItemInput {
   identity?: IdentityFields;
   /** A card's values. */
   card?: CardInput;
+}
+
+/** A custom field's kind (spec 2026-09-30-login-custom-fields). */
+export type FieldType = "text" | "url" | "email" | "phone" | "date" | "address" | "password" | "otp";
+export type AddressPart =
+  | "street"
+  | "number"
+  | "complement"
+  | "neighborhood"
+  | "city"
+  | "state"
+  | "postalCode"
+  | "country";
+export type AddressValue = Partial<Record<AddressPart, string | null>>;
+
+/** A custom field as the core shows it: no Password value, no OTP secret. */
+export type FieldView = { id: string; label: string } & (
+  | { type: "text" | "url" | "email" | "phone" | "date"; value: string }
+  | { type: "address"; parts: AddressValue; formatted: string }
+  | { type: "password"; hasValue: boolean }
+  | { type: "otp"; hasOtp: boolean }
+);
+export interface SectionView {
+  id: string;
+  title: string | null;
+  fields: FieldView[];
+}
+
+export type FieldValueInput =
+  | { type: "text" | "url" | "email" | "phone" | "date"; value: string }
+  | { type: "address"; value: AddressValue }
+  | { type: "password" | "otp"; value: SecretUpdate };
+export interface FieldInput {
+  /** Absent: a new field. */
+  id?: string;
+  label: string;
+  value: FieldValueInput;
+}
+export interface SectionInput {
+  id?: string;
+  title: string | null;
+  fields: FieldInput[];
 }
 
 /** Something else the user wants to remember on their identity. */
@@ -242,6 +286,7 @@ export interface ImportReport {
   attachmentsSkipped: number;
   passwordHistorySkipped: number;
   urlsMovedToNotes: number;
+  fieldsToNotes: number;
   ssoUpgraded: number;
 }
 

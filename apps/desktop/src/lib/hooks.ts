@@ -48,11 +48,13 @@ export function useRevealedSecret(load: () => Promise<string>, autoHideMs = 30_0
   return { value, reveal, hide };
 }
 
-/** Live TOTP code for an item; refreshes at the period boundary. */
-export function useTotp(itemId: string, enabled: boolean) {
+/** A live TOTP code; refreshes at the period boundary. `key` restarts it. */
+export function useTotp(load: () => Promise<TotpCode>, key: string, enabled: boolean) {
   const [code, setCode] = useState<TotpCode | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [failed, setFailed] = useState(false);
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   useEffect(() => {
     if (!enabled) return;
@@ -62,7 +64,7 @@ export function useTotp(itemId: string, enabled: boolean) {
 
     const fetchCode = async () => {
       try {
-        const c = await api.totp(itemId);
+        const c = await loadRef.current();
         if (cancelled) return;
         deadline = Date.now() + c.secondsRemaining * 1000;
         setCode(c);
@@ -88,7 +90,7 @@ export function useTotp(itemId: string, enabled: boolean) {
       window.clearInterval(tick);
       setCode(null);
     };
-  }, [itemId, enabled]);
+  }, [key, enabled]);
 
   return { code, remaining, failed };
 }

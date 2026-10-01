@@ -151,6 +151,7 @@ fn login_item(title: &str, password: &str) -> ItemInput {
         sign_in_with: None,
         identity: None,
         card: None,
+        sections: None,
     }
 }
 

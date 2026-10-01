@@ -46,9 +46,14 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
         │
         ├── item overview blobs   (title, username, URLs, flags, timestamps)
         ├── item details blobs    (password, TOTP config, notes, note content, password history,
-        │                          identity values)
+        │                          identity values, custom-field `sections`)
         └── settings blob         (auto-lock, clipboard timeout; device-local, unsynced)
 ```
+
+A login's custom fields (`sections`: section titles, field labels and values,
+including Password and OTP setups) sit inside the same `ItemDetails::Login`
+blob. Nothing about them is in the overview, so the server and the search
+index see no titles, labels or values.
 
 Why this shape:
 

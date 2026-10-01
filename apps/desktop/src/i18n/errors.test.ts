@@ -125,7 +125,9 @@ describe("the error table", () => {
   it("translates only invalid-input details Rust actually has", () => {
     const sources = [...rustFiles("crates"), ...rustFiles("apps/desktop/src-tauri/src")].join("\n");
     // Details are literals in `InvalidInput("…")` or `const …_MSG: &str = "…"` handed to it.
+    // `clean_value` takes its detail as a bare literal, always "… contains control characters".
     const details = new Set([
+      ...Array.from(sources.matchAll(/"([^"]* is too long or contains control characters)"/g), (m) => m[1]),
       ...Array.from(sources.matchAll(/InvalidInput\("([^"]*)"\)/g), (m) => m[1]),
       ...Array.from(sources.matchAll(/const [A-Z_]+_MSG: &str = "([^"]*)";/g), (m) => m[1]),
     ]);

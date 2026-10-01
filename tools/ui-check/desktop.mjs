@@ -126,6 +126,37 @@ const identity = {
   address: "Quadra 02 Conjunto 01 (Setor Especial) with a long street name, 10\nEstrutural\nBrasília – DF\nCEP 71266-105\nBrasil",
 };
 
+/** A login's custom fields (login_fields): every type, a titled and an untitled section. */
+const loginFields = [
+  {
+    id: "c1000000-0000-4000-8000-000000000001",
+    title: null,
+    fields: [
+      { id: "f1000000-0000-4000-8000-000000000001", type: "text", label: "Recovery codes", value: "4f9a-22c1 7d0e-91b3\n0c5a-6e2f 33d8-a1c7" },
+      { id: "f1000000-0000-4000-8000-000000000002", type: "password", label: "Deploy key passphrase", hasValue: true },
+      { id: "f1000000-0000-4000-8000-000000000003", type: "otp", label: "Backup authenticator", hasOtp: true },
+    ],
+  },
+  {
+    id: "c1000000-0000-4000-8000-000000000002",
+    title: "Billing contact with a rather long section title",
+    fields: [
+      { id: "f1000000-0000-4000-8000-000000000004", type: "email", label: "Billing email", value: "billing.department.long-address@corporate-example.com" },
+      { id: "f1000000-0000-4000-8000-000000000005", type: "phone", label: "Phone", value: "+55 (61) 99999-0000" },
+      { id: "f1000000-0000-4000-8000-000000000006", type: "url", label: "Billing portal", value: "https://billing.example-with-a-rather-long-hostname.com/account/settings" },
+      { id: "f1000000-0000-4000-8000-000000000007", type: "date", label: "Renewal", value: "2027-03-14" },
+      {
+        id: "f1000000-0000-4000-8000-000000000008",
+        type: "address",
+        label: "Invoice address",
+        parts: { street: "Quadra 02 Conjunto 01 (Setor Especial)", number: "10", neighborhood: "Estrutural", city: "Brasília", state: "DF", postalCode: "71266-105", country: "Brasil" },
+        formatted: "Quadra 02 Conjunto 01 (Setor Especial), 10\nEstrutural\nBrasília – DF\nCEP 71266-105\nBrasil",
+      },
+      { id: "f1000000-0000-4000-8000-000000000009", type: "password", label: "Empty secret", hasValue: false },
+    ],
+  },
+];
+
 const settings = {
   autoLockMinutes: 15,
   clipboardClearSeconds: 30,
@@ -166,6 +197,11 @@ function baseResponses() {
     reveal_card_field: "5200828282827609",
     copy_card_field: { clearAfterSeconds: 30 },
     check_card_number: { brand: "mastercard", checkDigitOk: false },
+    login_fields: [],
+    reveal_login_field: "a deploy key passphrase that is rather long",
+    login_field_totp: { code: "77104523", period: 30, secondsRemaining: 4 },
+    copy_login_field: { clearAfterSeconds: 30 },
+    open_login_field_url: null,
     get_item: items[0],
     reveal_secret: "correct horse battery staple — a long passphrase note\nSecond line of the note.",
     password_history: [NOW - 40 * DAY, NOW - 200 * DAY],
@@ -419,6 +455,27 @@ export const desktopScenarios = [
     shots: [".history-list", ".item-foot"],
   },
   {
+    name: "detail-custom-fields",
+    respond: { login_fields: loginFields },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      // The custom Password field's eye.
+      await page.click(".item .row:has(.secret) >> nth=1 >> .icon-btn >> nth=0");
+      await page.waitForTimeout(150);
+    },
+    shots: [".item .group:has(.totp-code) >> nth=1", ".group-history"],
+  },
+  {
+    name: "detail-custom-fields-failed",
+    respond: { login_fields: reject("internal") },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+    },
+    shots: [".group-note"],
+  },
+  {
     name: "detail-long-title",
     respond: {},
     async act(page) {
@@ -586,6 +643,51 @@ export const desktopScenarios = [
       await page.waitForTimeout(200);
     },
     shots: [".edit-area"],
+  },
+  {
+    name: "editor-custom-fields",
+    respond: { login_fields: loginFields },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      // Replace the kept Password field; ask to remove the second section.
+      await page.click(".cf-row .edit-secret .btn >> nth=0");
+      await page.click(".cf-section >> nth=1 >> .cf-section-head .icon-btn >> nth=-1");
+    },
+    shots: [".cf-section >> nth=0", ".cf-section >> nth=1", ".cf-add-group"],
+  },
+  {
+    name: "editor-custom-fields-reveal",
+    respond: { login_fields: loginFields },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      // The kept Password field's eye.
+      await page.click(".cf-row .edit-secret:has(.masked) .icon-btn >> nth=0");
+      await page.waitForTimeout(150);
+    },
+    shots: [".cf-section >> nth=0"],
+  },
+  {
+    name: "editor-custom-fields-new",
+    respond: {},
+    async act(page) {
+      await page.click(".new-menu .icon-btn");
+      await page.click(".menu button >> nth=0");
+      await page.waitForTimeout(200);
+      // One of each type, then an empty section, then the menu open again.
+      for (let i = 0; i < 8; i++) {
+        await page.click(".cf-add .add-row");
+        await page.click(`.cf-menu button >> nth=${i}`);
+      }
+      await page.click(".cf-add-group > .add-row");
+      await page.click(".cf-add .add-row");
+    },
+    shots: [".cf-section", ".cf-row:has(.cf-address)", ".cf-add-group"],
   },
   {
     name: "editor-new-note",

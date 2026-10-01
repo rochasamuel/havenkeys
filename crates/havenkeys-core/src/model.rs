@@ -5,12 +5,13 @@
 //! * [`ItemDetails`]  — secrets; decrypted per request only.
 
 use crate::card::{CardFields, CardInput, CardSummary};
+use crate::custom_field::{FieldSection, SectionInput};
 use crate::error::{Error, Result};
 use crate::identity::IdentityFields;
 use crate::passkey::Passkey;
 use crate::secret::SecretString;
 use crate::sso::SignInWith;
-use crate::totp::TotpConfig;
+use crate::totp::{self, TotpConfig};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
@@ -127,6 +128,9 @@ pub enum ItemDetails {
         /// Passkeys this login holds. Private keys never leave the core.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         passkeys: Vec<Passkey>,
+        /// Custom fields, in sections (spec 2026-09-30-login-custom-fields).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        sections: Vec<FieldSection>,
     },
     SecureNote {
         content: SecretString,
@@ -190,7 +194,7 @@ impl fmt::Debug for SecretUpdate {
 }
 
 impl SecretUpdate {
-    fn is_keep(&self) -> bool {
+    pub(crate) fn is_keep(&self) -> bool {
         matches!(self, SecretUpdate::Keep)
     }
 
@@ -201,6 +205,18 @@ impl SecretUpdate {
             SecretUpdate::Clear => None,
             SecretUpdate::Set(v) if v.is_empty() => None,
             SecretUpdate::Set(v) => Some(v),
+        }
+    }
+
+    /// Apply to a one-time-password setup: `Set` takes an `otpauth://` URI
+    /// or a bare Base32 secret; a blank `Set` clears. The one rule for the
+    /// login's TOTP and for OTP custom fields.
+    pub(crate) fn apply_totp(self, current: Option<TotpConfig>) -> Result<Option<TotpConfig>> {
+        match self {
+            SecretUpdate::Keep => Ok(current),
+            SecretUpdate::Clear => Ok(None),
+            SecretUpdate::Set(v) if v.expose().trim().is_empty() => Ok(None),
+            SecretUpdate::Set(v) => totp::parse_totp_input(v.expose()).map(Some),
         }
     }
 }
@@ -240,6 +256,11 @@ pub struct ItemInput {
     /// A card's values. Required for a card, refused for the other types.
     #[serde(default)]
     pub card: Option<CardInput>,
+    /// A login's custom fields. `None` keeps them as they are (every save
+    /// path except the desktop editor); `Some` replaces the whole layout, in
+    /// order (`custom_field::apply_sections`).
+    #[serde(default)]
+    pub sections: Option<Vec<SectionInput>>,
 }
 
 impl ItemInput {
@@ -259,6 +280,7 @@ impl ItemInput {
             sign_in_with: None,
             identity: None,
             card: None,
+            sections: None,
         }
     }
 }
@@ -463,6 +485,9 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
     // What a login or a secure note may hold, and an identity or card not.
     let identity_only = login_fields || !input.content.is_keep();
     match input.item_type {
+        t if t != ItemType::Login && input.sections.is_some() => {
+            Err(Error::InvalidInput("only a login has custom fields"))
+        }
         ItemType::Card if input.card.is_none() => {
             Err(Error::InvalidInput("a card needs its values"))
         }
@@ -633,6 +658,7 @@ mod tests {
             notes: None,
             password_history: Vec::new(),
             passkeys: Vec::new(),
+            sections: Vec::new(),
         })
         .unwrap();
         assert!(!json.contains("passkeys"));

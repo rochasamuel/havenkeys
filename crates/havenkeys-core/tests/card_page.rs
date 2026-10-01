@@ -37,6 +37,7 @@ fn card_input(title: &str, number: &str, cvv: Option<&str>) -> ItemInput {
             }),
             notes: None,
         }),
+        sections: None,
     }
 }
 

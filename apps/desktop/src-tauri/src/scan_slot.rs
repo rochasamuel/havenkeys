@@ -1,7 +1,7 @@
-//! The one QR scan whose codes are waiting to be saved (design §4.2). The
+//! The QR scans whose codes are waiting to be saved (design §4.2). The
 //! renderer only ever holds a token and the labels; the `otpauth://` URI
 //! stays here until an item is saved with it, the vault locks, a new scan
-//! replaces it, or five minutes pass.
+//! is added beside it, or five minutes pass.
 
 use crate::qr_scan::ScannedCode;
 use havenkeys_core::crypto::fill_random;
@@ -20,26 +20,30 @@ pub struct ScannedTotp {
     pub account: Option<String>,
 }
 
+/// The most scanned codes held at once; the oldest go first.
+pub const MAX_HELD: usize = 16;
+
 #[derive(Default)]
 pub struct ScanSlot {
-    batch: Option<Batch>,
+    entries: Vec<Entry>,
 }
 
-struct Batch {
+struct Entry {
     created: Instant,
-    entries: Vec<(String, SecretString)>,
+    token: String,
+    uri: SecretString,
 }
 
 impl ScanSlot {
-    /// Forget the previous scan and hold `codes`, each under a fresh
-    /// 128-bit token.
-    pub fn replace(
+    /// Hold `codes` beside any earlier scans (the editor can scan the
+    /// login's TOTP and several one-time-password fields before one save),
+    /// each under a fresh 128-bit token and its own expiry. Past
+    /// `MAX_HELD` the oldest are dropped.
+    pub fn add(
         &mut self,
         codes: Vec<ScannedCode>,
         now: Instant,
     ) -> havenkeys_core::Result<Vec<ScannedTotp>> {
-        self.batch = None;
-        let mut entries = Vec::with_capacity(codes.len());
         let mut previews = Vec::with_capacity(codes.len());
         for code in codes {
             let mut raw = [0u8; 16];
@@ -50,32 +54,32 @@ impl ScanSlot {
                 issuer: code.issuer,
                 account: code.account,
             });
-            entries.push((token, code.uri));
+            self.entries.push(Entry {
+                created: now,
+                token,
+                uri: code.uri,
+            });
         }
-        self.batch = Some(Batch {
-            created: now,
-            entries,
-        });
+        if self.entries.len() > MAX_HELD {
+            let extra = self.entries.len() - MAX_HELD;
+            self.entries.drain(..extra);
+        }
         Ok(previews)
     }
 
-    /// The URI for `token` while the scan is fresh. Looking it up does not
+    /// The URI for `token` while its scan is fresh. Looking it up does not
     /// use it up, so a save that fails can be retried; `clear` after a
     /// successful save.
     pub fn get(&self, token: &str, now: Instant) -> Option<SecretString> {
-        let batch = self.batch.as_ref()?;
-        if now.saturating_duration_since(batch.created) >= SCAN_TTL {
-            return None;
-        }
-        batch
-            .entries
+        self.entries
             .iter()
-            .find(|(t, _)| t == token)
-            .map(|(_, uri)| uri.clone())
+            .find(|e| e.token == token)
+            .filter(|e| now.saturating_duration_since(e.created) < SCAN_TTL)
+            .map(|e| e.uri.clone())
     }
 
     pub fn clear(&mut self) {
-        self.batch = None;
+        self.entries.clear();
     }
 }
 
@@ -96,7 +100,7 @@ mod tests {
         let t0 = Instant::now();
         let mut slot = ScanSlot::default();
         let out = slot
-            .replace(vec![code("A", "uri-a"), code("B", "uri-b")], t0)
+            .add(vec![code("A", "uri-a"), code("B", "uri-b")], t0)
             .unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[1].issuer.as_deref(), Some("B"));
@@ -114,7 +118,7 @@ mod tests {
         let t0 = Instant::now();
         let mut slot = ScanSlot::default();
         assert!(slot.get("00", t0).is_none());
-        let out = slot.replace(vec![code("A", "uri-a")], t0).unwrap();
+        let out = slot.add(vec![code("A", "uri-a")], t0).unwrap();
         assert!(slot.get("not-a-token", t0).is_none());
         assert!(slot
             .get(&out[0].token, t0 + SCAN_TTL - Duration::from_secs(1))
@@ -123,20 +127,47 @@ mod tests {
     }
 
     #[test]
-    fn a_new_scan_replaces_the_old_one() {
+    fn a_new_scan_keeps_the_earlier_ones() {
         let t0 = Instant::now();
         let mut slot = ScanSlot::default();
-        let old = slot.replace(vec![code("A", "uri-a")], t0).unwrap();
-        let new = slot.replace(vec![code("B", "uri-b")], t0).unwrap();
-        assert!(slot.get(&old[0].token, t0).is_none());
+        let old = slot.add(vec![code("A", "uri-a")], t0).unwrap();
+        let new = slot.add(vec![code("B", "uri-b")], t0).unwrap();
+        assert_eq!(slot.get(&old[0].token, t0).unwrap().expose(), "uri-a");
         assert_eq!(slot.get(&new[0].token, t0).unwrap().expose(), "uri-b");
+    }
+
+    #[test]
+    fn each_scan_expires_on_its_own() {
+        let t0 = Instant::now();
+        let mut slot = ScanSlot::default();
+        let old = slot.add(vec![code("A", "uri-a")], t0).unwrap();
+        let t1 = t0 + Duration::from_secs(200);
+        let new = slot.add(vec![code("B", "uri-b")], t1).unwrap();
+        let later = t0 + SCAN_TTL;
+        assert!(slot.get(&old[0].token, later).is_none());
+        assert!(slot.get(&new[0].token, later).is_some());
+    }
+
+    #[test]
+    fn the_cap_drops_the_oldest_first() {
+        let t0 = Instant::now();
+        let mut slot = ScanSlot::default();
+        let mut tokens = Vec::new();
+        for i in 0..MAX_HELD + 2 {
+            let out = slot.add(vec![code("A", &format!("uri-{i}"))], t0).unwrap();
+            tokens.push(out[0].token.clone());
+        }
+        assert!(slot.get(&tokens[0], t0).is_none());
+        assert!(slot.get(&tokens[1], t0).is_none());
+        assert!(slot.get(&tokens[2], t0).is_some());
+        assert!(slot.get(&tokens[MAX_HELD + 1], t0).is_some());
     }
 
     #[test]
     fn the_preview_never_carries_the_uri() {
         let mut slot = ScanSlot::default();
         let out = slot
-            .replace(vec![code("A", "otpauth://totp/x?secret=S")], Instant::now())
+            .add(vec![code("A", "otpauth://totp/x?secret=S")], Instant::now())
             .unwrap();
         let json = serde_json::to_string(&out).unwrap();
         assert!(!json.contains("otpauth"));

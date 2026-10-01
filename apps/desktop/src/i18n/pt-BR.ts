@@ -82,6 +82,24 @@ const invalidInput: Record<string, string> = {
   "a card needs its values": "Um cartão precisa dos seus valores.",
   "a card only has card values": "Um cartão só tem valores de cartão.",
   "only a card has card values": "Só um cartão tem valores de cartão.",
+  "a field needs a label": "Um campo precisa de um rótulo.",
+  "the login's fields changed; reopen it and try again": "Os campos do login mudaram; reabra o login e tente de novo.",
+  "the login's fields are too large": "Os campos do login são grandes demais.",
+  "too many fields": "Campos demais.",
+  "too many sections": "Seções demais.",
+  "date must be YYYY-MM-DD": "A data deve estar no formato AAAA-MM-DD.",
+  "only a login has custom fields": "Só um login tem campos personalizados.",
+  "address is too long or contains control characters": "O endereço é longo demais ou contém caracteres de controle.",
+  "email is too long or contains control characters": "O e-mail é longo demais ou contém caracteres de controle.",
+  "phone is too long or contains control characters": "O telefone é longo demais ou contém caracteres de controle.",
+  "field label is too long or contains control characters": "O rótulo do campo é longo demais ou contém caracteres de controle.",
+  "section title is too long or contains control characters": "O título da seção é longo demais ou contém caracteres de controle.",
+  "a text field is too long": "O campo de texto é longo demais.",
+  "only a password field can be revealed": "Só um campo de senha pode ser revelado.",
+  "not a one-time password field": "Não é um campo de código de verificação.",
+  "only an address has parts": "Só um endereço tem partes.",
+  "not a URL field": "Não é um campo de link.",
+  "not a plain value": "Não é um valor simples.",
   "note is too long": "A nota é longa demais.",
   "item too large": "O item é grande demais.",
   "search query too long": "A busca é longa demais.",
@@ -342,6 +360,41 @@ export const ptBR: Messages = {
     notesPlaceholder: "Qualquer outra coisa que valha guardar com este login",
     loadTextFailed: "Não foi possível carregar o texto existente.",
     saveFailed: "Não foi possível salvar o item.",
+  },
+
+  fields: {
+    types: {
+      text: "Texto",
+      url: "URL",
+      email: "E-mail",
+      address: "Endereço",
+      date: "Data",
+      otp: "Código de verificação",
+      password: "Senha",
+      phone: "Telefone",
+    },
+    addField: "Adicionar outro campo",
+    addSection: "Adicionar seção",
+    sectionTitle: "Título da seção",
+    untitled: "Seção sem título",
+    label: "Rótulo",
+    removeField: (label: string) => `Remover ${label}`,
+    removeSection: "Remover seção",
+    confirmRemoveSection: (n: number) =>
+      n === 1 ? "Remover esta seção e o campo dela?" : `Remover esta seção e os ${n} campos dela?`,
+    move: (label: string) => `Mover ${label} (Alt+↑ / Alt+↓)`,
+    moveSectionUp: "Mover seção para cima",
+    moveSectionDown: "Mover seção para baixo",
+    copy: (label: string) => `Copiar ${label}`,
+    copied: (label: string, seconds: number) =>
+      `Copiado: ${label}. A área de transferência é limpa em ${seconds}\u00a0s.`,
+    show: (label: string) => `Mostrar ${label}`,
+    hide: (label: string) => `Ocultar ${label}`,
+    loadFailed: "Não foi possível carregar os outros campos deste login.",
+    limit: "Este login já tem o máximo de campos.",
+    set: "Salvo.",
+    removed: "Será removido.",
+    emptySection: "Nenhum campo. Arraste um para cá.",
   },
 
   generator: {
@@ -655,6 +708,8 @@ export const ptBR: Messages = {
       n === 1
         ? "1 entrada de site não era um endereço web e foi mantida nas notas do item."
         : `${n} entradas de site não eram endereços web e foram mantidas nas notas do item.`,
+    fieldsToNotes: (n: number) =>
+      n === 1 ? "1 campo acima do limite de um login ficou nas notas dele." : `${n} campos acima do limite de um login ficaram nas notas deles.`,
     ssoUpgraded: (n: number) =>
       `${n} ${n === 1 ? "login que já estava no cofre agora entra" : "logins que já estavam no cofre agora entram"} com Google, Microsoft, GitHub ou Apple.`,
     failedItems: (n: number) =>

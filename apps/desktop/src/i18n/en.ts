@@ -351,6 +351,40 @@ export const en = {
     saveFailed: "Could not save the item.",
   },
 
+  fields: {
+    types: {
+      text: "Text",
+      url: "URL",
+      email: "Email",
+      address: "Address",
+      date: "Date",
+      otp: "One-time password",
+      password: "Password",
+      phone: "Phone",
+    },
+    addField: "Add another field",
+    addSection: "Add section",
+    sectionTitle: "Section title",
+    untitled: "Untitled section",
+    label: "Label",
+    removeField: (label: string) => `Remove ${label}`,
+    removeSection: "Remove section",
+    confirmRemoveSection: (n: number) =>
+      n === 1 ? "Remove this section and its field?" : `Remove this section and its ${n} fields?`,
+    move: (label: string) => `Move ${label} (Alt+Up / Alt+Down)`,
+    moveSectionUp: "Move section up",
+    moveSectionDown: "Move section down",
+    copy: (label: string) => `Copy ${label}`,
+    copied: (label: string, seconds: number) => `${label} copied. The clipboard clears in ${seconds}\u00a0s.`,
+    show: (label: string) => `Show ${label}`,
+    hide: (label: string) => `Hide ${label}`,
+    loadFailed: "Could not load this login's other fields.",
+    limit: "This login has as many fields as it can hold.",
+    set: "Saved.",
+    removed: "Will be removed.",
+    emptySection: "No fields. Drag one here.",
+  },
+
   generator: {
     title: "Password generator",
     lede: "Made on this computer from the operating system’s secure random source. Nothing is saved until you use it.",
@@ -652,6 +686,8 @@ export const en = {
       `${n} ${n === 1 ? "old password" : "old passwords"} from password history ${n === 1 ? "was" : "were"} left out.`,
     urlsMovedToNotes: (n: number) =>
       `${n} ${n === 1 ? "website entry wasn’t" : "website entries weren’t"} a web address and ${n === 1 ? "was" : "were"} kept in the item’s notes.`,
+    fieldsToNotes: (n: number) =>
+      n === 1 ? "1 field over a login's limit was kept in its notes." : `${n} fields over a login's limit were kept in their notes.`,
     ssoUpgraded: (n: number) =>
       `${n} ${n === 1 ? "login already in your vault now signs" : "logins already in your vault now sign"} in with Google, Microsoft, GitHub or Apple.`,
     failedItems: (n: number) =>
