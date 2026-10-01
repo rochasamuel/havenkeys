@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Icon } from "../components/Icon";
 import { TotpEdit } from "../components/TotpEdit";
 import { api } from "../lib/api";
@@ -20,6 +20,7 @@ import {
   type EditField,
   type EditSection,
 } from "../lib/customFields";
+import { useRevealedSecret } from "../lib/hooks";
 import { EMPTY, KEEP } from "../lib/secretEdit";
 import type { AddressPart, FieldType } from "../lib/types";
 import { useI18n } from "../i18n/context";
@@ -45,11 +46,14 @@ function focusHandle(key: string) {
 
 /** A login's custom fields in the editor (spec 2026-09-30-login-custom-fields §5.3). */
 export function CustomFieldsEditor({
+  itemId,
   sections,
   onChange,
   disabled,
   onError,
 }: {
+  /** The saved login, for revealing a kept Password; absent for a new login. */
+  itemId?: string;
   sections: EditSection[];
   onChange: (next: EditSection[]) => void;
   disabled: boolean;
@@ -173,6 +177,7 @@ export function CustomFieldsEditor({
             {s.fields.map((f) => (
               <FieldEditRow
                 key={f.key}
+                itemId={itemId}
                 field={f}
                 disabled={disabled}
                 onChange={(change) => onChange(updateField(sections, f.key, change))}
@@ -226,6 +231,7 @@ export function CustomFieldsEditor({
 }
 
 function FieldEditRow({
+  itemId,
   field,
   disabled,
   onChange,
@@ -237,6 +243,7 @@ function FieldEditRow({
   onDropBefore,
   onError,
 }: {
+  itemId?: string;
   field: EditField;
   disabled: boolean;
   onChange: (change: Partial<EditField>) => void;
@@ -287,7 +294,7 @@ function FieldEditRow({
           maxLength={256}
           disabled={disabled}
         />
-        <FieldValueEdit field={field} name={name} disabled={disabled} onChange={onChange} onError={onError} />
+        <FieldValueEdit itemId={itemId} field={field} name={name} disabled={disabled} onChange={onChange} onError={onError} />
       </div>
       <button
         type="button"
@@ -304,12 +311,14 @@ function FieldEditRow({
 }
 
 function FieldValueEdit({
+  itemId,
   field,
   name,
   disabled,
   onChange,
   onError,
 }: {
+  itemId?: string;
   field: EditField;
   name: string;
   disabled: boolean;
@@ -330,7 +339,7 @@ function FieldValueEdit({
         />
       );
     case "password":
-      return <PasswordEdit field={field} name={name} disabled={disabled} onChange={onChange} onError={onError} />;
+      return <PasswordEdit itemId={itemId} field={field} name={name} disabled={disabled} onChange={onChange} onError={onError} />;
     case "address":
       return (
         <div className="cf-address">
@@ -385,12 +394,14 @@ function FieldValueEdit({
  * to open the editor; a new one is typed or generated here, masked until the eye.
  */
 function PasswordEdit({
+  itemId,
   field,
   name,
   disabled,
   onChange,
   onError,
 }: {
+  itemId?: string;
   field: EditField;
   name: string;
   disabled: boolean;
@@ -423,24 +434,15 @@ function PasswordEdit({
 
   if (secret.mode === "keep") {
     return (
-      <div className="edit-secret">
-        <span className="mono masked" data-truncate="">
-          ••••••••••••
-        </span>
-        <span className="edit-secret-actions">
-          <button type="button" className="btn btn-small" onClick={() => onChange({ secret: EMPTY })} disabled={disabled}>
-            {t.editor.replace}
-          </button>
-          <button
-            type="button"
-            className="btn btn-small btn-quiet-danger"
-            onClick={() => onChange({ secret: { mode: "clear" } })}
-            disabled={disabled}
-          >
-            {t.common.remove}
-          </button>
-        </span>
-      </div>
+      <KeptPassword
+        itemId={itemId}
+        fieldId={field.id}
+        name={name}
+        disabled={disabled}
+        onReplace={() => onChange({ secret: EMPTY })}
+        onRemove={() => onChange({ secret: { mode: "clear" } })}
+        onError={onError}
+      />
     );
   }
   if (secret.mode === "clear") {
@@ -494,6 +496,74 @@ function PasswordEdit({
             {t.common.cancel}
           </button>
         )}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A saved Password left as it is. The eye shows it, read from Rust, for a
+ * moment: display only, never copied into the edit, so the save still
+ * sends `keep`. Dropped on hide, on its timer and on unmount (Replace,
+ * another item, lock).
+ */
+function KeptPassword({
+  itemId,
+  fieldId,
+  name,
+  disabled,
+  onReplace,
+  onRemove,
+  onError,
+}: {
+  itemId?: string;
+  fieldId?: string;
+  name: string;
+  disabled: boolean;
+  onReplace: () => void;
+  onRemove: () => void;
+  onError: (message: string) => void;
+}) {
+  const { t } = useI18n();
+  const canReveal = !!itemId && !!fieldId;
+  const load = useCallback(
+    () => (itemId && fieldId ? api.revealLoginField(itemId, fieldId) : Promise.reject(new Error("no saved field"))),
+    [itemId, fieldId],
+  );
+  const secret = useRevealedSecret(load);
+  const label = secret.value === null ? t.fields.show(name) : t.fields.hide(name);
+  return (
+    <div className="edit-secret">
+      {secret.value === null ? (
+        <span className="mono masked" aria-label={t.common.hiddenPassword} data-truncate="">
+          ••••••••••••
+        </span>
+      ) : (
+        <span className="mono selectable revealed">{secret.value}</span>
+      )}
+      <span className="edit-secret-actions">
+        {canReveal && (
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() =>
+              secret.value === null
+                ? void secret.reveal().catch((e) => onError(errorMessage(e, t, t.common.couldNotReveal)))
+                : secret.hide()
+            }
+            disabled={disabled}
+            aria-label={label}
+            title={label}
+          >
+            <Icon name={secret.value === null ? "eye" : "eyeOff"} size={16} />
+          </button>
+        )}
+        <button type="button" className="btn btn-small" onClick={onReplace} disabled={disabled}>
+          {t.editor.replace}
+        </button>
+        <button type="button" className="btn btn-small btn-quiet-danger" onClick={onRemove} disabled={disabled}>
+          {t.common.remove}
+        </button>
       </span>
     </div>
   );

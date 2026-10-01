@@ -407,6 +407,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
 
           {sections !== null && (
             <CustomFieldsEditor
+              itemId={existingId}
               sections={sections}
               onChange={setSections}
               disabled={saving || !!readOnly}

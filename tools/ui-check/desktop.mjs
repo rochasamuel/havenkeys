@@ -659,6 +659,20 @@ export const desktopScenarios = [
     shots: [".cf-section >> nth=0", ".cf-section >> nth=1", ".cf-add-group"],
   },
   {
+    name: "editor-custom-fields-reveal",
+    respond: { login_fields: loginFields },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      // The kept Password field's eye.
+      await page.click(".cf-row .edit-secret:has(.masked) .icon-btn >> nth=0");
+      await page.waitForTimeout(150);
+    },
+    shots: [".cf-section >> nth=0"],
+  },
+  {
     name: "editor-custom-fields-new",
     respond: {},
     async act(page) {
