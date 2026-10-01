@@ -37,9 +37,11 @@ class SecretKeyCipher : KeystoreCipher {
         throw CipherException.Failed()
     }
 
-    private fun key(): SecretKey {
+    // One lock with `delete`: two first uses at once would otherwise each
+    // generate a key, and a seal under the replaced one would never open.
+    private fun key(): SecretKey = synchronized(Companion) {
         val store = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        (store.getKey(ALIAS, null) as? SecretKey)?.let { return@synchronized it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
         generator.init(
             KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
@@ -49,7 +51,7 @@ class SecretKeyCipher : KeystoreCipher {
                 .setUnlockedDeviceRequired(true)
                 .build(),
         )
-        return generator.generateKey()
+        generator.generateKey()
     }
 
     companion object {
@@ -60,6 +62,7 @@ class SecretKeyCipher : KeystoreCipher {
         const val TAG_BITS = 128
         const val KEY_BITS = 256
 
+        @Synchronized
         fun delete() {
             KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.deleteEntry(ALIAS)
         }

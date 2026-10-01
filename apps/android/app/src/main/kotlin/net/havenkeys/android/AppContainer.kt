@@ -36,22 +36,17 @@ class AppContainer(app: HavenApp, cipher: KeystoreCipher) {
     val clipboard = SensitiveClipboard(app, app.appScope)
 
     /** Deletes the biometric key and bundle; a Keystore that does not answer is not an error here. */
-    fun forgetBiometricUnlock() = keystoreDelete { biometricKeys.delete() }
+    fun forgetBiometricUnlock() = keystoreOr(Unit) { biometricKeys.delete() }
 
     /** False too when the Keystore does not answer: the password still unlocks. */
-    @Suppress("SwallowedException")
-    fun hasBiometricUnlock(): Boolean = try {
-        biometricKeys.hasBundle()
-    } catch (e: GeneralSecurityException) {
-        false
-    }
+    fun hasBiometricUnlock(): Boolean = keystoreOr(false) { biometricKeys.hasBundle() }
 
     init {
         app.appScope.launch {
             wipeKeysOnExit(
                 events.events,
-                deleteBiometric = { keystoreDelete { biometricKeys.delete() } },
-                deleteSecretKey = { keystoreDelete { SecretKeyCipher.delete() } },
+                deleteBiometric = { keystoreOr(Unit) { biometricKeys.delete() } },
+                deleteSecretKey = { keystoreOr(Unit) { SecretKeyCipher.delete() } },
             )
         }
         app.appScope.launch { clearClipboardOnLock(events.events, clipboard::clearIfOurs) }
@@ -82,14 +77,19 @@ internal suspend fun wipeKeysOnExit(
 
 private const val BUNDLE_REFUSED = "bundle_refused"
 
-// A failed delete must not stop the collector: later events still need handling.
-@Suppress("SwallowedException")
-private inline fun keystoreDelete(delete: () -> Unit) {
-    try {
-        delete()
-    } catch (e: GeneralSecurityException) {
-        Unit
-    } catch (e: IOException) {
-        Unit
-    }
+/**
+ * A Keystore call whose failure answers [fallback]. Its callers include
+ * collectors in the app's scope, where an uncaught exception would end the
+ * process and a failed delete must not stop later events; the Keystore also
+ * throws unchecked `ProviderException`s. Nothing is logged.
+ */
+@Suppress("SwallowedException", "TooGenericExceptionCaught")
+internal inline fun <T> keystoreOr(fallback: T, call: () -> T): T = try {
+    call()
+} catch (e: GeneralSecurityException) {
+    fallback
+} catch (e: IOException) {
+    fallback
+} catch (e: RuntimeException) {
+    fallback
 }

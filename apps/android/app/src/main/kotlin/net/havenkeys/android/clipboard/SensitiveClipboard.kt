@@ -20,8 +20,14 @@ import net.havenkeys.android.data.VaultEvent
  * anyway, which may remove a newer copy made in another app: the safe side
  * for a secret.
  */
-class SensitiveClipboard(private val context: Context, private val scope: CoroutineScope) {
-    private val manager get() = context.getSystemService(ClipboardManager::class.java)
+class SensitiveClipboard internal constructor(
+    private val clipboard: () -> ClipboardManager,
+    private val scope: CoroutineScope,
+) {
+    constructor(context: Context, scope: CoroutineScope) :
+        this({ context.getSystemService(ClipboardManager::class.java) }, scope)
+
+    private val manager get() = clipboard()
     private val lock = Any()
     private var ours: String? = null
     private var timer: Job? = null
@@ -45,13 +51,22 @@ class SensitiveClipboard(private val context: Context, private val scope: Corout
         }
     }
 
-    /** Clears the clipboard if it still holds (or may hold) the last value we copied. */
+    /**
+     * Clears the clipboard if it still holds (or may hold) the last value we
+     * copied. Runs from the timer and the lock collector in the app's scope,
+     * where a clipboard error must not end the process; nothing is logged.
+     */
+    @Suppress("SwallowedException", "TooGenericExceptionCaught")
     fun clearIfOurs() {
         synchronized(lock) {
             timer?.cancel()
             timer = null
-            val current = manager.primaryClipDescription?.extras?.getString(TOKEN)
-            if (stillOurs(current, ours)) manager.clearPrimaryClip()
+            try {
+                val current = manager.primaryClipDescription?.extras?.getString(TOKEN)
+                if (stillOurs(current, ours)) manager.clearPrimaryClip()
+            } catch (e: RuntimeException) {
+                Unit
+            }
             ours = null
         }
     }

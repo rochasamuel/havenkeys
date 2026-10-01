@@ -1,9 +1,14 @@
 package net.havenkeys.android
 
+import java.io.IOException
+import java.security.GeneralSecurityException
+import java.security.ProviderException
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import net.havenkeys.android.data.VaultEvent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeystoreWipeTest {
@@ -25,6 +30,25 @@ class KeystoreWipeTest {
     fun signingOutAndARefusedBundleDropOnlyTheBiometricKey() = runTest {
         run(VaultEvent.SignedOut, VaultEvent.Locked("bundle_refused"))
         assertEquals(listOf("biometric", "biometric"), deleted)
+    }
+
+    @Test
+    fun aKeystoreThatThrowsAnswersTheFallback() {
+        val failures = listOf(GeneralSecurityException(), IOException(), IllegalStateException(), ProviderException())
+        for (failure in failures) {
+            assertFalse(keystoreOr(false) { throw failure })
+        }
+        assertTrue(keystoreOr(false) { true })
+    }
+
+    @Test
+    fun aFailedDeleteDoesNotStopTheCollector() = runTest {
+        wipeKeysOnExit(
+            flowOf(VaultEvent.SignedOut, VaultEvent.Removed),
+            deleteBiometric = { keystoreOr(Unit) { throw ProviderException() } },
+            deleteSecretKey = { deleted += "secret_key" },
+        )
+        assertEquals(listOf("secret_key"), deleted)
     }
 
     @Test

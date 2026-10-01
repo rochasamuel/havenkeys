@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -93,8 +94,12 @@ fun ItemScreen(
                 ) {
                     Column {
                         view.fields.forEachIndexed { i, field ->
-                            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            FieldRow(field, actions)
+                            // Keyed: after a reload adds or removes a field, a
+                            // revealed value stays with its own row.
+                            key(field.key) {
+                                if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                FieldRow(field, actions)
+                            }
                         }
                     }
                 }

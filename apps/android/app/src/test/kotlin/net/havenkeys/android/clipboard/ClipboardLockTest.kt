@@ -20,6 +20,12 @@ class ClipboardLockTest {
     }
 
     @Test
+    fun aClipboardThatThrowsDoesNotEndTheCaller() = runTest {
+        val clipboard = SensitiveClipboard({ throw SecurityException() }, backgroundScope)
+        clipboard.clearIfOurs()
+    }
+
+    @Test
     fun ordinaryEventsDoNotClear() = runTest {
         run(VaultEvent.Unlocked, VaultEvent.Connectivity(online = true), VaultEvent.ItemsChanged)
         assertEquals(0, clears)
