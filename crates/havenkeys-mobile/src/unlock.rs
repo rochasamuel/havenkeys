@@ -93,11 +93,12 @@ mod tests {
         let (vault, _) = mobile(dir.path());
         let key = havenkeys_client::testing::seed_account_vault(&vault.client, PASSWORD);
         vault.lock();
-        vault
+        let forgotten = vault
             .client
             .device()
             .unwrap()
             .forget(havenkeys_client::testing::ACCOUNT);
+        assert!(forgotten.saved.is_ok());
         assert!(vault.status().unwrap().needs_secret_key);
 
         assert_eq!(
