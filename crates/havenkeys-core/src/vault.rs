@@ -2055,18 +2055,36 @@ pub(crate) fn build_item(
 
     let details = match item_type {
         ItemType::Login => {
-            let (cur_pw, cur_totp, cur_notes, mut history, passkeys, cur_sections) = match current {
-                Some(ItemDetails::Login {
-                    password,
-                    totp,
-                    notes,
-                    password_history,
-                    passkeys,
-                    sections,
-                }) => (password, totp, notes, password_history, passkeys, sections),
-                Some(_) => return Err(Error::Corrupted),
-                None => (None, None, None, Vec::new(), Vec::new(), Vec::new()),
-            };
+            let (cur_pw, cur_totp, cur_notes, mut history, passkeys, cur_sections, app_bindings) =
+                match current {
+                    Some(ItemDetails::Login {
+                        password,
+                        totp,
+                        notes,
+                        password_history,
+                        passkeys,
+                        sections,
+                        app_bindings,
+                    }) => (
+                        password,
+                        totp,
+                        notes,
+                        password_history,
+                        passkeys,
+                        sections,
+                        app_bindings,
+                    ),
+                    Some(_) => return Err(Error::Corrupted),
+                    None => (
+                        None,
+                        None,
+                        None,
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                    ),
+                };
             let previous = cur_pw.clone();
             let password = password.apply(cur_pw);
             if let Some(p) = &password {
@@ -2098,6 +2116,7 @@ pub(crate) fn build_item(
                 password_history: history,
                 passkeys,
                 sections,
+                app_bindings,
             }
         }
         ItemType::SecureNote => {

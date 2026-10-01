@@ -110,9 +110,22 @@ impl Drop for ItemOverview {
     }
 }
 
+/// An Android app this login fills in, confirmed by the user (spec
+/// 2026-10-01-android-app §7.2). `cert_sha256` is the SHA-256 of one of the
+/// app's signing certificates, lowercase hex.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AppBinding {
+    pub package: String,
+    pub cert_sha256: String,
+}
+
+pub const MAX_APP_BINDINGS: usize = 32;
+
 /// Secret part of an item.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)] // one short-lived value per decrypted item; boxing Login would touch every pattern
 pub enum ItemDetails {
     Login {
         #[serde(default)]
@@ -131,6 +144,10 @@ pub enum ItemDetails {
         /// Custom fields, in sections (spec 2026-09-30-login-custom-fields).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         sections: Vec<FieldSection>,
+        /// Android apps this login fills in. Kept in the encrypted details,
+        /// like passkeys, and carried over by every edit.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        app_bindings: Vec<AppBinding>,
     },
     SecureNote {
         content: SecretString,
@@ -659,9 +676,10 @@ mod tests {
             password_history: Vec::new(),
             passkeys: Vec::new(),
             sections: Vec::new(),
+            app_bindings: Vec::new(),
         })
         .unwrap();
-        assert!(!json.contains("passkeys"));
+        assert!(!json.contains("passkeys") && !json.contains("appBindings"));
         let ov: ItemOverview = serde_json::from_str(
             r#"{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","itemType":"login","title":"t",
                 "hasPassword":true,"hasTotp":false,"hasNotes":false,"createdAt":1,"updatedAt":1}"#,
