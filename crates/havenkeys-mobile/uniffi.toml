@@ -1,0 +1,4 @@
+[bindings.kotlin]
+# Android's SystemCleaner from API 34, JNA's cleaner below it: the default
+# java.lang.ref.Cleaner needs API 33 and the app supports API 28.
+android = true
