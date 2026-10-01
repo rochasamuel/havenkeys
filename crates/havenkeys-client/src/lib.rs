@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+mod account;
 mod client;
 pub mod device;
 mod error;
@@ -14,6 +15,7 @@ mod events;
 pub mod key_store;
 mod sync;
 
+pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
 pub use client::{ClientConfig, HavenClient, ServerClient};
 pub use error::{ClientError, ClientResult};
 pub use events::ClientEvents;

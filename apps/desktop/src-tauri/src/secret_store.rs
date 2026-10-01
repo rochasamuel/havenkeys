@@ -3,7 +3,6 @@
 //! when none is available, `device.json` (see `havenkeys_client::device`).
 //! The `KeyStore` trait and the timeout wrapper live in `havenkeys-client`.
 
-pub use havenkeys_client::key_store::Storage;
 use havenkeys_client::key_store::{run_timed, KeyStore, NoAnswer, StoreError};
 use havenkeys_core::SecretString;
 use std::sync::atomic::{AtomicU8, Ordering};

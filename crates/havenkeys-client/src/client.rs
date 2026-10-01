@@ -45,7 +45,6 @@ pub struct HavenClient {
     /// refuses with it.
     storage_error: Option<ClientError>,
     pub(crate) events: Arc<dyn ClientEvents>,
-    #[allow(dead_code)] // read by the account operations that move in next
     pub(crate) config: ClientConfig,
     origin: Instant,
 }
