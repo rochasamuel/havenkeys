@@ -65,8 +65,11 @@ Why this shape:
   copy of the vault file **and** the old password (and Secret Key) can still
   read newer copies. See `security-review.md` #8.
 * **Secret Key storage** is outside this hierarchy's scope but worth stating
-  here: it is kept in the OS keychain (`apps/desktop/src-tauri/src/secret_store.rs`,
-  the `keyring-core` crate; service `app.havenkeys`, user = account ID), with
+  here: it is kept in the OS keychain (`OsKeyStore` in
+  `apps/desktop/src-tauri/src/secret_store.rs`, the `keyring-core` crate; the
+  `KeyStore` trait, its 5-second timeout wrapper and the device record live in
+  `crates/havenkeys-client/src/key_store.rs` and `device.rs`; service
+  `app.havenkeys`, user = account ID), with
   `device.json` (0600) as the fallback when no keychain is available, a call
   errors, or it does not answer within 5 seconds. Only the `H1-…` text is
   ever stored; errors from the store never carry the value. A keychain that
@@ -249,7 +252,7 @@ AAD = "havenkeys" || 0x00 || blob_version || algorithm || purpose || 0x00 || con
 | `item-overview` | vault ID, item ID |
 | `item-details` | vault ID, item ID |
 | `settings` | vault ID |
-| `sync-header` | vault ID (the account header a device publishes and reads, `sync.rs`) |
+| `sync-header` | vault ID (the account header a device publishes and reads, `crates/havenkeys-core/src/sync.rs`) |
 
 Consequences: a blob copied into another item row, another role, or another
 vault fails authentication. Header bytes (version, algorithm) are authenticated

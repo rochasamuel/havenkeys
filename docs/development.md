@@ -14,14 +14,16 @@
   * **macOS:** Xcode command-line tools
   * **Windows:** Microsoft C++ Build Tools and WebView2 (preinstalled on Windows 11)
 
-The security core, protocol, bridge, native host, server and sync client
-crates need only Rust. They are the Cargo workspace's `default-members`, so
+The security core, protocol, bridge, native host, server, sync client and
+client crates need only Rust. They are the Cargo workspace's `default-members`, so
 `cargo test` works without the WebKit libraries.
 
 The server and sync-client suites additionally need a **Postgres**, because
 what they test is SQL-level (account isolation, row locks, one transaction
 per write) and a mock would not test it. `scripts/test-server.sh` starts a
-disposable one in Docker and creates a fresh database per test:
+disposable one in Docker and creates a fresh database per test. It also runs
+`havenkeys-client`'s tests (`cargo test -p havenkeys-client`), including a
+round trip of two clients against the real server:
 
 ```sh
 scripts/test-server.sh              # or: pnpm test:server
@@ -39,7 +41,7 @@ holds a real vault, are in `docs/deployment.md`.
 | Run desktop app (dev) | `pnpm dev` |
 | Build installers | `pnpm build` |
 | Rust tests (core, protocol, bridge, native host, OS lock) | `cargo test` |
-| Server + sync client tests (needs Docker) | `scripts/test-server.sh` |
+| Server, sync client and client tests (needs Docker) | `scripts/test-server.sh` |
 | Regenerate design tokens after editing them | `pnpm --filter @havenkeys/ui generate` |
 | Rust lint (same crates) | `pnpm lint:rust` |
 | Native host (release) | `pnpm build:host` |

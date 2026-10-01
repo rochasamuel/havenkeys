@@ -10,6 +10,8 @@ havenkeys/
 │   ├── havenkeys-native-host/ binary launched by the browser; relays stdio ↔ socket
 │   ├── havenkeys-server/      the account server: blind relay, Postgres, admin CLI
 │   ├── havenkeys-sync-client/ HTTP against that server; treats every answer as hostile
+│   ├── havenkeys-client/      account, session and sync for every app: activation, unlock,
+│   │                          sync, writes, devices, removal (no Tauri, no UI)
 │   └── havenkeys-core/        Rust security core (no UI, no Tauri, no network)
 │       └── src/
 │           ├── crypto/        kdf.rs, keys.rs, blob.rs — composition of audited primitives
@@ -60,7 +62,7 @@ the server.
 │  React / TypeScript UI                                           │
 │         │                                                        │
 │         ▼                                                        │
-│   Tauri commands ──── AppState::require_online() ──── Connectivity│
+│   Tauri commands ── HavenClient (havenkeys-client) ─ Connectivity│
 │         │             (reads always allowed;                Online/│
 │         │              writes refused when offline)         Offline│
 │         ▼                                                        │

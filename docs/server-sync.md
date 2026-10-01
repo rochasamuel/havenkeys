@@ -112,7 +112,7 @@ Online    a live server session: reads and writes
 A locked vault is never online. An unlocked one may still be offline — the
 two states are orthogonal, which is why this is a separate flag rather than
 a third lock state. Every mutating Tauri command checks
-`AppState::require_online` before doing anything else and returns
+`HavenClient::require_online` (`crates/havenkeys-client/src/client.rs`) before doing anything else and returns
 `Error::Offline` ("HavenKeys is offline — the vault is read-only until it
 reconnects.") when it fails. The desktop shows a persistent banner while
 unlocked and offline, and disables the controls that would otherwise fail
