@@ -168,6 +168,7 @@ crates/havenkeys-bridge/        Desktop side of the browser bridge: authorizatio
 crates/havenkeys-native-host/   Native messaging host launched by the browser (relay only, no vault access)
 crates/havenkeys-server/        The account server: blind relay for encrypted items, Postgres, admin CLI
 crates/havenkeys-sync-client/   HTTP client for that server; treats every answer as hostile
+crates/havenkeys-client/        Account, session and sync for every app: activation, unlock, sync, writes, devices, removal (no Tauri, no UI)
 apps/desktop/src-tauri/         Tauri shell: command allowlist, clipboard, auto-lock timer
 apps/desktop/src/               React + TypeScript UI (no cryptography)
 apps/extension/                 MV3 browser extension (background worker, popup)
