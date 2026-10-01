@@ -417,6 +417,13 @@ button.code:hover {
   overflow-wrap: anywhere;
 }
 
+.row-status .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .row-status:empty {
   display: none;
 }

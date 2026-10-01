@@ -127,14 +127,21 @@ function userLine(m: Match): HTMLElement {
 function identityRow(title: string): HTMLElement {
   const status = h("div", { className: "row-status" });
   const fill = smallButton(t.popup.fill, t.popup.fillIdentityTitle);
+  // Under the name: what the identity holds, or the documents question.
+  const detail = h("div", { className: "user copy", text: t.popup.identityDetail });
   const row = h(
     "li",
     { className: "item identity" },
     h("span", { className: "avatar identity-avatar" }, idCardIcon(20)),
-    h("div", { className: "who" }, truncates(h("div", { className: "title", text: title || t.menu.identityFallback })), h("div", { className: "user copy", text: t.popup.identityDetail })),
+    h("div", { className: "who" }, truncates(h("div", { className: "title", text: title || t.menu.identityFallback })), detail),
     h("div", { className: "actions" }, fill),
     status,
   );
+  /** Back to the row as it opened: Fill shown, nothing asked. */
+  function reset(): void {
+    fill.hidden = false;
+    detail.textContent = t.popup.identityDetail;
+  }
   /** Buttons of the request in flight: all disabled until it answers. */
   let busy: HTMLButtonElement[] = [fill];
   async function run(req: Extract<PopupRequest, { type: "popup_fill_identity" }>): Promise<void> {
@@ -144,17 +151,22 @@ function identityRow(title: string): HTMLElement {
     for (const b of busy) b.disabled = false;
     if (!r.ok) {
       busy = [fill];
+      reset();
       return void status.replaceChildren(h("span", { className: "error", text: r.message }));
     }
     if (r.value === null) return window.close();
     const { origin } = r.value;
     const list = r.value.confirm.map((x: IdentityRole) => t.menu.documentLabels[x as keyof typeof t.menu.documentLabels] ?? x).join(t.menu.and);
     const yes = smallButton(t.menu.identityFillWithDocs(list), "");
-    const no = smallButton(t.menu.identityFillWithoutDocs, "");
+    const no = smallButton(t.popup.identityWithoutDocs, t.menu.identityFillWithoutDocs);
     busy = [fill, yes, no];
     yes.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: true, origin }));
     no.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: false, origin }));
-    status.replaceChildren(h("p", { text: t.popup.identityAsks(displayHost(origin) ?? origin, list) }), yes, no);
+    // The question names the site and the documents (identity spec §2); the
+    // answer takes a second click on a button that names them.
+    fill.hidden = true;
+    detail.textContent = t.popup.identityAsks(displayHost(origin) ?? origin, list);
+    status.replaceChildren(h("div", { className: "actions" }, yes, no));
   }
   fill.addEventListener("click", () => void run({ type: "popup_fill_identity", documents: null }));
   return row;

@@ -29,6 +29,7 @@ export const ptBR: Messages = {
     identityDetail: "Nome, endereço e contatos",
     fillIdentityTitle: "Preencher sua identidade no formulário desta página",
     identityAsks: (site: string, docs: string) => `${site} também pede ${docs}.`,
+    identityWithoutDocs: "Sem eles",
     pill: {
       offline: "Offline",
       locked: "Bloqueado",

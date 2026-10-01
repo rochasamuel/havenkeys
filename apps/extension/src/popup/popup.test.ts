@@ -58,7 +58,9 @@ describe("popup identity fill", () => {
     await load();
     fillButton().click();
     await vi.waitFor(() => expect(statusButtons()).toHaveLength(2));
-    expect(document.querySelector(".item.identity .row-status p")?.textContent).toBe("shop.com also asks for CPF.");
+    expect(document.querySelector(".item.identity .who .user")?.textContent).toBe("shop.com also asks for CPF.");
+    expect(statusButtons().map((b) => b.textContent)).toEqual(["Fill CPF too", "Without them"]);
+    expect(fillButton().hidden).toBe(true);
     statusButtons()[0]!.click();
     await flush();
     expect(identityRequests()).toEqual([

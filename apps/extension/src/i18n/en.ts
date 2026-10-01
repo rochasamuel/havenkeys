@@ -61,6 +61,7 @@ export const en = {
     identityDetail: "Name, address and contact details",
     fillIdentityTitle: "Fill your identity into this page’s form",
     identityAsks: (site: string, docs: string) => `${site} also asks for ${docs}.`,
+    identityWithoutDocs: "Without them",
     pill: {
       offline: "Offline",
       locked: "Locked",
