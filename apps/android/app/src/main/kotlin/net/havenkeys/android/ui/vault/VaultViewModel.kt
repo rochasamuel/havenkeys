@@ -56,6 +56,9 @@ class VaultViewModel(
     }
 
     fun setQuery(query: String) {
+        // Soft-keyboard typing does not reach `onUserInteraction`, and loads
+        // never count as activity (Rust), so typing is reported here.
+        vault.touch()
         _state.update { it.copy(query = query) }
         reload()
     }

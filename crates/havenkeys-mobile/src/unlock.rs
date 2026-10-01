@@ -22,6 +22,7 @@ impl MobileVault {
     /// The bytes the app seals with its biometric Keystore key. The app
     /// zeroes its copy right after sealing.
     pub fn create_unlock_bundle(&self, password: String, boot_count: i64) -> MobileResult<Vec<u8>> {
+        self.unlocked()?;
         let client = self.client.clone();
         let bundle =
             self.block_on(client.create_unlock_bundle(SecretString::new(password), boot_count))?;
@@ -38,7 +39,7 @@ impl MobileVault {
 
 #[cfg(test)]
 mod tests {
-    use crate::vault::tests::{mobile, unlocked, wait_for, PASSWORD};
+    use crate::vault::tests::{mobile, overdue_refuses, unlocked, wait_for, PASSWORD};
     use crate::vault::LockState;
 
     #[test]
@@ -71,6 +72,15 @@ mod tests {
         // Offline (the seeded server does not exist): it stays unlocked.
         std::thread::sleep(std::time::Duration::from_millis(300));
         assert!(matches!(vault.status().unwrap().state, LockState::Unlocked));
+    }
+
+    #[test]
+    fn an_overdue_vault_enrolls_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let (vault, seen) = unlocked(dir.path());
+        overdue_refuses(&vault, &seen, |v| {
+            v.create_unlock_bundle(PASSWORD.into(), 3)
+        });
     }
 
     #[test]

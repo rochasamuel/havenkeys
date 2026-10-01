@@ -48,7 +48,11 @@ object FillPlanner {
         kind: TargetKind,
         repo: AutofillRepository,
     ): FillPlan {
-        val matches = repo.matches(target).valueOrNull() ?: return FillPlan.Nothing
+        val matches = when (val found = repo.matches(target)) {
+            is Outcome.Ok -> found.value
+            // Rust applied an overdue auto-lock on this very request.
+            is Outcome.Failed -> return if (found.code == "locked") FillPlan.UnlockFirst else FillPlan.Nothing
+        }
         val direct = !repo.confirmBeforeFilling()
         val datasets = matches
             .filter { !form.otpOnly || it.hasTotp }

@@ -173,7 +173,11 @@ fn identity_field(name: &str) -> Option<IdentityField> {
 #[uniffi::export]
 impl MobileVault {
     pub fn list_items(&self) -> MobileResult<Vec<ItemSummary>> {
-        self.touch();
+        // No `touch()` in any read: the app also calls these on its own (a
+        // sync's `items_changed`, the TOTP countdown every second), and
+        // counting those as activity would keep the vault unlocked forever.
+        // Real interaction reaches the timer through `touch()`.
+        self.unlocked()?;
         let mut items: Vec<ItemSummary> = self
             .client
             .vault()?
@@ -186,7 +190,7 @@ impl MobileVault {
     }
 
     pub fn search(&self, query: String) -> MobileResult<Vec<ItemSummary>> {
-        self.touch();
+        self.unlocked()?;
         Ok(self
             .client
             .vault()?
@@ -197,7 +201,7 @@ impl MobileVault {
     }
 
     pub fn item_view(&self, id: String) -> MobileResult<ItemView> {
-        self.touch();
+        self.unlocked()?;
         let id = parse_id(&id)?;
         let vault = self.client.vault()?;
         let o = vault.get_item(&id)?;
@@ -279,7 +283,7 @@ impl MobileVault {
 
     /// Exactly one field of one item.
     pub fn reveal(&self, id: String, key: String) -> MobileResult<String> {
-        self.touch();
+        self.unlocked()?;
         let id = parse_id(&id)?;
         let vault = self.client.vault()?;
         let wrong = || Error::InvalidInput("field does not exist on this item");
@@ -312,7 +316,7 @@ impl MobileVault {
     }
 
     pub fn totp(&self, id: String) -> MobileResult<TotpNow> {
-        self.touch();
+        self.unlocked()?;
         let id = parse_id(&id)?;
         let code = self.client.vault()?.totp_code(&id, unix_seconds())?;
         Ok(TotpNow {
@@ -341,7 +345,7 @@ impl MobileVault {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vault::tests::unlocked;
+    use crate::vault::tests::{overdue_refuses, unlocked};
     use havenkeys_core::card::CardInput;
     use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
     use havenkeys_core::identity::IdentityFields;
@@ -416,6 +420,36 @@ mod tests {
         assert!(v.list_items().is_err());
         assert!(v.reveal(id.clone(), "password".into()).is_err());
         assert!(v.totp(id).is_err());
+    }
+
+    /// Reads also run when the app refreshes on its own (a sync, the TOTP
+    /// countdown): they must not count as the user being there.
+    #[test]
+    fn reads_do_not_postpone_the_auto_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = add_login(&v);
+        v.clock.arm_for(std::time::Duration::from_millis(600));
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        v.list_items().unwrap();
+        v.search("git".into()).unwrap();
+        v.item_view(id.clone()).unwrap();
+        v.reveal(id.clone(), "password".into()).unwrap();
+        v.totp(id).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(v.clock.due().is_some());
+    }
+
+    #[test]
+    fn an_overdue_vault_locks_before_any_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, seen) = unlocked(dir.path());
+        let id = add_login(&v);
+        overdue_refuses(&v, &seen, |v| v.list_items());
+        overdue_refuses(&v, &seen, |v| v.search("git".into()));
+        overdue_refuses(&v, &seen, |v| v.item_view(id.clone()));
+        overdue_refuses(&v, &seen, |v| v.reveal(id.clone(), "password".into()));
+        overdue_refuses(&v, &seen, |v| v.totp(id.clone()));
     }
 
     #[test]

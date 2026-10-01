@@ -157,7 +157,7 @@ impl MobileVault {
     }
 
     pub fn autofill_matches(&self, target: TargetFacts) -> MobileResult<Vec<AutofillMatch>> {
-        self.client.require_unlocked()?;
+        self.unlocked()?;
         let found = match self.target(&target)? {
             FillTarget::Browser { page_url } => {
                 self.client.vault()?.find_matches(&page_url, None)?
@@ -172,7 +172,7 @@ impl MobileVault {
 
     pub fn autofill_fill(&self, id: String, target: TargetFacts) -> MobileResult<FillValues> {
         let id = parse_id(&id)?;
-        self.client.require_unlocked()?;
+        self.unlocked()?;
         let creds = match self.target(&target)? {
             FillTarget::Browser { page_url } => self.client.vault()?.fill_for_page(
                 &id,
@@ -190,7 +190,7 @@ impl MobileVault {
 
     pub fn autofill_totp(&self, id: String, target: TargetFacts) -> MobileResult<String> {
         let id = parse_id(&id)?;
-        self.client.require_unlocked()?;
+        self.unlocked()?;
         let code = match self.target(&target)? {
             FillTarget::Browser { page_url } => {
                 self.client
@@ -210,6 +210,7 @@ impl MobileVault {
     /// "Search HavenKeys…": any login, by title, username or website. No
     /// secrets; filling one goes through `autofill_bind_and_fill`.
     pub fn autofill_search(&self, query: String) -> MobileResult<Vec<AutofillMatch>> {
+        self.unlocked()?;
         Ok(self
             .client
             .vault()?
@@ -228,6 +229,7 @@ impl MobileVault {
         target: TargetFacts,
     ) -> MobileResult<BoundFill> {
         let item = parse_id(&id)?;
+        self.unlocked()?;
         let FillTarget::App(app) = self.target(&target)? else {
             return Err(Error::Denied.into());
         };
@@ -262,7 +264,7 @@ impl MobileVault {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vault::tests::unlocked;
+    use crate::vault::tests::{overdue_refuses, unlocked};
     use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
     use havenkeys_core::SecretString;
 
@@ -408,6 +410,19 @@ mod tests {
             ..app(1)
         };
         assert!(v.autofill_matches(bad).is_err());
+    }
+
+    #[test]
+    fn an_overdue_vault_locks_before_any_fill() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, seen) = unlocked(dir.path());
+        let id = add_login(&v, "https://github.com");
+        let site = || chrome("github.com", Some("https"));
+        overdue_refuses(&v, &seen, |v| v.autofill_matches(site()));
+        overdue_refuses(&v, &seen, |v| v.autofill_fill(id.clone(), site()));
+        overdue_refuses(&v, &seen, |v| v.autofill_totp(id.clone(), site()));
+        overdue_refuses(&v, &seen, |v| v.autofill_search("git".into()));
+        overdue_refuses(&v, &seen, |v| v.autofill_bind_and_fill(id.clone(), app(1)));
     }
 
     #[test]

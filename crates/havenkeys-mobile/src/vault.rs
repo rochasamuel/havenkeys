@@ -66,6 +66,14 @@ impl MobileVault {
             client.lock(reason.as_str());
         }
     }
+
+    /// Every call that reads the vault starts here. The 5-second ticker can
+    /// run late (a frozen process, a busy runtime), so an overdue auto-lock
+    /// is applied now rather than answering one more request.
+    pub(crate) fn unlocked(&self) -> MobileResult<()> {
+        Self::auto_lock_tick(&self.client, &self.clock);
+        Ok(self.client.require_unlocked()?)
+    }
 }
 
 #[uniffi::export]
@@ -154,9 +162,14 @@ impl MobileVault {
         }
     }
 
-    /// The user did something: reset the idle timer.
+    /// The user did something: reset the idle timer. The app calls this for
+    /// real interaction only; reads never touch (see `items.rs`).
     pub fn touch(&self) {
-        self.clock.touch();
+        if let Some(reason) = self.clock.touch() {
+            if self.client.require_unlocked().is_ok() {
+                self.client.lock(reason.as_str());
+            }
+        }
     }
 
     /// Check the auto-lock now (the app calls this when it returns to the
@@ -248,6 +261,32 @@ pub(crate) mod tests {
         (vault, seen)
     }
 
+    pub(crate) fn code(e: crate::MobileError) -> String {
+        match e {
+            crate::MobileError::Failed { code, .. } => code,
+        }
+    }
+
+    /// Unlocks, makes the auto-lock overdue, then runs `call`: it must be
+    /// refused as locked and leave the vault locked.
+    pub(crate) fn overdue_refuses<T>(
+        vault: &MobileVault,
+        seen: &Seen,
+        call: impl FnOnce(&MobileVault) -> MobileResult<T>,
+    ) {
+        if vault.client.require_unlocked().is_err() {
+            vault.unlock_password(PASSWORD.into(), None).unwrap();
+        }
+        seen.0.lock().unwrap().clear();
+        vault.clock.arm_for(Duration::ZERO);
+        let Err(e) = call(vault) else {
+            panic!("an overdue vault answered");
+        };
+        assert_eq!(code(e), "locked");
+        assert!(matches!(vault.status().unwrap().state, LockState::Locked));
+        wait_for(|| seen.has("locked:idle"));
+    }
+
     pub(crate) fn wait_for(what: impl Fn() -> bool) {
         for _ in 0..250 {
             if what() {
@@ -316,6 +355,27 @@ pub(crate) mod tests {
             ..back
         };
         assert!(vault.update_settings(bad).is_err());
+    }
+
+    #[test]
+    fn a_late_touch_locks_an_overdue_vault_instead_of_rescuing_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let (vault, seen) = unlocked(dir.path());
+        vault.clock.arm_for(Duration::ZERO);
+        vault.touch();
+        assert!(matches!(vault.status().unwrap().state, LockState::Locked));
+        wait_for(|| seen.has("locked:idle"));
+    }
+
+    #[test]
+    fn a_touch_in_time_postpones_the_auto_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let (vault, _) = unlocked(dir.path());
+        vault.clock.arm_for(Duration::from_millis(600));
+        std::thread::sleep(Duration::from_millis(400));
+        vault.touch();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(vault.clock.due().is_none());
     }
 
     #[test]

@@ -45,6 +45,14 @@ class VaultViewModelTest {
     }
 
     @Test
+    fun typingInTheSearchCountsAsActivityButLoadingDoesNot() = runTest {
+        val vm = vm()
+        assertFalse("a load is not the user", "touch" in vault.calls)
+        vm.setQuery("git")
+        assertTrue("touch" in vault.calls)
+    }
+
+    @Test
     fun aFailedLoadShowsItsCode() = runTest {
         vault.items = Outcome.Failed("locked")
         val state = vm().state.value
@@ -76,7 +84,7 @@ class VaultViewModelTest {
         vault.items = Outcome.Ok(listOf(note))
         vm.setQuery("git")
         assertEquals("git", vm.state.value.query)
-        assertEquals(listOf("search"), vault.calls)
+        assertEquals(listOf("search"), vault.calls.filter { it != "touch" })
         assertEquals(listOf(note), vm.state.value.items)
     }
 
@@ -85,7 +93,7 @@ class VaultViewModelTest {
         val vm = vm()
         vm.setQuery("git")
         vm.setQuery("")
-        assertEquals(listOf("search"), vault.calls)
+        assertEquals(listOf("search"), vault.calls.filter { it != "touch" })
         assertEquals(all, vm.state.value.items)
     }
 

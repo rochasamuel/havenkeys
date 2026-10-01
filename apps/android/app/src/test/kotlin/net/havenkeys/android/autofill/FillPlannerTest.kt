@@ -83,8 +83,15 @@ class FillPlannerTest {
 
     @Test
     fun failedMatchesOfferNothing() = runTest {
-        val repo = FakeAutofillRepository().apply { matchList = Outcome.Failed("locked") }
+        val repo = FakeAutofillRepository().apply { matchList = Outcome.Failed("denied") }
         assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, repo))
+    }
+
+    @Test
+    fun aVaultRustLocksOnTheWayAsksToUnlockFirst() = runTest {
+        // The auto-lock was overdue: Rust locked the vault on this request.
+        val repo = FakeAutofillRepository().apply { matchList = Outcome.Failed("locked") }
+        assertEquals(FillPlan.UnlockFirst, FillPlanner.plan(login, target, unlocked = true, repo))
     }
 
     @Test

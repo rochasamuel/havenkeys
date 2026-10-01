@@ -83,15 +83,29 @@ impl LockClock {
         }
     }
 
-    pub fn touch(&self) {
-        if let Ok(mut m) = self.manager.lock() {
-            m.record_activity(self.origin.elapsed());
+    /// Records activity unless the vault is already overdue: a late touch
+    /// must not rescue it. Returns the reason to lock now, if any.
+    pub fn touch(&self) -> Option<LockReason> {
+        let mut m = self.manager.lock().unwrap_or_else(|p| p.into_inner());
+        let now = self.origin.elapsed();
+        let due = m.tick(now, Self::wall());
+        if due.is_none() {
+            m.record_activity(now);
         }
+        due
     }
 
     pub fn due(&self) -> Option<LockReason> {
         let mut m = self.manager.lock().unwrap_or_else(|p| p.into_inner());
         m.tick(self.origin.elapsed(), Self::wall())
+    }
+
+    /// Tests only: a timeout shorter than the one-minute settings allow.
+    #[cfg(test)]
+    pub fn arm_for(&self, timeout: Duration) {
+        let mut m = self.manager.lock().unwrap_or_else(|p| p.into_inner());
+        m.set_timeout(Some(timeout));
+        m.reset(self.origin.elapsed(), Self::wall());
     }
 }
 
