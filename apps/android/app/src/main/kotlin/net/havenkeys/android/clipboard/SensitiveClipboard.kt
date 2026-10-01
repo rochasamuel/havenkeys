@@ -56,7 +56,7 @@ class SensitiveClipboard internal constructor(
      * copied. Runs from the timer and the lock collector in the app's scope,
      * where a clipboard error must not end the process; nothing is logged.
      */
-    @Suppress("SwallowedException", "TooGenericExceptionCaught")
+    @Suppress("TooGenericExceptionCaught")
     fun clearIfOurs() {
         synchronized(lock) {
             timer?.cancel()
@@ -64,8 +64,8 @@ class SensitiveClipboard internal constructor(
             try {
                 val current = manager.primaryClipDescription?.extras?.getString(TOKEN)
                 if (stillOurs(current, ours)) manager.clearPrimaryClip()
-            } catch (e: RuntimeException) {
-                Unit
+            } catch (ignored: RuntimeException) {
+                // Nothing to do: the clip may stay until something else is copied.
             }
             ours = null
         }
