@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addField,
+  dropTarget,
   fromViews,
   moveField,
   moveSection,
@@ -115,5 +116,25 @@ describe("customFields", () => {
     const s = [...fromViews(views), newSection("New")];
     expect(moveSection(s, s[2]!.key, -1).map((x) => x.title)).toEqual(["Bank", "New", ""]);
     expect(keys(removeField(s, s[0]!.fields[1]!.key))[0]).toEqual(["f1", "f3"]);
+  });
+
+  it("places a drop before or after the row under the pointer, never where the field already is", () => {
+    const s = fromViews(views);
+    const [pin, token, account] = s[0]!.fields.map((f) => f.key);
+    const bank = s[0]!.key;
+    // Upper half of a row: before it; lower half: before the next one.
+    expect(dropTarget(s, account!, bank, pin!, false)).toEqual({ sectionKey: bank, beforeKey: pin });
+    expect(dropTarget(s, pin!, bank, token!, true)).toEqual({ sectionKey: bank, beforeKey: account });
+    // The lower half of the last row, or the section's empty space: its end.
+    expect(dropTarget(s, pin!, bank, account!, true)).toEqual({ sectionKey: bank, beforeKey: null });
+    expect(dropTarget(s, pin!, s[1]!.key, null, false)).toEqual({ sectionKey: s[1]!.key, beforeKey: null });
+    // Over itself, or right after itself: no move, so no placeholder.
+    expect(dropTarget(s, token!, bank, token!, false)).toBeNull();
+    expect(dropTarget(s, token!, bank, token!, true)).toBeNull();
+    expect(dropTarget(s, token!, bank, pin!, true)).toBeNull();
+    expect(dropTarget(s, account!, bank, null, false)).toBeNull();
+    // The drop it describes is the move placeField makes.
+    const t = dropTarget(s, pin!, bank, account!, true)!;
+    expect(keys(placeField(s, pin!, t.sectionKey, t.beforeKey))).toEqual([["f2", "f3", "f1"], ["f4"]]);
   });
 });

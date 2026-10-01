@@ -673,6 +673,28 @@ export const desktopScenarios = [
     shots: [".cf-section >> nth=0"],
   },
   {
+    name: "editor-custom-fields-drag",
+    respond: { login_fields: loginFields },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      // Hold the first field's handle over the last row's lower half: the
+      // field fades and the drop slot shows below that row.
+      await page.locator(".cf-section >> nth=0").scrollIntoViewIfNeeded();
+      const handle = await page.locator(".cf-section >> nth=0 >> .cf-handle >> nth=0").boundingBox();
+      const last = await page.locator(".cf-section >> nth=0 >> .cf-row >> nth=-1").boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(last.x + 40, last.y + last.height * 0.75, { steps: 8 });
+      await page.waitForTimeout(150);
+      await page.mouse.move(last.x + 44, last.y + last.height * 0.8, { steps: 2 });
+      await page.waitForTimeout(150);
+    },
+    shots: [".cf-section >> nth=0"],
+  },
+  {
     name: "editor-custom-fields-new",
     respond: {},
     async act(page) {

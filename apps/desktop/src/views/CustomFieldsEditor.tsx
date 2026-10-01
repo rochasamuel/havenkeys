@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Icon } from "../components/Icon";
 import { TotpEdit } from "../components/TotpEdit";
 import { api } from "../lib/api";
 import {
   addField,
+  dropTarget,
   FIELD_TYPES,
   fieldCount,
   MAX_FIELDS,
@@ -17,6 +18,7 @@ import {
   removeSection,
   updateField,
   updateSection,
+  type DropTarget,
   type EditField,
   type EditSection,
 } from "../lib/customFields";
@@ -64,6 +66,10 @@ export function CustomFieldsEditor({
   const [confirming, setConfirming] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const dragKey = useRef<string | null>(null);
+  // What the drag shows: the field being moved (and its height, for the
+  // placeholder) and where it would land.
+  const [dragging, setDragging] = useState<{ key: string; height: number } | null>(null);
+  const [target, setTarget] = useState<DropTarget | null>(null);
   const full = fieldCount(sections) >= MAX_FIELDS;
 
   // Close the add menu on Escape or a click anywhere else, as the New menu does.
@@ -86,20 +92,55 @@ export function CustomFieldsEditor({
     onChange(addField(sections, newField(type, t.fields.types[type])));
   }
 
-  function allowDrop(e: DragEvent) {
-    if (dragKey.current) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-    }
+  function aim(next: DropTarget | null) {
+    setTarget((cur) => (cur?.sectionKey === next?.sectionKey && cur?.beforeKey === next?.beforeKey ? cur : next));
   }
 
-  function drop(e: DragEvent, sectionKey: string, beforeKey: string | null) {
+  /** Accept the drag here; false for anything that is not a field's handle. */
+  function accept(e: DragEvent): boolean {
+    if (!dragKey.current) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    return true;
+  }
+
+  function startDrag(key: string, height: number) {
+    dragKey.current = key;
+    // After the browser has taken the drag image: changing the dragged row
+    // inside dragstart can cancel the drag.
+    setTimeout(() => setDragging({ key, height }), 0);
+  }
+
+  function endDrag() {
+    dragKey.current = null;
+    setDragging(null);
+    setTarget(null);
+  }
+
+  function overRow(e: DragEvent, sectionKey: string, overKey: string) {
+    if (!accept(e)) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    aim(dropTarget(sections, dragKey.current!, sectionKey, overKey, e.clientY > box.top + box.height / 2));
+  }
+
+  function overSection(e: DragEvent, sectionKey: string) {
+    if (!accept(e)) return;
+    aim(dropTarget(sections, dragKey.current!, sectionKey, null, false));
+  }
+
+  function leaveSection(e: DragEvent, sectionKey: string) {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setTarget((cur) => (cur?.sectionKey === sectionKey ? null : cur));
+  }
+
+  function drop(e: DragEvent) {
     const key = dragKey.current;
     if (!key) return;
     e.preventDefault();
     e.stopPropagation();
-    dragKey.current = null;
-    onChange(placeField(sections, key, sectionKey, beforeKey));
+    if (target) onChange(placeField(sections, key, target.sectionKey, target.beforeKey));
+    endDrag();
   }
 
   function move(key: string, delta: -1 | 1) {
@@ -172,24 +213,39 @@ export function CustomFieldsEditor({
               </button>
             </div>
           )}
-          <div className="group cf-fields" onDragOver={allowDrop} onDrop={(e) => drop(e, s.key, null)}>
-            {s.fields.length === 0 && <p className="row cf-empty muted">{t.fields.emptySection}</p>}
+          <div
+            className="group cf-fields"
+            onDragOver={(e) => overSection(e, s.key)}
+            onDragLeave={(e) => leaveSection(e, s.key)}
+            onDrop={drop}
+          >
+            {s.fields.length === 0 && target?.sectionKey !== s.key && (
+              <p className="row cf-empty muted">{t.fields.emptySection}</p>
+            )}
             {s.fields.map((f) => (
-              <FieldEditRow
-                key={f.key}
-                itemId={itemId}
-                field={f}
-                disabled={disabled}
-                onChange={(change) => onChange(updateField(sections, f.key, change))}
-                onRemove={() => onChange(removeField(sections, f.key))}
-                onMove={(delta) => move(f.key, delta)}
-                onDragStart={() => (dragKey.current = f.key)}
-                onDragEnd={() => (dragKey.current = null)}
-                onDragOver={allowDrop}
-                onDropBefore={(e) => drop(e, s.key, f.key)}
-                onError={onError}
-              />
+              <Fragment key={f.key}>
+                {dragging && target?.sectionKey === s.key && target.beforeKey === f.key && (
+                  <DropPlaceholder height={dragging.height} onDragOver={accept} onDrop={drop} />
+                )}
+                <FieldEditRow
+                  itemId={itemId}
+                  field={f}
+                  disabled={disabled}
+                  dragging={dragging?.key === f.key}
+                  onChange={(change) => onChange(updateField(sections, f.key, change))}
+                  onRemove={() => onChange(removeField(sections, f.key))}
+                  onMove={(delta) => move(f.key, delta)}
+                  onDragStart={(height) => startDrag(f.key, height)}
+                  onDragEnd={endDrag}
+                  onDragOver={(e) => overRow(e, s.key, f.key)}
+                  onDrop={drop}
+                  onError={onError}
+                />
+              </Fragment>
             ))}
+            {dragging && target?.sectionKey === s.key && target.beforeKey === null && (
+              <DropPlaceholder height={dragging.height} onDragOver={accept} onDrop={drop} />
+            )}
           </div>
         </div>
       ))}
@@ -230,36 +286,57 @@ export function CustomFieldsEditor({
   );
 }
 
+/** Where the dragged field will land: an empty slot of its height. */
+function DropPlaceholder({
+  height,
+  onDragOver,
+  onDrop,
+}: {
+  height: number;
+  onDragOver: (e: DragEvent) => void;
+  onDrop: (e: DragEvent) => void;
+}) {
+  return <div className="cf-drop" style={{ height }} onDragOver={onDragOver} onDrop={onDrop} aria-hidden="true" />;
+}
+
 function FieldEditRow({
   itemId,
   field,
   disabled,
+  dragging,
   onChange,
   onRemove,
   onMove,
   onDragStart,
   onDragEnd,
   onDragOver,
-  onDropBefore,
+  onDrop,
   onError,
 }: {
   itemId?: string;
   field: EditField;
   disabled: boolean;
+  /** This row is the one being dragged. */
+  dragging: boolean;
   onChange: (change: Partial<EditField>) => void;
   onRemove: () => void;
   onMove: (delta: -1 | 1) => void;
-  onDragStart: () => void;
+  /** With the row's height, for the placeholder. */
+  onDragStart: (height: number) => void;
   onDragEnd: () => void;
   onDragOver: (e: DragEvent) => void;
-  onDropBefore: (e: DragEvent) => void;
+  onDrop: (e: DragEvent) => void;
   onError: (message: string) => void;
 }) {
   const { t } = useI18n();
   const name = field.label.trim() || t.fields.types[field.type];
 
   return (
-    <div className="row edit-row cf-row" onDragOver={onDragOver} onDrop={onDropBefore}>
+    <div
+      className={`row edit-row cf-row${dragging ? " cf-row-dragging" : ""}`}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <button
         type="button"
         className="icon-btn cf-handle"
@@ -269,7 +346,10 @@ function FieldEditRow({
           e.dataTransfer.effectAllowed = "move";
           // Carries no value; the field is found by its key in memory.
           e.dataTransfer.setData(DRAG_TYPE, "");
-          onDragStart();
+          // Drag the whole row, not just the handle.
+          const row = e.currentTarget.closest<HTMLElement>(".cf-row");
+          if (row) e.dataTransfer.setDragImage(row, 16, 16);
+          onDragStart(row?.offsetHeight ?? 48);
         }}
         onDragEnd={onDragEnd}
         onKeyDown={(e) => {

@@ -1866,6 +1866,19 @@ input::-ms-clear {
   cursor: grab;
 }
 
+/* While dragging: the field fades where it was, and a slot of its height
+   shows where it will land. */
+.cf-row-dragging {
+  opacity: 0.35;
+}
+
+.cf-drop {
+  margin: 4px 6px;
+  border: 1.5px dashed var(--brass);
+  border-radius: 10px;
+  background: var(--sel);
+}
+
 .cf-handle:active {
   cursor: grabbing;
 }

@@ -149,6 +149,37 @@ export function placeField(
   });
 }
 
+/** Where a dragged field would land: in `sectionKey`, before `beforeKey` (`null`: at the end). */
+export interface DropTarget {
+  sectionKey: string;
+  beforeKey: string | null;
+}
+
+/**
+ * The drop target while dragging `dragKey` over `overKey` in `sectionKey`:
+ * before it on its upper half, after it on its lower half (`overKey` null:
+ * the section's end). `null` when the field would stay where it is.
+ */
+export function dropTarget(
+  sections: EditSection[],
+  dragKey: string,
+  sectionKey: string,
+  overKey: string | null,
+  after: boolean,
+): DropTarget | null {
+  const section = sections.find((s) => s.key === sectionKey);
+  if (!section) return null;
+  let beforeKey: string | null = null;
+  if (overKey !== null) {
+    const i = section.fields.findIndex((f) => f.key === overKey);
+    if (i < 0) return null;
+    beforeKey = after ? (section.fields[i + 1]?.key ?? null) : overKey;
+  }
+  const at = section.fields.findIndex((f) => f.key === dragKey);
+  if (at >= 0 && (beforeKey === dragKey || beforeKey === (section.fields[at + 1]?.key ?? null))) return null;
+  return { sectionKey, beforeKey };
+}
+
 function valueInput(f: EditField): FieldValueInput {
   switch (f.type) {
     case "password":
