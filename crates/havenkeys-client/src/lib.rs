@@ -19,6 +19,8 @@ mod removal;
 #[cfg(test)]
 mod stub_server;
 mod sync;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
 pub use client::{ClientConfig, HavenClient};

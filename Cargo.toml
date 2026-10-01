@@ -9,6 +9,7 @@ members = [
   "crates/havenkeys-server",
   "crates/havenkeys-sync-client",
   "crates/havenkeys-client",
+  "crates/havenkeys-mobile",
   "apps/desktop/src-tauri",
 ]
 # The Tauri shell needs WebKitGTK system libraries; keep plain `cargo test`
@@ -22,6 +23,7 @@ default-members = [
   "crates/havenkeys-server",
   "crates/havenkeys-sync-client",
   "crates/havenkeys-client",
+  "crates/havenkeys-mobile",
 ]
 
 [workspace.package]

@@ -308,7 +308,11 @@ impl HavenClient {
     }
 
     /// Store the new vault, which opens unlocked, and start its auto-lock.
-    fn create_vault(&self, prepared: PreparedVault, record: &AccountRecord) -> ClientResult<()> {
+    pub(crate) fn create_vault(
+        &self,
+        prepared: PreparedVault,
+        record: &AccountRecord,
+    ) -> ClientResult<()> {
         let mut vault = self.vault()?;
         vault.create_account_vault(prepared, record)?;
         let minutes = vault.settings()?.auto_lock_minutes;

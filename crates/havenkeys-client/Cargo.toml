@@ -8,7 +8,8 @@ rust-version.workspace = true
 publish = false
 
 [features]
-# Exposes the in-memory and failing key stores to other crates' tests.
+# Exposes the in-memory and failing key stores, and an offline seeded
+# vault, to other crates' tests.
 testing = []
 
 [dependencies]

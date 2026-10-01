@@ -65,6 +65,8 @@ pub struct Device {
     cached: Option<Cached>,
     /// Always timed: no call here can hang the caller.
     store: TimedKeyStore,
+    /// Whether a key the store refused may be kept in `device.json`.
+    file_fallback: bool,
 }
 
 fn parses(s: &SecretString) -> bool {
@@ -100,9 +102,18 @@ impl Device {
             file_key,
             cached: None,
             store,
+            file_fallback: true,
         };
         let _ = device.save();
         device
+    }
+
+    /// For platforms where the key store is the only acceptable place for
+    /// the Secret Key (Android: a Keystore-sealed file). A store that will
+    /// not take the key is then an error, never a plaintext `device.json`.
+    pub fn without_file_fallback(mut self) -> Self {
+        self.file_fallback = false;
+        self
     }
 
     /// Find the key for `account`: the keychain first, then the file. The
@@ -167,6 +178,12 @@ impl Device {
             && matches!(self.store.get(account), Ok(Some(v)) if v.expose() == text.expose());
         let (file_key, storage) = if in_keychain {
             (None, Storage::Keychain)
+        } else if !self.file_fallback {
+            // The store may have half-taken it: ask it again next time.
+            self.cached = None;
+            return Err(std::io::Error::other(
+                "the key store refused the Secret Key",
+            ));
         } else {
             (Some(text.clone()), Storage::File)
         };
@@ -327,6 +344,17 @@ mod tests {
         let started = std::time::Instant::now();
         assert_eq!(d.set_secret_key(ACCOUNT, &key()).unwrap(), Storage::File);
         assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[test]
+    fn without_file_fallback_a_failing_store_keeps_the_key_off_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut device =
+            Device::load(dir.path(), Box::new(FailingKeyStore)).without_file_fallback();
+        let key = SecretKey::generate().unwrap();
+        assert!(device.set_secret_key(Uuid::from_u128(1), &key).is_err());
+        let on_disk = std::fs::read_to_string(dir.path().join(FILE)).unwrap();
+        assert!(!on_disk.contains(key.to_text().expose()));
     }
 
     #[test]

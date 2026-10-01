@@ -1,0 +1,50 @@
+[package]
+name = "havenkeys-mobile"
+version = "0.1.0"
+description = "The UniFFI API the HavenKeys mobile apps call"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "havenkeys_mobile"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+# Exposes havenkeys-client's test seed to this crate's integration tests.
+testing = ["havenkeys-client/testing"]
+
+[dependencies]
+havenkeys-core = { path = "../havenkeys-core" }
+havenkeys-client = { path = "../havenkeys-client" }
+havenkeys-sync-client = { path = "../havenkeys-sync-client" }
+uniffi = "0.32"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
+# Same version and features as havenkeys-sync-client: one reqwest, one rustls.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.20", features = ["v4"] }
+zeroize = "1.8"
+data-encoding = "2"
+# Same as the desktop's QR scan.
+rxing = { version = "0.8", default-features = false, features = ["encoding_rs"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+havenkeys-sync-client = { path = "../havenkeys-sync-client", features = ["platform-verifier"] }
+rustls-platform-verifier = "0.7"
+# Must be the jni version rustls-platform-verifier 0.7 uses (`cargo tree -i jni --target aarch64-linux-android`).
+jni = "0.22"
+
+[dev-dependencies]
+havenkeys-client = { path = "../havenkeys-client", features = ["testing"] }
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
