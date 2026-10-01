@@ -27,3 +27,6 @@ havenkeys-server = { path = "../havenkeys-server" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
 deadpool-postgres = "0.14"
+# Integration tests need the key-store fakes, which `cfg(test)` does not
+# expose to them.
+havenkeys-client = { path = ".", features = ["testing"] }
