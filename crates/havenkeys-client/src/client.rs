@@ -247,10 +247,17 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn client_in(dir: &std::path::Path) -> (Arc<HavenClient>, Arc<RecordingEvents>) {
+        client_with_store(dir, Box::new(MemoryKeyStore::default()))
+    }
+
+    pub(crate) fn client_with_store(
+        dir: &std::path::Path,
+        store: Box<dyn crate::key_store::KeyStore>,
+    ) -> (Arc<HavenClient>, Arc<RecordingEvents>) {
         let vault = Arc::new(Mutex::new(VaultService::new(
             Store::open_in_memory().unwrap(),
         )));
-        let device = Device::load(dir, Box::new(MemoryKeyStore::default()));
+        let device = Device::load(dir, store);
         let events = Arc::new(RecordingEvents::default());
         let client = HavenClient::new(
             vault,

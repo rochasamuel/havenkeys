@@ -280,8 +280,22 @@ impl HavenClient {
         self.device()?
             .set_secret_key(account.id, &secret_key)
             .map_err(|_| ClientError::file())?;
-        self.set_online(session);
-        let status = self.vault()?.status()?;
+        // The keychain can hold this up for seconds (a prompt), long enough
+        // for the new vault to auto-lock. As in `connect`, a lock wins: the
+        // session is dropped unused. The vault exists by then, so the sign-in
+        // still succeeded; it reports the locked status and is unlocked as
+        // usual.
+        let (status, online) = {
+            let vault = self.vault()?;
+            let online = vault.is_unlocked();
+            if online {
+                self.set_online(session);
+            }
+            (vault.status()?, online)
+        };
+        if !online {
+            return Ok(status);
+        }
         self.events.connectivity(true);
 
         // Catch up in the background: a vault with many items should not
@@ -762,6 +776,94 @@ fn credential_change_conflict(err: &SyncError) -> Option<ClientError> {
 
 #[cfg(test)]
 mod tests {
+    mod sign_in {
+        use crate::client::tests::client_with_store;
+        use crate::client::HavenClient;
+        use crate::key_store::{KeyStore, MemoryKeyStore, StoreError};
+        use crate::stub_server::{StubAccount, StubServer};
+        use havenkeys_core::account::{AccountRef, NormalizedEmail};
+        use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+        use havenkeys_core::sync::encode_header_for;
+        use havenkeys_core::vault::{prepare_new_account_vault, VaultState};
+        use havenkeys_core::SecretString;
+        use std::sync::{Arc, OnceLock, Weak};
+        use uuid::Uuid;
+
+        /// A keychain whose save is where the vault locks: the auto-lock
+        /// firing while a keychain prompt waits for the user.
+        struct LocksOnSave {
+            client: Arc<OnceLock<Weak<HavenClient>>>,
+            inner: MemoryKeyStore,
+        }
+
+        impl KeyStore for LocksOnSave {
+            fn get(&self, account: Uuid) -> Result<Option<SecretString>, StoreError> {
+                self.inner.get(account)
+            }
+
+            fn set(&self, account: Uuid, value: &SecretString) -> Result<(), StoreError> {
+                if let Some(client) = self.client.get().and_then(Weak::upgrade) {
+                    client.lock("auto");
+                }
+                self.inner.set(account, value)
+            }
+
+            fn delete(&self, account: Uuid) -> Result<(), StoreError> {
+                self.inner.delete(account)
+            }
+        }
+
+        #[tokio::test]
+        async fn a_lock_while_saving_the_secret_key_leaves_the_device_offline() {
+            let password = "correct horse battery staple";
+            let account = AccountRef::new(
+                Uuid::from_u128(1),
+                NormalizedEmail::parse("user@example.com").unwrap(),
+            );
+            let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
+            let made = prepare_new_account_vault(
+                &SecretString::from(password),
+                &account,
+                kdf,
+                1_700_000_000_000,
+            )
+            .unwrap();
+            let server = StubServer::start(StubAccount {
+                account_id: account.id,
+                vault_id: made.prepared.vault_id(),
+                kdf: made.prepared.kdf().clone(),
+                header: encode_header_for(&made.prepared).unwrap(),
+                header_revision: made.prepared.header_revision() as i64,
+            })
+            .await;
+            server.release_login.notify_one();
+
+            let dir = tempfile::tempdir().unwrap();
+            let slot = Arc::new(OnceLock::new());
+            let store = LocksOnSave {
+                client: slot.clone(),
+                inner: MemoryKeyStore::default(),
+            };
+            let (client, events) = client_with_store(dir.path(), Box::new(store));
+            slot.set(Arc::downgrade(&client)).unwrap();
+
+            let status = client
+                .sign_in(
+                    server.url.clone(),
+                    "user@example.com".into(),
+                    SecretString::from(password),
+                    Some(made.secret_key.to_text()),
+                )
+                .await
+                .unwrap();
+            assert!(events.seen().iter().any(|e| e == "locked:auto:true"));
+            assert_eq!(status.state, VaultState::Locked);
+            assert!(status.vault_exists);
+            assert!(!client.is_online());
+            assert!(!events.seen().iter().any(|e| e == "online:true"));
+        }
+    }
+
     mod account_item {
         use super::super::{account_field, unlocked_account, AccountField};
         use crate::device::Device;
