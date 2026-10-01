@@ -2528,11 +2528,13 @@ dependencies = [
  "havenkeys-core",
  "havenkeys-server",
  "havenkeys-sync-client",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "tokio-postgres",
+ "url",
  "uuid",
  "zeroize",
 ]

@@ -45,6 +45,7 @@ export type ErrorCode =
   | "keychain_unavailable"
   | "password_change_unknown"
   | "password_changed_elsewhere"
+  | "invalid_kit"
   | "signed_out"
   | "rate_limited"
   | "invalid_server_url"
@@ -102,6 +103,7 @@ const codes: Record<ErrorCode, string | null> = {
     "HavenKeys could not confirm whether the server applied the new master password. If your current password stops working, use the new one.",
   password_changed_elsewhere:
     "Your master password was changed on another device. Lock and unlock with the new password.",
+  invalid_kit: "That is not a HavenKeys Emergency Kit code.",
   signed_out: "HavenKeys is signed out of this account. Unlock again to reconnect.",
   rate_limited: "Too many attempts. Try again in a few minutes.",
   invalid_server_url: "That server address cannot be used. It must start with https://.",

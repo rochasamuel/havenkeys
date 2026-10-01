@@ -54,6 +54,7 @@ const codes: Record<ErrorCode, string | null> = {
     "O HavenKeys não conseguiu confirmar se o servidor aplicou a nova senha mestra. Se a sua senha atual parar de funcionar, use a nova.",
   password_changed_elsewhere:
     "Sua senha mestra foi alterada em outro dispositivo. Bloqueie e desbloqueie com a nova senha.",
+  invalid_kit: "Este não é um código de Kit de Emergência do HavenKeys.",
   signed_out: "O HavenKeys foi desconectado desta conta. Desbloqueie de novo para reconectar.",
   rate_limited: "Tentativas demais. Tente novamente em alguns minutos.",
   invalid_server_url: "Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.",

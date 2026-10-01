@@ -14,6 +14,7 @@ pub mod device;
 mod error;
 mod events;
 pub mod key_store;
+pub mod kit;
 mod removal;
 #[cfg(test)]
 mod stub_server;
