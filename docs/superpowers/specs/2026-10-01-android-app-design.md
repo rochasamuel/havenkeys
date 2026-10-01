@@ -27,10 +27,10 @@ this design is Android-only below the Kotlin layer.
 |---|---|---|
 | Repository | This monorepo | A separate repo (the Rust core and sync client would drift) |
 | First platform | Android | iOS first; both at once |
-| Where security logic lives | Rust, shared with desktop | Kotlin or Dart orchestration over low-level core calls |
+| Where security logic lives | Rust, shared with desktop | Kotlin orchestration over low-level core calls |
 | Account/sync orchestration | Extracted from `src-tauri` into `havenkeys-client`, used by desktop and mobile | Copying it into the mobile crate |
-| Native binding | UniFFI (Kotlin now, Swift later) | flutter_rust_bridge (Dart-only; the autofill and credential services are Kotlin) |
-| Flutter ↔ native | Pigeon (typed, generated) | Untyped method channels |
+| UI toolkit | Fully native: Jetpack Compose on Android, SwiftUI on iOS | Flutter (the autofill and passkey screens must be native anyway, so it would mean two UI toolkits per platform and one more layer — Dart — holding secrets) |
+| Native binding | UniFFI (Kotlin now, Swift later), called directly | flutter_rust_bridge; a channel layer between UI and native |
 | Unlock | Master password; biometric unlock via Keystore after opt-in; password again every 14 days and after reboot | Password only; biometric with no re-entry |
 | Unlocked autofill | Matched items' values handed to the Android autofill framework; "Confirm before filling" restores per-fill authentication | Always authenticate each dataset |
 | App ↔ site association | Encrypted app bindings (package + signing cert) plus Digital Asset Links verification | Package name alone; trusting `webDomain` from any app |
@@ -94,7 +94,7 @@ sync_now, devices, sign_out, remove_device, settings
 It never returns keys, blobs, or whole vault objects. Every call that returns
 a secret validates the lock state, the item and the target in Rust.
 
-There is one `VaultService` per app process. The Flutter UI, the
+There is one `VaultService` per app process. The app's screens, the
 `AutofillService` and the `CredentialProviderService` all run in the app's
 default process and share it: one unlock opens all three, one lock closes
 all three.
@@ -104,27 +104,28 @@ all three.
 ```text
 crates/havenkeys-client/     account, sync, session (shared with desktop)
 crates/havenkeys-mobile/     UniFFI API
-apps/mobile/
-  lib/                       Flutter UI (§9)
-  android/app/src/main/kotlin/net/havenkeys/android/
-    bridge/                  Pigeon host API → UniFFI
+apps/android/                Gradle project, application id net.havenkeys.android
+  app/src/main/kotlin/net/havenkeys/android/
+    data/                    repositories over the UniFFI API (the only door to Rust)
+    ui/<feature>/            <Feature>Screen.kt + <Feature>ViewModel.kt (§9)
+    ui/theme/                design tokens, typography, motion
     autofill/                AutofillService, structure parser, field classifier
     credentials/             CredentialProviderService (M3)
     security/                Keystore, BiometricGate, SecretKeyStore impl
     update/                  GitHub update check (github flavor only)
-  ios/                       later
+    AppContainer.kt          manual dependency wiring
+apps/ios/                    later: SwiftUI app + AutoFill extension over the same UniFFI API
 ```
 
 ### 4.4 Boundaries
 
 * **Rust** decides: matching, origin and app checks, what a fill returns,
   bundle validity, passkey RP authorization.
-* **Kotlin** collects facts from Android (screen structure, caller package
-  and certificates) and talks to Keystore and BiometricPrompt. It holds a
-  secret only while passing it from Rust to Android for a fill.
-* **Dart** draws screens. It holds item overviews; a secret reaches it only
-  when the user taps reveal or copy. Autofill and passkeys never pass
-  through Dart.
+* **Kotlin services** collect facts from Android (screen structure, caller
+  package and certificates) and talk to Keystore and BiometricPrompt. They
+  hold a secret only while passing it from Rust to Android for a fill.
+* **Kotlin UI** (Compose) draws screens. ViewModels hold item overviews; a
+  secret reaches the UI only when the user taps reveal or copy (§9.4).
 
 ## 5. Unlock
 
@@ -333,7 +334,7 @@ the extension through the server.
 
 Hybrid (QR from a computer) is Android's job and out of scope.
 
-## 9. Flutter app
+## 9. Android app UI
 
 ### 9.1 Screens
 
@@ -344,51 +345,49 @@ generator) · Generator · Settings (auto-lock, lock on screen off, biometrics,
 Confirm before filling, Digital Asset Links, updates, account and devices,
 sign out, remove device) · Autofill setup (links to Android's Autofill
 service and Passwords & passkeys settings; Chrome's "Autofill using another
-service").
+service"). The autofill picker, "Search HavenKeys…" and the passkey sheet
+reuse the same Compose components.
 
 ### 9.2 Design
 
-The visual design is done with the `/impeccable` skill at implementation
-time, starting from the existing identity (desktop app, `packages/ui`
-tokens, `apps/web/DESIGN.md`) and adapted to Material 3. Smooth, purposeful
-motion for screen and state changes (unlock → vault, list → detail, reveal,
-TOTP progress, the lock wipe), honouring Android's "Remove animations".
-Light and dark follow the system. English and pt-BR via ARB files, reusing
-the desktop's wording.
+Jetpack Compose with Material 3. The visual design is done with the
+`/impeccable` skill at implementation time, starting from the existing
+identity (desktop app, `packages/ui` tokens, `apps/web/DESIGN.md`) and
+adapted to Android. Smooth, purposeful motion for screen and state changes
+(unlock → vault, list → detail with shared elements, reveal, TOTP progress,
+the lock wipe), honouring Android's "Remove animations". Light and dark
+follow the system. English and pt-BR as Android string resources
+(`values/`, `values-pt-rBR/`), reusing the desktop's wording.
 
 ### 9.3 Architecture
 
-Following Flutter's architecture guide
-(`docs.flutter.dev/app-architecture`):
+Android's recommended app architecture
+(`developer.android.com/topic/architecture`):
 
-```text
-lib/
-  data/services/       HavenKeysService — Pigeon client, the only door out of Dart
-  data/repositories/   VaultRepository, AccountRepository, SettingsRepository (abstract + impl)
-  ui/<feature>/        <feature>_screen.dart + <feature>_view_model.dart
-  ui/core/             theme, motion, shared widgets
-  routing/             go_router
-  utils/               Command, Result
-```
+* **UI layer:** a `@Composable` screen per feature and a `ViewModel` that
+  exposes one immutable `UiState` as a `StateFlow`. Composables hold layout,
+  animation and simple conditions only; logic lives in the ViewModel.
+* **Data layer:** repositories (`VaultRepository`, `AccountRepository`,
+  `SettingsRepository`) as interfaces with one implementation over the
+  UniFFI API, and fakes for tests. No local storage of their own: storage
+  and offline behaviour belong to Rust.
+* Unidirectional data flow: state flows down from repositories to
+  ViewModels to screens; user actions flow up as ViewModel function calls.
+* Coroutines throughout; Rust calls run on `Dispatchers.IO`; results are a
+  `sealed` type, not exceptions, between layers.
+* Navigation Compose; manual dependency wiring in `AppContainer` (no Hilt).
+* Not used: Room, DataStore or SharedPreferences for anything from the vault.
 
-* MVVM; ViewModels are `ChangeNotifier`s; widgets hold layout, animation and
-  simple conditions only.
-* Abstract repositories with fakes for tests; unidirectional data flow;
-  immutable models (Pigeon-generated); `provider` for injection; `go_router`;
-  `Command` for user actions; `Result` between layers.
-* Not used: the guide's SQL, key-value and offline-first patterns. Storage
-  and offline behaviour belong to Rust; SharedPreferences never holds vault
-  data.
+### 9.4 Secret handling in the UI
 
-### 9.4 Secret handling in Dart
-
-* Repositories expose overviews only.
-* A revealed value lives in the state of the widget showing it and is
-  cleared on leaving the screen, after 30 seconds, or on lock.
-* Never in global state, route arguments, logs or exceptions; a lint forbids
-  `print`/`debugPrint`.
-* The lock event from Rust clears every ViewModel and routes to Unlock.
-* Release builds use `--obfuscate --split-debug-info`.
+* Repositories and ViewModel state expose overviews only.
+* A revealed value lives in the `remember`ed state of the composable showing
+  it and is cleared when it leaves the screen, after 30 seconds, or on lock.
+* Never in ViewModel state, navigation arguments, `SavedStateHandle`, logs
+  or exceptions.
+* The lock event from Rust is a `StateFlow` every ViewModel observes: it
+  clears their state and navigation returns to Unlock.
+* Release builds are minified with R8.
 
 ## 10. Kotlin
 
@@ -396,12 +395,12 @@ lib/
   results; small single-purpose classes (`AutofillParser`, `FieldClassifier`,
   `KeystoreVault`, `BiometricGate`, `UpdateChecker`).
 * Manual construction, no DI framework.
-* No `Log` calls with vault data; a lint check forbids `Log` in the
-  `autofill`, `credentials` and `security` packages.
+* No logging of vault data: detekt's `ForbiddenMethodCall` forbids
+  `android.util.Log` and `println` in the whole app.
 
 ## 11. Code style
 
-Simple, readable code with clear names, in Dart, Kotlin and Rust. Comments
+Simple, readable code with clear names, in Kotlin, Swift and Rust. Comments
 only where the reason is not obvious — mostly security reasons. No
 narration.
 
@@ -410,7 +409,7 @@ narration.
 ### 12.1 Build
 
 `scripts/build-android.sh`: `cargo ndk` for arm64-v8a, armeabi-v7a, x86_64;
-UniFFI and Pigeon generation; `flutter build apk --flavor github`. Generated
+UniFFI Kotlin generation; `./gradlew assembleGithubRelease`. Generated
 bindings are committed. CI builds and tests on Linux on every push.
 
 ### 12.2 Release
@@ -437,8 +436,9 @@ bindings are committed. CI builds and tests on Linux on every push.
 * **Kotlin:** unit tests for parsing and classification on recorded
   structures (login, email-first, password-only, OTP, WebView, Chrome);
   instrumented emulator tests for Keystore, biometrics and the services.
-* **Flutter:** ViewModel tests with fake repositories; widget tests for
-  routing and the lock wipe.
+* **UI:** ViewModel unit tests with fake repositories
+  (`kotlinx-coroutines-test`); Compose UI tests for navigation and the lock
+  wipe.
 * **Manual checklist** in `security-review.md`: a real phone; Chrome and
   Firefox; the GitHub and Google apps; passkeys on webauthn.io and github.com.
 
