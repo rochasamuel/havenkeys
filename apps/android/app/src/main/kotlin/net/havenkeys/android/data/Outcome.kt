@@ -5,7 +5,10 @@ import kotlinx.coroutines.withContext
 import uniffi.havenkeys_mobile.MobileException
 
 sealed interface Outcome<out T> {
-    data class Ok<T>(val value: T) : Outcome<T>
+    data class Ok<T>(val value: T) : Outcome<T> {
+        // The value may be a secret (a revealed password, a TOTP code).
+        override fun toString() = "Ok(…)"
+    }
 
     /** Only the stable code crosses into the UI, which localizes it. */
     data class Failed(val code: String) : Outcome<Nothing>

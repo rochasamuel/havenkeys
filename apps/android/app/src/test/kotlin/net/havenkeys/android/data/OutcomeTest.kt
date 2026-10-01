@@ -2,6 +2,7 @@ package net.havenkeys.android.data
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import uniffi.havenkeys_mobile.MobileException
 
@@ -21,5 +22,13 @@ class OutcomeTest {
     @Test
     fun aValuePassesThrough() = runTest {
         assertEquals(Outcome.Ok(3), rust { 3 })
+    }
+
+    @Test
+    fun okNeverPrintsItsValueButStillCompares() {
+        val ok = Outcome.Ok("hunter2")
+        assertFalse(ok.toString().contains("hunter2"))
+        assertEquals(Outcome.Ok("hunter2"), ok)
+        assertEquals(Outcome.Ok("hunter2").hashCode(), ok.hashCode())
     }
 }
