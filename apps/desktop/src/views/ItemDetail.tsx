@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { CopyField, ItemOverview, PasskeyInfo } from "../lib/types";
-import { formatDate, groupCode, monogram, primaryHost } from "../lib/format";
-import { useRevealedSecret, useTotp } from "../lib/hooks";
+import { formatDate, monogram, primaryHost } from "../lib/format";
+import { useRevealedSecret } from "../lib/hooks";
 import { providerLogin, PROVIDER_NAMES } from "../lib/sso";
 import { CopyButton } from "../components/CopyButton";
+import { Field, IconButton, TotpField } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
+import { CustomSections } from "./CustomSections";
 
 interface Props {
   item: ItemOverview;
@@ -36,68 +38,6 @@ function useCopy(itemId: string) {
       }
     },
     [itemId, toast, t],
-  );
-}
-
-export function Field({ label, children, actions }: { label: string; children: ReactNode; actions?: ReactNode }) {
-  return (
-    <div className="row">
-      <div className="row-main">
-        <div className="row-label">{label}</div>
-        <div className="row-value">{children}</div>
-      </div>
-      {actions && <div className="row-actions-inline">{actions}</div>}
-    </div>
-  );
-}
-
-export function IconButton({
-  icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: Parameters<typeof Icon>[0]["name"];
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button className="icon-btn" onClick={onClick} title={label} aria-label={label} disabled={disabled}>
-      <Icon name={icon} size={16} />
-    </button>
-  );
-}
-
-function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise<boolean> }) {
-  const { t } = useI18n();
-  const { code, remaining, failed } = useTotp(() => api.totp(item.id), item.id, true);
-  const period = code?.period ?? 30;
-  const progress = code ? remaining / period : 0;
-  return (
-    <Field label={t.detail.oneTimeCode} actions={<CopyButton label={t.detail.copyOneTimeCode} onCopy={onCopy} />}>
-      {failed ? (
-        <span className="muted">{t.detail.codeFailed}</span>
-      ) : (
-        <span className="totp">
-          <span className="mono totp-code">{code ? groupCode(code.code) : "••• •••"}</span>
-          <svg className={`totp-ring${remaining <= 5 ? " totp-ring-low" : ""}`} viewBox="0 0 20 20" aria-hidden="true">
-            <circle cx="10" cy="10" r="8" className="totp-ring-track" />
-            <circle
-              cx="10"
-              cy="10"
-              r="8"
-              className="totp-ring-fill"
-              strokeDasharray="50.27"
-              strokeDashoffset={50.27 * (1 - progress)}
-            />
-          </svg>
-          <span className="totp-seconds" aria-label={t.detail.secondsRemaining(remaining)}>
-            {remaining}s
-          </span>
-        </span>
-      )}
-    </Field>
   );
 }
 
@@ -329,7 +269,14 @@ export function ItemDetail({ item, items, readOnly, onEdit, onDelete, onOpen }: 
               </Field>
             )}
 
-            {item.hasTotp && <TotpField item={item} onCopy={() => copy("totp")} />}
+            {item.hasTotp && (
+              <TotpField
+                label={t.detail.oneTimeCode}
+                load={() => api.totp(item.id)}
+                loadKey={item.id}
+                actions={<CopyButton label={t.detail.copyOneTimeCode} onCopy={() => copy("totp")} />}
+              />
+            )}
           </div>
 
           {item.hasPasskey && (
@@ -370,6 +317,8 @@ export function ItemDetail({ item, items, readOnly, onEdit, onDelete, onOpen }: 
               ))}
             </div>
           )}
+
+          <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
 
           {item.hasNotes && (
             <div className="group">

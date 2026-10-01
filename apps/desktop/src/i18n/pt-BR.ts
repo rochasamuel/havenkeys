@@ -376,6 +376,7 @@ export const ptBR: Messages = {
     limit: "Este login já tem o máximo de campos.",
     set: "Salvo.",
     removed: "Será removido.",
+    emptySection: "Nenhum campo. Arraste um para cá.",
   },
 
   generator: {

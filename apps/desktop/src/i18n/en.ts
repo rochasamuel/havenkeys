@@ -382,6 +382,7 @@ export const en = {
     limit: "This login has as many fields as it can hold.",
     set: "Saved.",
     removed: "Will be removed.",
+    emptySection: "No fields. Drag one here.",
   },
 
   generator: {

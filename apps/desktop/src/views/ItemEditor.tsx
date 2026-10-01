@@ -1,13 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { ItemInput, ItemOverview, ItemType, MatchType, ScannedTotp, SecretUpdate, SignInWith, SsoProvider, UrlRule } from "../lib/types";
-import { EMPTY, KEEP, canScan, scanLabel, toUpdate, type SecretEdit } from "../lib/secretEdit";
+import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, SignInWith, SsoProvider, UrlRule } from "../lib/types";
+import { EMPTY, KEEP, toUpdate, type SecretEdit } from "../lib/secretEdit";
+import { fromViews, sectionsInput, type EditSection } from "../lib/customFields";
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
 import { PROVIDER_NAMES, PROVIDER_ORDER, shouldCollapse } from "../lib/sso";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
+import { TotpEdit } from "../components/TotpEdit";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
+import { CustomFieldsEditor } from "./CustomFieldsEditor";
 
 interface Props {
   itemType: ItemType;
@@ -37,8 +40,10 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [password, setPassword] = useState<SecretEdit>(isNew || !existing.hasPassword ? EMPTY : KEEP);
   const [showPassword, setShowPassword] = useState(false);
   const [totp, setTotp] = useState<SecretEdit>(isNew || !existing.hasTotp ? EMPTY : KEEP);
-  const [scanning, setScanning] = useState(false);
-  const [scanChoices, setScanChoices] = useState<ScannedTotp[] | null>(null);
+  // A login's custom fields. `null` while an existing login's are loading
+  // or failed to load: nothing renders and the save sends no `sections`,
+  // so Rust keeps them as they are.
+  const [sections, setSections] = useState<EditSection[] | null>(itemType === "login" && isNew ? [] : null);
   // Notes/content are loaded (explicit edit action) so they can be edited in place.
   const [notes, setNotes] = useState<SecretEdit>(KEEP);
   const [notesText, setNotesText] = useState("");
@@ -52,8 +57,8 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
   const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
 
-  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, signInWith: signIn, sections: null };
-  const [initialSnapshot] = useState(snapshot);
+  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, signInWith: signIn, sections };
+  const [initialSnapshot, setInitialSnapshot] = useState(snapshot);
   const dirty = isDirty(initialSnapshot, snapshot);
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -93,6 +98,29 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
     // `t` is left out: a language change must not decrypt the text again.
   }, [existing, itemType, loadingText]);
 
+  // Keyed on the id, not the overview object: a list refresh (sync) hands
+  // the editor a new `existing` and must not reload over the user's edits.
+  const existingId = existing?.id;
+  useEffect(() => {
+    if (!existingId || itemType !== "login") return;
+    let cancelled = false;
+    api
+      .loginFields(existingId)
+      .then((views) => {
+        if (cancelled) return;
+        const loaded = fromViews(views);
+        setSections(loaded);
+        setInitialSnapshot((s) => ({ ...s, sections: loaded }));
+      })
+      .catch(() => {
+        if (!cancelled) setError(t.fields.loadFailed);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `t` is left out, as for the notes: a language change must not reload.
+  }, [existingId, itemType]);
+
   async function generate() {
     try {
       const g = await api.generate({
@@ -108,26 +136,6 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
     } catch (e) {
       setError(errorMessage(e, t, t.editor.generateFailed));
     }
-  }
-
-  async function scanQr() {
-    setScanning(true);
-    setError(null);
-    setScanChoices(null);
-    try {
-      const found = await api.scanTotpQr();
-      if (found.length === 1) pickScan(found[0]!);
-      else setScanChoices(found);
-    } catch (e) {
-      setError(errorMessage(e, t, t.editor.scanFailed));
-    } finally {
-      setScanning(false);
-    }
-  }
-
-  function pickScan(code: ScannedTotp) {
-    setScanChoices(null);
-    setTotp({ mode: "scanned", token: code.token, label: scanLabel(code, t.editor.scanUnnamed) });
   }
 
   async function submit(e: FormEvent) {
@@ -150,6 +158,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             notes: textUpdate,
             autoSignIn,
             signInWith: signIn ? { provider: signIn.provider, account: signIn.account?.trim() || null } : null,
+            sections: sectionsInput(sections),
           }
         : { itemType, title, content: textUpdate };
 
@@ -387,83 +396,23 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
 
           <h3 className="group-title">{t.editor.oneTimeCodes}</h3>
           <div className="group">
-            <div className="row edit-row">
-              {totp.mode === "keep" ? (
-                <div className="edit-secret">
-                  <span className="muted">{t.editor.setUp}</span>
-                  <span className="edit-secret-actions">
-                    <button type="button" className="btn btn-small" onClick={() => setTotp(EMPTY)}>
-                      {t.editor.replace}
-                    </button>
-                    <button type="button" className="btn btn-small btn-quiet-danger" onClick={() => setTotp({ mode: "clear" })}>
-                      {t.common.remove}
-                    </button>
-                  </span>
-                </div>
-              ) : totp.mode === "clear" ? (
-                <div className="edit-secret">
-                  <span className="muted">{t.editor.codesRemoved}</span>
-                  <span className="edit-secret-actions">
-                    <button type="button" className="btn btn-small" onClick={() => setTotp(KEEP)}>
-                      {t.common.undo}
-                    </button>
-                  </span>
-                </div>
-              ) : totp.mode === "scanned" ? (
-                <div className="edit-secret">
-                  <span className="scanned-code">
-                    <Icon name="check" size={15} /> {t.editor.scanned(totp.label)}
-                  </span>
-                  <span className="edit-secret-actions">
-                    <button type="button" className="btn btn-small" onClick={() => setTotp(EMPTY)}>
-                      {t.common.undo}
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                <div className="edit-secret">
-                  <input
-                    className="edit-input mono"
-                    type="password"
-                    value={totp.value}
-                    onChange={(e) => {
-                      setTotp({ mode: "set", value: e.target.value });
-                      setScanChoices(null);
-                    }}
-                    placeholder={t.editor.totpPlaceholder}
-                    autoComplete="off"
-                    spellCheck={false}
-                    autoCapitalize="off"
-                    aria-label={t.editor.totpLabel}
-                  />
-                  {canScan(totp) && (
-                    <span className="edit-secret-actions">
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() => void scanQr()}
-                        disabled={scanning || saving || readOnly}
-                        aria-label={scanning ? t.editor.scanning : t.editor.scanQr}
-                        title={scanning ? t.editor.scanning : t.editor.scanQr}
-                      >
-                        {scanning ? <span className="spinner" aria-hidden="true" /> : <Icon name="qr" size={16} />}
-                      </button>
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            {scanChoices && scanChoices.length > 1 && (
-              <div className="row scan-choices">
-                <span className="muted">{t.editor.scanPick}</span>
-                {scanChoices.map((code) => (
-                  <button key={code.token} type="button" className="btn btn-small" onClick={() => pickScan(code)}>
-                    {scanLabel(code, t.editor.scanUnnamed)}
-                  </button>
-                ))}
-              </div>
-            )}
+            <TotpEdit
+              edit={totp}
+              onChange={setTotp}
+              disabled={saving || !!readOnly}
+              ariaLabel={t.editor.totpLabel}
+              onError={setError}
+            />
           </div>
+
+          {sections !== null && (
+            <CustomFieldsEditor
+              sections={sections}
+              onChange={setSections}
+              disabled={saving || !!readOnly}
+              onError={setError}
+            />
+          )}
 
           <h3 className="group-title">{t.editor.browser}</h3>
           <div className="group">

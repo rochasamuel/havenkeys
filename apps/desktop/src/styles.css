@@ -1436,6 +1436,7 @@ button {
 }
 
 .totp-code {
+  white-space: nowrap;
   font-size: 21px;
   font-weight: 500;
   letter-spacing: var(--tracking-code);
@@ -1800,6 +1801,160 @@ button {
 
 .edit-area.note-input {
   min-height: 320px;
+}
+
+/* ------------------------------------------------- login custom fields */
+
+.multiline {
+  white-space: pre-wrap;
+}
+
+.cf-load-failed {
+  margin-bottom: 14px;
+}
+
+.cf-section-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 24px 0 8px;
+}
+
+/* An editable section title: reads as a group title until hovered or focused. */
+.group-title-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: border-color var(--t-fast);
+}
+
+.group-title-input:hover {
+  border-color: var(--line-strong);
+}
+
+.group-title-input:focus-visible {
+  border-color: var(--brass);
+  color: var(--text-strong);
+}
+
+.cf-confirm {
+  margin: 0 4px 8px;
+}
+
+.cf-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding-left: 6px;
+}
+
+.cf-handle {
+  cursor: grab;
+}
+
+.cf-handle:active {
+  cursor: grabbing;
+}
+
+.cf-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* In this column a flex-basis would be a height: the secret row's 220px
+   is meant as a width. */
+.cf-body > * {
+  flex: none;
+}
+
+/* The input shrinks before its buttons wrap under it. */
+.cf-body .edit-secret > input {
+  width: 0;
+}
+
+.cf-label {
+  height: 24px;
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--muted);
+}
+
+.cf-label:focus-visible {
+  color: var(--text-strong);
+}
+
+.cf-text {
+  height: auto;
+  min-height: 30px;
+  padding: 5px 0;
+  line-height: 1.45;
+  resize: none;
+}
+
+.cf-address {
+  display: grid;
+  /* Two columns where they fit, one in a narrow pane. */
+  grid-template-columns: repeat(auto-fit, minmax(9em, 1fr));
+  gap: 2px 12px;
+}
+
+.cf-part-street,
+.cf-part-complement {
+  grid-column: 1 / -1;
+}
+
+.cf-otp {
+  display: flex;
+  min-width: 0;
+}
+
+.cf-scan-choices {
+  display: flex;
+  align-items: center;
+  padding-top: 6px;
+}
+
+/* An empty section still takes a dropped field. */
+.cf-empty {
+  margin: 0;
+  min-height: 44px;
+  font-size: 13px;
+}
+
+/* The add menu must not be clipped by the group's rounded corners, so this
+   group lets it overflow and rounds its own buttons instead. */
+.cf-add-group {
+  overflow: visible;
+}
+
+.cf-add-group > .cf-add > .add-row {
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+}
+
+.cf-add-group > .add-row:last-child {
+  border-top: 1px solid var(--group-line);
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
+}
+
+.cf-add {
+  position: relative;
+}
+
+.cf-menu {
+  left: 8px;
+  right: auto;
+  transform-origin: top left;
 }
 
 .tool-head {
