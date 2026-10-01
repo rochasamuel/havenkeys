@@ -39,10 +39,12 @@ pub struct HavenClient {
     /// re-pointed vault cannot keep talking to the old server.
     server: Mutex<Option<(String, ServerClient)>>,
     /// When a pull was last attempted, so the periodic one keeps its spacing
-    /// whether or not the attempt worked.
+    /// whether or not the attempt worked. Real sync times live in the
+    /// account record.
     last_sync_attempt: Mutex<Option<Duration>>,
-    /// Set when the vault file could not be opened: every vault access
-    /// refuses with it.
+    /// Set when the vault file could not be opened. The app still starts —
+    /// it has to, or there is nowhere to show the reason — and every vault
+    /// access refuses with this.
     storage_error: Option<ClientError>,
     pub(crate) events: Arc<dyn ClientEvents>,
     pub(crate) config: ClientConfig,
@@ -71,6 +73,8 @@ impl HavenClient {
     }
 
     pub fn vault(&self) -> ClientResult<MutexGuard<'_, VaultService>> {
+        // Checked here rather than in each command: this is the one door
+        // every one of them goes through.
         if let Some(err) = &self.storage_error {
             return Err(err.clone());
         }
