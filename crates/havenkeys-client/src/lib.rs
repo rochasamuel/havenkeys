@@ -12,10 +12,12 @@ pub mod device;
 mod error;
 mod events;
 pub mod key_store;
+mod sync;
 
 pub use client::{ClientConfig, HavenClient, ServerClient};
 pub use error::{ClientError, ClientResult};
 pub use events::ClientEvents;
+pub use sync::{MAX_BATCH, PULL_INTERVAL};
 
 /// Wall-clock time in Unix milliseconds.
 pub fn now_ms() -> i64 {

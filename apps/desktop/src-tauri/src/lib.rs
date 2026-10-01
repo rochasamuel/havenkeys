@@ -38,7 +38,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
 
 pub(crate) const VAULT_FILE: &str = "vault.sqlite3";
 const AUTO_LOCK_TICK: Duration = Duration::from_secs(5);
-const PULL_INTERVAL: Duration = Duration::from_secs(sync::PULL_INTERVAL_SECS);
+use havenkeys_client::PULL_INTERVAL;
 
 /// Only the bundled app may be loaded in the webview. Everything else
 /// (remote sites, file://, javascript:, data:) is refused.
@@ -113,11 +113,12 @@ fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
         // assigns the revision, and only then is it recorded here.
         // The bridge thread waits for it, without the vault lock.
         move |staged| {
-            let handle = save_handle.clone();
-            tauri::async_runtime::block_on(
-                async move { sync::push(&handle, staged).await.map(|_| ()) },
-            )
-            .map_err(sync::bridge_error)
+            let Some(state) = save_handle.try_state::<AppState>() else {
+                return Err(havenkeys_protocol::ErrorCode::Internal);
+            };
+            let client = state.client().clone();
+            tauri::async_runtime::block_on(async move { client.push(staged).await.map(|_| ()) })
+                .map_err(sync::bridge_error)
         },
     );
     // "Edit in HavenKeys" from the extension popup. The bridge has
@@ -168,9 +169,9 @@ fn start_auto_lock(handle: AppHandle) -> std::io::Result<()> {
                 // Catch up with the server while unlocked. A locked
                 // vault has no session, so this simply does not run.
                 if state.is_online() && state.client().sync_due(PULL_INTERVAL) {
-                    let pull_handle = handle.clone();
+                    let client = state.client().clone();
                     tauri::async_runtime::spawn(async move {
-                        let _ = sync::sync_now(&pull_handle).await;
+                        let _ = client.sync_now().await;
                     });
                 }
             }

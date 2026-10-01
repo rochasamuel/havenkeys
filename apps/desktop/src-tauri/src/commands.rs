@@ -164,7 +164,8 @@ pub async fn unlock_vault(
     if let Some(auth_key) = auth_key {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = sync::connect(&handle, auth_key).await;
+            let client = handle.state::<AppState>().client().clone();
+            let _ = client.connect(auth_key).await;
         });
     }
     Ok(status)
@@ -208,7 +209,7 @@ async fn unlock_from_server(
     let state = app.state::<AppState>();
     let account = vault_account(&state)?;
     let local_kdf = state.vault()?.kdf()?;
-    let client = sync::client(&state)?;
+    let client = state.client().server()?;
     // Short, because this runs on every wrong password: an unreachable server
     // must not hold the unlock screen for the transport's full timeout. The
     // later requests keep the normal ones; the server has answered by then.
@@ -238,7 +239,7 @@ async fn unlock_from_server(
             &auth_key,
             account.id,
             state.device_id()?,
-            sync::DEVICE_NAME,
+            "Desktop",
         )
         .await?;
     drop(auth_key);
@@ -274,7 +275,8 @@ async fn unlock_from_server(
     let _ = app.emit(sync::CONNECTIVITY_EVENT, true);
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = sync::sync_now(&handle).await;
+        let client = handle.state::<AppState>().client().clone();
+        let _ = client.sync_now().await;
     });
     Ok(status)
 }
@@ -283,7 +285,8 @@ async fn unlock_from_server(
 #[tauri::command]
 pub async fn sync_now(app: AppHandle) -> CmdResult<havenkeys_core::sync::SyncReport> {
     app.state::<AppState>().touch();
-    sync::sync_now(&app).await
+    let client = app.state::<AppState>().client().clone();
+    client.sync_now().await
 }
 
 /// Download the whole vault again.
@@ -299,7 +302,8 @@ pub async fn resync_vault(app: AppHandle) -> CmdResult<havenkeys_core::sync::Syn
         state.require_online()?;
         state.vault()?.reset_sync_cursor(AppState::now_ms())?;
     }
-    sync::sync_now(&app).await
+    let client = app.state::<AppState>().client().clone();
+    client.sync_now().await
 }
 
 #[tauri::command]
@@ -327,7 +331,8 @@ pub async fn change_master_password(
     state.require_online()?;
     vault::check_new_master_password(&new)?;
     // Adopt a change made elsewhere first, so the base revision is current.
-    sync::sync_now(&app).await?;
+    let client = app.state::<AppState>().client().clone();
+    client.sync_now().await?;
     let kdf = KdfParams::generate()?;
     let account = vault_account(&state)?;
     let secret_key = state
@@ -358,7 +363,7 @@ pub async fn change_master_password(
     // Each `state.vault()?` guard below is a temporary, dropped at the end
     // of its statement: none is held across the request.
     let header = state.vault()?.encode_rekeyed_header(&ticket, &rekeyed)?;
-    let (session, client) = (state.session()?, sync::client(&state)?);
+    let (session, client) = (state.session()?, state.client().server()?);
     let sent = client
         .change_credentials(
             &session,
@@ -393,7 +398,7 @@ pub async fn change_master_password(
             }
         }
         Err(e) => {
-            return Err(credential_change_conflict(&e).unwrap_or_else(|| sync::failed(&app, e)))
+            return Err(credential_change_conflict(&e).unwrap_or_else(|| state.client().failed(e)))
         }
     };
     // The server has it; from here on the change has happened.
@@ -509,7 +514,11 @@ pub async fn delete_passkey(
             .vault()?
             .stage_remove_passkey(&id, &credential_id, AppState::now_ms())?)
     })?;
-    let item = sync::push(&app, staged)
+    let item = app
+        .state::<AppState>()
+        .client()
+        .clone()
+        .push(staged)
         .await?
         .ok_or_else(CmdError::internal)?;
     let _ = app.emit(crate::state::ITEMS_CHANGED_EVENT, ());
@@ -664,7 +673,8 @@ pub async fn update_item(
 #[tauri::command]
 pub async fn delete_item(app: AppHandle, id: Uuid) -> CmdResult<()> {
     let staged = stage_write(&app, |state| Ok(state.vault()?.stage_delete(&id)?))?;
-    sync::push(&app, staged).await.map(|_| ())
+    let client = app.state::<AppState>().client().clone();
+    client.push(staged).await.map(|_| ())
 }
 
 /// Stage a change for the server. Counts as activity and needs a session;
@@ -693,9 +703,8 @@ async fn save_item(
         let staged = stage(&mut *state.vault()?, input)?;
         Ok(staged)
     })?;
-    let saved = sync::push(app, staged)
-        .await?
-        .ok_or_else(CmdError::internal)?;
+    let client = app.state::<AppState>().client().clone();
+    let saved = client.push(staged).await?.ok_or_else(CmdError::internal)?;
     if uses_scan {
         app.state::<AppState>().clear_totp_scan();
     }

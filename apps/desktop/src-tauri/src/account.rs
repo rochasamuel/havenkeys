@@ -9,7 +9,7 @@
 use crate::commands::{copy_to_clipboard, CopyResult};
 use crate::secret_store::Storage;
 use crate::state::{AppState, CmdError, CmdResult};
-use crate::sync::{self, DEVICE_NAME};
+use crate::sync;
 use havenkeys_client::device::Device;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::KdfParams;
@@ -136,7 +136,7 @@ pub async fn activate_account(
     let email = NormalizedEmail::parse(&invite.email)?;
     let account = AccountRef::new(invite.account, email);
     let server_url = invite.server.clone();
-    let client = sync::client_for(&state, &server_url)?;
+    let client = state.client().server_for(&server_url)?;
 
     let kdf = KdfParams::generate()?;
     let account_for_derivation = account.clone();
@@ -184,7 +184,8 @@ pub async fn activate_account(
     // perfectly good offline vault, so it is not an activation failure.
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = sync::connect(&handle, made.auth_key).await;
+        let client = handle.state::<AppState>().client().clone();
+        let _ = client.connect(made.auth_key).await;
     });
     Ok(status)
 }
@@ -213,7 +214,7 @@ pub async fn sign_in(
         _ => None,
     };
     let server_url = server_url.trim().trim_end_matches('/').to_string();
-    let client = sync::client_for(&state, &server_url)?;
+    let client = state.client().server_for(&server_url)?;
     let device_id = state.device_id()?;
 
     // The parameters are public by design: a device needs them before it can
@@ -253,7 +254,7 @@ pub async fn sign_in(
             &auth_key,
             account.id,
             device_id,
-            DEVICE_NAME,
+            "Desktop",
         )
         .await
         .map_err(|_| CmdError::sign_in_failed())?;
@@ -292,7 +293,8 @@ pub async fn sign_in(
     // the sign-in screen open.
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = sync::sync_now(&handle).await;
+        let client = handle.state::<AppState>().client().clone();
+        let _ = client.sync_now().await;
     });
     Ok(status)
 }
@@ -341,7 +343,7 @@ pub struct DeviceEntry {
 pub async fn list_devices(app: AppHandle) -> CmdResult<Vec<DeviceEntry>> {
     let state = app.state::<AppState>();
     state.touch();
-    let (session, client) = (state.session()?, sync::client(&state)?);
+    let (session, client) = (state.session()?, state.client().server()?);
     let devices = client.devices(&session).await?;
     Ok(devices
         .into_iter()
@@ -360,10 +362,10 @@ pub async fn list_devices(app: AppHandle) -> CmdResult<Vec<DeviceEntry>> {
 pub async fn revoke_device(app: AppHandle, id: Uuid) -> CmdResult<()> {
     let state = app.state::<AppState>();
     state.touch();
-    let (session, client) = (state.session()?, sync::client(&state)?);
+    let (session, client) = (state.session()?, state.client().server()?);
     client.revoke_device(&session, id).await?;
     if id == state.device_id()? {
-        sync::go_offline(&app);
+        state.client().go_offline();
     }
     Ok(())
 }
@@ -373,7 +375,7 @@ pub async fn revoke_device(app: AppHandle, id: Uuid) -> CmdResult<()> {
 #[tauri::command]
 pub async fn sign_out(app: AppHandle) -> CmdResult<()> {
     let state = app.state::<AppState>();
-    if let (Ok(session), Ok(client)) = (state.session(), sync::client(&state)) {
+    if let (Ok(session), Ok(client)) = (state.session(), state.client().server()) {
         let _ = client.logout(&session).await;
     }
     state.lock("user");

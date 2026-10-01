@@ -128,7 +128,7 @@ pub async fn remove_device(app: AppHandle, confirmation: String) -> CmdResult<()
     // waits until the file is set aside: revoking first and then failing the
     // rename would leave an intact vault on a device the server refuses
     // forever.
-    let revoke = match (state.session(), sync::client(&state), state.device_id()) {
+    let revoke = match (state.session(), state.client().server(), state.device_id()) {
         (Ok(session), Ok(client), Ok(device_id)) => Some((session, client, device_id)),
         _ => None,
     };

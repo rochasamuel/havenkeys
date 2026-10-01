@@ -7,7 +7,6 @@
 //! batches of at most 500 (spec 2026-09-20 §8.4).
 
 use crate::state::{AppState, CmdError, CmdResult};
-use crate::sync;
 use havenkeys_core::import::{onepux, ImportReport};
 use serde::Serialize;
 use std::io::Read;
@@ -84,7 +83,12 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
         AppState::now_ms(),
     )?;
     let mut report = staged.report;
-    let committed = sync::push_batches(&app, staged.writes).await?;
+    let committed = app
+        .state::<AppState>()
+        .client()
+        .clone()
+        .push_batches(staged.writes)
+        .await?;
     // What the server accepted is what the vault has; the staged count was a
     // forecast. Upgrades (already-present logins that gained sign_in_with)
     // are counted separately, not as newly imported items.
