@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chrome 135+ talks to autofill services natively once the user picks
+     "Autofill using another service"; the compatibility entry covers older
+     Chrome. Other browsers are added only after testing each. -->
+<autofill-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="net.havenkeys.android.MainActivity"
+    android:supportsInlineSuggestions="true">
+    <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="10000000000" />
+</autofill-service>

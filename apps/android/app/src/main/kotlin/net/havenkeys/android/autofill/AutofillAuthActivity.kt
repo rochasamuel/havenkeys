@@ -1,0 +1,150 @@
+package net.havenkeys.android.autofill
+
+import android.app.Activity
+import android.app.assist.AssistStructure
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.os.Parcelable
+import android.view.WindowManager
+import android.view.autofill.AutofillManager
+import android.view.inputmethod.InlineSuggestionsRequest
+import androidx.activity.compose.setContent
+import androidx.core.content.IntentCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import net.havenkeys.android.AppContainer
+import net.havenkeys.android.HavenApp
+import net.havenkeys.android.data.Outcome
+import net.havenkeys.android.ui.theme.HavenTheme
+import net.havenkeys.android.ui.unlock.UnlockScreen
+import net.havenkeys.android.ui.unlock.UnlockViewModel
+import uniffi.havenkeys_mobile.LockState
+import uniffi.havenkeys_mobile.TargetFacts
+
+/**
+ * Opened by a tapped "Unlock HavenKeys" row or a gated dataset (spec §7.3).
+ * Unlocks if needed, then asks Rust for the fill; Rust re-checks the target
+ * and its refusal returns nothing. Not exported: only our PendingIntents
+ * reach it.
+ */
+class AutofillAuthActivity : FragmentActivity() {
+    private val container get() = (application as HavenApp).container
+    private var answering = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        val tapped = tappedRequest() ?: return cancel()
+        val mode = intent.getStringExtra(DatasetFactory.EXTRA_MODE)
+        val itemId = intent.getStringExtra(DatasetFactory.EXTRA_ITEM_ID)
+        unlockThen(container) { answer(tapped, mode, itemId) }
+    }
+
+    private fun answer(tapped: TappedRequest, mode: String?, itemId: String?) {
+        if (answering) return
+        answering = true
+        lifecycleScope.launch {
+            val repo = container.autofillRepository
+            val factory = tapped.factory(this@AutofillAuthActivity)
+            val result: Parcelable? = when {
+                mode == DatasetFactory.MODE_UNLOCK -> factory.response(
+                    FillPlanner.plan(tapped.form, tapped.target, container.isUnlocked(), repo),
+                )
+                itemId == null -> null
+                mode == DatasetFactory.MODE_FILL ->
+                    (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)
+                mode == DatasetFactory.MODE_TOTP ->
+                    (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::totpDataset)
+                else -> null
+            }
+            if (result == null) cancel() else finishWith(result)
+        }
+    }
+}
+
+/** What a tapped row is about, rebuilt from the structure Android attaches, never from our extras. */
+internal class TappedRequest(
+    val screen: ParsedScreen,
+    val form: LoginForm,
+    val target: TargetFacts,
+    private val inlineRequest: InlineSuggestionsRequest?,
+) {
+    fun factory(activity: Activity) = DatasetFactory(activity, screen, form, inlineRequest)
+}
+
+/**
+ * Null when there is no structure, no login form or no app to name. The app
+ * being filled starts us and receives the answer, and it could replace the
+ * structure: the structure counts only when it names that same app.
+ */
+internal fun Activity.tappedRequest(): TappedRequest? {
+    val structure = IntentCompat.getParcelableExtra(
+        intent,
+        AutofillManager.EXTRA_ASSIST_STRUCTURE,
+        AssistStructure::class.java,
+    )
+    val screen = structure?.let { StructureParser().parse(it) }?.takeIf { it.packageName == callingPackage }
+    val form = screen?.takeIf { it.packageName.isNotEmpty() }?.let { LoginFormFinder.find(it.fields) }
+    if (screen == null || form == null) return null
+    val target = TargetFacts(
+        screen.packageName,
+        CallerIdentity(packageManager).certDigests(screen.packageName),
+        form.webDomain,
+        form.webScheme,
+    )
+    // Android adds the keyboard's request to this Intent from Android 12 on.
+    val inlineRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        IntentCompat.getParcelableExtra(
+            intent,
+            AutofillManager.EXTRA_INLINE_SUGGESTIONS_REQUEST,
+            InlineSuggestionsRequest::class.java,
+        )
+    } else {
+        null
+    }
+    return TappedRequest(screen, form, target, inlineRequest)
+}
+
+/** Runs [then] once the vault is unlocked, showing the unlock screen first when it is locked. */
+internal fun FragmentActivity.unlockThen(container: AppContainer, then: () -> Unit) {
+    lifecycleScope.launch {
+        if (container.isUnlocked()) {
+            then()
+            return@launch
+        }
+        setContent {
+            HavenTheme {
+                UnlockScreen(
+                    viewModel = viewModel {
+                        UnlockViewModel(
+                            container.vaultRepository,
+                            biometricAvailable = container.biometricGate.available(this@unlockThen),
+                            hasBundle = container::hasBiometricUnlock,
+                            deleteBundle = container::forgetBiometricUnlock,
+                        )
+                    },
+                    activity = this@unlockThen,
+                    container = container,
+                    onUnlocked = then,
+                )
+            }
+        }
+    }
+}
+
+internal suspend fun AppContainer.isUnlocked(): Boolean =
+    (vaultRepository.status() as? Outcome.Ok)?.value?.state == LockState.UNLOCKED
+
+internal fun Activity.cancel() {
+    setResult(Activity.RESULT_CANCELED)
+    finish()
+}
+
+/** The fill goes back to Android as the autofill API requires; nothing else carries it. */
+internal fun Activity.finishWith(result: Parcelable) {
+    setResult(Activity.RESULT_OK, Intent().putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, result))
+    finish()
+}

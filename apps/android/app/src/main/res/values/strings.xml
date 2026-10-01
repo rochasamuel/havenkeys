@@ -215,4 +215,11 @@
     <string name="autofill_setup_unavailable">Android’s autofill settings could not be opened on this phone.</string>
     <string name="autofill_setup_chrome_title">In Chrome</string>
     <string name="autofill_setup_chrome">Chrome fills with its own password manager unless told otherwise. In Chrome, open Settings → Autofill services and choose “Autofill using another service”, then restart Chrome.</string>
+    <string name="autofill_unlock">Unlock HavenKeys</string>
+    <string name="autofill_search">Search HavenKeys…</string>
+    <string name="autofill_code">One-time code</string>
+    <string name="autofill_use_in_app">Use %1$s in %2$s?</string>
+    <string name="autofill_use">Use</string>
+    <string name="autofill_cancel">Cancel</string>
+    <string name="autofill_filled_once">Filled once — connect to save this app for next time.</string>
 </resources>

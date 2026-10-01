@@ -1,0 +1,68 @@
+package net.havenkeys.android.autofill
+
+import net.havenkeys.android.data.AutofillRepository
+import net.havenkeys.android.data.Outcome
+import uniffi.havenkeys_mobile.AutofillMatch
+import uniffi.havenkeys_mobile.FillValues
+import uniffi.havenkeys_mobile.TargetFacts
+import uniffi.havenkeys_mobile.TargetKind
+
+sealed interface FillPlan {
+    data object Nothing : FillPlan
+    data object UnlockFirst : FillPlan
+    data class Offer(val datasets: List<DatasetPlan>, val search: Boolean) : FillPlan
+}
+
+/** `values`/`totp` null: the dataset is gated and Rust is asked on tap. */
+data class DatasetPlan(val match: AutofillMatch, val values: FillValues?, val totp: String?) {
+    // The values are a password and a code; the match names the login.
+    override fun toString() = "DatasetPlan(…)"
+}
+
+/** A code-only step (the second page of a sign-in): offered the codes, never the login. */
+val LoginForm.otpOnly: Boolean get() = otps.isNotEmpty() && passwords.isEmpty() && usernames.isEmpty()
+
+val LoginForm.hasLoginFields: Boolean get() = usernames.isNotEmpty() || passwords.isNotEmpty()
+
+/**
+ * What to offer for one fill request. Every answer comes from Rust: the
+ * target, the matches and each value. A match Rust refuses to fill is not
+ * offered, and nothing from the vault is read while it is locked.
+ */
+object FillPlanner {
+    /** Matches offered per request (the "Search HavenKeys…" entry comes on top). */
+    const val MAX_DATASETS = 5
+
+    suspend fun plan(form: LoginForm, target: TargetFacts, unlocked: Boolean, repo: AutofillRepository): FillPlan {
+        val kind = repo.targetKind(target).valueOrNull()
+        return when {
+            kind == null -> FillPlan.Nothing
+            !unlocked -> FillPlan.UnlockFirst
+            else -> offer(form, target, kind, repo)
+        }
+    }
+
+    private suspend fun offer(
+        form: LoginForm,
+        target: TargetFacts,
+        kind: TargetKind,
+        repo: AutofillRepository,
+    ): FillPlan {
+        val matches = repo.matches(target).valueOrNull() ?: return FillPlan.Nothing
+        val direct = !repo.confirmBeforeFilling()
+        val datasets = matches
+            .filter { !form.otpOnly || it.hasTotp }
+            .take(MAX_DATASETS)
+            .mapNotNull { match ->
+                when {
+                    !direct -> DatasetPlan(match, null, null)
+                    form.otpOnly -> repo.totp(match.id, target).valueOrNull()?.let { DatasetPlan(match, null, it) }
+                    else -> repo.fill(match.id, target).valueOrNull()?.let { DatasetPlan(match, it, null) }
+                }
+            }
+        val search = kind == TargetKind.APP && form.hasLoginFields
+        return if (datasets.isEmpty() && !search) FillPlan.Nothing else FillPlan.Offer(datasets, search)
+    }
+
+    private fun <T> Outcome<T>.valueOrNull(): T? = (this as? Outcome.Ok)?.value
+}

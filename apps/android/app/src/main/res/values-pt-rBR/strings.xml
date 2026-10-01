@@ -203,4 +203,11 @@
     <string name="autofill_setup_unavailable">Não foi possível abrir as configurações de preenchimento automático do Android neste celular.</string>
     <string name="autofill_setup_chrome_title">No Chrome</string>
     <string name="autofill_setup_chrome">O Chrome preenche com o próprio gerenciador de senhas, a menos que você mude isso. No Chrome, abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”; depois reinicie o Chrome.</string>
+    <string name="autofill_unlock">Desbloquear o HavenKeys</string>
+    <string name="autofill_search">Pesquisar no HavenKeys…</string>
+    <string name="autofill_code">Código de uso único</string>
+    <string name="autofill_use_in_app">Usar %1$s em %2$s?</string>
+    <string name="autofill_use">Usar</string>
+    <string name="autofill_cancel">Cancelar</string>
+    <string name="autofill_filled_once">Preenchido desta vez — conecte-se para salvar este app para a próxima.</string>
 </resources>
