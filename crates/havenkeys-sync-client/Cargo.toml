@@ -7,6 +7,13 @@ rust-version.workspace = true
 # Not published: these are workspace crates with path dependencies.
 publish = false
 
+[features]
+# Mobile: verify the server with the operating system's trust store (spec
+# 2026-10-01-android-app §6.3) instead of the bundled Mozilla roots, so a
+# self-hosted server with a CA the user installed works as it does in the
+# phone's browser.
+platform-verifier = ["dep:rustls", "dep:rustls-platform-verifier"]
+
 [dependencies]
 havenkeys-core = { path = "../havenkeys-core" }
 # rustls, never OpenSSL; no cookie store, no proxy auto-detection, nothing
@@ -18,6 +25,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 data-encoding = "2"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 url = "2"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-platform-verifier = { version = "0.7", optional = true }
 
 [dev-dependencies]
 # test-util exposes StagedWrite::for_test, used only by this crate's tests to

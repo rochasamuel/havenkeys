@@ -27,4 +27,6 @@ pub use client::{
 pub use error::{Conflict, Result, SyncError};
 pub use invite::Invite;
 pub use session::Session;
-pub use transport::{HttpRequest, HttpResponse, HttpTransport, Method, Transport};
+pub use transport::{
+    http_client_builder, HttpRequest, HttpResponse, HttpTransport, Method, Transport,
+};

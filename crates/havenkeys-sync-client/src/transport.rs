@@ -64,6 +64,37 @@ pub trait Transport {
     fn send(&self, request: HttpRequest) -> impl Future<Output = Result<HttpResponse>> + Send;
 }
 
+/// The HTTP client this crate's transport, and the mobile app's Digital
+/// Asset Links fetch, are built from. Never follows a redirect.
+pub fn http_client_builder() -> reqwest::ClientBuilder {
+    let builder = reqwest::Client::builder()
+        // Following a redirect would hand the token to a host the user
+        // never chose.
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("havenkeys");
+    #[cfg(feature = "platform-verifier")]
+    let builder = match platform_tls() {
+        Some(config) => builder.use_preconfigured_tls(config),
+        // Not initialized (Android before NativeTls.init): the bundled
+        // roots still verify, they only miss user-installed CAs.
+        None => builder,
+    };
+    builder
+}
+
+#[cfg(feature = "platform-verifier")]
+fn platform_tls() -> Option<rustls::ClientConfig> {
+    use rustls_platform_verifier::BuilderVerifierExt;
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .ok()?
+        .with_platform_verifier()
+        .ok()?
+        .with_no_client_auth();
+    Some(config)
+}
+
 /// The real transport.
 #[derive(Debug)]
 pub struct HttpTransport {
@@ -83,13 +114,9 @@ impl HttpTransport {
             "http" if local => {}
             _ => return Err(SyncError::InvalidServerUrl),
         }
-        let client = reqwest::Client::builder()
-            // Following a redirect would hand the token to a host the user
-            // never chose.
-            .redirect(reqwest::redirect::Policy::none())
+        let client = http_client_builder()
             .timeout(std::time::Duration::from_secs(30))
             .connect_timeout(std::time::Duration::from_secs(10))
-            .user_agent("havenkeys")
             .build()
             .map_err(|_| SyncError::Unavailable)?;
         Ok(Self { base, client })
@@ -148,6 +175,17 @@ async fn read_capped(response: &mut reqwest::Response) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_shared_builder_makes_a_client() {
+        assert!(super::http_client_builder().build().is_ok());
+    }
+
+    #[cfg(feature = "platform-verifier")]
+    #[test]
+    fn the_platform_verifier_is_used_when_enabled() {
+        assert!(super::platform_tls().is_some());
+    }
 
     #[test]
     fn only_https_or_localhost_is_accepted() {
