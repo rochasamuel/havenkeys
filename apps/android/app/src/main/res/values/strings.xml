@@ -80,4 +80,41 @@
     <string name="field_identity_website">Website</string>
     <string name="field_identity_notes">Notes</string>
     <string name="field_custom">Field</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Welcome to HavenKeys</string>
+    <string name="onboarding_how">How to set up</string>
+    <string name="onboarding_scan_kit">Scan my Emergency Kit</string>
+    <string name="onboarding_scan_kit_sub">Point the camera at the QR code on your Emergency Kit.</string>
+    <string name="onboarding_type_kit">Type my Emergency Kit</string>
+    <string name="onboarding_type_kit_sub">Add this phone to an account you already have.</string>
+    <string name="onboarding_invite_choice">I have an invite</string>
+    <string name="onboarding_invite_sub">Set up this phone with your invite.</string>
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_cancel">Cancel</string>
+    <string name="onboarding_scanning">Looking for a QR code…</string>
+    <string name="onboarding_camera_needed">Allow the camera to scan your Emergency Kit, or go back and type it.</string>
+    <string name="onboarding_camera_allow">Allow camera</string>
+    <string name="onboarding_camera_unavailable">The camera could not be opened. Go back and type your Emergency Kit.</string>
+    <string name="onboarding_server">Server</string>
+    <string name="onboarding_server_hint">From your Emergency Kit.</string>
+    <string name="onboarding_email">Email</string>
+    <string name="onboarding_email_placeholder">you@example.com</string>
+    <string name="onboarding_secret_key">Secret Key</string>
+    <string name="onboarding_secret_key_hint">The long code on your Emergency Kit.</string>
+    <string name="onboarding_master_password">Master password</string>
+    <string name="onboarding_password_hint">At least 10 characters. Nobody can reset it for you — not the server, not us.</string>
+    <string name="onboarding_repeat_password">Repeat master password</string>
+    <string name="onboarding_too_short">Use at least 10 characters.</string>
+    <string name="onboarding_mismatch">The two passwords don’t match.</string>
+    <string name="onboarding_invite">Invite</string>
+    <string name="onboarding_invite_hint">One line, from whoever runs your HavenKeys server. It works once and expires after seven days.</string>
+    <string name="onboarding_create">Create my vault</string>
+    <string name="onboarding_creating">Setting up…</string>
+    <string name="onboarding_create_note">Your master password and Secret Key never leave this phone. The server stores only encrypted data.</string>
+    <string name="onboarding_kit_found">Emergency Kit found</string>
+    <string name="onboarding_kit_password">Enter your master password to sign in.</string>
+    <string name="onboarding_sign_in">Sign in</string>
+    <string name="onboarding_signing_in">Signing in…</string>
+    <string name="onboarding_sign_in_note">Signing in downloads your vault and decrypts it here. The server never sees your password or your Secret Key.</string>
 </resources>
