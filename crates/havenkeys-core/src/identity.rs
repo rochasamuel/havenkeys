@@ -477,6 +477,44 @@ impl IdentityFields {
         value.map(SecretString::new)
     }
 
+    /// The snake_case names of every non-empty value, in declaration order.
+    /// Custom fields are addressed by index and not listed.
+    pub fn filled_field_names(&self) -> Vec<&'static str> {
+        [
+            ("first_name", &self.first_name),
+            ("middle_name", &self.middle_name),
+            ("last_name", &self.last_name),
+            ("gender", &self.gender),
+            ("birth_date", &self.birth_date),
+            ("occupation", &self.occupation),
+            ("company", &self.company),
+            ("job_title", &self.job_title),
+            ("cpf", &self.cpf),
+            ("rg", &self.rg),
+            ("passport", &self.passport),
+            ("drivers_license", &self.drivers_license),
+            ("email", &self.email),
+            ("mobile_phone", &self.mobile_phone),
+            ("home_phone", &self.home_phone),
+            ("work_phone", &self.work_phone),
+            ("street", &self.street),
+            ("number", &self.number),
+            ("complement", &self.complement),
+            ("neighborhood", &self.neighborhood),
+            ("city", &self.city),
+            ("state", &self.state),
+            ("postal_code", &self.postal_code),
+            ("country", &self.country),
+            ("username", &self.username),
+            ("website", &self.website),
+            ("notes", &self.notes),
+        ]
+        .into_iter()
+        .filter(|(_, v)| v.as_ref().is_some_and(|v| !v.is_empty()))
+        .map(|(name, _)| name)
+        .collect()
+    }
+
     /// One value, for copying. `Address` is the formatted block.
     pub fn value(&self, field: IdentityField) -> Option<SecretString> {
         let v = match field {
@@ -564,6 +602,23 @@ mod tests {
 
     fn expose(v: &Option<SecretString>) -> Option<&str> {
         v.as_ref().map(SecretString::expose)
+    }
+
+    #[test]
+    fn filled_field_names_lists_non_empty_values_in_order() {
+        let f = IdentityFields {
+            notes: s("n"),
+            first_name: s("Ana"),
+            cpf: s("123"),
+            city: s(""),
+            drivers_license: s("D1"),
+            ..Default::default()
+        };
+        assert_eq!(
+            f.filled_field_names(),
+            ["first_name", "cpf", "drivers_license", "notes"]
+        );
+        assert!(IdentityFields::default().filled_field_names().is_empty());
     }
 
     #[test]

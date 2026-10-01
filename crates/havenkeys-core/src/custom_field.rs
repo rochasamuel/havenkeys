@@ -191,6 +191,31 @@ impl FieldValue {
         }
     }
 
+    /// Whether the value stays masked until the user asks: passwords and
+    /// one-time-password secrets.
+    pub fn is_concealed(&self) -> bool {
+        matches!(self, FieldValue::Password(_) | FieldValue::Otp(_))
+    }
+
+    /// The value as Copy puts it on the clipboard; an address is joined with
+    /// ", ". Empty for a cleared field and for an OTP field, whose secret
+    /// never leaves the core (use its code instead).
+    pub fn into_text(self) -> SecretString {
+        match self {
+            FieldValue::Text(v)
+            | FieldValue::Url(v)
+            | FieldValue::Email(v)
+            | FieldValue::Phone(v)
+            | FieldValue::Date(v) => v,
+            FieldValue::Address(a) => {
+                let formatted = a.formatted();
+                SecretString::new(formatted.expose().replace('\n', ", "))
+            }
+            FieldValue::Password(p) => p.unwrap_or_else(|| SecretString::new(String::new())),
+            FieldValue::Otp(_) => SecretString::new(String::new()),
+        }
+    }
+
     fn byte_len(&self) -> usize {
         match self {
             FieldValue::Text(v)
@@ -657,6 +682,28 @@ mod tests {
 
     fn s(v: &str) -> SecretString {
         SecretString::from(v)
+    }
+
+    #[test]
+    fn concealed_kinds_and_text_form() {
+        assert!(FieldValue::Password(None).is_concealed());
+        assert!(FieldValue::Otp(None).is_concealed());
+        assert!(!FieldValue::Text(s("x")).is_concealed());
+        assert_eq!(FieldValue::Email(s("a@b.c")).into_text().expose(), "a@b.c");
+        assert_eq!(
+            FieldValue::Password(Some(s("pw"))).into_text().expose(),
+            "pw"
+        );
+        assert_eq!(FieldValue::Otp(None).into_text().expose(), "");
+        let address = AddressValue {
+            street: Some(s("Rua A")),
+            city: Some(s("Brasilia")),
+            ..Default::default()
+        };
+        assert_eq!(
+            FieldValue::Address(Box::new(address)).into_text().expose(),
+            "Rua A, Brasilia"
+        );
     }
 
     fn field(id: Option<Uuid>, label: &str, value: FieldValueInput) -> FieldInput {
