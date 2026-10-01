@@ -26,6 +26,7 @@ pub mod sso;
 pub mod store;
 pub mod sync;
 pub mod totp;
+pub mod unlock_bundle;
 pub mod vault;
 
 pub use error::{Error, Result};

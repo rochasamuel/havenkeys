@@ -66,7 +66,11 @@ impl AuthKey {
         Zeroizing::new(BASE64.encode(self.0.as_ref()))
     }
 
-    #[cfg(test)]
+    /// Only the unlock bundle rebuilds an auth key from bytes.
+    pub(crate) fn from_bytes(bytes: [u8; KEY_LEN]) -> Self {
+        Self(Zeroizing::new(bytes))
+    }
+
     pub(crate) fn as_bytes(&self) -> &[u8; KEY_LEN] {
         &self.0
     }

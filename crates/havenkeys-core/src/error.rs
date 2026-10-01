@@ -44,6 +44,8 @@ pub enum Error {
     Offline,
     #[error("This item changed on another device.")]
     ItemChangedElsewhere,
+    #[error("Enter your master password to unlock.")]
+    BundleRefused,
 }
 
 impl Error {
@@ -68,6 +70,7 @@ impl Error {
             Error::Rng => "rng",
             Error::Offline => "offline",
             Error::ItemChangedElsewhere => "item_changed_elsewhere",
+            Error::BundleRefused => "bundle_refused",
         }
     }
 }

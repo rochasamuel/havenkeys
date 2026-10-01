@@ -27,6 +27,7 @@ use crate::secret::SecretString;
 use crate::sso::{SignInWith, SsoProvider};
 use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
 use crate::totp::{self, TotpCode};
+use crate::unlock_bundle::UnlockBundle;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -372,6 +373,46 @@ impl RekeyTicket {
             current_auth_key,
             new_auth_key,
         })
+    }
+}
+
+/// Snapshot for enrolling biometric unlock (see [`VaultService::begin_bundle`]),
+/// taken under the vault lock so Argon2id can run without holding it.
+pub struct BundleTicket {
+    vault_id: Uuid,
+    kdf: KdfParams,
+    wrapped_vault_key: Vec<u8>,
+    epoch: u64,
+}
+
+impl BundleTicket {
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// Slow (Argon2id). A wrong master password fails with `UnlockFailed`.
+    pub fn derive(
+        &self,
+        password: &SecretString,
+        secret_key: &SecretKey,
+        account: &AccountRef,
+        enrolled_at_ms: i64,
+        boot_count: i64,
+    ) -> Result<UnlockBundle> {
+        if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
+            return Err(Error::UnlockFailed);
+        }
+        let master_key = derive_master_key(password, &self.kdf)?;
+        let kek = derive_kek_v3(&master_key, secret_key, account)?;
+        let vault_key = unwrap_vault_key(&kek, self.vault_id, &self.wrapped_vault_key)
+            .map_err(|_| Error::UnlockFailed)?;
+        let auth_key = derive_auth_key_from_master(&master_key, secret_key, account)?;
+        Ok(UnlockBundle::new(
+            vault_key,
+            auth_key,
+            enrolled_at_ms,
+            boot_count,
+        ))
     }
 }
 
@@ -832,6 +873,48 @@ impl VaultService {
         let ticket = self.begin_unlock()?;
         let key = ticket.derive_for_account(password, secret_key, account);
         self.finish_unlock(ticket, key)
+    }
+
+    /// Only while unlocked: enrolling biometric unlock asks for the master
+    /// password again on an open vault, never on a locked one.
+    pub fn begin_bundle(&self) -> Result<BundleTicket> {
+        self.session()?;
+        let header = self.store.header()?.ok_or(Error::NoVault)?;
+        Ok(BundleTicket {
+            vault_id: header.vault_id,
+            kdf: header.kdf,
+            wrapped_vault_key: header.wrapped_vault_key,
+            epoch: self.epoch,
+        })
+    }
+
+    /// LOCKED → UNLOCKED with the vault key from an unlock bundle.
+    ///
+    /// The key proves itself by opening the settings blob, which every
+    /// account vault has (`create_account_vault` writes it): it is AEAD, so a
+    /// key for another vault, or random bytes, fails and the vault stays
+    /// LOCKED.
+    pub fn unlock_with_vault_key(&mut self, vault_key: &Key256) -> Result<()> {
+        match self.state {
+            VaultState::Locked => {}
+            VaultState::Unlocked => return Err(Error::InvalidInput("vault is already unlocked")),
+            VaultState::Unlocking | VaultState::Locking => return Err(Error::Busy),
+        }
+        let header = self.store.header()?.ok_or(Error::NoVault)?;
+        if header.format_version != FORMAT_VERSION {
+            return Err(Error::UnsupportedVersion);
+        }
+        let data_key = derive_data_key(vault_key)?;
+        let blob = self.store.settings_blob()?.ok_or(Error::BundleRefused)?;
+        let ctx = BlobContext::vault(Purpose::Settings, header.vault_id);
+        // Authenticate only: a settings shape this build does not know must
+        // not turn a correct key into a refusal.
+        open_json::<serde::de::IgnoredAny>(&data_key, &ctx, &blob)
+            .map_err(|_| Error::BundleRefused)?;
+        let session = self.open_session(header.vault_id, vault_key)?;
+        self.session = Some(session);
+        self.state = VaultState::Unlocked;
+        Ok(())
     }
 
     /// LOCKED → UNLOCKED with a header newer than the local one, already

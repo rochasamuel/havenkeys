@@ -28,6 +28,7 @@ export type ErrorCode =
   | "rng"
   | "offline"
   | "item_changed_elsewhere"
+  | "bundle_refused"
   | "internal"
   | "file"
   | "sign_in_failed"
@@ -77,6 +78,7 @@ const codes: Record<ErrorCode, string | null> = {
   rng: "Secure random number generator unavailable.",
   offline: "HavenKeys is offline — the vault is read-only until it reconnects.",
   item_changed_elsewhere: "This item changed on another device.",
+  bundle_refused: "Enter your master password to unlock.",
   internal: null,
   file: "Could not read or delete the file.",
   sign_in_failed: "Email, master password or Secret Key is incorrect.",
