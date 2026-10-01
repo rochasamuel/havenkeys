@@ -10,7 +10,7 @@ class ErrorTextTest {
         val known = listOf(
             "unlock_failed", "bundle_refused", "locked", "offline", "sign_in_failed",
             "invalid_kit", "secret_key_required", "rate_limited", "invalid_server_url",
-            "denied", "not_found", "keychain_unavailable", "internal",
+            "denied", "not_found", "keychain_unavailable", "biometric_unavailable", "internal",
         )
         val texts = known.map(::errorText)
         assertEquals(known.size, texts.toSet().size)

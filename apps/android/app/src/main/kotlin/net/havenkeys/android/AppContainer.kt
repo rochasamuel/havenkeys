@@ -32,6 +32,17 @@ class AppContainer(app: HavenApp, cipher: KeystoreCipher) {
     val biometricKeys = BiometricKeys(app)
     val biometricGate = BiometricGate()
 
+    /** Deletes the biometric key and bundle; a Keystore that does not answer is not an error here. */
+    fun forgetBiometricUnlock() = keystoreDelete { biometricKeys.delete() }
+
+    /** False too when the Keystore does not answer: the password still unlocks. */
+    @Suppress("SwallowedException")
+    fun hasBiometricUnlock(): Boolean = try {
+        biometricKeys.hasBundle()
+    } catch (e: GeneralSecurityException) {
+        false
+    }
+
     init {
         app.appScope.launch {
             wipeKeysOnExit(

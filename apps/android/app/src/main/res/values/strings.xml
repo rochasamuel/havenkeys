@@ -19,6 +19,7 @@
     <string name="error_not_found">Item not found.</string>
     <string name="error_keystore">This phone\'s secure key storage did not answer. Try again.</string>
     <string name="error_internal">Something went wrong. Try again.</string>
+    <string name="error_biometric_unavailable">Biometric unlock can\'t be turned on right now on this device.</string>
 
     <!-- Unlock -->
     <string name="unlock_title">HavenKeys is locked.</string>
@@ -27,6 +28,9 @@
     <string name="unlock_biometric">Unlock with fingerprint or face</string>
     <string name="biometric_prompt_title">Unlock HavenKeys</string>
     <string name="biometric_cancel">Use master password</string>
+    <string name="unlock_busy">Unlocking…</string>
+    <string name="biometric_enroll_title">Turn on unlock with fingerprint or face</string>
+    <string name="biometric_enroll_cancel">Cancel</string>
 
     <!-- Vault -->
     <string name="vault_lock_now">Lock now</string>
