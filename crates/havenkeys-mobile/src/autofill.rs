@@ -119,8 +119,12 @@ impl MobileVault {
                         });
                     }
                     let mut fetched = vec![None; stale.len()];
-                    while let Some(Ok((i, statements))) = set.join_next().await {
-                        fetched[i] = statements;
+                    // A failed task leaves its host as a failure; the others
+                    // are still collected.
+                    while let Some(joined) = set.join_next().await {
+                        if let Ok((i, statements)) = joined {
+                            fetched[i] = statements;
+                        }
                     }
                     fetched
                 });

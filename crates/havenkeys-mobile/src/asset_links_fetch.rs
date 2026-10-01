@@ -55,13 +55,13 @@ mod tests {
         format!("http://{addr}")
     }
 
+    const VALID: &str = r#"[{"relation":["delegate_permission/common.get_login_creds"],"target":{"namespace":"android_app","package_name":"com.x.y","sha256_cert_fingerprints":["AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"]}}]"#;
+
     #[tokio::test]
     async fn a_file_is_fetched_and_parsed() {
-        let body = r#"[{"relation":["delegate_permission/common.get_login_creds"],"target":{"namespace":"android_app","package_name":"com.x.y","sha256_cert_fingerprints":["AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"]}}]"#;
-        let base = serve(axum::Router::new().route(
-            "/.well-known/assetlinks.json",
-            get(move || async move { body }),
-        ))
+        let base = serve(
+            axum::Router::new().route("/.well-known/assetlinks.json", get(|| async { VALID })),
+        )
         .await;
         let s = fetch_from(
             &client().unwrap(),
@@ -74,17 +74,24 @@ mod tests {
 
     #[tokio::test]
     async fn a_redirect_is_not_followed() {
-        let base = serve(axum::Router::new().route(
-            "/.well-known/assetlinks.json",
-            get(|| async { axum::response::Redirect::temporary("https://evil.example/") }),
-        ))
-        .await;
-        assert!(fetch_from(
-            &client().unwrap(),
-            &format!("{base}/.well-known/assetlinks.json")
+        // The redirect target serves a valid file on the same server, so a
+        // followed redirect would succeed: only refusing it yields `None`.
+        let base = serve(
+            axum::Router::new()
+                .route("/ok", get(|| async { VALID }))
+                .route(
+                    "/.well-known/assetlinks.json",
+                    get(|| async { axum::response::Redirect::temporary("/ok") }),
+                ),
         )
-        .await
-        .is_none());
+        .await;
+        let http = client().unwrap();
+        assert!(fetch_from(&http, &format!("{base}/ok")).await.is_some());
+        assert!(
+            fetch_from(&http, &format!("{base}/.well-known/assetlinks.json"))
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
