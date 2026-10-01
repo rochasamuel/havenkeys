@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -43,6 +43,19 @@ CREATE TABLE settings (
 CREATE TABLE unreadable_items (
     id       TEXT PRIMARY KEY NOT NULL,
     revision INTEGER NOT NULL
+);
+CREATE TABLE local_blob (
+    name TEXT PRIMARY KEY NOT NULL,
+    blob BLOB NOT NULL
+);
+";
+
+/// Schema 5 → 6: device-local encrypted values, never synced (spec
+/// 2026-10-01-android-app §5.3, §7.2).
+const MIGRATE_5_TO_6: &str = "
+CREATE TABLE local_blob (
+    name TEXT PRIMARY KEY NOT NULL,
+    blob BLOB NOT NULL
 );
 ";
 
@@ -157,6 +170,12 @@ impl Store {
             0 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(SCHEMA)?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+                tx.commit()?;
+            }
+            5 => {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch(MIGRATE_5_TO_6)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -532,6 +551,25 @@ impl Store {
             .optional()?)
     }
 
+    pub fn local_blob(&self, name: &str) -> Result<Option<Vec<u8>>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT blob FROM local_blob WHERE name = ?1",
+                params![name],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    pub fn set_local_blob(&self, name: &str, blob: &[u8]) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO local_blob (name, blob) VALUES (?1, ?2)",
+            params![name, blob],
+        )?;
+        Ok(())
+    }
+
     pub fn write_settings(&self, blob: &[u8]) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO settings (id, blob) VALUES (1, ?1)",
@@ -594,6 +632,25 @@ mod tests {
             .unwrap();
         assert_eq!(v, SCHEMA_VERSION);
         assert!(s.header().unwrap().is_none());
+    }
+
+    #[test]
+    fn a_schema_5_vault_gains_the_local_blob_table() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let schema_5 = SCHEMA.replace(
+            "CREATE TABLE local_blob (\n    name TEXT PRIMARY KEY NOT NULL,\n    blob BLOB NOT NULL\n);\n",
+            "",
+        );
+        conn.execute_batch(&schema_5).unwrap();
+        conn.pragma_update(None, "user_version", 5).unwrap();
+        let store = Store::init(conn).unwrap();
+        store.set_local_blob("x", b"y").unwrap();
+        assert_eq!(store.local_blob("x").unwrap().unwrap(), b"y");
+        let version: i64 = store
+            .conn()
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
     }
 
     #[test]

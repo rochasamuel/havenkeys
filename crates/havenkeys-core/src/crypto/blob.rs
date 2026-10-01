@@ -40,6 +40,10 @@ pub enum Purpose {
     Settings,
     /// Proof that an account's header was written by a vault-key holder.
     SyncHeader,
+    /// The Android app's own settings (never synced).
+    DeviceSettings,
+    /// The Digital Asset Links cache (never synced).
+    AssetLinks,
 }
 
 impl Purpose {
@@ -50,6 +54,8 @@ impl Purpose {
             Purpose::ItemDetails => b"item-details",
             Purpose::Settings => b"settings",
             Purpose::SyncHeader => b"sync-header",
+            Purpose::DeviceSettings => b"device-settings",
+            Purpose::AssetLinks => b"asset-links",
         }
     }
 

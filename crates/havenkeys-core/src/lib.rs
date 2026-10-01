@@ -16,6 +16,7 @@ pub mod generator;
 pub mod identity;
 pub mod identity_page;
 pub mod import;
+pub mod local;
 pub mod lock;
 pub mod model;
 pub mod origin;
