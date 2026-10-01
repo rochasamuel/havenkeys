@@ -9,6 +9,7 @@
 pub mod account;
 mod app_fill;
 pub mod app_target;
+pub mod asset_links;
 pub mod card;
 pub mod card_page;
 pub mod crypto;

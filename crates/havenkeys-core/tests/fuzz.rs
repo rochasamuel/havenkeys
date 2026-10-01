@@ -417,3 +417,31 @@ fn fuzz_custom_field_input() {
         let _ = v.stage_create(input, NOW);
     }
 }
+
+#[test]
+fn fuzz_asset_links_parser() {
+    use havenkeys_core::asset_links::parse;
+    let valid = br#"[{"relation":["delegate_permission/common.get_login_creds"],"target":{"namespace":"android_app","package_name":"com.x.y","sha256_cert_fingerprints":["AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"]}}]"#;
+    let mut rng = Rng::new(0xa55e7);
+    for _ in 0..20_000 {
+        let input = if rng.below(2) == 0 {
+            rng.bytes(512)
+        } else {
+            let mut v = valid.to_vec();
+            for _ in 0..1 + rng.below(4) {
+                let i = rng.below(v.len());
+                v[i] = rng.next() as u8;
+            }
+            v
+        };
+        if let Ok(statements) = parse(&input) {
+            for s in statements {
+                assert!(s.package.contains('.'));
+                assert!(s
+                    .certs
+                    .iter()
+                    .all(|c| c.len() == 64 && c.bytes().all(|b| b.is_ascii_hexdigit())));
+            }
+        }
+    }
+}
