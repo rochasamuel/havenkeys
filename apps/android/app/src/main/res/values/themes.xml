@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The window behind Compose, so the first frame and the splash already
+     match the theme (light: token bg, #ffffff). Compose draws everything else. -->
+<resources>
+    <style name="Theme.HavenKeys" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFFFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

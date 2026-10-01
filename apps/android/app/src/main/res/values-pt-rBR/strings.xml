@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wording from the desktop app (apps/desktop/src/i18n/pt-BR.ts). Terms:
+     senha, senha mestra, cofre, login, nota segura, código de verificação,
+     chave de acesso. Secret Key and Emergency Kit stay in English. -->
+<resources>
+    <string name="error_unlock_failed">Senha mestra incorreta ou cofre danificado.</string>
+    <string name="error_bundle_refused">Digite sua senha mestra para desbloquear.</string>
+    <string name="error_locked">O cofre está bloqueado.</string>
+    <string name="error_offline">O HavenKeys está offline — o cofre fica somente leitura até reconectar.</string>
+    <string name="error_sign_in_failed">E-mail, senha mestra ou Secret Key incorretos.</string>
+    <string name="error_invalid_kit">Este não é um código de Kit de Emergência do HavenKeys.</string>
+    <string name="error_secret_key_required">Este cofre precisa da sua Secret Key.</string>
+    <string name="error_rate_limited">Tentativas demais. Tente novamente em alguns minutos.</string>
+    <string name="error_invalid_server_url">Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.</string>
+    <string name="error_denied">Este item não está salvo para este site.</string>
+    <string name="error_not_found">Item não encontrado.</string>
+    <string name="error_keystore">O armazenamento seguro de chaves deste celular não respondeu. Tente novamente.</string>
+    <string name="error_internal">Algo deu errado. Tente novamente.</string>
+
+    <string name="unlock_title">O HavenKeys está bloqueado.</string>
+    <string name="unlock_password_hint">Senha mestra</string>
+    <string name="unlock_button">Desbloquear</string>
+    <string name="unlock_biometric">Desbloquear com digital ou rosto</string>
+    <string name="biometric_prompt_title">Desbloquear o HavenKeys</string>
+    <string name="biometric_cancel">Usar senha mestra</string>
+
+    <string name="vault_lock_now">Bloquear agora</string>
+    <string name="vault_offline">Offline, somente leitura</string>
+    <string name="item_passkey">Chave de acesso</string>
+
+    <string name="copy">Copiar %1$s</string>
+    <string name="copied">Copiado: %1$s. A área de transferência é limpa em %2$d s.</string>
+    <string name="reveal">Mostrar %1$s</string>
+    <string name="hide">Ocultar %1$s</string>
+    <string name="hidden">%1$s oculto</string>
+
+    <string name="field_username">Usuário</string>
+    <string name="field_password">Senha</string>
+    <string name="field_totp">Código de verificação</string>
+    <string name="field_website">Site</string>
+    <string name="field_notes">Notas</string>
+    <string name="field_content">Nota</string>
+    <string name="field_card_holder">Nome do titular</string>
+    <string name="field_card_number">Número</string>
+    <string name="field_card_code">Código de segurança</string>
+    <string name="field_card_expiry">Validade</string>
+    <string name="field_card_notes">Notas</string>
+    <string name="field_identity_first_name">Nome</string>
+    <string name="field_identity_middle_name">Nome do meio</string>
+    <string name="field_identity_last_name">Sobrenome</string>
+    <string name="field_identity_gender">Gênero</string>
+    <string name="field_identity_birth_date">Data de nascimento</string>
+    <string name="field_identity_occupation">Ocupação</string>
+    <string name="field_identity_company">Empresa</string>
+    <string name="field_identity_job_title">Cargo</string>
+    <string name="field_identity_cpf">CPF</string>
+    <string name="field_identity_rg">RG</string>
+    <string name="field_identity_passport">Passaporte</string>
+    <string name="field_identity_drivers_license">CNH</string>
+    <string name="field_identity_email">E-mail</string>
+    <string name="field_identity_mobile_phone">Celular</string>
+    <string name="field_identity_home_phone">Telefone residencial</string>
+    <string name="field_identity_work_phone">Telefone comercial</string>
+    <string name="field_identity_street">Logradouro</string>
+    <string name="field_identity_number">Número</string>
+    <string name="field_identity_complement">Complemento</string>
+    <string name="field_identity_neighborhood">Bairro</string>
+    <string name="field_identity_city">Cidade</string>
+    <string name="field_identity_state">Estado</string>
+    <string name="field_identity_postal_code">CEP</string>
+    <string name="field_identity_country">País</string>
+    <string name="field_identity_username">Nome de usuário</string>
+    <string name="field_identity_website">Site</string>
+    <string name="field_identity_notes">Observações</string>
+    <string name="field_custom">Campo</string>
+</resources>

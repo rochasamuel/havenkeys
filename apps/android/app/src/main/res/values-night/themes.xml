@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark: token bg, #0f1614. -->
+<resources>
+    <style name="Theme.HavenKeys" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0F1614</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

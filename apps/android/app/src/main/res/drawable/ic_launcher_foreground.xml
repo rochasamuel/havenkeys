@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The desktop icon's shield and keyhole (apps/desktop/assets/icon.svg),
+     its 1024-unit tile scaled onto the 72dp visible area of the 108dp
+     adaptive canvas; the glyph stays inside the 66dp safe circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.0703125"
+        android:scaleY="0.0703125"
+        android:translateX="18"
+        android:translateY="18">
+        <path
+            android:pathData="M512,196 L772,300 V500 C772,668 662,792 512,846 C362,792 252,668 252,500 V300 Z"
+            android:strokeColor="#FFE8C37A"
+            android:strokeLineJoin="round"
+            android:strokeWidth="44" />
+        <path
+            android:fillColor="#FFE8C37A"
+            android:pathData="M428,468 A84,84 0 1,0 596,468 A84,84 0 1,0 428,468 Z" />
+        <path
+            android:fillColor="#FFE8C37A"
+            android:pathData="M504,520 H520 A18,18 0 0,1 538,538 V672 A18,18 0 0,1 520,690 H504 A18,18 0 0,1 486,672 V538 A18,18 0 0,1 504,520 Z" />
+    </group>
+</vector>

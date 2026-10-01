@@ -1,4 +1,9 @@
 style:
+  MagicNumber:
+    # The theme is token values from packages/ui/src/tokens.css by design.
+    excludes: ['**/test/**', '**/androidTest/**', '**/ui/theme/**']
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']
   ForbiddenMethodCall:
     active: true
     methods:
@@ -19,7 +24,13 @@ style:
       - value: 'android.util.Log'
         reason: 'Never log in HavenKeys (CLAUDE.md §40).'
 complexity:
+  LongParameterList:
+    # Composables take a defaulted Modifier and options by convention.
+    ignoreDefaultParameters: true
   TooManyFunctions:
     # Repositories mirror the Rust API one call per function.
     thresholdInInterfaces: 20
     ignoreOverridden: true
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']

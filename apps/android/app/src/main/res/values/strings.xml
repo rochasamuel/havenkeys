@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wording from the desktop app (apps/desktop/src/i18n/en.ts). Product
+     names (HavenKeys, Secret Key, Emergency Kit) stay in English in every
+     locale. No string ever carries a secret. -->
+<resources>
+    <string name="app_name" translatable="false">HavenKeys</string>
+
+    <!-- Errors, by MobileException.Failed code (ErrorText.kt) -->
+    <string name="error_unlock_failed">Incorrect master password or damaged vault.</string>
+    <string name="error_bundle_refused">Enter your master password to unlock.</string>
+    <string name="error_locked">The vault is locked.</string>
+    <string name="error_offline">HavenKeys is offline — the vault is read-only until it reconnects.</string>
+    <string name="error_sign_in_failed">Email, master password or Secret Key is incorrect.</string>
+    <string name="error_invalid_kit">That is not a HavenKeys Emergency Kit code.</string>
+    <string name="error_secret_key_required">This vault needs your Secret Key.</string>
+    <string name="error_rate_limited">Too many attempts. Try again in a few minutes.</string>
+    <string name="error_invalid_server_url">That server address cannot be used. It must start with https://.</string>
+    <string name="error_denied">This item is not saved for this website.</string>
+    <string name="error_not_found">Item not found.</string>
+    <string name="error_keystore">This phone\'s secure key storage did not answer. Try again.</string>
+    <string name="error_internal">Something went wrong. Try again.</string>
+
+    <!-- Unlock -->
+    <string name="unlock_title">HavenKeys is locked.</string>
+    <string name="unlock_password_hint">Master password</string>
+    <string name="unlock_button">Unlock</string>
+    <string name="unlock_biometric">Unlock with fingerprint or face</string>
+    <string name="biometric_prompt_title">Unlock HavenKeys</string>
+    <string name="biometric_cancel">Use master password</string>
+
+    <!-- Vault -->
+    <string name="vault_lock_now">Lock now</string>
+    <string name="vault_offline">Offline, read-only</string>
+    <string name="item_passkey">Passkey</string>
+
+    <!-- Field actions; %1$s is the field's label, never its value -->
+    <string name="copy">Copy %1$s</string>
+    <string name="copied">%1$s copied. The clipboard clears in %2$d s.</string>
+    <string name="reveal">Show %1$s</string>
+    <string name="hide">Hide %1$s</string>
+    <string name="hidden">Hidden %1$s</string>
+
+    <!-- Field labels, by ViewField key (havenkeys-mobile items.rs) -->
+    <string name="field_username">Username</string>
+    <string name="field_password">Password</string>
+    <string name="field_totp">One-time code</string>
+    <string name="field_website">Website</string>
+    <string name="field_notes">Notes</string>
+    <string name="field_content">Note</string>
+    <string name="field_card_holder">Cardholder name</string>
+    <string name="field_card_number">Number</string>
+    <string name="field_card_code">Verification number</string>
+    <string name="field_card_expiry">Expiry date</string>
+    <string name="field_card_notes">Notes</string>
+    <string name="field_identity_first_name">First name</string>
+    <string name="field_identity_middle_name">Middle name</string>
+    <string name="field_identity_last_name">Last name</string>
+    <string name="field_identity_gender">Gender</string>
+    <string name="field_identity_birth_date">Date of birth</string>
+    <string name="field_identity_occupation">Occupation</string>
+    <string name="field_identity_company">Company</string>
+    <string name="field_identity_job_title">Job title</string>
+    <string name="field_identity_cpf">CPF</string>
+    <string name="field_identity_rg">RG</string>
+    <string name="field_identity_passport">Passport</string>
+    <string name="field_identity_drivers_license">Driver\'s license</string>
+    <string name="field_identity_email">Email</string>
+    <string name="field_identity_mobile_phone">Mobile phone</string>
+    <string name="field_identity_home_phone">Home phone</string>
+    <string name="field_identity_work_phone">Work phone</string>
+    <string name="field_identity_street">Street</string>
+    <string name="field_identity_number">Number</string>
+    <string name="field_identity_complement">Complement</string>
+    <string name="field_identity_neighborhood">Neighborhood</string>
+    <string name="field_identity_city">City</string>
+    <string name="field_identity_state">State</string>
+    <string name="field_identity_postal_code">Postal code</string>
+    <string name="field_identity_country">Country</string>
+    <string name="field_identity_username">Username</string>
+    <string name="field_identity_website">Website</string>
+    <string name="field_identity_notes">Notes</string>
+    <string name="field_custom">Field</string>
+</resources>
