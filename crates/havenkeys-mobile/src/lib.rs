@@ -9,6 +9,9 @@
 
 uniffi::setup_scaffolding!();
 
+mod account;
+#[cfg(target_os = "android")]
+mod android_tls;
 mod asset_links_fetch;
 mod autofill;
 mod error;
@@ -21,6 +24,7 @@ mod settings;
 mod unlock;
 mod vault;
 
+pub use account::DeviceInfo;
 pub use autofill::{AutofillMatch, BoundFill, FillValues, TargetFacts, TargetKind};
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
@@ -31,3 +35,38 @@ pub use key_file::{CipherError, KeystoreCipher};
 pub use onboarding::{KitPreview, LumaFrame};
 pub use settings::MobileSettings;
 pub use vault::{LockState, MobileConfig, MobileVault, Status};
+
+/// Test support for this crate's integration tests. Not part of the API
+/// (not exported through UniFFI).
+#[cfg(any(test, feature = "testing"))]
+#[doc(hidden)]
+pub mod testing {
+    use crate::MobileVault;
+    use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
+    use havenkeys_core::SecretString;
+
+    pub fn seed_with_github_login(v: &MobileVault) {
+        havenkeys_client::testing::seed_account_vault(&v.client, "correct horse battery staple");
+        let input = ItemInput {
+            item_type: ItemType::Login,
+            title: "GitHub".into(),
+            username: Some("octo".into()),
+            urls: vec![UrlRule {
+                url: "https://github.com".into(),
+                match_type: MatchType::Domain,
+            }],
+            password: SecretUpdate::Set(SecretString::from("hunter2hunter2")),
+            totp: SecretUpdate::Keep,
+            notes: SecretUpdate::Keep,
+            content: SecretUpdate::Keep,
+            auto_sign_in: None,
+            sign_in_with: None,
+            identity: None,
+            card: None,
+            sections: None,
+        };
+        let mut vault = v.client.vault().unwrap();
+        let staged = vault.stage_create(input, 1).unwrap();
+        vault.commit_write(staged, 1).unwrap();
+    }
+}

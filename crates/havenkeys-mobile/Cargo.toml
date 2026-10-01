@@ -16,6 +16,11 @@ name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 required-features = ["bindgen"]
 
+[[test]]
+name = "regressions"
+path = "tests/regressions.rs"
+required-features = ["testing"]
+
 [features]
 bindgen = ["uniffi/cli"]
 # Exposes havenkeys-client's test seed to this crate's integration tests.
