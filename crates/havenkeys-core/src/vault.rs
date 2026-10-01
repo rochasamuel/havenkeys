@@ -13,6 +13,7 @@ use crate::crypto::keys::{
     Key256, KEY_LEN,
 };
 use crate::crypto::secret_key::SecretKey;
+use crate::custom_field::{self, CustomField, FieldSection};
 use crate::error::{Error, Result};
 use crate::identity::{IdentityField, IdentityFields};
 use crate::import::{ImportReport, ImportedItem};
@@ -1597,6 +1598,7 @@ impl VaultService {
                 ..Default::default()
             }),
             card: None,
+            sections: None,
         };
         let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
         self.stage(overview, Some(&details), None).map(Some)
@@ -1642,6 +1644,29 @@ impl VaultService {
     /// One card value, for copying or an explicit reveal. `NotFound` when empty.
     pub fn card_value(&self, id: &Uuid, field: CardField) -> Result<SecretString> {
         self.card_fields(*id)?.value(field).ok_or(Error::NotFound)
+    }
+
+    // ------------------------------------------------------------ custom fields
+
+    /// A login's custom fields (spec 2026-09-30-login-custom-fields).
+    /// `NotFound` for any other kind of item. Holds Password values and OTP
+    /// secrets: callers hand out `custom_field::views` or one value.
+    pub fn login_sections(&self, id: &Uuid) -> Result<Vec<FieldSection>> {
+        match self.load_details(id)? {
+            ItemDetails::Login { sections, .. } => Ok(sections),
+            _ => Err(Error::NotFound),
+        }
+    }
+
+    /// One custom field of a login: the one lookup behind reveal, code,
+    /// copy and open. `load_details` checks the session first, so a locked
+    /// vault answers `Locked` before any id is looked at.
+    pub fn login_field(&self, id: &Uuid, field_id: &Uuid) -> Result<CustomField> {
+        self.login_sections(id)?
+            .into_iter()
+            .flat_map(|s| s.fields)
+            .find(|f| f.id == *field_id)
+            .ok_or(Error::NotFound)
     }
 
     pub(crate) fn stage(
@@ -1942,20 +1967,22 @@ pub(crate) fn build_item(
         sign_in_with,
         identity,
         card,
+        sections,
     } = input;
 
     let details = match item_type {
         ItemType::Login => {
-            let (cur_pw, cur_totp, cur_notes, mut history, passkeys) = match current {
+            let (cur_pw, cur_totp, cur_notes, mut history, passkeys, cur_sections) = match current {
                 Some(ItemDetails::Login {
                     password,
                     totp,
                     notes,
                     password_history,
                     passkeys,
-                }) => (password, totp, notes, password_history, passkeys),
+                    sections,
+                }) => (password, totp, notes, password_history, passkeys, sections),
                 Some(_) => return Err(Error::Corrupted),
-                None => (None, None, None, Vec::new(), Vec::new()),
+                None => (None, None, None, Vec::new(), Vec::new(), Vec::new()),
             };
             let previous = cur_pw.clone();
             let password = password.apply(cur_pw);
@@ -1980,12 +2007,14 @@ pub(crate) fn build_item(
                 check_notes(n)?;
             }
             let totp = totp.apply_totp(cur_totp)?;
+            let sections = custom_field::apply_sections(sections, cur_sections)?;
             ItemDetails::Login {
                 password,
                 totp,
                 notes,
                 password_history: history,
                 passkeys,
+                sections,
             }
         }
         ItemType::SecureNote => {

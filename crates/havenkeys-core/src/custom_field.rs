@@ -5,9 +5,6 @@
 //! opens (as notes do). A Password value leaves the core only on an explicit
 //! reveal or copy; an OTP secret never does, only its codes.
 
-// TODO(task-3): remove once vault.rs uses apply_sections.
-#![allow(dead_code)]
-
 use crate::error::{Error, Result};
 use crate::identity::{clean_value, parse_ymd, Allow};
 use crate::model::{check_notes, check_password, normalize_url, SecretUpdate, MAX_TITLE_CHARS};

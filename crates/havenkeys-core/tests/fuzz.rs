@@ -385,3 +385,35 @@ fn fuzz_authorize_rp() {
         }
     }
 }
+
+// ------------------------------------------------------------------ custom fields
+
+/// Custom field layouts come from the renderer: arbitrary JSON must never
+/// panic the parser or `stage_create`, and anything accepted must read back.
+#[test]
+fn fuzz_custom_field_input() {
+    let mut rng = Rng::new(0xC0F1);
+    let (v, _) = activated_vault();
+    let seeds = [
+        r#"[{"title":"Bank","fields":[{"label":"PIN","value":{"type":"password","value":{"op":"set","value":"1"}}}]}]"#,
+        r#"[{"fields":[{"label":"x","value":{"type":"date","value":"2026-02-30"}}]}]"#,
+        r#"[{"fields":[{"label":"x","value":{"type":"address","value":{"street":"a","postalCode":"1"}}}]}]"#,
+        r#"[{"fields":[{"label":"t","value":{"type":"otp","value":{"op":"set","value":"JBSWY3DPEHPK3PXP"}}}]}]"#,
+    ];
+    for i in 0..3_000 {
+        let text = if i % 4 == 0 {
+            String::from_utf8_lossy(&rng.bytes(200)).into_owned()
+        } else {
+            let seed = *rng.pick(&seeds);
+            mutate_str(&mut rng, seed)
+        };
+        let Ok(sections) =
+            serde_json::from_str::<Vec<havenkeys_core::custom_field::SectionInput>>(&text)
+        else {
+            continue;
+        };
+        let mut input = login("x", "y", "z", "x.com");
+        input.sections = Some(sections);
+        let _ = v.stage_create(input, NOW);
+    }
+}

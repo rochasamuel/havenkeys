@@ -87,6 +87,7 @@ impl ItemInputWire {
             sign_in_with: self.sign_in_with,
             identity: self.identity,
             card: self.card,
+            sections: None,
         })
     }
 }

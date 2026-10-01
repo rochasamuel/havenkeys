@@ -81,6 +81,7 @@ fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> Ite
         sign_in_with: None,
         identity: None,
         card: None,
+        sections: None,
     }
 }
 
@@ -133,6 +134,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 sign_in_with: None,
                 identity: None,
                 card: None,
+                sections: None,
             },
             NOW,
         )
@@ -159,6 +161,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
                 }),
                 identity: None,
                 card: None,
+                sections: None,
             },
             NOW,
         )
@@ -528,6 +531,7 @@ fn add_card(f: &Fixture) -> Uuid {
             }),
             notes: None,
         }),
+        sections: None,
     };
     let staged = v.stage_create(input, NOW).unwrap();
     v.commit_write(staged, 60).unwrap().unwrap().id
@@ -1684,6 +1688,7 @@ fn add_identity(f: &Fixture) -> Uuid {
             ..Default::default()
         }),
         card: None,
+        sections: None,
     };
     let staged = v.stage_update(&id, input, NOW + 1).unwrap();
     v.commit_write(staged, 51).unwrap();

@@ -281,6 +281,7 @@ impl VaultService {
                 expiry,
                 notes: None,
             }),
+            sections: None,
         };
         let write = self.stage_create(input, now_ms)?;
         Ok(StagedSave {
