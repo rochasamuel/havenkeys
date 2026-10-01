@@ -72,8 +72,12 @@ function rustMessages(): Map<string, Set<string | null>> {
     const message = byVariant.get(m[1] ?? "");
     add(m[2] ?? "", message?.includes("{") ? null : (message ?? null));
   }
-  for (const source of rustFiles("apps/desktop/src-tauri/src")) {
+  for (const source of [...rustFiles("crates/havenkeys-client/src"), ...rustFiles("apps/desktop/src-tauri/src")]) {
     for (const m of source.matchAll(/code: "(\w+)",\s*message: (?:"([^"]*)"|format!)/g)) {
+      add(m[1] ?? "", m[2] ?? null);
+    }
+    // ClientError's constructors: `Self::fixed("code", "message")`.
+    for (const m of source.matchAll(/Self::fixed\(\s*"(\w+)",\s*"([^"]*)",?\s*\)/g)) {
       add(m[1] ?? "", m[2] ?? null);
     }
   }
@@ -128,7 +132,7 @@ describe("the error table", () => {
     // `clean_value` takes its detail as a bare literal, always "… contains control characters".
     const details = new Set([
       ...Array.from(sources.matchAll(/"([^"]* is too long or contains control characters)"/g), (m) => m[1]),
-      ...Array.from(sources.matchAll(/InvalidInput\("([^"]*)"\)/g), (m) => m[1]),
+      ...Array.from(sources.matchAll(/InvalidInput\(\s*"([^"]*)",?\s*\)/g), (m) => m[1]),
       ...Array.from(sources.matchAll(/const [A-Z_]+_MSG: &str = "([^"]*)";/g), (m) => m[1]),
     ]);
     const unknown = Object.keys(ptBR.errors.invalidInput).filter((d) => !details.has(d));
@@ -136,8 +140,8 @@ describe("the error table", () => {
   });
 
   it("keeps Rust's keychain warning word for word", () => {
-    const removal = readFileSync(join(root, "apps/desktop/src-tauri/src/removal.rs"), "utf8");
-    const rustText = /const KEYCHAIN_NOT_CLEARED: &str = "([^"]*)";/.exec(removal)?.[1];
+    const events = readFileSync(join(root, "apps/desktop/src-tauri/src/events.rs"), "utf8");
+    const rustText = /const KEYCHAIN_NOT_CLEARED: &str = "([^"]*)";/.exec(events)?.[1];
     expect(rustText?.replaceAll("\\u{201c}", "“").replaceAll("\\u{201d}", "”")).toBe(en.app.keychainNotCleared);
   });
 });
