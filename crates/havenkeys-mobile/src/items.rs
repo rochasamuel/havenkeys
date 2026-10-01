@@ -2,6 +2,7 @@
 //! (title, username, websites); every sealed value comes from `reveal`, one
 //! field per call, so a screen holds a secret only after the user asked.
 
+use crate::autofill::unix_seconds;
 use crate::error::MobileResult;
 use crate::vault::MobileVault;
 use havenkeys_core::card::CardField;
@@ -167,12 +168,6 @@ fn identity_field(name: &str) -> Option<IdentityField> {
         "notes" => F::Notes,
         _ => return None,
     })
-}
-
-pub(crate) fn unix_seconds() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
 }
 
 #[uniffi::export]

@@ -9,6 +9,8 @@
 
 uniffi::setup_scaffolding!();
 
+mod asset_links_fetch;
+mod autofill;
 mod error;
 mod events;
 mod items;
@@ -19,6 +21,7 @@ mod settings;
 mod unlock;
 mod vault;
 
+pub use autofill::{AutofillMatch, BoundFill, FillValues, TargetFacts, TargetKind};
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
 pub use items::{

@@ -39,8 +39,6 @@ pub struct Status {
     pub unreadable_items: u32,
 }
 
-// `own_package` serves the autofill calls added next to this skeleton.
-#[allow(dead_code)]
 #[derive(uniffi::Object)]
 pub struct MobileVault {
     pub(crate) client: Arc<HavenClient>,
