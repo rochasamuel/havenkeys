@@ -82,9 +82,11 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
         composable(Routes.VAULT) { VaultPlaceholder(container) }
     }
 
-    // A back stack restored from before a process kill must not outlive the lock.
-    LaunchedEffect(navController, first) {
-        routeToForce(navController.currentDestination?.route, first)?.let(navController::replaceAll)
+    // A back stack restored from before a process kill must not outlive the
+    // lock. Decided from Rust's state now, not `first`: after a rotation the
+    // vault may have been unlocked or created since the start was read.
+    LaunchedEffect(navController) {
+        routeToForce(navController.currentDestination?.route, root.current())?.let(navController::replaceAll)
     }
     // The lock wipe: no screen that showed vault data stays in the back stack.
     LaunchedEffect(navController) {

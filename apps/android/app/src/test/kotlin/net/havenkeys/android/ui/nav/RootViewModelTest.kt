@@ -13,6 +13,7 @@ import net.havenkeys.android.fakes.FakeVaultRepository
 import net.havenkeys.android.fakes.status
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import uniffi.havenkeys_mobile.LockState
@@ -73,5 +74,31 @@ class RootViewModelTest {
         events.itemsChanged()
         events.removed()
         assertEquals(Start.ONBOARDING, vm.lockedSignal.first())
+    }
+
+    @Test
+    fun afterAnUnlockTheResetKeepsTheVault() = runTest {
+        val vault = FakeVaultRepository().apply { nextStatus = Outcome.Ok(status(LockState.LOCKED)) }
+        val vm = RootViewModel(vault, VaultEventsHub())
+        assertEquals(Start.UNLOCK, vm.start.value)
+        vault.nextStatus = Outcome.Ok(status(LockState.UNLOCKED))
+        assertEquals(Start.VAULT, vm.current())
+        assertNull(routeToForce(Routes.VAULT, vm.current()))
+    }
+
+    @Test
+    fun afterOnboardingTheResetDoesNotReturnToOnboarding() = runTest {
+        val vault = FakeVaultRepository().apply { nextStatus = Outcome.Ok(status(LockState.LOCKED, exists = false)) }
+        val vm = RootViewModel(vault, VaultEventsHub())
+        assertEquals(Start.ONBOARDING, vm.start.value)
+        vault.nextStatus = Outcome.Ok(status(LockState.UNLOCKED))
+        assertNull(routeToForce(Routes.VAULT, vm.current()))
+    }
+
+    @Test
+    fun aLockedVaultAtProcessStartStillResetsToUnlock() = runTest {
+        val vault = FakeVaultRepository().apply { nextStatus = Outcome.Ok(status(LockState.LOCKED)) }
+        val vm = RootViewModel(vault, VaultEventsHub())
+        assertEquals(Routes.UNLOCK, routeToForce(Routes.ITEM, vm.current()))
     }
 }
