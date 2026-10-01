@@ -108,7 +108,10 @@ struct Probe {
 
 impl ClientEvents for Probe {
     fn unlocked(&self, _: u32) {
-        let held = self.vault.try_lock().is_err();
+        let held = matches!(
+            self.vault.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        );
         self.seen
             .lock()
             .unwrap()
@@ -208,7 +211,7 @@ async fn two_devices_share_one_vault_through_the_client() {
     let account_id = a.account_status().unwrap().unwrap().account_id;
     let secret_key = a.device().unwrap().secret_key_text(account_id).unwrap();
     let dir_b = tempfile::tempdir().unwrap();
-    let (b, _) = device(dir_b.path());
+    let (b, probe_b) = device(dir_b.path());
     b.sign_in(
         server.base.clone(),
         "user@example.com".into(),
@@ -229,7 +232,8 @@ async fn two_devices_share_one_vault_through_the_client() {
     assert!(titles.contains(&"GitHub".to_string()));
 
     // Unlocking an unlocked vault is refused, and leaves it open.
-    assert!(b.unlock(SecretString::from(PASSWORD), None).await.is_err());
+    let again = b.unlock(SecretString::from(PASSWORD), None).await;
+    assert_eq!(again.unwrap_err().code, "invalid_input");
     assert!(b.require_unlocked().is_ok());
 
     b.lock("user");
@@ -246,6 +250,17 @@ async fn two_devices_share_one_vault_through_the_client() {
 
     b.unlock(SecretString::from(PASSWORD), None).await.unwrap();
     until(|| b.is_online()).await;
+    // Once when sign-in created the vault, once for the unlock above; both
+    // announced while the vault was held.
+    let unlocked: Vec<String> = probe_b
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|e| e.starts_with("unlocked:"))
+        .cloned()
+        .collect();
+    assert_eq!(unlocked, vec!["unlocked:held=true"; 2]);
 
     server.cleanup().await;
 }
