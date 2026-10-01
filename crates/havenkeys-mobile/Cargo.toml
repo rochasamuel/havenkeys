@@ -48,3 +48,4 @@ havenkeys-client = { path = "../havenkeys-client", features = ["testing"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+qrcode = { version = "0.14", default-features = false }

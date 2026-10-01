@@ -2718,6 +2718,7 @@ dependencies = [
  "havenkeys-core",
  "havenkeys-sync-client",
  "jni 0.22.4",
+ "qrcode",
  "reqwest 0.12.28",
  "rustls-platform-verifier",
  "rxing",

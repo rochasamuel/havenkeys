@@ -39,8 +39,7 @@ pub struct Status {
     pub unreadable_items: u32,
 }
 
-// `runtime`, `own_package` and `block_on` serve the network and autofill
-// calls added next to this skeleton.
+// `own_package` serves the autofill calls added next to this skeleton.
 #[allow(dead_code)]
 #[derive(uniffi::Object)]
 pub struct MobileVault {
@@ -53,7 +52,6 @@ pub struct MobileVault {
 }
 
 impl MobileVault {
-    #[allow(dead_code)]
     pub(crate) fn block_on<F: std::future::Future>(&self, f: F) -> F::Output {
         self.runtime.block_on(f)
     }

@@ -12,11 +12,15 @@ uniffi::setup_scaffolding!();
 mod error;
 mod events;
 mod key_file;
+mod onboarding;
+mod qr;
 mod settings;
+mod unlock;
 mod vault;
 
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
 pub use key_file::{CipherError, KeystoreCipher};
+pub use onboarding::{KitPreview, LumaFrame};
 pub use settings::MobileSettings;
 pub use vault::{LockState, MobileConfig, MobileVault, Status};
