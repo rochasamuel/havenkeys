@@ -7,7 +7,9 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+pub mod device;
 mod error;
+pub mod key_store;
 
 pub use error::{ClientError, ClientResult};
 

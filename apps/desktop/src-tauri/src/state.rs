@@ -5,12 +5,12 @@
 //! vault lock; the bridge never takes the vault while holding its own locks).
 
 use crate::clipboard::ClipboardGuard;
-use crate::device::Device;
 use crate::item_input::ItemInputWire;
 use crate::qr_scan::ScannedCode;
 use crate::scan_slot::{ScanSlot, ScannedTotp};
 use crate::sync::Client;
 use havenkeys_bridge::Bridge;
+use havenkeys_client::device::Device;
 pub use havenkeys_client::{ClientError as CmdError, ClientResult as CmdResult};
 use havenkeys_core::lock::LockManager;
 use havenkeys_core::model::ItemInput;

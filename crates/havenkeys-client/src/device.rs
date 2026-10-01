@@ -1,7 +1,7 @@
 //! What this computer knows about itself, kept outside the vault database:
 //! a random device ID and the Secret Key.
 //!
-//! The Secret Key lives in the OS keychain (`secret_store.rs`), under the
+//! The Secret Key lives in the OS keychain (the platform key store), under the
 //! account's ID. `device.json` lives next to `vault.sqlite3` in the app's
 //! data folder (mode 0600 on Unix) and holds the device ID; it holds the
 //! Secret Key too, in plain text, only when no keychain answered — which
@@ -13,7 +13,7 @@
 //! device holds one vault, and the key there is the one for that vault's
 //! account.
 
-use crate::secret_store::{KeyStore, Storage, TimedKeyStore};
+use crate::key_store::{KeyStore, Storage, TimedKeyStore};
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::SecretString;
 use serde::{Deserialize, Serialize};
@@ -259,12 +259,31 @@ fn private_create(path: &Path) -> std::io::Result<std::fs::File> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::secret_store::{
+    use crate::key_store::{
         FailingKeyStore, KeyStore, MemoryKeyStore, SlowKeyStore, SlowOnceKeyStore, Storage,
     };
     use std::time::Duration;
 
     const ACCOUNT: Uuid = Uuid::from_u128(7);
+
+    #[test]
+    fn an_existing_device_json_is_read_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = SecretKey::generate().unwrap();
+        let id = Uuid::from_u128(42);
+        let written = format!(
+            "{{\n  \"deviceId\": \"{id}\",\n  \"secretKey\": \"{}\"\n}}",
+            key.to_text().expose()
+        );
+        std::fs::write(dir.path().join("device.json"), written).unwrap();
+
+        let mut device = Device::load(dir.path(), Box::new(FailingKeyStore));
+        assert_eq!(device.id, id);
+        assert_eq!(
+            device.secret_key_text(Uuid::from_u128(7)).unwrap().expose(),
+            key.to_text().expose()
+        );
+    }
 
     fn key() -> SecretKey {
         SecretKey::generate().unwrap()
@@ -387,12 +406,9 @@ mod tests {
     }
 
     impl KeyStore for FailsFirstGet {
-        fn get(
-            &self,
-            account: Uuid,
-        ) -> Result<Option<SecretString>, crate::secret_store::StoreError> {
+        fn get(&self, account: Uuid) -> Result<Option<SecretString>, crate::key_store::StoreError> {
             if !self.failed.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                return Err(crate::secret_store::StoreError);
+                return Err(crate::key_store::StoreError);
             }
             self.inner.get(account)
         }
@@ -400,10 +416,10 @@ mod tests {
             &self,
             account: Uuid,
             value: &SecretString,
-        ) -> Result<(), crate::secret_store::StoreError> {
+        ) -> Result<(), crate::key_store::StoreError> {
             self.inner.set(account, value)
         }
-        fn delete(&self, account: Uuid) -> Result<(), crate::secret_store::StoreError> {
+        fn delete(&self, account: Uuid) -> Result<(), crate::key_store::StoreError> {
             self.inner.delete(account)
         }
     }

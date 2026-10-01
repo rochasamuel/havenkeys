@@ -9,7 +9,6 @@ mod card;
 mod clipboard;
 mod commands;
 mod custom_field;
-mod device;
 mod emergency_kit;
 mod identity;
 mod import;
@@ -203,7 +202,10 @@ pub fn run() {
             let vault = Arc::new(Mutex::new(VaultService::new(store)));
             // Bounded by the keychain timeout; `Device::load` itself reads
             // only device.json.
-            let device = device::Device::load(&dir, Box::new(secret_store::OsKeyStore::install()));
+            let device = havenkeys_client::device::Device::load(
+                &dir,
+                Box::new(secret_store::OsKeyStore::install()),
+            );
             let bridge = browser_bridge(app.handle(), vault.clone());
             app.manage(AppState::new(
                 vault,

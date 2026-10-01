@@ -7,10 +7,10 @@
 //! Key, the KEK or the vault key.
 
 use crate::commands::{copy_to_clipboard, CopyResult};
-use crate::device::Device;
 use crate::secret_store::Storage;
 use crate::state::{AppState, CmdError, CmdResult};
 use crate::sync::{self, DEVICE_NAME};
+use havenkeys_client::device::Device;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::secret_key::SecretKey;
@@ -462,8 +462,8 @@ pub async fn copy_account_field(app: AppHandle, field: AccountField) -> CmdResul
 mod tests {
     mod account_item {
         use super::super::{account_field, unlocked_account, AccountField};
-        use crate::device::Device;
-        use crate::secret_store::MemoryKeyStore;
+        use havenkeys_client::device::Device;
+        use havenkeys_client::key_store::MemoryKeyStore;
         use havenkeys_core::account::{AccountRef, NormalizedEmail};
         use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
         use havenkeys_core::crypto::secret_key::SecretKey;
