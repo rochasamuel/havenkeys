@@ -2,6 +2,7 @@
 // open request does to the vault screen's current pane, and telling an
 // untouched editor from a changed one.
 
+import type { EditSection } from "./customFields";
 import type { SecretEdit } from "./secretEdit";
 import type { SignInWith, UrlRule } from "./types";
 
@@ -38,6 +39,8 @@ export interface EditorSnapshot {
   notes: SecretEdit;
   autoSignIn: boolean;
   signInWith: SignInWith | null;
+  /** `null` while a login's custom fields are loading or failed to load. */
+  sections: EditSection[] | null;
 }
 
 /** Compared in memory only; never logged or stored. */

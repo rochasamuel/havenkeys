@@ -344,6 +344,40 @@ export const ptBR: Messages = {
     saveFailed: "Não foi possível salvar o item.",
   },
 
+  fields: {
+    types: {
+      text: "Texto",
+      url: "URL",
+      email: "E-mail",
+      address: "Endereço",
+      date: "Data",
+      otp: "Código de verificação",
+      password: "Senha",
+      phone: "Telefone",
+    },
+    addField: "Adicionar outro campo",
+    addSection: "Adicionar seção",
+    sectionTitle: "Título da seção",
+    untitled: "Seção sem título",
+    label: "Rótulo",
+    removeField: (label: string) => `Remover ${label}`,
+    removeSection: "Remover seção",
+    confirmRemoveSection: (n: number) =>
+      n === 1 ? "Remover esta seção e o campo dela?" : `Remover esta seção e os ${n} campos dela?`,
+    move: (label: string) => `Mover ${label} (Alt+↑ / Alt+↓)`,
+    moveSectionUp: "Mover seção para cima",
+    moveSectionDown: "Mover seção para baixo",
+    copy: (label: string) => `Copiar ${label}`,
+    copied: (label: string, seconds: number) =>
+      `Copiado: ${label}. A área de transferência é limpa em ${seconds}\u00a0s.`,
+    show: (label: string) => `Mostrar ${label}`,
+    hide: (label: string) => `Ocultar ${label}`,
+    loadFailed: "Não foi possível carregar os outros campos deste login.",
+    limit: "Este login já tem o máximo de campos.",
+    set: "Salvo.",
+    removed: "Será removido.",
+  },
+
   generator: {
     title: "Gerador de senhas",
     lede: "Gerada neste computador pela fonte aleatória segura do sistema operacional. Nada é salvo até você usá-la.",
@@ -655,6 +689,8 @@ export const ptBR: Messages = {
       n === 1
         ? "1 entrada de site não era um endereço web e foi mantida nas notas do item."
         : `${n} entradas de site não eram endereços web e foram mantidas nas notas do item.`,
+    fieldsToNotes: (n: number) =>
+      n === 1 ? "1 campo acima do limite de um login ficou nas notas dele." : `${n} campos acima do limite de um login ficaram nas notas deles.`,
     ssoUpgraded: (n: number) =>
       `${n} ${n === 1 ? "login que já estava no cofre agora entra" : "logins que já estavam no cofre agora entram"} com Google, Microsoft, GitHub ou Apple.`,
     failedItems: (n: number) =>

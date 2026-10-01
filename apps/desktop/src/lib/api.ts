@@ -7,6 +7,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AddressPart,
+  SectionView,
   AccountField,
   AccountStatus,
   CopyField,
@@ -95,6 +97,13 @@ export const api = {
   copy: (id: string, field: CopyField) => call<CopyResult>("copy_secret", { id, field }),
   /** Rust opens it only if `url` is one of the item's saved websites. */
   openWebsite: (id: string, url: string) => call<void>("open_website", { id, url }),
+  loginFields: (id: string) => call<SectionView[]>("login_fields", { id }),
+  revealLoginField: (id: string, fieldId: string) => call<string>("reveal_login_field", { id, fieldId }),
+  loginFieldTotp: (id: string, fieldId: string) => call<TotpCode>("login_field_totp", { id, fieldId }),
+  copyLoginField: (id: string, fieldId: string, part?: AddressPart) =>
+    call<CopyResult>("copy_login_field", { id, fieldId, part: part ?? null }),
+  /** Rust opens only that field's saved http(s) address. */
+  openLoginFieldUrl: (id: string, fieldId: string) => call<void>("open_login_field_url", { id, fieldId }),
   /** Rust reads the clipboard image, then the screen; returns tokens and labels, never the secret. */
   scanTotpQr: () => call<ScannedTotp[]>("scan_totp_qr"),
   createItem: (input: ItemInput) => call<ItemOverview>("create_item", { input }),

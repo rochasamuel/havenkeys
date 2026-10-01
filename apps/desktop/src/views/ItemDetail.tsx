@@ -71,7 +71,7 @@ export function IconButton({
 
 function TotpField({ item, onCopy }: { item: ItemOverview; onCopy: () => Promise<boolean> }) {
   const { t } = useI18n();
-  const { code, remaining, failed } = useTotp(item.id, true);
+  const { code, remaining, failed } = useTotp(() => api.totp(item.id), item.id, true);
   const period = code?.period ?? 30;
   const progress = code ? remaining / period : 0;
   return (

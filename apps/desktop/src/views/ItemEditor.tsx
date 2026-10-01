@@ -52,7 +52,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
   const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
 
-  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, signInWith: signIn };
+  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, signInWith: signIn, sections: null };
   const [initialSnapshot] = useState(snapshot);
   const dirty = isDirty(initialSnapshot, snapshot);
   useEffect(() => {
