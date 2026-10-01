@@ -23,7 +23,7 @@ use uuid::Uuid;
 pub const PULL_INTERVAL: Duration = Duration::from_secs(60);
 
 /// The most changes the server takes in one request (spec 2026-09-20 §7.3).
-pub const MAX_BATCH: usize = 500;
+pub(crate) const MAX_BATCH: usize = 500;
 
 impl HavenClient {
     /// Map a failure, and drop the session when the server says it is gone,

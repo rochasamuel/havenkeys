@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-pub type ServerClient = Arc<SyncClient<HttpTransport>>;
+pub(crate) type ServerClient = Arc<SyncClient<HttpTransport>>;
 
 /// Whether this device has a server session. A locked vault is never online;
 /// an unlocked one may be offline (spec 2026-09-20 §8.6).
@@ -96,7 +96,7 @@ impl HavenClient {
         )
     }
 
-    pub fn session(&self) -> ClientResult<Session> {
+    pub(crate) fn session(&self) -> ClientResult<Session> {
         match self.connectivity.lock().as_deref() {
             Ok(Connectivity::Online(session)) => Ok(session.clone()),
             _ => Err(havenkeys_core::Error::Offline.into()),
@@ -122,7 +122,7 @@ impl HavenClient {
     }
 
     /// Drop the session and tell the shell, when one was held.
-    pub fn go_offline(&self) -> bool {
+    pub(crate) fn go_offline(&self) -> bool {
         let dropped = self.drop_session();
         if dropped {
             self.events.connectivity(false);
@@ -131,7 +131,7 @@ impl HavenClient {
     }
 
     /// The HTTP client for this vault's server.
-    pub fn server(&self) -> ClientResult<ServerClient> {
+    pub(crate) fn server(&self) -> ClientResult<ServerClient> {
         let url = self
             .vault()?
             .account()?
@@ -140,7 +140,7 @@ impl HavenClient {
         self.server_for(&url)
     }
 
-    pub fn server_for(&self, url: &str) -> ClientResult<ServerClient> {
+    pub(crate) fn server_for(&self, url: &str) -> ClientResult<ServerClient> {
         let mut cached = self.server.lock().map_err(|_| ClientError::internal())?;
         if let Some((cached_url, client)) = cached.as_ref() {
             if cached_url == url {
@@ -154,7 +154,7 @@ impl HavenClient {
 
     /// So a stale client for an old server is never reused after this
     /// device leaves its account.
-    pub fn forget_server(&self) {
+    pub(crate) fn forget_server(&self) {
         if let Ok(mut cached) = self.server.lock() {
             *cached = None;
         }

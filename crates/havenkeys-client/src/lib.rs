@@ -19,10 +19,10 @@ mod stub_server;
 mod sync;
 
 pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
-pub use client::{ClientConfig, HavenClient, ServerClient};
+pub use client::{ClientConfig, HavenClient};
 pub use error::{ClientError, ClientResult};
 pub use events::ClientEvents;
-pub use sync::{MAX_BATCH, PULL_INTERVAL};
+pub use sync::PULL_INTERVAL;
 
 /// Wall-clock time in Unix milliseconds.
 pub fn now_ms() -> i64 {
