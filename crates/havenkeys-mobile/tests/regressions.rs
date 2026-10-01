@@ -37,6 +37,23 @@ fn chrome(domain: &str) -> TargetFacts {
     }
 }
 
+fn code(e: MobileError) -> String {
+    match e {
+        MobileError::Failed { code, .. } => code,
+    }
+}
+
+/// Positive control: the fixture really does allow this fill, so the attacks
+/// below are refused for their own reason and not because setup is broken.
+fn assert_fill_works(v: &MobileVault, id: &str) {
+    let matches = v.autofill_matches(chrome("github.com")).unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].id, id);
+    let fill = v.autofill_fill(id.into(), chrome("github.com")).unwrap();
+    assert_eq!(fill.username.as_deref(), Some("octo"));
+    assert!(fill.password.is_some());
+}
+
 fn setup() -> (Arc<MobileVault>, String, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let v = MobileVault::new(
@@ -62,6 +79,7 @@ fn setup() -> (Arc<MobileVault>, String, tempfile::TempDir) {
 #[test]
 fn attack_1_a_page_on_evil_com_gets_nothing_for_github() {
     let (v, id, _d) = setup();
+    assert_fill_works(&v, &id);
     assert!(v.autofill_matches(chrome("evil.com")).unwrap().is_empty());
     assert!(v.autofill_fill(id, chrome("evil.com")).is_err());
 }
@@ -69,6 +87,7 @@ fn attack_1_a_page_on_evil_com_gets_nothing_for_github() {
 #[test]
 fn attack_2_an_arbitrary_item_id_needs_a_matching_target() {
     let (v, id, _d) = setup();
+    assert_fill_works(&v, &id);
     let webview = TargetFacts {
         package_name: "com.evil.app".into(),
         signing_certs: vec![vec![9; 32]],
@@ -88,6 +107,8 @@ fn attack_2_an_arbitrary_item_id_needs_a_matching_target() {
 #[test]
 fn attack_3_a_locked_vault_fills_nothing() {
     let (v, id, _d) = setup();
+    assert_fill_works(&v, &id);
+    assert!(v.reveal(id.clone(), "password".into()).is_ok());
     v.lock();
     assert!(v.autofill_fill(id.clone(), chrome("github.com")).is_err());
     assert!(v.autofill_totp(id.clone(), chrome("github.com")).is_err());
@@ -96,7 +117,8 @@ fn attack_3_a_locked_vault_fills_nothing() {
 
 #[test]
 fn attack_5_malformed_ids_and_targets_are_refused_without_a_panic() {
-    let (v, _id, _d) = setup();
+    let (v, id, _d) = setup();
+    assert_fill_works(&v, &id);
     for id in [
         "",
         "x",
@@ -117,13 +139,32 @@ fn attack_5_malformed_ids_and_targets_are_refused_without_a_panic() {
 #[test]
 fn a_stale_or_tampered_bundle_is_refused() {
     let (v, _id, _d) = setup();
-    let mut bundle = v
+    let bundle = v
         .create_unlock_bundle("correct horse battery staple".into(), 1)
         .unwrap();
+
+    // Positive control: the untouched bundle unlocks.
     v.lock();
+    let status = v.unlock_with_bundle(bundle.clone(), 1).unwrap();
+    assert!(matches!(status.state, LockState::Unlocked));
+
+    // Stale: a bundle made before a reboot (boot count 1) is refused at boot 2.
+    v.lock();
+    assert_eq!(
+        code(v.unlock_with_bundle(bundle.clone(), 2).err().unwrap()),
+        "bundle_refused"
+    );
+
+    // Layout: version (1 byte), then the vault key. Byte 5 is inside the vault
+    // key, so the unlock key no longer opens the vault.
     let mut tampered = bundle.clone();
     tampered[5] ^= 1;
     assert!(v.unlock_with_bundle(tampered, 1).is_err());
-    bundle.truncate(10);
-    assert!(v.unlock_with_bundle(bundle, 1).is_err());
+
+    let mut truncated = bundle;
+    truncated.truncate(10);
+    assert_eq!(
+        code(v.unlock_with_bundle(truncated, 1).err().unwrap()),
+        "bundle_refused"
+    );
 }
