@@ -11,6 +11,7 @@ use crate::qr_scan::ScannedCode;
 use crate::scan_slot::{ScanSlot, ScannedTotp};
 use crate::sync::Client;
 use havenkeys_bridge::Bridge;
+pub use havenkeys_client::{ClientError as CmdError, ClientResult as CmdResult};
 use havenkeys_core::lock::LockManager;
 use havenkeys_core::model::ItemInput;
 use havenkeys_core::vault::VaultService;
@@ -70,79 +71,6 @@ pub struct AppState {
     /// The app's data folder: where `vault.sqlite3` and `device.json` live.
     data_dir: PathBuf,
 }
-
-/// Error returned to the renderer: a stable code and a fixed message.
-#[derive(Clone, Debug, Serialize)]
-pub struct CmdError {
-    pub code: &'static str,
-    pub message: String,
-}
-
-impl From<havenkeys_core::Error> for CmdError {
-    fn from(e: havenkeys_core::Error) -> Self {
-        Self {
-            code: e.code(),
-            message: e.to_string(),
-        }
-    }
-}
-
-impl CmdError {
-    pub fn internal() -> Self {
-        Self {
-            code: "internal",
-            message: "Internal error.".into(),
-        }
-    }
-
-    pub fn file() -> Self {
-        Self {
-            code: "file",
-            message: "Could not read or delete the file.".into(),
-        }
-    }
-
-    /// One message for every way signing in can fail. The device never says
-    /// whether it was the address, the password or the Secret Key.
-    pub fn sign_in_failed() -> Self {
-        Self {
-            code: "sign_in_failed",
-            message: "Email, master password or Secret Key is incorrect.".into(),
-        }
-    }
-
-    /// The vault file exists but this build cannot open it. Carries the
-    /// folder so the message can tell the user where their file is; a path
-    /// is not a secret, and without it the advice is unfollowable.
-    pub fn vault_unreadable(dir: &std::path::Path) -> Self {
-        Self {
-            code: "vault_unreadable",
-            message: format!(
-                "This vault was created by an older version of HavenKeys and cannot be \
-                 opened by this one. Your file is in {}. Move vault.sqlite3 and \
-                 device.json somewhere safe — do not delete them — and start HavenKeys \
-                 again to set this computer up with an invite.",
-                dir.display()
-            ),
-        }
-    }
-
-    pub fn clipboard() -> Self {
-        Self {
-            code: "clipboard",
-            message: "Could not access the clipboard.".into(),
-        }
-    }
-
-    pub fn open_website() -> Self {
-        Self {
-            code: "open_website",
-            message: "Could not open the website.".into(),
-        }
-    }
-}
-
-pub type CmdResult<T> = Result<T, CmdError>;
 
 #[derive(Clone, Serialize)]
 struct LockedPayload {

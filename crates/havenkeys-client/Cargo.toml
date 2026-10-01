@@ -1,0 +1,29 @@
+[package]
+name = "havenkeys-client"
+version = "0.1.0"
+description = "HavenKeys account, session and sync logic shared by the desktop and mobile apps"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+# Exposes the in-memory and failing key stores to other crates' tests.
+testing = []
+
+[dependencies]
+havenkeys-core = { path = "../havenkeys-core" }
+havenkeys-sync-client = { path = "../havenkeys-sync-client" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "time"] }
+uuid = { version = "1.20", features = ["v4", "serde"] }
+zeroize = "1.8"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+havenkeys-server = { path = "../havenkeys-server" }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
+deadpool-postgres = "0.14"

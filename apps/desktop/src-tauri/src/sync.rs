@@ -42,34 +42,6 @@ pub const MAX_BATCH: usize = 500;
 
 pub type Client = Arc<SyncClient<HttpTransport>>;
 
-impl From<SyncError> for CmdError {
-    fn from(err: SyncError) -> Self {
-        match err {
-            SyncError::Conflict(_) => havenkeys_core::Error::ItemChangedElsewhere.into(),
-            SyncError::Unavailable => havenkeys_core::Error::Offline.into(),
-            SyncError::Unauthorized => Self {
-                code: "signed_out",
-                message: "HavenKeys is signed out of this account. Unlock again to reconnect."
-                    .into(),
-            },
-            SyncError::RateLimited => Self {
-                code: "rate_limited",
-                message: "Too many attempts. Try again in a few minutes.".into(),
-            },
-            SyncError::InvalidServerUrl => Self {
-                code: "invalid_server_url",
-                message: "That server address cannot be used. It must start with https://.".into(),
-            },
-            // The server's own words are never shown: they are text an
-            // attacker could choose.
-            SyncError::Refused(_) | SyncError::Protocol(_) | SyncError::TooLarge => Self {
-                code: "sync_failed",
-                message: "The server did not accept that request.".into(),
-            },
-        }
-    }
-}
-
 /// What the browser extension is told when a save fails. The extension gets
 /// a code and a fixed message, never the server's words.
 pub fn bridge_error(err: CmdError) -> havenkeys_protocol::ErrorCode {

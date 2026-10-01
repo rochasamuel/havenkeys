@@ -2518,6 +2518,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "havenkeys-client"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "deadpool-postgres",
+ "havenkeys-core",
+ "havenkeys-server",
+ "havenkeys-sync-client",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-postgres",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "havenkeys-core"
 version = "0.13.0"
 dependencies = [
@@ -2552,6 +2570,7 @@ dependencies = [
  "apple-native-keyring-store",
  "arboard",
  "havenkeys-bridge",
+ "havenkeys-client",
  "havenkeys-core",
  "havenkeys-native-host",
  "havenkeys-oslock",

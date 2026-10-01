@@ -22,6 +22,7 @@ havenkeys-native-host = { path = "../../../crates/havenkeys-native-host" }
 havenkeys-oslock = { path = "../../../crates/havenkeys-oslock" }
 havenkeys-protocol = { path = "../../../crates/havenkeys-protocol" }
 havenkeys-sync-client = { path = "../../../crates/havenkeys-sync-client" }
+havenkeys-client = { path = "../../../crates/havenkeys-client" }
 # No fs, shell, http or clipboard plugin. The plugins below are driven from
 # Rust only; the capability grants the renderer none of their commands.
 tauri = { version = "2", features = ["tray-icon"] }
@@ -68,4 +69,5 @@ apple-native-keyring-store = { version = "1.0", features = ["keychain"] }
 zbus-secret-service-keyring-store = { version = "1.0", features = ["crypto-rust"] }
 
 [dev-dependencies]
+havenkeys-client = { path = "../../../crates/havenkeys-client", features = ["testing"] }
 tempfile = "3"

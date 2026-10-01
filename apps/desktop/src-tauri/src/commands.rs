@@ -69,7 +69,7 @@ pub async fn unlock_vault(
     // would land in device.json because that keychain would not take it
     // either. The vault never left LOCKED, so nothing needs resetting.
     if typed.is_none() && stored.is_none() && !definite {
-        return Err(keychain_unavailable());
+        return Err(CmdError::keychain_unavailable());
     }
     // `SecretKey` is deliberately not `Clone`, so both options move into the
     // blocking closure and are borrowed there, as the current code does.
@@ -178,14 +178,6 @@ fn vault_account(state: &AppState) -> CmdResult<AccountRef> {
         .account()?
         .ok_or(havenkeys_core::Error::NoVault)?
         .to_ref()?)
-}
-
-/// The keychain did not give a definite answer at unlock.
-fn keychain_unavailable() -> CmdError {
-    CmdError {
-        code: "keychain_unavailable",
-        message: "Your system keychain did not answer. Approve its prompt if one is showing, then try again.".into(),
-    }
 }
 
 /// A Secret Key typed from the Emergency Kit proved correct: remember it.
@@ -398,7 +390,7 @@ pub async fn change_master_password(
                 // The server applies the change at base + 1.
                 ChangeOutcome::Applied => ticket.base_revision().saturating_add(1),
                 ChangeOutcome::NotApplied => return Err(e.into()),
-                ChangeOutcome::Unknown => return Err(password_change_unknown()),
+                ChangeOutcome::Unknown => return Err(CmdError::password_change_unknown()),
             }
         }
         Err(e) => {
@@ -440,21 +432,11 @@ fn change_outcome(server: Option<&KdfParams>, old: &KdfParams, new: &KdfParams) 
     }
 }
 
-fn password_change_unknown() -> CmdError {
-    CmdError {
-        code: "password_change_unknown",
-        message: "HavenKeys could not confirm whether the server applied the new master password. If your current password stops working, use the new one.".into(),
-    }
-}
-
 /// A 409 on a credential change: the header moved on the server since this
 /// device read it, which only another device's password change does. The
 /// password this device knows is no longer the account's.
 fn credential_change_conflict(err: &SyncError) -> Option<CmdError> {
-    matches!(err, SyncError::Conflict(_)).then(|| CmdError {
-        code: "password_changed_elsewhere",
-        message: "Your master password was changed on another device. Lock and unlock with the new password.".into(),
-    })
+    matches!(err, SyncError::Conflict(_)).then(CmdError::password_changed_elsewhere)
 }
 
 #[tauri::command]
@@ -796,7 +778,7 @@ mod tests {
 
     #[test]
     fn an_unconfirmed_password_change_says_so() {
-        let err = password_change_unknown();
+        let err = CmdError::password_change_unknown();
         assert_eq!(err.code, "password_change_unknown");
         assert!(err.message.contains("use the new one"));
     }
