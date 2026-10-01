@@ -318,7 +318,7 @@ impl HavenClient {
 
     /// The account this vault belongs to, from the local store (never from
     /// the caller).
-    fn vault_account(&self) -> ClientResult<AccountRef> {
+    pub(crate) fn vault_account(&self) -> ClientResult<AccountRef> {
         Ok(self
             .vault()?
             .account()?

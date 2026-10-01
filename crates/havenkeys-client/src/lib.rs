@@ -8,6 +8,7 @@
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 mod account;
+mod bundle;
 mod client;
 pub mod device;
 mod error;

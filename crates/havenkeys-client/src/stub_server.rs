@@ -27,6 +27,8 @@ pub(crate) struct StubServer {
     /// The login answers only once this is notified. A permit given before
     /// the request arrives lets it straight through.
     pub release_login: Arc<Notify>,
+    /// While true, login answers 401 at once.
+    pub refuse_login: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl StubServer {
@@ -51,15 +53,21 @@ impl StubServer {
         })
         .to_string();
 
+        let refuse = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let refuse_for_route = refuse.clone();
         let (entered, release) = (login_entered.clone(), release_login.clone());
         let app = Router::new()
             .route("/v1/auth/params", post(move || async move { params }))
             .route(
                 "/v1/auth/login",
                 post(move || async move {
+                    use axum::response::IntoResponse;
+                    if refuse_for_route.load(std::sync::atomic::Ordering::SeqCst) {
+                        return axum::http::StatusCode::UNAUTHORIZED.into_response();
+                    }
                     entered.notify_one();
                     release.notified().await;
-                    login
+                    login.into_response()
                 }),
             )
             .route("/v1/vault/header", get(move || async move { header }));
@@ -73,6 +81,7 @@ impl StubServer {
             url: format!("http://{addr}"),
             login_entered,
             release_login,
+            refuse_login: refuse,
         }
     }
 }
