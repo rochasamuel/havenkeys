@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rust's transport refuses plain HTTP except to localhost; this keeps the
+     platform's own stack (rustls-platform-verifier) consistent with it. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="false">
+        <!-- User CAs on purpose: a self-hosted server signed by the user's own CA
+             must work, as it does in the phone's browser. -->
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" tools:ignore="AcceptsUserCertificates" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

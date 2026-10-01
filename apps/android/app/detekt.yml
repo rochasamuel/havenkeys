@@ -1,1 +1,25 @@
-# Builds on detekt's defaults (buildUponDefaultConfig); the project rules land in Task 15.
+style:
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - reason: 'Never log in HavenKeys (CLAUDE.md §40).'
+        value: 'android.util.Log.v'
+      - value: 'android.util.Log.d'
+      - value: 'android.util.Log.i'
+      - value: 'android.util.Log.w'
+      - value: 'android.util.Log.e'
+      - value: 'android.util.Log.wtf'
+      - value: 'android.util.Log.println'
+      - value: 'kotlin.io.println'
+      - value: 'kotlin.io.print'
+      - value: 'java.lang.Throwable.printStackTrace'
+  ForbiddenImport:
+    active: true
+    imports:
+      - value: 'android.util.Log'
+        reason: 'Never log in HavenKeys (CLAUDE.md §40).'
+complexity:
+  TooManyFunctions:
+    # Repositories mirror the Rust API one call per function.
+    thresholdInInterfaces: 20
+    ignoreOverridden: true

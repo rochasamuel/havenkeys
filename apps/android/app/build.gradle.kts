@@ -67,6 +67,32 @@ tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
     exclude("**/uniffi/**")
 }
 
+// detekt's ForbiddenMethodCall needs type resolution, which detekt 1.23 has
+// no task for under AGP's built-in Kotlin; this text scan enforces the rule.
+val forbidLogging by tasks.registering {
+    description = "Fails on any logging call: HavenKeys never logs (CLAUDE.md §40)."
+    val sources = fileTree("src") {
+        include("**/*.kt")
+        exclude("**/uniffi/**")
+    }
+    inputs.files(sources)
+    doLast {
+        val forbidden = Regex(
+            """\bandroid\.util\.Log\b|\bLog\.(v|d|i|w|e|wtf|println)\s*\(|\bprintln\s*\(|\bprint\s*\(|""" +
+                """\.printStackTrace\s*\(|\bSystem\.(out|err)\b""",
+        )
+        val hits = sources.flatMap { file ->
+            file.readLines().mapIndexedNotNull { i, line ->
+                if (forbidden.containsMatchIn(line)) "${file.path}:${i + 1}" else null
+            }
+        }
+        if (hits.isNotEmpty()) {
+            throw GradleException("Logging is forbidden (CLAUDE.md §40):\n" + hits.joinToString("\n"))
+        }
+    }
+}
+tasks.named("detekt") { dependsOn(forbidLogging) }
+
 // detekt 1.23 embeds the Kotlin compiler it was built with; the project's
 // newer Kotlin must not replace it on detekt's own classpath.
 configurations.matching { it.name == "detekt" }.configureEach {
