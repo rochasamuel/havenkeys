@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rust's transport refuses plain HTTP except to localhost; this keeps the
-     platform's own stack (rustls-platform-verifier) consistent with it. -->
+<!-- Release: no cleartext anywhere. Rust's transport agrees: a release build of
+     the native library refuses plain HTTP even to localhost (only a debug build
+     allows it, matching the debug variant of this file). -->
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
     <base-config cleartextTrafficPermitted="false">
         <!-- User CAs on purpose: a self-hosted server signed by the user's own CA

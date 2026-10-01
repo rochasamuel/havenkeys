@@ -95,6 +95,24 @@ fn platform_tls() -> Option<rustls::ClientConfig> {
     Some(config)
 }
 
+/// Plain HTTP to this machine's own loopback (a local server during
+/// development). A phone's release build allows none: its only server is the
+/// user's own over HTTPS, and Android's release network config forbids
+/// cleartext too.
+const LOCALHOST_HTTP: bool = cfg!(any(
+    debug_assertions,
+    not(any(target_os = "android", target_os = "ios"))
+));
+
+fn scheme_allowed(base: &url::Url, localhost_http: bool) -> bool {
+    let local = matches!(base.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    match base.scheme() {
+        "https" => true,
+        "http" => local && localhost_http,
+        _ => false,
+    }
+}
+
 /// The real transport.
 #[derive(Debug)]
 pub struct HttpTransport {
@@ -104,15 +122,13 @@ pub struct HttpTransport {
 
 impl HttpTransport {
     /// Refuses any base URL a bearer token must not travel to: plain HTTP
-    /// anywhere but localhost, and anything that is not http(s).
+    /// anywhere but localhost (and there too in a phone's release build),
+    /// and anything that is not http(s).
     pub fn new(base_url: &str) -> Result<Self> {
         let base = url::Url::parse(base_url.trim_end_matches('/'))
             .map_err(|_| SyncError::InvalidServerUrl)?;
-        let local = matches!(base.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
-        match base.scheme() {
-            "https" => {}
-            "http" if local => {}
-            _ => return Err(SyncError::InvalidServerUrl),
+        if !scheme_allowed(&base, LOCALHOST_HTTP) {
+            return Err(SyncError::InvalidServerUrl);
         }
         let client = http_client_builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -204,6 +220,36 @@ mod tests {
             HttpTransport::new("not a url").unwrap_err(),
             SyncError::InvalidServerUrl
         );
+    }
+
+    #[test]
+    fn plain_http_to_localhost_follows_the_build() {
+        for url in [
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://[::1]:8080",
+        ] {
+            assert!(
+                scheme_allowed(&url::Url::parse(url).unwrap(), true),
+                "{url}"
+            );
+            assert!(
+                !scheme_allowed(&url::Url::parse(url).unwrap(), false),
+                "{url}"
+            );
+        }
+        let remote = url::Url::parse("http://vault.example.com").unwrap();
+        assert!(!scheme_allowed(&remote, true));
+        let https = url::Url::parse("https://vault.example.com").unwrap();
+        assert!(scheme_allowed(&https, false));
+    }
+
+    /// A phone release build: no plain HTTP at all. Desktop and debug
+    /// builds keep localhost for a local server.
+    #[test]
+    fn mobile_release_builds_refuse_localhost_http() {
+        let mobile = cfg!(any(target_os = "android", target_os = "ios"));
+        assert_eq!(LOCALHOST_HTTP, cfg!(debug_assertions) || !mobile,);
     }
 
     #[test]

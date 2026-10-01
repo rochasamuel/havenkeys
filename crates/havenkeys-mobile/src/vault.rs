@@ -191,6 +191,7 @@ pub(crate) mod tests {
     use crate::events::VaultEvents;
     use crate::key_file::{CipherError, KeystoreCipher};
     use crate::settings::MobileSettings;
+    use havenkeys_core::local::LocalSlot;
     use std::sync::Mutex;
 
     pub(crate) const PASSWORD: &str = "correct horse battery staple";
@@ -376,6 +377,22 @@ pub(crate) mod tests {
         vault.touch();
         std::thread::sleep(Duration::from_millis(300));
         assert!(vault.clock.due().is_none());
+    }
+
+    #[test]
+    fn an_unreadable_settings_blob_keeps_confirm_before_filling_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let (vault, _) = unlocked(dir.path());
+        assert!(!vault.confirm_before_filling());
+        // A blob that is there but does not open as this phone's settings.
+        vault
+            .client
+            .vault()
+            .unwrap()
+            .write_local(LocalSlot::DeviceSettings, &"not settings")
+            .unwrap();
+        assert!(vault.confirm_before_filling());
+        assert!(vault.settings().unwrap().confirm_before_filling);
     }
 
     #[test]

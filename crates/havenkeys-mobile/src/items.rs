@@ -11,6 +11,7 @@ use havenkeys_core::generator;
 use havenkeys_core::identity::IdentityField;
 use havenkeys_core::model::{ItemOverview, ItemType, SecretField};
 use havenkeys_core::Error;
+use url::Url;
 use uuid::Uuid;
 
 #[derive(uniffi::Enum)]
@@ -90,10 +91,19 @@ fn host_of(o: &ItemOverview) -> Option<String> {
     o.urls.first().and_then(|r| url_host(&r.url))
 }
 
+/// The host (and a non-default port) only: a saved URL may carry userinfo,
+/// which must not reach the list.
 fn url_host(raw: &str) -> Option<String> {
-    let after_scheme = raw.split_once("://").map_or(raw, |(_, rest)| rest);
-    let host = after_scheme.split(['/', '?', '#']).next()?;
-    Some(host.trim_start_matches("www.").to_owned()).filter(|h| !h.is_empty())
+    let parsed = Url::parse(raw)
+        .ok()
+        .filter(Url::has_host)
+        .or_else(|| Url::parse(&format!("https://{raw}")).ok())?;
+    let host = parsed.host_str()?;
+    let host = host.strip_prefix("www.").unwrap_or(host);
+    Some(match parsed.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_owned(),
+    })
 }
 
 fn summary(o: &ItemOverview) -> ItemSummary {
@@ -450,6 +460,22 @@ mod tests {
         overdue_refuses(&v, &seen, |v| v.item_view(id.clone()));
         overdue_refuses(&v, &seen, |v| v.reveal(id.clone(), "password".into()));
         overdue_refuses(&v, &seen, |v| v.totp(id.clone()));
+    }
+
+    #[test]
+    fn the_website_shown_is_the_host_never_the_userinfo() {
+        for (saved, shown) in [
+            ("https://user:pw@host.example/", Some("host.example")),
+            ("https://www.github.com/login?next=/", Some("github.com")),
+            (
+                "https://vault.example.com:8443/x",
+                Some("vault.example.com:8443"),
+            ),
+            ("github.com", Some("github.com")),
+            ("not a url at all", None),
+        ] {
+            assert_eq!(url_host(saved).as_deref(), shown, "{saved}");
+        }
     }
 
     #[test]

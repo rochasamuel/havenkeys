@@ -22,6 +22,22 @@ impl Default for DeviceSettings {
     }
 }
 
+impl DeviceSettings {
+    /// Nothing written yet: the defaults. A blob that is there but does not
+    /// open (damaged, replaced) or a locked vault: the defaults with
+    /// "Confirm before filling" on, so a bad blob never turns it off.
+    fn from_slot(read: havenkeys_core::Result<Option<Self>>) -> Self {
+        match read {
+            Ok(Some(settings)) => settings,
+            Ok(None) => Self::default(),
+            Err(_) => Self {
+                confirm_before_filling: true,
+                ..Self::default()
+            },
+        }
+    }
+}
+
 #[derive(Clone, uniffi::Record)]
 pub struct MobileSettings {
     pub auto_lock_minutes: u32,
@@ -32,18 +48,11 @@ pub struct MobileSettings {
 }
 
 impl MobileVault {
-    /// Defaults when locked or unreadable: the safe ones (screen-off lock
-    /// on, Digital Asset Links on, confirm off as the spec's default).
     pub(crate) fn device_settings(&self) -> DeviceSettings {
-        self.client
-            .vault()
-            .ok()
-            .and_then(|v| {
-                v.read_local::<DeviceSettings>(LocalSlot::DeviceSettings)
-                    .ok()
-                    .flatten()
-            })
-            .unwrap_or_default()
+        DeviceSettings::from_slot(match self.client.vault() {
+            Ok(v) => v.read_local(LocalSlot::DeviceSettings),
+            Err(_) => Err(havenkeys_core::Error::Locked),
+        })
     }
 }
 
@@ -52,11 +61,7 @@ impl MobileVault {
     pub fn settings(&self) -> MobileResult<MobileSettings> {
         let vault = self.client.vault()?;
         let shared = vault.settings()?;
-        let device = vault
-            .read_local::<DeviceSettings>(LocalSlot::DeviceSettings)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let device = DeviceSettings::from_slot(vault.read_local(LocalSlot::DeviceSettings));
         Ok(MobileSettings {
             auto_lock_minutes: shared.auto_lock_minutes,
             clipboard_clear_seconds: shared.clipboard_clear_seconds,
