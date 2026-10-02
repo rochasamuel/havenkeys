@@ -20,14 +20,12 @@ data class CardKindOf(val kind: CardKind, val byHint: Boolean)
 object CardFieldClassifier {
     /** [strong]: the field's frame already has a number, code or expiry field. */
     fun kindOf(f: FieldFacts, strong: Boolean): CardKindOf? {
-        val shape = shapeOf(f)
+        val shape = shapeOf(f) ?: return null
         val s = CardSignals(f)
-        val hit = if (shape == null || s.refused) {
-            Hit.Refused
-        } else {
-            hintHit(s) ?: wordHit(s, strong) ?: weakHit(f, s, shape, strong) ?: Hit.Refused
-        }
-        return (hit as? Hit.Of)?.takeIf { shape?.allows(it.kind) == true }?.let { CardKindOf(it.kind, it.byHint) }
+        // Refusals are checked only once something matched: most fields match nothing.
+        val hit = hintHit(s) ?: wordHit(s, strong, shape) ?: weakHit(f, s, shape, strong)
+        val of = (hit as? Hit.Of)?.takeIf { shape.allows(it.kind) && !s.refused }
+        return of?.let { CardKindOf(it.kind, it.byHint) }
     }
 
     private sealed interface Hit {
@@ -69,12 +67,17 @@ object CardFieldClassifier {
         val autocomplete = f.htmlAttributes["autocomplete"].orEmpty().lowercase()
             .split(' ', '\t', '\n').filter { it.isNotEmpty() && !AC_PREFIX.matches(it) }
         val attrs = normalizeAll(f.idEntry, f.htmlAttributes["name"], f.htmlAttributes["id"])
-        val text = normalizeAll(
-            f.hint, f.contentDescription, f.htmlAttributes["placeholder"],
-            f.htmlAttributes["aria-label"], f.htmlAttributes["title"], f.htmlAttributes["label"],
-        )
+        val text = if (f.hint == null && f.contentDescription == null && f.htmlAttributes.isEmpty()) {
+            ""
+        } else {
+            normalizeAll(
+                f.hint, f.contentDescription, f.htmlAttributes["placeholder"],
+                f.htmlAttributes["aria-label"], f.htmlAttributes["title"], f.htmlAttributes["label"],
+            )
+        }
         val all = "$attrs $text".trim()
-        val refused = hasAny(all, NEGATIVE) || "one-time-code" in autocomplete || "one-time-code" in hints
+        val refused: Boolean get() =
+            hasAny(all, NEGATIVE) || "one-time-code" in autocomplete || "one-time-code" in hints
     }
 
     private fun hintHit(s: CardSignals): Hit? {
@@ -83,8 +86,10 @@ object CardFieldClassifier {
         return kind?.let { Hit.Of(it, byHint = true) }
     }
 
-    private fun wordHit(s: CardSignals, strong: Boolean): Hit? {
-        val kind = WORDS.firstOrNull { (_, words) ->
+    private fun wordHit(s: CardSignals, strong: Boolean, shape: Shape): Hit? {
+        // A password box only ever holds the code, which is the first list.
+        val lists = if (shape == Shape.SECRET) WORDS.take(1) else WORDS
+        val kind = lists.firstOrNull { (_, words) ->
             val usable = if (strong) words else words.filter { it !in AMBIGUOUS }
             hasAny(s.attrs, usable) || hasAny(s.text, usable)
         }?.first

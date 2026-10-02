@@ -27,8 +27,20 @@ internal fun normalizeAll(vararg raw: String?): String =
 
 /** Does normalized [text] contain any of [phrases] as whole words? */
 internal fun hasAny(text: String, phrases: Collection<String>): Boolean {
-    val padded = " $text "
-    return text.isNotEmpty() && phrases.any { padded.contains(" $it ") }
+    return text.isNotEmpty() && phrases.any { containsWords(text, it) }
+}
+
+/** [phrase] in [text] bounded by spaces or the ends, without building strings. */
+private fun containsWords(text: String, phrase: String): Boolean {
+    var from = text.indexOf(phrase)
+    while (from >= 0) {
+        val end = from + phrase.length
+        val startsWord = from == 0 || text[from - 1] == ' '
+        val endsWord = end == text.length || text[end] == ' '
+        if (startsWord && endsWord) return true
+        from = text.indexOf(phrase, from + 1)
+    }
+    return false
 }
 
 internal fun isPasswordInputType(inputType: Int): Boolean {

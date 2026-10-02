@@ -62,7 +62,7 @@ class CardFormFinderTest {
     }
 
     @Test
-    fun aLoneAmbiguousFieldDoesNotQualify() {
+    fun aLoneNameFieldDoesNotQualify() {
         assertNull(CardFormFinder.find(listOf(field(hint = "Name on card", focused = true))))
     }
 

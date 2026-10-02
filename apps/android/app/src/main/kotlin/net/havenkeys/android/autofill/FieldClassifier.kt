@@ -17,7 +17,7 @@ object FieldClassifier {
     private val UNKNOWN = Classification(FieldRole.UNKNOWN, 0)
 
     fun classify(f: FieldFacts): Classification {
-        if (!isLoginCandidate(f)) return UNKNOWN
+        if (!f.visible || !f.enabled || !isTextInput(f)) return UNKNOWN
         val s = Signals(f)
         val candidates = listOf(
             Triple(passwordRole(s), passwordScore(s), PASSWORD_THRESHOLD),
@@ -25,17 +25,23 @@ object FieldClassifier {
             Triple(FieldRole.OTP, otpScore(s), OTP_THRESHOLD),
         )
         val best = candidates.filter { it.second >= it.third }.maxByOrNull { it.second }
-        return best?.let { Classification(it.first, it.second.coerceAtMost(MAX_CONFIDENCE)) } ?: UNKNOWN
+        // Checked only for a field that would be classified: a card field only ever gets cards.
+        val isCard = best != null && CardFieldClassifier.kindOf(f, strong = false) != null
+        return if (best == null || isCard) {
+            UNKNOWN
+        } else {
+            Classification(best.first, best.second.coerceAtMost(MAX_CONFIDENCE))
+        }
     }
 
     /** A visible, enabled text field that nothing rules out as a username. */
     internal fun couldBeUsername(f: FieldFacts): Boolean =
-        f.visible && f.enabled && isTextInput(f) && usernameScore(Signals(f)) >= 0
+        isLoginCandidate(f) && usernameScore(Signals(f)) >= 0
 
     /** One box of a code split across one-character inputs (group.ts's split code field). */
     internal fun isCodeBox(f: FieldFacts): Boolean {
         val s = Signals(f)
-        return f.visible && f.enabled && isTextInput(f) && !s.isPassword && s.maxLength == 1
+        return isLoginCandidate(f) && !s.isPassword && s.maxLength == 1
     }
 
     /** An input that can hold text at all; any other HTML control, list or date is never filled. */

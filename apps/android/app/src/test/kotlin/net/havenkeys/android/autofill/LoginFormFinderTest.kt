@@ -21,6 +21,15 @@ class LoginFormFinderTest {
     }
 
     @Test
+    fun aCardFieldBeforeThePasswordIsNotTheUsername() {
+        val card = field(hint = "Card number")
+        val pw = field(inputType = password)
+        val form = find(card, pw)!!
+        assertEquals(emptyList<Int>(), form.usernames)
+        assertEquals(listOf(pw.index), form.passwords)
+    }
+
+    @Test
     fun emailFirst() {
         val user = field(inputType = email)
         val form = find(field(), user)!!
