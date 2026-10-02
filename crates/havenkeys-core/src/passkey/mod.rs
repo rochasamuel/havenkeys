@@ -15,11 +15,13 @@ use data_encoding::BASE64URL_NOPAD;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
+mod app;
 pub(crate) mod cbor;
 mod rp;
 mod vault;
 mod webauthn;
 
+pub use app::{AppCreateQuery, AppPasskeyCreate};
 pub use rp::{
     android_app_origin, app_rp_id, authorize_rp, authorize_rp_for_app, RpContext, MAX_RP_ID_BYTES,
 };
