@@ -76,6 +76,24 @@ page) until you do.
 macOS Gatekeeper will warn on first run. Code-signing certificates are a
 real ongoing cost and are out of scope for this MVP.
 
+## Cutting an Android release
+
+The download page links to the newest **published** release whose tag starts
+with `android-v`. Android releases are never marked "latest", so the desktop
+download and the desktop auto-updater keep pointing at desktop releases.
+
+1. Raise `versionCode` and `versionName` in `apps/android/app/build.gradle.kts`
+   (Android refuses an update whose `versionCode` is not higher), commit, push.
+2. Tag and push: `git tag android-v0.1.0 && git push origin android-v0.1.0`.
+3. `.github/workflows/android-release.yml` builds the release-mode Rust
+   library and the signed APK, refuses an unsigned or debuggable APK, and
+   attaches `HavenKeys-<version>.apk` and its `.sha256` to a **draft**
+   release with the signing certificate's fingerprint in the notes.
+4. Download the draft APK, install it on a phone, then click **Publish
+   release**.
+
+The signing key's custody is in `docs/android.md` → Release key custody.
+
 ## In-app updates (from 0.9.0)
 
 From version 0.9.0, the desktop app updates itself on Windows, macOS and the
