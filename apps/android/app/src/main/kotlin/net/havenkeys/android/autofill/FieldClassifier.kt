@@ -1,7 +1,7 @@
 package net.havenkeys.android.autofill
 
 import android.text.InputType
-import java.text.Normalizer
+import android.view.View
 
 enum class FieldRole { USERNAME, PASSWORD, NEW_PASSWORD, CONFIRM_PASSWORD, OTP, UNKNOWN }
 
@@ -38,11 +38,12 @@ object FieldClassifier {
         return f.visible && f.enabled && isTextInput(f) && !s.isPassword && s.maxLength == 1
     }
 
-    /** An input that can hold text at all; any other HTML control is never filled. */
+    /** An input that can hold text at all; any other HTML control, list or date is never filled. */
     internal fun isTextInput(f: FieldFacts): Boolean {
         val type = f.htmlAttributes["type"]?.lowercase()
         val isInput = f.htmlTag == null || f.htmlTag.equals("input", ignoreCase = true)
-        return isInput && (type == null || type in TEXT_TYPES || type == "password")
+        return f.autofillType == View.AUTOFILL_TYPE_TEXT && isInput &&
+            (type == null || type in TEXT_TYPES || type == "password")
     }
 
     private fun passwordScore(s: Signals): Int {
@@ -129,22 +130,19 @@ object FieldClassifier {
 
         private val inputClass = f.inputType and InputType.TYPE_MASK_CLASS
         private val variation = f.inputType and InputType.TYPE_MASK_VARIATION
-        val isPassword = htmlType == "password" ||
-            (inputClass == InputType.TYPE_CLASS_TEXT && variation in PASSWORD_VARIATIONS) ||
-            (inputClass == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        val isPassword = htmlType == "password" || isPasswordInputType(f.inputType)
         val isEmail = htmlType == "email" ||
             (inputClass == InputType.TYPE_CLASS_TEXT && variation in EMAIL_VARIATIONS)
         val isNumeric = inputClass == InputType.TYPE_CLASS_NUMBER || inputClass == InputType.TYPE_CLASS_PHONE ||
             htmlType == "tel" || htmlType == "number" || f.htmlAttributes["inputmode"]?.lowercase() == "numeric"
-        val maxLength = f.htmlAttributes["maxlength"]?.trim()?.take(MAX_DIGITS)?.toIntOrNull()
-            ?.takeIf { it > 0 } ?: f.maxTextLength
+        val maxLength = maxLengthOf(f)
         val isCard = tokens.any { it.startsWith("cc-") } || attrs.has(CARD_WORDS)
     }
 
     /** Normalized text, matched against keyword lists as whole words (text.ts). */
     private class Words private constructor(val normalized: String) {
         constructor(vararg raw: String?) :
-            this(raw.mapNotNull(::normalize).filter { it.isNotEmpty() }.joinToString(" "))
+            this(raw.map(::normalize).filter { it.isNotEmpty() }.joinToString(" "))
 
         private val padded = " $normalized "
         private val wordSet = if (normalized.isEmpty()) emptySet() else normalized.split(' ').toSet()
@@ -161,11 +159,6 @@ object FieldClassifier {
         val multi = all.filter { ' ' in it }.map { " $it " }
     }
 
-    private val PASSWORD_VARIATIONS = setOf(
-        InputType.TYPE_TEXT_VARIATION_PASSWORD,
-        InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-        InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
-    )
     private val EMAIL_VARIATIONS = setOf(
         InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
         InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
@@ -252,24 +245,3 @@ private const val OTP_LENGTH = 15
 private const val OTP_NUMERIC = 10
 private const val OTP_MIN_LENGTH = 4
 private const val OTP_MAX_LENGTH = 8
-
-/** Longest string read from any one source, as text.ts's MAX_HINT_CHARS. */
-private const val MAX_TEXT_CHARS = 200
-private const val MAX_DIGITS = 6
-private const val ASCII_END = 128
-
-/** `"loginEmail_Endereço"` → `"login email endereco"`. */
-private fun normalize(raw: String?): String? = raw
-    ?.take(MAX_TEXT_CHARS)
-    ?.replace(CAMEL, "\$1 \$2")
-    ?.let { if (it.all { c -> c.code < ASCII_END }) it else stripAccents(it) }
-    ?.lowercase()
-    ?.replace(NOT_WORD, " ")
-    ?.trim()
-
-private fun stripAccents(text: String) =
-    Normalizer.normalize(text, Normalizer.Form.NFKD).replace(COMBINING_MARKS, "")
-
-private val CAMEL = Regex("([a-z])([A-Z])")
-private val COMBINING_MARKS = Regex("\\p{Mn}+")
-private val NOT_WORD = Regex("[^a-z0-9]+")

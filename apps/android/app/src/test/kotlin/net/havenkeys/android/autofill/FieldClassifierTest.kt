@@ -107,4 +107,10 @@ class FieldClassifierTest {
         assertTrue(c.confidence in 1..100)
         assertEquals(0, FieldClassifier.classify(field()).confidence)
     }
+
+    @Test
+    fun aListOrADateIsNeverALoginField() {
+        assertEquals(FieldRole.UNKNOWN, role(list(listOf("a", "b"), id = "username")))
+        assertEquals(FieldRole.UNKNOWN, role(date(hints = listOf("username"))))
+    }
 }
