@@ -13,6 +13,7 @@ import android.service.autofill.Field
 import android.service.autofill.FillResponse
 import android.service.autofill.InlinePresentation
 import android.service.autofill.Presentations
+import android.service.autofill.SaveInfo
 import android.view.View
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
@@ -37,13 +38,15 @@ import uniffi.havenkeys_mobile.FillValues
 class DatasetFactory(
     private val context: Context,
     private val screen: ParsedScreen,
-    private val form: LoginForm,
+    private val form: LoginForm?,
+    private val save: SaveForm?,
     inlineRequest: InlineSuggestionsRequest?,
 ) {
     private val rows = Rows(context, inlineRequest)
-    private val usernameId = form.usernames.idIn(screen)
-    private val passwordId = form.passwords.idIn(screen)
-    private val otpId = form.otps.idIn(screen)
+    private val usernameId = form?.usernames.orEmpty().idIn(screen)
+    private val passwordId = form?.passwords.orEmpty().idIn(screen)
+    private val otpId = form?.otps.orEmpty().idIn(screen)
+    private val otpOnly = form?.otpOnly == true
 
     fun response(plan: FillPlan): FillResponse? = when (plan) {
         FillPlan.Nothing -> null
@@ -65,7 +68,8 @@ class DatasetFactory(
 
     // Locked: one row that names no login; the fields' ids are all Android gets.
     private fun unlockResponse(): FillResponse? {
-        val ids = (form.usernames + form.passwords + form.otps).mapNotNull(screen.ids::getOrNull).toTypedArray()
+        val fields = form?.let { it.usernames + it.passwords + it.otps }.orEmpty()
+        val ids = fields.mapNotNull(screen.ids::getOrNull).toTypedArray()
         if (ids.isEmpty()) return null
         val title = context.getString(R.string.autofill_unlock)
         val menu = rows.menu(title, null)
@@ -96,20 +100,25 @@ class DatasetFactory(
         val datasets = offer.datasets.mapNotNull(::datasetOf).toMutableList()
         offer.copies.mapNotNullTo(datasets, ::copyDataset)
         if (offer.search) searchDataset()?.let(datasets::add)
-        if (datasets.isEmpty()) return null
-        return FillResponse.Builder().apply { datasets.forEach(::addDataset) }.build()
+        val saveInfo = if (offer.save) save?.saveInfoIn(screen) else null
+        if (datasets.isEmpty() && saveInfo == null) return null
+        return FillResponse.Builder().apply {
+            datasets.forEach(::addDataset)
+            saveInfo?.let(::setSaveInfo)
+        }.build()
     }
 
     private fun datasetOf(plan: DatasetPlan): Dataset? {
-        val subtitle = if (form.otpOnly) context.getString(R.string.autofill_code) else plan.match.username
+        val subtitle = if (otpOnly) context.getString(R.string.autofill_code) else plan.match.username
         val gated = plan.values == null && plan.totp == null
         val fields = when {
-            gated && form.otpOnly -> listOfNotNull(otpId).map { it to null }
+            gated && otpOnly -> listOfNotNull(otpId).map { it to null }
             gated -> listOfNotNull(usernameId, passwordId).map { it to null }
             plan.totp != null -> listOfNotNull(otpId?.let { it to AutofillValue.forText(plan.totp) })
             else -> filled(requireNotNull(plan.values))
         }
-        val auth = if (gated) sender(context, if (form.otpOnly) MODE_TOTP else MODE_FILL, plan.match.id) else null
+        val mode = if (otpOnly) MODE_TOTP else MODE_FILL
+        val auth = if (gated) sender(context, mode, plan.match.id) else null
         return dataset(fields, plan.match.title, subtitle, auth)
     }
 
@@ -196,6 +205,36 @@ class DatasetFactory(
                 PendingIntent.FLAG_CANCEL_CURRENT or mutable,
             ).intentSender
         }
+    }
+}
+
+/**
+ * Android's save sheet, shown when the form is submitted. Its "Save" is
+ * the user's confirmation; Rust decides what it adds or updates.
+ */
+private fun SaveForm.saveInfoIn(screen: ParsedScreen): SaveInfo? {
+    val passwordId = password?.let(screen.ids::getOrNull)
+    val usernameId = username?.let(screen.ids::getOrNull)
+    val currentId = current?.let(screen.ids::getOrNull)
+    return when {
+        passwordId != null -> {
+            val types = SaveInfo.SAVE_DATA_TYPE_PASSWORD or
+                (if (usernameId != null) SaveInfo.SAVE_DATA_TYPE_USERNAME else 0)
+            SaveInfo.Builder(types, arrayOf(passwordId))
+                .apply {
+                    val optional = listOfNotNull(usernameId, currentId)
+                    if (optional.isNotEmpty()) setOptionalIds(optional.toTypedArray())
+                }
+                // Web pages and single-activity apps rarely finish: save when the fields go away.
+                .setFlags(SaveInfo.FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE)
+                .build()
+        }
+        // A username-first sign-in: keep this screen for the password's.
+        usernameId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+            SaveInfo.Builder(SaveInfo.SAVE_DATA_TYPE_USERNAME, arrayOf(usernameId))
+                .setFlags(SaveInfo.FLAG_DELAY_SAVE)
+                .build()
+        else -> null
     }
 }
 

@@ -61,7 +61,13 @@ class AutofillAuthActivity : FragmentActivity() {
             val factory = tapped.factory(this@AutofillAuthActivity)
             val result: Parcelable? = when {
                 mode == DatasetFactory.MODE_UNLOCK -> factory.response(
-                    FillPlanner.plan(tapped.form, tapped.target, container.isUnlocked(), repo),
+                    FillPlanner.plan(
+                        tapped.form,
+                        tapped.target,
+                        container.isUnlocked(),
+                        repo,
+                        saveable = tapped.save != null,
+                    ),
                 )
                 itemId == null -> null
                 mode == DatasetFactory.MODE_FILL ->
@@ -94,10 +100,11 @@ private suspend fun AutofillAuthActivity.copyCode(code: String) {
 internal class TappedRequest(
     val screen: ParsedScreen,
     val form: LoginForm,
+    val save: SaveForm?,
     val target: TargetFacts,
     private val inlineRequest: InlineSuggestionsRequest?,
 ) {
-    fun factory(activity: Activity) = DatasetFactory(activity, screen, form, inlineRequest)
+    fun factory(activity: Activity) = DatasetFactory(activity, screen, form, save, inlineRequest)
 }
 
 /**
@@ -132,7 +139,7 @@ internal fun Activity.tappedRequest(): TappedRequest? {
     } else {
         null
     }
-    return TappedRequest(screen, form, target, inlineRequest)
+    return TappedRequest(screen, form, SaveFormFinder.find(screen.fields, form), target, inlineRequest)
 }
 
 /**

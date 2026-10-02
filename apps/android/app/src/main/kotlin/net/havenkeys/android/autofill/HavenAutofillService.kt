@@ -8,6 +8,8 @@ import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
 import android.service.autofill.SaveRequest
+import android.widget.Toast
+import androidx.annotation.StringRes
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +19,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.havenkeys.android.HavenApp
+import net.havenkeys.android.R
+import net.havenkeys.android.data.Outcome
+import uniffi.havenkeys_mobile.SaveLogin
+import uniffi.havenkeys_mobile.SaveResult
 import uniffi.havenkeys_mobile.TargetFacts
 
 /**
@@ -40,16 +46,19 @@ class HavenAutofillService : AutofillService() {
             val response = withContext(Dispatchers.Default) {
                 val screen = StructureParser().parse(structure)
                 val form = LoginFormFinder.find(screen.fields)
+                val save = SaveFormFinder.find(screen.fields, form)
                 // No activity component: nobody to check the caller against.
-                if (form == null || screen.packageName.isEmpty()) return@withContext null
+                if ((form == null && save == null) || screen.packageName.isEmpty()) return@withContext null
                 val target = TargetFacts(
                     screen.packageName,
                     CallerIdentity(packageManager).certDigests(screen.packageName),
-                    form.webDomain,
-                    form.webScheme,
+                    form?.webDomain ?: save?.webDomain,
+                    form?.webScheme ?: save?.webScheme,
                 )
-                val plan = FillPlanner.plan(form, target, container.events.unlocked.value, container.autofillRepository)
-                DatasetFactory(this@HavenAutofillService, screen, form, inlineRequest).response(plan)
+                val unlocked = container.events.unlocked.value
+                val repo = container.autofillRepository
+                val plan = FillPlanner.plan(form, target, unlocked, repo, saveable = save != null)
+                DatasetFactory(this@HavenAutofillService, screen, form, save, inlineRequest).response(plan)
             }
             answer(response)
         }
@@ -67,9 +76,38 @@ class HavenAutofillService : AutofillService() {
         }
     }
 
-    /** Saving logins comes in M2: no response asks for a save, so this is never expected. */
+    /**
+     * The user confirmed Android's save sheet. Values are read here, for the
+     * saved fields only, and go straight to Rust. Not app use: no `touch()`.
+     */
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
-        callback.onFailure(null)
+        val answered = AtomicBoolean(false)
+        fun answer(message: String?): Boolean {
+            if (!answered.compareAndSet(false, true)) return false
+            if (message == null) callback.onSuccess() else callback.onFailure(message)
+            return true
+        }
+        val structures = request.fillContexts.map { it.structure }
+        val work = scope.launch {
+            val outcome = withContext(Dispatchers.Default) {
+                val reader = SaveRequestReader(packageManager)
+                val login = SaveCollector.collect(reader.read(structures)) ?: return@withContext null
+                container.autofillRepository.save(
+                    login.target,
+                    SaveLogin(login.username, login.password, login.current, reader.appTitle(login.target.packageName)),
+                )
+            }
+            val message = saveMessage(outcome)?.let(::getString)
+            // Past the deadline Android no longer shows our answer: say it ourselves.
+            if (!answer(message) && message != null) {
+                Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+            }
+        }
+        val deadline = scope.launch {
+            delay(SAVE_BUDGET_MS)
+            answer(null)
+        }
+        work.invokeOnCompletion { deadline.cancel() }
     }
 
     override fun onDestroy() {
@@ -80,5 +118,17 @@ class HavenAutofillService : AutofillService() {
     private companion object {
         // Android waits about five seconds for a fill response.
         const val FILL_BUDGET_MS = 4_000L
+        const val SAVE_BUDGET_MS = 8_000L
+    }
+}
+
+/** Null when saved or already saved; otherwise the message Android shows. */
+@StringRes
+internal fun saveMessage(outcome: Outcome<SaveResult>?): Int? = when (outcome) {
+    null, is Outcome.Ok -> null
+    is Outcome.Failed -> when (outcome.code) {
+        "offline" -> R.string.autofill_save_offline
+        "locked" -> R.string.autofill_save_locked
+        else -> R.string.autofill_save_failed
     }
 }

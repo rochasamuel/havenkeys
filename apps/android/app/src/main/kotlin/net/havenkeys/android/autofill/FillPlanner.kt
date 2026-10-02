@@ -19,6 +19,8 @@ sealed interface FillPlan {
         val datasets: List<DatasetPlan>,
         val search: Boolean,
         val copies: List<AutofillMatch> = emptyList(),
+        /** Attach a SaveInfo: the screen has a login to save. */
+        val save: Boolean = false,
     ) : FillPlan
 }
 
@@ -42,12 +44,25 @@ object FillPlanner {
     /** Matches offered per request (the "Search HavenKeys…" entry comes on top). */
     const val MAX_DATASETS = 5
 
-    suspend fun plan(form: LoginForm, target: TargetFacts, unlocked: Boolean, repo: AutofillRepository): FillPlan {
+    /**
+     * [form] is null when the screen has nothing to fill (a sign-up form);
+     * [saveable] when it has something to save. Saving is offered only while
+     * unlocked.
+     */
+    suspend fun plan(
+        form: LoginForm?,
+        target: TargetFacts,
+        unlocked: Boolean,
+        repo: AutofillRepository,
+        saveable: Boolean = false,
+    ): FillPlan {
         val kind = repo.targetKind(target).valueOrNull()
         return when {
             kind == null -> FillPlan.Nothing
-            !unlocked -> FillPlan.UnlockFirst
-            else -> offer(form, target, kind, repo)
+            !unlocked -> if (form != null) FillPlan.UnlockFirst else FillPlan.Nothing
+            // Nothing to fill: no login is read at all.
+            form == null -> if (saveable) FillPlan.Offer(emptyList(), search = false, save = true) else FillPlan.Nothing
+            else -> offer(form, target, kind, repo, saveable)
         }
     }
 
@@ -56,14 +71,29 @@ object FillPlanner {
         target: TargetFacts,
         kind: TargetKind,
         repo: AutofillRepository,
+        saveable: Boolean,
     ): FillPlan {
         val matches = when (val found = repo.matches(target)) {
             is Outcome.Ok -> found.value
             // Rust applied an overdue auto-lock on this very request.
             is Outcome.Failed -> return if (found.code == "locked") FillPlan.UnlockFirst else FillPlan.Nothing
         }
+        val datasets = datasetsOf(matches, form, target, repo)
+        val search = kind == TargetKind.APP && form.hasLoginFields
+        // The code itself is asked of Rust only when a copy is tapped.
+        val copies = if (form.otpOnly) datasets.map { it.match } else emptyList()
+        val offered = datasets.isNotEmpty() || search || saveable
+        return if (offered) FillPlan.Offer(datasets, search, copies, save = saveable) else FillPlan.Nothing
+    }
+
+    private suspend fun datasetsOf(
+        matches: List<AutofillMatch>,
+        form: LoginForm,
+        target: TargetFacts,
+        repo: AutofillRepository,
+    ): List<DatasetPlan> {
         val direct = !repo.confirmBeforeFilling()
-        val datasets = matches
+        return matches
             .filter { !form.otpOnly || it.hasTotp }
             .take(MAX_DATASETS)
             .mapNotNull { match ->
@@ -73,10 +103,6 @@ object FillPlanner {
                     else -> repo.fill(match.id, target).valueOrNull()?.let { DatasetPlan(match, it, null) }
                 }
             }
-        val search = kind == TargetKind.APP && form.hasLoginFields
-        // The code itself is asked of Rust only when a copy is tapped.
-        val copies = if (form.otpOnly) datasets.map { it.match } else emptyList()
-        return if (datasets.isEmpty() && !search) FillPlan.Nothing else FillPlan.Offer(datasets, search, copies)
     }
 
     private fun <T> Outcome<T>.valueOrNull(): T? = (this as? Outcome.Ok)?.value

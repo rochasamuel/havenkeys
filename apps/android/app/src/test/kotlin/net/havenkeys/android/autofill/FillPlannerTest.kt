@@ -158,4 +158,41 @@ class FillPlannerTest {
         assertFalse(FillPlan.Offer(listOf(plan), search = false).toString().contains("hunter2"))
         assertEquals(plan, DatasetPlan(match, FillValues("octo", "hunter2"), "123456"))
     }
+
+    @Test
+    fun aLoginWithNoMatchStillOffersToSave() = runTest {
+        val repo = FakeAutofillRepository()
+        val plan = FillPlanner.plan(login, target, unlocked = true, repo, saveable = true) as FillPlan.Offer
+        assertTrue(plan.save)
+        assertTrue(plan.datasets.isEmpty())
+    }
+
+    @Test
+    fun aSignUpFormIsOfferedOnlyTheSaveAndReadsNoLogin() = runTest {
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match))
+            values = Outcome.Ok(FillValues("octo", "hunter2"))
+        }
+        val plan = FillPlanner.plan(null, target, unlocked = true, repo, saveable = true) as FillPlan.Offer
+        assertTrue(plan.save)
+        assertTrue(plan.datasets.isEmpty())
+        assertTrue(
+            "no login is read for a form with nothing to fill",
+            repo.calls.none { it.startsWith("fill:") || it == "matches" },
+        )
+    }
+
+    @Test
+    fun lockedOffersNoSave() = runTest {
+        val repo = FakeAutofillRepository()
+        assertEquals(FillPlan.UnlockFirst, FillPlanner.plan(login, target, unlocked = false, repo, saveable = true))
+        assertEquals(FillPlan.Nothing, FillPlanner.plan(null, target, unlocked = false, repo, saveable = true))
+    }
+
+    @Test
+    fun withoutAnythingToSaveNothingChanges() = runTest {
+        val repo = FakeAutofillRepository()
+        assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, repo))
+        assertEquals(FillPlan.Nothing, FillPlanner.plan(null, target, unlocked = true, repo))
+    }
 }

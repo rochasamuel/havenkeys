@@ -32,6 +32,27 @@ class StructureParser {
         )
     }
 
+    /**
+     * The typed text of the [wanted] fields only, for a save the user just
+     * confirmed. Bounded like [parse]; any other field's value is never read.
+     */
+    fun textOf(structure: AssistStructure, wanted: Set<AutofillId>): Map<AutofillId, String> {
+        if (wanted.isEmpty()) return emptyMap()
+        val roots = (0 until structure.windowNodeCount).map { structure.getWindowNodeAt(it).rootViewNode to Unit }
+        val found = cap(
+            roots = roots,
+            childCount = { it.childCount },
+            childAt = { node, i -> node.getChildAt(i) },
+            context = { _, parent -> parent },
+            accept = { it.autofillId in wanted },
+        )
+        return found.mapNotNull { (node, _) ->
+            val id = node.autofillId ?: return@mapNotNull null
+            val text = node.autofillValue?.takeIf { it.isText }?.textValue?.toString()?.take(MAX_VALUE)
+            text?.let { id to it }
+        }.toMap()
+    }
+
     /** What a node inherits: its frame's web domain and scheme, and whether an ancestor hides it. */
     private data class Frame(val domain: String?, val scheme: String?, val visible: Boolean)
 
@@ -77,6 +98,8 @@ class StructureParser {
         const val MAX_FIELDS = 500
         const val MAX_NODES = 20_000
         private const val MAX_TEXT = 200
+        // Rust validates the real limits.
+        private const val MAX_VALUE = 4_096
         private const val MAX_HINTS = 16
         private const val MAX_ATTRIBUTES_READ = 64
         private val HTML_ATTRIBUTES = setOf(
