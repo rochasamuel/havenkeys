@@ -43,8 +43,10 @@ Google Play, the in-app updater (§12.2 `github` flavor updater) and the
   `HAVENKEYS_KEY_PASSWORD`). With any one missing, the release build stays
   unsigned, as today. It never falls back to the debug key, and a missing
   key never fails a normal build.
-* The decision ("all four present → sign") is a small function with a JVM
-  unit test.
+* The decision ("all four present → sign") is checked by building twice
+  with a throwaway keystore: without the values the APK is
+  `…-release-unsigned.apk`; with them it is signed and `apksigner verify`
+  shows the throwaway certificate.
 
 ## 5. Release workflow
 
@@ -125,7 +127,8 @@ tag that does not match `versionName`.
 * Website (vitest): the Android release is found among desktop releases;
   drafts and untrusted URLs are rejected; no Android release gives null; the
   desktop lookup is unaffected.
-* Gradle (JVM): the signing decision.
+* Gradle: the two builds of §4 (unsigned without the values, signed with
+  them).
 * Workflow: first exercised by the first tag, which only makes a draft.
   The draft APK is then downloaded, checked with `apksigner` (certificate,
   not debuggable) and installed on the user's phone. The debug build must be
