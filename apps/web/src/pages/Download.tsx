@@ -98,8 +98,11 @@ export function Download() {
         <h2>{d.android.stepsTitle}</h2>
         <ol className="setup__steps">
           {d.android.steps.map((step) => (
-            <li key={step}>
-              <p>{step}</p>
+            <li key={step.title}>
+              <h3>{step.title}</h3>
+              <div>
+                <p>{step.body}</p>
+              </div>
             </li>
           ))}
         </ol>

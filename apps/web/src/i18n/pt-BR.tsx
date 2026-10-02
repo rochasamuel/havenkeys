@@ -508,10 +508,10 @@ export const ptBR: Messages = {
       comingSoon: "O app para Android ainda não foi lançado.",
       stepsTitle: "Instalando no Android",
       steps: [
-        "Baixe o APK e abra. O Android pede uma vez para permitir instalar apps pelo navegador.",
-        "Abra o HavenKeys e entre escaneando o seu Emergency Kit, ou com um convite.",
-        "Ative o preenchimento automático: no HavenKeys, Configurações → Configurar preenchimento automático.",
-        "No Chrome, abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”.",
+        { title: "Instale o APK", body: "Baixe e abra. O Android pede uma vez para permitir instalar apps pelo navegador." },
+        { title: "Entre", body: "Abra o HavenKeys e escaneie o seu Emergency Kit, ou use um convite." },
+        { title: "Ative o preenchimento automático", body: "No HavenKeys, abra Configurações → Configurar preenchimento automático." },
+        { title: "Use no Chrome", body: "Abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”." },
       ],
       browsers:
         "O preenchimento funciona em apps, no Chrome e no Firefox. O Samsung Internet só deixa preencher os gerenciadores de senhas da lista da própria Samsung, e o HavenKeys não está nela.",

@@ -497,10 +497,10 @@ export const en = {
       comingSoon: "The Android app isn’t released yet.",
       stepsTitle: "Installing on Android",
       steps: [
-        "Download the APK and open it. Android asks once to allow installing apps from your browser.",
-        "Open HavenKeys and sign in by scanning your Emergency Kit, or with an invite.",
-        "Turn on autofill: in HavenKeys, Settings → Autofill setup.",
-        "In Chrome, open Settings → Autofill services and choose “Autofill using another service”.",
+        { title: "Install the APK", body: "Download it and open it. Android asks once to allow installing apps from your browser." },
+        { title: "Sign in", body: "Open HavenKeys and scan your Emergency Kit, or use an invite." },
+        { title: "Turn on autofill", body: "In HavenKeys, open Settings → Autofill setup." },
+        { title: "Use it in Chrome", body: "Open Settings → Autofill services and choose “Autofill using another service”." },
       ],
       browsers:
         "Autofill works in apps, Chrome and Firefox. Samsung Internet only lets password managers on Samsung’s own list fill, and HavenKeys isn’t on it.",
