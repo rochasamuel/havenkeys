@@ -138,7 +138,10 @@ class ManifestTest {
     fun mainActivityKeepsItsScreenAcrossRotation() {
         val main = elements("activity").single { it.android("name") == ".MainActivity" }
         val handled = main.android("configChanges").split('|')
-        for (change in listOf("orientation", "screenSize", "screenLayout", "smallestScreenSize", "keyboardHidden")) {
+        val changes = listOf(
+            "orientation", "screenSize", "screenLayout", "smallestScreenSize", "keyboardHidden", "uiMode",
+        )
+        for (change in changes) {
             assertTrue("MainActivity must handle $change", change in handled)
         }
     }

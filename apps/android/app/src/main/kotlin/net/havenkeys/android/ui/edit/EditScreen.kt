@@ -106,7 +106,7 @@ fun EditScreen(
             if (!online) OfflineNote()
             state.errorCode?.let { ErrorLine(it) }
             if (editor != null && edit != null) {
-                EditFields(editor, edit, FieldValues(viewModel, loading))
+                NoPersonalizedLearning { EditFields(editor, edit, FieldValues(viewModel, loading)) }
             }
         }
     }
