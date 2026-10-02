@@ -6,7 +6,7 @@ import android.view.View
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
 import java.time.Instant
-import java.time.ZoneOffset
+import java.time.ZoneId
 
 /**
  * A screen's fillable fields; `ids[i]` is the AutofillId of `fields[i]`.
@@ -130,7 +130,7 @@ class StructureParser {
     private fun valueText(node: ViewNode, value: AutofillValue): String? = when {
         value.isText -> value.textValue.toString().take(MAX_VALUE)
         value.isList -> node.autofillOptions?.getOrNull(value.listValue)?.toString()?.take(MAX_TEXT)
-        value.isDate -> Instant.ofEpochMilli(value.dateValue).atZone(ZoneOffset.UTC).toLocalDate().toString()
+        value.isDate -> Instant.ofEpochMilli(value.dateValue).atZone(ZoneId.systemDefault()).toLocalDate().toString()
         else -> null
     }
 

@@ -40,18 +40,18 @@ object ValueShaper {
             ?.takeIf { role == IdentityRole.BIRTH_DATE }
             ?.let(IdentityShapes::dateOf)
         f.htmlAttributes["type"].equals("date", ignoreCase = true) ->
-            IdentityShapes.isoDate(value)?.let { Shaped.Text(value) }
+            IdentityShapes.isoDate(value)?.let { fit(f, value) }
         role == IdentityRole.BIRTH_DATE ->
-            IdentityShapes.birthDate(CardFormats.hintOf(f), value)?.let(Shaped::Text)
-        role == IdentityRole.PHONE -> IdentityShapes.phone(f, value)?.let(Shaped::Text)
+            IdentityShapes.birthDate(CardFormats.hintOf(f), value)?.let { fit(f, it) }
+        role == IdentityRole.PHONE -> IdentityShapes.phone(f, value)?.let { fit(f, it) }
         else -> fit(f, value)
     }
 
     private fun monthIn(f: FieldFacts, month: String): Shaped? =
-        if (f.isList) pick(OptionMatch.month(f.options, month)) else Shaped.Text(CardFormats.month(f, month))
+        if (f.isList) pick(OptionMatch.month(f.options, month)) else fit(f, CardFormats.month(f, month))
 
     private fun yearIn(f: FieldFacts, year: String): Shaped? =
-        if (f.isList) pick(OptionMatch.year(f.options, year)) else Shaped.Text(CardFormats.year(f, year))
+        if (f.isList) pick(OptionMatch.year(f.options, year)) else fit(f, CardFormats.year(f, year))
 
     private fun expiry(f: FieldFacts, month: String, year: String): Shaped? = if (f.isDate) {
         val m = month.toIntOrNull()
@@ -62,13 +62,13 @@ object ValueShaper {
             null
         }
     } else {
-        Shaped.Text(CardFormats.expiry(f, month, year))
+        fit(f, CardFormats.expiry(f, month, year))
     }
 
     private fun number(f: FieldFacts, slice: IntRange?, digits: String): Shaped? = when {
-        slice == null -> Shaped.Text(CardFormats.number(f, digits))
-        slice.first >= digits.length -> null
-        else -> Shaped.Text(digits.substring(slice.first, minOf(slice.last + 1, digits.length)))
+        slice == null -> fit(f, CardFormats.number(f, digits))
+        slice.last < slice.first || slice.first >= digits.length -> null
+        else -> fit(f, digits.substring(slice.first, minOf(slice.last + 1, digits.length)))
     }
 
     private fun roleOf(kind: CardKind): CardRole? = when (kind) {
@@ -79,6 +79,8 @@ object ValueShaper {
         else -> null
     }
 
+    /** The one guard every text value passes: a value longer than the field allows is left out, never cut.
+     */
     private fun fit(f: FieldFacts, value: String): Shaped? {
         val max = maxLengthOf(f)
         return Shaped.Text(value).takeIf { max < 0 || value.length <= max }

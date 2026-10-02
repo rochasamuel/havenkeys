@@ -1,6 +1,8 @@
 package net.havenkeys.android.autofill
 
 import android.text.InputType
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -61,9 +63,26 @@ class ValueShaperTest {
     }
 
     @Test
+    fun nothingIsEverCut() {
+        assertNull(card(field(maxTextLength = 12), CardKind.NUMBER))
+        assertNull(card(field(maxTextLength = 3), CardKind.EXPIRY))
+        assertNull(card(field(maxTextLength = 3), CardKind.NUMBER, slice = 4 until 8))
+        assertNull(card(field(maxTextLength = 1), CardKind.EXPIRY_YEAR))
+        assertNull(card(field(), CardKind.NUMBER, slice = IntRange(5, 4)))
+        assertNull(ValueShaper.identity(
+            field(html = mapOf("placeholder" to "dd/mm/aaaa"), maxTextLength = 8),
+            IdentityRole.BIRTH_DATE, "1990-03-12",
+        ))
+        assertNull(ValueShaper.identity(
+            field(html = mapOf("type" to "date"), maxTextLength = 8), IdentityRole.BIRTH_DATE, "1990-03-12",
+        ))
+    }
+
+    @Test
     fun aDatePickerGetsTheFirstDayOfTheMonth() {
-        // 2033-04-01T00:00Z
-        assertEquals(Shaped.Date(1_995_926_400_000), card(date(), CardKind.EXPIRY))
+        // Android's DatePicker reads the millis in the device's time zone: local midnight.
+        val local = LocalDate.of(2033, 4, 1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        assertEquals(Shaped.Date(local), card(date(), CardKind.EXPIRY))
     }
 
     @Test

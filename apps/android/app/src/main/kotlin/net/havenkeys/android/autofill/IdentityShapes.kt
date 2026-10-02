@@ -1,7 +1,7 @@
 package net.havenkeys.android.autofill
 
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 
 /** identity-fill.ts's text shapes for dates and phone numbers. */
 internal object IdentityShapes {
@@ -24,7 +24,7 @@ internal object IdentityShapes {
     fun isoDate(value: String): LocalDate? =
         if (ISO_DATE.matches(value)) runCatching { LocalDate.parse(value) }.getOrNull() else null
 
-    fun dateOf(day: LocalDate) = Shaped.Date(day.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+    fun dateOf(day: LocalDate) = Shaped.Date(day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
 
     private val ISO_DATE = Regex("\\d{4}-\\d{2}-\\d{2}")
     private val BRAZIL_PREFIX = Regex("^\\+55\\s*")
