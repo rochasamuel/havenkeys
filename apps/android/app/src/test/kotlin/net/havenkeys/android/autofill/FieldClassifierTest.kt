@@ -113,4 +113,11 @@ class FieldClassifierTest {
         assertEquals(FieldRole.UNKNOWN, role(list(listOf("a", "b"), id = "username")))
         assertEquals(FieldRole.UNKNOWN, role(date(hints = listOf("username"))))
     }
+
+    @Test
+    fun aCardFieldIsNeverALoginField() {
+        assertEquals(FieldRole.UNKNOWN, role(field(hints = listOf("creditCardNumber"))))
+        assertEquals(FieldRole.UNKNOWN, role(field(hint = "Número do cartão")))
+        assertEquals(FieldRole.UNKNOWN, role(field(id = "cvv", inputType = password)))
+    }
 }

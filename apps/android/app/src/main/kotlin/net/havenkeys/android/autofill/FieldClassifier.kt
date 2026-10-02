@@ -17,7 +17,7 @@ object FieldClassifier {
     private val UNKNOWN = Classification(FieldRole.UNKNOWN, 0)
 
     fun classify(f: FieldFacts): Classification {
-        if (!f.visible || !f.enabled || !isTextInput(f)) return UNKNOWN
+        if (!isLoginCandidate(f)) return UNKNOWN
         val s = Signals(f)
         val candidates = listOf(
             Triple(passwordRole(s), passwordScore(s), PASSWORD_THRESHOLD),
@@ -245,3 +245,7 @@ private const val OTP_LENGTH = 15
 private const val OTP_NUMERIC = 10
 private const val OTP_MIN_LENGTH = 4
 private const val OTP_MAX_LENGTH = 8
+
+/** A visible, enabled text input that is not a card field: a card field only ever gets cards. */
+private fun isLoginCandidate(f: FieldFacts): Boolean =
+    f.visible && f.enabled && FieldClassifier.isTextInput(f) && CardFieldClassifier.kindOf(f, strong = false) == null
