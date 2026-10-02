@@ -2802,11 +2802,17 @@ frames, and the identity's non-document values. **Scenario:** any app or
 https page that shows a card form gets rows for the user's cards.
 **Mitigation:** the values go to Android's autofill framework (part of the
 OS, already trusted with every keystroke), which hands the app only the
-row the user taps — the same exposure as the extension's pick. Rust
-refuses http pages and cross-site frames. **Remaining:** the framework holds
-up to 5 cards' values for the life of the fill session; turn on "Confirm
-before filling" to keep them out of it. The user decided this at planning
-(CLAUDE.md amendment of 2026-10-02).
+row the user taps. This is more exposure than the extension's pick, not
+the same: the extension asks for a card's values only after the user
+picks it, while here up to 5 cards' values sit in the framework before
+any tap. Rust refuses http pages and cross-site frames. **Remaining:** the
+framework holds up to 5 cards' values for the life of the fill session;
+turn on "Confirm before filling" to keep them out of it. The user decided
+this at planning (CLAUDE.md amendment of 2026-10-02). In Kotlin, the
+UniFFI-generated data classes `CardValue`, `IdentityValue` and `SaveCard`
+(like M1's `FillValues`) print their values in the generated `toString()`:
+they must never be logged or interpolated into a string, and pass from the
+repository straight into datasets.
 
 ### AN46. Gated card and identity rows confirm in HavenKeys (Info, mitigated)
 **Component:** `AutofillAuthActivity`, `WalletConfirmation`,
@@ -2839,8 +2845,14 @@ service.
 after the user confirmed Android's save sheet; the number reaches Rust then.
 A number already saved is `Unchanged`; a new card needs the server. A card
 typed into a payment processor's iframe is not saved (the extension's
-limitation too), and Android shows its sheet only when a value changed from
-what was filled.
+limitation too). We expect Android to show its sheet only when a value
+changed from what was filled; this is to be verified on a device (AN50).
+**Remaining:** Android keeps the `SaveInfo` and client state of the
+session's last fill response only, so moving from the card form to an
+address field after typing a card (a new response, for the identity) can
+lose the card's save sheet. A save sheet attached to a payment processor's
+frame ends in "HavenKeys could not save this card.", because Rust refuses
+saves from processor frames.
 
 ### AN50. M4 has not run on a device (Info, open)
 Card and identity classification, shaping, planning and saving are
@@ -2879,6 +2891,7 @@ None of these has been run; the same list is in `docs/android.md`.
 - [ ] An address form: the identity fills names, address and phone; a CPF field: "Fill CPF too" asks first; on http no document row.
 - [ ] Type a new card and submit: Android's save sheet; saved; type it again: nothing new.
 - [ ] Offline: saving a new card says the card was not saved.
+- [ ] Cards fill in both Chrome and Firefox (each browser's first field may be its own address bar; the page's site must still be read from the first field inside the page).
 - [ ] TalkBack reads the card rows; dark theme.
 
 ### Verification (2026-10-02, tip of `android-m3` plus this documentation)
@@ -2892,3 +2905,21 @@ None of these has been run; the same list is in `docs/android.md`.
 | `cargo audit` | No vulnerabilities; the same 3 allowed warnings |
 | `scripts/build-android.sh`, then `git diff --exit-code apps/android/app/src/main/kotlin/uniffi` | Built; no diff (bindings current) |
 | `./gradlew :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest :app:detekt :app:lintGithubDebug :app:assembleGithubRelease` | BUILD SUCCESSFUL; 230 JVM unit tests per flavor, 0 failed |
+
+### Verification (2026-10-02, Android M4)
+
+Nothing below ran on a phone or an emulator (AN50).
+
+| Command | Result |
+|---|---|
+| Branch review at `cf7eda9`: `cargo test --workspace`; `cargo clippy --workspace --all-targets -- -D warnings` | 922 passed, 0 failed; clippy clean |
+| Branch review at `cf7eda9`: `cargo test -p havenkeys-mobile --features testing --test regressions`; `--features server-tests,testing --test round_trip` (Postgres on port 5433) | 15 passed; round trip 1 passed |
+| Branch review at `cf7eda9`: `scripts/build-android.sh`, then `git diff --exit-code apps/android/app/src/main/kotlin/uniffi` | No diff (bindings current) |
+| Branch review at `cf7eda9`: `./gradlew :app:testGithubDebugUnitTest :app:detekt :app:forbidLogging :app:lintGithubDebug :app:assembleGithubRelease` | BUILD SUCCESSFUL; 311 JVM unit tests, 0 failed |
+| Final fixes: `cargo fmt --all -- --check` | Clean |
+| Final fixes: `cargo test --workspace`; `cargo clippy --workspace --all-targets -- -D warnings` | 922 passed, 0 failed; clippy clean |
+| Final fixes: `regressions`; `round_trip` (Postgres on port 5433) | 15 passed; 1 passed |
+| Final fixes: `scripts/build-android.sh`, then `git diff --exit-code apps/android/app/src/main/kotlin/uniffi` | No diff (bindings current) |
+| Final fixes: `./gradlew :app:testGithubDebugUnitTest`, three runs | 315 JVM unit tests, 0 failed, each run |
+| Final fixes: `./gradlew :app:detekt :app:forbidLogging :app:lintGithubDebug :app:assembleGithubDebug` | BUILD SUCCESSFUL |
+| Final fixes: `LoginFormFinderTest.thousandsOfInputsStayFast` with all 16 cores busy, 8 runs each (best of 5, ms) | Before: 47 22 45 53 43 46 31 41; after normalizing each field once: 20 31 33 35 27 29 31 30 |

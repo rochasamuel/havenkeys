@@ -1104,7 +1104,9 @@ device forgets it and deletes its Keystore key.
 
 ### 22.4 Direct fill and "Confirm before filling"
 
-This is the one documented relaxation of CLAUDE.md §33.
+This is one of the two documented relaxations of CLAUDE.md §33: this one
+for logins, the other for cards and the identity (§22.4a, CLAUDE.md
+amendment of 2026-10-02).
 
 * **Direct fill** (default; "Confirm before filling" off) while unlocked:
   the fill response carries one dataset per login Rust matched to the
@@ -1142,9 +1144,11 @@ Android Autofill also fills cards and the identity (`WalletPlanner`,
 `WalletDatasets`, `FormRouter`). Nothing here has run on a phone yet
 (`security-review.md` AN50).
 
-* **What Rust decides** (`autofill_wallet_*`, the same rules as the
-  extension's card and identity fills). Cards are offered only to https
-  browser pages and to apps; never on http. A frame is allowed only if it is
+* **What Rust decides** (`autofill_cards`, `autofill_card_values`,
+  `autofill_identity`, `autofill_identity_values`, `autofill_save_card`;
+  the same rules as the extension's card and identity fills). Cards are
+  offered only to https browser pages and to apps; never to an http page in
+  a browser (an app, its WebView included, gets them whatever it shows). A frame is allowed only if it is
   the tab's own site or a card frame of a payment processor on Rust's fixed
   list; any other frame is left out, and a refused focused frame gets
   nothing. Rust is told which roles the form asks for and returns only
@@ -1174,6 +1178,12 @@ Android Autofill also fills cards and the identity (`WalletPlanner`,
   processor frame (AN49).
 * **Limits.** Frames depend on what the browser reports (AN47); emptiness is
   read from the structure and only a boolean is kept (AN48).
+* **Generated records print their values.** The UniFFI-generated Kotlin
+  data classes `CardValue`, `IdentityValue` and `SaveCard` (like M1's
+  `FillValues`) carry the number, code, document numbers and other values,
+  and their generated `toString()` prints them. They must never be logged,
+  interpolated into a string, or passed to anything that may print them;
+  they go from the repository straight into datasets (AN45).
 
 ### 22.5 Fill targets: browsers and apps
 

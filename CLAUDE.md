@@ -47,7 +47,8 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > "Confirm before filling" restores per-fill authorization.
 
 > Amended on 2026-10-02 by
-> `docs/superpowers/plans/2026-10-02-android-m4.md`: Android direct fill
+> `docs/superpowers/specs/2026-10-01-android-app-design.md` §7.6
+> "Revisions from planning (M4)": Android direct fill
 > also covers cards and the identity. While unlocked, the values of up to 5
 > cards and the identity's non-document values for the requesting form may
 > go to the operating system's autofill framework, which hands the app only

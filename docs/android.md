@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Security:
 
 > This software has not undergone an independent security audit.
 
-**Status: Android M3.** Sign in with the Emergency Kit (QR code or typed) or
+**Status: Android M4.** Sign in with the Emergency Kit (QR code or typed) or
 an invite; unlock with the master password or, once turned on, a fingerprint
 or face; browse, search, reveal, copy and read TOTP codes offline; generate
 passwords; fill logins and TOTP codes in apps and browsers through Android
@@ -18,9 +18,9 @@ concurrent edit shows "This item changed on another device." It also adds
 saving from Autofill: after you confirm Android's save sheet, a login typed
 into a browser is saved for that site, and one typed into an app is bound to
 that app (`security-model.md` §22.16, §22.17). Android M3 adds passkeys
-(below). Not yet: editing custom fields (kept as they are), scanning a TOTP
-QR code (type or paste the key), saving a login typed while locked, cards and
-identities in Autofill, and an in-app updater.
+and Android M4 cards and the identity in Autofill (below). Not yet: editing
+custom fields (kept as they are), scanning a TOTP QR code (type or paste the
+key), saving a login typed while locked, and an in-app updater.
 
 **Nothing in `apps/android` has run on a phone or an emulator yet.** It
 compiles, its JVM unit tests pass, and the Rust it calls is tested on the
@@ -65,9 +65,12 @@ Manager, on **Android 14 or later** (the app itself still runs from Android
 Autofill also fills payment cards and your identity (name, address, phone,
 email, dates, document numbers). Security: `security-model.md` §22.4a.
 
-* **Where:** cards on https pages in browsers and in apps, never on http;
-  the identity on any page or app. Document numbers (for example CPF) need a
-  separate confirmation and never appear on http.
+* **Where:** cards on https pages in browsers and in apps, never on an http
+  page in a browser. An app is not a page: an app (its WebView included, and
+  a browser that is not on the privileged list, which is treated as an app)
+  gets cards whatever the scheme of what it shows (spec §7.6 revision 7).
+  The identity goes to any page or app. Document numbers (for example CPF)
+  need a separate confirmation and never appear on an http page.
 * **Direct and gated rows:** while unlocked with "Confirm before filling"
   off, up to 5 card rows (for example `•••• 1111 · 04/33`) and the identity
   row fill with one tap. Document numbers, "Confirm before filling" on, and
@@ -80,8 +83,9 @@ email, dates, document numbers). Security: `security-model.md` §22.4a.
   nothing is submitted. A list counts as empty when nothing or its first
   option is chosen. A card brand goes only into a list.
 * **Lists and dates:** month and year lists are matched by their option
-  text or value; date pickers get local midnight in the device's time zone.
-  A value that does not fit a field's maximum length is left out, never cut.
+  labels (the only option text Kotlin sees); date pickers get local
+  midnight in the device's time zone. A value that does not fit a field's
+  maximum length is left out, never cut.
   A login field guess never takes a card field, and a sign-up routed to the
   identity keeps its "Save password?" sheet when there is no identity row.
 * **Saving a card:** type a new card and submit; after you confirm Android's
@@ -333,6 +337,7 @@ Editing and saving (Android M2; the same list is in `security-review.md`):
 - [ ] An address form: the identity fills names, address and phone; a CPF field: "Fill CPF too" asks first; on http no document row.
 - [ ] Type a new card and submit: Android's save sheet; saved; type it again: nothing new.
 - [ ] Offline: saving a new card says the card was not saved.
+- [ ] Cards fill in both Chrome and Firefox (each browser's first field may be its own address bar; the page's site must still be read from the first field inside the page).
 - [ ] TalkBack reads the card rows; dark theme.
 
 Passkeys (Android M3; the same list is in `security-review.md`): see "Android

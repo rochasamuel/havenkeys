@@ -25,7 +25,7 @@ changes need the server.
 | Account server (`havenkeys-server`) | Implemented and tested against Postgres; deployed ([docs/deployment.md](docs/deployment.md)). The backup restore drill (§5) and real cross-device use are not yet done — see [docs/roadmap.md](docs/roadmap.md) §3 |
 | Marketing/download website (havenkeys.net) | Implemented; static site on Vercel, download page reads GitHub Releases ([docs/website.md](docs/website.md)) |
 | Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
-| Android app | **Status: early release (Android M1).** Unit-tested and tried on one phone (Galaxy S24+, Android 16); the instrumented test suite has not run yet ([docs/android.md](docs/android.md), manual checklist in [docs/security-review.md](docs/security-review.md), Android M1) |
+| Android app | **Status: early release (Android M4).** M1 (sign-in, unlock, browsing, login autofill) is unit-tested and was tried on one phone (Galaxy S24+, Android 16); M2 (editing, saving from Autofill), M3 (passkeys) and M4 (cards and identity in Autofill) are unit-tested but have not run on a device, and the instrumented test suite has not run yet ([docs/android.md](docs/android.md), manual checklists in [docs/security-review.md](docs/security-review.md), Android M1–M4) |
 
 What the desktop app does today:
 
@@ -117,7 +117,12 @@ What the Android app does (early release; tried on one phone, the instrumented t
 * Cards and your identity in Autofill, and saving a typed card
 * No screenshots of HavenKeys, no backups of its data, English and Brazilian
   Portuguese
-* Creating and editing items, saving from Autofill, and passkeys come later
+* Creating, editing and deleting logins, secure notes and cards, and editing
+  the identity (needs the server); saving a login typed into a browser or an
+  app after you confirm Android's save sheet
+* Passkeys through Credential Manager (Android 14+)
+* Not yet: editing custom fields, scanning a TOTP QR code, saving a login
+  typed while locked, an in-app updater
 
 Setting up the first computer needs an invite from whoever runs the server
 (`havenkeys-server admin new-account`); see
