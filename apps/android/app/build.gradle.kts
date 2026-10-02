@@ -4,6 +4,17 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
+// Release signing comes only from the environment (the release workflow's
+// secrets, or a local export). Without all four values the release build
+// stays unsigned; it is never signed with the debug key.
+val releaseSigning: Map<String, String>? = listOf(
+    "HAVENKEYS_KEYSTORE_FILE",
+    "HAVENKEYS_KEYSTORE_PASSWORD",
+    "HAVENKEYS_KEY_ALIAS",
+    "HAVENKEYS_KEY_PASSWORD",
+).associateWith { providers.environmentVariable(it).orNull.orEmpty() }
+    .takeIf { values -> values.values.all { it.isNotEmpty() } }
+
 android {
     namespace = "net.havenkeys.android"
     compileSdk = 36
@@ -25,8 +36,20 @@ android {
         create("play") { dimension = "distribution" }
     }
 
+    signingConfigs {
+        if (releaseSigning != null) {
+            create("release") {
+                storeFile = file(releaseSigning.getValue("HAVENKEYS_KEYSTORE_FILE"))
+                storePassword = releaseSigning.getValue("HAVENKEYS_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigning.getValue("HAVENKEYS_KEY_ALIAS")
+                keyPassword = releaseSigning.getValue("HAVENKEYS_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

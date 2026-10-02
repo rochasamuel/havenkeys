@@ -253,8 +253,8 @@ pnpm ui:check --app=desktop   # one app: extension | desktop
 
 ## Releases and updates
 
-This section is about the desktop app. Android releases, and the custody of
-their signing key, are in `docs/android.md`.
+This section is about the desktop app. Android releases are signed with a key
+kept outside the repository; see `docs/android.md` → Release key custody.
 
 See `docs/superpowers/specs/2026-09-27-desktop-auto-update-design.md` for the
 full design and `docs/security-model.md` §18 / `docs/threat-model.md` T10 for
