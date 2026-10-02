@@ -192,7 +192,7 @@ pub enum SaveAction {
 /// A login keeping `existing`'s title, username and websites, every secret
 /// left as it is and no "Sign in with". Callers set what their save
 /// changes, and "Sign in with" always.
-fn login_input_from(existing: &ItemOverview) -> ItemInput {
+pub(crate) fn login_input_from(existing: &ItemOverview) -> ItemInput {
     ItemInput {
         username: existing.username.clone(),
         urls: existing.urls.clone(),
@@ -1469,15 +1469,27 @@ impl VaultService {
         password: &SecretString,
         current: Option<&SecretString>,
     ) -> Result<SaveAction> {
+        let candidates = self.find_matches(page_url, top_url)?;
+        self.save_action(&candidates, username, password, current)
+    }
+
+    /// The decision [`check_login`](Self::check_login) describes, over the
+    /// logins saved for the place the form was submitted in.
+    pub(crate) fn save_action(
+        &self,
+        candidates: &[Suggestion],
+        username: Option<&str>,
+        password: &SecretString,
+        current: Option<&SecretString>,
+    ) -> Result<SaveAction> {
         if password.is_empty() {
             return Err(Error::InvalidInput("password is required"));
         }
         let current = current.filter(|c| !c.is_empty());
         let wanted = normalize_username(username);
-        let candidates = self.find_matches(page_url, top_url)?;
         let mut update = None;
         let mut by_current = Vec::new();
-        for c in &candidates {
+        for c in candidates {
             let same_user = normalize_username(c.username.as_deref()) == wanted;
             // A password-only form (no username captured) is "unchanged" if
             // it matches any login for the page.

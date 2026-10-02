@@ -6,10 +6,17 @@
 
 use crate::app_target::{AppIdentity, CERT_LEN};
 use crate::error::{Error, Result};
-use crate::model::{AppBinding, ItemDetails, ItemOverview, ItemType, MAX_APP_BINDINGS};
+use crate::model::{
+    clean_title, AppBinding, ItemDetails, ItemInput, ItemOverview, ItemType, SecretUpdate,
+    MAX_APP_BINDINGS,
+};
 use crate::origin::{match_item, MatchStrength, PageUrl};
 use crate::totp::TotpCode;
-use crate::vault::{FillCredentials, StagedWrite, Suggestion, VaultService};
+use crate::vault::{
+    build_item, login_input_from, FillCredentials, SaveAction, SaveTarget, StagedSave, StagedWrite,
+    Suggestion, VaultService,
+};
+use crate::SecretString;
 use data_encoding::HEXLOWER_PERMISSIVE;
 use std::collections::BTreeSet;
 use uuid::Uuid;
@@ -31,6 +38,18 @@ fn binding_cert(b: &AppBinding) -> Option<[u8; CERT_LEN]> {
         .decode(b.cert_sha256.as_bytes())
         .ok()
         .and_then(|v| <[u8; CERT_LEN]>::try_from(v.as_slice()).ok())
+}
+
+/// One binding per signing certificate, so a multi-signer app matches with
+/// any of them.
+fn bindings_for(app: &AppIdentity) -> Vec<AppBinding> {
+    app.certs()
+        .iter()
+        .map(|cert| AppBinding {
+            package: app.package().to_owned(),
+            cert_sha256: data_encoding::HEXLOWER.encode(cert),
+        })
+        .collect()
 }
 
 impl VaultService {
@@ -135,11 +154,7 @@ impl VaultService {
         let ItemDetails::Login { app_bindings, .. } = &mut details else {
             return Err(Error::Corrupted);
         };
-        for cert in app.certs() {
-            let binding = AppBinding {
-                package: app.package().to_owned(),
-                cert_sha256: data_encoding::HEXLOWER.encode(cert),
-            };
+        for binding in bindings_for(app) {
             if !app_bindings.contains(&binding) {
                 app_bindings.push(binding);
             }
@@ -151,6 +166,76 @@ impl VaultService {
         overview.updated_at = now_ms;
         let base = self.store.item_revision(id)?;
         self.stage(overview, Some(&details), base)
+    }
+
+    /// What saving a login the user just submitted in `app` would do: the
+    /// rules of [`check_login`](VaultService::check_login), over the logins
+    /// this app is matched to (bound to it, or vouched for by their site).
+    pub fn check_login_for_app(
+        &self,
+        app: &AppIdentity,
+        verified_hosts: &[String],
+        username: Option<&str>,
+        password: &SecretString,
+        current: Option<&SecretString>,
+    ) -> Result<SaveAction> {
+        let candidates = self.matches_for_app(app, verified_hosts)?;
+        self.save_action(&candidates, username, password, current)
+    }
+
+    /// Seal a login submitted in `app`, ready to send. A new login is bound
+    /// to the app and has no website: an app cannot vouch for a site. An
+    /// update must name a login already matched to this app, and changes
+    /// only its password. Nothing is written here.
+    pub fn stage_save_login_for_app(
+        &self,
+        app: &AppIdentity,
+        verified_hosts: &[String],
+        username: Option<&str>,
+        password: SecretString,
+        target: SaveTarget<'_>,
+        now_ms: i64,
+    ) -> Result<StagedSave> {
+        if password.is_empty() {
+            return Err(Error::InvalidInput("password is required"));
+        }
+        self.session()?;
+        let title = match target {
+            SaveTarget::New { title } => title,
+            SaveTarget::Update(id) => {
+                let existing = self.authorize_for_app(id, app, verified_hosts)?;
+                let input = ItemInput {
+                    password: SecretUpdate::Set(password),
+                    sign_in_with: existing.sign_in_with.clone(),
+                    ..login_input_from(existing)
+                };
+                return Ok(StagedSave {
+                    item_id: *id,
+                    write: self.stage_update(id, input, now_ms)?,
+                });
+            }
+        };
+        let title = match title.map(str::trim).filter(|t| !t.is_empty()) {
+            Some(t) => clean_title(t)?,
+            None => app.package().to_owned(),
+        };
+        let id = Uuid::new_v4();
+        let input = ItemInput {
+            username: username.map(str::to_owned),
+            password: SecretUpdate::Set(password),
+            ..ItemInput::blank(ItemType::Login, title)
+        };
+        let (overview, mut details) = build_item(id, input, None, now_ms, now_ms)?;
+        if let ItemDetails::Login { app_bindings, .. } = &mut details {
+            *app_bindings = bindings_for(app);
+            if app_bindings.len() > MAX_APP_BINDINGS {
+                return Err(Error::InvalidInput("too many apps for this login"));
+            }
+        }
+        Ok(StagedSave {
+            item_id: id,
+            write: self.stage(overview, Some(&details), None)?,
+        })
     }
 
     /// Every login whose title, username or website contains `query`, for
@@ -374,5 +459,205 @@ mod tests {
         let found = v.search_logins("hub").unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].title, "GitHub");
+    }
+
+    use crate::vault::{SaveAction, SaveTarget};
+
+    fn save_new(
+        v: &mut VaultService,
+        app: &AppIdentity,
+        title: Option<&str>,
+        user: &str,
+        pw: &str,
+    ) -> Uuid {
+        let staged = v
+            .stage_save_login_for_app(
+                app,
+                &[],
+                Some(user),
+                SecretString::from(pw),
+                SaveTarget::New { title },
+                NOW,
+            )
+            .unwrap();
+        let id = staged.item_id;
+        v.commit_write(staged.write, 3).unwrap();
+        id
+    }
+
+    #[test]
+    fn a_login_saved_from_an_app_is_bound_to_it_and_has_no_website() {
+        let mut v = unlocked_vault();
+        let pw = SecretString::from("s3cret-pass");
+        assert_eq!(
+            v.check_login_for_app(&github_app(1), &[], Some("octo"), &pw, None)
+                .unwrap(),
+            SaveAction::Add
+        );
+        let id = save_new(
+            &mut v,
+            &github_app(1),
+            Some("GitHub"),
+            "octo",
+            "s3cret-pass",
+        );
+        let o = v.get_item(&id).unwrap();
+        assert_eq!(o.title, "GitHub");
+        assert_eq!(o.username.as_deref(), Some("octo"));
+        assert!(o.urls.is_empty());
+        let m = v.matches_for_app(&github_app(1), &[]).unwrap();
+        assert_eq!(m.len(), 1);
+        assert_eq!(
+            v.fill_for_app(&id, &github_app(1), &[])
+                .unwrap()
+                .password
+                .unwrap()
+                .expose(),
+            "s3cret-pass"
+        );
+        assert!(v.matches_for_app(&github_app(2), &[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_untitled_app_login_is_named_after_its_package() {
+        let mut v = unlocked_vault();
+        let id = save_new(&mut v, &github_app(1), None, "octo", "s3cret-pass");
+        assert_eq!(v.get_item(&id).unwrap().title, "com.github.android");
+        let id = save_new(&mut v, &github_app(1), Some("   "), "ana", "s3cret-pass");
+        assert_eq!(v.get_item(&id).unwrap().title, "com.github.android");
+    }
+
+    #[test]
+    fn a_new_password_in_a_bound_app_updates_only_that_password() {
+        let mut v = unlocked_vault();
+        let id = add_login(&mut v, "GitHub", "https://github.com");
+        bind(&mut v, &id, &github_app(1));
+        let new = SecretString::from("brand-new-pass");
+        assert_eq!(
+            v.check_login_for_app(&github_app(1), &[], Some(" OCTO "), &new, None)
+                .unwrap(),
+            SaveAction::Update(id)
+        );
+        let staged = v
+            .stage_save_login_for_app(
+                &github_app(1),
+                &[],
+                Some("octo"),
+                new,
+                SaveTarget::Update(&id),
+                NOW,
+            )
+            .unwrap();
+        v.commit_write(staged.write, 4).unwrap();
+        let o = v.get_item(&id).unwrap();
+        assert_eq!(o.title, "GitHub");
+        assert_eq!(o.urls.len(), 1);
+        assert!(o.has_totp);
+        assert_eq!(
+            v.fill_for_app(&id, &github_app(1), &[])
+                .unwrap()
+                .password
+                .unwrap()
+                .expose(),
+            "brand-new-pass"
+        );
+        // Still bound: the update did not drop the app.
+        assert_eq!(v.matches_for_app(&github_app(1), &[]).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_same_password_is_unchanged() {
+        let mut v = unlocked_vault();
+        let id = add_login(&mut v, "GitHub", "https://github.com");
+        bind(&mut v, &id, &github_app(1));
+        let same = SecretString::from("hunter2hunter2");
+        assert_eq!(
+            v.check_login_for_app(&github_app(1), &[], Some("octo"), &same, None)
+                .unwrap(),
+            SaveAction::Unchanged
+        );
+    }
+
+    #[test]
+    fn an_impostor_app_never_updates_a_bound_login() {
+        let mut v = unlocked_vault();
+        let id = add_login(&mut v, "GitHub", "https://github.com");
+        bind(&mut v, &id, &github_app(1));
+        let pw = SecretString::from("stolen-or-not");
+        assert_eq!(
+            v.check_login_for_app(&github_app(2), &[], Some("octo"), &pw, None)
+                .unwrap(),
+            SaveAction::Add
+        );
+        assert_eq!(
+            v.stage_save_login_for_app(
+                &github_app(2),
+                &[],
+                Some("octo"),
+                pw,
+                SaveTarget::Update(&id),
+                NOW
+            )
+            .err(),
+            Some(Error::Denied)
+        );
+    }
+
+    #[test]
+    fn a_site_that_vouches_for_the_app_lets_it_update_that_sites_login() {
+        let mut v = unlocked_vault();
+        let id = add_login(&mut v, "GitHub", "https://github.com");
+        let hosts = vec!["github.com".to_owned()];
+        let new = SecretString::from("brand-new-pass");
+        assert_eq!(
+            v.check_login_for_app(&github_app(1), &hosts, Some("octo"), &new, None)
+                .unwrap(),
+            SaveAction::Update(id)
+        );
+        assert_eq!(
+            v.check_login_for_app(&github_app(1), &[], Some("octo"), &new, None)
+                .unwrap(),
+            SaveAction::Add
+        );
+    }
+
+    #[test]
+    fn an_empty_password_or_a_locked_vault_saves_nothing() {
+        let mut v = unlocked_vault();
+        assert!(matches!(
+            v.stage_save_login_for_app(
+                &github_app(1),
+                &[],
+                Some("octo"),
+                SecretString::from(""),
+                SaveTarget::New { title: None },
+                NOW
+            ),
+            Err(Error::InvalidInput(_))
+        ));
+        let _ = v.lock();
+        assert_eq!(
+            v.check_login_for_app(
+                &github_app(1),
+                &[],
+                Some("octo"),
+                &SecretString::from("x-password"),
+                None
+            )
+            .err(),
+            Some(Error::Locked)
+        );
+        assert_eq!(
+            v.stage_save_login_for_app(
+                &github_app(1),
+                &[],
+                Some("octo"),
+                SecretString::from("x-password"),
+                SaveTarget::New { title: None },
+                NOW
+            )
+            .err(),
+            Some(Error::Locked)
+        );
     }
 }
