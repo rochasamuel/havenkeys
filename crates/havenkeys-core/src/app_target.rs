@@ -196,6 +196,12 @@ pub fn is_privileged_browser(package: &str, cert: &[u8; CERT_LEN]) -> bool {
     browsers().iter().any(|(p, c)| p == package && c == cert)
 }
 
+/// The vendored list, for Android's `CallingAppInfo.getOrigin`. Rust checks
+/// the caller against the same list again; Android's check is not relied on.
+pub fn privileged_browsers_json() -> &'static str {
+    BROWSERS_JSON
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,5 +376,11 @@ mod tests {
         assert!(parse_fingerprint(&CHROME_RELEASE.replace(':', "")).is_none());
         assert!(parse_fingerprint(&CHROME_RELEASE[3..]).is_none());
         assert!(parse_fingerprint("ZZ").is_none());
+    }
+
+    #[test]
+    fn the_allowlist_handed_to_android_is_the_vendored_list() {
+        let json: serde_json::Value = serde_json::from_str(privileged_browsers_json()).unwrap();
+        assert!(json["apps"].as_array().unwrap().len() > 20);
     }
 }

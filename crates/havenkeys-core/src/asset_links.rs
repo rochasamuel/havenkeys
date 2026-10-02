@@ -4,7 +4,7 @@
 //! has no network). Every input is untrusted: a site's file is parsed
 //! statement by statement, and one bad statement voids only itself.
 
-use crate::app_target::{parse_fingerprint, valid_package, AppIdentity};
+use crate::app_target::{parse_fingerprint, valid_package, AppIdentity, CERT_LEN};
 use crate::error::{Error, Result};
 use crate::origin::registrable_domain_of;
 use data_encoding::HEXLOWER;
@@ -22,6 +22,8 @@ const LOGIN_RELATIONS: [&str; 2] = [
     "delegate_permission/common.get_login_creds",
 ];
 
+const GET_LOGIN_CREDS: &str = "delegate_permission/common.get_login_creds";
+
 /// Labels too common in package names to say anything about the site.
 const GENERIC_LABELS: [&str; 14] = [
     "com", "org", "net", "app", "apps", "android", "mobile", "client", "www", "beta", "debug",
@@ -33,6 +35,10 @@ pub struct AppStatement {
     pub package: String,
     /// SHA-256 certificate digests, lowercase hex.
     pub certs: Vec<String>,
+    /// The statement grants `common.get_login_creds`, which passkeys need
+    /// (spec §8.1); `handle_all_urls` alone is enough for filling only.
+    #[serde(default)]
+    pub login_creds: bool,
 }
 
 #[derive(Deserialize)]
@@ -73,6 +79,7 @@ pub fn parse(body: &[u8]) -> Result<Vec<AppStatement>> {
         {
             continue;
         }
+        let login_creds = s.relation.iter().any(|r| r == GET_LOGIN_CREDS);
         let Some(package) = s.target.package_name.filter(|p| valid_package(p)) else {
             continue;
         };
@@ -84,7 +91,11 @@ pub fn parse(body: &[u8]) -> Result<Vec<AppStatement>> {
             .map(|c| HEXLOWER.encode(&c))
             .collect();
         if !certs.is_empty() {
-            out.push(AppStatement { package, certs });
+            out.push(AppStatement {
+                package,
+                certs,
+                login_creds,
+            });
         }
     }
     Ok(out)
@@ -98,6 +109,20 @@ pub fn vouches_for(statements: &[AppStatement], app: &AppIdentity) -> bool {
                 .iter()
                 .any(|c| s.certs.contains(&HEXLOWER.encode(c)))
     })
+}
+
+/// The certificate of `app` that a statement grants `get_login_creds`: the
+/// one an app's passkey origin names.
+pub fn login_creds_cert(statements: &[AppStatement], app: &AppIdentity) -> Option<[u8; CERT_LEN]> {
+    statements
+        .iter()
+        .filter(|s| s.login_creds && s.package == app.package())
+        .find_map(|s| {
+            app.certs()
+                .iter()
+                .find(|c| s.certs.contains(&HEXLOWER.encode(&c[..])))
+                .copied()
+        })
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -127,6 +152,14 @@ impl CachedHost {
 impl AssetLinksCache {
     pub fn is_fresh(&self, host: &str, now_ms: i64) -> bool {
         self.hosts.iter().any(|h| h.host == host && h.fresh(now_ms))
+    }
+
+    /// The statements of a fresh, successful fetch of `host`.
+    pub fn statements_for(&self, host: &str, now_ms: i64) -> Option<&[AppStatement]> {
+        self.hosts
+            .iter()
+            .find(|h| h.host == host && h.fresh(now_ms))
+            .and_then(|h| h.statements.as_deref())
     }
 
     pub fn record(&mut self, host: &str, now_ms: i64, statements: Option<Vec<AppStatement>>) {
@@ -333,5 +366,90 @@ mod tests {
             candidate_hosts("com.github.android", &hosts).len(),
             MAX_CANDIDATES
         );
+    }
+
+    #[test]
+    fn get_login_creds_is_recorded_per_statement() {
+        let creds = parse(
+            file(
+                "delegate_permission/common.get_login_creds",
+                "com.github.android",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        assert!(creds[0].login_creds);
+        let urls = parse(
+            file(
+                "delegate_permission/common.handle_all_urls",
+                "com.github.android",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        assert!(!urls[0].login_creds);
+        assert_eq!(
+            login_creds_cert(&creds, &app()),
+            Some(crate::app_target::parse_fingerprint(FP).unwrap())
+        );
+        assert_eq!(
+            login_creds_cert(&urls, &app()),
+            None,
+            "handle_all_urls alone is for filling only"
+        );
+    }
+
+    #[test]
+    fn login_creds_cert_needs_the_same_package_and_certificate() {
+        let s = parse(
+            file(
+                "delegate_permission/common.get_login_creds",
+                "com.other.app",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(login_creds_cert(&s, &app()), None);
+        let other_cert = AppIdentity::new("com.github.android", &[vec![1; 32]]).unwrap();
+        let s = parse(
+            file(
+                "delegate_permission/common.get_login_creds",
+                "com.github.android",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(login_creds_cert(&s, &other_cert), None);
+    }
+
+    #[test]
+    fn statements_for_answers_only_fresh_successful_fetches() {
+        let s = parse(
+            file(
+                "delegate_permission/common.get_login_creds",
+                "com.github.android",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        let mut cache = AssetLinksCache::default();
+        cache.record("github.com", NOW, Some(s));
+        cache.record("down.example", NOW, None);
+        assert_eq!(
+            cache.statements_for("github.com", NOW).map(<[_]>::len),
+            Some(1)
+        );
+        assert!(cache
+            .statements_for("github.com", NOW + FRESH_MS + 1)
+            .is_none());
+        assert!(cache.statements_for("down.example", NOW).is_none());
+        assert!(cache.statements_for("other.example", NOW).is_none());
+    }
+
+    #[test]
+    fn a_cache_written_before_login_creds_existed_still_reads() {
+        let old = r#"{"hosts":[{"host":"github.com","checked_at_ms":1,"statements":[{"package":"com.x.y","certs":["aa"]}]}]}"#;
+        let cache: AssetLinksCache = serde_json::from_str(old).unwrap();
+        assert!(!cache.statements_for("github.com", 1).unwrap()[0].login_creds);
     }
 }

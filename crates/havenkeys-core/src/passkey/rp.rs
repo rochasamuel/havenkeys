@@ -4,6 +4,9 @@
 //! worker), never from page content; the `rp_id` comes from the page and is
 //! untrusted.
 
+use super::encode_b64url;
+use crate::app_target::{AppIdentity, CERT_LEN};
+use crate::asset_links::{login_creds_cert, AssetLinksCache};
 use crate::error::{Error, Result};
 use crate::origin::{host_key, registrable_domain_of, PageUrl};
 use url::{Host, Url};
@@ -110,6 +113,41 @@ pub fn authorize_rp(rp_id: &str, page_url: &str, top_url: Option<&str>) -> Resul
         origin,
         cross_origin,
         top_origin,
+    })
+}
+
+/// The origin Android gives a WebAuthn request from an app.
+pub fn android_app_origin(cert: &[u8; CERT_LEN]) -> String {
+    format!("android:apk-key-hash:{}", encode_b64url(cert))
+}
+
+/// An RP ID an app may ask about: a domain with a registrable domain of its
+/// own — never a public suffix, an IP address or localhost — normalized.
+pub fn app_rp_id(raw: &str) -> Option<String> {
+    let id = normalize_rp_id(raw)?;
+    match Host::parse(&id).ok()? {
+        Host::Domain(_) if id != "localhost" && registrable_domain_of(&id).is_some() => Some(id),
+        _ => None,
+    }
+}
+
+/// May `app` use `rp_id`? Only when the site's Digital Asset Links file,
+/// fresh in `cache`, grants the app `common.get_login_creds` (spec §8.1).
+/// The cache is the caller's to refresh; nothing the app says is used.
+pub fn authorize_rp_for_app(
+    rp_id: &str,
+    app: &AppIdentity,
+    cache: &AssetLinksCache,
+    now_ms: i64,
+) -> Result<RpContext> {
+    let rp_id = app_rp_id(rp_id).ok_or(Error::Denied)?;
+    let statements = cache.statements_for(&rp_id, now_ms).ok_or(Error::Denied)?;
+    let cert = login_creds_cert(statements, app).ok_or(Error::Denied)?;
+    Ok(RpContext {
+        origin: android_app_origin(&cert),
+        rp_id,
+        cross_origin: false,
+        top_origin: None,
     })
 }
 
@@ -246,5 +284,112 @@ mod tests {
         .unwrap();
         assert!(sub.cross_origin);
         assert_eq!(sub.top_origin.as_deref(), Some("https://github.com"));
+    }
+
+    use crate::app_target::AppIdentity;
+    use crate::asset_links::{AppStatement, AssetLinksCache};
+
+    const NOW: i64 = 1_800_000_000_000;
+
+    fn github_app(cert: u8) -> AppIdentity {
+        AppIdentity::new("com.github.android", &[vec![cert; 32]]).unwrap()
+    }
+
+    fn vouching(host: &str, login_creds: bool) -> AssetLinksCache {
+        let mut cache = AssetLinksCache::default();
+        cache.record(
+            host,
+            NOW,
+            Some(vec![AppStatement {
+                package: "com.github.android".into(),
+                certs: vec!["ab".repeat(32)],
+                login_creds,
+            }]),
+        );
+        cache
+    }
+
+    #[test]
+    fn a_vouched_app_gets_its_apk_key_hash_origin() {
+        let c = authorize_rp_for_app(
+            "GitHub.com",
+            &github_app(0xab),
+            &vouching("github.com", true),
+            NOW,
+        )
+        .unwrap();
+        assert_eq!(c.rp_id, "github.com");
+        assert_eq!(
+            c.origin,
+            format!(
+                "android:apk-key-hash:{}",
+                crate::passkey::encode_b64url(&[0xab; 32])
+            )
+        );
+        assert!(!c.cross_origin);
+        assert_eq!(c.top_origin, None);
+    }
+
+    #[test]
+    fn an_app_the_site_does_not_vouch_for_is_denied() {
+        let denied = |rp: &str, app: &AppIdentity, cache: &AssetLinksCache, now: i64| {
+            assert_eq!(
+                authorize_rp_for_app(rp, app, cache, now).err(),
+                Some(Error::Denied),
+                "{rp}"
+            );
+        };
+        let cache = vouching("github.com", true);
+        denied("github.com", &github_app(0xcd), &cache, NOW);
+        denied("gist.github.com", &github_app(0xab), &cache, NOW);
+        denied(
+            "github.com",
+            &github_app(0xab),
+            &vouching("github.com", false),
+            NOW,
+        );
+        denied(
+            "github.com",
+            &github_app(0xab),
+            &cache,
+            NOW + crate::asset_links::FRESH_MS + 1,
+        );
+        denied(
+            "github.com",
+            &github_app(0xab),
+            &AssetLinksCache::default(),
+            NOW,
+        );
+    }
+
+    #[test]
+    fn app_rp_ids_are_plain_registrable_domains() {
+        assert_eq!(app_rp_id("GitHub.com").as_deref(), Some("github.com"));
+        assert_eq!(
+            app_rp_id("accounts.github.com").as_deref(),
+            Some("accounts.github.com")
+        );
+        assert_eq!(
+            app_rp_id("user.github.io").as_deref(),
+            Some("user.github.io")
+        );
+        for bad in [
+            "",
+            "com",
+            "github.io",
+            "co.uk",
+            "localhost",
+            "127.0.0.1",
+            "[::1]",
+            "github.com.",
+            "git hub.com",
+            "github.com:443",
+        ] {
+            assert_eq!(app_rp_id(bad), None, "{bad}");
+        }
+        // Even a cache that "vouches" for a public suffix grants nothing.
+        assert!(
+            authorize_rp_for_app("com", &github_app(0xab), &vouching("com", true), NOW).is_err()
+        );
     }
 }

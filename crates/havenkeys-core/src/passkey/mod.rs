@@ -20,7 +20,9 @@ mod rp;
 mod vault;
 mod webauthn;
 
-pub use rp::{authorize_rp, RpContext, MAX_RP_ID_BYTES};
+pub use rp::{
+    android_app_origin, app_rp_id, authorize_rp, authorize_rp_for_app, RpContext, MAX_RP_ID_BYTES,
+};
 pub use vault::{
     CreateCheck, CreateQuery, PasskeyCreate, PasskeyInfo, PasskeyMatch, StagedPasskey, Upgrade,
 };
