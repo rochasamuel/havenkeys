@@ -829,6 +829,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_sign_in_with_kit(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_settings(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_settings(
@@ -964,6 +966,8 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sign_in(`ptr`: Long,`serverUrl`: RustBuffer.ByValue,`email`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sign_in_with_kit(`ptr`: Long,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_save(`ptr`: Long,`target`: RustBuffer.ByValue,`login`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_settings(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1212,6 +1216,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sign_in_with_kit() and 0xFFFF) != 10376) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save() and 0xFFFF) != 64679) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_settings() and 0xFFFF) != 9031) {
@@ -2160,6 +2167,12 @@ public interface MobileVaultInterface {
      */
     fun `signInWithKit`(`password`: kotlin.String): Status
     
+    /**
+     * After Android's save sheet was confirmed. Online only; not app use,
+     * so the idle timer is not touched.
+     */
+    fun `autofillSave`(`target`: TargetFacts, `login`: SaveLogin): SaveResult
+    
     fun `settings`(): MobileSettings
     
     fun `updateSettings`(`s`: MobileSettings)
@@ -2772,6 +2785,26 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
         it,
         
         FfiConverterString.lower(`password`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * After Android's save sheet was confirmed. Online only; not app use,
+     * so the idle timer is not touched.
+     */
+    @Throws(MobileException::class)override fun `autofillSave`(`target`: TargetFacts, `login`: SaveLogin): SaveResult {
+            return FfiConverterTypeSaveResult.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_save(
+        it,
+        
+        FfiConverterTypeTargetFacts.lower(`target`),
+        FfiConverterTypeSaveLogin.lower(`login`),_status)
 }
     }
     )
@@ -4192,6 +4225,65 @@ public object FfiConverterTypeMobileSettings: FfiConverterRustBuffer<MobileSetti
 
 
 
+/**
+ * What the user typed. No `Debug`: it carries the password.
+ */
+data class SaveLogin (
+    var `username`: kotlin.String?
+    , 
+    var `password`: kotlin.String
+    , 
+    /**
+     * A change-password form's current password: it finds the login to
+     * update when the form has no username.
+     */
+    var `currentPassword`: kotlin.String?
+    , 
+    /**
+     * For a new app login: the app's label. A browser login is named
+     * after its site.
+     */
+    var `title`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSaveLogin: FfiConverterRustBuffer<SaveLogin> {
+    override fun read(buf: ByteBuffer): SaveLogin {
+        return SaveLogin(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SaveLogin) = (
+            FfiConverterOptionalString.allocationSize(value.`username`) +
+            FfiConverterString.allocationSize(value.`password`) +
+            FfiConverterOptionalString.allocationSize(value.`currentPassword`) +
+            FfiConverterOptionalString.allocationSize(value.`title`)
+    )
+
+    override fun write(value: SaveLogin, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`username`, buf)
+            FfiConverterString.write(value.`password`, buf)
+            FfiConverterOptionalString.write(value.`currentPassword`, buf)
+            FfiConverterOptionalString.write(value.`title`, buf)
+    }
+}
+
+
+
 data class Status (
     var `state`: LockState
     , 
@@ -4791,6 +4883,41 @@ public object FfiConverterTypeMobileError : FfiConverterRustBuffer<MobileExcepti
     }
 
 }
+
+
+
+
+enum class SaveResult {
+    
+    ADDED,
+    UPDATED,
+    UNCHANGED;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSaveResult: FfiConverterRustBuffer<SaveResult> {
+    override fun read(buf: ByteBuffer) = try {
+        SaveResult.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SaveResult) = 4UL
+
+    override fun write(value: SaveResult, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

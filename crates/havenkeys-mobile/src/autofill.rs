@@ -69,7 +69,7 @@ fn to_values(c: FillCredentials) -> FillValues {
 }
 
 impl MobileVault {
-    fn target(&self, t: &TargetFacts) -> MobileResult<FillTarget> {
+    pub(crate) fn target(&self, t: &TargetFacts) -> MobileResult<FillTarget> {
         Ok(classify(
             &self.own_package,
             &t.package_name,
@@ -82,7 +82,7 @@ impl MobileVault {
     /// Hosts that vouch for `app`, refreshing stale cache entries first when
     /// the setting allows. Bounded by `FETCH_TIMEOUT` per request, run in
     /// parallel, so a fill request is never held longer than that.
-    fn verified_hosts(&self, app: &AppIdentity) -> MobileResult<Vec<String>> {
+    pub(crate) fn verified_hosts(&self, app: &AppIdentity) -> MobileResult<Vec<String>> {
         let now = havenkeys_client::now_ms();
         // Read before taking the vault guard: it locks the vault itself.
         let asset_links = self.device_settings().asset_links;

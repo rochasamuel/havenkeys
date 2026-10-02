@@ -21,6 +21,7 @@ mod items;
 mod key_file;
 mod onboarding;
 mod qr;
+mod save;
 mod settings;
 mod unlock;
 mod vault;
@@ -36,6 +37,7 @@ pub use items::{
 pub use key_file::{CipherError, KeystoreCipher};
 pub use onboarding::{KitPreview, LumaFrame};
 pub use settings::MobileSettings;
+pub use save::{SaveLogin, SaveResult};
 pub use vault::{LockState, MobileConfig, MobileVault, Status};
 
 /// Test support for this crate's integration tests. Not part of the API
