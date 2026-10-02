@@ -52,7 +52,7 @@ pub(crate) fn unix_seconds() -> u64 {
     u64::try_from(havenkeys_client::now_ms() / 1000).unwrap_or(0)
 }
 
-fn to_match(s: &Suggestion) -> AutofillMatch {
+pub(crate) fn to_match(s: &Suggestion) -> AutofillMatch {
     AutofillMatch {
         id: s.id.to_string(),
         title: s.title.clone(),
@@ -80,9 +80,19 @@ impl MobileVault {
     }
 
     /// Hosts that vouch for `app`, refreshing stale cache entries first when
-    /// the setting allows. Bounded by `FETCH_TIMEOUT` per request, run in
-    /// parallel, so a fill request is never held longer than that.
+    /// the setting allows.
     pub(crate) fn verified_hosts(&self, app: &AppIdentity) -> MobileResult<Vec<String>> {
+        self.verified_hosts_asking(app, &[])
+    }
+
+    /// Hosts that vouch for `app`, after refreshing the stale ones among the
+    /// vault's candidates and `also` (when the setting allows). Bounded by
+    /// `FETCH_TIMEOUT` per request, run in parallel.
+    pub(crate) fn verified_hosts_asking(
+        &self,
+        app: &AppIdentity,
+        also: &[String],
+    ) -> MobileResult<Vec<String>> {
         let now = havenkeys_client::now_ms();
         // Read before taking the vault guard: it locks the vault itself.
         let asset_links = self.device_settings().asset_links;
@@ -94,7 +104,13 @@ impl MobileVault {
                 .flatten()
                 .unwrap_or_default();
             let stale: Vec<String> = if asset_links {
-                candidate_hosts(app.package(), &vault.login_hosts()?)
+                let mut hosts = candidate_hosts(app.package(), &vault.login_hosts()?);
+                for host in also {
+                    if !hosts.contains(host) {
+                        hosts.push(host.clone());
+                    }
+                }
+                hosts
                     .into_iter()
                     .filter(|h| !cache.is_fresh(h, now))
                     .collect()

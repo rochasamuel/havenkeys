@@ -278,5 +278,51 @@ fn two_phones_edit_one_vault_through_the_server() {
     b.sync_now().unwrap();
     assert!(b.list_items().unwrap().iter().all(|s| s.id != id));
 
+    // A passkey created on phone A for a site in Chrome reaches phone B,
+    // which signs in with it.
+    let chrome_on = |origin: &str| CredentialCaller {
+        package_name: "com.android.chrome".into(),
+        signing_certs: chrome("github.com").signing_certs,
+        origin: Some(origin.into()),
+    };
+    let create = r#"{"rp":{"id":"webauthn.io"},"user":{"id":"AQID","name":"ana"},"challenge":"BwcH","pubKeyCredParams":[{"type":"public-key","alg":-7}]}"#;
+    let registration: serde_json::Value = serde_json::from_str(
+        &a.passkey_create(chrome_on("https://webauthn.io"), create.into(), None)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(registration["type"], "public-key");
+    b.sync_now().unwrap();
+    let get = r#"{"challenge":"AwMD","rpId":"webauthn.io"}"#;
+    let offers = b
+        .passkey_offers(chrome_on("https://webauthn.io"), get.into())
+        .unwrap();
+    assert_eq!(offers.len(), 1);
+    assert_eq!(offers[0].user_name, "ana");
+    b.passkey_sign_in(
+        chrome_on("https://webauthn.io"),
+        get.into(),
+        None,
+        offers[0].item_id.clone(),
+        offers[0].credential_id.clone(),
+    )
+    .unwrap();
+    // Asked again with the passkey excluded, A refuses to make a second one.
+    let excluding = create.replace(
+        r#""challenge""#,
+        &format!(
+            r#""excludeCredentials":[{{"type":"public-key","id":"{}"}}],"challenge""#,
+            registration["id"].as_str().unwrap()
+        ),
+    );
+    assert_eq!(
+        code(
+            a.passkey_create(chrome_on("https://webauthn.io"), excluding, None)
+                .err()
+                .unwrap()
+        ),
+        "passkey_exists"
+    );
+
     rt.block_on(server.cleanup());
 }

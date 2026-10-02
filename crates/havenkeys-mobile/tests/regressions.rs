@@ -168,3 +168,158 @@ fn a_stale_or_tampered_bundle_is_refused() {
         "bundle_refused"
     );
 }
+
+const GET: &str = r#"{"challenge":"AwMD","rpId":"github.com"}"#;
+
+fn chrome_caller(origin: &str) -> CredentialCaller {
+    CredentialCaller {
+        package_name: "com.android.chrome".into(),
+        signing_certs: chrome("github.com").signing_certs,
+        origin: Some(origin.into()),
+    }
+}
+
+fn app_caller(cert: u8) -> CredentialCaller {
+    CredentialCaller {
+        package_name: "com.github.android".into(),
+        signing_certs: vec![vec![cert; 32]],
+        origin: None,
+    }
+}
+
+fn no_fetches(v: &MobileVault) {
+    let mut s = v.settings().unwrap();
+    s.asset_links = false;
+    v.update_settings(s).unwrap();
+}
+
+#[test]
+fn attack_an_impostor_app_gets_no_passkey() {
+    let (v, _, _dir) = setup();
+    no_fetches(&v);
+    let (item, cred, _) = havenkeys_mobile::testing::seed_github_passkey(&v);
+    havenkeys_mobile::testing::vouch(&v, "github.com", "com.github.android", &[0xab; 32], true);
+    // Positive control.
+    assert_eq!(
+        v.passkey_offers(app_caller(0xab), GET.into())
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        code(
+            v.passkey_offers(app_caller(0xcd), GET.into())
+                .err()
+                .unwrap()
+        ),
+        "denied"
+    );
+    assert_eq!(
+        code(
+            v.passkey_sign_in(app_caller(0xcd), GET.into(), None, item, cred)
+                .err()
+                .unwrap()
+        ),
+        "denied"
+    );
+}
+
+#[test]
+fn attack_an_app_vouched_only_for_filling_gets_no_passkey() {
+    let (v, _, _dir) = setup();
+    no_fetches(&v);
+    havenkeys_mobile::testing::seed_github_passkey(&v);
+    havenkeys_mobile::testing::vouch(&v, "github.com", "com.github.android", &[0xab; 32], false);
+    assert_eq!(
+        code(
+            v.passkey_offers(app_caller(0xab), GET.into())
+                .err()
+                .unwrap()
+        ),
+        "denied"
+    );
+}
+
+#[test]
+fn attack_an_app_reporting_a_websites_origin_gets_nothing() {
+    let (v, _, _dir) = setup();
+    havenkeys_mobile::testing::seed_github_passkey(&v);
+    assert_eq!(
+        v.passkey_offers(chrome_caller("https://github.com"), GET.into())
+            .unwrap()
+            .len(),
+        1
+    );
+    let claiming = CredentialCaller {
+        origin: Some("https://github.com".into()),
+        ..app_caller(0xab)
+    };
+    assert_eq!(
+        code(v.passkey_offers(claiming, GET.into()).err().unwrap()),
+        "denied"
+    );
+}
+
+#[test]
+fn attack_an_apps_client_data_hash_is_not_signed() {
+    use p256::ecdsa::signature::Verifier;
+    use p256::ecdsa::{Signature, VerifyingKey};
+    use p256::pkcs8::DecodePublicKey;
+    let (v, _, _dir) = setup();
+    no_fetches(&v);
+    let (item, cred, spki) = havenkeys_mobile::testing::seed_github_passkey(&v);
+    havenkeys_mobile::testing::vouch(&v, "github.com", "com.github.android", &[0xab; 32], true);
+    let forged = [0x42u8; 32];
+    let out: serde_json::Value = serde_json::from_str(
+        &v.passkey_sign_in(
+            app_caller(0xab),
+            GET.into(),
+            Some(forged.to_vec()),
+            item,
+            cred,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let b64 = |k: &str| {
+        data_encoding::BASE64URL_NOPAD
+            .decode(out["response"][k].as_str().unwrap().as_bytes())
+            .unwrap()
+    };
+    let mut signed = b64("authenticatorData");
+    signed.extend_from_slice(&forged);
+    let sig = Signature::from_der(&b64("signature")).unwrap();
+    assert!(VerifyingKey::from_public_key_der(&spki)
+        .unwrap()
+        .verify(&signed, &sig)
+        .is_err());
+}
+
+#[test]
+fn attack_a_locked_vault_gives_no_passkey() {
+    let (v, _, _dir) = setup();
+    let (item, cred, _) = havenkeys_mobile::testing::seed_github_passkey(&v);
+    v.lock();
+    assert_eq!(
+        code(
+            v.passkey_offers(chrome_caller("https://github.com"), GET.into())
+                .err()
+                .unwrap()
+        ),
+        "locked"
+    );
+    assert_eq!(
+        code(
+            v.passkey_sign_in(
+                chrome_caller("https://github.com"),
+                GET.into(),
+                None,
+                item,
+                cred
+            )
+            .err()
+            .unwrap()
+        ),
+        "locked"
+    );
+}

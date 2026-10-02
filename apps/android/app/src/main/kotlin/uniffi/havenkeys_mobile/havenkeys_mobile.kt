@@ -757,6 +757,8 @@ internal object IntegrityCheckingUniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_havenkeys_mobile_checksum_func_privileged_browsers_json(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_locked(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_unlocked(
@@ -798,6 +800,18 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_totp(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password_offers(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create_plan(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_offers(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_sign_in(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_create_item(
     ): Int
@@ -937,6 +951,18 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_credential_password(`ptr`: Long,`caller`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_credential_password_offers(`ptr`: Long,`caller`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_create(`ptr`: Long,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_create_plan(`ptr`: Long,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_offers(`ptr`: Long,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_sign_in(`ptr`: Long,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,`clientDataHash`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_create_item(`ptr`: Long,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_delete_item(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -991,6 +1017,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_touch(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_havenkeys_mobile_fn_func_privileged_browsers_json(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_havenkeys_mobile_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_havenkeys_mobile_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1110,6 +1138,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_func_privileged_browsers_json() and 0xFFFF) != 19751) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_vaultevents_locked() and 0xFFFF) != 2662) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1171,6 +1202,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling() and 0xFFFF) != 26529) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password() and 0xFFFF) != 12506) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password_offers() and 0xFFFF) != 23780) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create() and 0xFFFF) != 6934) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create_plan() and 0xFFFF) != 1399) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_offers() and 0xFFFF) != 51091) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_sign_in() and 0xFFFF) != 20089) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_create_item() and 0xFFFF) != 49671) {
@@ -2114,6 +2163,41 @@ public interface MobileVaultInterface {
     fun `confirmBeforeFilling`(): kotlin.Boolean
     
     /**
+     * The tapped login's username and password, re-checked for the caller.
+     */
+    fun `credentialPassword`(`caller`: CredentialCaller, `itemId`: kotlin.String): FillValues
+    
+    /**
+     * Logins for a Credential Manager password request, by the M1 target
+     * rules. Only logins with a username. No secrets.
+     */
+    fun `credentialPasswordOffers`(`caller`: CredentialCaller): List<AutofillMatch>
+    
+    /**
+     * The user confirmed and passed user verification. Online only: the
+     * passkey is returned to the site only after the server accepted it.
+     * `item_id`: the login to hold it; `None` makes a new login.
+     */
+    fun `passkeyCreate`(`caller`: CredentialCaller, `requestJson`: kotlin.String, `itemId`: kotlin.String?): kotlin.String
+    
+    /**
+     * What "Save a passkey to HavenKeys?" shows. Works offline.
+     */
+    fun `passkeyCreatePlan`(`caller`: CredentialCaller, `requestJson`: kotlin.String): PasskeyCreatePlan
+    
+    /**
+     * Passkeys for Android's sheet (a Begin request). No secrets.
+     */
+    fun `passkeyOffers`(`caller`: CredentialCaller, `requestJson`: kotlin.String): List<PasskeyOffer>
+    
+    /**
+     * The user tapped a passkey and passed user verification. Works
+     * offline. A browser's `client_data_hash` is signed; an app's is
+     * ignored, since it could name any origin.
+     */
+    fun `passkeySignIn`(`caller`: CredentialCaller, `requestJson`: kotlin.String, `clientDataHash`: kotlin.ByteArray?, `itemId`: kotlin.String, `credentialId`: kotlin.ByteArray): kotlin.String
+    
+    /**
      * Returns the new item's ID.
      */
     fun `createItem`(`draft`: ItemDraft): kotlin.String
@@ -2533,6 +2617,128 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The tapped login's username and password, re-checked for the caller.
+     */
+    @Throws(MobileException::class)override fun `credentialPassword`(`caller`: CredentialCaller, `itemId`: kotlin.String): FillValues {
+            return FfiConverterTypeFillValues.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_credential_password(
+        it,
+        
+        FfiConverterTypeCredentialCaller.lower(`caller`),
+        FfiConverterString.lower(`itemId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Logins for a Credential Manager password request, by the M1 target
+     * rules. Only logins with a username. No secrets.
+     */
+    @Throws(MobileException::class)override fun `credentialPasswordOffers`(`caller`: CredentialCaller): List<AutofillMatch> {
+            return FfiConverterSequenceTypeAutofillMatch.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_credential_password_offers(
+        it,
+        
+        FfiConverterTypeCredentialCaller.lower(`caller`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The user confirmed and passed user verification. Online only: the
+     * passkey is returned to the site only after the server accepted it.
+     * `item_id`: the login to hold it; `None` makes a new login.
+     */
+    @Throws(MobileException::class)override fun `passkeyCreate`(`caller`: CredentialCaller, `requestJson`: kotlin.String, `itemId`: kotlin.String?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_create(
+        it,
+        
+        FfiConverterTypeCredentialCaller.lower(`caller`),
+        FfiConverterString.lower(`requestJson`),
+        FfiConverterOptionalString.lower(`itemId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * What "Save a passkey to HavenKeys?" shows. Works offline.
+     */
+    @Throws(MobileException::class)override fun `passkeyCreatePlan`(`caller`: CredentialCaller, `requestJson`: kotlin.String): PasskeyCreatePlan {
+            return FfiConverterTypePasskeyCreatePlan.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_create_plan(
+        it,
+        
+        FfiConverterTypeCredentialCaller.lower(`caller`),
+        FfiConverterString.lower(`requestJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Passkeys for Android's sheet (a Begin request). No secrets.
+     */
+    @Throws(MobileException::class)override fun `passkeyOffers`(`caller`: CredentialCaller, `requestJson`: kotlin.String): List<PasskeyOffer> {
+            return FfiConverterSequenceTypePasskeyOffer.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_offers(
+        it,
+        
+        FfiConverterTypeCredentialCaller.lower(`caller`),
+        FfiConverterString.lower(`requestJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The user tapped a passkey and passed user verification. Works
+     * offline. A browser's `client_data_hash` is signed; an app's is
+     * ignored, since it could name any origin.
+     */
+    @Throws(MobileException::class)override fun `passkeySignIn`(`caller`: CredentialCaller, `requestJson`: kotlin.String, `clientDataHash`: kotlin.ByteArray?, `itemId`: kotlin.String, `credentialId`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_passkey_sign_in(
+        it,
+        
+        FfiConverterTypeCredentialCaller.lower(`caller`),
+        FfiConverterString.lower(`requestJson`),
+        FfiConverterOptionalByteArray.lower(`clientDataHash`),
+        FfiConverterString.lower(`itemId`),
+        FfiConverterByteArray.lower(`credentialId`),_status)
 }
     }
     )
@@ -3549,6 +3755,52 @@ public object FfiConverterTypeBoundFill: FfiConverterRustBuffer<BoundFill> {
 
 
 
+data class CredentialCaller (
+    var `packageName`: kotlin.String
+    , 
+    var `signingCerts`: List<kotlin.ByteArray>
+    , 
+    /**
+     * Only from `CallingAppInfo.getOrigin` for a browser on the allowlist.
+     */
+    var `origin`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCredentialCaller: FfiConverterRustBuffer<CredentialCaller> {
+    override fun read(buf: ByteBuffer): CredentialCaller {
+        return CredentialCaller(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceByteArray.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CredentialCaller) = (
+            FfiConverterString.allocationSize(value.`packageName`) +
+            FfiConverterSequenceByteArray.allocationSize(value.`signingCerts`) +
+            FfiConverterOptionalString.allocationSize(value.`origin`)
+    )
+
+    override fun write(value: CredentialCaller, buf: ByteBuffer) {
+            FfiConverterString.write(value.`packageName`, buf)
+            FfiConverterSequenceByteArray.write(value.`signingCerts`, buf)
+            FfiConverterOptionalString.write(value.`origin`, buf)
+    }
+}
+
+
+
 data class DeviceInfo (
     var `id`: kotlin.String
     , 
@@ -4236,6 +4488,111 @@ public object FfiConverterTypeMobileSettings: FfiConverterRustBuffer<MobileSetti
             FfiConverterBoolean.write(value.`lockOnScreenOff`, buf)
             FfiConverterBoolean.write(value.`confirmBeforeFilling`, buf)
             FfiConverterBoolean.write(value.`assetLinks`, buf)
+    }
+}
+
+
+
+data class PasskeyCreatePlan (
+    var `rpId`: kotlin.String
+    , 
+    var `userName`: kotlin.String
+    , 
+    /**
+     * The vault already holds one of the site's `excludeCredentials`.
+     */
+    var `excluded`: kotlin.Boolean
+    , 
+    /**
+     * Logins that can hold the new passkey, the same account first.
+     */
+    var `homes`: List<AutofillMatch>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyCreatePlan: FfiConverterRustBuffer<PasskeyCreatePlan> {
+    override fun read(buf: ByteBuffer): PasskeyCreatePlan {
+        return PasskeyCreatePlan(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeAutofillMatch.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyCreatePlan) = (
+            FfiConverterString.allocationSize(value.`rpId`) +
+            FfiConverterString.allocationSize(value.`userName`) +
+            FfiConverterBoolean.allocationSize(value.`excluded`) +
+            FfiConverterSequenceTypeAutofillMatch.allocationSize(value.`homes`)
+    )
+
+    override fun write(value: PasskeyCreatePlan, buf: ByteBuffer) {
+            FfiConverterString.write(value.`rpId`, buf)
+            FfiConverterString.write(value.`userName`, buf)
+            FfiConverterBoolean.write(value.`excluded`, buf)
+            FfiConverterSequenceTypeAutofillMatch.write(value.`homes`, buf)
+    }
+}
+
+
+
+/**
+ * A passkey offered in Android's sheet. No secrets.
+ */
+data class PasskeyOffer (
+    var `itemId`: kotlin.String
+    , 
+    var `credentialId`: kotlin.ByteArray
+    , 
+    var `title`: kotlin.String
+    , 
+    var `userName`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyOffer: FfiConverterRustBuffer<PasskeyOffer> {
+    override fun read(buf: ByteBuffer): PasskeyOffer {
+        return PasskeyOffer(
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyOffer) = (
+            FfiConverterString.allocationSize(value.`itemId`) +
+            FfiConverterByteArray.allocationSize(value.`credentialId`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterString.allocationSize(value.`userName`)
+    )
+
+    override fun write(value: PasskeyOffer, buf: ByteBuffer) {
+            FfiConverterString.write(value.`itemId`, buf)
+            FfiConverterByteArray.write(value.`credentialId`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterString.write(value.`userName`, buf)
     }
 }
 
@@ -5039,6 +5396,38 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
 /**
  * @suppress
  */
+public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteArray?> {
+    override fun read(buf: ByteBuffer): kotlin.ByteArray? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterByteArray.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.ByteArray?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterByteArray.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.ByteArray?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterByteArray.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeKitPreview: FfiConverterRustBuffer<KitPreview?> {
     override fun read(buf: ByteBuffer): KitPreview? {
         if (buf.get().toInt() == 0) {
@@ -5239,6 +5628,34 @@ public object FfiConverterSequenceTypeItemSummary: FfiConverterRustBuffer<List<I
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypePasskeyOffer: FfiConverterRustBuffer<List<PasskeyOffer>> {
+    override fun read(buf: ByteBuffer): List<PasskeyOffer> {
+        val len = buf.getInt()
+        return List<PasskeyOffer>(len) {
+            FfiConverterTypePasskeyOffer.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<PasskeyOffer>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypePasskeyOffer.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<PasskeyOffer>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypePasskeyOffer.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeViewField: FfiConverterRustBuffer<List<ViewField>> {
     override fun read(buf: ByteBuffer): List<ViewField> {
         val len = buf.getInt()
@@ -5288,4 +5705,18 @@ public object FfiConverterSequenceTypeWebsite: FfiConverterRustBuffer<List<Websi
         }
     }
 }
+        /**
+         * The vendored allowlist, for `CallingAppInfo.getOrigin`. The caller is
+         * checked against the same list again here.
+         */ fun `privilegedBrowsersJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_func_privileged_browsers_json(
+    
+        _status)
+}
+    )
+    }
+    
+
 
