@@ -268,4 +268,8 @@
     <string name="autofill_save_failed">O HavenKeys não conseguiu salvar este login.</string>
     <string name="credential_provider_subtitle">Senhas e chaves de acesso do seu cofre HavenKeys</string>
     <string name="credential_create_entry">Salva no seu cofre e sincronizada com seus dispositivos</string>
+    <string name="passkey_verify_title">Use o bloqueio de tela</string>
+    <string name="passkey_verify_sign_in">Entrar em %1$s com uma chave de acesso</string>
+    <string name="passkey_verify_save">Salvar uma chave de acesso para %1$s</string>
+    <string name="passkey_needs_screen_lock">Defina um bloqueio de tela neste telefone para usar chaves de acesso.</string>
 </resources>

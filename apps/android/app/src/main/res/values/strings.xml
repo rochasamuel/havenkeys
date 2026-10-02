@@ -280,4 +280,8 @@
     <string name="autofill_save_failed">HavenKeys could not save this login.</string>
     <string name="credential_provider_subtitle">Passwords and passkeys from your HavenKeys vault</string>
     <string name="credential_create_entry">Saved in your vault and synced to your devices</string>
+    <string name="passkey_verify_title">Use your screen lock</string>
+    <string name="passkey_verify_sign_in">Sign in to %1$s with a passkey</string>
+    <string name="passkey_verify_save">Save a passkey for %1$s</string>
+    <string name="passkey_needs_screen_lock">Set a screen lock on this phone to use passkeys.</string>
 </resources>
