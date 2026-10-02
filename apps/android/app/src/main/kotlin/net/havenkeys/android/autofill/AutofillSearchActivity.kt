@@ -60,7 +60,7 @@ class AutofillSearchActivity : FragmentActivity() {
         // A fill is confirmed here: a tap that passed through another app's
         // overlay is not the user's (tapjacking).
         window.decorView.filterTouchesWhenObscured = true
-        val tapped = tappedRequest() ?: return cancel()
+        val tapped = tappedRequest()?.takeIf { it.routed is Routed.Login } ?: return cancel()
         val packageName = tapped.screen.packageName
         val app = CallerApp(packageName, appLabel(packageName))
         unlockThen(container) {

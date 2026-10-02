@@ -49,32 +49,39 @@ class AutofillAuthActivity : FragmentActivity() {
     private fun answer(tapped: TappedRequest, mode: String?, itemId: String?) {
         if (answering) return
         answering = true
-        lifecycleScope.launch {
-            val repo = container.autofillRepository
-            val factory = tapped.factory(this@AutofillAuthActivity)
-            val result: Parcelable? = when {
-                mode == DatasetFactory.MODE_UNLOCK -> factory.response(
-                    FillPlanner.plan(
-                        tapped.form,
-                        tapped.target,
-                        container.isUnlocked(),
-                        repo,
-                        saveable = tapped.save != null,
-                    ),
-                )
-                itemId == null -> null
-                mode == DatasetFactory.MODE_FILL ->
-                    (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)
-                mode == DatasetFactory.MODE_TOTP ->
-                    (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::totpDataset)
-                mode == DatasetFactory.MODE_COPY_TOTP -> {
-                    (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let { copyCode(it) }
-                    null // Nothing is filled: the copy is the whole answer.
-                }
-                else -> null
-            }
-            if (result == null) cancel() else finishWith(result)
+        when (val routed = tapped.routed) {
+            is Routed.Login -> lifecycleScope.launch { answerLogin(tapped, routed, mode, itemId) }
+            is Routed.Card -> lifecycleScope.launch { answerCard(tapped, routed.form, mode, itemId) }
+            is Routed.Identity -> lifecycleScope.launch { answerIdentity(tapped, routed.form, mode) }
         }
+    }
+
+    private suspend fun answerLogin(tapped: TappedRequest, login: Routed.Login, mode: String?, itemId: String?) {
+        val repo = container.autofillRepository
+        val factory = tapped.factory(this)
+        val form = login.form ?: return cancel()
+        val result: Parcelable? = when {
+            mode == DatasetFactory.MODE_UNLOCK -> factory.response(
+                FillPlanner.plan(
+                    form,
+                    tapped.target,
+                    container.isUnlocked(),
+                    repo,
+                    saveable = login.save != null,
+                ),
+            )
+            itemId == null -> null
+            mode == DatasetFactory.MODE_FILL ->
+                (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)
+            mode == DatasetFactory.MODE_TOTP ->
+                (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::totpDataset)
+            mode == DatasetFactory.MODE_COPY_TOTP -> {
+                (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let { copyCode(it) }
+                null // Nothing is filled: the copy is the whole answer.
+            }
+            else -> null
+        }
+        if (result == null) cancel() else finishWith(result)
     }
 }
 
@@ -92,18 +99,22 @@ private suspend fun AutofillAuthActivity.copyCode(code: String) {
 /** What a tapped row is about, rebuilt from the structure Android attaches, never from our extras. */
 internal class TappedRequest(
     val screen: ParsedScreen,
-    val form: LoginForm,
-    val save: SaveForm?,
+    val routed: Routed,
     val target: TargetFacts,
     private val inlineRequest: InlineSuggestionsRequest?,
 ) {
-    fun factory(activity: Activity) = DatasetFactory(activity, screen, form, save, inlineRequest)
+    fun factory(activity: Activity): DatasetFactory {
+        val login = routed as? Routed.Login
+        return DatasetFactory(activity, screen, login?.form, login?.save, inlineRequest)
+    }
+
+    fun wallet(activity: Activity) = WalletDatasets(activity, screen, routed, inlineRequest)
 }
 
 /**
- * Null when there is no structure, no login form or no app to name. The app
- * being filled starts us and receives the answer, and it could replace the
- * structure: the structure counts only when it names that same app.
+ * Null when there is no structure, nothing to fill or no app to name. The
+ * app being filled starts us and receives the answer, and it could replace
+ * the structure: the structure counts only when it names that same app.
  */
 internal fun Activity.tappedRequest(): TappedRequest? {
     val structure = IntentCompat.getParcelableExtra(
@@ -114,14 +125,12 @@ internal fun Activity.tappedRequest(): TappedRequest? {
     val screen = structure
         ?.let { StructureParser().parse(it) }
         ?.takeIf { structureNamesCaller(it.packageName, callingPackage) }
-    val form = screen?.let { LoginFormFinder.find(it.fields) }
-    if (screen == null || form == null) return null
-    val target = TargetFacts(
-        screen.packageName,
-        CallerIdentity(packageManager).certDigests(screen.packageName),
-        form.webDomain,
-        form.webScheme,
-    )
+    val routed = screen?.let { FormRouter.route(it.fields) }?.takeIf { it !is Routed.Login || it.form != null }
+    if (screen == null || routed == null) return null
+    val target = when (routed) {
+        is Routed.Login -> packageManager.targetOf(screen, routed.form?.webDomain, routed.form?.webScheme)
+        else -> packageManager.targetOf(screen, screen.pageDomain, screen.pageScheme)
+    }
     // Android adds the keyboard's request to this Intent from Android 12 on.
     val inlineRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         IntentCompat.getParcelableExtra(
@@ -132,7 +141,7 @@ internal fun Activity.tappedRequest(): TappedRequest? {
     } else {
         null
     }
-    return TappedRequest(screen, form, SaveFormFinder.find(screen.fields, form), target, inlineRequest)
+    return TappedRequest(screen, routed, target, inlineRequest)
 }
 
 /**
