@@ -324,5 +324,50 @@ fn two_phones_edit_one_vault_through_the_server() {
         "passkey_exists"
     );
 
+    // A card typed into a checkout on phone A and confirmed in Android's
+    // save sheet reaches phone B, which fills it; typing it again changes
+    // nothing.
+    let typed = || SaveCard {
+        cardholder_name: Some("Ana Souza".into()),
+        number: "4000 0566 5566 5556".into(),
+        verification_number: Some("321".into()),
+        expiry: Some("2031-07".into()),
+    };
+    let checkout = FrameFacts {
+        web_domain: None,
+        web_scheme: None,
+    };
+    assert!(matches!(
+        a.autofill_save_card(chrome("shop.example.com"), checkout.clone(), typed())
+            .unwrap(),
+        SaveResult::Added
+    ));
+    assert!(matches!(
+        a.autofill_save_card(chrome("shop.example.com"), checkout.clone(), typed())
+            .unwrap(),
+        SaveResult::Unchanged
+    ));
+    b.sync_now().unwrap();
+    let on_b = b
+        .autofill_cards(chrome("shop.example.com"), vec![checkout.clone()])
+        .unwrap();
+    let saved = on_b
+        .cards
+        .iter()
+        .find(|c| c.last4.as_deref() == Some("5556"))
+        .unwrap();
+    assert_eq!(saved.expiry.as_deref(), Some("2031-07"));
+    let values = b
+        .autofill_card_values(
+            saved.id.clone(),
+            chrome("shop.example.com"),
+            vec![CardFrameRoles {
+                frame: checkout,
+                roles: vec![CardRole::VerificationNumber],
+            }],
+        )
+        .unwrap();
+    assert_eq!(values[0][0].value, "321");
+
     rt.block_on(server.cleanup());
 }

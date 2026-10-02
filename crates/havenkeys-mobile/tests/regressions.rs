@@ -323,3 +323,150 @@ fn attack_a_locked_vault_gives_no_passkey() {
         "locked"
     );
 }
+
+const VISA: &str = "4111111111111111";
+
+fn frame(domain: Option<&str>) -> FrameFacts {
+    FrameFacts {
+        web_domain: domain.map(Into::into),
+        web_scheme: domain.map(|_| "https".into()),
+    }
+}
+
+fn card_roles(domain: Option<&str>) -> CardFrameRoles {
+    CardFrameRoles {
+        frame: frame(domain),
+        roles: vec![CardRole::Number, CardRole::VerificationNumber],
+    }
+}
+
+fn http(domain: &str) -> TargetFacts {
+    TargetFacts {
+        web_scheme: Some("http".into()),
+        ..chrome(domain)
+    }
+}
+
+/// Positive control for the card attacks below.
+fn assert_card_fill_works(v: &MobileVault, card: &str) {
+    let values = v
+        .autofill_card_values(
+            card.into(),
+            chrome("shop.example.com"),
+            vec![card_roles(None)],
+        )
+        .unwrap();
+    assert_eq!(values[0][0].value, VISA);
+}
+
+#[test]
+fn attack_a_cross_site_frame_in_a_checkout_gets_no_card() {
+    let (v, _, _dir) = setup();
+    let card = havenkeys_mobile::testing::seed_card(&v, "Visa", VISA);
+    assert_card_fill_works(&v, &card);
+    let err = v
+        .autofill_card_values(
+            card,
+            chrome("shop.example.com"),
+            vec![card_roles(None), card_roles(Some("evil.example.net"))],
+        )
+        .unwrap_err();
+    assert_eq!(code(err), "denied");
+}
+
+#[test]
+fn attack_an_http_checkout_gets_no_card() {
+    let (v, _, _dir) = setup();
+    let card = havenkeys_mobile::testing::seed_card(&v, "Visa", VISA);
+    assert_card_fill_works(&v, &card);
+    assert!(v
+        .autofill_cards(http("shop.example.com"), vec![frame(None)])
+        .unwrap()
+        .cards
+        .is_empty());
+    assert_eq!(
+        code(
+            v.autofill_card_values(card, http("shop.example.com"), vec![card_roles(None)])
+                .unwrap_err()
+        ),
+        "denied"
+    );
+}
+
+#[test]
+fn attack_item_ids_cross_no_kind() {
+    let (v, github, _dir) = setup();
+    let card = havenkeys_mobile::testing::seed_card(&v, "Visa", VISA);
+    assert_card_fill_works(&v, &card);
+    // A login asked for as a card, a card asked for as a login.
+    assert_eq!(
+        code(
+            v.autofill_card_values(github, chrome("github.com"), vec![card_roles(None)])
+                .unwrap_err()
+        ),
+        "not_found"
+    );
+    assert!(v.autofill_fill(card, chrome("shop.example.com")).is_err());
+}
+
+#[test]
+fn attack_documents_need_the_confirmation_flag_and_https() {
+    let (v, _, _dir) = setup();
+    havenkeys_mobile::testing::seed_identity(&v);
+    let asked = vec![IdentityRole::FirstName, IdentityRole::Cpf];
+    let roles = |values: Vec<IdentityValue>| -> Vec<IdentityRole> {
+        values.into_iter().map(|v| v.role).collect()
+    };
+    assert_eq!(
+        roles(
+            v.autofill_identity_values(
+                chrome("shop.example.com"),
+                frame(None),
+                asked.clone(),
+                false
+            )
+            .unwrap()
+        ),
+        vec![IdentityRole::FirstName]
+    );
+    assert_eq!(
+        roles(
+            v.autofill_identity_values(http("shop.example.com"), frame(None), asked.clone(), true)
+                .unwrap()
+        ),
+        vec![IdentityRole::FirstName]
+    );
+    // Positive control: confirmed on https, the document comes.
+    assert_eq!(
+        roles(
+            v.autofill_identity_values(chrome("shop.example.com"), frame(None), asked, true)
+                .unwrap()
+        ),
+        vec![IdentityRole::FirstName, IdentityRole::Cpf]
+    );
+}
+
+#[test]
+fn attack_a_locked_vault_fills_no_card_and_no_identity() {
+    let (v, _, _dir) = setup();
+    let card = havenkeys_mobile::testing::seed_card(&v, "Visa", VISA);
+    havenkeys_mobile::testing::seed_identity(&v);
+    assert_card_fill_works(&v, &card);
+    v.lock();
+    let shop = || chrome("shop.example.com");
+    assert_eq!(
+        code(v.autofill_cards(shop(), vec![frame(None)]).unwrap_err()),
+        "locked"
+    );
+    assert_eq!(
+        code(
+            v.autofill_card_values(card, shop(), vec![card_roles(None)])
+                .unwrap_err()
+        ),
+        "locked"
+    );
+    assert_eq!(
+        code(v.autofill_identity(shop(), frame(None)).err().unwrap()),
+        "locked"
+    );
+}
