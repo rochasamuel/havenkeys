@@ -385,9 +385,52 @@ async fn a_fetch_answer_is_bounded_to_what_was_asked() {
             .fetch_items(&session(), &[asked])
             .await
             .unwrap()
+            .changes
             .len(),
         1
     );
+}
+
+#[tokio::test]
+async fn unanswered_items_must_be_asked_for_and_not_also_answered() {
+    let asked = Uuid::from_u128(1);
+    let later = Uuid::from_u128(3);
+    let other = Uuid::from_u128(2);
+
+    let body = format!(r#"{{"changes":[],"unanswered":["{other}"]}}"#);
+    let err = Stub::ok(&body)
+        .fetch_items(&session(), &[asked])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Protocol(_)));
+
+    let body = format!(
+        r#"{{"changes":[{{"itemId":"{asked}","revision":1,"deleted":true}}],"unanswered":["{asked}"]}}"#
+    );
+    let err = Stub::ok(&body)
+        .fetch_items(&session(), &[asked])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Protocol(_)));
+
+    let body = format!(
+        r#"{{"changes":[{{"itemId":"{asked}","revision":1,"deleted":true}}],"unanswered":["{later}"]}}"#
+    );
+    let fetched = Stub::ok(&body)
+        .fetch_items(&session(), &[asked, later])
+        .await
+        .unwrap();
+    assert_eq!(fetched.changes.len(), 1);
+    assert_eq!(fetched.unanswered, vec![later]);
+
+    // An answer from a server without the field still parses.
+    let body = format!(r#"{{"changes":[{{"itemId":"{asked}","revision":1,"deleted":true}}]}}"#);
+    assert!(Stub::ok(&body)
+        .fetch_items(&session(), &[asked])
+        .await
+        .unwrap()
+        .unanswered
+        .is_empty());
 }
 
 #[tokio::test]

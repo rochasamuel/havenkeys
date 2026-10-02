@@ -10,9 +10,11 @@ use crate::error::{Result, SyncError};
 use std::future::Future;
 use zeroize::Zeroizing;
 
-/// The largest answer the protocol can legitimately produce: a full pull page
-/// of blobs, base64-expanded, plus slack. Anything beyond it is refused while
-/// still being read, so a server cannot make the client allocate at will.
+/// The largest answer the protocol can legitimately produce. The server keeps
+/// pull and fetch answers under `MAX_PAGE_BYTES` (12 MiB) and a single
+/// revision under `MAX_BODY_BYTES` (16 MiB), so 17 MiB leaves room for one
+/// whole write batch. Anything beyond it is refused while still being read,
+/// so a server cannot make the client allocate at will.
 pub const MAX_RESPONSE_BYTES: usize = 17 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

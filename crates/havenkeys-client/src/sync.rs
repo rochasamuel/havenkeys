@@ -171,24 +171,38 @@ impl HavenClient {
         // Items that did not open earlier are asked for again, by id, until
         // they open, are deleted, or a Re-download clears them. Best effort:
         // a failure stops the retry for this sync and nothing more. Only a
-        // refused session is acted on.
+        // refused session is acted on. Items the server could not fit in one
+        // answer are asked for again, never read as deleted.
         let pending = self.vault()?.unreadable_item_ids()?;
-        for chunk in pending.chunks(MAX_BATCH) {
-            let changes = match server.fetch_items(&session, chunk).await {
-                Ok(changes) => changes,
-                Err(SyncError::Unauthorized) => {
-                    let _ = self.failed(SyncError::Unauthorized);
-                    break;
+        'chunks: for chunk in pending.chunks(MAX_BATCH) {
+            let mut ask = chunk.to_vec();
+            while !ask.is_empty() {
+                let fetched = match server.fetch_items(&session, &ask).await {
+                    Ok(fetched) => fetched,
+                    Err(SyncError::Unauthorized) => {
+                        let _ = self.failed(SyncError::Unauthorized);
+                        break 'chunks;
+                    }
+                    Err(_) => break 'chunks,
+                };
+                let answered: Vec<Uuid> = ask
+                    .iter()
+                    .copied()
+                    .filter(|id| !fetched.unanswered.contains(id))
+                    .collect();
+                // A server that answers nothing would spin this loop.
+                if answered.is_empty() {
+                    break 'chunks;
                 }
-                Err(_) => break,
-            };
-            let applied = self
-                .vault()
-                .and_then(|mut v| Ok(v.apply_refetched(chunk, changes, now_ms())?));
-            let Ok(page) = applied else { break };
-            report.added += page.added;
-            report.updated += page.updated;
-            report.deleted += page.deleted;
+                let applied = self.vault().and_then(|mut v| {
+                    Ok(v.apply_refetched(&answered, fetched.changes, now_ms())?)
+                });
+                let Ok(page) = applied else { break 'chunks };
+                report.added += page.added;
+                report.updated += page.updated;
+                report.deleted += page.deleted;
+                ask = fetched.unanswered;
+            }
         }
 
         self.mark_sync_attempt();

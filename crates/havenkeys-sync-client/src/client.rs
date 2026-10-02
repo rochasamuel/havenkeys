@@ -30,6 +30,14 @@ pub struct AuthParams {
     pub kdf: KdfParams,
 }
 
+/// A fetch answer: the items that fit, and the asked-for items that did not
+/// (ask for those again; they are not deleted).
+#[derive(Debug)]
+pub struct Fetched {
+    pub changes: Vec<RemoteChange>,
+    pub unanswered: Vec<Uuid>,
+}
+
 pub struct Pulled {
     pub cursor: i64,
     pub has_more: bool,
@@ -308,9 +316,10 @@ impl<T: Transport> SyncClient<T> {
     }
 
     /// The current version of specific items, for retrying ones that did not
-    /// open. Every returned change must be for an ID that was asked for,
-    /// and at most once.
-    pub async fn fetch_items(&self, session: &Session, ids: &[Uuid]) -> Result<Vec<RemoteChange>> {
+    /// open. Every returned change must be for an ID that was asked for, at
+    /// most once, and an unanswered ID must have been asked for and not also
+    /// answered.
+    pub async fn fetch_items(&self, session: &Session, ids: &[Uuid]) -> Result<Fetched> {
         if ids.is_empty() || ids.len() > MAX_CHANGES {
             return Err(SyncError::Refused("item list is not valid"));
         }
@@ -324,15 +333,24 @@ impl<T: Transport> SyncClient<T> {
         let dto: wire::FetchDto = expect_ok(response)?;
         let asked: std::collections::HashSet<Uuid> = ids.iter().copied().collect();
         let mut seen = std::collections::HashSet::new();
-        for change in &dto.changes {
-            if !asked.contains(&change.item_id) || !seen.insert(change.item_id) {
+        for id in dto
+            .changes
+            .iter()
+            .map(|c| c.item_id)
+            .chain(dto.unanswered.iter().copied())
+        {
+            if !asked.contains(&id) || !seen.insert(id) {
                 return Err(SyncError::Protocol("an item that was not asked for"));
             }
         }
-        dto.changes
-            .into_iter()
-            .map(RemoteChange::try_from)
-            .collect()
+        Ok(Fetched {
+            changes: dto
+                .changes
+                .into_iter()
+                .map(RemoteChange::try_from)
+                .collect::<Result<Vec<_>>>()?,
+            unanswered: dto.unanswered,
+        })
     }
 
     pub async fn devices(&self, session: &Session) -> Result<Vec<Device>> {

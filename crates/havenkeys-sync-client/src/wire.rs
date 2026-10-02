@@ -268,6 +268,9 @@ pub struct FetchBody<'a> {
 #[serde(rename_all = "camelCase")]
 pub struct FetchDto {
     pub changes: Vec<RemoteChangeDto>,
+    /// Asked-for items that exist but did not fit this answer.
+    #[serde(default)]
+    pub unanswered: Vec<Uuid>,
 }
 
 #[derive(Deserialize)]

@@ -911,4 +911,37 @@ mod tests {
         assert_eq!(c.skipped_items, 0);
         assert_eq!(v.get_item(&id).unwrap().urls[0].url, "https://example.com/");
     }
+
+    #[test]
+    fn unanswered_items_are_asked_again_and_never_deleted() {
+        // The client passes only the answered ids to apply_refetched; an
+        // unreadable item it did not pass stays recorded, not deleted.
+        let mut v = activated_vault();
+        let a = Uuid::from_u128(0xa);
+        let b = Uuid::from_u128(0xb);
+        let junk = |id: Uuid, revision: i64| RemoteChange {
+            item_id: id,
+            revision,
+            overview: Some(vec![1; 40]),
+            details: Some(vec![2; 40]),
+            deleted: false,
+        };
+        let pulled = v
+            .apply_remote_changes(2, vec![junk(a, 1), junk(b, 2)], NOW)
+            .unwrap();
+        assert_eq!(pulled.skipped_items, 2);
+        let mut pending = v.unreadable_item_ids().unwrap();
+        pending.sort();
+        assert_eq!(pending, vec![a, b]);
+        // Only `a` was answered (here: by a tombstone).
+        let tomb = RemoteChange {
+            item_id: a,
+            revision: 3,
+            overview: None,
+            details: None,
+            deleted: true,
+        };
+        v.apply_refetched(&[a], vec![tomb], NOW).unwrap();
+        assert_eq!(v.unreadable_item_ids().unwrap(), vec![b]);
+    }
 }

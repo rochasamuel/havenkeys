@@ -552,12 +552,20 @@ async fn an_unreadable_item_is_retried_and_clears_once_fixed() {
     assert_eq!(one.vault.unreadable_item_ids().unwrap(), vec![id]);
 
     // Fix it on the server, then retry by id.
-    let revision = client.fetch_items(&one.session, &[id]).await.unwrap()[0].revision;
+    let revision = client
+        .fetch_items(&one.session, &[id])
+        .await
+        .unwrap()
+        .changes[0]
+        .revision;
     let fixed = havenkeys_core::vault::StagedWrite::for_test(id, Some(revision), good.0, good.1);
     client.write(&one.session, &[fixed]).await.unwrap();
     let ids = one.vault.unreadable_item_ids().unwrap();
-    let changes = client.fetch_items(&one.session, &ids).await.unwrap();
-    one.vault.apply_refetched(&ids, changes, NOW).unwrap();
+    let fetched = client.fetch_items(&one.session, &ids).await.unwrap();
+    assert!(fetched.unanswered.is_empty());
+    one.vault
+        .apply_refetched(&ids, fetched.changes, NOW)
+        .unwrap();
     assert!(one.vault.unreadable_item_ids().unwrap().is_empty());
     assert_eq!(one.vault.get_item(&id).unwrap().title, "Good");
     server.cleanup().await;
