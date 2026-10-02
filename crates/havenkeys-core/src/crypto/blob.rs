@@ -164,6 +164,10 @@ pub fn seal(key: &Key256, ctx: &BlobContext, plaintext: &[u8]) -> Result<Vec<u8>
         return Err(Error::InvalidInput("item too large"));
     }
     let aad = ctx.aad(BLOB_V1, ALG_AES_256_GCM)?;
+    seal_with_aad(key, &aad, plaintext)
+}
+
+fn seal_with_aad(key: &Key256, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
     let mut nonce_bytes = [0u8; NONCE_LEN];
     fill_random(&mut nonce_bytes)?;
 
@@ -174,7 +178,7 @@ pub fn seal(key: &Key256, ctx: &BlobContext, plaintext: &[u8]) -> Result<Vec<u8>
             &nonce,
             Payload {
                 msg: plaintext,
-                aad: &aad,
+                aad,
             },
         )
         .map_err(|_| Error::Encryption)?;
@@ -379,13 +383,16 @@ mod tests {
             seal(&k, &unbound, b"x").is_err(),
             "details must be bound to an overview"
         );
-        // A blob sealed the old way (no binding in the AAD) does not open
-        // under the new context.
-        let old_ctx = BlobContext {
-            bound_to: None,
-            ..BlobContext::item(Purpose::ItemOverview, vault, item)
-        };
-        let old = seal(&k, &old_ctx, b"x").unwrap();
+        // A details blob sealed the pre-CR1 way (vault and item in the AAD,
+        // no overview binding) does not open under the new context.
+        let mut old_aad = BlobContext {
+            bound_to: Some([0; 32]),
+            ..unbound
+        }
+        .aad(BLOB_V1, ALG_AES_256_GCM)
+        .unwrap();
+        old_aad.truncate(old_aad.len() - b"overview\0".len() - 32);
+        let old = seal_with_aad(&k, &old_aad, b"x").unwrap();
         assert!(open(&k, &BlobContext::item_details(vault, item, b"ov"), &old).is_err());
     }
 

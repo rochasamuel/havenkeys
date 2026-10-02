@@ -15,6 +15,10 @@ screen-lock code has not run on Windows.
   save and update prompts, and the overlay (clickjacking) test on Chromium.
 * Runtime check of the desktop CSP and capabilities (#14).
 * Windows: the named-pipe DACL (P1), and the vault locking on Win+L (H1).
+* Windows pipe squatting (BR-1): with a second Windows account, create the
+  pipe name first; the extension must report HavenKeys unreachable and send
+  nothing. A `#[cfg(windows)]` self-check of the same-user test would also
+  help.
 * The passkey checklist in `security-review.md` (Passkeys): webauthn.io,
   github.com and google.com in Chrome and Firefox, including Firefox 128's
   support for `world: "MAIN"` script registration.

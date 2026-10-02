@@ -93,6 +93,12 @@ pub async fn pull(
         })
         .collect();
     let end = page_len(&sized, sized.len() as i64 == window);
+    // page_len takes at least the first revision unless the window was full
+    // of one revision, which MAX_CHANGES_PER_BATCH rules out. Never move the
+    // cursor past rows that were not sent.
+    if end == 0 && !sized.is_empty() {
+        return Err(ApiError::Internal);
+    }
     let has_more = end < sized.len();
 
     // Rows rewritten since the size query moved past every revision here
@@ -185,6 +191,17 @@ mod tests {
     fn page_len_always_takes_the_first_revision() {
         let rows = vec![(1, 15 * MB), (2, 1)];
         assert_eq!(page_len(&rows, false), 1);
+    }
+
+    #[test]
+    fn page_len_is_never_zero_for_rows_unless_the_window_is_full() {
+        for rows in [
+            vec![(1, 15 * MB)],
+            vec![(1, 1), (1, 1), (2, 1)],
+            vec![(5, 20 * MB), (5, 20 * MB), (6, 1)],
+        ] {
+            assert!(page_len(&rows, false) > 0);
+        }
     }
 
     #[test]

@@ -447,7 +447,12 @@ boolean: whether in-page suggestions are shown) and the host permissions
   * content scripts, in http(s) frames of a tab, including the passkey
     bridge (`webauthn-bridge.js`). The frame URL, the top URL
     for iframes, and on Chromium the frame's origin and document ID come from
-    the browser. In-page requests from a sandboxed frame are refused by the background (the browser reports origin `null`). A popup fill and the passkey bridge also refuse a document whose `self.origin` is opaque, since `tab.url` still names the real site.
+    the browser. On Chromium, the background refuses in-page requests from a
+    sandboxed frame (the browser reports sender origin `null`). Firefox
+    reports no `sender.origin`, so there the content script's own
+    `self.origin` check is what applies. A popup fill and the passkey bridge
+    also refuse a document whose `self.origin` is opaque, since `tab.url`
+    still names the real site.
 * `externally_connectable` is empty (Chromium), so web pages and other
   extensions cannot message it.
 * No sender ever supplies a URL. The worker takes URLs from the browser and
@@ -577,7 +582,12 @@ with Google, Microsoft, GitHub, Apple".
   reads the pipe server's process ID and refuses the pipe unless that process
   runs as the same Windows user (token user SID); the desktop app checks each
   client the same way. Any failure to find or open the process counts as
-  "another user". Elevation does not matter, since user SIDs are compared.
+  "another user". The comparison uses token user SIDs, not owners, so
+  elevation alone does not change the answer. An elevated desktop app still
+  owns its pipe as Administrators, though, and the owner-only DACL refuses an
+  unelevated host, which fails closed. None of this is verified on Windows
+  yet. A residual race: a process ID read from the pipe could in theory be
+  reused before the check runs; this is hard to exploit.
   What remains: if another user squats the name first, HavenKeys cannot
   serve until that pipe goes away. That is an availability problem, not a
   confidentiality one; the extension reports HavenKeys as unreachable and

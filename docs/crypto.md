@@ -360,7 +360,8 @@ byte layout WebAuthn prescribes around it.
   drop, redacted `Debug`, no `Display`), inside the `passkeys` list of
   `ItemDetails::Login`. That list is sealed with the rest of the login's
   details as an `item-details` blob, under the vault data key, with the vault
-  ID and item ID in the associated data (§Associated data). In the JSON
+  ID, item ID and the hash of the overview blob in the associated data
+  (§Associated data). In the JSON
   plaintext the key is unpadded base64url. It is never in an overview, a
   protocol message or a command result, and it syncs to the server only as
   part of that ciphertext.
