@@ -1,6 +1,7 @@
 package net.havenkeys.android.autofill
 
 import android.app.assist.AssistStructure
+import android.content.Context
 import android.os.Build
 import android.os.CancellationSignal
 import android.service.autofill.AutofillService
@@ -22,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
+import net.havenkeys.android.data.AutofillRepository
 import net.havenkeys.android.data.Outcome
 import uniffi.havenkeys_mobile.SaveLogin
 import uniffi.havenkeys_mobile.SaveResult
@@ -69,7 +71,7 @@ class HavenAutofillService : AutofillService() {
         val unlocked = container.events.unlocked.value
         val repo = container.autofillRepository
         return when (routed) {
-            is Routed.Login -> loginResponse(screen, routed.form, routed.save, inlineRequest)
+            is Routed.Login -> loginResponse(screen, routed.form, routed.save, unlocked, repo, inlineRequest)
             else -> {
                 val target = packageManager.targetOf(screen, screen.pageDomain, screen.pageScheme)
                 val direct = unlocked && !repo.confirmBeforeFilling()
@@ -77,26 +79,9 @@ class HavenAutofillService : AutofillService() {
                 val wallet = WalletDatasets(this, screen, routed, inlineRequest).response(plan)
                 // A sign-up form still gets "Save password?" when the wallet offers nothing.
                 val save = (routed as? Routed.Identity)?.save
-                withLoginSaveFallback(wallet, save) { loginResponse(screen, null, save, inlineRequest) }
+                withLoginSaveFallback(wallet, save) { loginResponse(screen, null, it, unlocked, repo, inlineRequest) }
             }
         }
-    }
-
-    private suspend fun loginResponse(
-        screen: ParsedScreen,
-        form: LoginForm?,
-        save: SaveForm?,
-        inlineRequest: InlineSuggestionsRequest?,
-    ): FillResponse? {
-        val target = packageManager.targetOf(
-            screen,
-            form?.webDomain ?: save?.webDomain,
-            form?.webScheme ?: save?.webScheme,
-        )
-        val plan = FillPlanner.plan(
-            form, target, container.events.unlocked.value, container.autofillRepository, saveable = save != null,
-        )
-        return DatasetFactory(this, screen, form, save, inlineRequest).response(plan)
     }
 
     /**
@@ -169,5 +154,20 @@ internal fun saveMessage(outcome: Outcome<SaveResult>?, card: Boolean = false): 
 }
 
 /** The wallet's answer, or, when there is none and a login save exists, the login-save answer. */
-internal inline fun <T : Any> withLoginSaveFallback(wallet: T?, save: SaveForm?, fallback: () -> T?): T? =
-    wallet ?: if (save != null) fallback() else null
+internal inline fun <T : Any> withLoginSaveFallback(wallet: T?, save: SaveForm?, fallback: (SaveForm) -> T?): T? =
+    wallet ?: save?.let(fallback)
+
+/** The M1 login answer: [form]'s rows and, with [save], "Save password?". */
+@Suppress("LongParameterList")
+internal suspend fun Context.loginResponse(
+    screen: ParsedScreen,
+    form: LoginForm?,
+    save: SaveForm?,
+    unlocked: Boolean,
+    repo: AutofillRepository,
+    inlineRequest: InlineSuggestionsRequest?,
+): FillResponse? {
+    val target = packageManager.targetOf(screen, form?.webDomain ?: save?.webDomain, form?.webScheme ?: save?.webScheme)
+    val plan = FillPlanner.plan(form, target, unlocked, repo, saveable = save != null)
+    return DatasetFactory(this, screen, form, save, inlineRequest).response(plan)
+}

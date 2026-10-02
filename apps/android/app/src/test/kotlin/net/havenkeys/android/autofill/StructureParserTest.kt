@@ -16,6 +16,13 @@ class StructureParserTest {
         )
 
     @Test
+    fun thePageComesFromTheFirstFieldInsideOne() {
+        val page = pageOf(listOf(null to null, "shop.example" to "https", "js.stripe.com" to "https"))
+        assertEquals("shop.example" to "https", page)
+        assertEquals(null, pageOf(listOf(null to null)))
+    }
+
+    @Test
     fun visitsInViewOrderWithInheritedContext() {
         val tree = Node("a", listOf(Node("b", listOf(Node("c"))), Node("d")))
         val got = walk(tree, Node("e"))

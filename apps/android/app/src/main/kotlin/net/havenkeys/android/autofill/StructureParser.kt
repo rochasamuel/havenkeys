@@ -22,6 +22,13 @@ data class ParsedScreen(
 )
 
 /**
+ * The tab's page (domain, scheme) from the first field inside a page: a
+ * browser's own field (its address bar) can come first and has none.
+ */
+internal fun pageOf(fieldPages: List<Pair<String?, String?>>): Pair<String?, String?>? =
+    fieldPages.firstOrNull { it.first != null }
+
+/**
  * Reads an AssistStructure into [FieldFacts]. A thin traversal: every
  * decision is in [FieldClassifier] and [LoginFormFinder]. The structure is
  * built by the app or page being filled, so everything is bounded (fields,
@@ -40,13 +47,13 @@ class StructureParser {
             context = ::frameOf,
             accept = { it.autofillId != null && it.autofillType in FILLABLE_TYPES },
         )
-        val page = found.firstOrNull()?.second
+        val page = pageOf(found.map { (_, frame) -> frame.pageDomain to frame.pageScheme })
         return ParsedScreen(
             packageName = structure.activityComponent?.packageName.orEmpty(),
             fields = found.mapIndexed { index, (node, frame) -> factsOf(index, node, frame) },
             ids = found.map { (node, _) -> requireNotNull(node.autofillId) },
-            pageDomain = page?.pageDomain,
-            pageScheme = page?.pageScheme,
+            pageDomain = page?.first,
+            pageScheme = page?.second,
         )
     }
 

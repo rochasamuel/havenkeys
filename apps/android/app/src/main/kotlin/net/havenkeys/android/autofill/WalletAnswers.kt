@@ -48,8 +48,13 @@ internal suspend fun AutofillAuthActivity.answerCard(
 }
 
 /** A tapped identity row: unlock rows again gated; gated rows confirmed here, documents only when chosen. */
-internal suspend fun AutofillAuthActivity.answerIdentity(tapped: TappedRequest, form: IdentityForm, mode: String?) {
-    if (mode == DatasetFactory.MODE_UNLOCK) return answerIdentityUnlock(tapped, form)
+internal suspend fun AutofillAuthActivity.answerIdentity(
+    tapped: TappedRequest,
+    identity: Routed.Identity,
+    mode: String?,
+) {
+    if (mode == DatasetFactory.MODE_UNLOCK) return answerIdentityUnlock(tapped, identity)
+    val form = identity.form
     val repo = (application as HavenApp).container.autofillRepository
     val confirmation = IdentityConfirmation.prepare(repo, form, tapped.target)
     val documents = mode == DatasetFactory.MODE_IDENTITY_DOCS && confirmation?.documents?.isNotEmpty() == true
@@ -79,16 +84,16 @@ internal suspend fun AutofillAuthActivity.answerIdentity(tapped: TappedRequest, 
     }
 }
 
-private suspend fun AutofillAuthActivity.answerIdentityUnlock(tapped: TappedRequest, form: IdentityForm) {
+/** After an unlock: the identity rows again, gated; a sign-up keeps its "Save password?". */
+private suspend fun AutofillAuthActivity.answerIdentityUnlock(tapped: TappedRequest, identity: Routed.Identity) {
     val container = (application as HavenApp).container
-    val plan = WalletPlanner.plan(
-        Routed.Identity(form, null),
-        tapped.target,
-        container.isUnlocked(),
-        container.autofillRepository,
-        direct = false,
+    val unlocked = container.isUnlocked()
+    val repo = container.autofillRepository
+    val plan = WalletPlanner.plan(identity, tapped.target, unlocked, repo, direct = false)
+    val wallet = tapped.wallet(this).response(plan)
+    finishOrCancel(
+        withLoginSaveFallback(wallet, identity.save) { tapped.loginSave(this, it, unlocked, repo) },
     )
-    finishOrCancel(tapped.wallet(this).response(plan))
 }
 
 /**

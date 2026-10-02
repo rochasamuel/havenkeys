@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
 import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
+import net.havenkeys.android.data.AutofillRepository
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.clipboardClearSeconds
 import net.havenkeys.android.security.hardenWindow
@@ -52,7 +53,7 @@ class AutofillAuthActivity : FragmentActivity() {
         when (val routed = tapped.routed) {
             is Routed.Login -> lifecycleScope.launch { answerLogin(tapped, routed, mode, itemId) }
             is Routed.Card -> lifecycleScope.launch { answerCard(tapped, routed.form, mode, itemId) }
-            is Routed.Identity -> lifecycleScope.launch { answerIdentity(tapped, routed.form, mode) }
+            is Routed.Identity -> lifecycleScope.launch { answerIdentity(tapped, routed, mode) }
         }
     }
 
@@ -109,6 +110,10 @@ internal class TappedRequest(
     }
 
     fun wallet(activity: Activity) = WalletDatasets(activity, screen, routed, inlineRequest)
+
+    /** A sign-up's "Save password?" alone, as the service answers when the wallet offers nothing. */
+    suspend fun loginSave(activity: Activity, save: SaveForm, unlocked: Boolean, repo: AutofillRepository) =
+        activity.loginResponse(screen, null, save, unlocked, repo, inlineRequest)
 }
 
 /**

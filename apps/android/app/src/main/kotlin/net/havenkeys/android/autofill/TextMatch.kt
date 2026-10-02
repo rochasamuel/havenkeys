@@ -25,6 +25,29 @@ internal fun normalize(raw: String?): String = raw
 internal fun normalizeAll(vararg raw: String?): String =
     raw.map(::normalize).filter { it.isNotEmpty() }.joinToString(" ")
 
+/** One field's strings, each normalized once. */
+internal class FieldWords(f: FieldFacts) {
+    private val hint = normalize(f.hint)
+    private val contentDescription = normalize(f.contentDescription)
+    private val placeholder = normalize(f.htmlAttributes["placeholder"])
+    private val ariaLabel = normalize(f.htmlAttributes["aria-label"])
+    private val title = normalize(f.htmlAttributes["title"])
+    private val label = normalize(f.htmlAttributes["label"])
+
+    /** Identifiers: resource id, `name`, `id`. */
+    val attrs = joinWords(normalize(f.idEntry), normalize(f.htmlAttributes["name"]), normalize(f.htmlAttributes["id"]))
+
+    /** What the user reads, without `title` (the login classifier's text). */
+    val labels = joinWords(hint, contentDescription, placeholder, ariaLabel, label)
+
+    /** What the user reads, `title` included (the card and identity classifiers' text). */
+    val text = joinWords(hint, contentDescription, placeholder, ariaLabel, title, label)
+
+    val all = "$attrs $text".trim()
+}
+
+private fun joinWords(vararg normalized: String) = normalized.filter { it.isNotEmpty() }.joinToString(" ")
+
 /** Does normalized [text] contain any of [phrases] as whole words? */
 internal fun hasAny(text: String, phrases: Collection<String>): Boolean {
     return text.isNotEmpty() && phrases.any { containsWords(text, it) }
@@ -32,7 +55,8 @@ internal fun hasAny(text: String, phrases: Collection<String>): Boolean {
 
 /** [phrase] in [text] bounded by spaces or the ends, without building strings. */
 private fun containsWords(text: String, phrase: String): Boolean {
-    var from = text.indexOf(phrase)
+    // An empty phrase would match at every position: it matches nothing.
+    var from = if (phrase.isEmpty()) -1 else text.indexOf(phrase)
     while (from >= 0) {
         val end = from + phrase.length
         val startsWord = from == 0 || text[from - 1] == ' '

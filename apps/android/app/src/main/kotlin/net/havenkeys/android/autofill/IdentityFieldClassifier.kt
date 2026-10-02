@@ -64,12 +64,9 @@ object IdentityFieldClassifier {
         val hints = f.autofillHints.map { it.lowercase() }
         private val rawAutocomplete = f.htmlAttributes["autocomplete"].orEmpty().lowercase()
         val autocomplete = rawAutocomplete.split(' ', '\t', '\n').filter { it.isNotEmpty() && !AC_PREFIX.matches(it) }
-        val attrs = normalizeAll(f.idEntry, f.htmlAttributes["name"], f.htmlAttributes["id"])
-        val text = normalizeAll(
-            f.hint, f.contentDescription, f.htmlAttributes["placeholder"],
-            f.htmlAttributes["aria-label"], f.htmlAttributes["title"], f.htmlAttributes["label"],
-        )
-        val all = "$attrs $text".trim()
+        val attrs = f.words.attrs
+        val text = f.words.text
+        val all = f.words.all
 
         // Checkouts put new-password on address fields to keep browsers away:
         // only card and one-time-code tokens refuse a text field here.

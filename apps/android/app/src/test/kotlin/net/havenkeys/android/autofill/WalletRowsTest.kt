@@ -2,6 +2,7 @@ package net.havenkeys.android.autofill
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 import uniffi.havenkeys_mobile.CardChoice
 
@@ -32,6 +33,12 @@ class LoginSaveFallbackTest {
     @Test
     fun aSignUpWithoutAWalletAnswerFallsBackToTheLoginSave() {
         assertEquals("login", withLoginSaveFallback<String>(null, save) { "login" })
+    }
+
+    @Test
+    fun theFallbackGetsTheRoutesOwnSaveForm() {
+        val identity = Routed.Identity(IdentityForm(emptyList(), null, null), save)
+        assertSame(save, withLoginSaveFallback<SaveForm>(null, identity.save) { it })
     }
 
     @Test

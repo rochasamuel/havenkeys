@@ -125,13 +125,10 @@ object FieldClassifier {
             ).filter { it.isNotEmpty() }.toSet()
 
         /** Identifiers: resource id, `name`, `id`. */
-        val attrs = Words(f.idEntry, f.htmlAttributes["name"], f.htmlAttributes["id"])
+        val attrs = Words(f.words.attrs)
 
         /** What the user reads: hint, content description, placeholder, labels. */
-        val text = Words(
-            f.hint, f.contentDescription, f.htmlAttributes["placeholder"],
-            f.htmlAttributes["aria-label"], f.htmlAttributes["label"],
-        )
+        val text = Words(f.words.labels)
         val words = attrs + text
 
         private val inputClass = f.inputType and InputType.TYPE_MASK_CLASS
@@ -146,10 +143,7 @@ object FieldClassifier {
     }
 
     /** Normalized text, matched against keyword lists as whole words (text.ts). */
-    private class Words private constructor(val normalized: String) {
-        constructor(vararg raw: String?) :
-            this(raw.map(::normalize).filter { it.isNotEmpty() }.joinToString(" "))
-
+    private class Words(val normalized: String) {
         private val padded = " $normalized "
         private val wordSet = if (normalized.isEmpty()) emptySet() else normalized.split(' ').toSet()
 

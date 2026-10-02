@@ -19,6 +19,19 @@ class TextMatchTest {
         assertTrue(hasAny("your card number", listOf("card number")))
         assertFalse(hasAny("cardnumber", listOf("card number")))
         assertFalse(hasAny("", listOf("card")))
+        assertFalse(hasAny("your card number", listOf("")))
+    }
+
+    @Test
+    fun aFieldsWordsAreNormalizedOnceAndJoinedLikeNormalizeAll() {
+        val f = field(
+            id = "cardNumber", hint = "Número", contentDescription = "do cartão",
+            html = mapOf("name" to "cc_num", "title" to "Título", "label" to "Rótulo"),
+        )
+        assertEquals(normalizeAll("cardNumber", "cc_num", null), f.words.attrs)
+        assertEquals(normalizeAll("Número", "do cartão", "Rótulo"), f.words.labels)
+        assertEquals(normalizeAll("Número", "do cartão", "Título", "Rótulo"), f.words.text)
+        assertEquals("${f.words.attrs} ${f.words.text}", f.words.all)
     }
 
     @Test

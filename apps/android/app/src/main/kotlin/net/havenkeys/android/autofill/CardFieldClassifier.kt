@@ -66,16 +66,9 @@ object CardFieldClassifier {
         val hints = f.autofillHints.map { it.lowercase() }
         val autocomplete = f.htmlAttributes["autocomplete"].orEmpty().lowercase()
             .split(' ', '\t', '\n').filter { it.isNotEmpty() && !AC_PREFIX.matches(it) }
-        val attrs = normalizeAll(f.idEntry, f.htmlAttributes["name"], f.htmlAttributes["id"])
-        val text = if (f.hint == null && f.contentDescription == null && f.htmlAttributes.isEmpty()) {
-            ""
-        } else {
-            normalizeAll(
-                f.hint, f.contentDescription, f.htmlAttributes["placeholder"],
-                f.htmlAttributes["aria-label"], f.htmlAttributes["title"], f.htmlAttributes["label"],
-            )
-        }
-        val all = "$attrs $text".trim()
+        val attrs = f.words.attrs
+        val text = f.words.text
+        val all = f.words.all
         val refused: Boolean get() =
             hasAny(all, NEGATIVE) || "one-time-code" in autocomplete || "one-time-code" in hints
     }

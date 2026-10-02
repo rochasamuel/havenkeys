@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.SecureFlagPolicy
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.components.SecureDialogWindow
 
@@ -43,6 +45,8 @@ internal fun WalletConfirmDialog(
     }
     AlertDialog(
         onDismissRequest = once(onDismiss),
+        // FLAG_SECURE stated, not inherited from the activity's window.
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
         text = {
             Column {
                 SecureDialogWindow(ignoreObscuredTouches = true)
