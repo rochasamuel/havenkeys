@@ -1013,7 +1013,8 @@ and running: `docs/android.md`. Threats: `threat-model.md` T12.
 this section says about Android's behaviour (the Keystore, BiometricPrompt,
 the autofill framework, package visibility, `FLAG_SECURE`, the clipboard)
 describes the code and Android's documentation, not a test on a device. The
-manual checklist is in `security-review.md` ("Android M1").
+manual checklists are in `security-review.md` ("Android M1" and, for editing
+and saving, "Android M2": not yet run).
 
 ### 22.1 Boundaries
 
@@ -1130,8 +1131,8 @@ This is the one documented relaxation of CLAUDE.md §33.
 * An unreadable device-settings blob (damaged, replaced) is read as
   "Confirm before filling" on: a bad blob never turns it off.
 * Locked, the response is one "Unlock HavenKeys" row that names no login.
-* Nothing is filled without a tap on a row. Saving logins from Autofill
-  comes in M2; `onSaveRequest` refuses.
+* Nothing is filled without a tap on a row. Saving logins from Autofill is
+  §22.17.
 * An OTP-only form (no username or password field) is offered the codes of
   the matched logins that have TOTP, never their passwords.
 
@@ -1360,7 +1361,10 @@ only. `ManifestTest` checks the source manifest only.
   `ByteArray` that is zeroed at once, but the JVM, the Keystore provider and
   UniFFI's buffers may hold copies we cannot reach. Camera frames of the
   Emergency Kit's QR code (which contains the Secret Key) are not zeroed.
-  These join the limits in §8.
+  These join the limits in §8. The editor and Autofill save add to this:
+  every typed value (a password, a TOTP key, a card number, a note) and every
+  value read from a save request passes through `String`s that stay in the
+  Java heap until garbage collection (§22.16, §22.17).
 
 ### 22.13 Logging and build supply chain
 
@@ -1390,6 +1394,14 @@ only. `ManifestTest` checks the source manifest only.
   (`security-review.md` AN1).
 * "Confirm before filling" does not stop the matched app from firing its
   own gated rows while the vault is unlocked (§22.4, AN3).
+* Writes need the server; nothing is edited or saved offline (§22.16).
+* A save from Autofill is lost if the vault locks before the user submits
+  the form, and the title of an app-saved login comes from the app's own
+  label (§22.17, AN32, AN33).
+* The Autofill service's coroutine scope has no exception handler: an
+  unexpected throw while parsing a hostile structure ends the process, which
+  locks the vault (fails closed, as in the fill path; AN30).
+* Editing and saving have not run on a phone or an emulator (AN36).
 
 ### 22.15 Distribution
 
@@ -1415,3 +1427,81 @@ only. `ManifestTest` checks the source manifest only.
   manual step (`docs/website.md`).
 * The download page fetches the release list from GitHub's API and accepts
   the APK only from this repository's release-download URL.
+
+### 22.16 Editing
+
+Android M2. The editor (`ui/edit/`) creates, edits and deletes logins,
+secure notes and cards, and edits the identity (the core refuses to create or
+delete the identity from a phone).
+
+* **The editor sends changes, not items.** Each field is `Keep`, `Replace`
+  or `Remove`; Rust merges them into the stored item
+  (`crates/havenkeys-mobile/src/edit.rs`). A hidden value (password, TOTP
+  key, card number, security code, a note's text) is read into the editor
+  only when the user taps Change, through `reveal`. Everything the editor
+  does not show is kept by every phone edit: custom fields, passkeys, app
+  bindings, "Sign in with" and a card's brand. The editing API returns field
+  names and presence, never a value, so `havenkeys-mobile` still returns no
+  whole item.
+* **The draft lives in the edit screen's composition only.** It is
+  `remember`ed, never `rememberSaveable`d, so it is not written to saved
+  instance state. `MainActivity` handles
+  `orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|density|uiMode|fontScale`
+  changes itself, so rotating, folding, a theme change or a font-size change
+  does not recreate the activity and an open draft survives; a locale change
+  or the process dying still discards it. The lock wipe and leaving the
+  screen drop the draft. The window is `FLAG_SECURE` and excluded from
+  autofill services, so neither a screenshot nor another autofill service
+  sees the fields.
+* **Keyboards.** Every editor field adds
+  `EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING` (`NoPersonalizedLearning.kt`),
+  and single-line secrets use the password keyboard with autocorrect off.
+  Keyboards may ignore the flag (an Android limitation), so a third-party
+  keyboard can still see and retain what is typed.
+* **A value being loaded is read-only.** When the user taps Change on a
+  value that exists, it loads asynchronously; its field stays read-only
+  until it arrives, and Save waits for every load, so a save cannot replace a
+  value the user has not seen with an empty one.
+* **Writes are online only.** `create_item`, `update_item` and `delete_item`
+  refuse with `offline` before staging anything; the editor shows a banner.
+  Nothing is recorded locally until the server has accepted the write
+  (`stage → push → commit`). The server's revision check turns a concurrent
+  edit into "This item changed on another device." and the app reloads;
+  nothing is overwritten silently.
+* **Typed values pass through JVM `String`s** that cannot be zeroed, the
+  same limitation as the master password field (§22.12).
+
+### 22.17 Saving from Autofill
+
+Android M2. When the user submits a login form in an app or a browser,
+Android offers its own save sheet; HavenKeys saves only if the user confirms
+it, which is the confirmation CLAUDE.md §27 asks for.
+
+* **`SaveInfo` is attached only to a response built while unlocked, for a
+  target Rust classified** (a browser page or an app). A locked vault gets
+  no `SaveInfo`, so a login typed while locked is not saved. HavenKeys' own
+  screens are never saved.
+* **Values are read from the save request only for the fields being saved**
+  (`StructureParser.textOf`); `FieldFacts` keeps no typed text. Rust decides
+  whether the save adds a login, updates one, or is unchanged
+  (`crates/havenkeys-mobile/src/save.rs`, `app_fill.rs`).
+* **A browser save** adds a login with a whole-site rule for the page's own
+  host (from the privileged browser's reported page, §22.5), and updates only
+  a login that already matches that page. It never touches a login that does
+  not match.
+* **An app save** adds a login bound to that app's package and every signing
+  certificate, with no website, and updates only a login matched to that app
+  (bound to it, or vouched for by Digital Asset Links, §22.7). It never
+  touches any other login. The new login's title comes from the app's
+  label, which the app chooses: see `security-review.md` AN32.
+* **A username-first sign-in** (username on one screen, password on the
+  next) uses `FLAG_DELAY_SAVE` on Android 10+ so the two screens save as one
+  login. On Android 9 there is no such flag: the password step saves
+  without the username unless that screen has one.
+* **Timing.** The answer to Android comes within 8 seconds; a later failure
+  (for example the server refusing) shows a Toast. If the vault locks before
+  the user submits, nothing is saved and the user sees "HavenKeys locked
+  before saving."
+* Offline, a save answers "Can't save while offline" and stages nothing.
+* Autofill is not app use: neither the fill nor the save path resets the
+  idle timer.

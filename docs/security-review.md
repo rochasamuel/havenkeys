@@ -1260,6 +1260,67 @@ findings. They are tracked in the development ledger, not here. Examples:
 reaches; `assert` accepts a stored key shorter than 32 bytes; and
 `find_passkeys` results are cut off at 50.
 
+### AN30. The autofill service's scope has no exception handler (Low, open)
+**Component:** `HavenAutofillService`. Parsing a structure Android hands
+the service (fill, and now save) is done in a coroutine scope with no
+`CoroutineExceptionHandler`. **Scenario:** a hostile app builds a view
+structure that makes the parser throw something unexpected; the uncaught
+exception ends the process. **Effect:** the in-memory vault goes with the
+process, so it fails closed (the user unlocks again); it can be used to
+annoy, not to read. The M1 fill path behaves the same. **Remaining:**
+catching and answering "nothing" would be kinder; not done in M2.
+
+### AN31. The editor's draft holds typed secrets (Low, mitigated)
+**Component:** `ui/edit/`. The draft (a password, a TOTP key, a card number,
+a note) lives in the edit screen's `remember`ed state for as long as the
+screen is open, and in the JVM `String`s the text fields use. **Mitigation:**
+no `rememberSaveable`, `SavedStateHandle`, Intent extra or ViewModel state
+(`EditorState.toString()` prints nothing); `MainActivity` handles
+`orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|density|uiMode|fontScale`
+itself so the draft survives them without being written anywhere (a locale
+change or process death discards it); the lock wipe and leaving the screen
+drop it; `FLAG_SECURE`; the window is excluded from autofill services. A
+value that exists loads asynchronously, its field is read-only until it
+arrives, and Save waits for loads. **Remaining:** JVM strings cannot be
+zeroed (same as the master password field), and the draft is readable by
+malware as the same user while unlocked (threat model section 4).
+
+### AN32. An app can make HavenKeys save a login named like another service (Low, mitigated)
+**Component:** `autofill_save` (`save.rs`, `app_fill.rs`). **Scenario:** an
+app labels itself "GitHub" and shows a login form; the user confirms
+Android's save sheet; the new login is titled "GitHub". **Mitigation:** the
+login is bound to that app's package and every signing certificate and has
+no website, so it never fills GitHub's site or app, and it never updates a
+login that is not already matched to that app. **Remaining:** the title can
+mislead the user later; the binding is shown only on the desktop.
+
+### AN33. A save is lost if the vault locks before submission (Info, accepted)
+**Component:** `SaveRequestReader`, `onSaveRequest`. `SaveInfo` is attached
+only while unlocked and the save is performed only while unlocked. If the
+vault locks (auto-lock, screen off) before the user submits, nothing is
+saved and the user sees "HavenKeys locked before saving." No safety impact;
+the user types the login again. The answer to Android comes within 8
+seconds; a later failure shows a Toast.
+
+### AN34. Username-first sign-in on Android 9 (Info, accepted)
+**Component:** `SaveForm`. `FLAG_DELAY_SAVE` (username screen, then password
+screen, saved as one login) exists on Android 10+. On Android 9 the password
+step saves a login without a username unless that screen has one. The user
+can add it in the editor.
+
+### AN35. Keyboards may ignore the no-learning flag (Info, accepted)
+**Component:** `NoPersonalizedLearning.kt`. Every editor field adds
+`EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING`, and single-line secrets use
+the password keyboard with autocorrect off. A keyboard app is free to ignore
+both; a malicious keyboard sees everything typed in any app. HavenKeys
+cannot detect or prevent that.
+
+### AN36. M2 has not run on a device (Info, open)
+The editor, conflict handling, the lock wipe in the editor, the keyboard
+flags and the Autofill save sheet are verified by JVM unit tests, the host
+Rust tests and `tests/round_trip.rs` (two phones editing one vault through a
+real server), not on Android. The Android M2 checklist below is open.
+
 ## Audits and full verification
 
 Run on 2026-09-24 at `2e0eb73` (WSL2, Linux 6.6).
@@ -1331,6 +1392,7 @@ Full verification was run for the automatic-sign-in feature (WSL2, Linux
 | `cargo test --workspace --exclude havenkeys-server --exclude havenkeys-sync-client` | 359 passed, 0 failed, across every other workspace crate (core, bridge, protocol, native-host, oslock, desktop-lib) |
 | `cargo test -p havenkeys-sync-client --test round_trip` | 6 failed, all `Postgres is not reachable — run scripts/test-server.sh: Error { kind: Connect, cause: Some(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }) }`. **Environmental, pre-existing:** no Postgres is running here, and this branch does not touch the sync client; the same failure mode as the `havenkeys-server` tests above |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
+| (not run: `cargo test --workspace`; the three Android-facing crates above were tested, not the server and desktop suites) | |
 | `pnpm audit --prod` | No known vulnerabilities found |
 | `cargo audit` | Same 7 allowed warnings as the previous re-run (`proc-macro-error`, five `unic-*`, `glib` `VariantStrIter`), all through Tauri's Linux GTK stack, none from this feature; **no vulnerabilities** |
 
@@ -2125,6 +2187,13 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN26 | Medium | Autofill (`LoginFormFinder`) | Found on the same phone: a login whose only password says `autocomplete="new-password"` (dashboard.render.com) was taken for a sign-up form, so nothing was offered | **Fixed**: that one field, beside a username with no confirmation, is the login's password |
 | AN27 | Medium | Autofill (`LoginFormFinder`, `FieldClassifier`) | Found in the Riot app: a code split one box per digit (`maxlength=1`, and a stray `new-password` hint) was not a code field, and the app shows Android only the tapped box | **Fixed**: the tapped one-character box (HTML `maxlength` or a native view's `maxTextLength`) on a screen with no login field is a code field; in a row of such boxes the first one |
 | AN28 | Info | Autofill (`DatasetFactory`, `AutofillAuthActivity`) | Android fills only the tapped box, which keeps one digit, so a split code cannot be filled whole | **Mitigated**: a "Copy one-time code" row beside each offered code copies it (explicit tap, Rust asked for that target, sensitive clip, usual clearing) for pasting |
+| AN30 | Low | Autofill (`HavenAutofillService` scope) | The service's coroutine scope has no exception handler: an unexpected throw while parsing a hostile structure (fill or save) ends the process | Open (fails closed: the vault, in memory, goes with the process; same as M1's fill path) |
+| AN31 | Low | Editor (`ui/edit/`) | The draft holds typed secrets in Compose state, and typed values pass through JVM `String`s, for as long as the screen is open | Mitigated (no saved state, rotation handled in place, lock wipe, `FLAG_SECURE`, autofill exclusion); strings are not zeroed |
+| AN32 | Low | Autofill save (`autofill_save`) | An app can make HavenKeys save a login named like another service | Mitigated: bound to that app only; title can mislead |
+| AN33 | Info | Autofill save | A save request is lost if the vault locks before the user submits | Accepted (user sees "HavenKeys locked before saving.") |
+| AN34 | Info | Autofill save (`SaveForm`) | On Android 9 a username-first sign-in has no `FLAG_DELAY_SAVE`: the password step saves without the username unless that screen has one | Accepted |
+| AN35 | Info | Editor keyboards | `IME_FLAG_NO_PERSONALIZED_LEARNING` is a request: a keyboard may ignore it and learn or log what is typed | Accepted (Android limitation) |
+| AN36 | Info | Editor, Autofill save | Nothing in M2 has run on a device or emulator; the Android M2 checklist is open | Open |
 
 ## Details
 
@@ -2526,3 +2595,59 @@ None of these has been run.
 "Each fill asks" means each row opens HavenKeys (AN3). Also owed: one run of
 `connectedGithubDebugAndroidTest` on an emulator or phone. Package
 visibility was checked on a phone and fixed for the `github` flavor (AN10).
+
+## Android M2 (editing and saving from Autofill)
+
+**Scope:** branch `android-m2`: `crates/havenkeys-mobile` (`edit.rs`,
+`save.rs`), `app_fill.rs` in the core, and `apps/android` (`ui/edit/`,
+`autofill/SaveForm.kt`, `SaveCollector.kt`, `SaveRequestReader.kt`,
+`onSaveRequest`). **Nothing here has run on a phone or an emulator.** New
+findings are AN30–AN36 above.
+
+Properties checked by host tests and `tests/round_trip.rs`: a write offline
+is refused before staging; a stale revision becomes `item_changed_elsewhere`
+and nothing is overwritten; a phone edit keeps custom fields, passkeys, app
+bindings, "Sign in with" and a card's brand; a browser save adds a
+whole-site rule for the page's own host and updates only a login matching
+that page; an app save adds a login bound to the app, with no website, and
+updates only a login matched to that app; a locked vault saves nothing.
+JVM tests check that `SubmittedForm`, `SubmittedLogin` and `EditorState`
+do not print values and that the ViewModel's state does not hold a draft.
+
+Secret-leak grep over the diff
+(`git diff main -- apps/android crates/havenkeys-mobile | grep -nE 'Log\.|println|toString\(\)|\$\{?(draft|login|value|password)'`):
+every hit is a redacting `toString()` override, a test asserting that a
+value is absent from `toString()`, or `toString()` on a non-secret (an app
+label, a node's text value read only for a confirmed save and truncated).
+
+### Manual checklist (Android M2, verification pending)
+
+None of these has been run.
+
+- [ ] Editor: create a login, a secure note and a card; edit each; delete one. Each shows in the list and on the desktop.
+- [ ] Edit a login that has a custom field, a passkey and an app binding on the desktop: after a phone edit all three are still there.
+- [ ] Change a password: the field loads the current value, stays read-only until loaded, and Save waits; leaving a field untouched keeps the stored value.
+- [ ] Rotate the phone, change the theme and the font size with an open draft: the draft stays. Change the locale (or kill the process): the draft is gone.
+- [ ] Lock (auto-lock or the lock button) with a draft open: the editor closes and the draft is gone; recents show a blank thumbnail.
+- [ ] With another autofill service active: the editor's fields get no suggestion and no offer to save.
+- [ ] Airplane mode: the editor shows the offline banner and refuses to save; reading still works.
+- [ ] Edit the same item on the desktop and the phone, save on the phone second: "This item changed on another device." and the item reloads.
+- [ ] A keyboard other than the default: confirm the editor's fields are not offered personalized suggestions (AN35: a keyboard may ignore the flag).
+- [ ] Autofill save, Chrome and Firefox: sign in to a new site, confirm Android's save sheet; the login appears with that site only. Sign in again with a changed password: updated; with the same one: unchanged. github.com.evil.com does not update github.com's login.
+- [ ] Autofill save, an app: sign in to a sideloaded test app, confirm; the login appears bound to that app, with no website. A second app with another certificate and the same label does not update it.
+- [ ] A username-first sign-in on Android 10+: one login with both values. On Android 9: password step only (AN34).
+- [ ] Lock before submitting: "HavenKeys locked before saving." (AN33); offline: "Can't save while offline."
+- [ ] HavenKeys' own screens never offer to save.
+- [ ] Also owed from M1: `connectedGithubDebugAndroidTest` on an emulator or phone.
+
+### Verification (2026-10-02, tip of `android-m2` plus this documentation)
+
+| Command | Result |
+|---|---|
+| `cargo test -p havenkeys-core -p havenkeys-client -p havenkeys-mobile --features havenkeys-mobile/testing` | 568 passed, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
+| `cargo test -p havenkeys-mobile --features server-tests --test round_trip` (Postgres container) | 1 passed |
+| `cargo audit` | No vulnerabilities; the same 3 allowed warnings as Android M1 |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok` |
+| `scripts/build-android.sh`, then `git status --porcelain` on `kotlin/uniffi` | Built; no change (bindings current) |
+| `./gradlew detekt testGithubDebugUnitTest lintGithubDebug assembleGithubDebug` | BUILD SUCCESSFUL; 212 JVM unit tests, 0 failed |

@@ -13,7 +13,9 @@ havenkeys/
 │   ├── havenkeys-client/      account, session and sync for every app: activation, unlock,
 │   │                          sync, writes, devices, removal (no Tauri, no UI)
 │   ├── havenkeys-mobile/      UniFFI API for the Android app (and later iOS): intent-level calls,
-│   │                          Keystore-sealed Secret Key file, Digital Asset Links fetch
+│   │                          Keystore-sealed Secret Key file, Digital Asset Links fetch;
+│   │                          edit.rs: changes (Keep/Replace/Remove), not items, online-only writes;
+│   │                          save.rs: Autofill save, Rust decides add / update / unchanged
 │   └── havenkeys-core/        Rust security core (no UI, no Tauri, no network)
 │       └── src/
 │           ├── crypto/        kdf.rs, keys.rs, blob.rs — composition of audited primitives
@@ -31,7 +33,8 @@ havenkeys/
 │           ├── sync.rs        account header attestation + applying a server pull (no network)
 │           ├── unlock_bundle.rs  Android biometric unlock bundle: layout and freshness
 │           ├── app_target.rs  Android fill targets: privileged browsers vs apps
-│           ├── app_fill.rs    filling Android apps: app bindings, vouched sites
+│           ├── app_fill.rs    filling Android apps: app bindings, vouched sites;
+│           │                  saving logins from apps and browsers (add / update / unchanged)
 │           ├── asset_links.rs Digital Asset Links parsing and cache (the fetch is mobile's)
 │           ├── local.rs       device-local encrypted slots that never sync
 │           └── error.rs       secret-free error type
@@ -78,7 +81,8 @@ Spec: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Building:
 ┌─────────────────────────────────▼──────────────────────────────────────────┐
 │ havenkeys-mobile: MobileVault — status, onboarding, unlock (password,       │
 │ bundle), list/search/view/reveal/TOTP, generator, autofill_matches/fill/    │
-│ totp/search/bind_and_fill, settings, sync, devices, sign out, remove        │
+│ totp/search/bind_and_fill/save, create/update/delete item (changes, online  │
+│ only), settings, sync, devices, sign out, remove                            │
 │        │                                │                                   │
 │ havenkeys-client (account, sync)   asset_links_fetch (HTTPS, assetlinks.json)│
 │        │                                                                    │
@@ -106,7 +110,9 @@ Spec: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Building:
   biometric unlock is on, the sealed bundle in `noBackupFilesDir`.
 * **Sync** is `havenkeys-client`'s: a pull on unlock, on pull-to-refresh, and
   while the app is in the foreground (checked every 30 seconds, pulled when
-  60 seconds have passed). Nothing syncs while locked. Editing is not in M1.
+  60 seconds have passed). Nothing syncs while locked. Editing (M2) is online only: Rust stages a
+  change, the server accepts it (or refuses with a revision conflict), and
+  only then is it recorded locally.
 * **Calls block.** `havenkeys-mobile` runs a small Tokio runtime of its own
   (two workers) and blocks the calling thread; the app always calls it off
   the main thread. An autofill request is answered within 4 seconds or with

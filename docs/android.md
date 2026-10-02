@@ -7,12 +7,20 @@ Design: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Security:
 
 > This software has not undergone an independent security audit.
 
-**Status: Android M1.** Sign in with the Emergency Kit (QR code or typed) or
+**Status: Android M2.** Sign in with the Emergency Kit (QR code or typed) or
 an invite; unlock with the master password or, once turned on, a fingerprint
 or face; browse, search, reveal, copy and read TOTP codes offline; generate
 passwords; fill logins and TOTP codes in apps and browsers through Android
-Autofill. Creating and editing items, saving from Autofill, passkeys, cards
-and identities in Autofill, and an in-app updater come in later milestones.
+Autofill. Android M2 adds editing: create, edit and delete logins, secure
+notes and cards, and edit the identity, with a password generator in the
+editor; writes need the server (offline, the editor is read-only) and a
+concurrent edit shows "This item changed on another device." It also adds
+saving from Autofill: after you confirm Android's save sheet, a login typed
+into a browser is saved for that site, and one typed into an app is bound to
+that app (`security-model.md` §22.16, §22.17). Not in M2: editing custom
+fields (kept as they are), scanning a TOTP QR code (type or paste the key),
+saving a login typed while locked, passkeys, cards and identities in
+Autofill, and an in-app updater.
 
 **Nothing in `apps/android` has run on a phone or an emulator yet.** It
 compiles, its JVM unit tests pass, and the Rust it calls is tested on the
@@ -116,6 +124,14 @@ cargo test -p havenkeys-mobile --features testing   # includes tests/regressions
 cargo test -p havenkeys-core                          # bundle, app targets, asset links
 ```
 
+The round-trip test (two phones editing one vault through a real server)
+needs Postgres; `scripts/test-server.sh` starts a container and exports the
+`HAVENKEYS_TEST_DATABASE_URL` it uses:
+
+```sh
+cargo test -p havenkeys-mobile --features server-tests --test round_trip
+```
+
 ## Running against a local server
 
 The server address must be `https://`, except `http://localhost` (or
@@ -213,7 +229,7 @@ keytool -genkeypair -v -keystore havenkeys-release.jks -alias havenkeys \
 ## Manual checklist
 
 None of these has been run. Record results in `docs/security-review.md`
-("Android M1"), where the same list lives.
+("Android M1" and "Android M2"), where the same lists live.
 
 - [ ] Real phone, Android 14+: sign in by scanning the kit; unlock with password; enroll fingerprint; unlock with fingerprint; reboot → password required; add a fingerprint → bundle refused, password required.
 - [ ] Chrome (Autofill using another service) and Firefox: login on github.com fills after a tap; github.com.evil.com (hosts file or a test domain) offers nothing; an http page does not get an https login.
@@ -228,6 +244,21 @@ None of these has been run. Record results in `docs/security-review.md`
 - [ ] An app with "display over other apps" covering the binding prompt or a gated row's activity: the tap through it is ignored.
 - [ ] With the screen kept on and a TOTP login open, the vault locks at the auto-lock time; after the app sat frozen past the deadline, the next fill shows "Unlock HavenKeys".
 - [ ] Before the first release: build a release APK with R8 (`scripts/build-android.sh --release`, then `./gradlew assembleGithubRelease`) and smoke-test it on a phone — unlock, sync, reveal, autofill — so R8 has not stripped anything JNI or JNA (UniFFI, `rustls-platform-verifier`) reaches by reflection.
+
+Editing and saving (Android M2; the same list is in `security-review.md`):
+
+- [ ] Create a login, a secure note and a card; edit each; delete one. Each shows on the desktop too.
+- [ ] Edit a login that has a custom field, a passkey and an app binding: all three survive a phone edit.
+- [ ] Change a password: the field stays read-only until the current value loads; an untouched field keeps its stored value.
+- [ ] Rotate, change theme and font size with an open draft: the draft stays. Change the locale or kill the process: it is gone.
+- [ ] Lock with a draft open: the editor closes, the draft is gone, recents are blank.
+- [ ] With another autofill service active: the editor's fields get no suggestion and no save offer.
+- [ ] Airplane mode: the editor shows the offline banner and will not save.
+- [ ] Edit the same item on the desktop and the phone, save on the phone second: "This item changed on another device."
+- [ ] Autofill save in Chrome and Firefox: a new login is saved for that site only; a changed password updates it; the same password is "unchanged"; github.com.evil.com never updates github.com's login.
+- [ ] Autofill save in an app: the login is bound to that app with no website; an app with another certificate does not update it.
+- [ ] Username-first sign-in: one login on Android 10+; password step only on Android 9.
+- [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "Can't save while offline."; HavenKeys' own screens never offer to save.
 
 On "Confirm before filling on: each fill asks": with the setting on, each
 row opens HavenKeys, which unlocks first if the vault is locked; while it is

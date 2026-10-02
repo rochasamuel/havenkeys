@@ -543,8 +543,8 @@ messages in `native-messaging.md` §"Sign in with", the mechanism in
 The Android app (`docs/android.md`; `security-model.md` §22) holds the same
 vault as the desktop and fills logins in other apps and in browsers through
 Android Autofill. Nothing in this section has been run on a phone or an
-emulator yet; the manual checklist in `security-review.md` ("Android M1")
-covers each item.
+emulator yet; the manual checklists in `security-review.md` ("Android M1"
+and "Android M2") cover each item.
 
 * **A malicious app with a borrowed package name.** Anyone can install an
   app called `com.github.android`. *Mitigation:* Rust identifies an app by
@@ -622,6 +622,26 @@ covers each item.
   after the vault's delay and on lock. Android 10+ keeps background apps
   from reading the clipboard, but the foreground app, the keyboard and a
   clipboard-reading accessibility service can. See `security-model.md` §22.10.
+* **A malicious app or page submitting a fake form to plant or overwrite a
+  login (M2).** An app or a web page can show a login form and submit it so
+  that Android offers to save. *Mitigation:* nothing is saved unless the user
+  confirms Android's save sheet and the vault is unlocked; a browser save can
+  only add a login whose whole-site rule is the page's own host (reported by
+  the privileged browser, not claimed by the page) and can only update a
+  login that already matches that page; an app save can only add a login
+  bound to that app's package and certificates, with no website, and can only
+  update a login matched to that app. It cannot change another site's or
+  app's login (`security-model.md` §22.17). *Residual:* an app can choose its
+  label, so the new login's title can imitate another service (AN32).
+* **Another autofill service reading the editor.** The edit window is
+  excluded from autofill services and is `FLAG_SECURE`, so a second
+  autofill service gets no structure from it and no screenshot is possible.
+  *Residual:* a keyboard app sees what is typed and may ignore the
+  no-learning flag (AN35).
+* **A stale edit overwriting a newer one.** Phone writes go through the
+  server's revision check; a concurrent change becomes "This item changed on
+  another device." and nothing is overwritten (`security-model.md` §22.16).
+  Editing is online only.
 * **Overlays.** HavenKeys sets `FLAG_SECURE` (no screenshots, blank recents).
   On Android 9–11 an app allowed to draw over others could disguise the
   "Use" button of the binding prompt; the autofill activities and the
