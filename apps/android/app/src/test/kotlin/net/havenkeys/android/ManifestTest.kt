@@ -66,6 +66,21 @@ class ManifestTest {
         )
     }
 
+    @Test
+    fun onlyTheGithubFlavorMaySeeOtherApps() {
+        // Autofill must read the signing certificate of the app or browser
+        // it fills; Android 11+ hides other packages without this.
+        val github = DocumentBuilderFactory.newInstance()
+            .apply { isNamespaceAware = true }
+            .newDocumentBuilder()
+            .parse(File("src/github/AndroidManifest.xml"))
+            .documentElement
+        val nodes = github.getElementsByTagName("uses-permission")
+        val added = (0 until nodes.length).map { (nodes.item(it) as Element).android("name") }.toSet()
+        assertEquals(setOf("android.permission.QUERY_ALL_PACKAGES"), added)
+        assertFalse(File("src/play/AndroidManifest.xml").exists())
+    }
+
     private val sources = File("src/main/kotlin").walk().filter { it.extension == "kt" }.toList()
 
     private val activities: List<File> by lazy {

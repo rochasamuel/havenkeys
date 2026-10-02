@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- github flavor only. Autofill binds a login to the signing certificate of
+     the app or browser it fills (CallerIdentity), and Android 11+ hides other
+     packages from HavenKeys: without this, every certificate lookup fails and
+     Rust refuses every target (security-review.md AN10). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+</manifest>
