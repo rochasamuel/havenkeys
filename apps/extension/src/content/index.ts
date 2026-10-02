@@ -506,6 +506,9 @@ function start(): void {
 
   function handleFill(m: Extract<BackgroundToContent, { type: "bg_fill" }>): FillReply {
     const none: FillReply = { filled: 0, pressing: null };
+    // A sandboxed document (CSP `sandbox`) keeps its URL but runs with an
+    // opaque origin: page script there is not the site and must get nothing.
+    if (self.origin !== location.origin) return none;
     // The frame may have navigated since the desktop matched its URL.
     if (m.origin !== location.origin) return none;
     const env = defaultEnv();

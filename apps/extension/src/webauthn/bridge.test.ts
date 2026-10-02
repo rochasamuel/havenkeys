@@ -58,6 +58,21 @@ const request = (detail: unknown) => window.dispatchEvent(new CustomEvent(REQUES
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("isolated bridge", () => {
+  it("falls back without asking the background in an opaque-origin document", async () => {
+    const real = Object.getOwnPropertyDescriptor(window, "origin");
+    Object.defineProperty(window, "origin", { value: "null", configurable: true });
+    try {
+      reply = () => ({ ok: true, token: TOKEN, ui: "chooser" });
+      request({ kind: "get", id: hex(77), options: get });
+      await flush();
+      expect(sent).toEqual([]);
+      expect(responses).toEqual([{ id: hex(77), outcome: "fallback" }]);
+    } finally {
+      if (real) Object.defineProperty(window, "origin", real);
+      else delete (window as { origin?: string }).origin;
+    }
+  });
+
   it("ignores malformed page events", async () => {
     window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: { kind: "get" } }));
     request({ kind: "get", id: ID, options: { ...get, url: "https://evil" } });

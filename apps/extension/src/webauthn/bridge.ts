@@ -174,6 +174,9 @@ export function startBridge(): void {
     if (req.kind === "cancel") return cancel(req.id);
     // Synchronous: the page script knows at once that a bridge is here.
     dispatch({ id: req.id, outcome: "ack" });
+    // An opaque-origin (sandboxed) document is not the site; the background
+    // refuses it too, but nothing is sent from here at all.
+    if (self.origin !== location.origin) return dispatch({ id: req.id, outcome: "fallback" });
     void begin(req);
   });
 

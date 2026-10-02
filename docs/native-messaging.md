@@ -446,7 +446,7 @@ boolean: whether in-page suggestions are shown) and the host permissions
   * content scripts, in http(s) frames of a tab, including the passkey
     bridge (`webauthn-bridge.js`). The frame URL, the top URL
     for iframes, and on Chromium the frame's origin and document ID come from
-    the browser. A sandboxed frame (origin `null`) is ignored.
+    the browser. In-page requests from a sandboxed frame are refused by the background (the browser reports origin `null`). A popup fill and the passkey bridge also refuse a document whose `self.origin` is opaque, since `tab.url` still names the real site.
 * `externally_connectable` is empty (Chromium), so web pages and other
   extensions cannot message it.
 * No sender ever supplies a URL. The worker takes URLs from the browser and

@@ -101,6 +101,22 @@ describe("content script", () => {
     expect(listener).toBe(again);
   });
 
+  it("refuses_a_popup_fill_into_an_opaque_origin_document", () => {
+    // A document served with `Content-Security-Policy: sandbox` keeps its
+    // URL (and location.origin) but runs with an opaque origin.
+    const real = Object.getOwnPropertyDescriptor(window, "origin");
+    Object.defineProperty(window, "origin", { value: "null", configurable: true });
+    try {
+      expect(deliver(loginFill(location.origin))).toEqual({ filled: 0, pressing: null });
+      expect(field("pw").value).toBe("");
+    } finally {
+      if (real) Object.defineProperty(window, "origin", real);
+      else delete (window as { origin?: string }).origin;
+    }
+    // The same page without the sandbox still fills.
+    expect(deliver(loginFill(location.origin))).toEqual({ filled: 2, pressing: null });
+  });
+
   it("fills the page's login form for a popup fill on the matched origin", () => {
     expect(deliver(loginFill(location.origin))).toEqual({ filled: 2, pressing: null });
     expect(field("user").value).toBe("octo");
