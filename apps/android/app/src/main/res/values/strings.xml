@@ -295,4 +295,9 @@
     <string name="passkey_cancel">Cancel</string>
     <string name="passkey_close">Close</string>
     <string name="error_passkey_unsupported">This site asked for a kind of passkey HavenKeys can\'t create.</string>
+    <string name="autofill_setup_passkeys_title">Passkeys and app sign-in</string>
+    <string name="autofill_setup_passkeys_on">HavenKeys is on for passwords and passkeys.</string>
+    <string name="autofill_setup_passkeys_off">Turn on HavenKeys in Android\'s passwords and passkeys settings to use your passkeys in apps and browsers.</string>
+    <string name="autofill_setup_passkeys_open">Open passwords and passkeys settings</string>
+    <string name="autofill_setup_passkeys_old">Passkeys need Android 14 or later.</string>
 </resources>

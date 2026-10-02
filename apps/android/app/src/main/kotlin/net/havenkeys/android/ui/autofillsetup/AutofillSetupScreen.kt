@@ -1,8 +1,10 @@
 package net.havenkeys.android.ui.autofillsetup
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import android.view.autofill.AutofillManager
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import net.havenkeys.android.R
+import net.havenkeys.android.credentials.HavenCredentialService
 import net.havenkeys.android.ui.components.HavenTopBar
 import net.havenkeys.android.ui.theme.HavenTheme
 
@@ -47,9 +50,11 @@ import net.havenkeys.android.ui.theme.HavenTheme
 fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(isOurAutofillService(context)) }
+    var passkeysOn by remember { mutableStateOf(isOurCredentialProvider(context)) }
     var openFailed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(context) {
         enabled = isOurAutofillService(context)
+        passkeysOn = isOurCredentialProvider(context)
         onPauseOrDispose { }
     }
 
@@ -93,6 +98,36 @@ fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            PasskeysSection(passkeysOn, onOpen = { openFailed = !openCredentialProviderSettings(context) })
+        }
+    }
+}
+
+@Composable
+private fun PasskeysSection(passkeysOn: Boolean, onOpen: () -> Unit) {
+    Text(
+        stringResource(R.string.autofill_setup_passkeys_title),
+        style = MaterialTheme.typography.titleSmall,
+        color = HavenTheme.colors.textStrong,
+    )
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        Text(
+            stringResource(R.string.autofill_setup_passkeys_old),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        Text(
+            stringResource(
+                if (passkeysOn) R.string.autofill_setup_passkeys_on else R.string.autofill_setup_passkeys_off,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (!passkeysOn) {
+            Button(
+                onClick = onOpen,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.autofill_setup_passkeys_open)) }
         }
     }
 }
@@ -132,6 +167,20 @@ private fun requestAutofillService(context: Context): Boolean = try {
     context.startActivity(
         Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE, "package:${context.packageName}".toUri()),
     )
+    true
+} catch (e: ActivityNotFoundException) {
+    false
+}
+
+private fun isOurCredentialProvider(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+        context.getSystemService(android.credentials.CredentialManager::class.java)
+            ?.isEnabledCredentialProviderService(ComponentName(context, HavenCredentialService::class.java)) == true
+
+/** False when no settings screen answers (some phones remove it). */
+@Suppress("SwallowedException")
+private fun openCredentialProviderSettings(context: Context): Boolean = try {
+    context.startActivity(Intent(Settings.ACTION_CREDENTIAL_PROVIDER, "package:${context.packageName}".toUri()))
     true
 } catch (e: ActivityNotFoundException) {
     false

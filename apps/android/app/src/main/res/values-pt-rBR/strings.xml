@@ -283,4 +283,9 @@
     <string name="passkey_cancel">Cancelar</string>
     <string name="passkey_close">Fechar</string>
     <string name="error_passkey_unsupported">Este site pediu um tipo de chave de acesso que o HavenKeys não consegue criar.</string>
+    <string name="autofill_setup_passkeys_title">Chaves de acesso e login em apps</string>
+    <string name="autofill_setup_passkeys_on">O HavenKeys está ativado para senhas e chaves de acesso.</string>
+    <string name="autofill_setup_passkeys_off">Ative o HavenKeys nas configurações de senhas e chaves de acesso do Android para usar suas chaves de acesso em apps e navegadores.</string>
+    <string name="autofill_setup_passkeys_open">Abrir configurações de senhas e chaves de acesso</string>
+    <string name="autofill_setup_passkeys_old">Chaves de acesso exigem Android 14 ou mais recente.</string>
 </resources>
