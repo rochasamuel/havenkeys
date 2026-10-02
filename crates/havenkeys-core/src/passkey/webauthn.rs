@@ -188,13 +188,24 @@ pub(crate) fn register(
 }
 
 /// Sign an assertion with a stored passkey. The caller has checked that the
-/// passkey belongs to `ctx.rp_id`.
-pub(crate) fn assert(passkey: &Passkey, ctx: &RpContext, challenge: &[u8]) -> Result<Assertion> {
+/// passkey belongs to `ctx.rp_id`. `client_data_hash`: a privileged
+/// browser built `clientDataJSON` itself and sent its hash, which is signed
+/// instead; the `client_data_json` returned is then a placeholder the
+/// browser replaces.
+pub(crate) fn assert(
+    passkey: &Passkey,
+    ctx: &RpContext,
+    challenge: &[u8],
+    client_data_hash: Option<&[u8; 32]>,
+) -> Result<Assertion> {
     let key = SigningKey::from_slice(passkey.private_key.expose()).map_err(|_| Error::Corrupted)?;
     let authenticator_data = authenticator_data(&ctx.rp_id, None);
     let client_data_json = client_data_json(Ceremony::Get, challenge, ctx);
     let mut signed = authenticator_data.clone();
-    signed.extend_from_slice(&Sha256::digest(&client_data_json));
+    match client_data_hash {
+        Some(hash) => signed.extend_from_slice(hash),
+        None => signed.extend_from_slice(&Sha256::digest(&client_data_json)),
+    }
     // `sign` hashes with SHA-256 (ES256) and is deterministic (RFC 6979).
     let signature: Signature = key.sign(&signed);
     Ok(Assertion {
@@ -313,7 +324,7 @@ mod tests {
     #[test]
     fn assertion_signature_verifies() {
         let (passkey, reg) = register(&ctx(), &[5; 32], user(), 0).unwrap();
-        let a = assert(&passkey, &ctx(), &[9; 32]).unwrap();
+        let a = assert(&passkey, &ctx(), &[9; 32], None).unwrap();
         assert_eq!(a.credential_id, reg.credential_id);
         assert_eq!(a.user_handle, vec![1, 2, 3]);
         assert_eq!(a.authenticator_data, authenticator_data("github.com", None));
@@ -323,7 +334,7 @@ mod tests {
         let sig = Signature::from_der(&a.signature).unwrap();
         vk.verify(&signed, &sig).unwrap();
         // A different challenge is a different signed message.
-        let b = assert(&passkey, &ctx(), &[8; 32]).unwrap();
+        let b = assert(&passkey, &ctx(), &[8; 32], None).unwrap();
         let mut other = b.authenticator_data.clone();
         other.extend_from_slice(&Sha256::digest(&b.client_data_json));
         assert!(vk
@@ -347,6 +358,24 @@ mod tests {
     fn a_damaged_key_is_refused_not_used() {
         let (mut passkey, _) = register(&ctx(), &[5; 32], user(), 0).unwrap();
         passkey.private_key = SecretBytes::new(vec![0; 32]);
-        assert_eq!(assert(&passkey, &ctx(), &[1]).err(), Some(Error::Corrupted));
+        assert_eq!(
+            assert(&passkey, &ctx(), &[1], None).err(),
+            Some(Error::Corrupted)
+        );
+    }
+
+    #[test]
+    fn a_supplied_client_data_hash_is_what_gets_signed() {
+        let (passkey, reg) = register(&ctx(), &[5; 32], user(), 0).unwrap();
+        let hash = [0x42; 32];
+        let a = assert(&passkey, &ctx(), &[9; 32], Some(&hash)).unwrap();
+        let vk = VerifyingKey::from_public_key_der(&reg.public_key).unwrap();
+        let sig = Signature::from_der(&a.signature).unwrap();
+        let mut over_hash = a.authenticator_data.clone();
+        over_hash.extend_from_slice(&hash);
+        vk.verify(&over_hash, &sig).unwrap();
+        let mut over_json = a.authenticator_data.clone();
+        over_json.extend_from_slice(&Sha256::digest(&a.client_data_json));
+        assert!(vk.verify(&over_json, &sig).is_err());
     }
 }

@@ -804,3 +804,61 @@ fn a_fill_on_one_site_is_no_upgrade_on_another_site_of_the_same_login() {
         Upgrade::None
     );
 }
+
+#[test]
+fn a_browser_supplied_client_data_hash_is_signed_on_the_page_rules() {
+    use p256::ecdsa::signature::Verifier;
+    use p256::ecdsa::{Signature, VerifyingKey};
+    use p256::pkcs8::DecodePublicKey;
+
+    let (mut v, _) = activated_vault();
+    let mut rev = Rev(0);
+    let s = v
+        .stage_passkey_create(create_req("octo", &[1], None), NOW)
+        .unwrap();
+    let spki = s.registration.public_key.clone();
+    let (id, cred) = commit(&mut v, &mut rev, s);
+    let hash = [0x24; 32];
+    let a = v
+        .passkey_assert_with_hash(
+            &id,
+            &cred,
+            "github.com",
+            "https://github.com",
+            &[3; 32],
+            &hash,
+        )
+        .unwrap();
+    let mut signed = a.authenticator_data.clone();
+    signed.extend_from_slice(&hash);
+    VerifyingKey::from_public_key_der(&spki)
+        .unwrap()
+        .verify(&signed, &Signature::from_der(&a.signature).unwrap())
+        .unwrap();
+    // The page rules still apply.
+    assert_eq!(
+        v.passkey_assert_with_hash(
+            &id,
+            &cred,
+            "github.com",
+            "https://github.com.evil.com",
+            &[3; 32],
+            &hash
+        )
+        .err(),
+        Some(Error::Denied)
+    );
+    v.lock();
+    assert_eq!(
+        v.passkey_assert_with_hash(
+            &id,
+            &cred,
+            "github.com",
+            "https://github.com",
+            &[3; 32],
+            &hash
+        )
+        .err(),
+        Some(Error::Locked)
+    );
+}

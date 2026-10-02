@@ -9,7 +9,7 @@
 
 use super::{
     assert, authorize_rp, clean_site_name, register, Assertion, B64Url, NewUser, Passkey,
-    Registration, CREDENTIAL_ID_LEN, MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN,
+    Registration, RpContext, CREDENTIAL_ID_LEN, MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN,
     MAX_USER_HANDLE_BYTES, MIN_CHALLENGE_BYTES,
 };
 use crate::error::{Error, Result};
@@ -114,7 +114,7 @@ pub struct PasskeyInfo {
     pub created_at: i64,
 }
 
-fn check_challenge(c: &[u8]) -> Result<()> {
+pub(super) fn check_challenge(c: &[u8]) -> Result<()> {
     if (MIN_CHALLENGE_BYTES..=MAX_CHALLENGE_BYTES).contains(&c.len()) {
         Ok(())
     } else {
@@ -124,6 +124,30 @@ fn check_challenge(c: &[u8]) -> Result<()> {
 
 fn fold(s: &str) -> String {
     s.trim().to_lowercase()
+}
+
+/// Stable: the logins with the site's account name (folded) first.
+pub(super) fn same_user_first(candidates: &mut [Suggestion], user_name: &str) {
+    let wanted = fold(user_name);
+    candidates.sort_by_key(|s| s.username.as_deref().map(fold) != Some(wanted.clone()));
+}
+
+/// What a site asked a new passkey to hold.
+pub(super) struct NewPasskey<'a> {
+    pub challenge: &'a [u8],
+    pub user_handle: &'a [u8],
+    pub user_name: &'a str,
+    pub display_name: Option<&'a str>,
+}
+
+/// Where a new passkey may go, by the caller's own rules.
+pub(super) struct Homes<'a> {
+    /// The login the user chose; `None` makes a new login.
+    pub chosen: Option<Uuid>,
+    /// The logins this caller is offered: a chosen login must be one.
+    pub offered: &'a [Uuid],
+    /// A conditional create never replaces an existing passkey.
+    pub refuse_replace: bool,
 }
 
 /// Logins whose overview says they hold a passkey.
@@ -137,7 +161,7 @@ fn passkey_logins(session: &Session) -> impl Iterator<Item = &ItemOverview> {
 /// A new login for a passkey created on `page_url`: titled by its host,
 /// with the page's origin as its one whole-site rule and the site's account
 /// name, if any, as its username.
-fn new_login_for_passkey(
+pub(super) fn new_login_for_passkey(
     page_url: &str,
     user_name: String,
     now_ms: i64,
@@ -199,18 +223,15 @@ impl VaultService {
         Ok((overview, self.load_details(&id)?, base))
     }
 
-    /// Passkeys for `rp_id` that the page may use, filtered by the site's
+    /// Passkeys bound to `ctx.rp_id`, filtered by the site's
     /// `allowCredentials` when it sent any. A login whose details do not
     /// open is skipped, not fatal.
-    pub fn find_passkeys(
+    pub(super) fn passkeys_for(
         &self,
-        rp_id: &str,
-        page_url: &str,
-        top_url: Option<&str>,
+        ctx: &RpContext,
         allow: &[Vec<u8>],
     ) -> Result<Vec<PasskeyMatch>> {
         let session = self.session()?;
-        let ctx = authorize_rp(rp_id, page_url, top_url)?;
         let holders: Vec<(Uuid, String)> = passkey_logins(session)
             .map(|o| (o.id, o.title.clone()))
             .collect();
@@ -241,6 +262,41 @@ impl VaultService {
         Ok(out)
     }
 
+    /// Passkeys for `rp_id` that the page may use, filtered by the site's
+    /// `allowCredentials` when it sent any. A login whose details do not
+    /// open is skipped, not fatal.
+    pub fn find_passkeys(
+        &self,
+        rp_id: &str,
+        page_url: &str,
+        top_url: Option<&str>,
+        allow: &[Vec<u8>],
+    ) -> Result<Vec<PasskeyMatch>> {
+        self.session()?;
+        let ctx = authorize_rp(rp_id, page_url, top_url)?;
+        self.passkeys_for(&ctx, allow)
+    }
+
+    /// The assertion for one passkey bound to `ctx.rp_id`. The challenge was
+    /// checked by the caller.
+    pub(super) fn assert_for(
+        &self,
+        item_id: &Uuid,
+        credential_id: &[u8],
+        ctx: &RpContext,
+        challenge: &[u8],
+        client_data_hash: Option<&[u8; 32]>,
+    ) -> Result<Assertion> {
+        let ItemDetails::Login { passkeys, .. } = self.load_details(item_id)? else {
+            return Err(Error::Denied);
+        };
+        let passkey = passkeys
+            .iter()
+            .find(|p| p.credential_id.0 == credential_id && p.rp_id == ctx.rp_id)
+            .ok_or(Error::Denied)?;
+        assert(passkey, ctx, challenge, client_data_hash)
+    }
+
     /// Sign in: the assertion for one passkey, if and only if it is bound to
     /// `rp_id` and the page may use `rp_id`.
     pub fn passkey_assert(
@@ -255,30 +311,42 @@ impl VaultService {
         self.session()?;
         check_challenge(challenge)?;
         let ctx = authorize_rp(rp_id, page_url, top_url)?;
-        let ItemDetails::Login { passkeys, .. } = self.load_details(item_id)? else {
-            return Err(Error::Denied);
-        };
-        let passkey = passkeys
-            .iter()
-            .find(|p| p.credential_id.0 == credential_id && p.rp_id == ctx.rp_id)
-            .ok_or(Error::Denied)?;
-        assert(passkey, &ctx, challenge)
+        self.assert_for(item_id, credential_id, &ctx, challenge, None)
     }
 
-    /// Logins saved for the page that can take another passkey, in
-    /// `find_matches` order.
-    fn passkey_homes(&self, page_url: &str, top_url: Option<&str>) -> Result<Vec<Suggestion>> {
-        let mut out = Vec::new();
-        for s in self.find_matches(page_url, top_url)? {
-            let full = match self.load_details(&s.id) {
-                Ok(ItemDetails::Login { passkeys, .. }) => passkeys.len() >= MAX_PASSKEYS_PER_LOGIN,
-                _ => true,
-            };
-            if !full {
-                out.push(s);
-            }
-        }
-        Ok(out)
+    /// `passkey_assert` for a privileged Android browser that built
+    /// `clientDataJSON` itself and sent only its hash (spec §8.1). Never for
+    /// an app: an app's hash could name any origin.
+    pub fn passkey_assert_with_hash(
+        &self,
+        item_id: &Uuid,
+        credential_id: &[u8],
+        rp_id: &str,
+        page_url: &str,
+        challenge: &[u8],
+        client_data_hash: &[u8; 32],
+    ) -> Result<Assertion> {
+        self.session()?;
+        check_challenge(challenge)?;
+        let ctx = authorize_rp(rp_id, page_url, None)?;
+        self.assert_for(
+            item_id,
+            credential_id,
+            &ctx,
+            challenge,
+            Some(client_data_hash),
+        )
+    }
+
+    /// `offered` without the logins that cannot take another passkey.
+    pub(super) fn with_room(&self, offered: Vec<Suggestion>) -> Vec<Suggestion> {
+        offered
+            .into_iter()
+            .filter(|s| match self.load_details(&s.id) {
+                Ok(ItemDetails::Login { passkeys, .. }) => passkeys.len() < MAX_PASSKEYS_PER_LOGIN,
+                _ => false,
+            })
+            .collect()
     }
 
     /// The newest recent password fill on the page's site whose login is
@@ -323,15 +391,10 @@ impl VaultService {
     /// HavenKeys password fill?
     pub fn check_passkey_create(&self, q: &CreateQuery<'_>, now_ms: i64) -> Result<CreateCheck> {
         self.session()?;
-        authorize_rp(q.rp_id, q.page_url, q.top_url)?;
-        let excluded = !q.exclude.is_empty()
-            && !self
-                .find_passkeys(q.rp_id, q.page_url, q.top_url, q.exclude)?
-                .is_empty();
-        let wanted = fold(q.user_name);
-        let mut candidates = self.passkey_homes(q.page_url, q.top_url)?;
-        // Stable: same username first, otherwise find_matches' order.
-        candidates.sort_by_key(|s| s.username.as_deref().map(fold) != Some(wanted.clone()));
+        let ctx = authorize_rp(q.rp_id, q.page_url, q.top_url)?;
+        let excluded = !q.exclude.is_empty() && !self.passkeys_for(&ctx, q.exclude)?.is_empty();
+        let mut candidates = self.with_room(self.find_matches(q.page_url, q.top_url)?);
+        same_user_first(&mut candidates, q.user_name);
         let upgrade = if q.conditional && !excluded {
             self.upgrade_for(q.page_url, q.user_name, &candidates, now_ms)?
         } else {
@@ -341,6 +404,77 @@ impl VaultService {
             excluded,
             candidates,
             upgrade,
+        })
+    }
+
+    /// Create a passkey for `ctx` and seal it into a login: the one already
+    /// holding a passkey for this rpId + user handle anywhere in the vault
+    /// (see `find_passkey_holder`), else `homes.chosen` if it is offered,
+    /// else a new login from `new_login`. Nothing is stored until the caller
+    /// sends `write` and commits it.
+    pub(super) fn stage_create_for(
+        &mut self,
+        ctx: &RpContext,
+        new: NewPasskey<'_>,
+        homes: Homes<'_>,
+        new_login: impl FnOnce(String) -> Result<(ItemOverview, ItemDetails)>,
+        now_ms: i64,
+    ) -> Result<StagedPasskey> {
+        if new.user_handle.is_empty() || new.user_handle.len() > MAX_USER_HANDLE_BYTES {
+            return Err(Error::InvalidInput("invalid user handle"));
+        }
+        let user_name = clean_site_name(Some(new.user_name))?.unwrap_or_default();
+        let display_name = clean_site_name(new.display_name)?.filter(|d| !d.is_empty());
+        let (passkey, registration) = register(
+            ctx,
+            new.challenge,
+            NewUser {
+                user_handle: new.user_handle,
+                user_name: user_name.clone(),
+                display_name,
+            },
+            now_ms,
+        )?;
+        let holder = self.find_passkey_holder(&ctx.rp_id, new.user_handle)?;
+        // An upgrade only ever adds a passkey to the login that was filled.
+        // Replacing an existing one (in that login or any other) needs the
+        // card.
+        if homes.refuse_replace && holder.is_some() {
+            return Err(Error::Denied);
+        }
+        // The existing holder wins over the chosen login; a chosen login
+        // must be one this caller is offered.
+        let (mut overview, mut details, base) = match (holder, homes.chosen) {
+            (Some(id), _) => self.load_login_for_edit(id, now_ms)?,
+            (None, Some(id)) => {
+                if !homes.offered.contains(&id) {
+                    return Err(Error::Denied);
+                }
+                self.load_login_for_edit(id, now_ms)?
+            }
+            (None, None) => {
+                let (overview, details) = new_login(user_name)?;
+                (overview, details, None)
+            }
+        };
+        let ItemDetails::Login { passkeys, .. } = &mut details else {
+            return Err(Error::Denied);
+        };
+        // Registering the same account again replaces its passkey.
+        passkeys.retain(|p| !(p.rp_id == passkey.rp_id && p.user_handle == passkey.user_handle));
+        if passkeys.len() >= MAX_PASSKEYS_PER_LOGIN {
+            return Err(Error::InvalidInput(
+                "this login already has the maximum number of passkeys",
+            ));
+        }
+        passkeys.push(passkey);
+        overview.has_passkey = true;
+        let item_id = overview.id;
+        let write = self.stage(overview, Some(&details), base)?;
+        Ok(StagedPasskey {
+            write,
+            item_id,
+            registration,
         })
     }
 
@@ -362,90 +496,47 @@ impl VaultService {
         // here, never taken from the extension.
         if req.conditional {
             let item = req.item_id.ok_or(Error::Denied)?;
-            let homes = self.passkey_homes(req.page_url, req.top_url)?;
+            let homes = self.with_room(self.find_matches(req.page_url, req.top_url)?);
             if self.upgrade_for(req.page_url, req.user_name, &homes, now_ms)? != Upgrade::Auto(item)
             {
                 return Err(Error::Denied);
             }
         }
-        if req.user_handle.is_empty() || req.user_handle.len() > MAX_USER_HANDLE_BYTES {
-            return Err(Error::InvalidInput("invalid user handle"));
-        }
-        let user_name = clean_site_name(Some(req.user_name))?.unwrap_or_default();
-        let display_name = clean_site_name(req.display_name)?.filter(|d| !d.is_empty());
         let ctx = authorize_rp(req.rp_id, req.page_url, req.top_url)?;
-        let (passkey, registration) = register(
+        let offered: Vec<Uuid> = self
+            .find_matches(req.page_url, req.top_url)?
+            .iter()
+            .map(|s| s.id)
+            .collect();
+        let page_url = req.page_url;
+        let staged = self.stage_create_for(
             &ctx,
-            req.challenge,
-            NewUser {
+            NewPasskey {
+                challenge: req.challenge,
                 user_handle: req.user_handle,
-                user_name: user_name.clone(),
-                display_name,
+                user_name: req.user_name,
+                display_name: req.display_name,
             },
+            Homes {
+                chosen: req.item_id,
+                offered: &offered,
+                refuse_replace: req.conditional,
+            },
+            |user_name| new_login_for_passkey(page_url, user_name, now_ms),
             now_ms,
         )?;
-
-        // If some login in the vault already holds a passkey for this rpId
-        // + user handle, the write goes there (see `find_passkey_holder`),
-        // regardless of `req.item_id`. It is already bound to an rpId this
-        // page may use, so the "offered for the page" check below is only
-        // needed for a login named by the caller that is not already the
-        // holder.
-        let holder = self.find_passkey_holder(&ctx.rp_id, req.user_handle)?;
-        // An upgrade only ever adds a passkey to the login that was filled.
-        // Replacing an existing one (in that login or any other) needs the
-        // card.
-        if req.conditional && holder.is_some() {
-            return Err(Error::Denied);
-        }
-        // The existing holder wins over the login the caller named; a named
-        // login must be one this page is offered.
-        let (mut overview, mut details, base) = match (holder, req.item_id) {
-            (Some(id), _) => self.load_login_for_edit(id, now_ms)?,
-            (None, Some(id)) => {
-                let offered = self
-                    .find_matches(req.page_url, req.top_url)?
-                    .iter()
-                    .any(|s| s.id == id);
-                if !offered {
-                    return Err(Error::Denied);
-                }
-                self.load_login_for_edit(id, now_ms)?
-            }
-            (None, None) => {
-                let (overview, details) = new_login_for_passkey(req.page_url, user_name, now_ms)?;
-                (overview, details, None)
-            }
-        };
-        let ItemDetails::Login { passkeys, .. } = &mut details else {
-            return Err(Error::Denied);
-        };
-        // Registering the same account again replaces its passkey.
-        passkeys.retain(|p| !(p.rp_id == passkey.rp_id && p.user_handle == passkey.user_handle));
-        if passkeys.len() >= MAX_PASSKEYS_PER_LOGIN {
-            return Err(Error::InvalidInput(
-                "this login already has the maximum number of passkeys",
-            ));
-        }
-        passkeys.push(passkey);
-        overview.has_passkey = true;
-        let item_id = overview.id;
-        let write = self.stage(overview, Some(&details), base)?;
         // One fill grants one silent passkey: spend it now, so a script on
         // the site cannot repeat the create with fresh user handles. Spent
         // even if the write later fails; the user can fill again.
         if req.conditional {
             if let Some(site) = PageUrl::parse(req.page_url).as_ref().and_then(site_of) {
+                let item_id = staged.item_id;
                 self.session_mut()?
                     .recent_fills
                     .retain(|f| !(f.item_id == item_id && f.site == site));
             }
         }
-        Ok(StagedPasskey {
-            write,
-            item_id,
-            registration,
-        })
+        Ok(staged)
     }
 
     /// Does the vault hold any passkey this page may use (its rpId passes
