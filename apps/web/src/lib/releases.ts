@@ -62,6 +62,38 @@ export const ANDROID_CERT_SHA256: string | null = null;
 const ANDROID_TAG_PREFIX = "android-v";
 const RELEASES_LIST_URL = "https://api.github.com/repos/rochasamuel/havenkeys/releases?per_page=100";
 
+/** Validates an asset: must have string name and browser_download_url. */
+function isValidReleaseAsset(asset: unknown): asset is ReleaseAsset {
+  return (
+    typeof asset === "object" &&
+    asset !== null &&
+    typeof (asset as Record<string, unknown>).name === "string" &&
+    typeof (asset as Record<string, unknown>).browser_download_url === "string"
+  );
+}
+
+/** Validates a release: tag_name, draft, prerelease, html_url (must be on GitHub), and assets must be an array of valid items. */
+function validateAndroidRelease(item: unknown): ReleaseListing | null {
+  if (typeof item !== "object" || item === null) return null;
+  const r = item as Record<string, unknown>;
+  if (typeof r.tag_name !== "string") return null;
+  if (typeof r.draft !== "boolean" || typeof r.prerelease !== "boolean") return null;
+  if (typeof r.html_url !== "string") return null;
+  if (!r.html_url.startsWith(RELEASES_PAGE_URL + "/")) return null;
+  if (!Array.isArray(r.assets)) return null;
+
+  // Filter assets to only valid ones (drop malformed items).
+  const validAssets = (r.assets as unknown[]).filter(isValidReleaseAsset);
+
+  return {
+    tag_name: r.tag_name,
+    html_url: r.html_url,
+    draft: r.draft,
+    prerelease: r.prerelease,
+    assets: validAssets,
+  };
+}
+
 /** The newest published Android release (GitHub lists newest first). */
 export function pickAndroidRelease(releases: ReleaseListing[]): LatestRelease | null {
   return (
@@ -87,7 +119,11 @@ export async function fetchLatestAndroidRelease(): Promise<LatestRelease | null>
     if (!response.ok) return null;
     const data = (await response.json()) as unknown;
     if (!Array.isArray(data)) return null;
-    return pickAndroidRelease(data as ReleaseListing[]);
+    // Validate each release; skip invalid ones.
+    const validReleases = data
+      .map((item) => validateAndroidRelease(item))
+      .filter((r): r is ReleaseListing => r !== null);
+    return pickAndroidRelease(validReleases);
   } catch {
     return null;
   }

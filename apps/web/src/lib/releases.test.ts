@@ -152,8 +152,20 @@ describe("fetchLatestAndroidRelease", () => {
 
   it("returns the newest published Android release", async () => {
     const list = [
-      { tag_name: "desktop-v0.13.0", html_url: "x", assets: [], draft: false, prerelease: false },
-      { tag_name: "android-v0.1.0", html_url: "y", assets: [], draft: false, prerelease: false },
+      {
+        tag_name: "desktop-v0.13.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/desktop-v0.13.0",
+        assets: [],
+        draft: false,
+        prerelease: false,
+      },
+      {
+        tag_name: "android-v0.1.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/android-v0.1.0",
+        assets: [],
+        draft: false,
+        prerelease: false,
+      },
     ];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => list }));
     expect((await fetchLatestAndroidRelease())?.tag_name).toBe("android-v0.1.0");
@@ -172,5 +184,86 @@ describe("fetchLatestAndroidRelease", () => {
   it("returns null when the answer is not a list", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ message: "x" }) }));
     expect(await fetchLatestAndroidRelease()).toBeNull();
+  });
+
+  it("skips null and non-string tag_name, finds valid Android release after", async () => {
+    const list = [
+      null,
+      { tag_name: 123, html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/x", assets: [], draft: false, prerelease: false },
+      {
+        tag_name: "android-v0.1.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/android-v0.1.0",
+        assets: [],
+        draft: false,
+        prerelease: false,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => list }));
+    expect((await fetchLatestAndroidRelease())?.tag_name).toBe("android-v0.1.0");
+  });
+
+  it("skips release with off-GitHub html_url", async () => {
+    const list = [
+      {
+        tag_name: "android-v0.2.0",
+        html_url: "https://evil.example/releases/tag/android-v0.2.0",
+        assets: [],
+        draft: false,
+        prerelease: false,
+      },
+      {
+        tag_name: "android-v0.1.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/android-v0.1.0",
+        assets: [],
+        draft: false,
+        prerelease: false,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => list }));
+    expect((await fetchLatestAndroidRelease())?.tag_name).toBe("android-v0.1.0");
+  });
+
+  it("skips release with non-array assets", async () => {
+    const list = [
+      {
+        tag_name: "android-v0.2.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/android-v0.2.0",
+        assets: "not an array",
+        draft: false,
+        prerelease: false,
+      },
+      {
+        tag_name: "android-v0.1.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/android-v0.1.0",
+        assets: [],
+        draft: false,
+        prerelease: false,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => list }));
+    expect((await fetchLatestAndroidRelease())?.tag_name).toBe("android-v0.1.0");
+  });
+
+  it("skips malformed asset items, keeps good APK", async () => {
+    const list = [
+      {
+        tag_name: "android-v0.1.0",
+        html_url: "https://github.com/rochasamuel/havenkeys/releases/tag/android-v0.1.0",
+        assets: [
+          { name: "HavenKeys-0.1.0.apk", browser_download_url: null },
+          { name: null, browser_download_url: "https://example.com/x" },
+          {
+            name: "HavenKeys-0.1.0.apk",
+            browser_download_url: `${RELEASE_ASSET_PREFIX}android-v0.1.0/HavenKeys-0.1.0.apk`,
+          },
+        ],
+        draft: false,
+        prerelease: false,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => list }));
+    const release = await fetchLatestAndroidRelease();
+    expect(release?.tag_name).toBe("android-v0.1.0");
+    expect(pickAndroidAssets(release?.assets ?? [])?.apk.name).toBe("HavenKeys-0.1.0.apk");
   });
 });
