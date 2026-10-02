@@ -58,10 +58,12 @@ jobs:
           apk=apps/android/app/build/outputs/apk/github/release/app-github-release.apk
           test -f "$apk" || { echo "No signed APK: are all four signing secrets set?"; exit 1; }
           tools="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
-          "$tools/apksigner" verify --print-certs "$apk" | tee certs.txt
+          "$tools/apksigner" verify --print-certs "$apk" > certs.txt
+          cat certs.txt
           cert=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt)
           test -n "$cert" || { echo "No signing certificate"; exit 1; }
-          if "$tools/aapt2" dump badging "$apk" | grep -q application-debuggable; then
+          badging=$("$tools/aapt2" dump badging "$apk")
+          if grep -q "application-debuggable" <<<"$badging"; then
             echo "The APK is debuggable"; exit 1
           fi
           mkdir dist

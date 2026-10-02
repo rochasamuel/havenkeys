@@ -89,8 +89,15 @@ download and the desktop auto-updater keep pointing at desktop releases.
    library and the signed APK, refuses an unsigned or debuggable APK, and
    attaches `HavenKeys-<version>.apk` and its `.sha256` to a **draft**
    release with the signing certificate's fingerprint in the notes.
-4. Download the draft APK, install it on a phone, then click **Publish
-   release**.
+4. Download the draft APK and install it on a phone. Then publish with
+   `gh release edit android-v0.1.0 --draft=false --latest=false` (in the web
+   form, untick "Set as the latest release": it is ticked by default). Confirm
+   `gh release view --json tagName -q .tagName` still prints a `desktop-v`
+   tag; if it prints `android-v`, the desktop download and auto-updater are
+   broken until you mark the desktop release latest again.
+
+If a run fails after the draft exists, delete the draft
+(`gh release delete android-v0.1.0 --yes`) before re-running.
 
 The signing key's custody is in `docs/android.md` → Release key custody.
 
