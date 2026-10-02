@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import android.view.autofill.AutofillManager
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,7 @@ fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit,
     var enabled by remember { mutableStateOf(isOurAutofillService(context)) }
     var passkeysOn by remember { mutableStateOf(isOurCredentialProvider(context)) }
     var openFailed by remember { mutableStateOf(false) }
+    var providerOpenFailed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(context) {
         enabled = isOurAutofillService(context)
         passkeysOn = isOurCredentialProvider(context)
@@ -98,13 +100,13 @@ fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            PasskeysSection(passkeysOn, onOpen = { openFailed = !openCredentialProviderSettings(context) })
+            PasskeysSection(passkeysOn, providerOpenFailed) { providerOpenFailed = !openProviderSettings(context) }
         }
     }
 }
 
 @Composable
-private fun PasskeysSection(passkeysOn: Boolean, onOpen: () -> Unit) {
+private fun PasskeysSection(passkeysOn: Boolean, openFailed: Boolean, onOpen: () -> Unit) {
     Text(
         stringResource(R.string.autofill_setup_passkeys_title),
         style = MaterialTheme.typography.titleSmall,
@@ -128,6 +130,9 @@ private fun PasskeysSection(passkeysOn: Boolean, onOpen: () -> Unit) {
                 onClick = onOpen,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.autofill_setup_passkeys_open)) }
+        }
+        if (openFailed) {
+            Text(stringResource(R.string.autofill_setup_passkeys_unavailable), color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -177,7 +182,11 @@ private fun isOurCredentialProvider(context: Context): Boolean =
         context.getSystemService(android.credentials.CredentialManager::class.java)
             ?.isEnabledCredentialProviderService(ComponentName(context, HavenCredentialService::class.java)) == true
 
+private fun openProviderSettings(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && openCredentialProviderSettings(context)
+
 /** False when no settings screen answers (some phones remove it). */
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @Suppress("SwallowedException")
 private fun openCredentialProviderSettings(context: Context): Boolean = try {
     context.startActivity(Intent(Settings.ACTION_CREDENTIAL_PROVIDER, "package:${context.packageName}".toUri()))

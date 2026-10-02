@@ -7,7 +7,9 @@ import android.os.OutcomeReceiver
 import androidx.annotation.RequiresApi
 import androidx.credentials.exceptions.ClearCredentialException
 import androidx.credentials.exceptions.CreateCredentialException
+import androidx.credentials.exceptions.CreateCredentialUnknownException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialUnknownException
 import androidx.credentials.provider.BeginCreateCredentialRequest
 import androidx.credentials.provider.BeginCreateCredentialResponse
 import androidx.credentials.provider.BeginCreatePublicKeyCredentialRequest
@@ -16,6 +18,7 @@ import androidx.credentials.provider.BeginGetCredentialResponse
 import androidx.credentials.provider.CreateEntry
 import androidx.credentials.provider.CredentialProviderService
 import androidx.credentials.provider.ProviderClearCredentialStateRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,9 +43,21 @@ class HavenCredentialService : CredentialProviderService() {
         callback: OutcomeReceiver<BeginGetCredentialResponse, GetCredentialException>,
     ) {
         val work = scope.launch {
-            val unlocked = container.events.unlocked.value
-            val repo = container.credentialRepository
-            callback.onResult(answerBeginGet(this@HavenCredentialService, request, unlocked, repo))
+            val answer = try {
+                answerBeginGet(
+                    this@HavenCredentialService,
+                    request,
+                    container.events.unlocked.value,
+                    container.credentialRepository,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (@Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception) {
+                // The message is never kept: it could quote anything.
+                callback.onError(GetCredentialUnknownException())
+                return@launch
+            }
+            callback.onResult(answer)
         }
         cancellationSignal.setOnCancelListener { work.cancel() }
     }
@@ -53,7 +68,17 @@ class HavenCredentialService : CredentialProviderService() {
         cancellationSignal: CancellationSignal,
         callback: OutcomeReceiver<BeginCreateCredentialResponse, CreateCredentialException>,
     ) {
-        val entries = if (request is BeginCreatePublicKeyCredentialRequest) {
+        val entries = try {
+            createEntries(request)
+        } catch (@Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception) {
+            // The message is never kept: it could quote anything.
+            return callback.onError(CreateCredentialUnknownException())
+        }
+        callback.onResult(BeginCreateCredentialResponse(createEntries = entries))
+    }
+
+    private fun createEntries(request: BeginCreateCredentialRequest): List<CreateEntry> =
+        if (request is BeginCreatePublicKeyCredentialRequest) {
             listOf(
                 CreateEntry(
                     accountName = getString(R.string.app_name),
@@ -64,8 +89,6 @@ class HavenCredentialService : CredentialProviderService() {
         } else {
             emptyList()
         }
-        callback.onResult(BeginCreateCredentialResponse(createEntries = entries))
-    }
 
     override fun onClearCredentialStateRequest(
         request: ProviderClearCredentialStateRequest,

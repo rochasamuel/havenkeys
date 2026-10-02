@@ -14,11 +14,18 @@ import uniffi.havenkeys_mobile.privilegedBrowsersJson
  * makes the caller an app.
  */
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-internal fun CallingAppInfo.toCaller(): CredentialCaller {
-    val certs = signingInfo.apkContentsSigners.orEmpty().map {
+internal fun CallingAppInfo.toCaller(): CredentialCaller =
+    CredentialCaller(packageName, certificateHashes(), verifiedOrigin())
+
+/** A caller whose signers cannot be read has none; Rust refuses a caller without certificates. */
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+@Suppress("TooGenericExceptionCaught", "SwallowedException")
+private fun CallingAppInfo.certificateHashes(): List<ByteArray> = try {
+    signingInfo.apkContentsSigners.orEmpty().map {
         MessageDigest.getInstance("SHA-256").digest(it.toByteArray())
     }
-    return CredentialCaller(packageName, certs, verifiedOrigin())
+} catch (e: Exception) {
+    emptyList()
 }
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)

@@ -26,6 +26,7 @@ data class PasskeyCreateUiState(
     val excluded: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null,
+    val planFailed: Boolean = false,
     val response: String? = null,
 )
 
@@ -42,7 +43,7 @@ class PasskeyCreateViewModel(
     fun load() {
         // A site's automatic upgrade would save without a tap here: never on Android.
         if (conditional) {
-            _state.value = PasskeyCreateUiState(loading = false, error = "denied")
+            _state.value = PasskeyCreateUiState(loading = false, error = "denied", planFailed = true)
             return
         }
         viewModelScope.launch {
@@ -52,21 +53,23 @@ class PasskeyCreateViewModel(
                     rpId = plan.value.rpId,
                     userName = plan.value.userName,
                     homes = plan.value.homes,
-                    selected = plan.value.homes.firstOrNull()?.id,
+                    selected = homeFor(plan.value.userName, plan.value.homes),
                     excluded = plan.value.excluded,
                 )
-                is Outcome.Failed -> PasskeyCreateUiState(loading = false, error = plan.code)
+                is Outcome.Failed -> PasskeyCreateUiState(loading = false, error = plan.code, planFailed = true)
             }
         }
     }
 
-    fun select(itemId: String?) = _state.update { it.copy(selected = itemId, error = null) }
+    fun select(itemId: String?) = _state.update {
+        if (it.planFailed) it else it.copy(selected = itemId, error = null)
+    }
 
     /** Call only after user verification passed. */
     fun create() {
         val s = _state.value
         val working = s.loading || s.busy
-        val finished = s.excluded || s.response != null
+        val finished = s.excluded || s.response != null || s.planFailed
         if (working || finished || conditional) return
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
@@ -76,4 +79,11 @@ class PasskeyCreateViewModel(
             }
         }
     }
+}
+
+/** Only an account with the same username is preselected; otherwise the passkey makes a new login. */
+private fun homeFor(userName: String, homes: List<AutofillMatch>): String? {
+    val wanted = userName.trim().lowercase()
+    if (wanted.isEmpty()) return null
+    return homes.firstOrNull { it.username?.trim()?.lowercase() == wanted }?.id
 }

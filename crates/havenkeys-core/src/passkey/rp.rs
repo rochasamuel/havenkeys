@@ -363,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn app_rp_ids_are_plain_registrable_domains() {
+    fn app_rp_ids_are_domains_with_a_registrable_domain() {
         assert_eq!(app_rp_id("GitHub.com").as_deref(), Some("github.com"));
         assert_eq!(
             app_rp_id("accounts.github.com").as_deref(),

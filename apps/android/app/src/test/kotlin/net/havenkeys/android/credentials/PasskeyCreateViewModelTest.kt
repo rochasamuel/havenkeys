@@ -43,6 +43,44 @@ class PasskeyCreateViewModelTest {
     }
 
     @Test
+    fun aHomeWithAnotherUsernameIsNotPreselected() = runTest {
+        val repo = FakeCredentialRepository().apply {
+            plan = Outcome.Ok(PasskeyCreatePlan("github.com", "someone-else", false, listOf(home)))
+        }
+        val s = vm(repo).state.value
+        assertEquals(listOf(home), s.homes)
+        assertNull(s.selected)
+    }
+
+    @Test
+    fun theUsernameMatchIgnoresCaseAndSpaces() = runTest {
+        val repo = FakeCredentialRepository().apply {
+            plan = Outcome.Ok(PasskeyCreatePlan("github.com", " OCTO ", false, listOf(home)))
+        }
+        assertEquals("id1", vm(repo).state.value.selected)
+    }
+
+    @Test
+    fun aBlankUserNameNeverPreselects() = runTest {
+        val blankHome = AutofillMatch("id2", "Other", "", false)
+        val repo = FakeCredentialRepository().apply {
+            plan = Outcome.Ok(PasskeyCreatePlan("github.com", "", false, listOf(blankHome)))
+        }
+        assertNull(vm(repo).state.value.selected)
+    }
+
+    @Test
+    fun aFailedPlanStaysFailedAndCannotSave() = runTest {
+        val repo = FakeCredentialRepository().apply { plan = Outcome.Failed("offline") }
+        val vm = vm(repo)
+        assertTrue(vm.state.value.planFailed)
+        vm.select(null)
+        assertEquals("offline", vm.state.value.error)
+        vm.create()
+        assertTrue(repo.calls.none { it.startsWith("passkeyCreate:") })
+    }
+
+    @Test
     fun withoutHomesANewLoginIsChosen() = runTest {
         val repo = FakeCredentialRepository().apply {
             plan = Outcome.Ok(PasskeyCreatePlan("github.com", "octo", false, emptyList()))
@@ -92,6 +130,7 @@ class PasskeyCreateViewModelTest {
         val repo = FakeCredentialRepository()
         val s = vm(repo, conditional = true).state.value
         assertEquals("denied", s.error)
+        assertTrue(s.planFailed)
         assertTrue(repo.calls.isEmpty())
     }
 }

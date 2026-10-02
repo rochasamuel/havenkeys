@@ -1541,11 +1541,15 @@ Android's facts and draws UI. Nothing here has run on a phone yet.
   origin only from a browser whose package and a signing certificate are on
   Rust's privileged list, the same list autofill uses (§22.5). Kotlin asks
   Android's `getOrigin` with that list, and Rust checks the caller against
-  the list again. Any other caller that reports an origin is refused. Every
-  caller without an origin is an app. Only a browser's origin is treated as a
-  page URL, under the extension's rule (`authorize_rp`).
-* **App passkeys.** An app may use an RP ID only if the RP ID is a plain
-  registrable domain (never a public suffix, IP address or `localhost`) and
+  the list again. Kotlin drops an origin Android will not vouch for, so a
+  caller that is not a privileged browser reaches Rust as an app and is
+  denied unless the site grants that app `get_login_creds`; if an origin
+  nevertheless reaches Rust from a caller not on the list, Rust refuses it.
+  Every caller without an origin is an app. Only a browser's origin is
+  treated as a page URL, under the extension's rule (`authorize_rp`).
+* **App passkeys.** An app may use an RP ID only if the RP ID is a
+  domain with a registrable domain of its own (subdomains allowed; never a
+  public suffix, IP address or `localhost`) and
   `https://<rp_id>/.well-known/assetlinks.json`, fresh in the 7-day cache
   (§22.7), lists the app's package and the signing certificate Android
   reports with `delegate_permission/common.get_login_creds`.
@@ -1570,7 +1574,7 @@ Android's facts and draws UI. Nothing here has run on a phone yet.
   (§22.4). Saving a password through Credential Manager is not supported;
   saving stays with Autofill (§22.17).
 * **Creating.** A passkey is created only online and after the user taps
-  "Create" in HavenKeys; nothing is recorded locally until the server
+  "Save" in HavenKeys; nothing is recorded locally until the server
   accepted it. A conditional create (Chrome's automatic upgrade) is refused
   on Android, so nothing is saved without a tap in HavenKeys. A request whose
   `excludeCredentials` names a passkey the vault holds for that RP ends with

@@ -47,7 +47,7 @@ Manager, on **Android 14 or later** (the app itself still runs from Android
   days without network an app's passkey is refused until the phone is online
   again.
 * **Create:** HavenKeys opens a screen showing the site and the account, and
-  creates the passkey when you tap Create. Creating needs the server (offline
+  creates the passkey when you tap Save. Creating needs the server (offline
   it says so and nothing is saved). If the vault already has a passkey for
   that account, it says so instead.
 * **Passwords:** Credential Manager can also offer your saved logins (only

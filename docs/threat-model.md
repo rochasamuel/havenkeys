@@ -665,8 +665,11 @@ emulator yet; the manual checklists in `security-review.md` ("Android M1",
   within the 7-day cache. Offline, an app's passkey stops working after 7
   days until the phone is online again (AN38).
 * **A malicious browser not on the privileged list that reports an origin.**
-  Refused: an origin counts only from a caller whose package and certificate
-  are on Rust's list, and Rust re-checks what Android's `getOrigin` returned.
+  Its origin is dropped: an origin counts only from a caller whose package
+  and certificate are on Rust's list, and Kotlin passes Android's `getOrigin`
+  only that list. The caller then reaches Rust as an app and is denied unless
+  the site grants that app `get_login_creds`; an origin that still reaches
+  Rust from an unlisted caller is refused there.
 * **A passkey request while the vault is locked.** Only "Unlock HavenKeys" is
   offered; no passkey or login names.
 * **A conditional (automatic) create.** Refused; nothing is saved without a

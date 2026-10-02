@@ -14,6 +14,7 @@ import androidx.credentials.provider.PendingIntentHandler
 import androidx.credentials.provider.ProviderGetCredentialRequest
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
@@ -42,13 +43,29 @@ class CredentialGetActivity : FragmentActivity() {
         unlockThen(container) { unlockedHere ->
             if (answering) return@unlockThen
             answering = true
-            lifecycleScope.launch {
-                when (intent.getStringExtra(CredentialExtras.KIND)) {
-                    CredentialExtras.KIND_PASSKEY -> signIn(request, caller, itemId, unlockedHere)
-                    CredentialExtras.KIND_PASSWORD -> password(request, caller, itemId)
-                    else -> failGet(GetCredentialUnknownException())
-                }
+            lifecycleScope.launch { answer(request, caller, itemId, unlockedHere) }
+        }
+    }
+
+    /** An unexpected failure must still answer Android, and must not take the unlocked app down. */
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
+    private suspend fun answer(
+        request: ProviderGetCredentialRequest,
+        caller: CredentialCaller,
+        itemId: String,
+        unlockedHere: Boolean,
+    ) {
+        try {
+            when (intent.getStringExtra(CredentialExtras.KIND)) {
+                CredentialExtras.KIND_PASSKEY -> signIn(request, caller, itemId, unlockedHere)
+                CredentialExtras.KIND_PASSWORD -> password(request, caller, itemId)
+                else -> failGet(GetCredentialUnknownException())
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The message is never kept: it could quote anything.
+            failGet(GetCredentialUnknownException())
         }
     }
 

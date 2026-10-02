@@ -17,12 +17,14 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
 import net.havenkeys.android.autofill.unlockThen
 import net.havenkeys.android.security.hardenWindow
 import net.havenkeys.android.ui.theme.HavenTheme
+import uniffi.havenkeys_mobile.CredentialCaller
 
 /**
  * "Save a passkey to HavenKeys?" (spec §8.2): unlock if needed, choose the
@@ -38,8 +40,15 @@ class PasskeyCreateActivity : FragmentActivity() {
         hardenWindow()
         val provider = PendingIntentHandler.retrieveProviderCreateCredentialRequest(intent)
         val request = provider?.callingRequest as? CreatePublicKeyCredentialRequest
-            ?: return failCreate(CreateCredentialUnknownException())
-        val caller = provider.callingAppInfo.toCaller()
+        // A site's automatic upgrade would save without a tap: refused before any HavenKeys screen shows.
+        when {
+            provider == null || request == null -> failCreate(CreateCredentialUnknownException())
+            request.isConditional -> failCreate(CreateCredentialCancellationException())
+            else -> showCreate(provider.callingAppInfo.toCaller(), request)
+        }
+    }
+
+    private fun showCreate(caller: CredentialCaller, request: CreatePublicKeyCredentialRequest) {
         unlockThen(container) { unlockedHere ->
             setContent {
                 HavenTheme {
@@ -62,16 +71,26 @@ class PasskeyCreateActivity : FragmentActivity() {
                         state = state,
                         onSelect = vm::select,
                         onSave = {
-                            lifecycleScope.launch {
-                                val subtitle = getString(R.string.passkey_verify_save, state.rpId)
-                                if (userVerified(container, unlockedHere, subtitle)) vm.create()
-                            }
+                            lifecycleScope.launch { verifyAndCreate(vm, state.rpId, unlockedHere) }
                         },
                         onCancel = { failCreate(CreateCredentialCancellationException()) },
                         onClose = { failCreate(CreatePublicKeyCredentialDomException(InvalidStateError())) },
                     )
                 }
             }
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught", "SwallowedException")
+    private suspend fun verifyAndCreate(vm: PasskeyCreateViewModel, rpId: String, unlockedHere: Boolean) {
+        try {
+            val subtitle = getString(R.string.passkey_verify_save, rpId)
+            if (userVerified(container, unlockedHere, subtitle)) vm.create()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The message is never kept: it could quote anything.
+            failCreate(CreateCredentialUnknownException())
         }
     }
 }

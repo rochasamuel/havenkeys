@@ -51,6 +51,10 @@ fun PasskeyCreateScreen(
                     Text(stringResource(R.string.passkey_exists), style = MaterialTheme.typography.titleMedium)
                     TextButton(onClick = onClose) { Text(stringResource(R.string.passkey_close)) }
                 }
+                state.planFailed -> {
+                    state.error?.let { Text(stringResource(errorText(it)), color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = onCancel) { Text(stringResource(R.string.passkey_cancel)) }
+                }
                 else -> Choice(state, onSelect, onSave, onCancel)
             }
         }
@@ -87,7 +91,7 @@ private fun Choice(state: PasskeyCreateUiState, onSelect: (String?) -> Unit, onS
     state.error?.let { Text(stringResource(errorText(it)), color = MaterialTheme.colorScheme.error) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.passkey_cancel)) }
-        Button(onClick = onSave, enabled = !state.busy && state.error != "denied", modifier = Modifier.weight(1f)) {
+        Button(onClick = onSave, enabled = !state.busy, modifier = Modifier.weight(1f)) {
             Text(stringResource(R.string.passkey_save))
         }
     }

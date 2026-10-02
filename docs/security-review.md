@@ -2668,7 +2668,9 @@ Properties checked by host tests (`regressions.rs`,
 `passkeys_android.rs`, `tests/round_trip.rs`): an impostor app (right package,
 another certificate) gets no passkey; an app vouched only for filling
 (`handle_all_urls`) gets none; a stale or failed lookup vouches for nothing;
-a caller that is not a privileged browser and reports an origin is refused;
+an origin that reaches Rust from a caller that is not a privileged browser
+is refused (in the real flow Kotlin drops such an origin, so the caller is an
+app and is denied unless the site vouches for it);
 an app's `clientDataHash` is not signed; a locked vault offers and signs
 nothing; a chosen login must match the app; a passkey made for an app works
 on the website and back.
@@ -2680,7 +2682,7 @@ on the website and back.
 | AN39 | Low | `CallerFacts`, `credentials.rs` | Origin trust relies on Android's `getOrigin` plus Rust's list | Mitigated |
 | AN40 | Low | `CredentialResults`, service | Mutable PendingIntents; request codes restart per process | Mitigated |
 | AN41 | Info | `passkey_json.rs` | `clientDataJSON` in a browser response is a placeholder | Accepted |
-| AN42 | Low | `CredentialGetActivity` | An unexpected exception ends the request as a bare cancel | Open |
+| AN42 | Low | credential activities, service | An unexpected exception ends the request as a generic error | Accepted |
 | AN43 | Low | `credential_password` | The password path asks no user verification when unlocked | Accepted |
 | AN44 | Info | all of M3 | Not run on a device | Open |
 
@@ -2717,7 +2719,9 @@ decides, from the list Kotlin passes, whether the caller may report one; a
 bug there, or a list entry for a browser that mishandles origins, would let
 a page's origin be trusted.
 **Mitigation:** Rust checks the caller's package and certificate against its
-own list again and refuses any other caller that reports an origin; the list
+own list again and refuses an origin from any other caller (Kotlin already
+drops an origin Android will not vouch for, so such a caller is treated as an
+app and is denied unless the site grants it `get_login_creds`); the list
 is the one autofill uses, changed only by hand
 (`scripts/update-android-browsers.sh`), and the origin then goes through
 `authorize_rp` like the extension's.
@@ -2731,8 +2735,8 @@ redirect them; the per-process request-code counter restarts when the process
 does, and `FLAG_UPDATE_CURRENT` then lets a new intent replace an old one
 with the same code.
 **Mitigation:** the intents are explicit and target only HavenKeys'
-non-exported activities; the extras hold no secret (ids and non-secret
-request data); Rust re-checks the caller, origin, RP ID and item on every
+non-exported activities; the extras carry ids and the item title
+(vault metadata, not a secret) and non-secret request data; Rust re-checks the caller, origin, RP ID and item on every
 request, so a replaced intent can only ask Rust a question it answers again.
 **Remaining:** a stale entry may open the wrong one of HavenKeys' own
 screens; nothing is signed that Rust's checks would not allow.
@@ -2748,13 +2752,22 @@ own bytes, and Rust never signs a hash for an app (AN39's list decides who is
 a browser).
 **Remaining:** relies on browsers following Credential Manager's contract.
 
-### AN42. An unexpected exception ends the request as a bare cancel (Low, open)
-**Component:** `CredentialGetActivity`.
-**Scenario:** an exception that the activity does not map to an error ends
-the request as a cancel, with no message to the user or the site.
-**Mitigation:** it fails closed: nothing is signed, and no secret is in an
-exception message (CLAUDE.md §39).
-**Remaining:** the user sees a cancelled sign-in with no explanation.
+### AN42. An unexpected exception ends the request as a generic error (Low, accepted)
+**Component:** `CredentialGetActivity`, `PasskeyCreateActivity`,
+`CredentialUnlockActivity`, `HavenCredentialService`, `CallerFacts.kt`.
+**Scenario:** an exception that no code maps to an error (a failed
+read of the caller's signing information, an unexpected Android or UniFFI
+failure) would crash the process, losing the unlocked vault, and leave
+Credential Manager unanswered.
+**Mitigation:** each entry point catches `Exception` (never
+`CancellationException`) and answers exactly once: the get and create
+activities and the service answer with `GetCredentialUnknownException` or
+`CreateCredentialUnknownException`, and the unlock activity answers with no
+entries. Unreadable signing information gives a caller with no certificates,
+which Rust refuses. The exception message is never kept, logged or shown
+(CLAUDE.md §39). Nothing is signed on this path.
+**Remaining:** the user and the site see a generic failure without an
+explanation.
 
 ### AN43. The password path asks no user verification when unlocked (Low, accepted)
 **Component:** `credential_password`, `CredentialGetActivity`.

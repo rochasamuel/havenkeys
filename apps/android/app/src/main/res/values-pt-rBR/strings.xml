@@ -287,5 +287,6 @@
     <string name="autofill_setup_passkeys_on">O HavenKeys está ativado para senhas e chaves de acesso.</string>
     <string name="autofill_setup_passkeys_off">Ative o HavenKeys nas configurações de senhas e chaves de acesso do Android para usar suas chaves de acesso em apps e navegadores.</string>
     <string name="autofill_setup_passkeys_open">Abrir configurações de senhas e chaves de acesso</string>
+    <string name="autofill_setup_passkeys_unavailable">Não foi possível abrir as configurações de senhas e chaves de acesso do Android neste telefone.</string>
     <string name="autofill_setup_passkeys_old">Chaves de acesso exigem Android 14 ou mais recente.</string>
 </resources>

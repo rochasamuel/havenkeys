@@ -299,5 +299,6 @@
     <string name="autofill_setup_passkeys_on">HavenKeys is on for passwords and passkeys.</string>
     <string name="autofill_setup_passkeys_off">Turn on HavenKeys in Android\'s passwords and passkeys settings to use your passkeys in apps and browsers.</string>
     <string name="autofill_setup_passkeys_open">Open passwords and passkeys settings</string>
+    <string name="autofill_setup_passkeys_unavailable">Android’s passwords and passkeys settings could not be opened on this phone.</string>
     <string name="autofill_setup_passkeys_old">Passkeys need Android 14 or later.</string>
 </resources>
