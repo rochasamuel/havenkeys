@@ -94,7 +94,10 @@ pub mod testing {
     pub fn seed_identity(v: &MobileVault) {
         use havenkeys_core::identity::IdentityFields;
         let mut vault = v.client.vault().unwrap();
-        let id = match vault.stage_identity_if_missing("user@example.com", 1).unwrap() {
+        let id = match vault
+            .stage_identity_if_missing("user@example.com", 1)
+            .unwrap()
+        {
             Some(staged) => {
                 let id = staged.item_id;
                 vault.commit_write(staged, 1).unwrap();

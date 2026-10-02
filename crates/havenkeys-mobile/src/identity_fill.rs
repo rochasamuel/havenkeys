@@ -45,48 +45,67 @@ pub enum IdentityRole {
     DriversLicense,
 }
 
-/// The two lists name the same roles in the same order (a test pins it).
-const ROLES: [IdentityRole; MAX_IDENTITY_ROLES] = [
-    IdentityRole::FullName,
-    IdentityRole::FirstName,
-    IdentityRole::MiddleName,
-    IdentityRole::LastName,
-    IdentityRole::Email,
-    IdentityRole::Phone,
-    IdentityRole::BirthDate,
-    IdentityRole::BirthDay,
-    IdentityRole::BirthMonth,
-    IdentityRole::BirthYear,
-    IdentityRole::Company,
-    IdentityRole::Street,
-    IdentityRole::Number,
-    IdentityRole::Complement,
-    IdentityRole::AddressLine1,
-    IdentityRole::AddressLine2,
-    IdentityRole::Neighborhood,
-    IdentityRole::City,
-    IdentityRole::State,
-    IdentityRole::PostalCode,
-    IdentityRole::Country,
-    IdentityRole::Username,
-    IdentityRole::Cpf,
-    IdentityRole::Rg,
-    IdentityRole::Passport,
-    IdentityRole::DriversLicense,
-];
-
 impl IdentityRole {
     fn core(self) -> FillRole {
-        let at = ROLES.iter().position(|r| *r == self).unwrap_or_default();
-        FillRole::ALL[at]
+        match self {
+            IdentityRole::FullName => FillRole::FullName,
+            IdentityRole::FirstName => FillRole::FirstName,
+            IdentityRole::MiddleName => FillRole::MiddleName,
+            IdentityRole::LastName => FillRole::LastName,
+            IdentityRole::Email => FillRole::Email,
+            IdentityRole::Phone => FillRole::Phone,
+            IdentityRole::BirthDate => FillRole::BirthDate,
+            IdentityRole::BirthDay => FillRole::BirthDay,
+            IdentityRole::BirthMonth => FillRole::BirthMonth,
+            IdentityRole::BirthYear => FillRole::BirthYear,
+            IdentityRole::Company => FillRole::Company,
+            IdentityRole::Street => FillRole::Street,
+            IdentityRole::Number => FillRole::Number,
+            IdentityRole::Complement => FillRole::Complement,
+            IdentityRole::AddressLine1 => FillRole::AddressLine1,
+            IdentityRole::AddressLine2 => FillRole::AddressLine2,
+            IdentityRole::Neighborhood => FillRole::Neighborhood,
+            IdentityRole::City => FillRole::City,
+            IdentityRole::State => FillRole::State,
+            IdentityRole::PostalCode => FillRole::PostalCode,
+            IdentityRole::Country => FillRole::Country,
+            IdentityRole::Username => FillRole::Username,
+            IdentityRole::Cpf => FillRole::Cpf,
+            IdentityRole::Rg => FillRole::Rg,
+            IdentityRole::Passport => FillRole::Passport,
+            IdentityRole::DriversLicense => FillRole::DriversLicense,
+        }
     }
 
     fn of(role: FillRole) -> Self {
-        let at = FillRole::ALL
-            .iter()
-            .position(|r| *r == role)
-            .unwrap_or_default();
-        ROLES[at]
+        match role {
+            FillRole::FullName => IdentityRole::FullName,
+            FillRole::FirstName => IdentityRole::FirstName,
+            FillRole::MiddleName => IdentityRole::MiddleName,
+            FillRole::LastName => IdentityRole::LastName,
+            FillRole::Email => IdentityRole::Email,
+            FillRole::Phone => IdentityRole::Phone,
+            FillRole::BirthDate => IdentityRole::BirthDate,
+            FillRole::BirthDay => IdentityRole::BirthDay,
+            FillRole::BirthMonth => IdentityRole::BirthMonth,
+            FillRole::BirthYear => IdentityRole::BirthYear,
+            FillRole::Company => IdentityRole::Company,
+            FillRole::Street => IdentityRole::Street,
+            FillRole::Number => IdentityRole::Number,
+            FillRole::Complement => IdentityRole::Complement,
+            FillRole::AddressLine1 => IdentityRole::AddressLine1,
+            FillRole::AddressLine2 => IdentityRole::AddressLine2,
+            FillRole::Neighborhood => IdentityRole::Neighborhood,
+            FillRole::City => IdentityRole::City,
+            FillRole::State => IdentityRole::State,
+            FillRole::PostalCode => IdentityRole::PostalCode,
+            FillRole::Country => IdentityRole::Country,
+            FillRole::Username => IdentityRole::Username,
+            FillRole::Cpf => IdentityRole::Cpf,
+            FillRole::Rg => IdentityRole::Rg,
+            FillRole::Passport => IdentityRole::Passport,
+            FillRole::DriversLicense => IdentityRole::DriversLicense,
+        }
     }
 }
 
@@ -360,11 +379,25 @@ mod tests {
     }
 
     #[test]
-    fn the_role_lists_match_the_core_one_for_one() {
-        for (i, role) in ROLES.iter().enumerate() {
-            assert_eq!(role.core(), FillRole::ALL[i]);
-            assert_eq!(IdentityRole::of(FillRole::ALL[i]), *role);
-        }
+    fn every_role_maps_to_the_same_core_role_and_back() {
+        assert!(FillRole::ALL
+            .iter()
+            .all(|r| IdentityRole::of(*r).core() == *r));
+        assert_eq!(IdentityRole::Cpf.core(), FillRole::Cpf);
+        assert_eq!(IdentityRole::of(FillRole::Cpf), IdentityRole::Cpf);
+        assert_eq!(IdentityRole::AddressLine1.core(), FillRole::AddressLine1);
+        assert_eq!(
+            IdentityRole::of(FillRole::AddressLine1),
+            IdentityRole::AddressLine1
+        );
+        assert_eq!(
+            IdentityRole::DriversLicense.core(),
+            FillRole::DriversLicense
+        );
+        assert_eq!(
+            IdentityRole::of(FillRole::BirthMonth),
+            IdentityRole::BirthMonth
+        );
         assert!(is_document_role(IdentityRole::Rg));
         assert!(!is_document_role(IdentityRole::Email));
     }
