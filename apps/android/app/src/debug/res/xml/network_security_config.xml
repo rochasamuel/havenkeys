@@ -13,4 +13,8 @@
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">127.0.0.1</domain>
     </domain-config>
+    <!-- As in the release file: Let's Encrypt's revocation lists. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">lencr.org</domain>
+    </domain-config>
 </network-security-config>

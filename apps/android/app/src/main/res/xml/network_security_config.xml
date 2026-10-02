@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Release: no cleartext anywhere. Rust's transport agrees: a release build of
+<!-- Release: no cleartext except the CA revocation lists below. Rust's transport agrees: a release build of
      the native library refuses plain HTTP even to localhost (only a debug build
      allows it, matching the debug variant of this file). -->
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
@@ -11,4 +11,13 @@
             <certificates src="user" tools:ignore="AcceptsUserCertificates" />
         </trust-anchors>
     </base-config>
+    <!-- Android's certificate check (rustls-platform-verifier) downloads the
+         certificate's revocation list itself, over plain HTTP: Let's Encrypt
+         publishes CRLs only (no OCSP) at http://*.c.lencr.org, and a blocked
+         download is reported as "revoked". CRLs are signed by the CA, so
+         plain HTTP cannot forge one. This file governs Android's own HTTP
+         only; Rust's transport still refuses plain HTTP to the vault server. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">lencr.org</domain>
+    </domain-config>
 </network-security-config>
