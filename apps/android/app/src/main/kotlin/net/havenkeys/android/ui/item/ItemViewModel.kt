@@ -14,6 +14,7 @@ import net.havenkeys.android.data.SettingsRepository
 import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
+import net.havenkeys.android.data.clipboardClearSeconds
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.TotpNow
 
@@ -56,8 +57,7 @@ class ItemViewModel(
         }
     }
 
-    suspend fun clipboardClearSeconds(): Int =
-        (settings.get() as? Outcome.Ok)?.value?.clipboardClearSeconds?.toInt() ?: DEFAULT_CLIPBOARD_SECONDS
+    suspend fun clipboardClearSeconds(): Int = settings.clipboardClearSeconds()
 
     private fun load() {
         viewModelScope.launch {
@@ -70,8 +70,5 @@ class ItemViewModel(
 
     private companion object {
         const val TICK_MS = 1_000L
-
-        // The core's default (havenkeys-core model.rs), used when the setting cannot be read.
-        const val DEFAULT_CLIPBOARD_SECONDS = 30
     }
 }

@@ -218,6 +218,8 @@
     <string name="autofill_unlock">Unlock HavenKeys</string>
     <string name="autofill_search">Search HavenKeys…</string>
     <string name="autofill_code">One-time code</string>
+    <string name="autofill_copy_code">Copy one-time code</string>
+    <string name="autofill_code_copied">One-time code copied. The clipboard clears in %1$d s.</string>
     <string name="autofill_use_in_app">Use %1$s in %2$s?</string>
     <string name="autofill_app_label">The app calls itself “%1$s”. Only the package name above says which app this is.</string>
     <string name="autofill_use">Use</string>

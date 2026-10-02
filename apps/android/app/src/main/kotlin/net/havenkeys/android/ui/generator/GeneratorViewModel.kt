@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.update
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.SettingsRepository
 import net.havenkeys.android.data.VaultRepository
+import net.havenkeys.android.data.clipboardClearSeconds
 import uniffi.havenkeys_mobile.GeneratorOptions
 
 /** The options and the last strength; never the password itself (spec §9.4). */
@@ -40,8 +41,7 @@ class GeneratorViewModel(
         }
     }
 
-    suspend fun clipboardClearSeconds(): Int =
-        (settings.get() as? Outcome.Ok)?.value?.clipboardClearSeconds?.toInt() ?: DEFAULT_CLIPBOARD_SECONDS
+    suspend fun clipboardClearSeconds(): Int = settings.clipboardClearSeconds()
 
     companion object {
         // The core's generator::MIN_LENGTH and MAX_LENGTH.
@@ -55,7 +55,6 @@ class GeneratorViewModel(
             symbols = true,
             avoidAmbiguous = false,
         )
-        private const val DEFAULT_CLIPBOARD_SECONDS = 30
     }
 }
 

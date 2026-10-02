@@ -10,6 +10,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.autofill.AutofillManager
 import android.view.inputmethod.InlineSuggestionsRequest
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.FragmentActivity
@@ -18,7 +19,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
 import net.havenkeys.android.HavenApp
+import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
+import net.havenkeys.android.data.clipboardClearSeconds
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.unlock.UnlockScreen
 import net.havenkeys.android.ui.unlock.UnlockViewModel
@@ -65,11 +68,26 @@ class AutofillAuthActivity : FragmentActivity() {
                     (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)
                 mode == DatasetFactory.MODE_TOTP ->
                     (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::totpDataset)
+                mode == DatasetFactory.MODE_COPY_TOTP -> {
+                    (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let { copyCode(it) }
+                    null // Nothing is filled: the copy is the whole answer.
+                }
                 else -> null
             }
             if (result == null) cancel() else finishWith(result)
         }
     }
+}
+
+/**
+ * A tapped "Copy code" row: the code Rust gave for this target goes on the
+ * clipboard (sensitive, cleared on the usual timer and on lock).
+ */
+private suspend fun AutofillAuthActivity.copyCode(code: String) {
+    val container = (application as HavenApp).container
+    val seconds = container.settingsRepository.clipboardClearSeconds()
+    container.clipboard.copy(getString(R.string.autofill_code), code, seconds)
+    Toast.makeText(applicationContext, getString(R.string.autofill_code_copied, seconds), Toast.LENGTH_LONG).show()
 }
 
 /** What a tapped row is about, rebuilt from the structure Android attaches, never from our extras. */

@@ -10,7 +10,16 @@ import uniffi.havenkeys_mobile.TargetKind
 sealed interface FillPlan {
     data object Nothing : FillPlan
     data object UnlockFirst : FillPlan
-    data class Offer(val datasets: List<DatasetPlan>, val search: Boolean) : FillPlan
+    /**
+     * [copies]: the logins whose code is also offered for copying, on a code
+     * step. A code on its own field is filled; one split across a box per
+     * digit (Android fills only the tapped box) is pasted from the copy.
+     */
+    data class Offer(
+        val datasets: List<DatasetPlan>,
+        val search: Boolean,
+        val copies: List<AutofillMatch> = emptyList(),
+    ) : FillPlan
 }
 
 /** `values`/`totp` null: the dataset is gated and Rust is asked on tap. */
@@ -65,7 +74,9 @@ object FillPlanner {
                 }
             }
         val search = kind == TargetKind.APP && form.hasLoginFields
-        return if (datasets.isEmpty() && !search) FillPlan.Nothing else FillPlan.Offer(datasets, search)
+        // The code itself is asked of Rust only when a copy is tapped.
+        val copies = if (form.otpOnly) datasets.map { it.match } else emptyList()
+        return if (datasets.isEmpty() && !search) FillPlan.Nothing else FillPlan.Offer(datasets, search, copies)
     }
 
     private fun <T> Outcome<T>.valueOrNull(): T? = (this as? Outcome.Ok)?.value

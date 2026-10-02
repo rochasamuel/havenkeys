@@ -206,6 +206,8 @@
     <string name="autofill_unlock">Desbloquear o HavenKeys</string>
     <string name="autofill_search">Pesquisar no HavenKeys…</string>
     <string name="autofill_code">Código de uso único</string>
+    <string name="autofill_copy_code">Copiar código de verificação</string>
+    <string name="autofill_code_copied">Código de verificação copiado. A área de transferência é limpa em %1$d s.</string>
     <string name="autofill_use_in_app">Usar %1$s em %2$s?</string>
     <string name="autofill_app_label">O app se chama “%1$s”. Só o nome do pacote acima diz qual app é este.</string>
     <string name="autofill_use">Usar</string>

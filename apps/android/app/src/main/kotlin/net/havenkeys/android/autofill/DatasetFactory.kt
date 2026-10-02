@@ -6,6 +6,7 @@ import android.app.slice.Slice
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.autofill.Dataset
 import android.service.autofill.Field
@@ -18,12 +19,14 @@ import android.view.autofill.AutofillValue
 import android.view.inputmethod.InlineSuggestionsRequest
 import android.widget.RemoteViews
 import android.widget.inline.InlinePresentationSpec
+import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.autofill.inline.UiVersions
 import androidx.autofill.inline.v1.InlineSuggestionUi
 import java.util.concurrent.atomic.AtomicInteger
 import net.havenkeys.android.MainActivity
 import net.havenkeys.android.R
+import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.FillValues
 
 /**
@@ -82,7 +85,16 @@ class DatasetFactory(
     }
 
     private fun offerResponse(offer: FillPlan.Offer): FillResponse? {
+        // A copy row fills nothing: tapping it opens HavenKeys, which copies that login's code.
+        fun copyDataset(match: AutofillMatch) = dataset(
+            listOfNotNull(otpId).map { it to null },
+            context.getString(R.string.autofill_copy_code),
+            match.title,
+            sender(context, MODE_COPY_TOTP, match.id),
+            R.drawable.ic_autofill_copy,
+        )
         val datasets = offer.datasets.mapNotNull(::datasetOf).toMutableList()
+        offer.copies.mapNotNullTo(datasets, ::copyDataset)
         if (offer.search) searchDataset()?.let(datasets::add)
         if (datasets.isEmpty()) return null
         return FillResponse.Builder().apply { datasets.forEach(::addDataset) }.build()
@@ -119,10 +131,11 @@ class DatasetFactory(
         title: String,
         subtitle: String?,
         auth: IntentSender?,
+        @DrawableRes icon: Int? = null,
     ): Dataset? {
         if (fields.isEmpty()) return null
-        val menu = rows.menu(title, subtitle)
-        val inline = rows.inline(title, subtitle)
+        val menu = rows.menu(title, subtitle, icon)
+        val inline = rows.inline(title, subtitle, icon)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val builder = Dataset.Builder(rows.presentations(menu, inline))
             fields.forEach { (id, value) -> builder.setField(id, value?.let { Field.Builder().setValue(it).build() }) }
@@ -153,6 +166,7 @@ class DatasetFactory(
         const val EXTRA_ITEM_ID = "net.havenkeys.android.autofill.ITEM_ID"
         const val MODE_FILL = "fill"
         const val MODE_TOTP = "totp"
+        const val MODE_COPY_TOTP = "copy-totp"
         const val MODE_UNLOCK = "unlock"
         const val MODE_SEARCH = "search"
 
@@ -191,7 +205,12 @@ private fun List<Int>.idIn(screen: ParsedScreen): AutofillId? = firstOrNull()?.l
 private class Rows(private val context: Context, private val inlineRequest: InlineSuggestionsRequest?) {
     private var position = 0
 
-    fun menu(title: String, subtitle: String?) = RemoteViews(context.packageName, R.layout.autofill_item).apply {
+    fun menu(title: String, subtitle: String?, @DrawableRes icon: Int? = null) =
+        RemoteViews(context.packageName, R.layout.autofill_item).apply {
+        icon?.let {
+            setImageViewResource(R.id.autofill_icon, it)
+            setViewVisibility(R.id.autofill_icon, View.VISIBLE)
+        }
         setTextViewText(R.id.autofill_title, title)
         if (subtitle.isNullOrEmpty()) {
             setViewVisibility(R.id.autofill_subtitle, View.GONE)
@@ -200,14 +219,14 @@ private class Rows(private val context: Context, private val inlineRequest: Inli
         }
     }
 
-    fun inline(title: String, subtitle: String?): InlinePresentation? {
+    fun inline(title: String, subtitle: String?, @DrawableRes icon: Int? = null): InlinePresentation? {
         val index = position++
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineAt(index, title, subtitle) else null
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineAt(index, title, subtitle, icon) else null
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun inlineAt(index: Int, title: String, subtitle: String?): InlinePresentation? =
-        specFor(index)?.let { InlinePresentation(chip(title, subtitle), it, false) }
+    private fun inlineAt(index: Int, title: String, subtitle: String?, icon: Int?): InlinePresentation? =
+        specFor(index)?.let { InlinePresentation(chip(title, subtitle, icon), it, false) }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     fun presentations(menu: RemoteViews, inline: InlinePresentation?): Presentations = Presentations.Builder()
@@ -229,7 +248,9 @@ private class Rows(private val context: Context, private val inlineRequest: Inli
     @SuppressLint("RestrictedApi")
     @Suppress("DEPRECATION")
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun chip(title: String, subtitle: String?): Slice = InlineSuggestionUi.newContentBuilder(attribution())
+    private fun chip(title: String, subtitle: String?, icon: Int?): Slice =
+        InlineSuggestionUi.newContentBuilder(attribution())
+        .apply { icon?.let { setStartIcon(Icon.createWithResource(context, it)) } }
         .setTitle(title)
         .apply { if (!subtitle.isNullOrEmpty()) setSubtitle(subtitle) }
         .setContentDescription(listOfNotNull(title, subtitle).joinToString(" "))

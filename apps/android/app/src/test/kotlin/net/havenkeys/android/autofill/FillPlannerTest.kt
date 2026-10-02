@@ -63,6 +63,27 @@ class FillPlannerTest {
     }
 
     @Test
+    fun eachOfferedCodeCanAlsoBeCopied() = runTest {
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match, match.copy(id = "id2"), match.copy(id = "id3", hasTotp = false)))
+            confirm = true
+        }
+        val plan = FillPlanner.plan(otp, target, unlocked = true, repo) as FillPlan.Offer
+        assertEquals(listOf("id1", "id2"), plan.copies.map { it.id })
+        assertTrue("no code is read until the copy is tapped", repo.calls.none { it.startsWith("totp:") })
+    }
+
+    @Test
+    fun aLoginStepOffersNothingToCopy() = runTest {
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match))
+            confirm = true
+        }
+        val plan = FillPlanner.plan(login, target, unlocked = true, repo) as FillPlan.Offer
+        assertTrue(plan.copies.isEmpty())
+    }
+
+    @Test
     fun aRefusedTargetOffersNothing() = runTest {
         val repo = FakeAutofillRepository().apply { kind = Outcome.Failed("denied") }
         assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, repo))
