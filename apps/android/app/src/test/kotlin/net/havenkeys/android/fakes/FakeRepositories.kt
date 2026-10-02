@@ -24,6 +24,14 @@ import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileSettings
 import uniffi.havenkeys_mobile.PasskeyCreatePlan
 import uniffi.havenkeys_mobile.PasskeyOffer
+import uniffi.havenkeys_mobile.CardChoices
+import uniffi.havenkeys_mobile.CardFrameRoles
+import uniffi.havenkeys_mobile.CardValue
+import uniffi.havenkeys_mobile.FrameFacts
+import uniffi.havenkeys_mobile.IdentityChoice
+import uniffi.havenkeys_mobile.IdentityRole
+import uniffi.havenkeys_mobile.IdentityValue
+import uniffi.havenkeys_mobile.SaveCard
 import uniffi.havenkeys_mobile.SaveLogin
 import uniffi.havenkeys_mobile.SaveResult
 import uniffi.havenkeys_mobile.Status
@@ -272,6 +280,52 @@ class FakeAutofillRepository : AutofillRepository {
         calls += "save"
         saves += target to login
         return saved
+    }
+
+    var cardChoices: Outcome<CardChoices> = Outcome.Ok(CardChoices(false, emptyList(), emptyList()))
+    var cardValueList: Outcome<List<List<CardValue>>> = Outcome.Failed("not_found")
+    var identityChoice: Outcome<IdentityChoice?> = Outcome.Ok(null)
+    var identityValueList: Outcome<List<IdentityValue>> = Outcome.Ok(emptyList())
+    var savedCard: Outcome<SaveResult> = Outcome.Ok(SaveResult.ADDED)
+    val valueFrames = mutableListOf<List<CardFrameRoles>>()
+    val identityAsks = mutableListOf<Pair<List<IdentityRole>, Boolean>>()
+    val savedCards = mutableListOf<SaveCard>()
+
+    override suspend fun cards(target: TargetFacts, frames: List<FrameFacts>): Outcome<CardChoices> {
+        calls += "cards"
+        return cardChoices
+    }
+
+    override suspend fun cardValues(
+        id: String,
+        target: TargetFacts,
+        frames: List<CardFrameRoles>,
+    ): Outcome<List<List<CardValue>>> {
+        calls += "cardValues:$id"
+        valueFrames += frames
+        return cardValueList
+    }
+
+    override suspend fun identity(target: TargetFacts, frame: FrameFacts): Outcome<IdentityChoice?> {
+        calls += "identity"
+        return identityChoice
+    }
+
+    override suspend fun identityValues(
+        target: TargetFacts,
+        frame: FrameFacts,
+        roles: List<IdentityRole>,
+        documents: Boolean,
+    ): Outcome<List<IdentityValue>> {
+        calls += "identityValues"
+        identityAsks += roles to documents
+        return identityValueList
+    }
+
+    override suspend fun saveCard(target: TargetFacts, frame: FrameFacts, card: SaveCard): Outcome<SaveResult> {
+        calls += "saveCard"
+        savedCards += card
+        return savedCard
     }
 }
 
