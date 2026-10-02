@@ -140,6 +140,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.biometric)
     implementation(libs.autofill)
+    implementation(libs.credentials)
     implementation(libs.camerax.core)
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)

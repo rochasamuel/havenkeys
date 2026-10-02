@@ -8,8 +8,10 @@ import net.havenkeys.android.clipboard.SensitiveClipboard
 import net.havenkeys.android.clipboard.clearClipboardOnLock
 import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.AutofillRepository
+import net.havenkeys.android.data.CredentialRepository
 import net.havenkeys.android.data.RustAccountRepository
 import net.havenkeys.android.data.RustAutofillRepository
+import net.havenkeys.android.data.RustCredentialRepository
 import net.havenkeys.android.data.RustSettingsRepository
 import net.havenkeys.android.data.RustVaultRepository
 import net.havenkeys.android.data.SettingsRepository
@@ -31,6 +33,7 @@ class AppContainer(app: HavenApp, cipher: KeystoreCipher) {
     val accountRepository: AccountRepository = RustAccountRepository(vault)
     val settingsRepository: SettingsRepository = RustSettingsRepository(vault)
     val autofillRepository: AutofillRepository = RustAutofillRepository(vault)
+    val credentialRepository: CredentialRepository = RustCredentialRepository(vault)
     val biometricKeys = BiometricKeys(app)
     val biometricGate = BiometricGate()
     val clipboard = SensitiveClipboard(app, app.appScope)

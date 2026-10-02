@@ -2,11 +2,13 @@ package net.havenkeys.android.fakes
 
 import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.AutofillRepository
+import net.havenkeys.android.data.CredentialRepository
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.SettingsRepository
 import net.havenkeys.android.data.VaultRepository
 import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.BoundFill
+import uniffi.havenkeys_mobile.CredentialCaller
 import uniffi.havenkeys_mobile.DeviceInfo
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.Generated
@@ -20,6 +22,8 @@ import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LockState
 import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileSettings
+import uniffi.havenkeys_mobile.PasskeyCreatePlan
+import uniffi.havenkeys_mobile.PasskeyOffer
 import uniffi.havenkeys_mobile.SaveLogin
 import uniffi.havenkeys_mobile.SaveResult
 import uniffi.havenkeys_mobile.Status
@@ -268,5 +272,58 @@ class FakeAutofillRepository : AutofillRepository {
         calls += "save"
         saves += target to login
         return saved
+    }
+}
+
+class FakeCredentialRepository : CredentialRepository {
+    var passkeys: Outcome<List<PasskeyOffer>> = Outcome.Ok(emptyList())
+    var passwords: Outcome<List<AutofillMatch>> = Outcome.Ok(emptyList())
+    var plan: Outcome<PasskeyCreatePlan> = Outcome.Failed("denied")
+    var created: Outcome<String> = Outcome.Failed("denied")
+    var signedIn: Outcome<String> = Outcome.Failed("denied")
+    var passwordValues: Outcome<FillValues> = Outcome.Failed("denied")
+    val calls = mutableListOf<String>()
+
+    override suspend fun passkeyOffers(caller: CredentialCaller, requestJson: String): Outcome<List<PasskeyOffer>> {
+        calls += "passkeyOffers"
+        return passkeys
+    }
+
+    override suspend fun passkeySignIn(
+        caller: CredentialCaller,
+        requestJson: String,
+        clientDataHash: ByteArray?,
+        itemId: String,
+        credentialId: ByteArray,
+    ): Outcome<String> {
+        calls += "passkeySignIn:$itemId"
+        return signedIn
+    }
+
+    override suspend fun passkeyCreatePlan(
+        caller: CredentialCaller,
+        requestJson: String,
+    ): Outcome<PasskeyCreatePlan> {
+        calls += "passkeyCreatePlan"
+        return plan
+    }
+
+    override suspend fun passkeyCreate(
+        caller: CredentialCaller,
+        requestJson: String,
+        itemId: String?,
+    ): Outcome<String> {
+        calls += "passkeyCreate:${itemId ?: "new"}"
+        return created
+    }
+
+    override suspend fun passwordOffers(caller: CredentialCaller): Outcome<List<AutofillMatch>> {
+        calls += "passwordOffers"
+        return passwords
+    }
+
+    override suspend fun password(caller: CredentialCaller, itemId: String): Outcome<FillValues> {
+        calls += "password:$itemId"
+        return passwordValues
     }
 }
