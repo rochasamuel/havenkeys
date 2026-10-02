@@ -37,7 +37,10 @@ data class EditUiState(
     val saving: Boolean = false,
     val errorCode: String? = null,
     val conflict: Boolean = false,
-)
+) {
+    // `edit` holds the username.
+    override fun toString() = "EditUiState(…)"
+}
 
 sealed interface EditResult {
     data class Saved(val id: String) : EditResult

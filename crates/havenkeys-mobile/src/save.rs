@@ -49,27 +49,46 @@ impl MobileVault {
         self.unlocked()?;
         let password = SecretString::new(login.password);
         let current = login.current_password.map(SecretString::new);
-        let username = login.username.as_deref().map(str::trim).filter(|u| !u.is_empty());
+        let username = login
+            .username
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| !u.is_empty());
         let now = havenkeys_client::now_ms();
         match self.target(target)? {
             FillTarget::Browser { page_url } => {
                 let vault = self.client.vault()?;
-                let action = vault.check_login(&page_url, None, username, &password, current.as_ref())?;
-                let Some((to, result)) = decided(&action) else { return Ok(None) };
-                let staged = vault.stage_save_login(&page_url, None, username, password, to, now)?;
+                let action =
+                    vault.check_login(&page_url, None, username, &password, current.as_ref())?;
+                let Some((to, result)) = decided(&action) else {
+                    return Ok(None);
+                };
+                let staged =
+                    vault.stage_save_login(&page_url, None, username, password, to, now)?;
                 Ok(Some((staged.write, result)))
             }
             FillTarget::App(app) => {
                 // Fetched before taking the vault guard: it may reach the network.
                 let hosts = self.verified_hosts(&app)?;
                 let vault = self.client.vault()?;
-                let action = vault.check_login_for_app(&app, &hosts, username, &password, current.as_ref())?;
-                let Some((to, result)) = decided(&action) else { return Ok(None) };
+                let action = vault.check_login_for_app(
+                    &app,
+                    &hosts,
+                    username,
+                    &password,
+                    current.as_ref(),
+                )?;
+                let Some((to, result)) = decided(&action) else {
+                    return Ok(None);
+                };
                 let to = match to {
-                    SaveTarget::New { .. } => SaveTarget::New { title: login.title.as_deref() },
+                    SaveTarget::New { .. } => SaveTarget::New {
+                        title: login.title.as_deref(),
+                    },
                     update => update,
                 };
-                let staged = vault.stage_save_login_for_app(&app, &hosts, username, password, to, now)?;
+                let staged =
+                    vault.stage_save_login_for_app(&app, &hosts, username, password, to, now)?;
                 Ok(Some((staged.write, result)))
             }
         }
@@ -97,15 +116,17 @@ mod tests {
     use super::*;
     use crate::vault::tests::{code, overdue_refuses, unlocked};
     use havenkeys_core::app_target::AppIdentity;
-    use uuid::Uuid;
     use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
+    use uuid::Uuid;
 
     const CHROME: &str = "F0:FD:6C:5B:41:0F:25:CB:25:C3:B5:33:46:C8:97:2F:AE:30:F8:EE:74:11:DF:91:04:80:AD:6B:2D:60:DB:83";
 
     fn chrome(domain: &str, scheme: Option<&str>) -> TargetFacts {
         TargetFacts {
             package_name: "com.android.chrome".into(),
-            signing_certs: vec![havenkeys_core::app_target::parse_fingerprint(CHROME).unwrap().to_vec()],
+            signing_certs: vec![havenkeys_core::app_target::parse_fingerprint(CHROME)
+                .unwrap()
+                .to_vec()],
             web_domain: Some(domain.into()),
             web_scheme: scheme.map(Into::into),
         }
@@ -140,7 +161,10 @@ mod tests {
             item_type: ItemType::Login,
             title: "GitHub".into(),
             username: Some("octo".into()),
-            urls: vec![UrlRule { url: "https://github.com".into(), match_type: MatchType::Domain }],
+            urls: vec![UrlRule {
+                url: "https://github.com".into(),
+                match_type: MatchType::Domain,
+            }],
             password: SecretUpdate::Set(SecretString::from("hunter2hunter2")),
             totp: SecretUpdate::Keep,
             notes: SecretUpdate::Keep,
@@ -177,8 +201,17 @@ mod tests {
     fn a_new_site_login_is_added_for_the_pages_host() {
         let dir = tempfile::tempdir().unwrap();
         let (v, _) = unlocked(dir.path());
-        assert!(matches!(save(&v, chrome("github.com", Some("https")), login(Some("octo"), "s3cret-pass")), SaveResult::Added));
-        let m = v.autofill_matches(chrome("github.com", Some("https"))).unwrap();
+        assert!(matches!(
+            save(
+                &v,
+                chrome("github.com", Some("https")),
+                login(Some("octo"), "s3cret-pass")
+            ),
+            SaveResult::Added
+        ));
+        let m = v
+            .autofill_matches(chrome("github.com", Some("https")))
+            .unwrap();
         assert_eq!(m.len(), 1);
         assert_eq!(m[0].title, "github.com");
         assert_eq!(m[0].username.as_deref(), Some("octo"));
@@ -190,8 +223,14 @@ mod tests {
         let (v, _) = unlocked(dir.path());
         let id = add_github(&v);
         let site = || chrome("github.com", Some("https"));
-        assert!(matches!(save(&v, site(), login(Some("octo"), "hunter2hunter2")), SaveResult::Unchanged));
-        assert!(matches!(save(&v, site(), login(Some("Octo"), "brand-new-pass")), SaveResult::Updated));
+        assert!(matches!(
+            save(&v, site(), login(Some("octo"), "hunter2hunter2")),
+            SaveResult::Unchanged
+        ));
+        assert!(matches!(
+            save(&v, site(), login(Some("Octo"), "brand-new-pass")),
+            SaveResult::Updated
+        ));
         assert_eq!(github_password(&v, &id), "brand-new-pass");
         assert_eq!(v.list_items().unwrap().len(), 1);
     }
@@ -207,7 +246,10 @@ mod tests {
             current_password: Some("hunter2hunter2".into()),
             title: None,
         };
-        assert!(matches!(save(&v, chrome("github.com", Some("https")), change), SaveResult::Updated));
+        assert!(matches!(
+            save(&v, chrome("github.com", Some("https")), change),
+            SaveResult::Updated
+        ));
         assert_eq!(github_password(&v, &id), "brand-new-pass");
     }
 
@@ -216,11 +258,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (v, _) = unlocked(dir.path());
         let id = add_github(&v);
-        for domain in ["github.com.evil.com", "evilgithub.com", "github-login.example.com"] {
-            assert!(matches!(save(&v, chrome(domain, Some("https")), login(Some("octo"), "phished-pass")), SaveResult::Added));
+        for domain in [
+            "github.com.evil.com",
+            "evilgithub.com",
+            "github-login.example.com",
+        ] {
+            assert!(matches!(
+                save(
+                    &v,
+                    chrome(domain, Some("https")),
+                    login(Some("octo"), "phished-pass")
+                ),
+                SaveResult::Added
+            ));
         }
         assert_eq!(github_password(&v, &id), "hunter2hunter2");
-        assert_eq!(v.autofill_matches(chrome("github.com", Some("https"))).unwrap().len(), 1);
+        assert_eq!(
+            v.autofill_matches(chrome("github.com", Some("https")))
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -228,12 +286,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (v, _) = unlocked(dir.path());
         no_asset_links(&v);
-        assert!(matches!(save(&v, app(1), login(Some("octo"), "s3cret-pass")), SaveResult::Added));
+        assert!(matches!(
+            save(&v, app(1), login(Some("octo"), "s3cret-pass")),
+            SaveResult::Added
+        ));
         let m = v.autofill_matches(app(1)).unwrap();
         assert_eq!(m.len(), 1);
         assert_eq!(m[0].title, "GitHub");
         assert!(v.autofill_matches(app(2)).unwrap().is_empty());
-        assert!(v.autofill_matches(chrome("github.com", Some("https"))).unwrap().is_empty());
+        assert!(v
+            .autofill_matches(chrome("github.com", Some("https")))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -248,9 +312,15 @@ mod tests {
             let staged = vault.stage_bind_app(&id, &bound, 2).unwrap();
             vault.commit_write(staged, 2).unwrap();
         }
-        assert!(matches!(save(&v, app(2), login(Some("octo"), "phished-pass")), SaveResult::Added));
+        assert!(matches!(
+            save(&v, app(2), login(Some("octo"), "phished-pass")),
+            SaveResult::Added
+        ));
         assert_eq!(github_password(&v, &id), "hunter2hunter2");
-        assert!(matches!(save(&v, app(1), login(Some("octo"), "brand-new-pass")), SaveResult::Updated));
+        assert!(matches!(
+            save(&v, app(1), login(Some("octo"), "brand-new-pass")),
+            SaveResult::Updated
+        ));
         assert_eq!(github_password(&v, &id), "brand-new-pass");
     }
 
@@ -258,11 +328,25 @@ mod tests {
     fn no_scheme_havenkeys_itself_and_an_empty_password_save_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let (v, _) = unlocked(dir.path());
-        assert!(v.stage_autofill_save(&chrome("github.com", None), login(Some("octo"), "pw-pw-pw")).is_err());
-        let own = TargetFacts { package_name: "net.havenkeys.android".into(), ..app(1) };
-        assert!(v.stage_autofill_save(&own, login(Some("octo"), "pw-pw-pw")).is_err());
+        assert!(v
+            .stage_autofill_save(&chrome("github.com", None), login(Some("octo"), "pw-pw-pw"))
+            .is_err());
+        let own = TargetFacts {
+            package_name: "net.havenkeys.android".into(),
+            ..app(1)
+        };
+        assert!(v
+            .stage_autofill_save(&own, login(Some("octo"), "pw-pw-pw"))
+            .is_err());
         assert_eq!(
-            code(v.stage_autofill_save(&chrome("github.com", Some("https")), login(Some("octo"), "")).err().unwrap()),
+            code(
+                v.stage_autofill_save(
+                    &chrome("github.com", Some("https")),
+                    login(Some("octo"), "")
+                )
+                .err()
+                .unwrap()
+            ),
             "invalid_input"
         );
         assert!(v.list_items().unwrap().is_empty());
@@ -273,12 +357,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (v, seen) = unlocked(dir.path());
         assert_eq!(
-            code(v.autofill_save(chrome("github.com", Some("https")), login(Some("octo"), "pw-pw-pw")).err().unwrap()),
+            code(
+                v.autofill_save(
+                    chrome("github.com", Some("https")),
+                    login(Some("octo"), "pw-pw-pw")
+                )
+                .err()
+                .unwrap()
+            ),
             "offline"
         );
-        overdue_refuses(&v, &seen, |v| v.autofill_save(chrome("github.com", Some("https")), login(Some("octo"), "pw-pw-pw")));
+        overdue_refuses(&v, &seen, |v| {
+            v.autofill_save(
+                chrome("github.com", Some("https")),
+                login(Some("octo"), "pw-pw-pw"),
+            )
+        });
         assert_eq!(
-            code(v.stage_autofill_save(&chrome("github.com", Some("https")), login(Some("octo"), "pw-pw-pw")).err().unwrap()),
+            code(
+                v.stage_autofill_save(
+                    &chrome("github.com", Some("https")),
+                    login(Some("octo"), "pw-pw-pw")
+                )
+                .err()
+                .unwrap()
+            ),
             "locked"
         );
     }

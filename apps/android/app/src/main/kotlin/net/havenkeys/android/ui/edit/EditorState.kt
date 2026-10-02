@@ -79,7 +79,8 @@ class EditorState(private val edit: ItemEdit) {
     val dirty: Boolean
         get() = title != edit.title || websitesOf() != edit.websites || changes().isNotEmpty()
 
-    fun toDraft(): ItemDraft = ItemDraft(kind, title.trim(), websitesOf(), changes())
+    /** Carries the revision the edit was opened at: Rust refuses it if the item changed since. */
+    fun toDraft(): ItemDraft = ItemDraft(kind, title.trim(), websitesOf(), changes(), edit.revision)
 
     private fun websitesOf(): List<Website> =
         websites.filter { it.url.isNotBlank() }.map { Website(it.url.trim(), it.match) }
@@ -89,6 +90,8 @@ class EditorState(private val edit: ItemEdit) {
             removed[f.key] == true -> Change.Remove
             else -> typed[f.key]?.let { text ->
                 when {
+                    // Spaces typed where nothing was shown are not a value.
+                    text.isBlank() && loaded[f.key] == null -> null
                     text.isNotEmpty() -> Change.Replace(text)
                     // Erasing a value that was shown removes it; an empty
                     // field that never showed one (a code's "Replace") keeps it.

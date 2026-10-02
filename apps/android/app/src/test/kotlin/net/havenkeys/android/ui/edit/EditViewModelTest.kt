@@ -36,11 +36,11 @@ class EditViewModelTest {
     private val accounts = FakeAccountRepository()
     private val edit = ItemEdit(
         ItemKind.LOGIN, "GitHub", emptyList(),
-        listOf(EditField("password", FieldKind.SECRET, true, null)), false, true,
+        listOf(EditField("password", FieldKind.SECRET, true, null)), false, true, 3L,
     )
     private val draft = ItemDraft(
         ItemKind.LOGIN, "GitHub", emptyList(),
-        listOf(FieldChange("password", Change.Replace("hunter3"))),
+        listOf(FieldChange("password", Change.Replace("hunter3"))), 3L,
     )
 
     private fun vault() = FakeVaultRepository().apply { this.edit = Outcome.Ok(this@EditViewModelTest.edit) }
@@ -53,6 +53,15 @@ class EditViewModelTest {
         assertEquals(Outcome.Ok("hunter2"), vm.reveal("password"))
         assertFalse(vm.state.value.toString().contains("hunter2"))
         assertTrue("editable:id" in vault.calls)
+    }
+
+    @Test
+    fun theStateNamesNoUsername() = runTest {
+        val withUsername = edit.copy(fields = listOf(EditField("username", FieldKind.TEXT, true, "octo")))
+        val vault = FakeVaultRepository().apply { this.edit = Outcome.Ok(withUsername) }
+        val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
+        assertEquals(withUsername, vm.state.value.edit)
+        assertFalse(vm.state.value.toString().contains("octo"))
     }
 
     @Test

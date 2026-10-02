@@ -1641,6 +1641,15 @@ impl VaultService {
         self.stage(overview, Some(&details), base)
     }
 
+    /// The server revision this device holds for `id` (`None` before the
+    /// server accepted it). An editor compares it with the revision it was
+    /// opened at, so an edit made before a pull cannot overwrite what the
+    /// pull brought in.
+    pub fn item_revision(&self, id: &Uuid) -> Result<Option<i64>> {
+        self.session()?;
+        self.store.item_revision(id)
+    }
+
     /// Stage a deletion. Carries no blobs, only the revision this device
     /// last saw, so the server can detect a conflicting edit.
     pub fn stage_delete(&self, id: &Uuid) -> Result<StagedWrite> {

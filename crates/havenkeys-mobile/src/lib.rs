@@ -36,8 +36,8 @@ pub use items::{
 };
 pub use key_file::{CipherError, KeystoreCipher};
 pub use onboarding::{KitPreview, LumaFrame};
-pub use settings::MobileSettings;
 pub use save::{SaveLogin, SaveResult};
+pub use settings::MobileSettings;
 pub use vault::{LockState, MobileConfig, MobileVault, Status};
 
 /// Test support for this crate's integration tests. Not part of the API
@@ -76,7 +76,14 @@ pub mod testing {
 
     /// The Secret Key a second test device signs in with.
     pub fn secret_key_text(v: &MobileVault) -> String {
-        let account = v.client.vault().unwrap().account().unwrap().unwrap().account_id;
+        let account = v
+            .client
+            .vault()
+            .unwrap()
+            .account()
+            .unwrap()
+            .unwrap()
+            .account_id;
         v.client
             .device()
             .unwrap()

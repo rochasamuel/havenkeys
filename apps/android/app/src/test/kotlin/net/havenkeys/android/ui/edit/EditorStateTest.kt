@@ -25,6 +25,7 @@ class EditorStateTest {
         ),
         false,
         true,
+        7L,
     )
 
     private fun EditorState.changes() = toDraft().changes.associate { it.key to it.change }
@@ -38,6 +39,21 @@ class EditorStateTest {
         assertEquals(listOf(Website("https://github.com", MatchKind.DOMAIN)), draft.websites)
         assertTrue(draft.changes.isEmpty())
         assertEquals("octo", editor.shown("username"))
+    }
+
+    @Test
+    fun theDraftCarriesTheRevisionItWasOpenedAt() {
+        assertEquals(7L, EditorState(login()).toDraft().baseRevision)
+        assertEquals(null, EditorState(login().copy(revision = null)).toDraft().baseRevision)
+    }
+
+    @Test
+    fun spacesInAnEmptyCodeAreNotSent() {
+        val editor = EditorState(login())
+        editor.open("totp")
+        editor.type("totp", "   ")
+        assertTrue(editor.changes().isEmpty())
+        assertFalse(editor.dirty)
     }
 
     @Test

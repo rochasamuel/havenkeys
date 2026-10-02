@@ -152,7 +152,8 @@ fn chrome(domain: &str) -> TargetFacts {
     }
 }
 
-fn draft(title: &str, changes: Vec<FieldChange>) -> ItemDraft {
+/// `base_revision` is the revision of the `ItemEdit` the draft was made from.
+fn draft(title: &str, changes: Vec<FieldChange>, base_revision: Option<i64>) -> ItemDraft {
     ItemDraft {
         kind: ItemKind::Login,
         title: title.into(),
@@ -161,6 +162,7 @@ fn draft(title: &str, changes: Vec<FieldChange>) -> ItemDraft {
             match_kind: MatchKind::Domain,
         }],
         changes,
+        base_revision,
     }
 }
 
@@ -192,6 +194,7 @@ fn two_phones_edit_one_vault_through_the_server() {
                 replace("username", "octo"),
                 replace("password", "hunter2hunter2"),
             ],
+            None,
         ))
         .unwrap();
     assert_eq!(
@@ -213,20 +216,33 @@ fn two_phones_edit_one_vault_through_the_server() {
     b.sync_now().unwrap();
     assert!(b.list_items().unwrap().iter().any(|s| s.id == id));
 
-    // B edits first; A's edit, made from the older revision, is refused.
-    b.update_item(id.clone(), draft("B's title", vec![]))
+    // B edits first; A's edit, made from the older revision, is refused by
+    // the server.
+    let a_opened = a.item_edit(id.clone()).unwrap().revision;
+    let b_opened = b.item_edit(id.clone()).unwrap().revision;
+    b.update_item(id.clone(), draft("B's title", vec![], b_opened))
         .unwrap();
     let refused = a
-        .update_item(id.clone(), draft("A's title", vec![]))
+        .update_item(id.clone(), draft("A's title", vec![], a_opened))
         .err()
         .unwrap();
     assert_eq!(code(refused), "item_changed_elsewhere");
     assert_eq!(a.item_view(id.clone()).unwrap().summary.title, "GitHub");
 
-    // After a pull A sees B's change and can edit again; the password stayed.
+    // A pull brings B's change while A's editor is still open: that edit is
+    // refused on the phone, before anything is sent.
     a.sync_now().unwrap();
-    assert_eq!(a.item_edit(id.clone()).unwrap().title, "B's title");
-    a.update_item(id.clone(), draft("A's title", vec![]))
+    let refused = a
+        .update_item(id.clone(), draft("A's title", vec![], a_opened))
+        .err()
+        .unwrap();
+    assert_eq!(code(refused), "item_changed_elsewhere");
+    assert_eq!(a.item_view(id.clone()).unwrap().summary.title, "B's title");
+
+    // Reopened, A sees B's change and can edit again; the password stayed.
+    let reopened = a.item_edit(id.clone()).unwrap();
+    assert_eq!(reopened.title, "B's title");
+    a.update_item(id.clone(), draft("A's title", vec![], reopened.revision))
         .unwrap();
     assert_eq!(
         a.reveal(id.clone(), "password".into()).unwrap(),

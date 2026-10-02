@@ -3828,6 +3828,8 @@ public object FfiConverterTypeGeneratorOptions: FfiConverterRustBuffer<Generator
 
 /**
  * `websites` replaces a login's list; it is ignored for other kinds.
+ * `base_revision` is the `revision` of the `ItemEdit` the draft was made
+ * from.
  */
 data class ItemDraft (
     var `kind`: ItemKind
@@ -3837,6 +3839,8 @@ data class ItemDraft (
     var `websites`: List<Website>
     , 
     var `changes`: List<FieldChange>
+    , 
+    var `baseRevision`: kotlin.Long?
     
 ){
     
@@ -3857,6 +3861,7 @@ public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
             FfiConverterString.read(buf),
             FfiConverterSequenceTypeWebsite.read(buf),
             FfiConverterSequenceTypeFieldChange.read(buf),
+            FfiConverterOptionalLong.read(buf),
         )
     }
 
@@ -3864,7 +3869,8 @@ public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
             FfiConverterTypeItemKind.allocationSize(value.`kind`) +
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
-            FfiConverterSequenceTypeFieldChange.allocationSize(value.`changes`)
+            FfiConverterSequenceTypeFieldChange.allocationSize(value.`changes`) +
+            FfiConverterOptionalLong.allocationSize(value.`baseRevision`)
     )
 
     override fun write(value: ItemDraft, buf: ByteBuffer) {
@@ -3872,6 +3878,7 @@ public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
             FfiConverterString.write(value.`title`, buf)
             FfiConverterSequenceTypeWebsite.write(value.`websites`, buf)
             FfiConverterSequenceTypeFieldChange.write(value.`changes`, buf)
+            FfiConverterOptionalLong.write(value.`baseRevision`, buf)
     }
 }
 
@@ -3892,6 +3899,12 @@ data class ItemEdit (
     var `hasCustomFields`: kotlin.Boolean
     , 
     var `deletable`: kotlin.Boolean
+    , 
+    /**
+     * The revision the phone holds for the item; `None` for a new one.
+     * A draft carries it back so a save made from an older copy is refused.
+     */
+    var `revision`: kotlin.Long?
     
 ){
     
@@ -3914,6 +3927,7 @@ public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
             FfiConverterSequenceTypeEditField.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalLong.read(buf),
         )
     }
 
@@ -3923,7 +3937,8 @@ public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
             FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
             FfiConverterSequenceTypeEditField.allocationSize(value.`fields`) +
             FfiConverterBoolean.allocationSize(value.`hasCustomFields`) +
-            FfiConverterBoolean.allocationSize(value.`deletable`)
+            FfiConverterBoolean.allocationSize(value.`deletable`) +
+            FfiConverterOptionalLong.allocationSize(value.`revision`)
     )
 
     override fun write(value: ItemEdit, buf: ByteBuffer) {
@@ -3933,6 +3948,7 @@ public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
             FfiConverterSequenceTypeEditField.write(value.`fields`, buf)
             FfiConverterBoolean.write(value.`hasCustomFields`, buf)
             FfiConverterBoolean.write(value.`deletable`, buf)
+            FfiConverterOptionalLong.write(value.`revision`, buf)
     }
 }
 
