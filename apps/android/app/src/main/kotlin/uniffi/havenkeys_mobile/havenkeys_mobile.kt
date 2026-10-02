@@ -829,6 +829,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity_values(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_generate_password(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_view(
@@ -985,6 +989,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_update_item(`ptr`: Long,`id`: RustBuffer.ByValue,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_identity(`ptr`: Long,`target`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_identity_values(`ptr`: Long,`target`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,`roles`: RustBuffer.ByValue,`documents`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_generate_password(`ptr`: Long,`o`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_view(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1256,6 +1264,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item() and 0xFFFF) != 43620) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity() and 0xFFFF) != 64409) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity_values() and 0xFFFF) != 3636) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_generate_password() and 0xFFFF) != 1655) {
@@ -2259,6 +2273,18 @@ public interface MobileVaultInterface {
     
     fun `updateItem`(`id`: kotlin.String, `draft`: ItemDraft)
     
+    /**
+     * The identity a form may be offered. `None`: no identity, or nothing
+     * in it that can be filled here.
+     */
+    fun `autofillIdentity`(`target`: TargetFacts, `frame`: FrameFacts): IdentityChoice?
+    
+    /**
+     * The values for `roles`, in that order, skipping roles with no value.
+     * `documents`: the user confirmed them in HavenKeys's own window.
+     */
+    fun `autofillIdentityValues`(`target`: TargetFacts, `frame`: FrameFacts, `roles`: List<IdentityRole>, `documents`: kotlin.Boolean): List<IdentityValue>
+    
     fun `generatePassword`(`o`: GeneratorOptions): Generated
     
     fun `itemView`(`id`: kotlin.String): ItemView
@@ -2931,6 +2957,48 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 }
     }
     
+    
+
+    
+    /**
+     * The identity a form may be offered. `None`: no identity, or nothing
+     * in it that can be filled here.
+     */
+    @Throws(MobileException::class)override fun `autofillIdentity`(`target`: TargetFacts, `frame`: FrameFacts): IdentityChoice? {
+            return FfiConverterOptionalTypeIdentityChoice.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_identity(
+        it,
+        
+        FfiConverterTypeTargetFacts.lower(`target`),
+        FfiConverterTypeFrameFacts.lower(`frame`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The values for `roles`, in that order, skipping roles with no value.
+     * `documents`: the user confirmed them in HavenKeys's own window.
+     */
+    @Throws(MobileException::class)override fun `autofillIdentityValues`(`target`: TargetFacts, `frame`: FrameFacts, `roles`: List<IdentityRole>, `documents`: kotlin.Boolean): List<IdentityValue> {
+            return FfiConverterSequenceTypeIdentityValue.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_identity_values(
+        it,
+        
+        FfiConverterTypeTargetFacts.lower(`target`),
+        FfiConverterTypeFrameFacts.lower(`frame`),
+        FfiConverterSequenceTypeIdentityRole.lower(`roles`),
+        FfiConverterBoolean.lower(`documents`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -4412,6 +4480,90 @@ public object FfiConverterTypeGeneratorOptions: FfiConverterRustBuffer<Generator
 
 
 
+data class IdentityChoice (
+    var `title`: kotlin.String
+    , 
+    var `email`: kotlin.String?
+    , 
+    var `roles`: List<IdentityRole>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIdentityChoice: FfiConverterRustBuffer<IdentityChoice> {
+    override fun read(buf: ByteBuffer): IdentityChoice {
+        return IdentityChoice(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeIdentityRole.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IdentityChoice) = (
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterOptionalString.allocationSize(value.`email`) +
+            FfiConverterSequenceTypeIdentityRole.allocationSize(value.`roles`)
+    )
+
+    override fun write(value: IdentityChoice, buf: ByteBuffer) {
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterOptionalString.write(value.`email`, buf)
+            FfiConverterSequenceTypeIdentityRole.write(value.`roles`, buf)
+    }
+}
+
+
+
+/**
+ * One identity value. No `Debug`.
+ */
+data class IdentityValue (
+    var `role`: IdentityRole
+    , 
+    var `value`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIdentityValue: FfiConverterRustBuffer<IdentityValue> {
+    override fun read(buf: ByteBuffer): IdentityValue {
+        return IdentityValue(
+            FfiConverterTypeIdentityRole.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IdentityValue) = (
+            FfiConverterTypeIdentityRole.allocationSize(value.`role`) +
+            FfiConverterString.allocationSize(value.`value`)
+    )
+
+    override fun write(value: IdentityValue, buf: ByteBuffer) {
+            FfiConverterTypeIdentityRole.write(value.`role`, buf)
+            FfiConverterString.write(value.`value`, buf)
+    }
+}
+
+
+
 /**
  * `websites` replaces a login's list; it is ignored for other kinds.
  * `base_revision` is the `revision` of the `ItemEdit` the draft was made
@@ -5510,6 +5662,64 @@ public object FfiConverterTypeFieldKind: FfiConverterRustBuffer<FieldKind> {
 
 
 
+enum class IdentityRole {
+    
+    FULL_NAME,
+    FIRST_NAME,
+    MIDDLE_NAME,
+    LAST_NAME,
+    EMAIL,
+    PHONE,
+    BIRTH_DATE,
+    BIRTH_DAY,
+    BIRTH_MONTH,
+    BIRTH_YEAR,
+    COMPANY,
+    STREET,
+    NUMBER,
+    COMPLEMENT,
+    ADDRESS_LINE1,
+    ADDRESS_LINE2,
+    NEIGHBORHOOD,
+    CITY,
+    STATE,
+    POSTAL_CODE,
+    COUNTRY,
+    USERNAME,
+    CPF,
+    RG,
+    PASSPORT,
+    DRIVERS_LICENSE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIdentityRole: FfiConverterRustBuffer<IdentityRole> {
+    override fun read(buf: ByteBuffer) = try {
+        IdentityRole.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: IdentityRole) = 4UL
+
+    override fun write(value: IdentityRole, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class ItemKind {
     
     LOGIN,
@@ -5856,6 +6066,38 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeIdentityChoice: FfiConverterRustBuffer<IdentityChoice?> {
+    override fun read(buf: ByteBuffer): IdentityChoice? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeIdentityChoice.read(buf)
+    }
+
+    override fun allocationSize(value: IdentityChoice?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeIdentityChoice.allocationSize(value)
+        }
+    }
+
+    override fun write(value: IdentityChoice?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeIdentityChoice.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeKitPreview: FfiConverterRustBuffer<KitPreview?> {
     override fun read(buf: ByteBuffer): KitPreview? {
         if (buf.get().toInt() == 0) {
@@ -6168,6 +6410,34 @@ public object FfiConverterSequenceTypeFrameFacts: FfiConverterRustBuffer<List<Fr
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeIdentityValue: FfiConverterRustBuffer<List<IdentityValue>> {
+    override fun read(buf: ByteBuffer): List<IdentityValue> {
+        val len = buf.getInt()
+        return List<IdentityValue>(len) {
+            FfiConverterTypeIdentityValue.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IdentityValue>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIdentityValue.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IdentityValue>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIdentityValue.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeItemSummary: FfiConverterRustBuffer<List<ItemSummary>> {
     override fun read(buf: ByteBuffer): List<ItemSummary> {
         val len = buf.getInt()
@@ -6298,6 +6568,34 @@ public object FfiConverterSequenceTypeCardRole: FfiConverterRustBuffer<List<Card
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeCardRole.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeIdentityRole: FfiConverterRustBuffer<List<IdentityRole>> {
+    override fun read(buf: ByteBuffer): List<IdentityRole> {
+        val len = buf.getInt()
+        return List<IdentityRole>(len) {
+            FfiConverterTypeIdentityRole.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IdentityRole>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIdentityRole.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IdentityRole>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIdentityRole.write(it, buf)
         }
     }
 }

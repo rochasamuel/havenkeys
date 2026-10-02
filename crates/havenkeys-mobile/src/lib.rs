@@ -19,6 +19,7 @@ mod credentials;
 mod edit;
 mod error;
 mod events;
+mod identity_fill;
 mod items;
 mod key_file;
 mod onboarding;
@@ -40,6 +41,7 @@ pub use credentials::{
 pub use edit::{Change, EditField, FieldChange, ItemDraft, ItemEdit, MatchKind, Website};
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
+pub use identity_fill::{IdentityChoice, IdentityRole, IdentityValue, MAX_IDENTITY_ROLES};
 pub use items::{
     FieldKind, Generated, GeneratorOptions, ItemKind, ItemSummary, ItemView, TotpNow, ViewField,
 };
@@ -85,6 +87,36 @@ pub mod testing {
         let id = staged.item_id;
         vault.commit_write(staged, 1).unwrap();
         id.to_string()
+    }
+
+    /// The account's identity: Samuel Rocha, user@example.com, a mobile
+    /// phone, a postal code and a CPF. The vault must be unlocked.
+    pub fn seed_identity(v: &MobileVault) {
+        use havenkeys_core::identity::IdentityFields;
+        let mut vault = v.client.vault().unwrap();
+        let id = match vault.stage_identity_if_missing("user@example.com", 1).unwrap() {
+            Some(staged) => {
+                let id = staged.item_id;
+                vault.commit_write(staged, 1).unwrap();
+                id
+            }
+            None => vault.identity_item_id().unwrap(),
+        };
+        let some = |s: &str| Some(SecretString::from(s));
+        let input = ItemInput {
+            identity: Some(IdentityFields {
+                first_name: some("Samuel"),
+                last_name: some("Rocha"),
+                email: some("user@example.com"),
+                mobile_phone: some("+55 61 99999-0000"),
+                postal_code: some("71266-105"),
+                cpf: some("123.456.789-00"),
+                ..Default::default()
+            }),
+            ..blank(ItemType::Identity, "")
+        };
+        let staged = vault.stage_update(&id, input, 2).unwrap();
+        vault.commit_write(staged, 2).unwrap();
     }
 
     /// The GitHub login of `seed_with_github_login`, in a vault that is

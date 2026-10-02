@@ -69,7 +69,7 @@ impl PageUrl {
         &self.url
     }
 
-    pub(crate) fn is_https(&self) -> bool {
+    pub fn is_https(&self) -> bool {
         self.url.scheme() == "https"
     }
 }
