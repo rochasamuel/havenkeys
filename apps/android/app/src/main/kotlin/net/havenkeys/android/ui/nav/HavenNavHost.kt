@@ -30,8 +30,13 @@ import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
 import net.havenkeys.android.ui.autofillsetup.AutofillSetupScreen
+import net.havenkeys.android.ui.edit.EditNavigation
+import net.havenkeys.android.ui.edit.EditScreen
+import net.havenkeys.android.ui.edit.EditTarget
+import net.havenkeys.android.ui.edit.EditViewModel
 import net.havenkeys.android.ui.generator.GeneratorScreen
 import net.havenkeys.android.ui.generator.GeneratorViewModel
+import net.havenkeys.android.ui.item.ItemNavigation
 import net.havenkeys.android.ui.item.ItemScreen
 import net.havenkeys.android.ui.item.ItemViewModel
 import net.havenkeys.android.ui.onboarding.OnboardingScreen
@@ -45,6 +50,7 @@ import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.unlock.UnlockScreen
 import net.havenkeys.android.ui.unlock.UnlockViewModel
+import net.havenkeys.android.ui.vault.VaultNavigation
 import net.havenkeys.android.ui.vault.VaultScreen
 import net.havenkeys.android.ui.vault.VaultViewModel
 
@@ -135,10 +141,13 @@ private fun NavGraphBuilder.vaultScreens(
             viewModel = viewModel {
                 VaultViewModel(container.vaultRepository, container.accountRepository, container.events)
             },
-            onOpen = { id -> navController.navigate(Routes.item(id)) },
-            onLock = container.vaultRepository::lock,
-            onGenerator = { navController.navigate(Routes.GENERATOR) },
-            onSettings = { navController.navigate(Routes.SETTINGS) },
+            navigation = VaultNavigation(
+                onOpen = { id -> navController.navigate(Routes.item(id)) },
+                onNew = { kind -> navController.navigate(Routes.new(kind)) },
+                onLock = container.vaultRepository::lock,
+                onGenerator = { navController.navigate(Routes.GENERATOR) },
+                onSettings = { navController.navigate(Routes.SETTINGS) },
+            ),
             titleModifier = { id -> Modifier.sharedTitle(shared, id, visibility, motion) },
         )
     }
@@ -151,11 +160,51 @@ private fun NavGraphBuilder.vaultScreens(
             },
             clipboard = container.clipboard,
             online = online,
-            onBack = { navController.popBackStack() },
-            onLock = container.vaultRepository::lock,
+            navigation = ItemNavigation(
+                onBack = { navController.popBackStack() },
+                onLock = container.vaultRepository::lock,
+                onEdit = { navController.navigate(Routes.edit(id)) },
+                onDeleted = { navController.popBackStack() },
+            ),
             titleModifier = Modifier.sharedTitle(shared, id, this, motion),
         )
     }
+    composable(Routes.EDIT, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
+        val id = requireNotNull(it.arguments?.getString(Routes.ITEM_ID))
+        EditRoute(container, navController, EditTarget.Existing(id))
+    }
+    composable(Routes.NEW, arguments = listOf(navArgument(Routes.KIND) { type = NavType.StringType })) {
+        val kind = it.arguments?.getString(Routes.KIND)?.let(::creatableKind)
+        if (kind == null) {
+            LaunchedEffect(Unit) { navController.popBackStack() }
+        } else {
+            EditRoute(container, navController, EditTarget.New(kind))
+        }
+    }
+}
+
+@Composable
+private fun EditRoute(container: AppContainer, navController: NavHostController, target: EditTarget) {
+    val online by container.events.online.collectAsStateWithLifecycle()
+    EditScreen(
+        viewModel = viewModel {
+            EditViewModel(container.vaultRepository, container.accountRepository, container.events, target)
+        },
+        isNew = target is EditTarget.New,
+        online = online,
+        navigation = EditNavigation(
+            onDone = { id ->
+                if (target is EditTarget.New) {
+                    // The new item's screen replaces the editor, so Back goes to the list.
+                    navController.navigate(Routes.item(id)) { popUpTo(Routes.NEW) { inclusive = true } }
+                } else {
+                    navController.popBackStack()
+                }
+            },
+            onBack = { navController.popBackStack() },
+            onLock = container.vaultRepository::lock,
+        ),
+    )
 }
 
 /** Generator, Settings and the screens Settings leads to. No route carries an argument. */

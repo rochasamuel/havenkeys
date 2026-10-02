@@ -28,6 +28,7 @@ import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.TotpNow
 import uniffi.havenkeys_mobile.ViewField
+import org.junit.Assert.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ItemViewModelTest {
@@ -120,5 +121,12 @@ class ItemViewModelTest {
     fun anUnreadableSettingClearsTheClipboardAtTheDefault() = runTest {
         settings.current = Outcome.Failed("locked")
         assertEquals(30, vm(FakeVaultRepository()).clipboardClearSeconds())
+    }
+
+    @Test
+    fun deleteAsksRustForThisItem() = runTest {
+        val vault = FakeVaultRepository().apply { view = Outcome.Ok(loginView()) }
+        assertEquals(Outcome.Ok(Unit), vm(vault).delete())
+        assertTrue("delete:id" in vault.calls)
     }
 }

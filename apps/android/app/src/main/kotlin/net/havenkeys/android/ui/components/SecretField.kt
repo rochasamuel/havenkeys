@@ -31,7 +31,7 @@ import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.theme.HavenType
 
 // Always the same count: the mask must not tell the value's length.
-private const val MASK = "••••••••••••"
+internal const val MASK = "••••••••••••"
 
 /**
  * One field of an item. The caller owns [revealed] (remembered state that

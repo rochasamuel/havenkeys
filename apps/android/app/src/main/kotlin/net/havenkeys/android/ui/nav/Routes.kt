@@ -1,6 +1,11 @@
 package net.havenkeys.android.ui.nav
 
-/** Navigation routes. An argument is never a secret: `item/{id}` carries only the item's UUID. */
+import uniffi.havenkeys_mobile.ItemKind
+
+/**
+ * Navigation routes. An argument is never a secret: `item/{id}` and
+ * `edit/{id}` carry only the item's UUID, `new/{kind}` only a kind.
+ */
 object Routes {
     const val ONBOARDING = "onboarding"
     const val UNLOCK = "unlock"
@@ -11,8 +16,28 @@ object Routes {
     const val SETTINGS = "settings"
     const val DEVICES = "devices"
     const val AUTOFILL_SETUP = "autofill-setup"
+    const val EDIT = "edit/{$ITEM_ID}"
+    const val KIND = "kind"
+    const val NEW = "new/{$KIND}"
 
     fun item(id: String) = "item/$id"
+    fun edit(id: String) = "edit/$id"
+    fun new(kind: ItemKind) = "new/${kindArg(kind)}"
+}
+
+private fun kindArg(kind: ItemKind): String = when (kind) {
+    ItemKind.LOGIN -> "login"
+    ItemKind.SECURE_NOTE -> "note"
+    ItemKind.CARD -> "card"
+    ItemKind.IDENTITY -> "identity"
+}
+
+/** The kinds the phone can create; the identity is never one of them. */
+internal fun creatableKind(arg: String): ItemKind? = when (arg) {
+    "login" -> ItemKind.LOGIN
+    "note" -> ItemKind.SECURE_NOTE
+    "card" -> ItemKind.CARD
+    else -> null
 }
 
 internal fun routeOf(start: Start): String = when (start) {

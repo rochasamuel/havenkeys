@@ -3,6 +3,7 @@ package net.havenkeys.android.ui.item
 import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,11 +27,14 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
@@ -42,6 +52,8 @@ import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.theme.HavenType
 import uniffi.havenkeys_mobile.FieldKind
+import uniffi.havenkeys_mobile.ItemKind
+import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.ViewField
 
 /**
@@ -54,8 +66,7 @@ fun ItemScreen(
     viewModel: ItemViewModel,
     clipboard: SensitiveClipboard,
     online: Boolean,
-    onBack: () -> Unit,
-    onLock: () -> Unit,
+    navigation: ItemNavigation,
     modifier: Modifier = Modifier,
     titleModifier: Modifier = Modifier,
 ) {
@@ -66,9 +77,18 @@ fun ItemScreen(
     val actions = remember(viewModel, clipboard, snackbar, scope, resources) {
         FieldActions(viewModel, clipboard, snackbar, scope, resources)
     }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { HavenTopBar(title = "", online = online, onLock = onLock, onBack = onBack) },
+        topBar = {
+            HavenTopBar(
+                title = "",
+                online = online,
+                onLock = navigation.onLock,
+                onBack = navigation.onBack,
+                actions = { ItemActions(state.view, online, navigation.onEdit, onDelete = { confirmDelete = true }) },
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier,
@@ -79,30 +99,14 @@ fun ItemScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            val view = state.view
-            if (view != null) {
+            state.view?.let { view ->
                 Text(
                     text = view.summary.title,
                     style = MaterialTheme.typography.headlineSmall,
                     color = HavenTheme.colors.textStrong,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).then(titleModifier),
                 )
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Column {
-                        view.fields.forEachIndexed { i, field ->
-                            // Keyed: after a reload adds or removes a field, a
-                            // revealed value stays with its own row.
-                            key(field.key) {
-                                if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                FieldRow(field, actions)
-                            }
-                        }
-                    }
-                }
+                ItemFields(view, actions)
             }
             state.errorCode?.let { code ->
                 Text(
@@ -113,9 +117,82 @@ fun ItemScreen(
             }
         }
     }
+    val view = state.view
+    if (confirmDelete && view != null) {
+        DeleteDialog(view, onCancel = { confirmDelete = false }) {
+            confirmDelete = false
+            actions.delete(navigation.onDeleted)
+        }
+    }
 }
 
-/** What a field can do; every value passes through here without being kept. */
+@Composable
+private fun ItemFields(view: ItemView, actions: FieldActions) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.padding(16.dp),
+    ) {
+        Column {
+            view.fields.forEachIndexed { i, field ->
+                // Keyed: after a reload adds or removes a field, a
+                // revealed value stays with its own row.
+                key(field.key) {
+                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    FieldRow(field, actions)
+                }
+            }
+        }
+    }
+}
+
+/** Edit, and Delete in the overflow; both write to the server, so both need it online. */
+@Composable
+private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+    IconButton(onClick = onEdit, enabled = online && view != null) {
+        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.item_edit))
+    }
+    // The identity is never deleted from the phone.
+    if (view == null || view.summary.kind == ItemKind.IDENTITY) return
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.vault_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.item_delete)) },
+                leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                enabled = online,
+                onClick = {
+                    open = false
+                    onDelete()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeleteDialog(view: ItemView, onCancel: () -> Unit, onDelete: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.item_confirm_delete, view.summary.title)) },
+        text = if (view.summary.hasPasskey) {
+            { Text(stringResource(R.string.item_passkey_warning)) }
+        } else {
+            null
+        },
+        confirmButton = {
+            TextButton(onClick = onDelete) {
+                Text(stringResource(R.string.item_delete), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.item_cancel)) } },
+    )
+}
+
+/** What a field (and the item) can do; every value passes through here without being kept. */
 private class FieldActions(
     val viewModel: ItemViewModel,
     private val clipboard: SensitiveClipboard,
@@ -140,6 +217,15 @@ private class FieldActions(
         scope.launch {
             when (val r = viewModel.reveal(key)) {
                 is Outcome.Ok -> copy(label, r.value)
+                is Outcome.Failed -> snackbar.showSnackbar(resources.getString(errorText(r.code)))
+            }
+        }
+    }
+
+    fun delete(onDeleted: () -> Unit) {
+        scope.launch {
+            when (val r = viewModel.delete()) {
+                is Outcome.Ok -> onDeleted()
                 is Outcome.Failed -> snackbar.showSnackbar(resources.getString(errorText(r.code)))
             }
         }

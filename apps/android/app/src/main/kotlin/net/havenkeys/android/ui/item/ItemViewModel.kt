@@ -57,6 +57,9 @@ class ItemViewModel(
         }
     }
 
+    /** Online only; the screen pops on success. */
+    suspend fun delete(): Outcome<Unit> = vault.delete(id)
+
     suspend fun clipboardClearSeconds(): Int = settings.clipboardClearSeconds()
 
     private fun load() {

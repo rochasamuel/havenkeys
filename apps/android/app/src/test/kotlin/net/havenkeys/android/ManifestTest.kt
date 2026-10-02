@@ -132,4 +132,14 @@ class ManifestTest {
             "SecureDialogWindow(ignoreObscuredTouches = true)" in search,
         )
     }
+
+    /** A rotation must not recreate the activity: an open draft lives in composition only. */
+    @Test
+    fun mainActivityKeepsItsScreenAcrossRotation() {
+        val main = elements("activity").single { it.android("name") == ".MainActivity" }
+        val handled = main.android("configChanges").split('|')
+        for (change in listOf("orientation", "screenSize", "screenLayout", "smallestScreenSize", "keyboardHidden")) {
+            assertTrue("MainActivity must handle $change", change in handled)
+        }
+    }
 }
