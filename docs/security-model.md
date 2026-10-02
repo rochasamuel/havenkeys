@@ -1156,11 +1156,14 @@ structure's `webDomain` and scheme:
 * HavenKeys never fills itself.
 * The certificates come from `PackageManager` (`signingInfo.apkContentsSigners`).
   A package Android will not describe gives none, and Rust refuses a target
-  without one. **Package visibility is unverified:** the manifest declares
-  no `<queries>` and does not request `QUERY_ALL_PACKAGES`. If Android 11+
-  hides the app being filled from HavenKeys, it gets no certificates and
-  nothing is filled — the safe side, but autofill would not work for it. This
-  is pending a test on a device.
+  without one. Android 11+ hides other packages from HavenKeys, Chrome
+  included (seen on a Galaxy S24+, Android 16: no certificates, every target
+  refused), so the `github` flavor requests `QUERY_ALL_PACKAGES`
+  (`src/github/AndroidManifest.xml`). It lets HavenKeys list every installed
+  app; HavenKeys reads only the signing certificates of the app it is
+  filling. The `play` flavor does not request it yet: Google Play restricts
+  that permission, and the `play` build's alternative is still open
+  (`security-review.md` AN10).
 
 ### 22.6 App bindings and "Search HavenKeys…"
 
@@ -1255,6 +1258,12 @@ hosts whose registrable domain's first label appears in the package name
   own stack (release: cleartext forbidden; debug: `localhost` and
   `127.0.0.1` allowed); it does not govern Rust's sockets, so Rust enforces
   its own rule. The desktop keeps `localhost` HTTP in every build.
+* One cleartext exception for Android's stack, in both build types:
+  `lencr.org` and its subdomains. Android's certificate check downloads the
+  server certificate's revocation list itself, and Let's Encrypt publishes
+  CRLs only over plain HTTP; blocked, every sign-in failed as "revoked"
+  (`security-review.md` AN25). CRLs are signed by the CA, so this cannot be
+  used to forge a verdict, and Rust's sockets are not affected.
 * **User-installed CAs are trusted, on purpose:** a self-hosted server signed
   by the user's own CA must work, as it does in the phone's browser. The
   cost: anyone whose CA the user installed (or a device policy installed) can
@@ -1278,6 +1287,12 @@ hosts whose registrable domain's first label appears in the package name
   lock event ran, the clip stays.
 * The foreground app, the keyboard and accessibility services can read the
   clipboard while it holds the value.
+* Autofill offers "Copy one-time code" beside each code it offers. Some apps
+  split a code across one box per digit and show Android only the tapped
+  box, so the code cannot be filled into all of them; the user pastes it
+  instead. The row fills nothing: tapping it opens HavenKeys, which asks
+  Rust for the code for that exact app or site and copies it under the
+  rules above.
 
 ### 22.11 Permissions, exported components and hardening
 
@@ -1286,10 +1301,11 @@ hosts whose registrable domain's first label appears in the package name
 | `INTERNET` | The user's server and `assetlinks.json` |
 | `USE_BIOMETRIC` | Biometric unlock (BiometricPrompt) |
 | `CAMERA` | Scanning the Emergency Kit's QR code; requested when scanning. `android.hardware.camera` is not required |
+| `QUERY_ALL_PACKAGES` (`github` flavor only) | Reading the signing certificates of the app or browser being filled (§22.5) |
 
-No other permission is declared (`ManifestTest` checks the set). In
-particular there is no `QUERY_ALL_PACKAGES`, no `REQUEST_INSTALL_PACKAGES`
-and no accessibility service.
+No other permission is declared (`ManifestTest` checks both sets). In
+particular there is no `REQUEST_INSTALL_PACKAGES` and no accessibility
+service.
 
 **Exported components** in the source manifest: the launcher activity
 (`MainActivity`) and `HavenAutofillService`, guarded by

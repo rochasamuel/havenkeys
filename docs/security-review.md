@@ -2106,7 +2106,7 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN7 | Medium | Mobile API / auto-lock | Every read (`list_items`, `search`, `item_view`, `reveal`, `totp`) reset the idle timer, and the app calls them on its own (a sync's `items_changed` every 30 s while in the foreground, the TOTP countdown every second), so auto-lock never fired with the screen on | **Fixed** (`eee642f`) |
 | AN8 | Low | Settings → Devices | Revoking this phone from its own Devices list leaves its biometric bundle in place (Sign out deletes it) | Open |
 | AN9 | Low | Mobile API / auto-lock | Secret-returning calls check the lock state, not the auto-lock clock; after the process thaws, a fill can be answered before the overdue 5-second tick locks | **Fixed** (`eee642f`) |
-| AN10 | Info | Autofill (package visibility) | No `<queries>` and no `QUERY_ALL_PACKAGES`: if Android 11+ hides the app being filled, it gets no certificates and nothing is filled for it | Open: pending a device test (fails closed) |
+| AN10 | Medium | Autofill (package visibility) | Confirmed on a Galaxy S24+ (Android 16): Android hid Chrome and every app from HavenKeys, so no certificates were read and nothing was ever filled | **Fixed** for the `github` flavor (`QUERY_ALL_PACKAGES`); open for `play` |
 | AN11 | Info | Auto-lock | Rust's monotonic clock excludes deep sleep on Android, so the core's suspend detection probably locks the vault after any sleep longer than 30 s, even with auto-lock off | Open: to observe on a device (fails closed) |
 | AN12 | Info | App (`VaultEventsHub`) | Events go through a `SharedFlow` with `DROP_OLDEST`; a slow collector could miss `SignedOut`/`Removed` and keep Keystore keys | Accepted |
 | AN13 | Info | App memory | The master password, typed Secret Key, revealed and fill values are JVM `String`s; the Kit's QR camera frames are not zeroed | Accepted, documented |
@@ -2121,6 +2121,10 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN22 | Low | Vault list (`items.rs`) | The list's website came from string splitting and kept a saved URL's userinfo (`https://user:pw@host/` showed `user:pw@host`) | **Fixed** (`a129cff`) |
 | AN23 | Info | Secret Key file (`SecretKeyCipher`) | Two first uses at once could each generate the Keystore key, leaving a seal under a replaced key | **Fixed** (`4beb735`) |
 | AN24 | Info | Item screen | Revealed values were remembered by position, so after a reload added or removed a field a shown value could appear in another row | **Fixed** (`4beb735`) |
+| AN25 | High | TLS on Android (`network_security_config.xml`) | Found on the first real phone: sign-in always said "offline". Android's certificate check downloads the certificate's revocation list over plain HTTP (Let's Encrypt has no OCSP, only CRLs at `http://*.c.lencr.org`); the app's no-cleartext rule blocked it, and the verifier reports any revocation failure as "revoked" | **Fixed**: plain HTTP allowed to `lencr.org` only, for Android's stack (Rust still refuses plain HTTP to the server) |
+| AN26 | Medium | Autofill (`LoginFormFinder`) | Found on the same phone: a login whose only password says `autocomplete="new-password"` (dashboard.render.com) was taken for a sign-up form, so nothing was offered | **Fixed**: that one field, beside a username with no confirmation, is the login's password |
+| AN27 | Medium | Autofill (`LoginFormFinder`, `FieldClassifier`) | Found in the Riot app: a code split one box per digit (`maxlength=1`, and a stray `new-password` hint) was not a code field, and the app shows Android only the tapped box | **Fixed**: the tapped one-character box (HTML `maxlength` or a native view's `maxTextLength`) on a screen with no login field is a code field; in a row of such boxes the first one |
+| AN28 | Info | Autofill (`DatasetFactory`, `AutofillAuthActivity`) | Android fills only the tapped box, which keeps one digit, so a split code cannot be filled whole | **Mitigated**: a "Copy one-time code" row beside each offered code copies it (explicit tap, Rust asked for that target, sensitive clip, usual clearing) for pasting |
 
 ## Details
 
@@ -2266,13 +2270,18 @@ locks an overdue vault instead of rescuing it. The autofill planner shows
 `FillPlannerTest.aVaultRustLocksOnTheWayAsksToUnlockFirst`. **Remaining
 limitation:** none known for these calls; not observed on a device.
 
-### AN10. Package visibility (Info, open)
-**Component:** `CallerIdentity.kt`, `AndroidManifest.xml`. Android 11+
-filters which packages an app can see. The autofill caller may be visible to
-the active autofill service, but this has not been checked. If it is not,
-`certDigests` returns nothing, Rust refuses the target, and that app (or
-browser) gets no autofill. `QUERY_ALL_PACKAGES` was not added without evidence that it is
-needed. **Remaining limitation:** fails closed; pending the checklist.
+### AN10. Package visibility (Medium, fixed for `github`)
+**Component:** `CallerIdentity.kt`, `src/github/AndroidManifest.xml`. On a
+Galaxy S24+ (Android 16) the caller was not visible to the autofill
+service: `certDigests` returned nothing for Chrome, Rust refused the
+target, and no app or site was ever offered a login. The plan's answer
+(Task 23 Step 4) is applied: the `github` flavor requests
+`QUERY_ALL_PACKAGES`, checked by `ManifestTest`. HavenKeys reads only the
+signing certificates of the package being filled. **Remaining
+limitation:** the `play` flavor has no such permission (Google Play
+restricts it), so autofill there would fail the same way until another
+route (for example `<queries>` for the privileged browsers, or Play's
+autofill-service exception) is chosen.
 
 ### AN11. Sleep and the suspend detector (Info, open)
 **Component:** `LockClock` (`Instant`), core `LockManager::tick`. The
@@ -2380,6 +2389,53 @@ The item screen's rows are keyed by field key, so a revealed value stays
 with its own field when a reload adds or removes one (`4beb735`). Compose
 behaviour; covered by reading.
 
+### AN25. Revocation lists blocked by the cleartext rule (High, fixed)
+First run on a Galaxy S24+ (Android 16): every sign-in to a server with a
+Let's Encrypt certificate failed with `invalid peer certificate: Revoked`,
+shown as "offline". The certificate was not revoked (not in the CA's
+current CRL). rustls-platform-verifier's Android half validates with
+`PKIXRevocationChecker` (`SOFT_FAIL`, `ONLY_END_ENTITY`); with no OCSP URL
+in the certificate it fetches the CRL over plain HTTP, which the app's
+`network_security_config.xml` forbade, and the library maps any failure in
+that step to "revoked". The fix allows cleartext to `lencr.org` (and its
+subdomains) in both build types. CRLs are signed by the CA, so plain HTTP
+cannot forge one; it reveals to the network which CRL shard was fetched.
+The file governs Android's HTTP stack only: Rust's transport still refuses
+plain HTTP to the vault server. **Remaining limitation:** a self-hosted
+server whose certificate comes from another CA that publishes only HTTP
+CRLs will fail the same way until its host is added.
+
+### AN26. `new-password` on a login's password (Medium, fixed)
+dashboard.render.com's login marks its only password field
+`autocomplete="new-password"`; the form finder read that as a sign-up and
+offered nothing, not even on the email field. Now a single new-password
+field beside a username, with no confirmation and no other password, is the
+login's password. Two new-password fields (sign-up), a confirmation, a lone
+new-password without a username (a reset page) and change-password forms
+keep their old handling. Covered by `LoginFormFinderTest`.
+
+### AN27. Split code boxes (Medium, fixed)
+The Riot app's code step is six one-character inputs, and Android's
+structure holds only the focused one, with an autofill hint of
+`new-password`. Nothing classified it, so no code was offered. Now a
+focused, visible, enabled text box limited to one character — by HTML
+`maxlength` or, for native views, `ViewNode.maxTextLength` (now in
+`FieldFacts`) — on a screen with no username or password is a code field;
+when the row of boxes is visible, the first box. Covered by
+`LoginFormFinderTest` (the Riot structure, a web row of six, native boxes,
+and a one-character box beside a login that stays a login).
+
+### AN28. Copying a code for split boxes (Info, mitigated)
+Android lets the service fill only the box that was tapped, and the box
+keeps one character, so filling the code there sets only its first digit.
+Every code the planner offers now has a "Copy one-time code" row with a copy
+icon. It fills nothing; tapping it opens `AutofillAuthActivity`, which asks
+Rust for that login's code for the same target (refused otherwise) and
+copies it through `SensitiveClipboard`: marked sensitive, cleared after the
+vault's delay and on lock. **Remaining limitation:** while on the clipboard,
+the foreground app and the keyboard can read the code (§22.10); it is a
+30-second code, and copying needs the user's tap.
+
 ## Audits and full verification
 
 Run on 2026-10-01 (WSL2, Linux 6.6.87.2-microsoft-standard-WSL2), at the
@@ -2461,5 +2517,5 @@ None of these has been run.
 - [ ] Before the first release: build a release APK with R8 and smoke-test it on a phone (unlock, sync, reveal, autofill), so R8 has not stripped anything JNI or JNA reaches by reflection.
 
 "Each fill asks" means each row opens HavenKeys (AN3). Also owed: one run of
-`connectedGithubDebugAndroidTest` on an emulator or phone, and the package
-visibility check (AN10).
+`connectedGithubDebugAndroidTest` on an emulator or phone. Package
+visibility was checked on a phone and fixed for the `github` flavor (AN10).
