@@ -9,8 +9,8 @@
 //! [14..]   ciphertext || 128-bit GCM tag
 //! ```
 //!
-//! Associated data binds each blob to its purpose, vault and item, plus the
-//! header bytes above. See docs/crypto.md.
+//! Associated data binds each blob to its purpose, vault and item, a details
+//! blob to its overview blob, plus the header bytes above. See docs/crypto.md.
 
 use crate::crypto::fill_random;
 use crate::crypto::keys::Key256;
@@ -70,6 +70,10 @@ pub struct BlobContext {
     pub purpose: Purpose,
     pub vault_id: Uuid,
     pub item_id: Option<Uuid>,
+    /// Details only: SHA-256 of the overview blob written with them, so the
+    /// two halves of one item version cannot be paired with another
+    /// version's (security-review CR1).
+    pub bound_to: Option<[u8; 32]>,
 }
 
 impl BlobContext {
@@ -78,6 +82,7 @@ impl BlobContext {
             purpose,
             vault_id,
             item_id: None,
+            bound_to: None,
         }
     }
 
@@ -86,14 +91,26 @@ impl BlobContext {
             purpose,
             vault_id,
             item_id: Some(item_id),
+            bound_to: None,
+        }
+    }
+
+    /// An item's details, bound to the overview blob they were written with.
+    pub fn item_details(vault_id: Uuid, item_id: Uuid, overview_blob: &[u8]) -> Self {
+        use sha2::{Digest, Sha256};
+        Self {
+            bound_to: Some(Sha256::digest(overview_blob).into()),
+            ..Self::item(Purpose::ItemDetails, vault_id, item_id)
         }
     }
 
     fn aad(&self, version: u8, algorithm: u8) -> Result<Vec<u8>> {
-        if self.purpose.needs_item_id() != self.item_id.is_some() {
+        if self.purpose.needs_item_id() != self.item_id.is_some()
+            || (self.purpose == Purpose::ItemDetails) != self.bound_to.is_some()
+        {
             return Err(Error::InvalidInput("blob context"));
         }
-        let mut aad = Vec::with_capacity(64);
+        let mut aad = Vec::with_capacity(96);
         aad.extend_from_slice(AAD_PREFIX);
         aad.push(version);
         aad.push(algorithm);
@@ -102,6 +119,10 @@ impl BlobContext {
         aad.extend_from_slice(self.vault_id.as_bytes());
         if let Some(item_id) = self.item_id {
             aad.extend_from_slice(item_id.as_bytes());
+        }
+        if let Some(overview) = self.bound_to {
+            aad.extend_from_slice(b"overview\0");
+            aad.extend_from_slice(&overview);
         }
         Ok(aad)
     }
@@ -194,11 +215,7 @@ mod tests {
     }
 
     fn ctx_item(item: u128) -> BlobContext {
-        BlobContext::item(
-            Purpose::ItemDetails,
-            Uuid::from_u128(1),
-            Uuid::from_u128(item),
-        )
+        BlobContext::item_details(Uuid::from_u128(1), Uuid::from_u128(item), b"overview")
     }
 
     #[test]
@@ -263,17 +280,12 @@ mod tests {
         let k = key();
         let vault = Uuid::from_u128(1);
         let item = Uuid::from_u128(2);
-        let blob = seal(
-            &k,
-            &BlobContext::item(Purpose::ItemDetails, vault, item),
-            b"x",
-        )
-        .unwrap();
+        let blob = seal(&k, &BlobContext::item_details(vault, item, b"ov"), b"x").unwrap();
 
         // Other item, other role, other vault: all rejected.
-        let other_item = BlobContext::item(Purpose::ItemDetails, vault, Uuid::from_u128(3));
+        let other_item = BlobContext::item_details(vault, Uuid::from_u128(3), b"ov");
         let other_role = BlobContext::item(Purpose::ItemOverview, vault, item);
-        let other_vault = BlobContext::item(Purpose::ItemDetails, Uuid::from_u128(9), item);
+        let other_vault = BlobContext::item_details(Uuid::from_u128(9), item, b"ov");
         for ctx in [other_item, other_role, other_vault] {
             assert_eq!(open(&k, &ctx, &blob), Err(Error::Decryption));
         }
@@ -286,12 +298,14 @@ mod tests {
             purpose: Purpose::ItemDetails,
             vault_id: Uuid::nil(),
             item_id: None,
+            bound_to: Some([0; 32]),
         };
         assert!(seal(&k, &bad, b"x").is_err());
         let bad = BlobContext {
             purpose: Purpose::Settings,
             vault_id: Uuid::nil(),
             item_id: Some(Uuid::nil()),
+            bound_to: None,
         };
         assert!(seal(&k, &bad, b"x").is_err());
     }
@@ -343,5 +357,45 @@ mod tests {
     fn oversized_blob_rejected_before_crypto() {
         let big = vec![BLOB_V1; MAX_BLOB_LEN + 1];
         assert_eq!(parse(&big).err(), Some(Error::Corrupted));
+    }
+
+    #[test]
+    fn details_open_only_with_the_overview_they_were_written_with() {
+        let (vault, item) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let k = key();
+        let ctx = BlobContext::item_details(vault, item, b"overview-v2");
+        let blob = seal(&k, &ctx, b"details-v2").unwrap();
+        assert_eq!(open(&k, &ctx, &blob).unwrap().as_slice(), b"details-v2");
+        let other = BlobContext::item_details(vault, item, b"overview-v1");
+        assert!(open(&k, &other, &blob).is_err());
+    }
+
+    #[test]
+    fn an_unbound_details_blob_does_not_open() {
+        let (vault, item) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let k = key();
+        let unbound = BlobContext::item(Purpose::ItemDetails, vault, item);
+        assert!(
+            seal(&k, &unbound, b"x").is_err(),
+            "details must be bound to an overview"
+        );
+        // A blob sealed the old way (no binding in the AAD) does not open
+        // under the new context.
+        let old_ctx = BlobContext {
+            bound_to: None,
+            ..BlobContext::item(Purpose::ItemOverview, vault, item)
+        };
+        let old = seal(&k, &old_ctx, b"x").unwrap();
+        assert!(open(&k, &BlobContext::item_details(vault, item, b"ov"), &old).is_err());
+    }
+
+    #[test]
+    fn only_details_carry_a_binding() {
+        let (vault, item) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let bound_overview = BlobContext {
+            bound_to: Some([0; 32]),
+            ..BlobContext::item(Purpose::ItemOverview, vault, item)
+        };
+        assert!(seal(&key(), &bound_overview, b"x").is_err());
     }
 }

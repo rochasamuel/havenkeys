@@ -124,6 +124,9 @@ stores, and they see every request.
     password and the Secret Key will open the vault on a fresh device.
   * Password history (5 entries) is what limits an item rollback; a patient
     server can cycle through it.
+  * A **splice** of halves from different versions (an old overview with newer
+    details, or the reverse) is refused: the details blob's AAD binds the
+    SHA-256 of its overview blob, so the pair does not open and is skipped.
 * They **cannot impersonate a device**: the auth key is stored only as an
   Argon2id hash, and `auth/params` answers identically for addresses that have
   no account, so the server is not an account-enumeration oracle either.

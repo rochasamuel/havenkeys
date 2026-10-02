@@ -295,7 +295,7 @@ AAD = "havenkeys" || 0x00 || blob_version || algorithm || purpose || 0x00 || con
 |---|---|
 | `vault-key` | vault ID |
 | `item-overview` | vault ID, item ID |
-| `item-details` | vault ID, item ID |
+| `item-details` | vault ID, item ID, then `"overview" \|\| 0x00 \|\| SHA-256(overview blob)` of the overview blob written with it |
 | `settings` | vault ID |
 | `sync-header` | vault ID (the account header a device publishes and reads, `crates/havenkeys-core/src/sync.rs`) |
 | `device-settings` | vault ID (Android: the phone's own settings, `local_blob` table) |
@@ -304,6 +304,16 @@ AAD = "havenkeys" || 0x00 || blob_version || algorithm || purpose || 0x00 || con
 Consequences: a blob copied into another item row, another role, or another
 vault fails authentication. Header bytes (version, algorithm) are authenticated
 too, so they cannot be altered to trigger a different code path.
+
+The details blob also binds the overview blob it was written with: its AAD
+ends with `"overview\0" || SHA-256(overview blob)`. Without it, a hostile
+server could pair an old overview (website rules) with newer details (the
+current password), so the password would be offered to a website the item no
+longer names (security-review CR1 / SV-1). Whole-item replay of an older
+version, where both halves are genuine and written together, is not prevented
+(threat model T1b). Details written before this change do not open: the format
+changed without a migration, and the vault and server account are reset (only
+the owner's vault existed).
 
 ### Nonces
 

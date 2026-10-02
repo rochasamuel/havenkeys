@@ -461,7 +461,7 @@ impl VaultService {
         .ok()?;
         let details: ItemDetails = open_json(
             data_key,
-            &BlobContext::item(Purpose::ItemDetails, vault_id, id),
+            &BlobContext::item_details(vault_id, id, &ov_blob),
             &det_blob,
         )
         .ok()?;
@@ -862,5 +862,53 @@ mod tests {
         vault.reset_sync_cursor(NOW).unwrap();
         assert!(vault.unreadable_item_ids().unwrap().is_empty());
         assert_eq!(vault.account().unwrap().unwrap().server_cursor, 0);
+    }
+
+    #[test]
+    fn a_spliced_item_is_refused() {
+        let mut v = activated_vault();
+        let first = v.stage_create(login("GitHub"), NOW).unwrap();
+        let id = first.item_id;
+        let (ov1, det1) = (
+            first.overview.clone().unwrap(),
+            first.details.clone().unwrap(),
+        );
+        v.commit_write(first, 1).unwrap();
+
+        let mut moved = login("GitHub");
+        moved.urls = vec![UrlRule {
+            url: "example.com".into(),
+            match_type: MatchType::Domain,
+        }];
+        moved.password = SecretUpdate::Set(SecretString::from("pw2"));
+        let second = v.stage_update(&id, moved, NOW).unwrap();
+        let (ov2, det2) = (
+            second.overview.clone().unwrap(),
+            second.details.clone().unwrap(),
+        );
+        v.commit_write(second, 2).unwrap();
+
+        let change = |ov: &[u8], det: &[u8], revision: i64| RemoteChange {
+            item_id: id,
+            revision,
+            overview: Some(ov.to_vec()),
+            details: Some(det.to_vec()),
+            deleted: false,
+        };
+        // Old website rules with the new password, and the reverse.
+        let a = v
+            .apply_remote_changes(3, vec![change(&ov1, &det2, 3)], NOW)
+            .unwrap();
+        assert_eq!(a.skipped_items, 1);
+        let b = v
+            .apply_remote_changes(4, vec![change(&ov2, &det1, 4)], NOW)
+            .unwrap();
+        assert_eq!(b.skipped_items, 1);
+        // A pair written together still applies.
+        let c = v
+            .apply_remote_changes(5, vec![change(&ov2, &det2, 5)], NOW)
+            .unwrap();
+        assert_eq!(c.skipped_items, 0);
+        assert_eq!(v.get_item(&id).unwrap().urls[0].url, "https://example.com/");
     }
 }

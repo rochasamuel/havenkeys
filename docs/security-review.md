@@ -1782,7 +1782,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 
 | ID | Title | Severity | Component | Status |
 |---|---|---|---|---|
-| CR1 / SV-1 | A hostile server can splice an old item overview (URL rules) with a newer details blob (password), or vice versa, so the current secret reaches an origin the item no longer names | Medium | Core sync / server | Open (planned) |
+| CR1 / SV-1 | A hostile server can splice an old item overview (URL rules) with a newer details blob (password), or vice versa, so the current secret reaches an origin the item no longer names | Medium | Core sync / server | Fixed |
 | CR2 | A corrupt or missing settings blob silently falls back to `auto_sign_in`/`auto_passkey_upgrade` = on | Low | Core vault | Open (planned) |
 | CR3 | A crafted `.1pux` with millions of ZIP central-directory entries costs ~7× its size in memory before any size check runs | Low | Core import | Open (planned) |
 | BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Open |
@@ -1810,7 +1810,8 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 
 ### Details
 
-#### CR1 / SV-1. Overview/details splice across revisions (Medium, open)
+#### CR1 / SV-1. Overview/details splice across revisions (Medium, fixed)
+**Status:** fixed. A details blob's AAD now includes the SHA-256 of the overview blob written with it (`BlobContext::item_details`), so a spliced pair fails to open and is skipped. Test: `sync::tests::a_spliced_item_is_refused`. Whole-item replay of an older version stays as recorded (#9, S5, T1b). Details written before the fix do not open; the vault is reset, no migration.
 **Attack scenario:** a hostile or compromised `havenkeys-server` operator keeps every blob version it has ever received. It later serves an item made of an old overview (stale URL rules, or a stale `auto_sign_in` flag) paired with a newer details blob (the current password), or the reverse. Each blob authenticates on its own — the AEAD's AAD binds only purpose, vault ID and item ID, never a revision or the sibling blob — so `check_item_bytes` accepts the pair as an ordinary update. The item then matches an origin the user has since removed, and `fill_for_page`/`totp_for_page` hand that origin the *current* secret. The user still has to pick the suggestion; there is no silent fill.
 **Evidence:** CR1 CONFIRMED via a throwaway probe crate linking the real `havenkeys-core` (`scratchpad/cr/probe`); SV-1 CONFIRMED independently via a separate throwaway crate (`scratchpad/sv/mix`) — both reproduce the same splice through the public core API and land the *new* password on the *removed* domain.
 **Suggested fix:** bind the two blobs of one write together — a random per-write id, or `SHA-256` of one blob, carried in both plaintexts (or both AADs) and checked in `check_item_bytes` — plus the per-item monotonic revision floor already proposed for plain replay (`docs/server-sync.md` §7, `docs/threat-model.md` T1b).

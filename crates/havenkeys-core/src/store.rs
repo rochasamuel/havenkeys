@@ -322,6 +322,18 @@ impl Store {
             .optional()?)
     }
 
+    /// Both blobs of one item, as written together.
+    pub fn item_blobs(&self, id: &Uuid) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT overview, details FROM items WHERE id = ?1",
+                params![id.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?)
+    }
+
     pub fn upsert_item(
         &mut self,
         id: &Uuid,

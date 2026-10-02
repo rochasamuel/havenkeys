@@ -1176,8 +1176,8 @@ impl VaultService {
     pub(crate) fn load_details(&self, id: &Uuid) -> Result<ItemDetails> {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
-        let data = self.store.item_details(id)?.ok_or(Error::NotFound)?;
-        let ctx = BlobContext::item(Purpose::ItemDetails, session.vault_id, *id);
+        let (ov_blob, data) = self.store.item_blobs(id)?.ok_or(Error::NotFound)?;
+        let ctx = BlobContext::item_details(session.vault_id, *id, &ov_blob);
         let details: ItemDetails =
             open_json(&session.data_key, &ctx, &data).map_err(|e| match e {
                 Error::Corrupted => Error::Corrupted,
@@ -1793,7 +1793,7 @@ impl VaultService {
         let det_blob = match details {
             Some(d) => Some(seal_json(
                 &session.data_key,
-                &BlobContext::item(Purpose::ItemDetails, session.vault_id, id),
+                &BlobContext::item_details(session.vault_id, id, &ov_blob),
                 d,
             )?),
             None => None,

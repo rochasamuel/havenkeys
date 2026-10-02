@@ -9,7 +9,7 @@
 mod common;
 
 use common::*;
-use havenkeys_core::crypto::blob::{self, BlobContext, Purpose};
+use havenkeys_core::crypto::blob::{self, BlobContext};
 use havenkeys_core::crypto::keys::Key256;
 use havenkeys_core::model::{normalize_url, ItemInput, MatchType, UrlRule};
 use havenkeys_core::origin::{match_rule, MatchStrength, PageUrl};
@@ -75,7 +75,7 @@ fn mutate_str(rng: &mut Rng, s: &str) -> String {
 fn fuzz_blob_parse_and_open() {
     let mut rng = Rng::new(0xB10B);
     let key = Key256::from_bytes([7; 32]);
-    let ctx = BlobContext::item(Purpose::ItemDetails, Uuid::from_u128(1), Uuid::from_u128(2));
+    let ctx = BlobContext::item_details(Uuid::from_u128(1), Uuid::from_u128(2), b"overview");
     let sealed: Vec<Vec<u8>> = [
         &b""[..],
         b"x",
