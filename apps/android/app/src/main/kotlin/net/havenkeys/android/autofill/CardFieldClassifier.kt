@@ -106,8 +106,8 @@ object CardFieldClassifier {
     private fun weakHit(f: FieldFacts, s: CardSignals, shape: Shape, strong: Boolean): Hit? {
         val kind = when {
             !strong -> null
-            shape == Shape.LIST && OptionMatch.isMonthList(f.options) -> CardKind.EXPIRY_MONTH
-            shape == Shape.LIST && OptionMatch.isYearList(f.options) -> CardKind.EXPIRY_YEAR
+            shape == Shape.LIST && OptionLists.isMonthList(f.options) -> CardKind.EXPIRY_MONTH
+            shape == Shape.LIST && OptionLists.isYearList(f.options) -> CardKind.EXPIRY_YEAR
             hasAny(s.all, MONTH_WORDS) -> CardKind.EXPIRY_MONTH
             hasAny(s.all, YEAR_WORDS) -> CardKind.EXPIRY_YEAR
             shape != Shape.LIST && maxLengthOf(f) in CODE_LENGTHS && hasAny(s.all, CODE_WORDS) ->
