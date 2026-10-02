@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { AndroidDownload } from "../components/AndroidDownload";
 import { Icon } from "../components/Icon";
 import { Mark } from "../components/Mark";
 import { useI18n } from "../i18n/context";
+import { detectOs, type Os } from "../lib/os";
 import {
   fetchLatestRelease,
   pickAsset,
@@ -10,7 +12,7 @@ import {
   type Platform,
 } from "../lib/releases";
 
-const PLATFORMS: Array<{ id: Platform; os: "windows" | "macos" | "linux" }> = [
+const PLATFORMS: Array<{ id: Platform; os: Os }> = [
   { id: "windows", os: "windows" },
   { id: "macos", os: "macos" },
   { id: "linux-appimage", os: "linux" },
@@ -22,20 +24,11 @@ type LoadState =
   | { status: "ready"; release: LatestRelease }
   | { status: "unavailable" };
 
-function detectOs(): "windows" | "macos" | "linux" | null {
-  if (typeof navigator === "undefined") return null;
-  const ua = navigator.userAgent;
-  if (/Windows/i.test(ua)) return "windows";
-  if (/Macintosh|Mac OS X/i.test(ua)) return "macos";
-  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return "linux";
-  return null;
-}
-
 export function Download() {
   const { t } = useI18n();
   const d = t.download;
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const [os] = useState(detectOs);
+  const [os] = useState(() => (typeof navigator === "undefined" ? null : detectOs(navigator.userAgent)));
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +91,19 @@ export function Download() {
             </div>
           );
         })}
+        <AndroidDownload yours={os === "android"} />
+      </section>
+
+      <section className="setup setup--android">
+        <h2>{d.android.stepsTitle}</h2>
+        <ol className="setup__steps">
+          {d.android.steps.map((step) => (
+            <li key={step}>
+              <p>{step}</p>
+            </li>
+          ))}
+        </ol>
+        <p className="setup__note">{d.android.browsers}</p>
       </section>
 
       <section className="setup">

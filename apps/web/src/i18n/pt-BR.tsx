@@ -70,7 +70,7 @@ export const ptBR: Messages = {
     heroLede:
       "Suas chaves ficam nos seus dispositivos; o único servidor é um que você roda, e ele guarda dados cifrados que não tem como abrir.",
     seeHow: "Veja como funciona",
-    heroMeta: "Gratuito e open source · Windows, macOS e Linux · Chrome e Firefox",
+    heroMeta: "Gratuito e open source · Windows, macOS, Linux e Android · Chrome e Firefox",
     desktopAlt:
       "O app de desktop do HavenKeys: uma barra lateral com as seções do cofre, uma lista de logins e o login da Fernway aberto com o usuário, a senha oculta e um código de uso único ao vivo.",
     popupAlt: "O popup do HavenKeys no navegador: dois logins salvos da Fernway, um botão Fill e um código de uso único.",
@@ -182,7 +182,7 @@ export const ptBR: Messages = {
         Leve suas senhas para <em>casa</em>.
       </>
     ),
-    closerLede: "Instale o app de desktop, aponte para o seu servidor e adicione a extensão.",
+    closerLede: "Instale o app no computador ou no celular, aponte para o seu servidor e adicione a extensão.",
     readSource: "Ler o código-fonte",
   },
 
@@ -498,6 +498,24 @@ export const ptBR: Messages = {
     yourSystem: "Seu sistema",
     download: "Baixar",
     viewReleases: "Ver versões",
+    android: {
+      label: "Android",
+      format: "APK para Android 9 ou mais recente",
+      early: "Versão inicial",
+      downloadApk: "Baixar APK",
+      checksum: "Checksum SHA-256",
+      certificate: "Certificado de assinatura (SHA-256)",
+      comingSoon: "O app para Android ainda não foi lançado.",
+      stepsTitle: "Instalando no Android",
+      steps: [
+        "Baixe o APK e abra. O Android pede uma vez para permitir instalar apps pelo navegador.",
+        "Abra o HavenKeys e entre escaneando o seu Emergency Kit, ou com um convite.",
+        "Ative o preenchimento automático: no HavenKeys, Configurações → Configurar preenchimento automático.",
+        "No Chrome, abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”.",
+      ],
+      browsers:
+        "O preenchimento funciona em apps, no Chrome e no Firefox. O Samsung Internet só deixa preencher os gerenciadores de senhas da lista da própria Samsung, e o HavenKeys não está nela.",
+    },
     platforms: {
       windows: { label: "Windows", format: "instalador .msi" },
       macos: { label: "macOS", format: "imagem de disco .dmg" },

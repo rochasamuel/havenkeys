@@ -2157,6 +2157,17 @@ p {
   display: block;
 }
 
+.platform__meta {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.setup__note {
+  margin-top: 1rem;
+  color: var(--muted);
+}
+
 .setup {
   max-width: 880px;
   margin: 0 auto;

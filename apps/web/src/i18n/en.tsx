@@ -75,7 +75,7 @@ export const en = {
     heroLede:
       "Your keys stay on your devices; the only server is one you run, and it holds ciphertext it has no key for.",
     seeHow: "See how it works",
-    heroMeta: "Free and open source · Windows, macOS and Linux · Chrome and Firefox",
+    heroMeta: "Free and open source · Windows, macOS, Linux and Android · Chrome and Firefox",
     desktopAlt:
       "The HavenKeys desktop app: a sidebar with the vault's sections, a list of logins, and the Fernway login open with its username, hidden password and a live one-time code.",
     popupAlt: "The HavenKeys browser popup: two saved Fernway logins, a Fill button, and a one-time code.",
@@ -175,7 +175,7 @@ export const en = {
         Bring your passwords <em>home</em>.
       </>
     ),
-    closerLede: "Install the desktop app, point it at your server, add the extension.",
+    closerLede: "Install the app on your computer or phone, point it at your server, add the extension.",
     readSource: "Read the source",
   },
 
@@ -487,6 +487,24 @@ export const en = {
     yourSystem: "Your system",
     download: "Download",
     viewReleases: "View releases",
+    android: {
+      label: "Android",
+      format: "APK for Android 9 and later",
+      early: "Early release",
+      downloadApk: "Download APK",
+      checksum: "SHA-256 checksum",
+      certificate: "Signing certificate (SHA-256)",
+      comingSoon: "The Android app isn’t released yet.",
+      stepsTitle: "Installing on Android",
+      steps: [
+        "Download the APK and open it. Android asks once to allow installing apps from your browser.",
+        "Open HavenKeys and sign in by scanning your Emergency Kit, or with an invite.",
+        "Turn on autofill: in HavenKeys, Settings → Autofill setup.",
+        "In Chrome, open Settings → Autofill services and choose “Autofill using another service”.",
+      ],
+      browsers:
+        "Autofill works in apps, Chrome and Firefox. Samsung Internet only lets password managers on Samsung’s own list fill, and HavenKeys isn’t on it.",
+    },
     platforms: {
       windows: { label: "Windows", format: ".msi installer" },
       macos: { label: "macOS", format: ".dmg disk image" },
