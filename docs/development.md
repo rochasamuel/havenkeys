@@ -30,6 +30,8 @@ scripts/test-server.sh              # or: pnpm test:server
 docker rm -f havenkeys-test-pg      # when you are done with it
 ```
 
+`cargo test -p havenkeys-mobile --features server-tests --test round_trip` — the phone's writes, conflict and Autofill save against the real server (needs `scripts/test-server.sh`).
+
 Running the server itself, and the backup drill that has to pass before it
 holds a real vault, are in `docs/deployment.md`.
 

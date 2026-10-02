@@ -73,4 +73,16 @@ pub mod testing {
         let staged = vault.stage_create(input, 1).unwrap();
         vault.commit_write(staged, 1).unwrap();
     }
+
+    /// The Secret Key a second test device signs in with.
+    pub fn secret_key_text(v: &MobileVault) -> String {
+        let account = v.client.vault().unwrap().account().unwrap().unwrap().account_id;
+        v.client
+            .device()
+            .unwrap()
+            .secret_key_text(account)
+            .unwrap()
+            .expose()
+            .to_owned()
+    }
 }

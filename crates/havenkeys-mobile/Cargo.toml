@@ -21,10 +21,17 @@ name = "regressions"
 path = "tests/regressions.rs"
 required-features = ["testing"]
 
+[[test]]
+name = "round_trip"
+path = "tests/round_trip.rs"
+required-features = ["server-tests"]
+
 [features]
 bindgen = ["uniffi/cli"]
 # Exposes havenkeys-client's test seed to this crate's integration tests.
 testing = ["havenkeys-client/testing"]
+# Runs against the real server and a Postgres from scripts/test-server.sh.
+server-tests = ["testing"]
 
 [dependencies]
 havenkeys-core = { path = "../havenkeys-core" }
@@ -55,3 +62,6 @@ tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 qrcode = { version = "0.14", default-features = false }
+havenkeys-server = { path = "../havenkeys-server" }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
+deadpool-postgres = "0.14"

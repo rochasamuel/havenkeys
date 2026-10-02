@@ -2714,8 +2714,10 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "data-encoding",
+ "deadpool-postgres",
  "havenkeys-client",
  "havenkeys-core",
+ "havenkeys-server",
  "havenkeys-sync-client",
  "jni 0.22.4",
  "qrcode",
@@ -2726,6 +2728,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-postgres",
  "uniffi",
  "url",
  "uuid",
