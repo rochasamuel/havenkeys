@@ -2436,6 +2436,13 @@ vault's delay and on lock. **Remaining limitation:** while on the clipboard,
 the foreground app and the keyboard can read the code (§22.10); it is a
 30-second code, and copying needs the user's tap.
 
+### AN29. Release APK built after a debug native build (Low, mitigated)
+`scripts/build-android.sh` without `--release` leaves a debug library
+(which accepts plain HTTP to loopback, AN20) in `jniLibs`. The release
+workflow always runs `scripts/build-android.sh --release` on a clean runner
+before `assembleGithubRelease`. A local release build still needs
+`--release` first.
+
 ## Audits and full verification
 
 Run on 2026-10-01 (WSL2, Linux 6.6.87.2-microsoft-standard-WSL2), at the

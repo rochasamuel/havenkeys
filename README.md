@@ -94,6 +94,9 @@ What the browser extension does:
 * Logins are only ever offered on the sites they are saved for, and that is
   checked in Rust
 
+Android: download the APK from the website's download page or from GitHub Releases
+(`android-v*`); it is signed with the HavenKeys release key.
+
 What the Android app does (M1; not yet run on a device):
 
 * Sign in by scanning the Emergency Kit's QR code (or typing it), or

@@ -1390,3 +1390,27 @@ only. `ManifestTest` checks the source manifest only.
   (`security-review.md` AN1).
 * "Confirm before filling" does not stop the matched app from firing its
   own gated rows while the vault is unlocked (§22.4, AN3).
+
+### 22.15 Distribution
+
+* The APK is published on GitHub Releases from `android-v*` tags by
+  `.github/workflows/android-release.yml`, never through a store. It is a
+  release build: the workflow builds the release-mode Rust library
+  (`scripts/build-android.sh --release`) and refuses an APK that is unsigned
+  or debuggable.
+* It is signed with the HavenKeys release key (custody:
+  `docs/android.md`). Android installs an update only when it is signed with
+  the same key, so a tampered or re-signed APK cannot replace an installed
+  HavenKeys.
+* Each release's notes list the signing certificate's SHA-256, which the
+  download page also shows, and the release ships
+  `HavenKeys-<version>.apk.sha256`. A first install can be checked with
+  `apksigner verify --print-certs`. The checksum and the certificate come
+  from the same GitHub release as the APK, so they catch a damaged download,
+  not a compromised release: only a fingerprint known from another source
+  does that.
+* The release is created as a draft and never marked "latest", so the
+  desktop download and auto-updater are unaffected; publishing it is a
+  manual step (`docs/website.md`).
+* The download page fetches the release list from GitHub's API and accepts
+  the APK only from this repository's release-download URL.

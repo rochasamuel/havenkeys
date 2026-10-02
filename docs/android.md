@@ -85,7 +85,7 @@ Then, from `apps/android`:
 | JVM unit tests | `./gradlew testGithubDebugUnitTest` |
 | Android lint | `./gradlew lintGithubDebug` |
 | Debug APK | `./gradlew assembleGithubDebug` → `app/build/outputs/apk/github/debug/` |
-| Release APK (unsigned) | `./gradlew assembleGithubRelease` → `app/build/outputs/apk/github/release/app-github-release-unsigned.apk` |
+| Release APK | `./gradlew assembleGithubRelease` → `app/build/outputs/apk/github/release/app-github-release-unsigned.apk` (unsigned), or `app-github-release.apk` when the four `HAVENKEYS_*` values are set (signed) |
 | Instrumented tests (needs a device or emulator) | `./gradlew connectedGithubDebugAndroidTest` |
 | Compile the instrumented tests only | `./gradlew assembleGithubDebugAndroidTest` |
 
@@ -192,7 +192,11 @@ keytool -genkeypair -v -keystore havenkeys-release.jks -alias havenkeys \
 ```
 
 * Keep `havenkeys-release.jks` and both passwords offline: a HavenKeys
-  secure note and a copy on removable storage. Never commit them.
+  secure note and a copy on removable storage (the copy needs both
+  passwords too). Never commit them. The key and passwords are never printed
+  in build logs.
+* If the app moves to Google Play, the same key goes to Play App Signing, so
+  sideloaded installs keep updating.
 * Add four repository secrets (Settings → Secrets and variables → Actions):
   `ANDROID_KEYSTORE_BASE64` (`base64 -w0 havenkeys-release.jks`),
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`havenkeys`) and
