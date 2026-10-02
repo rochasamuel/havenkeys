@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.system.measureTimeMillis
 
 class LoginFormFinderTest {
     private fun find(vararg fields: FieldFacts) = LoginFormFinder.find(fields.toList())
@@ -223,9 +222,9 @@ class LoginFormFinderTest {
 
     @Test
     fun thousandsOfInputsStayFast() {
-        val fields = List(5_000) { if (it % 2 == 0) field(id = "field$it") else field(inputType = password) }
-        // The fastest of a few runs, so a cold JIT or a GC pause does not decide.
-        val ms = List(5) { measureTimeMillis { LoginFormFinder.find(fields) } }.min()
-        assertTrue("took $ms ms", ms < 50)
+        assertScalesLinearly(
+            page = { n -> List(n) { if (it % 2 == 0) field(id = "field$it") else field(inputType = password) } },
+            work = { LoginFormFinder.find(it) },
+        )
     }
 }

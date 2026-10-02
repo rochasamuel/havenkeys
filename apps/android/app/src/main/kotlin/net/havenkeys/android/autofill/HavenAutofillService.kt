@@ -34,7 +34,7 @@ import uniffi.havenkeys_mobile.SaveResult
  * touches the idle timer.
  */
 class HavenAutofillService : AutofillService() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + swallowUncaught)
     private val container get() = (application as HavenApp).container
 
     override fun onFillRequest(request: FillRequest, cancellation: CancellationSignal, callback: FillCallback) {
@@ -46,7 +46,7 @@ class HavenAutofillService : AutofillService() {
         val inlineRequest =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.inlineSuggestionsRequest else null
         val work = scope.launch {
-            val response = withContext(Dispatchers.Default) { respond(structure, inlineRequest) }
+            val response = withContext(Dispatchers.Default) { guarded(null) { respond(structure, inlineRequest) } }
             answer(response)
         }
         // Rust calls cannot be interrupted, so the deadline answers "nothing"
@@ -100,7 +100,7 @@ class HavenAutofillService : AutofillService() {
         val card = request.clientState?.getString(DatasetFactory.EXTRA_SAVE_KIND) == DatasetFactory.SAVE_KIND_CARD
         val work = scope.launch {
             val outcome = withContext(Dispatchers.Default) {
-                if (card) saveCard(structures) else saveLogin(structures)
+                guarded(Outcome.Failed("internal")) { if (card) saveCard(structures) else saveLogin(structures) }
             }
             val message = saveMessage(outcome, card)?.let(::getString)
             // Past the deadline Android no longer shows our answer: say it ourselves.

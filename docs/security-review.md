@@ -1260,7 +1260,7 @@ findings. They are tracked in the development ledger, not here. Examples:
 reaches; `assert` accepts a stored key shorter than 32 bytes; and
 `find_passkeys` results are cut off at 50.
 
-### AN30. The autofill service's scope has no exception handler (Low, open)
+### AN30. The autofill service's scope has no exception handler (Low, fixed)
 **Component:** `HavenAutofillService`. Parsing a structure Android hands
 the service (fill, and now save) is done in a coroutine scope with no
 `CoroutineExceptionHandler`. **Scenario:** a hostile app builds a view
@@ -1269,6 +1269,8 @@ exception ends the process. **Effect:** the in-memory vault goes with the
 process, so it fails closed (the user unlocks again); it can be used to
 annoy, not to read. The M1 fill path behaves the same. **Remaining:**
 catching and answering "nothing" would be kinder; not done in M2.
+
+**Fixed (2026-10-02):** fill and save work runs inside `guarded` (`ServiceGuard.kt`): anything the parser or planner throws ends that request with "nothing" (a save with "could not save"); the service scope also has a `CoroutineExceptionHandler` as a last net. Cancellation still propagates. Pinned by `ServiceGuardTest`.
 
 ### AN31. The editor's draft holds typed secrets (Low, mitigated)
 **Component:** `ui/edit/`. The draft (a password, a TOTP key, a card number,
@@ -2169,7 +2171,7 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN5 | Low | Network / Digital Asset Links | User-installed CAs are trusted; whoever holds one can intercept the server connection and forge `assetlinks.json`, so a malicious app named after a site can be offered that site's logins | Accepted, documented |
 | AN6 | Low | UI (binding prompt, unlock) | No protection against touches through another app's overlay (`filterTouchesWhenObscured` / `setHideOverlayWindows`); matters mainly on Android 9–11 | **Fixed** (`d11030a`) for the autofill activities and the binding prompt |
 | AN7 | Medium | Mobile API / auto-lock | Every read (`list_items`, `search`, `item_view`, `reveal`, `totp`) reset the idle timer, and the app calls them on its own (a sync's `items_changed` every 30 s while in the foreground, the TOTP countdown every second), so auto-lock never fired with the screen on | **Fixed** (`eee642f`) |
-| AN8 | Low | Settings → Devices | Revoking this phone from its own Devices list leaves its biometric bundle in place (Sign out deletes it) | Open |
+| AN8 | Low | Settings → Devices | Revoking this phone from its own Devices list leaves its biometric bundle in place (Sign out deletes it) | Fixed (revoking this phone emits `signed_out`) |
 | AN9 | Low | Mobile API / auto-lock | Secret-returning calls check the lock state, not the auto-lock clock; after the process thaws, a fill can be answered before the overdue 5-second tick locks | **Fixed** (`eee642f`) |
 | AN10 | Medium | Autofill (package visibility) | Confirmed on a Galaxy S24+ (Android 16): Android hid Chrome and every app from HavenKeys, so no certificates were read and nothing was ever filled | **Fixed** for the `github` flavor (`QUERY_ALL_PACKAGES`); open for `play` |
 | AN11 | Info | Auto-lock | Rust's monotonic clock excludes deep sleep on Android, so the core's suspend detection probably locks the vault after any sleep longer than 30 s, even with auto-lock off | Open: to observe on a device (fails closed) |
@@ -2179,7 +2181,7 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN15 | Info | Digital Asset Links (privacy) | A fill request in an app makes HavenKeys contact up to 8 vault sites named like the app, telling them (and the network) that the phone holds a login there | Accepted, setting to turn off |
 | AN16 | Info | "Search HavenKeys…" offline | Offline, a confirmed "Use <login> in <package>?" fills any login once without storing a binding | Accepted (the confirmation is the authorization) |
 | AN17 | Info | Onboarding / unlock | The master password's minimum length (10) is checked by the UI only, on desktop and Android | Accepted |
-| AN18 | Info | Dependencies | `yoke-derive` 0.8.3 in `Cargo.lock` has been yanked (already so on `main`) | Open |
+| AN18 | Info | Dependencies | `yoke-derive` 0.8.3 in `Cargo.lock` has been yanked (already so on `main`) | Fixed (0.8.4) |
 | AN19 | Medium | Unlock, onboarding (master password, Secret Key) | The master password fields carried `ContentType.Password`/`NewPassword`, so a third-party autofill service (Google Autofill, another password manager) was offered the master password and the Secret Key and could offer to save them | **Fixed** (`d11030a`) |
 | AN20 | Low | Network (`havenkeys-sync-client`) | A release build of the phone app accepted `http://localhost` as a server address | **Fixed** (`a129cff`) |
 | AN21 | Low | Settings (`settings.rs`) | A device-settings blob that exists but does not open turned "Confirm before filling" off (the default) | **Fixed** (`a129cff`) |
@@ -2190,7 +2192,7 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN26 | Medium | Autofill (`LoginFormFinder`) | Found on the same phone: a login whose only password says `autocomplete="new-password"` (dashboard.render.com) was taken for a sign-up form, so nothing was offered | **Fixed**: that one field, beside a username with no confirmation, is the login's password |
 | AN27 | Medium | Autofill (`LoginFormFinder`, `FieldClassifier`) | Found in the Riot app: a code split one box per digit (`maxlength=1`, and a stray `new-password` hint) was not a code field, and the app shows Android only the tapped box | **Fixed**: the tapped one-character box (HTML `maxlength` or a native view's `maxTextLength`) on a screen with no login field is a code field; in a row of such boxes the first one |
 | AN28 | Info | Autofill (`DatasetFactory`, `AutofillAuthActivity`) | Android fills only the tapped box, which keeps one digit, so a split code cannot be filled whole | **Mitigated**: a "Copy one-time code" row beside each offered code copies it (explicit tap, Rust asked for that target, sensitive clip, usual clearing) for pasting |
-| AN30 | Low | Autofill (`HavenAutofillService` scope) | The service's coroutine scope has no exception handler: an unexpected throw while parsing a hostile structure (fill or save) ends the process | Open (fails closed: the vault, in memory, goes with the process; same as M1's fill path) |
+| AN30 | Low | Autofill (`HavenAutofillService` scope) | The service's coroutine scope has no exception handler: an unexpected throw while parsing a hostile structure (fill or save) ends the process | Fixed (`guarded`, `ServiceGuard.kt`) |
 | AN31 | Low | Editor (`ui/edit/`) | The draft holds typed secrets in Compose state, and typed values pass through JVM `String`s, for as long as the screen is open | Mitigated (no saved state, rotation handled in place, lock wipe, `FLAG_SECURE`, autofill exclusion); strings are not zeroed |
 | AN32 | Low | Autofill save (`autofill_save`) | An app can make HavenKeys save a login named like another service | Mitigated: bound to that app only; title can mislead |
 | AN33 | Info | Autofill save | A save request is lost if the vault locks before the user submits | Accepted (user sees "HavenKeys locked before saving.") |
@@ -2312,13 +2314,15 @@ keyboard does not route through `onUserInteraction`. Covered by
 **Remaining limitation:** typing in a dialog's text field (enrolling
 biometrics, removing the vault) is not reported as activity.
 
-### AN8. Revoking this phone keeps its bundle (Low, open)
+### AN8. Revoking this phone keeps its bundle (Low, fixed)
 **Component:** `DevicesViewModel.revoke`, `wipeKeysOnExit`. Sign out emits
 `signed_out` and deletes the biometric key and bundle; revoking the current
 device from the list does not. **Mitigation:** the server refuses the
 bundle's auth key at the next online bundle unlock, which locks with
 `bundle_refused` and deletes it. **Remaining limitation:** offline, the
 bundle still opens the local replica until it expires (14 days or a reboot).
+
+**Fixed (2026-10-02):** `revoke_device` emits `signed_out` when the revoked device is this phone, so the app deletes the biometric key and bundle as on sign-out (`account.rs`, `revoking_this_phone_signs_it_out_and_another_does_not`).
 
 ### AN9. A fill right after the process thaws (Low, fixed)
 **Component:** `MobileVault` (`require_unlocked`), `LockClock`. Auto-lock is
@@ -2398,10 +2402,12 @@ The 10-character minimum when activating is a UI check
 directly could set a shorter password. Argon2id cost and the Secret Key
 still apply.
 
-### AN18. Yanked `yoke-derive` (Info, open)
+### AN18. Yanked `yoke-derive` (Info, fixed)
 `cargo deny check` and `cargo audit` warn that `yoke-derive` 0.8.3 is
 yanked. It is the same on `main`, so not introduced here; a
 `cargo update -p yoke-derive` is the likely fix.
+
+**Fixed (2026-10-02):** `cargo update -p yoke-derive` (0.8.3 → 0.8.4); `cargo deny check` passes and `cargo audit` no longer reports it.
 
 ### AN19. The master password reached third-party autofill (Medium, fixed)
 **Component:** `UnlockScreen.kt`, `OnboardingScreen.kt` (master password,

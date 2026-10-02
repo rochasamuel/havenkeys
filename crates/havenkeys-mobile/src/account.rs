@@ -45,7 +45,9 @@ impl MobileVault {
     pub fn revoke_device(&self, id: String) -> MobileResult<()> {
         let id = parse_id(&id)?;
         let client = self.client.clone();
-        Ok(self.block_on(client.revoke_device(id))?)
+        self.block_on(client.revoke_device(id))?;
+        self.revoked(id);
+        Ok(())
     }
 
     /// Ends the session and locks. The app also deletes its biometric key
@@ -63,6 +65,18 @@ impl MobileVault {
     }
 }
 
+impl MobileVault {
+    /// Revoking this phone ends its access as signing out does: on
+    /// `signed_out` the app deletes its biometric key and unlock bundle, so
+    /// the bundle cannot keep opening the replica offline (security-review
+    /// AN8).
+    fn revoked(&self, id: uuid::Uuid) {
+        if self.client.device_id().is_ok_and(|own| own == id) {
+            havenkeys_client::ClientEvents::signed_out(&*self.events);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::vault::tests::unlocked;
@@ -75,6 +89,26 @@ mod tests {
         v.sync_if_due().unwrap();
         assert!(v.devices().is_err());
         assert!(v.revoke_device("not-an-id".into()).is_err());
+    }
+
+    #[test]
+    fn revoking_this_phone_signs_it_out_and_another_does_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, seen) = unlocked(dir.path());
+        v.revoked(uuid::Uuid::new_v4());
+        v.revoked(v.client.device_id().unwrap());
+        // Events arrive in order: by the time this phone's arrives, another
+        // device's revocation would already have been seen.
+        crate::vault::tests::wait_for(|| seen.has("signed_out"));
+        assert_eq!(
+            seen.0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|e| *e == "signed_out")
+                .count(),
+            1
+        );
     }
 
     #[test]

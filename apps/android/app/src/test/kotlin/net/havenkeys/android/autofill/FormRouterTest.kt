@@ -4,7 +4,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.system.measureTimeMillis
 
 class FormRouterTest {
     @Test
@@ -54,18 +53,20 @@ class FormRouterTest {
     @Test
     fun thousandsOfMixedInputsRouteFast() {
         // CLAUDE.md attack 7 for what a request runs: cards, logins, saves and identity.
-        fun page() = List(5_000) {
-            when (it % 6) {
-                0 -> field(id = "field$it")
-                1 -> field(inputType = password)
-                2 -> field(hint = "Card number")
-                3 -> field(id = "cep", hint = "Cidade")
-                4 -> list(listOf("01", "02", "03"), id = "exp-month")
-                else -> field(inputType = email, focused = it == 5)
-            }
-        }
-        // Fresh fields every run, as every request has; the fastest run, so a cold JIT or a GC pause does not decide.
-        val ms = List(5) { page().let { fields -> measureTimeMillis { FormRouter.route(fields) } } }.min()
-        assertTrue("took $ms ms", ms < 150)
+        assertScalesLinearly(
+            page = { n ->
+                List(n) {
+                    when (it % 6) {
+                        0 -> field(id = "field$it")
+                        1 -> field(inputType = password)
+                        2 -> field(hint = "Card number")
+                        3 -> field(id = "cep", hint = "Cidade")
+                        4 -> list(listOf("01", "02", "03"), id = "exp-month")
+                        else -> field(inputType = email, focused = it == 5)
+                    }
+                }
+            },
+            work = { FormRouter.route(it) },
+        )
     }
 }
