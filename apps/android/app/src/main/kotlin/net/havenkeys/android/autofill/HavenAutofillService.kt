@@ -1,5 +1,6 @@
 package net.havenkeys.android.autofill
 
+import android.app.assist.AssistStructure
 import android.os.Build
 import android.os.CancellationSignal
 import android.service.autofill.AutofillService
@@ -8,6 +9,7 @@ import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
 import android.service.autofill.SaveRequest
+import android.view.inputmethod.InlineSuggestionsRequest
 import android.widget.Toast
 import androidx.annotation.StringRes
 import java.util.concurrent.atomic.AtomicBoolean
@@ -23,7 +25,6 @@ import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import uniffi.havenkeys_mobile.SaveLogin
 import uniffi.havenkeys_mobile.SaveResult
-import uniffi.havenkeys_mobile.TargetFacts
 
 /**
  * Android's entry point for filling (spec §7). Parses the screen, then asks
@@ -43,23 +44,7 @@ class HavenAutofillService : AutofillService() {
         val inlineRequest =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.inlineSuggestionsRequest else null
         val work = scope.launch {
-            val response = withContext(Dispatchers.Default) {
-                val screen = StructureParser().parse(structure)
-                val form = LoginFormFinder.find(screen.fields)
-                val save = SaveFormFinder.find(screen.fields, form)
-                // No activity component: nobody to check the caller against.
-                if ((form == null && save == null) || screen.packageName.isEmpty()) return@withContext null
-                val target = TargetFacts(
-                    screen.packageName,
-                    CallerIdentity(packageManager).certDigests(screen.packageName),
-                    form?.webDomain ?: save?.webDomain,
-                    form?.webScheme ?: save?.webScheme,
-                )
-                val unlocked = container.events.unlocked.value
-                val repo = container.autofillRepository
-                val plan = FillPlanner.plan(form, target, unlocked, repo, saveable = save != null)
-                DatasetFactory(this@HavenAutofillService, screen, form, save, inlineRequest).response(plan)
-            }
+            val response = withContext(Dispatchers.Default) { respond(structure, inlineRequest) }
             answer(response)
         }
         // Rust calls cannot be interrupted, so the deadline answers "nothing"
@@ -73,6 +58,32 @@ class HavenAutofillService : AutofillService() {
             answered.set(true)
             work.cancel()
             deadline.cancel()
+        }
+    }
+
+    private suspend fun respond(structure: AssistStructure, inlineRequest: InlineSuggestionsRequest?): FillResponse? {
+        val screen = StructureParser().parse(structure)
+        val routed = FormRouter.route(screen.fields)
+        // No activity component: nobody to check the caller against.
+        if (routed == null || screen.packageName.isEmpty()) return null
+        val unlocked = container.events.unlocked.value
+        val repo = container.autofillRepository
+        return when (routed) {
+            is Routed.Login -> {
+                val target = packageManager.targetOf(
+                    screen,
+                    routed.form?.webDomain ?: routed.save?.webDomain,
+                    routed.form?.webScheme ?: routed.save?.webScheme,
+                )
+                val plan = FillPlanner.plan(routed.form, target, unlocked, repo, saveable = routed.save != null)
+                DatasetFactory(this, screen, routed.form, routed.save, inlineRequest).response(plan)
+            }
+            else -> {
+                val target = packageManager.targetOf(screen, screen.pageDomain, screen.pageScheme)
+                val direct = unlocked && !repo.confirmBeforeFilling()
+                val plan = WalletPlanner.plan(routed, target, unlocked, repo, direct)
+                WalletDatasets(this, screen, routed, inlineRequest).response(plan)
+            }
         }
     }
 

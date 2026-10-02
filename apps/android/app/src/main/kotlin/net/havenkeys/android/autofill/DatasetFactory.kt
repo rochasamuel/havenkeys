@@ -56,45 +56,28 @@ class DatasetFactory(
 
     /** The answer to a tapped "fill" or search row: only this login's two values. */
     fun loginDataset(values: FillValues): Dataset? =
-        dataset(filled(values), context.getString(R.string.app_name), null, null)
+        rows.dataset(filled(values), context.getString(R.string.app_name), null, null)
 
     /** The answer to a tapped "totp" row: the code, into the first code field. */
-    fun totpDataset(code: String): Dataset? = dataset(
+    fun totpDataset(code: String): Dataset? = rows.dataset(
         listOfNotNull(otpId?.let { it to AutofillValue.forText(code) }),
         context.getString(R.string.app_name),
         null,
         null,
     )
 
-    // Locked: one row that names no login; the fields' ids are all Android gets.
     private fun unlockResponse(): FillResponse? {
         val fields = form?.let { it.usernames + it.passwords + it.otps }.orEmpty()
-        val ids = fields.mapNotNull(screen.ids::getOrNull).toTypedArray()
-        if (ids.isEmpty()) return null
-        val title = context.getString(R.string.autofill_unlock)
-        val menu = rows.menu(title, null)
-        val inline = rows.inline(title, null)
-        val sender = sender(context, MODE_UNLOCK, null)
-        val builder = FillResponse.Builder()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            builder.setAuthentication(ids, sender, rows.presentations(menu, inline))
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inline != null) {
-            @Suppress("DEPRECATION")
-            builder.setAuthentication(ids, sender, menu, inline)
-        } else {
-            @Suppress("DEPRECATION")
-            builder.setAuthentication(ids, sender, menu)
-        }
-        return builder.build()
+        return rows.unlockResponse(fields.mapNotNull(screen.ids::getOrNull))
     }
 
     private fun offerResponse(offer: FillPlan.Offer): FillResponse? {
         // A copy row fills nothing: tapping it opens HavenKeys, which copies that login's code.
-        fun copyDataset(match: AutofillMatch) = dataset(
+        fun copyDataset(match: AutofillMatch) = rows.dataset(
             listOfNotNull(otpId).map { it to null },
             context.getString(R.string.autofill_copy_code),
             match.title,
-            sender(context, MODE_COPY_TOTP, match.id),
+            autofillSender(context, MODE_COPY_TOTP, match.id),
             R.drawable.ic_autofill_copy,
         )
         val datasets = offer.datasets.mapNotNull(::datasetOf).toMutableList()
@@ -118,8 +101,8 @@ class DatasetFactory(
             else -> filled(requireNotNull(plan.values))
         }
         val mode = if (otpOnly) MODE_TOTP else MODE_FILL
-        val auth = if (gated) sender(context, mode, plan.match.id) else null
-        return dataset(fields, plan.match.title, subtitle, auth)
+        val auth = if (gated) autofillSender(context, mode, plan.match.id) else null
+        return rows.dataset(fields, plan.match.title, subtitle, auth)
     }
 
     private fun filled(values: FillValues) = listOfNotNull(
@@ -127,48 +110,12 @@ class DatasetFactory(
         passwordId?.let { id -> values.password?.let { id to AutofillValue.forText(it) } },
     )
 
-    private fun searchDataset(): Dataset? = dataset(
+    private fun searchDataset(): Dataset? = rows.dataset(
         listOfNotNull(usernameId, passwordId).map { it to null },
         context.getString(R.string.autofill_search),
         null,
-        sender(context, MODE_SEARCH, null),
+        autofillSender(context, MODE_SEARCH, null),
     )
-
-    /** Null when there is no field to fill: Android refuses a dataset without one. */
-    private fun dataset(
-        fields: List<Pair<AutofillId, AutofillValue?>>,
-        title: String,
-        subtitle: String?,
-        auth: IntentSender?,
-        @DrawableRes icon: Int? = null,
-    ): Dataset? {
-        if (fields.isEmpty()) return null
-        val menu = rows.menu(title, subtitle, icon)
-        val inline = rows.inline(title, subtitle, icon)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val builder = Dataset.Builder(rows.presentations(menu, inline))
-            fields.forEach { (id, value) -> builder.setField(id, value?.let { Field.Builder().setValue(it).build() }) }
-            auth?.let(builder::setAuthentication)
-            builder.build()
-        } else {
-            legacyDataset(fields, menu, inline, auth)
-        }
-    }
-
-    // The builders Android 13 replaced with Presentations and Field.
-    @Suppress("DEPRECATION")
-    private fun legacyDataset(
-        fields: List<Pair<AutofillId, AutofillValue?>>,
-        menu: RemoteViews,
-        inline: InlinePresentation?,
-        auth: IntentSender?,
-    ): Dataset {
-        val builder = Dataset.Builder(menu)
-        fields.forEach { (id, value) -> builder.setValue(id, value) }
-        if (inline != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) builder.setInlinePresentation(inline)
-        auth?.let(builder::setAuthentication)
-        return builder.build()
-    }
 
     companion object {
         const val EXTRA_MODE = "net.havenkeys.android.autofill.MODE"
@@ -178,33 +125,13 @@ class DatasetFactory(
         const val MODE_COPY_TOTP = "copy-totp"
         const val MODE_UNLOCK = "unlock"
         const val MODE_SEARCH = "search"
+        const val MODE_CARD = "card"
+        const val MODE_IDENTITY = "identity"
+        const val MODE_IDENTITY_DOCS = "identity-docs"
 
-        // One code per PendingIntent: Android tells them apart only by it,
-        // and a reused one would cancel a row still on screen.
-        private val nextRequestCode = AtomicInteger(Rows.ATTRIBUTION_REQUEST)
-
-        /**
-         * Mutable on purpose: Android adds the structure and the inline
-         * request to this Intent when the row is tapped, and an immutable
-         * PendingIntent drops what is added. The Intent names our
-         * non-exported activity explicitly, and the activity trusts none of
-         * its extras: Rust re-checks the item id, and the structure must name
-         * the calling app.
-         */
-        @SuppressLint("UnspecifiedImmutableFlag")
-        private fun sender(context: Context, mode: String, itemId: String?): IntentSender {
-            val activity =
-                if (mode == MODE_SEARCH) AutofillSearchActivity::class.java else AutofillAuthActivity::class.java
-            val intent = Intent(context, activity).putExtra(EXTRA_MODE, mode)
-            itemId?.let { intent.putExtra(EXTRA_ITEM_ID, it) }
-            val mutable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
-            return PendingIntent.getActivity(
-                context,
-                nextRequestCode.incrementAndGet(),
-                intent,
-                PendingIntent.FLAG_CANCEL_CURRENT or mutable,
-            ).intentSender
-        }
+        /** In the response's client state: which kind of save Android's sheet confirms. */
+        const val EXTRA_SAVE_KIND = "net.havenkeys.android.autofill.SAVE_KIND"
+        const val SAVE_KIND_CARD = "card"
     }
 }
 
@@ -212,7 +139,7 @@ class DatasetFactory(
  * Android's save sheet, shown when the form is submitted. Its "Save" is
  * the user's confirmation; Rust decides what it adds or updates.
  */
-private fun SaveForm.saveInfoIn(screen: ParsedScreen): SaveInfo? {
+internal fun SaveForm.saveInfoIn(screen: ParsedScreen): SaveInfo? {
     val passwordId = password?.let(screen.ids::getOrNull)
     val usernameId = username?.let(screen.ids::getOrNull)
     val currentId = current?.let(screen.ids::getOrNull)
@@ -239,72 +166,3 @@ private fun SaveForm.saveInfoIn(screen: ParsedScreen): SaveInfo? {
 }
 
 private fun List<Int>.idIn(screen: ParsedScreen): AutofillId? = firstOrNull()?.let(screen.ids::getOrNull)
-
-/** How a row looks: a dropdown row, and a keyboard chip while the keyboard has room for one. */
-private class Rows(private val context: Context, private val inlineRequest: InlineSuggestionsRequest?) {
-    private var position = 0
-
-    fun menu(title: String, subtitle: String?, @DrawableRes icon: Int? = null) =
-        RemoteViews(context.packageName, R.layout.autofill_item).apply {
-        icon?.let {
-            setImageViewResource(R.id.autofill_icon, it)
-            setViewVisibility(R.id.autofill_icon, View.VISIBLE)
-        }
-        setTextViewText(R.id.autofill_title, title)
-        if (subtitle.isNullOrEmpty()) {
-            setViewVisibility(R.id.autofill_subtitle, View.GONE)
-        } else {
-            setTextViewText(R.id.autofill_subtitle, subtitle)
-        }
-    }
-
-    fun inline(title: String, subtitle: String?, @DrawableRes icon: Int? = null): InlinePresentation? {
-        val index = position++
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineAt(index, title, subtitle, icon) else null
-    }
-
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun inlineAt(index: Int, title: String, subtitle: String?, icon: Int?): InlinePresentation? =
-        specFor(index)?.let { InlinePresentation(chip(title, subtitle, icon), it, false) }
-
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    fun presentations(menu: RemoteViews, inline: InlinePresentation?): Presentations = Presentations.Builder()
-        .setMenuPresentation(menu)
-        .apply { inline?.let(::setInlinePresentation) }
-        .build()
-
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun specFor(index: Int): InlinePresentationSpec? {
-        val request = inlineRequest?.takeIf { index < it.maxSuggestionCount }
-        val specs = request?.inlinePresentationSpecs.orEmpty()
-        return specs.getOrNull(minOf(index, specs.size - 1))
-            ?.takeIf { UiVersions.getVersions(it.style).contains(UiVersions.INLINE_UI_VERSION_1) }
-    }
-
-    // `slice` is how the library's own documentation hands the chip to
-    // Android; lint flags it only because SlicedContent declares it
-    // library-internal. Slice itself is deprecated but is what the API takes.
-    @SuppressLint("RestrictedApi")
-    @Suppress("DEPRECATION")
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun chip(title: String, subtitle: String?, icon: Int?): Slice =
-        InlineSuggestionUi.newContentBuilder(attribution())
-        .apply { icon?.let { setStartIcon(Icon.createWithResource(context, it)) } }
-        .setTitle(title)
-        .apply { if (!subtitle.isNullOrEmpty()) setSubtitle(subtitle) }
-        .setContentDescription(listOfNotNull(title, subtitle).joinToString(" "))
-        .build()
-        .slice
-
-    // Long-pressing a chip opens HavenKeys; nothing is filled from it.
-    private fun attribution(): PendingIntent = PendingIntent.getActivity(
-        context,
-        ATTRIBUTION_REQUEST,
-        Intent(context, MainActivity::class.java),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
-
-    companion object {
-        const val ATTRIBUTION_REQUEST = 0
-    }
-}

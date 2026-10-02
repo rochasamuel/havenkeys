@@ -289,4 +289,20 @@
     <string name="autofill_setup_passkeys_open">Abrir configurações de senhas e chaves de acesso</string>
     <string name="autofill_setup_passkeys_unavailable">Não foi possível abrir as configurações de senhas e chaves de acesso do Android neste telefone.</string>
     <string name="autofill_setup_passkeys_old">Chaves de acesso exigem Android 14 ou mais recente.</string>
+    <string name="autofill_card_fallback">Cartão</string>
+    <string name="autofill_card_expired">Vencido</string>
+    <string name="autofill_identity_fallback">Sua identidade</string>
+    <string name="autofill_identity_with_docs">Preencher %1$s também</string>
+    <string name="autofill_identity_without_docs">Preencher sem documentos</string>
+    <string name="autofill_identity_also_asks">%1$s também pede: %2$s</string>
+    <string name="autofill_fill_card_in">Preencher %1$s em %2$s?</string>
+    <string name="autofill_fill_identity_in">Preencher sua identidade em %1$s?</string>
+    <string name="autofill_fill">Preencher</string>
+    <string name="autofill_doc_cpf">CPF</string>
+    <string name="autofill_doc_rg">RG</string>
+    <string name="autofill_doc_passport">passaporte</string>
+    <string name="autofill_doc_drivers_license">CNH</string>
+    <string name="autofill_card_save_offline">O HavenKeys está offline. O cartão não foi salvo.</string>
+    <string name="autofill_card_save_locked">O HavenKeys foi bloqueado antes de salvar. O cartão não foi salvo.</string>
+    <string name="autofill_card_save_failed">O HavenKeys não conseguiu salvar este cartão.</string>
 </resources>

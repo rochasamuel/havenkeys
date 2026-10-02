@@ -4,6 +4,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import java.security.MessageDigest
+import uniffi.havenkeys_mobile.TargetFacts
 
 /**
  * The caller's signing certificates, as Android reports them. Any failure
@@ -32,3 +33,11 @@ class CallerIdentity(private val pm: PackageManager) {
             pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
         }
 }
+
+/** The target Rust checks: the app being filled, and the page a browser reported. */
+internal fun PackageManager.targetOf(screen: ParsedScreen, domain: String?, scheme: String?) = TargetFacts(
+    screen.packageName,
+    CallerIdentity(this).certDigests(screen.packageName),
+    domain,
+    scheme,
+)

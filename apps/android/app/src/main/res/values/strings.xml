@@ -301,4 +301,20 @@
     <string name="autofill_setup_passkeys_open">Open passwords and passkeys settings</string>
     <string name="autofill_setup_passkeys_unavailable">Android’s passwords and passkeys settings could not be opened on this phone.</string>
     <string name="autofill_setup_passkeys_old">Passkeys need Android 14 or later.</string>
+    <string name="autofill_card_fallback">Card</string>
+    <string name="autofill_card_expired">Expired</string>
+    <string name="autofill_identity_fallback">Your identity</string>
+    <string name="autofill_identity_with_docs">Fill %1$s too</string>
+    <string name="autofill_identity_without_docs">Fill without documents</string>
+    <string name="autofill_identity_also_asks">%1$s also asks for: %2$s</string>
+    <string name="autofill_fill_card_in">Fill %1$s in %2$s?</string>
+    <string name="autofill_fill_identity_in">Fill your identity in %1$s?</string>
+    <string name="autofill_fill">Fill</string>
+    <string name="autofill_doc_cpf">CPF</string>
+    <string name="autofill_doc_rg">RG</string>
+    <string name="autofill_doc_passport">passport</string>
+    <string name="autofill_doc_drivers_license">driver’s license</string>
+    <string name="autofill_card_save_offline">HavenKeys is offline. The card was not saved.</string>
+    <string name="autofill_card_save_locked">HavenKeys locked before saving. The card was not saved.</string>
+    <string name="autofill_card_save_failed">HavenKeys could not save this card.</string>
 </resources>
