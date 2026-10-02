@@ -449,6 +449,28 @@ a `SigningKey` (which zeroizes its scalar on drop) only for that call. A
 stored key that is not a valid scalar gives `Error::Corrupted`, never a
 signature.
 
+### Android
+
+Android M3 adds the Android callers of Credential Manager
+(`passkey/app.rs`, `passkey/rp.rs`; `security-model.md` §22.18).
+
+* **Origin format.** A browser caller's origin is the page's origin, as on
+  the desktop. An app's origin is `android:apk-key-hash:<unpadded base64url
+  SHA-256 of the signing certificate>`, the certificate the site's
+  `assetlinks.json` vouched for with `delegate_permission/common.get_login_creds`.
+  It is the `origin` in `clientDataJSON`; `crossOrigin` is false and there is
+  no `topOrigin`.
+* **Signing over a supplied `clientDataHash`.** For a browser, Credential
+  Manager passes the hash of the `clientDataJSON` the browser built, and Rust
+  signs `authenticatorData || clientDataHash` (`passkey_assert_with_hash`);
+  the `clientDataJSON` in the response is a placeholder that the browser
+  replaces with its own. For an app a supplied hash is ignored: Rust builds
+  `clientDataJSON` itself and signs `authenticatorData || SHA-256` of it.
+* **Response JSON** (`havenkeys-mobile`, `passkey_json.rs`) is public
+  WebAuthn data only: `transports` is `["internal"]` and
+  `clientExtensionResults` is `{"credProps": {"rk": true}}`. Keys, signing,
+  attestation `none`, counter 0 and storage are unchanged.
+
 ### CBOR
 
 The three CBOR shapes above (COSE key, attestation object, and their

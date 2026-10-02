@@ -71,8 +71,10 @@ Spec: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Building:
 │                 value lives in the composable showing it)                   │
 │  autofill/      HavenAutofillService, StructureParser, FieldClassifier,     │
 │                 FillPlanner, DatasetFactory, auth and search activities     │
+│  credentials/   HavenCredentialService (Credential Manager), CallerFacts,   │
+│                 CredentialPlanner, unlock/get/create activities             │
 │  security/      Keystore keys (Secret Key file, unlock bundle),             │
-│                 BiometricGate, boot count                                   │
+│                 BiometricGate, WindowHardening, boot count                  │
 │  data/          VaultRepository, AccountRepository, SettingsRepository,    │
 │                 AutofillRepository — the only door to Rust                  │
 │  AppContainer   manual wiring; one MobileVault for the process              │
@@ -99,6 +101,16 @@ Spec: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Building:
   framework. The repositories store nothing of their own: storage and
   offline behaviour belong to Rust. Room, DataStore and SharedPreferences
   are not used for anything from the vault.
+* **Credential Manager (M3).** `HavenCredentialService` collects Android's
+  facts (`CallerFacts`: package, certificates, the origin from `getOrigin`
+  over Rust's browser list) and calls `CredentialRepository`, which calls
+  `havenkeys-mobile::credentials` (`passkey_offers`, `passkey_sign_in`,
+  `passkey_create_plan`, `passkey_create`, `credential_password_offers`,
+  `credential_password`) and, below it, the core's `passkey` module
+  (`app.rs` for app callers, `vault.rs`, `rp.rs`, `webauthn.rs`). The
+  activities show unlock, the user-verification prompt and the create card;
+  results go back to Credential Manager as Intents built in
+  `CredentialResults`.
 * **One vault per process.** The screens and the `AutofillService` run in
   the app's default process and share one `MobileVault`, so one unlock
   opens both and one lock closes both. Rust's events (locked, unlocked,

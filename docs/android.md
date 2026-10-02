@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Security:
 
 > This software has not undergone an independent security audit.
 
-**Status: Android M2.** Sign in with the Emergency Kit (QR code or typed) or
+**Status: Android M3.** Sign in with the Emergency Kit (QR code or typed) or
 an invite; unlock with the master password or, once turned on, a fingerprint
 or face; browse, search, reveal, copy and read TOTP codes offline; generate
 passwords; fill logins and TOTP codes in apps and browsers through Android
@@ -17,10 +17,10 @@ editor; writes need the server (offline, the editor is read-only) and a
 concurrent edit shows "This item changed on another device." It also adds
 saving from Autofill: after you confirm Android's save sheet, a login typed
 into a browser is saved for that site, and one typed into an app is bound to
-that app (`security-model.md` §22.16, §22.17). Not in M2: editing custom
-fields (kept as they are), scanning a TOTP QR code (type or paste the key),
-saving a login typed while locked, passkeys, cards and identities in
-Autofill, and an in-app updater.
+that app (`security-model.md` §22.16, §22.17). Android M3 adds passkeys
+(below). Not yet: editing custom fields (kept as they are), scanning a TOTP
+QR code (type or paste the key), saving a login typed while locked, cards and
+identities in Autofill, and an in-app updater.
 
 **Nothing in `apps/android` has run on a phone or an emulator yet.** It
 compiles, its JVM unit tests pass, and the Rust it calls is tested on the
@@ -28,6 +28,37 @@ host. The instrumented tests (`src/androidTest`) are compiled but have not
 run. The manual checklist at the end of this file is what remains.
 
 Minimum Android 9 (API 28); compiled against and targeting API 36.
+
+## Passkeys (Android M3)
+
+HavenKeys is a passkey and password provider for Android's Credential
+Manager, on **Android 14 or later** (the app itself still runs from Android
+9; older phones simply have no passkey support). Security:
+`security-model.md` §22.18.
+
+* **Turn it on:** Settings → Passwords & passkeys (Passwords, passkeys &
+  accounts) → select HavenKeys. HavenKeys' own Autofill setup screen has a
+  button that opens that page.
+* **Sign in:** in a browser or an app that offers a passkey, choose
+  HavenKeys. A locked vault shows "Unlock HavenKeys" first. You confirm with
+  your fingerprint, face or screen lock; a phone with no screen lock cannot
+  use passkeys. Signing in works offline for websites in browsers. An app's
+  passkey needs a fresh answer from the site's `assetlinks.json`, so after 7
+  days without network an app's passkey is refused until the phone is online
+  again.
+* **Create:** HavenKeys opens a screen showing the site and the account, and
+  creates the passkey when you tap Create. Creating needs the server (offline
+  it says so and nothing is saved). If the vault already has a passkey for
+  that account, it says so instead.
+* **Passwords:** Credential Manager can also offer your saved logins (only
+  those with a username), by the same rules as Autofill.
+* **Browsers:** Chrome and Firefox and the others on the privileged list
+  (`scripts/update-android-browsers.sh`); an unlisted browser cannot use
+  passkeys through HavenKeys.
+* **Limitations:** no hybrid (phone-as-security-key) sign-in, no conditional
+  create (Chrome's automatic upgrade; HavenKeys never saves without your
+  tap), and no saving a password through Credential Manager (saving stays
+  with Autofill).
 
 ## Toolchain
 
@@ -259,6 +290,10 @@ Editing and saving (Android M2; the same list is in `security-review.md`):
 - [ ] Autofill save in an app: the login is bound to that app with no website; an app with another certificate does not update it.
 - [ ] Username-first sign-in: one login on Android 10+; password step only on Android 9.
 - [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "HavenKeys is offline. The login was not saved."; HavenKeys' own screens never offer to save.
+
+Passkeys (Android M3; the same list is in `security-review.md`): see "Android
+M3" there. Run it on a real Android 14+ phone with HavenKeys enabled in
+Passwords & passkeys.
 
 On "Confirm before filling on: each fill asks": with the setting on, each
 row opens HavenKeys, which unlocks first if the vault is locked; while it is

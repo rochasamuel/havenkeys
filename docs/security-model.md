@@ -1014,7 +1014,7 @@ this section says about Android's behaviour (the Keystore, BiometricPrompt,
 the autofill framework, package visibility, `FLAG_SECURE`, the clipboard)
 describes the code and Android's documentation, not a test on a device. The
 manual checklists are in `security-review.md` ("Android M1" and, for editing
-and saving, "Android M2": not yet run).
+and saving, "Android M2" and, for passkeys, "Android M3": not yet run).
 
 ### 22.1 Boundaries
 
@@ -1309,9 +1309,12 @@ particular there is no `REQUEST_INSTALL_PACKAGES` and no accessibility
 service.
 
 **Exported components** in the source manifest: the launcher activity
-(`MainActivity`) and `HavenAutofillService`, guarded by
-`android.permission.BIND_AUTOFILL_SERVICE` so only the system can bind it.
-`AutofillAuthActivity` and `AutofillSearchActivity` are not exported; only
+(`MainActivity`), `HavenAutofillService`, guarded by
+`android.permission.BIND_AUTOFILL_SERVICE`, and `HavenCredentialService`,
+guarded by `android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE` (§22.18), so
+only the system can bind them.
+`AutofillAuthActivity`, `AutofillSearchActivity` and the three credential
+activities are not exported; only
 HavenKeys' own PendingIntents reach them. There is no provider and no
 manifest receiver (the screen-off receiver is registered at run time).
 Libraries add components to the **merged** manifest: androidx
@@ -1514,3 +1517,75 @@ it, which is the confirmation CLAUDE.md §27 asks for.
   and stages nothing.
 * Autofill is not app use: neither the fill nor the save path resets the
   idle timer.
+
+### 22.18 Passkeys and Credential Manager
+
+Android M3 (Android 14+). `HavenCredentialService` makes HavenKeys a
+credential provider for Credential Manager, so websites in browsers and apps
+can sign in with, and create, passkeys that live in the vault (the same
+objects the desktop and the extension use, §15), and Credential Manager can
+offer saved passwords. Rust decides everything that matters; Kotlin reports
+Android's facts and draws UI. Nothing here has run on a phone yet.
+
+* **Components.** `HavenCredentialService` is the only newly exported
+  component. It is guarded by `android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE`,
+  so only the system can bind it. `CredentialUnlockActivity`,
+  `CredentialGetActivity` and `PasskeyCreateActivity` are not exported; only
+  HavenKeys' own PendingIntents reach them. Each sets `FLAG_SECURE`,
+  `filterTouchesWhenObscured`, excludes itself from autofill and from
+  recents. No new permission is declared. Credential Manager hands the
+  service the caller's signing information, so passkeys need no package
+  visibility: the `play` flavor, which has no `QUERY_ALL_PACKAGES`, can use
+  them (§22.5).
+* **Caller rules** (`credentials.rs`, `passkey/rp.rs`). A request carries an
+  origin only from a browser whose package and a signing certificate are on
+  Rust's privileged list, the same list autofill uses (§22.5). Kotlin asks
+  Android's `getOrigin` with that list, and Rust checks the caller against
+  the list again. Any other caller that reports an origin is refused. Every
+  caller without an origin is an app. Only a browser's origin is treated as a
+  page URL, under the extension's rule (`authorize_rp`).
+* **App passkeys.** An app may use an RP ID only if the RP ID is a plain
+  registrable domain (never a public suffix, IP address or `localhost`) and
+  `https://<rp_id>/.well-known/assetlinks.json`, fresh in the 7-day cache
+  (§22.7), lists the app's package and the signing certificate Android
+  reports with `delegate_permission/common.get_login_creds`.
+  `handle_all_urls` alone does not authorize passkeys. The origin the site
+  sees is `android:apk-key-hash:<unpadded base64url SHA-256 of that
+  certificate>`, so it names the certificate the site vouched for. A passkey
+  created for an app gets a login whose website is the RP's site.
+* **`clientDataHash`.** Rust signs a hash supplied by the caller only for a
+  browser. An app's hash is ignored and Rust builds `clientDataJSON` itself;
+  signing an app's hash would let the app choose the origin the site sees.
+* **User verification.** Every passkey use (sign-in or create) shows
+  `BiometricPrompt` with `BIOMETRIC_STRONG` or the device screen lock. The
+  prompt is skipped only right after the user unlocked HavenKeys in that same
+  activity. A phone with no screen lock is refused. **Rust cannot check that
+  Kotlin prompted**: the app process is trusted to enforce user verification,
+  as the extension trusts the desktop's click (security-review AN37).
+* **Passwords.** For a password request Rust applies the target rules of
+  §22.5 (a browser's page, or an app's bindings and vouched sites). Only
+  logins with a username are offered. The password goes from Rust straight
+  into the result Intent; no extra, state or log holds it. When the vault is
+  already unlocked this path asks no user verification, like direct fill
+  (§22.4). Saving a password through Credential Manager is not supported;
+  saving stays with Autofill (§22.17).
+* **Creating.** A passkey is created only online and after the user taps
+  "Create" in HavenKeys; nothing is recorded locally until the server
+  accepted it. A conditional create (Chrome's automatic upgrade) is refused
+  on Android, so nothing is saved without a tap in HavenKeys. A request whose
+  `excludeCredentials` names a passkey the vault holds for that RP ends with
+  "This account already has a passkey in HavenKeys."
+* **Responses.** `transports` is `["internal"]` and `credProps.rk` is `true`.
+  Offers list the RP ID, account name and credential ID, never a key.
+  `clientDataJSON` for a browser is a placeholder that the browser replaces
+  (`crypto.md`, Passkeys).
+* **PendingIntents.** The entries the service returns carry PendingIntents
+  that must be mutable (Credential Manager adds the request to them). They
+  are explicit, point only at HavenKeys' non-exported activities, and use a
+  per-process request-code counter. Rust re-checks the caller, the origin and
+  the item on every request, so a replayed or redirected Intent can at most
+  repeat a decision Rust makes again.
+* **Locking.** A locked vault offers one entry, "Unlock HavenKeys", and no
+  passkey or login names. Credential Manager and Autofill are not app use:
+  neither touches the idle timer.
+* **Known limitations:** `security-review.md` AN37-AN44.

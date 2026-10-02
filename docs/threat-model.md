@@ -543,8 +543,8 @@ messages in `native-messaging.md` §"Sign in with", the mechanism in
 The Android app (`docs/android.md`; `security-model.md` §22) holds the same
 vault as the desktop and fills logins in other apps and in browsers through
 Android Autofill. Nothing in this section has been run on a phone or an
-emulator yet; the manual checklists in `security-review.md` ("Android M1"
-and "Android M2") cover each item.
+emulator yet; the manual checklists in `security-review.md` ("Android M1",
+"Android M2" and "Android M3") cover each item.
 
 * **A malicious app with a borrowed package name.** Anyone can install an
   app called `com.github.android`. *Mitigation:* Rust identifies an app by
@@ -649,6 +649,32 @@ and "Android M2") cover each item.
   (`filterTouchesWhenObscured`, `security-review.md` AN6). The main activity
   does not filter them.
 
+**Passkeys and Credential Manager (Android M3; `security-model.md` §22.18).**
+
+* **A malicious app relays a site's challenge** to get a signature for the
+  site. *Mitigation:* for an app Rust ignores the supplied `clientDataHash`
+  and builds `clientDataJSON` with the origin
+  `android:apk-key-hash:<its certificate>`; a relying party that checks the
+  origin rejects it, and the app's hash is never signed.
+* **An impostor app with the real package name.** *Mitigation:* the site's
+  `assetlinks.json` must list the package and the certificate Android
+  reports for the caller; another certificate gets no passkey.
+* **A site that grants only `handle_all_urls`.** No passkey: only
+  `common.get_login_creds` authorizes one.
+* **A stale or failed asset-links lookup.** No passkey: the answer must be
+  within the 7-day cache. Offline, an app's passkey stops working after 7
+  days until the phone is online again (AN38).
+* **A malicious browser not on the privileged list that reports an origin.**
+  Refused: an origin counts only from a caller whose package and certificate
+  are on Rust's list, and Rust re-checks what Android's `getOrigin` returned.
+* **A passkey request while the vault is locked.** Only "Unlock HavenKeys" is
+  offered; no passkey or login names.
+* **A conditional (automatic) create.** Refused; nothing is saved without a
+  tap in HavenKeys.
+* **Residual:** user verification is enforced by Kotlin only (AN37); the
+  placeholder `clientDataJSON` for browsers (AN41); a compromised phone or
+  accessibility service can click through the prompt.
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can
@@ -728,3 +754,9 @@ and "Android M2") cover each item.
 | A20 | Stale, other-boot, unknown-boot, future-dated, tampered or truncated unlock bundle | `bundle_refused` / unlock fails | `crates/havenkeys-core/src/unlock_bundle.rs` tests, `regressions.rs` (`a_stale_or_tampered_bundle_is_refused`), `crates/havenkeys-mobile/src/unlock.rs` |
 | A21 | Hostile `assetlinks.json`: redirect, oversized, malformed, other package or certificate, IP or `localhost` host | No vouching; one bad statement voids only itself | `crates/havenkeys-core/src/asset_links.rs` tests, `crates/havenkeys-mobile/src/asset_links_fetch.rs` tests, `crates/havenkeys-core/tests/fuzz.rs` (`fuzz_asset_links_parser`) |
 | A22 | The app being filled replaces the assist structure to name another app | Structure ignored, nothing filled | `apps/android/app/src/test/.../autofill/StructureNamesCallerTest.kt` (unit test of the check only; the activity flow is unverified on a device) |
+| A1c | Android passkeys: an impostor app (the right package, another certificate) asks for the site's passkey | Nothing offered or signed | `crates/havenkeys-mobile/tests/regressions.rs` (`attack_an_impostor_app_gets_no_passkey`), `crates/havenkeys-core/tests/passkeys_android.rs` (`attack_an_app_the_site_does_not_vouch_for_gets_nothing`) |
+| A2c | Android passkeys: an app vouched only for filling (`handle_all_urls`), or with a stale or failed lookup, asks for a passkey | Nothing offered or signed | `regressions.rs` (`attack_an_app_vouched_only_for_filling_gets_no_passkey`), `passkeys_android.rs` (`a_stale_failed_or_fill_only_lookup_vouches_for_nothing`) |
+| A3c | Android passkeys: a caller that is not a privileged browser reports a website's origin | `denied` | `regressions.rs` (`attack_an_app_reporting_a_websites_origin_gets_nothing`) |
+| A4c | Android passkeys: an app supplies a `clientDataHash` to be signed | Ignored; Rust signs its own `clientDataJSON` with the `apk-key-hash` origin | `regressions.rs` (`attack_an_apps_client_data_hash_is_not_signed`) |
+| A5c | Android passkeys: vault locked, offers or sign-in requested | `locked`; nothing offered or signed | `regressions.rs` (`attack_a_locked_vault_gives_no_passkey`), `passkeys_android.rs` (`a_locked_vault_is_refused_first`) |
+| A6c | Android passkeys: an app picks a login not matched to it, or asks for another RP's site | Refused | `passkeys_android.rs` (`a_chosen_login_must_be_matched_to_the_app`, `a_site_vouches_only_for_its_own_rp_id`) |

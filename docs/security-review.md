@@ -2651,3 +2651,153 @@ None of these has been run.
 | `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok` |
 | `scripts/build-android.sh`, then `git status --porcelain` on `kotlin/uniffi` | Built; no change (bindings current) |
 | `./gradlew detekt testGithubDebugUnitTest lintGithubDebug assembleGithubDebug` | BUILD SUCCESSFUL; 212 JVM unit tests, 0 failed |
+
+## Android M3 (passkeys and Credential Manager)
+
+**Scope:** branch `android-m3`: the core's `passkey/` (`rp.rs`, `app.rs`,
+`vault.rs`, `webauthn.rs`), `asset_links.rs` and `app_target.rs`;
+`crates/havenkeys-mobile` (`credentials.rs`, `passkey_json.rs`); and
+`apps/android` (`credentials/`, `security/WindowHardening.kt`,
+`BiometricGate`, the Autofill setup section, the manifest and
+`res/xml/credential_provider.xml`). Design:
+`docs/superpowers/specs/2026-10-01-android-app-design.md` §8. **Nothing here
+has run on a phone or an emulator.** This is an internal review, not an
+independent audit.
+
+Properties checked by host tests (`regressions.rs`,
+`passkeys_android.rs`, `tests/round_trip.rs`): an impostor app (right package,
+another certificate) gets no passkey; an app vouched only for filling
+(`handle_all_urls`) gets none; a stale or failed lookup vouches for nothing;
+a caller that is not a privileged browser and reports an origin is refused;
+an app's `clientDataHash` is not signed; a locked vault offers and signs
+nothing; a chosen login must match the app; a passkey made for an app works
+on the website and back.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| AN37 | Medium | `CredentialGetActivity`, `PasskeyCreateActivity` | User verification is enforced in Kotlin only | Accepted |
+| AN38 | Low | `asset_links.rs`, `credentials.rs` | An app's passkey stops working after 7 days offline | Accepted |
+| AN39 | Low | `CallerFacts`, `credentials.rs` | Origin trust relies on Android's `getOrigin` plus Rust's list | Mitigated |
+| AN40 | Low | `CredentialResults`, service | Mutable PendingIntents; request codes restart per process | Mitigated |
+| AN41 | Info | `passkey_json.rs` | `clientDataJSON` in a browser response is a placeholder | Accepted |
+| AN42 | Low | `CredentialGetActivity` | An unexpected exception ends the request as a bare cancel | Open |
+| AN43 | Low | `credential_password` | The password path asks no user verification when unlocked | Accepted |
+| AN44 | Info | all of M3 | Not run on a device | Open |
+
+### AN37. User verification is enforced in Kotlin only (Medium, accepted)
+**Component:** `CredentialGetActivity`, `PasskeyCreateActivity`,
+`BiometricGate.verifyUser`.
+**Scenario:** WebAuthn's "user verified" flag is set by Rust, but the prompt
+that earns it is Kotlin's. A modified app, or code in the process, could
+call Rust's passkey operations without showing `BiometricPrompt`. Rust
+cannot tell.
+**Mitigation:** every sign-in and create shows `BiometricPrompt`
+(`BIOMETRIC_STRONG` or the device screen lock), skipped only right after an
+unlock in the same activity; a phone with no screen lock is refused. The
+activities are not exported, the vault is unlocked only in this process, and
+the signature needs the unlocked vault.
+**Remaining:** the app process is trusted for user verification, as the
+extension trusts the desktop's click. Code running in the process, or a
+rooted phone, can sign without a prompt.
+
+### AN38. Offline app passkeys after the 7-day cache (Low, accepted)
+**Component:** `asset_links.rs`, `credentials.rs`.
+**Scenario:** an app may use a passkey only if the site's `assetlinks.json`
+vouched for it within 7 days. A phone offline longer cannot sign in to an
+app with a passkey; an attacker who blocks the lookup can do the same.
+**Mitigation:** the check fails closed (no passkey, nothing signed); the
+answer refreshes as soon as the phone is online; browsers are unaffected
+(their origin does not depend on the file).
+**Remaining:** an availability cost, accepted over trusting an old answer.
+
+### AN39. Reliance on Android's `getOrigin` plus Rust's list (Low, mitigated)
+**Component:** `CallerFacts.kt`, `credentials.rs`, `app_target.rs`.
+**Scenario:** an origin is valid only from a privileged browser. Android
+decides, from the list Kotlin passes, whether the caller may report one; a
+bug there, or a list entry for a browser that mishandles origins, would let
+a page's origin be trusted.
+**Mitigation:** Rust checks the caller's package and certificate against its
+own list again and refuses any other caller that reports an origin; the list
+is the one autofill uses, changed only by hand
+(`scripts/update-android-browsers.sh`), and the origin then goes through
+`authorize_rp` like the extension's.
+**Remaining:** a privileged browser is trusted to report the right origin.
+
+### AN40. Mutable PendingIntents (Low, mitigated)
+**Component:** `CredentialResults.kt`, `HavenCredentialService`.
+**Scenario:** Credential Manager must add the request to the entries'
+PendingIntents, so they cannot be immutable. A holder could try to alter or
+redirect them; the per-process request-code counter restarts when the process
+does, and `FLAG_UPDATE_CURRENT` then lets a new intent replace an old one
+with the same code.
+**Mitigation:** the intents are explicit and target only HavenKeys'
+non-exported activities; the extras hold no secret (ids and non-secret
+request data); Rust re-checks the caller, origin, RP ID and item on every
+request, so a replaced intent can only ask Rust a question it answers again.
+**Remaining:** a stale entry may open the wrong one of HavenKeys' own
+screens; nothing is signed that Rust's checks would not allow.
+
+### AN41. Placeholder `clientDataJSON` (Info, accepted)
+**Component:** `passkey_json.rs`.
+**Scenario:** for a browser, Rust signs the supplied `clientDataHash`, so the
+`clientDataJSON` in the response is a placeholder that the browser replaces
+with its own. A browser that did not replace it would send a value that does
+not match the signature, and the site would refuse the sign-in.
+**Mitigation:** none needed for security; the signature covers the browser's
+own bytes, and Rust never signs a hash for an app (AN39's list decides who is
+a browser).
+**Remaining:** relies on browsers following Credential Manager's contract.
+
+### AN42. An unexpected exception ends the request as a bare cancel (Low, open)
+**Component:** `CredentialGetActivity`.
+**Scenario:** an exception that the activity does not map to an error ends
+the request as a cancel, with no message to the user or the site.
+**Mitigation:** it fails closed: nothing is signed, and no secret is in an
+exception message (CLAUDE.md §39).
+**Remaining:** the user sees a cancelled sign-in with no explanation.
+
+### AN43. The password path asks no user verification when unlocked (Low, accepted)
+**Component:** `credential_password`, `CredentialGetActivity`.
+**Scenario:** with the vault unlocked, a password chosen through Credential
+Manager is returned without `BiometricPrompt`, so someone holding an unlocked
+phone can use it.
+**Mitigation:** the same as direct fill (§22.4): the target rules of §22.5,
+only logins with a username, auto-lock, and the lock on screen-off; the
+value goes from Rust straight into the result Intent. Passkeys do ask.
+**Remaining:** accepted for parity with direct fill.
+
+### AN44. M3 has not run on a device (Info, open)
+No part of Credential Manager integration (the service binding, the browser
+`getOrigin` flow, `BiometricPrompt` from these activities, the UI) has run on
+a phone or an emulator; the list below is what remains.
+
+### Manual checklist (Android M3, verification pending)
+
+None of these has been run.
+
+- [ ] A real Android 14+ phone; HavenKeys enabled in Passwords & passkeys (the Autofill setup button opens it).
+- [ ] `webauthn.io` in Chrome: create a passkey, then sign in.
+- [ ] `webauthn.io` in Firefox: create a passkey, then sign in.
+- [ ] `github.com` in Chrome: create a passkey, then sign in.
+- [ ] GitHub app: passkey sign-in works through Digital Asset Links; a sideloaded app with the same package name and another key gets nothing.
+- [ ] The same passkey then signs in from the desktop extension (and one made on the desktop signs in on the phone).
+- [ ] Locked phone vault: "Unlock HavenKeys" appears; after unlocking, the entries appear.
+- [ ] Airplane mode: sign in works in a browser; create says HavenKeys is offline and saves nothing.
+- [ ] A re-registration with `excludeCredentials` ends with "This account already has a passkey in HavenKeys."
+- [ ] No screen lock on the phone: passkeys are refused; with one, a sign-in asks for the fingerprint, face or screen lock.
+- [ ] A conditional create (Chrome offering to upgrade a password) is refused and nothing is saved.
+- [ ] Credential Manager's password list offers only logins with a username, and none for a different site.
+- [ ] The three credential screens block screenshots and show a blank recents thumbnail; a tap through another app's overlay is ignored.
+- [ ] Also owed from M1: `connectedGithubDebugAndroidTest` on an emulator or phone.
+
+### Verification (2026-10-02, tip of `android-m3` plus this documentation)
+
+| Command | Result |
+|---|---|
+| `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` | All test results ok, 0 failed; clippy clean |
+| `cargo test -p havenkeys-mobile --features testing --test regressions` | 10 passed |
+| `scripts/test-server.sh` and `cargo test -p havenkeys-mobile --features server-tests --test round_trip` (Postgres on port 5433) | Server suite passed (62, 15 and 1 tests in its binaries); round trip 1 passed |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok` |
+| `cargo audit` | No vulnerabilities; the same 3 allowed warnings |
+| `scripts/build-android.sh`, then `git diff --exit-code apps/android/app/src/main/kotlin/uniffi` | Built; no diff (bindings current) |
+| `./gradlew :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest :app:detekt :app:lintGithubDebug :app:assembleGithubRelease` | BUILD SUCCESSFUL; 230 JVM unit tests per flavor, 0 failed |
