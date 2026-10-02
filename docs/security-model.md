@@ -1136,6 +1136,45 @@ This is the one documented relaxation of CLAUDE.md §33.
 * An OTP-only form (no username or password field) is offered the codes of
   the matched logins that have TOTP, never their passwords.
 
+### 22.4a Cards and identity (Android M4)
+
+Android Autofill also fills cards and the identity (`WalletPlanner`,
+`WalletDatasets`, `FormRouter`). Nothing here has run on a phone yet
+(`security-review.md` AN50).
+
+* **What Rust decides** (`autofill_wallet_*`, the same rules as the
+  extension's card and identity fills). Cards are offered only to https
+  browser pages and to apps; never on http. A frame is allowed only if it is
+  the tab's own site or a card frame of a payment processor on Rust's fixed
+  list; any other frame is left out, and a refused focused frame gets
+  nothing. Rust is told which roles the form asks for and returns only
+  those values. Document numbers are returned only with the confirmation
+  flag, and only on https pages or in apps. Cards and the identity are not
+  bound to an app or a site, so no page rule applies to an app's WebView.
+* **What Kotlin does.** It classifies fields (`CardFieldClassifier`,
+  `IdentityFieldClassifier`), picks the form (`FormRouter`), shapes values
+  to each field (`ValueShaper`: slices, expiry formats, lists, dates; a value
+  that does not fit `maxlength` is left out, never cut) and fills only empty
+  fields. It decides nothing about whether a value may be returned.
+* **Direct fill.** While unlocked and "Confirm before filling" is off, the
+  response carries the values of up to 5 cards (number, code, expiry, name)
+  and the identity's non-document values for the allowed frames of that form
+  to the operating system's autofill framework, which hands the app only
+  the row the user taps (CLAUDE.md amendment of 2026-10-02; AN45).
+* **Gated rows.** Document numbers, "Confirm before filling" and every row
+  offered after "Unlock HavenKeys" carry no value. They open
+  `AutofillAuthActivity`, which asks "Fill ... in <site or package>?" in a
+  `FLAG_SECURE` window that ignores obscured touches. Rust is asked only
+  after the tap, and the answer is one dataset. The app being filled cannot
+  stand in for that tap (AN46).
+* **Saving a card.** Only after the user confirms Android's save sheet; the
+  number reaches Rust then. It needs the server (offline says the card was
+  not saved), and a number already saved answers `Unchanged`, so nothing is
+  duplicated. A card is saved only from the tab's own site, never from a
+  processor frame (AN49).
+* **Limits.** Frames depend on what the browser reports (AN47); emptiness is
+  read from the structure and only a boolean is kept (AN48).
+
 ### 22.5 Fill targets: browsers and apps
 
 Rust decides the target on every call (`crates/havenkeys-core/src/app_target.rs`)

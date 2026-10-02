@@ -2689,6 +2689,12 @@ on the website and back.
 | AN42 | Low | credential activities, service | An unexpected exception ends the request as a generic error | Accepted |
 | AN43 | Low | `credential_password` | The password path asks no user verification when unlocked | Accepted |
 | AN44 | Info | all of M3 | Not run on a device | Open |
+| AN45 | Low | `WalletPlanner`, `WalletDatasets` | Card values in the autofill framework | Accepted |
+| AN46 | Info | `AutofillAuthActivity`, `WalletConfirmation` | Gated card and identity rows confirm in HavenKeys | Mitigated |
+| AN47 | Low | `StructureParser`, `CardFormFinder` | Frames depend on what the browser reports | Accepted |
+| AN48 | Info | `StructureParser.isEmpty` | Emptiness is read from the structure | Accepted |
+| AN49 | Info | `CardSaveReader`, `autofill_save_card` | Saving cards | Accepted |
+| AN50 | Info | all of M4 | Not run on a device | Open |
 
 ### AN37. User verification is enforced in Kotlin only (Medium, accepted)
 **Component:** `CredentialGetActivity`, `PasskeyCreateActivity`,
@@ -2788,6 +2794,59 @@ No part of Credential Manager integration (the service binding, the browser
 `getOrigin` flow, `BiometricPrompt` from these activities, the UI) has run on
 a phone or an emulator; the list below is what remains.
 
+### AN45. Card values in the autofill framework (Low, accepted)
+**Component:** `WalletPlanner`, `WalletDatasets`. While unlocked and
+"Confirm before filling" is off, a card form's response carries the values
+of up to 5 cards (number, code, expiry, name) for that form's allowed
+frames, and the identity's non-document values. **Scenario:** any app or
+https page that shows a card form gets rows for the user's cards.
+**Mitigation:** the values go to Android's autofill framework (part of the
+OS, already trusted with every keystroke), which hands the app only the
+row the user taps — the same exposure as the extension's pick. Rust
+refuses http pages and cross-site frames. **Remaining:** the framework holds
+up to 5 cards' values for the life of the fill session; turn on "Confirm
+before filling" to keep them out of it. The user decided this at planning
+(CLAUDE.md amendment of 2026-10-02).
+
+### AN46. Gated card and identity rows confirm in HavenKeys (Info, mitigated)
+**Component:** `AutofillAuthActivity`, `WalletConfirmation`,
+`WalletConfirmDialog`. As in AN3, the app being filled can fire a gated row
+itself, and rewrite its item ID or mode. Cards and the identity are not
+bound to the app, so unlike logins Rust's answer would not limit what it
+gets. **Mitigation:** a gated card or identity row (documents, "Confirm
+before filling", every row after an unlock) shows a question naming the
+card and the site or package in a `FLAG_SECURE` window that ignores
+obscured touches; Rust is asked only after the user's tap, and the answer is
+one dataset. The response to an unlock row carries no values. The card ID is
+accepted only when Rust offers that card to this form.
+
+### AN47. Frames depend on what the browser reports (Low, accepted)
+**Component:** `StructureParser`, `CardFormFinder`. Rust leaves out frames
+that are neither the tab's site nor a payment processor's card frame, but
+it can only judge the frames the browser's structure names. A browser that
+reports a cross-site iframe's fields under the page's own domain makes them
+look like the page's. **Remaining:** the browser's own cross-frame autofill
+policy then applies; HavenKeys cannot see more than the structure says.
+
+### AN48. Emptiness is read from the structure (Info, accepted)
+**Component:** `StructureParser.isEmpty`. To never overwrite, each field's
+current value is read to decide whether it is empty; only the boolean is
+kept. The values are already in the structure Android hands every autofill
+service.
+
+### AN49. Saving cards (Info, accepted)
+**Component:** `CardSaveReader`, `autofill_save_card`. A card is saved only
+after the user confirmed Android's save sheet; the number reaches Rust then.
+A number already saved is `Unchanged`; a new card needs the server. A card
+typed into a payment processor's iframe is not saved (the extension's
+limitation too), and Android shows its sheet only when a value changed from
+what was filled.
+
+### AN50. M4 has not run on a device (Info, open)
+Card and identity classification, shaping, planning and saving are
+verified by JVM unit tests, the host Rust tests and `tests/round_trip.rs`,
+not on Android. The Android M4 checklist in `docs/android.md` is open.
+
 ### Manual checklist (Android M3, verification pending)
 
 None of these has been run.
@@ -2806,6 +2865,21 @@ None of these has been run.
 - [ ] Credential Manager's password list offers only logins with a username, and none for a different site.
 - [ ] The three credential screens block screenshots and show a blank recents thumbnail; a tap through another app's overlay is ignored.
 - [ ] Also owed from M1: `connectedGithubDebugAndroidTest` on an emulator or phone.
+
+### Manual checklist (Android M4, verification pending)
+
+None of these has been run; the same list is in `docs/android.md`.
+
+- [ ] Chrome, https checkout with number, expiry (one field) and CVV: rows show `•••• 1111 · 04/33`; tapping fills all three; a field already typed in stays.
+- [ ] Chrome, checkout with month and year lists: both chosen.
+- [ ] Chrome, Stripe Elements checkout: the card fills inside Stripe's frames.
+- [ ] Chrome, http checkout: no card rows.
+- [ ] An app's card form: rows; "Confirm before filling" on: HavenKeys asks "Fill ... in <package>?" first.
+- [ ] Locked: "Unlock HavenKeys", then the rows, then HavenKeys asks before filling.
+- [ ] An address form: the identity fills names, address and phone; a CPF field: "Fill CPF too" asks first; on http no document row.
+- [ ] Type a new card and submit: Android's save sheet; saved; type it again: nothing new.
+- [ ] Offline: saving a new card says the card was not saved.
+- [ ] TalkBack reads the card rows; dark theme.
 
 ### Verification (2026-10-02, tip of `android-m3` plus this documentation)
 

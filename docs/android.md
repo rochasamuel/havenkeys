@@ -60,6 +60,38 @@ Manager, on **Android 14 or later** (the app itself still runs from Android
   tap), and no saving a password through Credential Manager (saving stays
   with Autofill).
 
+## Cards and identity (Android M4)
+
+Autofill also fills payment cards and your identity (name, address, phone,
+email, dates, document numbers). Security: `security-model.md` §22.4a.
+
+* **Where:** cards on https pages in browsers and in apps, never on http;
+  the identity on any page or app. Document numbers (for example CPF) need a
+  separate confirmation and never appear on http.
+* **Direct and gated rows:** while unlocked with "Confirm before filling"
+  off, up to 5 card rows (for example `•••• 1111 · 04/33`) and the identity
+  row fill with one tap. Document numbers, "Confirm before filling" on, and
+  every row shown after "Unlock HavenKeys" open HavenKeys, which asks "Fill
+  ... in <site or package>?" before anything is filled.
+* **Frames:** a checkout's card fields fill in frames of the page's own
+  site and of a fixed list of payment processors (for example Stripe
+  Elements); any other frame is left out.
+* **Empty fields only:** nothing you already typed is overwritten, and
+  nothing is submitted. A list counts as empty when nothing or its first
+  option is chosen. A card brand goes only into a list.
+* **Lists and dates:** month and year lists are matched by their option
+  text or value; date pickers get local midnight in the device's time zone.
+  A value that does not fit a field's maximum length is left out, never cut.
+  A login field guess never takes a card field, and a sign-up routed to the
+  identity keeps its "Save password?" sheet when there is no identity row.
+* **Saving a card:** type a new card and submit; after you confirm Android's
+  save sheet HavenKeys saves it. It needs the server, and a card whose
+  number is already saved is not saved again.
+* **Limitations:** the autofill framework holds up to 5 cards' values for a
+  fill session (AN45; "Confirm before filling" avoids it); frames depend on
+  the browser's report (AN47); a card typed into a processor's iframe is not
+  saved (AN49). Not run on a device yet (AN50).
+
 ## Toolchain
 
 Installed in user space, no `sudo`:
@@ -290,6 +322,18 @@ Editing and saving (Android M2; the same list is in `security-review.md`):
 - [ ] Autofill save in an app: the login is bound to that app with no website; an app with another certificate does not update it.
 - [ ] Username-first sign-in: one login on Android 10+; password step only on Android 9.
 - [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "HavenKeys is offline. The login was not saved."; HavenKeys' own screens never offer to save.
+
+### Android M4
+- [ ] Chrome, https checkout with number, expiry (one field) and CVV: rows show `•••• 1111 · 04/33`; tapping fills all three; a field already typed in stays.
+- [ ] Chrome, checkout with month and year lists: both chosen.
+- [ ] Chrome, Stripe Elements checkout: the card fills inside Stripe's frames.
+- [ ] Chrome, http checkout: no card rows.
+- [ ] An app's card form: rows; "Confirm before filling" on: HavenKeys asks "Fill ... in <package>?" first.
+- [ ] Locked: "Unlock HavenKeys", then the rows, then HavenKeys asks before filling.
+- [ ] An address form: the identity fills names, address and phone; a CPF field: "Fill CPF too" asks first; on http no document row.
+- [ ] Type a new card and submit: Android's save sheet; saved; type it again: nothing new.
+- [ ] Offline: saving a new card says the card was not saved.
+- [ ] TalkBack reads the card rows; dark theme.
 
 Passkeys (Android M3; the same list is in `security-review.md`): see "Android
 M3" there. Run it on a real Android 14+ phone with HavenKeys enabled in

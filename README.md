@@ -114,10 +114,10 @@ What the Android app does (early release; tried on one phone, the instrumented t
   certificate: a binding you confirm, or the website's Digital Asset Links
   file). Nothing is filled without a tap. "Confirm before filling" keeps the
   logins' values away from Android until you pick one
+* Cards and your identity in Autofill, and saving a typed card
 * No screenshots of HavenKeys, no backups of its data, English and Brazilian
   Portuguese
-* Creating and editing items, saving from Autofill, passkeys, and cards and
-  identities in Autofill come later
+* Creating and editing items, saving from Autofill, and passkeys come later
 
 Setting up the first computer needs an invite from whoever runs the server
 (`havenkeys-server admin new-account`); see

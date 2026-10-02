@@ -1303,6 +1303,15 @@ submit). Cards typed in processor iframes are not offered.
   the top page.
 * A phishing checkout that the user picks a card on receives that card.
 
+## Android
+
+The Android app's card (`CardFieldClassifier`, `CardFormFinder`) and identity
+(`IdentityFieldClassifier`, `IdentityFormFinder`) classifiers are ports of
+`card-kind.ts`, `card.ts` and `identity.ts` with Android's autofill hints
+added. `FormRouter` picks login, card or identity by the focused field, and
+`ValueShaper` follows `card-fill.ts` and `identity-fill.ts`. Rust makes the
+decisions (`docs/android.md`, `security-model.md` §22.4a).
+
 ## Permissions and injection
 
 * Requested at install: `nativeMessaging`, `activeTab`, `scripting`,

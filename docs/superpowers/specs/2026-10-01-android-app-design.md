@@ -300,6 +300,39 @@ browser targets or app targets, nothing overwritten, document numbers need a
 second confirmation, nothing submitted. A card typed into a form is saved
 only after confirmation.
 
+**Revisions from planning (M4, `docs/superpowers/plans/2026-10-02-android-m4.md`):**
+
+1. While unlocked, card and identity rows fill directly, like logins (the
+   user's decision): the values of at most 5 cards and the identity's
+   non-document values go to the autofill framework. Documents are never in
+   a direct row.
+2. Every gated card or identity row — documents, "Confirm before filling",
+   and every row offered after "Unlock HavenKeys" — opens HavenKeys, which
+   asks "Fill … in <site or package>?" in a hardened window before Rust is
+   asked, and answers with one dataset. Cards and the identity are not
+   bound to an app, so a row the app fires itself (AN3) must not be enough.
+3. A frame Rust refuses is left out of a card fill (the extension's
+   revision 4); a refused focused frame gets nothing.
+4. Only empty fields are filled; a list counts as empty when nothing or its
+   first option is chosen.
+5. A brand goes only into a list; a text field asking for the brand is left
+   empty.
+6. A card whose number is already saved answers `Unchanged`, even offline;
+   a card is saved only from the tab's own site (never a processor frame).
+7. Cards and the identity in an app's WebView are the app's: no page rule
+   applies to app targets.
+8. A login field fallback (a username guess, a split code box) never takes
+   a card field: the login classifier refuses card fields everywhere, not
+   only in classification.
+9. A shaped value that does not fit its field (`maxlength`) is left out
+   entirely, never cut, for every text value (number, slices, expiry,
+   month, year, birth date, dates).
+10. Date pickers get local midnight (the device's time zone), and a saved
+    date is read back in the same zone; Android's `DatePicker` uses a
+    default-timezone `Calendar`.
+11. A sign-up routed to the identity keeps its "Save password?" sheet: when
+    there is no identity row to offer, the M1 login save response is used.
+
 ### 7.7 Not on Android
 
 Auto sign-in, "Sign in with" provider flows: Android autofill cannot press

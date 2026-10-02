@@ -681,6 +681,26 @@ emulator yet; the manual checklists in `security-review.md` ("Android M1",
   placeholder `clientDataJSON` for browsers (AN41); a compromised phone or
   accessibility service can click through the prompt.
 
+### T12 addendum — cards and identity (Android M4)
+
+* **An app showing a fake checkout.** It gets only the card the user taps,
+  the same as a site in the extension; cards are not bound to a site or an
+  app, so any app or https page can ask. *Residual:* the framework holds up
+  to 5 cards' values for the fill session unless "Confirm before filling"
+  is on (AN45).
+* **An app firing gated rows itself.** It can fire the IntentSender and
+  rewrite the item ID or mode. *Mitigation:* HavenKeys asks "Fill ... in
+  <site or package>?" before Rust returns anything, and accepts a card ID
+  only when Rust offers that card to this form (AN46).
+* **A hostile iframe in a checkout.** Left out by Rust's frame rule (the
+  tab's site or a fixed list of processor card frames). *Residual:* it
+  depends on the browser reporting frames truthfully (AN47).
+* **Documents on http.** Refused in Rust; a document number also needs the
+  separate confirmation.
+* **A login fallback swallowing a card field.** The login classifier
+  refuses card fields everywhere, so a username guess or a split code box
+  never takes one.
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can
