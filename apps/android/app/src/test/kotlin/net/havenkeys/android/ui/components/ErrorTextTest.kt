@@ -32,4 +32,10 @@ class ErrorTextTest {
         assertEquals(R.string.error_invalid_input, errorText("invalid_input"))
         assertEquals(R.string.error_invalid_input, errorText("invalid_field"))
     }
+
+    @Test
+    fun passkeyCodesHaveTheirOwnText() {
+        assertEquals(R.string.passkey_exists, errorText("passkey_exists"))
+        assertEquals(R.string.error_passkey_unsupported, errorText("unsupported_algorithm"))
+    }
 }

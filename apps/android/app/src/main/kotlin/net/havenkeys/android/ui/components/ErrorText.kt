@@ -24,6 +24,8 @@ private val texts = mapOf(
     "invalid_expiry" to R.string.error_invalid_expiry,
     "invalid_website" to R.string.error_invalid_website,
     "invalid_input" to R.string.error_invalid_input,
+    "passkey_exists" to R.string.passkey_exists,
+    "unsupported_algorithm" to R.string.error_passkey_unsupported,
     // A field the editor should not have sent: the user can only retry.
     "invalid_field" to R.string.error_invalid_input,
 )

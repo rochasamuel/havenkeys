@@ -284,4 +284,15 @@
     <string name="passkey_verify_sign_in">Sign in to %1$s with a passkey</string>
     <string name="passkey_verify_save">Save a passkey for %1$s</string>
     <string name="passkey_needs_screen_lock">Set a screen lock on this phone to use passkeys.</string>
+    <string name="passkey_save_title">Save a passkey to HavenKeys?</string>
+    <string name="passkey_account">Account: %1$s</string>
+    <string name="passkey_no_account_name">No account name</string>
+    <string name="passkey_save_to">Save to</string>
+    <string name="passkey_new_login">New login</string>
+    <string name="passkey_new_login_detail">Create a login for this site</string>
+    <string name="passkey_exists">This account already has a passkey in HavenKeys</string>
+    <string name="passkey_save">Save</string>
+    <string name="passkey_cancel">Cancel</string>
+    <string name="passkey_close">Close</string>
+    <string name="error_passkey_unsupported">This site asked for a kind of passkey HavenKeys can\'t create.</string>
 </resources>

@@ -272,4 +272,15 @@
     <string name="passkey_verify_sign_in">Entrar em %1$s com uma chave de acesso</string>
     <string name="passkey_verify_save">Salvar uma chave de acesso para %1$s</string>
     <string name="passkey_needs_screen_lock">Defina um bloqueio de tela neste telefone para usar chaves de acesso.</string>
+    <string name="passkey_save_title">Salvar uma chave de acesso no HavenKeys?</string>
+    <string name="passkey_account">Conta: %1$s</string>
+    <string name="passkey_no_account_name">Sem nome de conta</string>
+    <string name="passkey_save_to">Salvar em</string>
+    <string name="passkey_new_login">Novo login</string>
+    <string name="passkey_new_login_detail">Criar um login para este site</string>
+    <string name="passkey_exists">Esta conta já tem uma chave de acesso no HavenKeys</string>
+    <string name="passkey_save">Salvar</string>
+    <string name="passkey_cancel">Cancelar</string>
+    <string name="passkey_close">Fechar</string>
+    <string name="error_passkey_unsupported">Este site pediu um tipo de chave de acesso que o HavenKeys não consegue criar.</string>
 </resources>
