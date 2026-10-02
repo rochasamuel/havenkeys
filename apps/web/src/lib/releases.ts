@@ -50,3 +50,45 @@ export async function fetchLatestRelease(): Promise<LatestRelease | null> {
     return null;
   }
 }
+
+export interface ReleaseListing extends LatestRelease {
+  draft: boolean;
+  prerelease: boolean;
+}
+
+/** SHA-256 of the Android release key's certificate; null until the key exists. */
+export const ANDROID_CERT_SHA256: string | null = null;
+
+const ANDROID_TAG_PREFIX = "android-v";
+const RELEASES_LIST_URL = "https://api.github.com/repos/rochasamuel/havenkeys/releases?per_page=100";
+
+/** The newest published Android release (GitHub lists newest first). */
+export function pickAndroidRelease(releases: ReleaseListing[]): LatestRelease | null {
+  return (
+    releases.find((r) => !r.draft && !r.prerelease && r.tag_name.startsWith(ANDROID_TAG_PREFIX)) ?? null
+  );
+}
+
+export function pickAndroidAssets(
+  assets: ReleaseAsset[],
+): { apk: ReleaseAsset; checksum: ReleaseAsset | null } | null {
+  const trusted = assets.filter((a) => a.browser_download_url.startsWith(RELEASE_ASSET_PREFIX));
+  const apk = trusted.find((a) => a.name.endsWith(".apk"));
+  if (!apk) return null;
+  const checksum = trusted.find((a) => a.name === `${apk.name}.sha256`) ?? null;
+  return { apk, checksum };
+}
+
+export async function fetchLatestAndroidRelease(): Promise<LatestRelease | null> {
+  try {
+    const response = await fetch(RELEASES_LIST_URL, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as unknown;
+    if (!Array.isArray(data)) return null;
+    return pickAndroidRelease(data as ReleaseListing[]);
+  } catch {
+    return null;
+  }
+}
