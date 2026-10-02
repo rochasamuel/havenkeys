@@ -20,3 +20,22 @@ class WalletRowsTest {
         assertNull(shortExpiry("33-4"))
     }
 }
+
+class LoginSaveFallbackTest {
+    private val save = SaveForm(null, null, 0, null, null)
+
+    @Test
+    fun walletAnswerWinsAndIsNotReplaced() {
+        assertEquals("wallet", withLoginSaveFallback("wallet", save) { "login" })
+    }
+
+    @Test
+    fun aSignUpWithoutAWalletAnswerFallsBackToTheLoginSave() {
+        assertEquals("login", withLoginSaveFallback<String>(null, save) { "login" })
+    }
+
+    @Test
+    fun noSaveFormMeansNoFallback() {
+        assertNull(withLoginSaveFallback<String>(null, null) { "login" })
+    }
+}

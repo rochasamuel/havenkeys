@@ -69,22 +69,34 @@ class HavenAutofillService : AutofillService() {
         val unlocked = container.events.unlocked.value
         val repo = container.autofillRepository
         return when (routed) {
-            is Routed.Login -> {
-                val target = packageManager.targetOf(
-                    screen,
-                    routed.form?.webDomain ?: routed.save?.webDomain,
-                    routed.form?.webScheme ?: routed.save?.webScheme,
-                )
-                val plan = FillPlanner.plan(routed.form, target, unlocked, repo, saveable = routed.save != null)
-                DatasetFactory(this, screen, routed.form, routed.save, inlineRequest).response(plan)
-            }
+            is Routed.Login -> loginResponse(screen, routed.form, routed.save, inlineRequest)
             else -> {
                 val target = packageManager.targetOf(screen, screen.pageDomain, screen.pageScheme)
                 val direct = unlocked && !repo.confirmBeforeFilling()
                 val plan = WalletPlanner.plan(routed, target, unlocked, repo, direct)
-                WalletDatasets(this, screen, routed, inlineRequest).response(plan)
+                val wallet = WalletDatasets(this, screen, routed, inlineRequest).response(plan)
+                // A sign-up form still gets "Save password?" when the wallet offers nothing.
+                val save = (routed as? Routed.Identity)?.save
+                withLoginSaveFallback(wallet, save) { loginResponse(screen, null, save, inlineRequest) }
             }
         }
+    }
+
+    private suspend fun loginResponse(
+        screen: ParsedScreen,
+        form: LoginForm?,
+        save: SaveForm?,
+        inlineRequest: InlineSuggestionsRequest?,
+    ): FillResponse? {
+        val target = packageManager.targetOf(
+            screen,
+            form?.webDomain ?: save?.webDomain,
+            form?.webScheme ?: save?.webScheme,
+        )
+        val plan = FillPlanner.plan(
+            form, target, container.events.unlocked.value, container.autofillRepository, saveable = save != null,
+        )
+        return DatasetFactory(this, screen, form, save, inlineRequest).response(plan)
     }
 
     /**
@@ -143,3 +155,7 @@ internal fun saveMessage(outcome: Outcome<SaveResult>?): Int? = when (outcome) {
         else -> R.string.autofill_save_failed
     }
 }
+
+/** The wallet's answer, or, when there is none and a login save exists, the login-save answer. */
+internal inline fun <T : Any> withLoginSaveFallback(wallet: T?, save: SaveForm?, fallback: () -> T?): T? =
+    wallet ?: if (save != null) fallback() else null
