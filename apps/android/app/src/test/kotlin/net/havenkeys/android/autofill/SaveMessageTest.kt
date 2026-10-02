@@ -17,4 +17,11 @@ class SaveMessageTest {
         assertEquals(R.string.autofill_save_locked, saveMessage(Outcome.Failed("locked")))
         assertEquals(R.string.autofill_save_failed, saveMessage(Outcome.Failed("denied")))
     }
+
+    @Test
+    fun aCardSaveSaysCard() {
+        assertEquals(R.string.autofill_card_save_offline, saveMessage(Outcome.Failed("offline"), card = true))
+        assertEquals(R.string.autofill_card_save_failed, saveMessage(Outcome.Failed("invalid_input"), card = true))
+        assertEquals(null, saveMessage(Outcome.Ok(SaveResult.UNCHANGED), card = true))
+    }
 }

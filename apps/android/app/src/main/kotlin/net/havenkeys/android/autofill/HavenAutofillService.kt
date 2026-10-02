@@ -100,8 +100,9 @@ class HavenAutofillService : AutofillService() {
     }
 
     /**
-     * The user confirmed Android's save sheet. Values are read here, for the
-     * saved fields only, and go straight to Rust. Not app use: no `touch()`.
+     * The user confirmed Android's save sheet, for a login or (the response's
+     * client state says so) a card. Values are read here, for the saved fields
+     * only, and go straight to Rust. Not app use: no `touch()`.
      */
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
         val answered = AtomicBoolean(false)
@@ -111,16 +112,12 @@ class HavenAutofillService : AutofillService() {
             return true
         }
         val structures = request.fillContexts.map { it.structure }
+        val card = request.clientState?.getString(DatasetFactory.EXTRA_SAVE_KIND) == DatasetFactory.SAVE_KIND_CARD
         val work = scope.launch {
             val outcome = withContext(Dispatchers.Default) {
-                val reader = SaveRequestReader(packageManager)
-                val login = SaveCollector.collect(reader.read(structures)) ?: return@withContext null
-                container.autofillRepository.save(
-                    login.target,
-                    SaveLogin(login.username, login.password, login.current, reader.appTitle(login.target.packageName)),
-                )
+                if (card) saveCard(structures) else saveLogin(structures)
             }
-            val message = saveMessage(outcome)?.let(::getString)
+            val message = saveMessage(outcome, card)?.let(::getString)
             // Past the deadline Android no longer shows our answer: say it ourselves.
             if (!answer(message) && message != null) {
                 Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
@@ -132,6 +129,21 @@ class HavenAutofillService : AutofillService() {
         }
         work.invokeOnCompletion { deadline.cancel() }
     }
+
+    private suspend fun saveLogin(structures: List<AssistStructure>): Outcome<SaveResult>? {
+        val reader = SaveRequestReader(packageManager)
+        val login = SaveCollector.collect(reader.read(structures)) ?: return null
+        return container.autofillRepository.save(
+            login.target,
+            SaveLogin(login.username, login.password, login.current, reader.appTitle(login.target.packageName)),
+        )
+    }
+
+    /** The card's values are read here, for the card fields only, and go straight to Rust. */
+    private suspend fun saveCard(structures: List<AssistStructure>): Outcome<SaveResult>? =
+        CardSaveReader(packageManager).read(structures)?.let {
+            container.autofillRepository.saveCard(it.target, it.frame, it.card)
+        }
 
     override fun onDestroy() {
         scope.cancel()
@@ -147,12 +159,12 @@ class HavenAutofillService : AutofillService() {
 
 /** Null when saved or already saved; otherwise the message Android shows. */
 @StringRes
-internal fun saveMessage(outcome: Outcome<SaveResult>?): Int? = when (outcome) {
+internal fun saveMessage(outcome: Outcome<SaveResult>?, card: Boolean = false): Int? = when (outcome) {
     null, is Outcome.Ok -> null
     is Outcome.Failed -> when (outcome.code) {
-        "offline" -> R.string.autofill_save_offline
-        "locked" -> R.string.autofill_save_locked
-        else -> R.string.autofill_save_failed
+        "offline" -> if (card) R.string.autofill_card_save_offline else R.string.autofill_save_offline
+        "locked" -> if (card) R.string.autofill_card_save_locked else R.string.autofill_save_locked
+        else -> if (card) R.string.autofill_card_save_failed else R.string.autofill_save_failed
     }
 }
 
