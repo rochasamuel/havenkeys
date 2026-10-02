@@ -85,11 +85,94 @@ class LoginFormFinderTest {
     }
 
     @Test
+    fun aLoginWhosePasswordSaysNewPasswordIsStillALogin() {
+        // dashboard.render.com/login as Chrome reported it: sites put
+        // `new-password` on a login's only password to stop browsers filling.
+        val user = field(
+            hints = listOf("email"),
+            inputType = 0,
+            hint = "your@email.com",
+            html = mapOf("name" to "email", "label" to "Email", "type" to "email"),
+            domain = "dashboard.render.com",
+            scheme = "https",
+        )
+        val pw = field(
+            hints = listOf("new-password"),
+            inputType = 0,
+            hint = "correct horse battery staple",
+            html = mapOf("name" to "password", "label" to "Password", "type" to "password"),
+            focused = true,
+            domain = "dashboard.render.com",
+            scheme = "https",
+        )
+        val form = find(user, pw)!!
+        assertEquals(listOf(user.index), form.usernames)
+        assertEquals(listOf(pw.index), form.passwords)
+        assertEquals("dashboard.render.com", form.webDomain)
+        assertEquals(pw.index, form.focused)
+    }
+
+    // The Riot app's code step as Android reported it: one box per digit,
+    // and only the focused box in the structure.
+    private fun codeBox(focused: Boolean = false, domain: String? = null) = field(
+        hints = listOf("new-password"),
+        inputType = 0,
+        hint = "",
+        html = mapOf("maxlength" to "1", "name" to "", "label" to "", "id" to "", "type" to "text"),
+        focused = focused,
+        domain = domain,
+    )
+
+    @Test
+    fun aFocusedOneCharacterBoxIsASplitCodeField() {
+        val box = codeBox(focused = true, domain = "")
+        val form = find(box)!!
+        assertEquals(listOf(box.index), form.otps)
+        assertTrue(form.otpOnly)
+    }
+
+    @Test
+    fun aNativeAppsOneCharacterBoxIsASplitCodeFieldToo() {
+        // A native EditText reports its length limit as maxTextLength, not HTML.
+        val number = android.text.InputType.TYPE_CLASS_NUMBER
+        val boxes = List(4) { field(inputType = number, maxTextLength = 1, focused = it == 0) }
+        val form = find(*boxes.toTypedArray())!!
+        assertEquals(listOf(boxes[0].index), form.otps)
+    }
+
+
+    @Test
+    fun aRowOfOneCharacterBoxesIsFilledFromTheFirst() {
+        val boxes = List(6) { codeBox(focused = it == 2, domain = "example.com") }
+        val form = find(*boxes.toTypedArray())!!
+        assertEquals(listOf(boxes[0].index), form.otps)
+    }
+
+    @Test
+    fun aOneCharacterBoxIsNotACodeUnlessFocusedOnAScreenWithoutALogin() {
+        assertNull(find(codeBox()))
+        val user = field(inputType = email)
+        val pw = field(inputType = password, focused = true)
+        val form = find(user, codeBox(), pw)!!
+        assertEquals(emptyList<Int>(), form.otps)
+        assertEquals(listOf(pw.index), form.passwords)
+    }
+
+    @Test
+    fun aLoneNewPasswordWithoutAUsernameIsNotFilled() {
+        // A "choose a new password" step after a reset link.
+        assertNull(find(field(html = mapOf("type" to "password", "autocomplete" to "new-password"))))
+    }
+
+    @Test
     fun aChangePasswordFormOffersOnlyTheCurrentPassword() {
         val current = field(html = mapOf("type" to "password", "autocomplete" to "current-password"))
         val next = field(html = mapOf("type" to "password", "autocomplete" to "new-password"))
         val form = find(current, next)!!
         assertEquals(listOf(current.index), form.passwords)
+        // With a username too, the new password is still never the login's.
+        val user = field(inputType = email)
+        assertEquals(listOf(current.index), find(user, current, next)!!.passwords)
     }
 
     @Test

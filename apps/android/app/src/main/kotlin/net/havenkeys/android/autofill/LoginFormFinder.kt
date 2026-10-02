@@ -18,11 +18,13 @@ object LoginFormFinder {
     fun find(fields: List<FieldFacts>): LoginForm? {
         val roles = fields.map { FieldClassifier.classify(it) }
         fun positionsOf(role: FieldRole) = fields.indices.filter { roles[it].role == role }
-        val passwords = positionsOf(FieldRole.PASSWORD)
-        val otps = positionsOf(FieldRole.OTP)
         val usernames = positionsOf(FieldRole.USERNAME)
-        val signUp = passwords.isEmpty() && otps.isEmpty() && fields.indices.any { roles[it].role in NEW_ROLES }
+        val passwords = loginPasswords(roles, usernames.isNotEmpty())
         val focused = fields.indexOfFirst { it.focused }.takeIf { it >= 0 }
+        val otps = positionsOf(FieldRole.OTP).ifEmpty {
+            listOfNotNull(splitCodeStart(fields, focused).takeIf { usernames.isEmpty() && passwords.isEmpty() })
+        }
+        val signUp = passwords.isEmpty() && otps.isEmpty() && fields.indices.any { roles[it].role in NEW_ROLES }
         // The field the user focused decides the frame when it is a login
         // field; otherwise the password's, the code's, then the username's.
         val anchor = focused?.takeIf { roles[it].role in LOGIN_ROLES }
@@ -45,6 +47,37 @@ object LoginFormFinder {
             webScheme = frame.webScheme,
             focused = focused?.takeIf(::inFrame)?.let { fields[it].index },
         )
+    }
+
+    /**
+     * The login's password fields. Sites put `new-password` on a login's
+     * only password to stop browsers filling it: the only password field,
+     * beside a username and with no confirmation, is that login's password.
+     */
+    private fun loginPasswords(roles: List<Classification>, hasUsername: Boolean): List<Int> {
+        fun positionsOf(role: FieldRole) = roles.indices.filter { roles[it].role == role }
+        val current = positionsOf(FieldRole.PASSWORD)
+        val loneNew = positionsOf(FieldRole.NEW_PASSWORD).singleOrNull()?.takeIf {
+            current.isEmpty() && hasUsername && positionsOf(FieldRole.CONFIRM_PASSWORD).isEmpty()
+        }
+        return current + listOfNotNull(loneNew)
+    }
+
+    /**
+     * A code split one character per box, entered from the focused box:
+     * the first box of its row, which takes the whole code. Some apps (Riot)
+     * show Android only the focused box, so one box is enough.
+     */
+    private fun splitCodeStart(fields: List<FieldFacts>, focused: Int?): Int? {
+        if (focused == null || !FieldClassifier.isCodeBox(fields[focused])) return null
+        var start = focused
+        while (start > 0 && fields[start - 1].let {
+                FieldClassifier.isCodeBox(it) && it.webDomain == fields[focused].webDomain
+            }
+        ) {
+            start--
+        }
+        return start
     }
 
     /**

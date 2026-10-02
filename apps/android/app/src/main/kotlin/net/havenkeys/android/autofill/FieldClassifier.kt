@@ -32,6 +32,12 @@ object FieldClassifier {
     internal fun couldBeUsername(f: FieldFacts): Boolean =
         f.visible && f.enabled && isTextInput(f) && usernameScore(Signals(f)) >= 0
 
+    /** One box of a code split across one-character inputs (group.ts's split code field). */
+    internal fun isCodeBox(f: FieldFacts): Boolean {
+        val s = Signals(f)
+        return f.visible && f.enabled && isTextInput(f) && !s.isPassword && s.maxLength == 1
+    }
+
     /** An input that can hold text at all; any other HTML control is never filled. */
     internal fun isTextInput(f: FieldFacts): Boolean {
         val type = f.htmlAttributes["type"]?.lowercase()
@@ -130,7 +136,8 @@ object FieldClassifier {
             (inputClass == InputType.TYPE_CLASS_TEXT && variation in EMAIL_VARIATIONS)
         val isNumeric = inputClass == InputType.TYPE_CLASS_NUMBER || inputClass == InputType.TYPE_CLASS_PHONE ||
             htmlType == "tel" || htmlType == "number" || f.htmlAttributes["inputmode"]?.lowercase() == "numeric"
-        val maxLength = f.htmlAttributes["maxlength"]?.trim()?.take(MAX_DIGITS)?.toIntOrNull() ?: -1
+        val maxLength = f.htmlAttributes["maxlength"]?.trim()?.take(MAX_DIGITS)?.toIntOrNull()
+            ?.takeIf { it > 0 } ?: f.maxTextLength
         val isCard = tokens.any { it.startsWith("cc-") } || attrs.has(CARD_WORDS)
     }
 

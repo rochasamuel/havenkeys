@@ -57,6 +57,7 @@ class StructureParser {
         focused = node.isFocused,
         webDomain = frame.domain,
         webScheme = frame.scheme,
+        maxTextLength = node.maxTextLength,
     )
 
     // Only the attributes the classifier reads: never `value` or anything

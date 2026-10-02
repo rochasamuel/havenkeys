@@ -17,9 +17,10 @@ fun field(
     focused: Boolean = false,
     domain: String? = null,
     scheme: String? = null,
+    maxTextLength: Int = -1,
 ) = FieldFacts(
     next++, hints, inputType, id, hint, null, if (html.isEmpty()) null else "input", html,
-    visible, enabled, focused, domain, scheme,
+    visible, enabled, focused, domain, scheme, maxTextLength,
 )
 
 val password = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD

@@ -19,4 +19,6 @@ data class FieldFacts(
     val focused: Boolean,
     val webDomain: String?,
     val webScheme: String?,
+    /** A native view's length limit (`ViewNode.maxTextLength`); -1 when unknown. */
+    val maxTextLength: Int = -1,
 )
