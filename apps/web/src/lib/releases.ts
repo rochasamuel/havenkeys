@@ -57,7 +57,8 @@ export interface ReleaseListing extends LatestRelease {
 }
 
 /** SHA-256 of the Android release key's certificate; null until the key exists. */
-export const ANDROID_CERT_SHA256: string | null = null;
+export const ANDROID_CERT_SHA256: string | null =
+  "02:AA:D9:EF:F6:CE:B3:6C:A6:34:7D:31:55:FB:78:A4:27:FB:6C:F3:68:ED:43:93:22:6D:D9:D4:FB:27:5D:D5";
 
 const ANDROID_TAG_PREFIX = "android-v";
 const RELEASES_LIST_URL = "https://api.github.com/repos/rochasamuel/havenkeys/releases?per_page=100";
