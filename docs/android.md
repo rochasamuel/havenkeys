@@ -192,8 +192,8 @@ keytool -genkeypair -v -keystore havenkeys-release.jks -alias havenkeys \
 ```
 
 * Keep `havenkeys-release.jks` and both passwords offline: a HavenKeys
-  secure note and a copy on removable storage (the copy needs both
-  passwords too). Never commit them. The key and passwords are never printed
+  secure note and a copy on removable storage, with both passwords kept
+  alongside the copy. Never commit them. The key and passwords are never printed
   in build logs.
 * If the app moves to Google Play, the same key goes to Play App Signing, so
   sideloaded installs keep updating.
@@ -201,9 +201,11 @@ keytool -genkeypair -v -keystore havenkeys-release.jks -alias havenkeys \
   `ANDROID_KEYSTORE_BASE64` (`base64 -w0 havenkeys-release.jks`),
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`havenkeys`) and
   `ANDROID_KEY_PASSWORD`.
-* Its certificate fingerprint (`keytool -list -v -keystore
-  havenkeys-release.jks | grep SHA256`) is shown on the download page and in
-  every release's notes.
+* Its certificate fingerprint (the SHA256 line of `keytool -list -v
+  -keystore havenkeys-release.jks`) is in every release's notes. After
+  creating the key, put that SHA-256 into `ANDROID_CERT_SHA256` in
+  `apps/web/src/lib/releases.ts`; the download page shows it once it is set
+  (it is empty until then).
 * Gradle signs the release build only when `HAVENKEYS_KEYSTORE_FILE`,
   `HAVENKEYS_KEYSTORE_PASSWORD`, `HAVENKEYS_KEY_ALIAS` and
   `HAVENKEYS_KEY_PASSWORD` are all set; otherwise it builds unsigned.

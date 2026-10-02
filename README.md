@@ -25,7 +25,7 @@ changes need the server.
 | Account server (`havenkeys-server`) | Implemented and tested against Postgres; deployed ([docs/deployment.md](docs/deployment.md)). The backup restore drill (§5) and real cross-device use are not yet done — see [docs/roadmap.md](docs/roadmap.md) §3 |
 | Marketing/download website (havenkeys.net) | Implemented; static site on Vercel, download page reads GitHub Releases ([docs/website.md](docs/website.md)) |
 | Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
-| Android app | **Status: Android M1.** Implemented and unit-tested; not yet run on a phone or emulator ([docs/android.md](docs/android.md), manual checklist in [docs/security-review.md](docs/security-review.md), Android M1) |
+| Android app | **Status: early release (Android M1).** Unit-tested and tried on one phone (Galaxy S24+, Android 16); the instrumented test suite has not run yet ([docs/android.md](docs/android.md), manual checklist in [docs/security-review.md](docs/security-review.md), Android M1) |
 
 What the desktop app does today:
 
@@ -94,10 +94,10 @@ What the browser extension does:
 * Logins are only ever offered on the sites they are saved for, and that is
   checked in Rust
 
-Android: download the APK from the website's download page or from GitHub Releases
+Android (early release): download the APK from the website's download page or from GitHub Releases
 (`android-v*`); it is signed with the HavenKeys release key.
 
-What the Android app does (M1; not yet run on a device):
+What the Android app does (early release; tried on one phone, the instrumented tests have not run yet):
 
 * Sign in by scanning the Emergency Kit's QR code (or typing it), or
   activate from an invite

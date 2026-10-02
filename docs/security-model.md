@@ -1403,7 +1403,8 @@ only. `ManifestTest` checks the source manifest only.
   the same key, so a tampered or re-signed APK cannot replace an installed
   HavenKeys.
 * Each release's notes list the signing certificate's SHA-256, which the
-  download page also shows, and the release ships
+  download page also shows once the fingerprint is set in
+  `ANDROID_CERT_SHA256` (`apps/web/src/lib/releases.ts`), and the release ships
   `HavenKeys-<version>.apk.sha256`. A first install can be checked with
   `apksigner verify --print-certs`. The checksum and the certificate come
   from the same GitHub release as the APK, so they catch a damaged download,
