@@ -20,4 +20,16 @@ class ErrorTextTest {
     fun anUnknownCodeFallsBackToTheGenericText() {
         assertEquals(R.string.error_internal, errorText("something_new"))
     }
+
+    @Test
+    fun editingAndSavingCodesHaveTheirOwnText() {
+        assertEquals(R.string.error_item_changed_elsewhere, errorText("item_changed_elsewhere"))
+        assertEquals(R.string.error_title_required, errorText("title_required"))
+        assertEquals(R.string.error_card_title_required, errorText("card_title_required"))
+        assertEquals(R.string.error_invalid_totp, errorText("invalid_totp"))
+        assertEquals(R.string.error_invalid_expiry, errorText("invalid_expiry"))
+        assertEquals(R.string.error_invalid_website, errorText("invalid_website"))
+        assertEquals(R.string.error_invalid_input, errorText("invalid_input"))
+        assertEquals(R.string.error_invalid_input, errorText("invalid_field"))
+    }
 }

@@ -4,6 +4,8 @@ import uniffi.havenkeys_mobile.AutofillMatch
 import uniffi.havenkeys_mobile.BoundFill
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.MobileVault
+import uniffi.havenkeys_mobile.SaveLogin
+import uniffi.havenkeys_mobile.SaveResult
 import uniffi.havenkeys_mobile.TargetFacts
 import uniffi.havenkeys_mobile.TargetKind
 
@@ -15,6 +17,7 @@ interface AutofillRepository {
     suspend fun totp(id: String, target: TargetFacts): Outcome<String>
     suspend fun search(query: String): Outcome<List<AutofillMatch>>
     suspend fun bindAndFill(id: String, target: TargetFacts): Outcome<BoundFill>
+    suspend fun save(target: TargetFacts, login: SaveLogin): Outcome<SaveResult>
 }
 
 class RustAutofillRepository(private val vault: MobileVault) : AutofillRepository {
@@ -28,4 +31,5 @@ class RustAutofillRepository(private val vault: MobileVault) : AutofillRepositor
     override suspend fun totp(id: String, target: TargetFacts) = rust { vault.autofillTotp(id, target) }
     override suspend fun search(query: String) = rust { vault.autofillSearch(query) }
     override suspend fun bindAndFill(id: String, target: TargetFacts) = rust { vault.autofillBindAndFill(id, target) }
+    override suspend fun save(target: TargetFacts, login: SaveLogin) = rust { vault.autofillSave(target, login) }
 }

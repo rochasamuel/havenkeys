@@ -11,12 +11,17 @@ import uniffi.havenkeys_mobile.DeviceInfo
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.Generated
 import uniffi.havenkeys_mobile.GeneratorOptions
+import uniffi.havenkeys_mobile.ItemDraft
+import uniffi.havenkeys_mobile.ItemEdit
+import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LockState
 import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileSettings
+import uniffi.havenkeys_mobile.SaveLogin
+import uniffi.havenkeys_mobile.SaveResult
 import uniffi.havenkeys_mobile.Status
 import uniffi.havenkeys_mobile.TargetFacts
 import uniffi.havenkeys_mobile.TargetKind
@@ -104,6 +109,40 @@ class FakeVaultRepository : VaultRepository {
     override suspend fun generate(options: GeneratorOptions): Outcome<Generated> {
         generatedWith = options
         return generated ?: Outcome.Ok(Generated("x".repeat(options.length.toInt()), 100.0))
+    }
+
+    var edit: Outcome<ItemEdit> = Outcome.Failed("not_found")
+    var created: Outcome<String> = Outcome.Ok("new-id")
+    var updated: Outcome<Unit> = Outcome.Ok(Unit)
+    var deleted: Outcome<Unit> = Outcome.Ok(Unit)
+    /** Drafts handed over, for assertions; a test fake only. */
+    val drafts = mutableListOf<ItemDraft>()
+
+    override suspend fun editable(id: String): Outcome<ItemEdit> {
+        calls += "editable:$id"
+        return edit
+    }
+
+    override suspend fun template(kind: ItemKind): Outcome<ItemEdit> {
+        calls += "template:$kind"
+        return edit
+    }
+
+    override suspend fun create(draft: ItemDraft): Outcome<String> {
+        calls += "create"
+        drafts += draft
+        return created
+    }
+
+    override suspend fun update(id: String, draft: ItemDraft): Outcome<Unit> {
+        calls += "update:$id"
+        drafts += draft
+        return updated
+    }
+
+    override suspend fun delete(id: String): Outcome<Unit> {
+        calls += "delete:$id"
+        return deleted
     }
 }
 
@@ -220,5 +259,14 @@ class FakeAutofillRepository : AutofillRepository {
     override suspend fun bindAndFill(id: String, target: TargetFacts): Outcome<BoundFill> {
         calls += "bindAndFill:$id"
         return bound
+    }
+
+    var saved: Outcome<SaveResult> = Outcome.Ok(SaveResult.ADDED)
+    val saves = mutableListOf<Pair<TargetFacts, SaveLogin>>()
+
+    override suspend fun save(target: TargetFacts, login: SaveLogin): Outcome<SaveResult> {
+        calls += "save"
+        saves += target to login
+        return saved
     }
 }

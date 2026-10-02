@@ -2,6 +2,9 @@ package net.havenkeys.android.data
 
 import uniffi.havenkeys_mobile.Generated
 import uniffi.havenkeys_mobile.GeneratorOptions
+import uniffi.havenkeys_mobile.ItemDraft
+import uniffi.havenkeys_mobile.ItemEdit
+import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.MobileVault
@@ -24,6 +27,12 @@ interface VaultRepository {
     suspend fun reveal(id: String, key: String): Outcome<String>
     suspend fun totp(id: String): Outcome<TotpNow>
     suspend fun generate(options: GeneratorOptions): Outcome<Generated>
+    suspend fun editable(id: String): Outcome<ItemEdit>
+    suspend fun template(kind: ItemKind): Outcome<ItemEdit>
+    /** Online only; the new item's id. */
+    suspend fun create(draft: ItemDraft): Outcome<String>
+    suspend fun update(id: String, draft: ItemDraft): Outcome<Unit>
+    suspend fun delete(id: String): Outcome<Unit>
 }
 
 class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
@@ -49,4 +58,9 @@ class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
     override suspend fun reveal(id: String, key: String) = rust { vault.reveal(id, key) }
     override suspend fun totp(id: String) = rust { vault.totp(id) }
     override suspend fun generate(options: GeneratorOptions) = rust { vault.generatePassword(options) }
+    override suspend fun editable(id: String) = rust { vault.itemEdit(id) }
+    override suspend fun template(kind: ItemKind) = rust { vault.itemTemplate(kind) }
+    override suspend fun create(draft: ItemDraft) = rust { vault.createItem(draft) }
+    override suspend fun update(id: String, draft: ItemDraft) = rust { vault.updateItem(id, draft) }
+    override suspend fun delete(id: String) = rust { vault.deleteItem(id) }
 }

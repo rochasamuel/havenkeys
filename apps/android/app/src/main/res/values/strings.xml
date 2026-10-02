@@ -20,6 +20,13 @@
     <string name="error_keystore">This phone\'s secure key storage did not answer. Try again.</string>
     <string name="error_internal">Something went wrong. Try again.</string>
     <string name="error_biometric_unavailable">Biometric unlock can\'t be turned on right now on this device.</string>
+    <string name="error_item_changed_elsewhere">This item changed on another device.</string>
+    <string name="error_title_required">Add a title.</string>
+    <string name="error_card_title_required">Add a title or a card number.</string>
+    <string name="error_invalid_totp">That is not a setup key or otpauth:// link.</string>
+    <string name="error_invalid_expiry">Enter the expiry as MM/YYYY.</string>
+    <string name="error_invalid_website">One of the websites is not a valid address.</string>
+    <string name="error_invalid_input">Check the values and try again.</string>
 
     <!-- Unlock -->
     <string name="unlock_title">HavenKeys is locked.</string>
@@ -225,4 +232,50 @@
     <string name="autofill_use">Use</string>
     <string name="autofill_cancel">Cancel</string>
     <string name="autofill_filled_once">Filled once — connect to save this app for next time.</string>
+
+    <!-- Create, edit and delete -->
+    <string name="vault_new_item">New item</string>
+    <string name="vault_new_login">Login</string>
+    <string name="vault_new_note">Secure note</string>
+    <string name="vault_new_card">Card</string>
+    <string name="item_edit">Edit</string>
+    <string name="item_delete">Delete</string>
+    <string name="item_confirm_delete">Delete “%1$s” permanently?</string>
+    <string name="item_passkey_warning">Its passkeys go with it, and you may lose access to those sites.</string>
+    <string name="item_cancel">Cancel</string>
+    <string name="edit_new_login">New login</string>
+    <string name="edit_new_note">New secure note</string>
+    <string name="edit_new_card">New card</string>
+    <string name="edit_login">Edit login</string>
+    <string name="edit_note">Edit secure note</string>
+    <string name="edit_card">Edit card</string>
+    <string name="edit_identity">Edit identity</string>
+    <string name="edit_save">Save</string>
+    <string name="edit_title">Title</string>
+    <string name="edit_websites">Websites</string>
+    <string name="edit_add_website">Add website</string>
+    <string name="edit_remove_website">Remove website</string>
+    <string name="edit_match_domain">Whole site, any subdomain</string>
+    <string name="edit_match_origin">This exact site</string>
+    <string name="edit_match_exact">This exact page</string>
+    <string name="edit_change">Change</string>
+    <string name="edit_remove">Remove</string>
+    <string name="edit_undo">Undo</string>
+    <string name="edit_will_be_removed">Will be removed.</string>
+    <string name="edit_set_up">Set up.</string>
+    <string name="edit_replace">Replace</string>
+    <string name="edit_totp_placeholder">Setup key or otpauth:// link</string>
+    <string name="edit_generate">Generate</string>
+    <string name="edit_expiry_placeholder">MM/YYYY</string>
+    <string name="edit_custom_kept">Custom fields are kept as they are. Edit them in HavenKeys on your computer.</string>
+    <string name="edit_offline">Offline — changes can be saved when HavenKeys reconnects.</string>
+    <string name="edit_conflict_text">Reload it to see the change. Your edits here are discarded.</string>
+    <string name="edit_reload">Reload</string>
+    <string name="edit_discard_changes">Discard your changes?</string>
+    <string name="edit_discard_new">Discard the new item?</string>
+    <string name="edit_keep_editing">Keep editing</string>
+    <string name="edit_discard">Discard</string>
+    <string name="autofill_save_offline">HavenKeys is offline. The login was not saved.</string>
+    <string name="autofill_save_locked">HavenKeys locked before saving. The login was not saved.</string>
+    <string name="autofill_save_failed">HavenKeys could not save this login.</string>
 </resources>

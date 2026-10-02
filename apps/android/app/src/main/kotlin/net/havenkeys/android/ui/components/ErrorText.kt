@@ -17,6 +17,15 @@ private val texts = mapOf(
     "not_found" to R.string.error_not_found,
     "keychain_unavailable" to R.string.error_keystore,
     "biometric_unavailable" to R.string.error_biometric_unavailable,
+    "item_changed_elsewhere" to R.string.error_item_changed_elsewhere,
+    "title_required" to R.string.error_title_required,
+    "card_title_required" to R.string.error_card_title_required,
+    "invalid_totp" to R.string.error_invalid_totp,
+    "invalid_expiry" to R.string.error_invalid_expiry,
+    "invalid_website" to R.string.error_invalid_website,
+    "invalid_input" to R.string.error_invalid_input,
+    // A field the editor should not have sent: the user can only retry.
+    "invalid_field" to R.string.error_invalid_input,
 )
 
 /** The text for a `MobileException.Failed` code. Rust's own detail is never shown. */

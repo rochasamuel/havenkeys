@@ -17,6 +17,13 @@
     <string name="error_keystore">O armazenamento seguro de chaves deste celular não respondeu. Tente novamente.</string>
     <string name="error_internal">Algo deu errado. Tente novamente.</string>
     <string name="error_biometric_unavailable">O desbloqueio biométrico não pode ser ativado neste aparelho agora.</string>
+    <string name="error_item_changed_elsewhere">Este item foi alterado em outro dispositivo.</string>
+    <string name="error_title_required">Adicione um título.</string>
+    <string name="error_card_title_required">Adicione um título ou o número do cartão.</string>
+    <string name="error_invalid_totp">Isso não é uma chave de configuração nem um link otpauth://.</string>
+    <string name="error_invalid_expiry">Informe a validade como MM/AAAA.</string>
+    <string name="error_invalid_website">Um dos sites não é um endereço válido.</string>
+    <string name="error_invalid_input">Confira os valores e tente de novo.</string>
 
     <string name="unlock_title">O HavenKeys está bloqueado.</string>
     <string name="unlock_password_hint">Senha mestra</string>
@@ -213,4 +220,50 @@
     <string name="autofill_use">Usar</string>
     <string name="autofill_cancel">Cancelar</string>
     <string name="autofill_filled_once">Preenchido desta vez — conecte-se para salvar este app para a próxima.</string>
+
+    <!-- Create, edit and delete -->
+    <string name="vault_new_item">Novo item</string>
+    <string name="vault_new_login">Login</string>
+    <string name="vault_new_note">Nota segura</string>
+    <string name="vault_new_card">Cartão</string>
+    <string name="item_edit">Editar</string>
+    <string name="item_delete">Excluir</string>
+    <string name="item_confirm_delete">Excluir “%1$s” permanentemente?</string>
+    <string name="item_passkey_warning">As chaves de acesso vão junto, e você pode perder o acesso a esses sites.</string>
+    <string name="item_cancel">Cancelar</string>
+    <string name="edit_new_login">Novo login</string>
+    <string name="edit_new_note">Nova nota segura</string>
+    <string name="edit_new_card">Novo cartão</string>
+    <string name="edit_login">Editar login</string>
+    <string name="edit_note">Editar nota segura</string>
+    <string name="edit_card">Editar cartão</string>
+    <string name="edit_identity">Editar identidade</string>
+    <string name="edit_save">Salvar</string>
+    <string name="edit_title">Título</string>
+    <string name="edit_websites">Sites</string>
+    <string name="edit_add_website">Adicionar site</string>
+    <string name="edit_remove_website">Remover site</string>
+    <string name="edit_match_domain">Site inteiro, qualquer subdomínio</string>
+    <string name="edit_match_origin">Somente este site</string>
+    <string name="edit_match_exact">Somente esta página</string>
+    <string name="edit_change">Alterar</string>
+    <string name="edit_remove">Remover</string>
+    <string name="edit_undo">Desfazer</string>
+    <string name="edit_will_be_removed">Será removido.</string>
+    <string name="edit_set_up">Configurado.</string>
+    <string name="edit_replace">Substituir</string>
+    <string name="edit_totp_placeholder">Chave de configuração ou link otpauth://</string>
+    <string name="edit_generate">Gerar</string>
+    <string name="edit_expiry_placeholder">MM/AAAA</string>
+    <string name="edit_custom_kept">Os campos personalizados ficam como estão. Edite-os no HavenKeys do computador.</string>
+    <string name="edit_offline">Offline — as alterações poderão ser salvas quando o HavenKeys se reconectar.</string>
+    <string name="edit_conflict_text">Recarregue para ver a alteração. O que você editou aqui será descartado.</string>
+    <string name="edit_reload">Recarregar</string>
+    <string name="edit_discard_changes">Descartar suas alterações?</string>
+    <string name="edit_discard_new">Descartar o novo item?</string>
+    <string name="edit_keep_editing">Continuar editando</string>
+    <string name="edit_discard">Descartar</string>
+    <string name="autofill_save_offline">O HavenKeys está offline. O login não foi salvo.</string>
+    <string name="autofill_save_locked">O HavenKeys foi bloqueado antes de salvar. O login não foi salvo.</string>
+    <string name="autofill_save_failed">O HavenKeys não conseguiu salvar este login.</string>
 </resources>
