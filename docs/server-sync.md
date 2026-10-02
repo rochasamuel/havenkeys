@@ -339,3 +339,19 @@ than reimplementing the key derivation or the wire formats. Store the Secret
 Key in the platform keystore (iOS Keychain, Android Keystore) rather than a
 plaintext file. Argon2id parameters come from the header and must be
 benchmarked on real phones (`docs/crypto.md`, "Argon2id parameters").
+
+## Pull and fetch answer budget
+
+`GET /v1/sync` and `POST /v1/items/fetch` cut their answers by bytes as well
+as by count. The budget is `MAX_PAGE_BYTES` (12 MiB), counted as the base64
+length of every blob plus 256 bytes of JSON per row. A pull page holds whole
+revisions only (at most 500 rows) and always at least the first revision,
+which a write batch's 16 MiB body cap already bounds, so a page always fits
+the client's 17 MiB response cap. The server reads row sizes
+(`octet_length`) first and the blobs only for the rows that go out.
+
+A fetch answers as many of the requested items as fit (at least one) and
+names the rest in `unanswered`: `{"changes": [...], "unanswered": [uuid, ...]}`.
+The field is always present. It lists only items that exist in the vault, so
+a client can ask for them again and never reads them as deleted; IDs that do
+not exist are in neither list.

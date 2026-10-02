@@ -14,8 +14,8 @@ use crate::auth::Session;
 use crate::b64::Blob;
 use crate::error::ApiError;
 use crate::json::Json;
-use crate::limits::MAX_CHANGES_PER_BATCH;
-use crate::routes::sync::change_json;
+use crate::limits::{MAX_CHANGES_PER_BATCH, MAX_PAGE_BYTES};
+use crate::routes::sync::{b64_len, change_json, ROW_JSON_BYTES};
 use crate::routes::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -235,7 +235,9 @@ pub struct FetchRequest {
 /// The current row for each requested item in the caller's vault, in the
 /// pull's change shape. For a client retrying items it could not open. IDs
 /// in another vault, or not at all, are simply absent: the answer is the
-/// same either way, so it is not an oracle.
+/// same either way, so it is not an oracle. Rows past `MAX_PAGE_BYTES` (at
+/// least one always goes out) are not answered but named in `unanswered`, so
+/// the client asks again instead of reading them as deleted.
 pub async fn fetch(
     State(state): State<AppState>,
     session: Session,
@@ -249,14 +251,39 @@ pub async fn fetch(
         return Err(ApiError::InvalidRequest("an item appears twice"));
     }
     let db = state.pool.get().await?;
-    let rows = db
+    let sized = db
         .query(
-            "SELECT item_id, revision, overview, details, deleted_at IS NOT NULL
+            "SELECT item_id,
+                    COALESCE(octet_length(overview), 0)::bigint,
+                    COALESCE(octet_length(details), 0)::bigint
                FROM items WHERE vault_id = $1 AND item_id = ANY($2)
               ORDER BY item_id",
             &[&session.vault_id, &req.item_ids],
         )
         .await?;
+    // As many as fit, at least one; the rest are named, so the client asks
+    // again rather than reading them as deleted.
+    let mut answered: Vec<Uuid> = Vec::new();
+    let mut bytes = 0usize;
+    for row in &sized {
+        let more = b64_len(row.get(1)) + b64_len(row.get(2)) + ROW_JSON_BYTES;
+        if !answered.is_empty() && bytes + more > MAX_PAGE_BYTES {
+            break;
+        }
+        answered.push(row.get(0));
+        bytes += more;
+    }
+    let unanswered: Vec<Uuid> = sized[answered.len()..].iter().map(|r| r.get(0)).collect();
+    let rows = db
+        .query(
+            "SELECT item_id, revision, overview, details, deleted_at IS NOT NULL
+               FROM items WHERE vault_id = $1 AND item_id = ANY($2)
+              ORDER BY item_id",
+            &[&session.vault_id, &answered],
+        )
+        .await?;
     let changes: Vec<serde_json::Value> = rows.iter().map(change_json).collect();
-    Ok(axum::Json(serde_json::json!({ "changes": changes })))
+    Ok(axum::Json(
+        serde_json::json!({ "changes": changes, "unanswered": unanswered }),
+    ))
 }

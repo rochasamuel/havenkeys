@@ -1797,8 +1797,8 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | DT4 | Linux screen-lock detection disables itself for the rest of the run after three transient probe failures | Low | Desktop (oslock) | Open (planned) |
 | DT5 | NSIS pre-install hook ran `taskkill` without a path (binary planting from the installer's folder) | Low | Desktop (Windows installer) | **Fixed** |
 | DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | Open (planned) |
-| SV-2 | Pull pages are limited by row count, not bytes; an ordinary vault can permanently exceed the client's 17 MiB cap and sync stops for good | Medium | Server / sync client | Open (planned) |
-| SV-3 | Any account holder can exhaust the server's memory and disk (no byte bound on pull/fetch, no per-account quota) | Low | Server | Open (planned; same fix as SV-2) |
+| SV-2 | Pull pages are limited by row count, not bytes; an ordinary vault can permanently exceed the client's 17 MiB cap and sync stops for good | Medium | Server / sync client | Fixed (server: `a_vault_of_big_items_pulls_in_pages_under_the_cap`, `a_fetch_of_big_items_names_what_did_not_fit`; client re-asks `unanswered`) |
+| SV-3 | Any account holder can exhaust the server's memory and disk (no byte bound on pull/fetch, no per-account quota) | Low | Server | Partly fixed: byte-budgeted paging and per-request memory; per-account quota still open (planned) |
 | SV-4 | Unauthenticated login is an Argon2id amplifier that can starve the DB connection pool (no wait timeout) | Low | Server (auth) | Open (planned) |
 | SV-5 | Restoring a server backup leaves every replica silently out of step (cursor ahead, ghost items, permanent conflicts) | Low | Server / sync | Open (planned) |
 | SV-6 | The sync client honours system/environment proxies, contrary to its manifest comment | Info | Sync client | Accepted (same-user precondition) |
@@ -1885,15 +1885,16 @@ The hook originally ran `nsExec::Exec 'taskkill /F /IM havenkeys-native-host.exe
 **Scenario:** `Device::load` treats both a read error and any parse failure (including an unknown field on a downgrade, since the type is `deny_unknown_fields`) as "absent," and immediately overwrites it with a new UUID and `file_key: None` — discarding the only copy of a file-stored Secret Key on machines where the keychain wasn't available, and creating a new device identity on the server. Availability only, not confidentiality.
 **Suggested fix:** don't overwrite on a read error; move the file aside (rather than replace it) on a parse error.
 
-#### SV-2. Pull pages bounded by row count, not bytes (Medium, open)
+#### SV-2. Pull pages bounded by row count, not bytes (Medium, fixed)
 **Attack scenario (no attacker required):** the server pages pulls at up to 500 rows with no byte cap; the client refuses any response over 17 MiB. A vault whose first 500 rows exceed that — as few as 13 one-megabyte secure notes, or roughly 500 items averaging 35 KB — wedges every device that signs in from cursor 0 at the same point, forever; a `TooLarge` failure never takes the device offline, so it looks "online" while never catching up on later items or deletions.
 **Evidence:** LIKELY, measured with the real core: a single 1 MiB ASCII note serializes to about 1.4 MB of base64, so about 12.7 fit per 17 MiB page; a note using `\u0001`-escaped bytes serializes about 6× larger, so about 2.1 fit.
 **Suggested fix:** cut pages by a byte budget (for example, 12 MiB) as well as by row count, on both `/v1/sync` and `/v1/items/fetch`; surface `TooLarge` as a visible "sync stuck" state instead of a silent per-tick failure.
+**Fix:** `/v1/sync` and `/v1/items/fetch` cut answers at 12 MiB (whole revisions, at least one), reading blob sizes first and blobs only for rows that go out; fetch names `unanswered` items. Tests: `a_vault_of_big_items_pulls_in_pages_under_the_cap`, `a_fetch_of_big_items_names_what_did_not_fit`, and the `page_len` unit tests.
 **KNOWN?** No — S9 (above) covers per-field limits on pulled items, not page size; `transport.rs`'s comment calling 17 MiB "the largest answer the protocol can legitimately produce" is not accurate given the measurements above.
 
-#### SV-3. No byte bound or per-account quota on pull/fetch (Low, open)
+#### SV-3. No byte bound or per-account quota on pull/fetch (Low, partly fixed)
 **Attack scenario:** any account holder writes about 100 items with ~6 MiB blobs each (each write within the 16 MiB body cap), then calls `/v1/sync?since=0`; the server materializes the whole page (up to 1001 rows) into memory before building JSON — several GB for one request — OOM-killing the container and every account hosted on it.
-**Suggested fix:** the same byte-budgeted paging as SV-2, plus a per-account storage cap enforced in the write transaction.
+**Fixed:** paging and the server's memory use per request (see SV-2). **Still open:** the per-account storage cap enforced in the write transaction (planned).
 
 #### SV-4. Unauthenticated login as an Argon2id amplifier starving the DB pool (Low, open)
 **Attack scenario:** an outsider floods `/v1/auth/login` with random emails (each gets its own decoy key, so the per-account counter never fires); the per-address limiter is weaker than it looks — a routed IPv6 /64 gives a fresh budget per source address when the server isn't behind a proxy, and check-then-record is a race under a concurrent burst. Every login holds one of 10 pooled DB connections through a full Argon2id run, and `pool.get()` has no wait timeout, so authenticated `/v1/sync`/`/v1/items` requests queue until the client's own 30 s timeout gives up — devices drop to offline or read-only.

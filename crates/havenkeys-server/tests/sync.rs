@@ -423,6 +423,7 @@ async fn a_fetch_returns_current_rows_and_tombstones() {
     assert_eq!(by_id(live)["deleted"], false);
     assert_eq!(by_id(gone)["deleted"], true);
     assert!(by_id(gone)["overview"].is_null());
+    assert_eq!(body["unanswered"], json!([]));
     server.cleanup().await;
 }
 
@@ -442,5 +443,85 @@ async fn a_fetch_is_bounded_and_well_formed() {
         .await
         .unwrap();
     assert_eq!(res.status(), 400);
+    server.cleanup().await;
+}
+
+/// Six items of 2 × 3 MiB blobs (about 8 MiB of base64 each), one per batch.
+async fn big_items(server: &support::TestServer, sess: &support::Sess) -> Vec<Uuid> {
+    let blob = vec![7u8; 3 * 1024 * 1024];
+    let mut ids = Vec::new();
+    for _ in 0..6 {
+        let id = Uuid::new_v4();
+        let (status, _) =
+            support::write(server, sess, vec![support::change(id, None, &blob, &blob)]).await;
+        assert_eq!(status, 200);
+        ids.push(id);
+    }
+    ids
+}
+
+#[tokio::test]
+async fn a_vault_of_big_items_pulls_in_pages_under_the_cap() {
+    let server = support::TestServer::start().await;
+    let (_, sess) = support::signed_in(&server, "big@example.com").await;
+    let ids = big_items(&server, &sess).await;
+
+    let mut seen = std::collections::HashSet::new();
+    let mut cursor = 0;
+    loop {
+        let res = server
+            .get_as(&format!("/v1/sync?since={cursor}"), &sess)
+            .send()
+            .await
+            .unwrap();
+        let bytes = res.bytes().await.unwrap();
+        assert!(
+            bytes.len() < 17 * 1024 * 1024,
+            "page of {} bytes",
+            bytes.len()
+        );
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        let changes = body["changes"].as_array().unwrap();
+        assert!(
+            changes.len() <= 1,
+            "two 8 MiB items do not fit one 12 MiB page"
+        );
+        for change in changes {
+            seen.insert(change["itemId"].as_str().unwrap().to_string());
+        }
+        let next = body["cursor"].as_i64().unwrap();
+        let more = body["hasMore"].as_bool().unwrap();
+        assert!(next > cursor || !more, "no progress");
+        cursor = next;
+        if !more {
+            break;
+        }
+    }
+    assert_eq!(seen.len(), ids.len());
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_fetch_of_big_items_names_what_did_not_fit() {
+    let server = support::TestServer::start().await;
+    let (_, sess) = support::signed_in(&server, "big-fetch@example.com").await;
+    let ids = big_items(&server, &sess).await;
+    let unknown = Uuid::new_v4();
+    let mut asked = ids.clone();
+    asked.push(unknown);
+
+    let (status, body) = fetch(&server, &sess, &asked).await;
+    assert_eq!(status, 200);
+    let changes = body["changes"].as_array().unwrap();
+    let unanswered: Vec<String> = body["unanswered"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(unanswered.len(), ids.len() - 1);
+    // An item not in the vault is neither answered nor unanswered.
+    assert!(!unanswered.contains(&unknown.to_string()));
     server.cleanup().await;
 }

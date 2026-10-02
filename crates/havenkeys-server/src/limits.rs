@@ -28,3 +28,9 @@ pub const SESSION_TTL_HOURS: i64 = 24;
 
 /// Longest device label a client may set.
 pub const MAX_DEVICE_NAME_CHARS: usize = 64;
+
+/// Pull and fetch answers stop adding rows past this many bytes (blobs as
+/// base64, plus a per-row allowance for the JSON around them), so every
+/// answer stays under the client's 17 MiB cap. A page always holds at
+/// least one whole revision, which `MAX_BODY_BYTES` already bounds.
+pub const MAX_PAGE_BYTES: usize = 12 * 1024 * 1024;
