@@ -799,6 +799,16 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_create_item(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_delete_item(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_edit(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_generate_password(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_view(
@@ -925,6 +935,16 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_create_item(`ptr`: Long,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_delete_item(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_edit(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_template(`ptr`: Long,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_update_item(`ptr`: Long,`id`: RustBuffer.ByValue,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_generate_password(`ptr`: Long,`o`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_view(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1147,6 +1167,21 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling() and 0xFFFF) != 26529) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_create_item() and 0xFFFF) != 49671) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_delete_item() and 0xFFFF) != 18313) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_item_edit() and 0xFFFF) != 6199) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template() and 0xFFFF) != 49488) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item() and 0xFFFF) != 43620) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_generate_password() and 0xFFFF) != 1655) {
@@ -2071,6 +2106,29 @@ public interface MobileVaultInterface {
     
     fun `confirmBeforeFilling`(): kotlin.Boolean
     
+    /**
+     * Returns the new item's ID.
+     */
+    fun `createItem`(`draft`: ItemDraft): kotlin.String
+    
+    /**
+     * The identity cannot be deleted (the core refuses).
+     */
+    fun `deleteItem`(`id`: kotlin.String)
+    
+    /**
+     * What the editor needs to open `id`: names and presence, the title,
+     * websites and username. No secret.
+     */
+    fun `itemEdit`(`id`: kotlin.String): ItemEdit
+    
+    /**
+     * The editor for a new item of `kind`. The identity cannot be created.
+     */
+    fun `itemTemplate`(`kind`: ItemKind): ItemEdit
+    
+    fun `updateItem`(`id`: kotlin.String, `draft`: ItemDraft)
+    
     fun `generatePassword`(`o`: GeneratorOptions): Generated
     
     fun `itemView`(`id`: kotlin.String): ItemView
@@ -2466,6 +2524,93 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Returns the new item's ID.
+     */
+    @Throws(MobileException::class)override fun `createItem`(`draft`: ItemDraft): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_create_item(
+        it,
+        
+        FfiConverterTypeItemDraft.lower(`draft`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The identity cannot be deleted (the core refuses).
+     */
+    @Throws(MobileException::class)override fun `deleteItem`(`id`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_delete_item(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * What the editor needs to open `id`: names and presence, the title,
+     * websites and username. No secret.
+     */
+    @Throws(MobileException::class)override fun `itemEdit`(`id`: kotlin.String): ItemEdit {
+            return FfiConverterTypeItemEdit.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_item_edit(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The editor for a new item of `kind`. The identity cannot be created.
+     */
+    @Throws(MobileException::class)override fun `itemTemplate`(`kind`: ItemKind): ItemEdit {
+            return FfiConverterTypeItemEdit.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_item_template(
+        it,
+        
+        FfiConverterTypeItemKind.lower(`kind`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(MobileException::class)override fun `updateItem`(`id`: kotlin.String, `draft`: ItemDraft)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_update_item(
+        it,
+        
+        FfiConverterString.lower(`id`),
+        FfiConverterTypeItemDraft.lower(`draft`),_status)
+}
+    }
+    
     
 
     
@@ -3424,6 +3569,96 @@ public object FfiConverterTypeDeviceInfo: FfiConverterRustBuffer<DeviceInfo> {
 
 
 
+/**
+ * One field the editor shows. `value` is set for the username only (it is
+ * part of the overview); every other value is read with `reveal`.
+ */
+data class EditField (
+    var `key`: kotlin.String
+    , 
+    var `kind`: FieldKind
+    , 
+    var `present`: kotlin.Boolean
+    , 
+    var `value`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeEditField: FfiConverterRustBuffer<EditField> {
+    override fun read(buf: ByteBuffer): EditField {
+        return EditField(
+            FfiConverterString.read(buf),
+            FfiConverterTypeFieldKind.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: EditField) = (
+            FfiConverterString.allocationSize(value.`key`) +
+            FfiConverterTypeFieldKind.allocationSize(value.`kind`) +
+            FfiConverterBoolean.allocationSize(value.`present`) +
+            FfiConverterOptionalString.allocationSize(value.`value`)
+    )
+
+    override fun write(value: EditField, buf: ByteBuffer) {
+            FfiConverterString.write(value.`key`, buf)
+            FfiConverterTypeFieldKind.write(value.`kind`, buf)
+            FfiConverterBoolean.write(value.`present`, buf)
+            FfiConverterOptionalString.write(value.`value`, buf)
+    }
+}
+
+
+
+data class FieldChange (
+    var `key`: kotlin.String
+    , 
+    var `change`: Change
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFieldChange: FfiConverterRustBuffer<FieldChange> {
+    override fun read(buf: ByteBuffer): FieldChange {
+        return FieldChange(
+            FfiConverterString.read(buf),
+            FfiConverterTypeChange.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FieldChange) = (
+            FfiConverterString.allocationSize(value.`key`) +
+            FfiConverterTypeChange.allocationSize(value.`change`)
+    )
+
+    override fun write(value: FieldChange, buf: ByteBuffer) {
+            FfiConverterString.write(value.`key`, buf)
+            FfiConverterTypeChange.write(value.`change`, buf)
+    }
+}
+
+
+
 data class FillValues (
     var `username`: kotlin.String?
     , 
@@ -3553,6 +3788,118 @@ public object FfiConverterTypeGeneratorOptions: FfiConverterRustBuffer<Generator
             FfiConverterBoolean.write(value.`digits`, buf)
             FfiConverterBoolean.write(value.`symbols`, buf)
             FfiConverterBoolean.write(value.`avoidAmbiguous`, buf)
+    }
+}
+
+
+
+/**
+ * `websites` replaces a login's list; it is ignored for other kinds.
+ */
+data class ItemDraft (
+    var `kind`: ItemKind
+    , 
+    var `title`: kotlin.String
+    , 
+    var `websites`: List<Website>
+    , 
+    var `changes`: List<FieldChange>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
+    override fun read(buf: ByteBuffer): ItemDraft {
+        return ItemDraft(
+            FfiConverterTypeItemKind.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeWebsite.read(buf),
+            FfiConverterSequenceTypeFieldChange.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ItemDraft) = (
+            FfiConverterTypeItemKind.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
+            FfiConverterSequenceTypeFieldChange.allocationSize(value.`changes`)
+    )
+
+    override fun write(value: ItemDraft, buf: ByteBuffer) {
+            FfiConverterTypeItemKind.write(value.`kind`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterSequenceTypeWebsite.write(value.`websites`, buf)
+            FfiConverterSequenceTypeFieldChange.write(value.`changes`, buf)
+    }
+}
+
+
+
+data class ItemEdit (
+    var `kind`: ItemKind
+    , 
+    var `title`: kotlin.String
+    , 
+    var `websites`: List<Website>
+    , 
+    var `fields`: List<EditField>
+    , 
+    /**
+     * Kept as they are by every save; edited on the desktop.
+     */
+    var `hasCustomFields`: kotlin.Boolean
+    , 
+    var `deletable`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
+    override fun read(buf: ByteBuffer): ItemEdit {
+        return ItemEdit(
+            FfiConverterTypeItemKind.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeWebsite.read(buf),
+            FfiConverterSequenceTypeEditField.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ItemEdit) = (
+            FfiConverterTypeItemKind.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
+            FfiConverterSequenceTypeEditField.allocationSize(value.`fields`) +
+            FfiConverterBoolean.allocationSize(value.`hasCustomFields`) +
+            FfiConverterBoolean.allocationSize(value.`deletable`)
+    )
+
+    override fun write(value: ItemEdit, buf: ByteBuffer) {
+            FfiConverterTypeItemKind.write(value.`kind`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterSequenceTypeWebsite.write(value.`websites`, buf)
+            FfiConverterSequenceTypeEditField.write(value.`fields`, buf)
+            FfiConverterBoolean.write(value.`hasCustomFields`, buf)
+            FfiConverterBoolean.write(value.`deletable`, buf)
     }
 }
 
@@ -4052,6 +4399,131 @@ public object FfiConverterTypeViewField: FfiConverterRustBuffer<ViewField> {
 
 
 
+data class Website (
+    var `url`: kotlin.String
+    , 
+    var `matchKind`: MatchKind
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWebsite: FfiConverterRustBuffer<Website> {
+    override fun read(buf: ByteBuffer): Website {
+        return Website(
+            FfiConverterString.read(buf),
+            FfiConverterTypeMatchKind.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: Website) = (
+            FfiConverterString.allocationSize(value.`url`) +
+            FfiConverterTypeMatchKind.allocationSize(value.`matchKind`)
+    )
+
+    override fun write(value: Website, buf: ByteBuffer) {
+            FfiConverterString.write(value.`url`, buf)
+            FfiConverterTypeMatchKind.write(value.`matchKind`, buf)
+    }
+}
+
+
+
+sealed class Change {
+    
+    object Keep : Change()
+    
+    
+    data class Replace(
+        val `value`: kotlin.String) : Change()
+        
+    {
+        
+
+        companion object
+    }
+    
+    object Remove : Change()
+    
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeChange : FfiConverterRustBuffer<Change>{
+    override fun read(buf: ByteBuffer): Change {
+        return when(buf.getInt()) {
+            1 -> Change.Keep
+            2 -> Change.Replace(
+                FfiConverterString.read(buf),
+                )
+            3 -> Change.Remove
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: Change): ULong = when(value) {
+        is Change.Keep -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is Change.Replace -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`value`)
+            )
+        }
+        is Change.Remove -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: Change, buf: ByteBuffer) {
+        when(value) {
+            is Change.Keep -> {
+                buf.putInt(1)
+                Unit
+            }
+            is Change.Replace -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`value`, buf)
+                Unit
+            }
+            is Change.Remove -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 
 sealed class CipherException: kotlin.Exception() {
@@ -4207,6 +4679,41 @@ public object FfiConverterTypeLockState: FfiConverterRustBuffer<LockState> {
     override fun allocationSize(value: LockState) = 4UL
 
     override fun write(value: LockState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+enum class MatchKind {
+    
+    DOMAIN,
+    ORIGIN,
+    EXACT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMatchKind: FfiConverterRustBuffer<MatchKind> {
+    override fun read(buf: ByteBuffer) = try {
+        MatchKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: MatchKind) = 4UL
+
+    override fun write(value: MatchKind, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -4505,6 +5012,62 @@ public object FfiConverterSequenceTypeDeviceInfo: FfiConverterRustBuffer<List<De
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeEditField: FfiConverterRustBuffer<List<EditField>> {
+    override fun read(buf: ByteBuffer): List<EditField> {
+        val len = buf.getInt()
+        return List<EditField>(len) {
+            FfiConverterTypeEditField.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<EditField>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeEditField.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<EditField>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeEditField.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFieldChange: FfiConverterRustBuffer<List<FieldChange>> {
+    override fun read(buf: ByteBuffer): List<FieldChange> {
+        val len = buf.getInt()
+        return List<FieldChange>(len) {
+            FfiConverterTypeFieldChange.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FieldChange>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFieldChange.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FieldChange>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFieldChange.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeItemSummary: FfiConverterRustBuffer<List<ItemSummary>> {
     override fun read(buf: ByteBuffer): List<ItemSummary> {
         val len = buf.getInt()
@@ -4551,6 +5114,34 @@ public object FfiConverterSequenceTypeViewField: FfiConverterRustBuffer<List<Vie
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeViewField.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeWebsite: FfiConverterRustBuffer<List<Website>> {
+    override fun read(buf: ByteBuffer): List<Website> {
+        val len = buf.getInt()
+        return List<Website>(len) {
+            FfiConverterTypeWebsite.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<Website>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeWebsite.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<Website>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeWebsite.write(it, buf)
         }
     }
 }

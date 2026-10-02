@@ -14,6 +14,7 @@ mod account;
 mod android_tls;
 mod asset_links_fetch;
 mod autofill;
+mod edit;
 mod error;
 mod events;
 mod items;
@@ -26,6 +27,7 @@ mod vault;
 
 pub use account::DeviceInfo;
 pub use autofill::{AutofillMatch, BoundFill, FillValues, TargetFacts, TargetKind};
+pub use edit::{Change, EditField, FieldChange, ItemDraft, ItemEdit, MatchKind, Website};
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
 pub use items::{

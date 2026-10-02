@@ -44,6 +44,7 @@ pub struct MobileVault {
     pub(crate) client: Arc<HavenClient>,
     pub(crate) runtime: tokio::runtime::Runtime,
     pub(crate) clock: Arc<LockClock>,
+    pub(crate) events: Arc<MobileEvents>,
     /// A scanned Emergency Kit waiting for its master password.
     pub(crate) kit: Mutex<Option<KitFields>>,
     pub(crate) own_package: String,
@@ -52,6 +53,16 @@ pub struct MobileVault {
 impl MobileVault {
     pub(crate) fn block_on<F: std::future::Future>(&self, f: F) -> F::Output {
         self.runtime.block_on(f)
+    }
+
+    /// Send one staged write and record it once the server has accepted it.
+    /// A conflict comes back as `item_changed_elsewhere`; nothing is
+    /// recorded then.
+    pub(crate) fn send(&self, staged: havenkeys_core::vault::StagedWrite) -> MobileResult<()> {
+        let client = self.client.clone();
+        self.block_on(client.push(staged))?;
+        havenkeys_client::ClientEvents::items_changed(&*self.events);
+        Ok(())
     }
 
     fn auto_lock_tick(client: &HavenClient, clock: &LockClock) {
@@ -97,11 +108,12 @@ impl MobileVault {
         let device = Device::load(&dir, Box::new(KeystoreKeyStore::new(dir.clone(), cipher)))
             .without_file_fallback();
         let clock = Arc::new(LockClock::new());
+        let app_events = Arc::new(MobileEvents::new(events, clock.clone()));
         let client = HavenClient::new(
             vault,
             device,
             storage_error,
-            Arc::new(MobileEvents::new(events, clock.clone())),
+            app_events.clone(),
             ClientConfig {
                 device_name: "Android",
                 vault_path: path,
@@ -125,6 +137,7 @@ impl MobileVault {
             client,
             runtime,
             clock,
+            events: app_events,
             kit: Mutex::new(None),
             own_package: config.own_package,
         }))

@@ -14,7 +14,7 @@ use havenkeys_core::Error;
 use url::Url;
 use uuid::Uuid;
 
-#[derive(uniffi::Enum)]
+#[derive(Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ItemKind {
     Login,
     SecureNote,
@@ -34,7 +34,7 @@ pub struct ItemSummary {
     pub updated_at: i64,
 }
 
-#[derive(uniffi::Enum)]
+#[derive(Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum FieldKind {
     Text,
     Secret,
@@ -81,7 +81,7 @@ pub struct Generated {
 
 /// Masked until revealed. Everything else is read on demand too, but shown
 /// as soon as it arrives.
-const DOCUMENTS: [&str; 4] = ["cpf", "rg", "passport", "drivers_license"];
+pub(crate) const DOCUMENTS: [&str; 4] = ["cpf", "rg", "passport", "drivers_license"];
 
 pub(crate) fn parse_id(id: &str) -> MobileResult<Uuid> {
     Ok(Uuid::parse_str(id).map_err(|_| Error::NotFound)?)
