@@ -801,6 +801,12 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_card_values(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_cards(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save_card(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password_offers(
@@ -951,6 +957,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_card_values(`ptr`: Long,`id`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,`frames`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_cards(`ptr`: Long,`target`: RustBuffer.ByValue,`frames`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_save_card(`ptr`: Long,`target`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,`card`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_credential_password(`ptr`: Long,`caller`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_credential_password_offers(`ptr`: Long,`caller`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1202,6 +1214,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling() and 0xFFFF) != 26529) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_card_values() and 0xFFFF) != 37266) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_cards() and 0xFFFF) != 44817) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save_card() and 0xFFFF) != 28245) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password() and 0xFFFF) != 12506) {
@@ -2163,6 +2184,24 @@ public interface MobileVaultInterface {
     fun `confirmBeforeFilling`(): kotlin.Boolean
     
     /**
+     * One card's values for each frame, in order. Every frame must be
+     * allowed, or nothing is returned.
+     */
+    fun `autofillCardValues`(`id`: kotlin.String, `target`: TargetFacts, `frames`: List<CardFrameRoles>): List<List<CardValue>>
+    
+    /**
+     * The cards a form may be offered, and which of its frames may get one.
+     */
+    fun `autofillCards`(`target`: TargetFacts, `frames`: List<FrameFacts>): CardChoices
+    
+    /**
+     * After Android's save sheet was confirmed for a card. A card already
+     * saved is `Unchanged`, even offline; a new one needs the server. Not
+     * app use: the idle timer is not touched.
+     */
+    fun `autofillSaveCard`(`target`: TargetFacts, `frame`: FrameFacts, `card`: SaveCard): SaveResult
+    
+    /**
      * The tapped login's username and password, re-checked for the caller.
      */
     fun `credentialPassword`(`caller`: CredentialCaller, `itemId`: kotlin.String): FillValues
@@ -2617,6 +2656,68 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * One card's values for each frame, in order. Every frame must be
+     * allowed, or nothing is returned.
+     */
+    @Throws(MobileException::class)override fun `autofillCardValues`(`id`: kotlin.String, `target`: TargetFacts, `frames`: List<CardFrameRoles>): List<List<CardValue>> {
+            return FfiConverterSequenceSequenceTypeCardValue.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_card_values(
+        it,
+        
+        FfiConverterString.lower(`id`),
+        FfiConverterTypeTargetFacts.lower(`target`),
+        FfiConverterSequenceTypeCardFrameRoles.lower(`frames`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The cards a form may be offered, and which of its frames may get one.
+     */
+    @Throws(MobileException::class)override fun `autofillCards`(`target`: TargetFacts, `frames`: List<FrameFacts>): CardChoices {
+            return FfiConverterTypeCardChoices.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_cards(
+        it,
+        
+        FfiConverterTypeTargetFacts.lower(`target`),
+        FfiConverterSequenceTypeFrameFacts.lower(`frames`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * After Android's save sheet was confirmed for a card. A card already
+     * saved is `Unchanged`, even offline; a new one needs the server. Not
+     * app use: the idle timer is not touched.
+     */
+    @Throws(MobileException::class)override fun `autofillSaveCard`(`target`: TargetFacts, `frame`: FrameFacts, `card`: SaveCard): SaveResult {
+            return FfiConverterTypeSaveResult.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_save_card(
+        it,
+        
+        FfiConverterTypeTargetFacts.lower(`target`),
+        FfiConverterTypeFrameFacts.lower(`frame`),
+        FfiConverterTypeSaveCard.lower(`card`),_status)
 }
     }
     )
@@ -3755,6 +3856,197 @@ public object FfiConverterTypeBoundFill: FfiConverterRustBuffer<BoundFill> {
 
 
 
+/**
+ * A card offered in Android's list: overview data only.
+ */
+data class CardChoice (
+    var `id`: kotlin.String
+    , 
+    var `title`: kotlin.String
+    , 
+    /**
+     * The wire id: `"visa"`, `"mastercard"`, …, `"other"`.
+     */
+    var `brand`: kotlin.String
+    , 
+    var `last4`: kotlin.String?
+    , 
+    /**
+     * `"YYYY-MM"`.
+     */
+    var `expiry`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCardChoice: FfiConverterRustBuffer<CardChoice> {
+    override fun read(buf: ByteBuffer): CardChoice {
+        return CardChoice(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CardChoice) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterString.allocationSize(value.`brand`) +
+            FfiConverterOptionalString.allocationSize(value.`last4`) +
+            FfiConverterOptionalString.allocationSize(value.`expiry`)
+    )
+
+    override fun write(value: CardChoice, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterString.write(value.`brand`, buf)
+            FfiConverterOptionalString.write(value.`last4`, buf)
+            FfiConverterOptionalString.write(value.`expiry`, buf)
+    }
+}
+
+
+
+data class CardChoices (
+    /**
+     * A browser page that is not https: no card is offered there.
+     */
+    var `insecure`: kotlin.Boolean
+    , 
+    var `cards`: List<CardChoice>
+    , 
+    /**
+     * Per frame of the request: may it be filled with a card?
+     */
+    var `frames`: List<kotlin.Boolean>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCardChoices: FfiConverterRustBuffer<CardChoices> {
+    override fun read(buf: ByteBuffer): CardChoices {
+        return CardChoices(
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeCardChoice.read(buf),
+            FfiConverterSequenceBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CardChoices) = (
+            FfiConverterBoolean.allocationSize(value.`insecure`) +
+            FfiConverterSequenceTypeCardChoice.allocationSize(value.`cards`) +
+            FfiConverterSequenceBoolean.allocationSize(value.`frames`)
+    )
+
+    override fun write(value: CardChoices, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`insecure`, buf)
+            FfiConverterSequenceTypeCardChoice.write(value.`cards`, buf)
+            FfiConverterSequenceBoolean.write(value.`frames`, buf)
+    }
+}
+
+
+
+data class CardFrameRoles (
+    var `frame`: FrameFacts
+    , 
+    var `roles`: List<CardRole>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCardFrameRoles: FfiConverterRustBuffer<CardFrameRoles> {
+    override fun read(buf: ByteBuffer): CardFrameRoles {
+        return CardFrameRoles(
+            FfiConverterTypeFrameFacts.read(buf),
+            FfiConverterSequenceTypeCardRole.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CardFrameRoles) = (
+            FfiConverterTypeFrameFacts.allocationSize(value.`frame`) +
+            FfiConverterSequenceTypeCardRole.allocationSize(value.`roles`)
+    )
+
+    override fun write(value: CardFrameRoles, buf: ByteBuffer) {
+            FfiConverterTypeFrameFacts.write(value.`frame`, buf)
+            FfiConverterSequenceTypeCardRole.write(value.`roles`, buf)
+    }
+}
+
+
+
+/**
+ * One value of the card. `Debug` names the role only: the value is the
+ * number or the code.
+ */
+data class CardValue (
+    var `role`: CardRole
+    , 
+    var `value`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCardValue: FfiConverterRustBuffer<CardValue> {
+    override fun read(buf: ByteBuffer): CardValue {
+        return CardValue(
+            FfiConverterTypeCardRole.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CardValue) = (
+            FfiConverterTypeCardRole.allocationSize(value.`role`) +
+            FfiConverterString.allocationSize(value.`value`)
+    )
+
+    override fun write(value: CardValue, buf: ByteBuffer) {
+            FfiConverterTypeCardRole.write(value.`role`, buf)
+            FfiConverterString.write(value.`value`, buf)
+    }
+}
+
+
+
 data class CredentialCaller (
     var `packageName`: kotlin.String
     , 
@@ -3977,6 +4269,48 @@ public object FfiConverterTypeFillValues: FfiConverterRustBuffer<FillValues> {
     override fun write(value: FillValues, buf: ByteBuffer) {
             FfiConverterOptionalString.write(value.`username`, buf)
             FfiConverterOptionalString.write(value.`password`, buf)
+    }
+}
+
+
+
+/**
+ * One frame of a browser page, as the structure reported it. No domain:
+ * the page itself.
+ */
+data class FrameFacts (
+    var `webDomain`: kotlin.String?
+    , 
+    var `webScheme`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFrameFacts: FfiConverterRustBuffer<FrameFacts> {
+    override fun read(buf: ByteBuffer): FrameFacts {
+        return FrameFacts(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FrameFacts) = (
+            FfiConverterOptionalString.allocationSize(value.`webDomain`) +
+            FfiConverterOptionalString.allocationSize(value.`webScheme`)
+    )
+
+    override fun write(value: FrameFacts, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`webDomain`, buf)
+            FfiConverterOptionalString.write(value.`webScheme`, buf)
     }
 }
 
@@ -4599,6 +4933,60 @@ public object FfiConverterTypePasskeyOffer: FfiConverterRustBuffer<PasskeyOffer>
 
 
 /**
+ * A card typed into a form, after Android's save sheet. No `Debug`.
+ */
+data class SaveCard (
+    var `cardholderName`: kotlin.String?
+    , 
+    var `number`: kotlin.String
+    , 
+    var `verificationNumber`: kotlin.String?
+    , 
+    /**
+     * `"YYYY-MM"`.
+     */
+    var `expiry`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSaveCard: FfiConverterRustBuffer<SaveCard> {
+    override fun read(buf: ByteBuffer): SaveCard {
+        return SaveCard(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SaveCard) = (
+            FfiConverterOptionalString.allocationSize(value.`cardholderName`) +
+            FfiConverterString.allocationSize(value.`number`) +
+            FfiConverterOptionalString.allocationSize(value.`verificationNumber`) +
+            FfiConverterOptionalString.allocationSize(value.`expiry`)
+    )
+
+    override fun write(value: SaveCard, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`cardholderName`, buf)
+            FfiConverterString.write(value.`number`, buf)
+            FfiConverterOptionalString.write(value.`verificationNumber`, buf)
+            FfiConverterOptionalString.write(value.`expiry`, buf)
+    }
+}
+
+
+
+/**
  * What the user typed. No `Debug`: it carries the password.
  */
 data class SaveLogin (
@@ -4899,6 +5287,46 @@ public object FfiConverterTypeWebsite: FfiConverterRustBuffer<Website> {
             FfiConverterTypeMatchKind.write(value.`matchKind`, buf)
     }
 }
+
+
+
+
+enum class CardRole {
+    
+    CARDHOLDER_NAME,
+    CARDHOLDER_GIVEN_NAME,
+    CARDHOLDER_FAMILY_NAME,
+    NUMBER,
+    VERIFICATION_NUMBER,
+    EXPIRY_MONTH,
+    EXPIRY_YEAR,
+    BRAND;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCardRole: FfiConverterRustBuffer<CardRole> {
+    override fun read(buf: ByteBuffer) = try {
+        CardRole.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CardRole) = 4UL
+
+    override fun write(value: CardRole, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -5460,6 +5888,34 @@ public object FfiConverterOptionalTypeKitPreview: FfiConverterRustBuffer<KitPrev
 /**
  * @suppress
  */
+public object FfiConverterSequenceBoolean: FfiConverterRustBuffer<List<kotlin.Boolean>> {
+    override fun read(buf: ByteBuffer): List<kotlin.Boolean> {
+        val len = buf.getInt()
+        return List<kotlin.Boolean>(len) {
+            FfiConverterBoolean.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.Boolean>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterBoolean.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.Boolean>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterBoolean.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceByteArray: FfiConverterRustBuffer<List<kotlin.ByteArray>> {
     override fun read(buf: ByteBuffer): List<kotlin.ByteArray> {
         val len = buf.getInt()
@@ -5506,6 +5962,90 @@ public object FfiConverterSequenceTypeAutofillMatch: FfiConverterRustBuffer<List
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeAutofillMatch.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCardChoice: FfiConverterRustBuffer<List<CardChoice>> {
+    override fun read(buf: ByteBuffer): List<CardChoice> {
+        val len = buf.getInt()
+        return List<CardChoice>(len) {
+            FfiConverterTypeCardChoice.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CardChoice>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCardChoice.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CardChoice>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCardChoice.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCardFrameRoles: FfiConverterRustBuffer<List<CardFrameRoles>> {
+    override fun read(buf: ByteBuffer): List<CardFrameRoles> {
+        val len = buf.getInt()
+        return List<CardFrameRoles>(len) {
+            FfiConverterTypeCardFrameRoles.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CardFrameRoles>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCardFrameRoles.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CardFrameRoles>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCardFrameRoles.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCardValue: FfiConverterRustBuffer<List<CardValue>> {
+    override fun read(buf: ByteBuffer): List<CardValue> {
+        val len = buf.getInt()
+        return List<CardValue>(len) {
+            FfiConverterTypeCardValue.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CardValue>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCardValue.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CardValue>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCardValue.write(it, buf)
         }
     }
 }
@@ -5590,6 +6130,34 @@ public object FfiConverterSequenceTypeFieldChange: FfiConverterRustBuffer<List<F
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFieldChange.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFrameFacts: FfiConverterRustBuffer<List<FrameFacts>> {
+    override fun read(buf: ByteBuffer): List<FrameFacts> {
+        val len = buf.getInt()
+        return List<FrameFacts>(len) {
+            FfiConverterTypeFrameFacts.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FrameFacts>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFrameFacts.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FrameFacts>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFrameFacts.write(it, buf)
         }
     }
 }
@@ -5702,6 +6270,62 @@ public object FfiConverterSequenceTypeWebsite: FfiConverterRustBuffer<List<Websi
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeWebsite.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCardRole: FfiConverterRustBuffer<List<CardRole>> {
+    override fun read(buf: ByteBuffer): List<CardRole> {
+        val len = buf.getInt()
+        return List<CardRole>(len) {
+            FfiConverterTypeCardRole.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CardRole>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCardRole.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CardRole>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCardRole.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceSequenceTypeCardValue: FfiConverterRustBuffer<List<List<CardValue>>> {
+    override fun read(buf: ByteBuffer): List<List<CardValue>> {
+        val len = buf.getInt()
+        return List<List<CardValue>>(len) {
+            FfiConverterSequenceTypeCardValue.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<List<CardValue>>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterSequenceTypeCardValue.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<List<CardValue>>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterSequenceTypeCardValue.write(it, buf)
         }
     }
 }

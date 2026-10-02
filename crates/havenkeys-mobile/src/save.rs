@@ -24,7 +24,7 @@ pub struct SaveLogin {
     pub title: Option<String>,
 }
 
-#[derive(uniffi::Enum)]
+#[derive(Debug, uniffi::Enum)]
 pub enum SaveResult {
     Added,
     Updated,

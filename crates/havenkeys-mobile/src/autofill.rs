@@ -22,6 +22,24 @@ pub struct TargetFacts {
     pub web_scheme: Option<String>,
 }
 
+/// One frame of a browser page, as the structure reported it. No domain:
+/// the page itself.
+#[derive(Clone, uniffi::Record)]
+pub struct FrameFacts {
+    pub web_domain: Option<String>,
+    pub web_scheme: Option<String>,
+}
+
+/// The URL of `frame` in a browser tab showing `top`.
+pub(crate) fn frame_url(top: &str, frame: &FrameFacts) -> Option<String> {
+    match &frame.web_domain {
+        None => Some(top.to_owned()),
+        Some(domain) => {
+            havenkeys_core::app_target::browser_page_url(domain, frame.web_scheme.as_deref())
+        }
+    }
+}
+
 #[derive(uniffi::Enum)]
 pub enum TargetKind {
     Browser,

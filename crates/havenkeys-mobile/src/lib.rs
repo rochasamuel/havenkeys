@@ -14,6 +14,7 @@ mod account;
 mod android_tls;
 mod asset_links_fetch;
 mod autofill;
+mod cards;
 mod credentials;
 mod edit;
 mod error;
@@ -29,7 +30,10 @@ mod unlock;
 mod vault;
 
 pub use account::DeviceInfo;
-pub use autofill::{AutofillMatch, BoundFill, FillValues, TargetFacts, TargetKind};
+pub use autofill::{AutofillMatch, BoundFill, FillValues, FrameFacts, TargetFacts, TargetKind};
+pub use cards::{
+    CardChoice, CardChoices, CardFrameRoles, CardRole, CardValue, SaveCard, MAX_CARD_FRAMES,
+};
 pub use credentials::{
     privileged_browsers_json, CredentialCaller, PasskeyCreatePlan, PasskeyOffer,
 };
@@ -56,15 +60,58 @@ pub mod testing {
 
     pub fn seed_with_github_login(v: &MobileVault) {
         havenkeys_client::testing::seed_account_vault(&v.client, "correct horse battery staple");
+        seed_with_github_login_unlocked(v);
+    }
+
+    /// A card in an unlocked vault: (item ID). Expiry 04/2033, CVV 123.
+    pub fn seed_card(v: &MobileVault, title: &str, number: &str) -> String {
+        use havenkeys_core::card::{CardExpiry, CardInput};
         let input = ItemInput {
-            item_type: ItemType::Login,
-            title: "GitHub".into(),
+            card: Some(CardInput {
+                cardholder_name: Some(SecretString::from("Samuel Rocha")),
+                brand: None,
+                number: SecretUpdate::Set(SecretString::from(number)),
+                verification_number: SecretUpdate::Set(SecretString::from("123")),
+                expiry: Some(CardExpiry {
+                    year: 2033,
+                    month: 4,
+                }),
+                notes: None,
+            }),
+            ..blank(ItemType::Card, title)
+        };
+        let mut vault = v.client.vault().unwrap();
+        let staged = vault.stage_create(input, 1).unwrap();
+        let id = staged.item_id;
+        vault.commit_write(staged, 1).unwrap();
+        id.to_string()
+    }
+
+    /// The GitHub login of `seed_with_github_login`, in a vault that is
+    /// already unlocked.
+    pub fn seed_with_github_login_unlocked(v: &MobileVault) {
+        let input = ItemInput {
             username: Some("octo".into()),
             urls: vec![UrlRule {
                 url: "https://github.com".into(),
                 match_type: MatchType::Domain,
             }],
             password: SecretUpdate::Set(SecretString::from("hunter2hunter2")),
+            ..blank(ItemType::Login, "GitHub")
+        };
+        let mut vault = v.client.vault().unwrap();
+        let staged = vault.stage_create(input, 1).unwrap();
+        vault.commit_write(staged, 1).unwrap();
+    }
+
+    /// An item input with nothing set but its type and title.
+    fn blank(item_type: ItemType, title: &str) -> ItemInput {
+        ItemInput {
+            item_type,
+            title: title.into(),
+            username: None,
+            urls: vec![],
+            password: SecretUpdate::Keep,
             totp: SecretUpdate::Keep,
             notes: SecretUpdate::Keep,
             content: SecretUpdate::Keep,
@@ -73,10 +120,7 @@ pub mod testing {
             identity: None,
             card: None,
             sections: None,
-        };
-        let mut vault = v.client.vault().unwrap();
-        let staged = vault.stage_create(input, 1).unwrap();
-        vault.commit_write(staged, 1).unwrap();
+        }
     }
 
     /// A passkey for github.com, as the extension would have saved it:
