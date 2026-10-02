@@ -21,9 +21,6 @@ screen-lock code has not run on Windows.
 
 ## 2. Finish Phase 6 (hardening)
 
-* **Pipe owner check (P10):** before talking to the named pipe, the native
-  host verifies that the pipe's server process runs as the same user
-  (`GetNamedPipeServerProcessId`, then the token owner).
 * **Desktop confirmation for browser-initiated password changes (F2
   residual):** the desktop app asks before accepting `save_login` updates,
   so a compromised extension cannot cycle a password out of the history.

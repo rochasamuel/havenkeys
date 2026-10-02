@@ -24,3 +24,5 @@ rustix = { version = "1", default-features = false, features = ["std", "process"
 sha2 = "0.11"
 # Same version interprocess uses; needed to pass it an SDDL string.
 widestring = "1"
+# Pipe peer identity (BR-1): the peer process's token user.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }

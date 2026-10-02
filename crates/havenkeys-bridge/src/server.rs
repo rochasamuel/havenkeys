@@ -368,10 +368,17 @@ fn peer_is_same_user(stream: &Stream) -> bool {
         .is_some_and(|uid| uid == havenkeys_protocol::endpoint::current_euid())
 }
 
-// Named pipes: the pipe's DACL admits only its owner (see endpoint.rs).
+// Named pipes: the DACL admits only the owner; the client's user is checked
+// too, in case the pipe is not the one HavenKeys created.
 #[cfg(windows)]
-fn peer_is_same_user(_stream: &Stream) -> bool {
-    true
+fn peer_is_same_user(stream: &Stream) -> bool {
+    stream
+        .peer_creds()
+        .ok()
+        .and_then(|c| c.pid())
+        .is_some_and(|pid| {
+            havenkeys_protocol::win_identity::process_is_current_user(pid).unwrap_or(false)
+        })
 }
 
 /// Create the private socket directory and clear a stale socket file.

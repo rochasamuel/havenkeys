@@ -407,7 +407,8 @@ browser does not keep the vault open.
   `D:P(A;;GA;;;OW)`, which grants access to the pipe's owner only. The default
   DACL would give every user read access. That is not enough to send
   requests, but it is enough to take connection slots and watch lock/unlock
-  events. See §8 for the squatting caveat.
+  events. See §8 for the squatting caveat. Both ends also check the peer's
+  Windows user (token user SID); see the pipe-squatting bullet.
 * Connections that send nothing for 10 minutes are closed on Linux/macOS, so
   idle or half-sent connections cannot hold slots. Named pipes have no
   receive timeout.
@@ -571,10 +572,16 @@ with Google, Microsoft, GitHub, Apple".
   that bullet says, it does not keep out a process running as you.
 * **Windows pipe squatting.** Another user logged into the same machine
   could create your pipe name before HavenKeys starts, because the name is
-  derived from your profile path and is predictable. Your native host would
-  then talk to their pipe, which would receive your page URLs and could
-  return fake answers. It could not read your vault. The server-process check
-  (`GetNamedPipeServerProcessId`, then owner SID) is not implemented yet.
+  derived from your profile path and is predictable. The DACL protects only
+  a pipe HavenKeys created, so both ends check the other: the native host
+  reads the pipe server's process ID and refuses the pipe unless that process
+  runs as the same Windows user (token user SID); the desktop app checks each
+  client the same way. Any failure to find or open the process counts as
+  "another user". Elevation does not matter, since user SIDs are compared.
+  What remains: if another user squats the name first, HavenKeys cannot
+  serve until that pipe goes away. That is an availability problem, not a
+  confidentiality one; the extension reports HavenKeys as unreachable and
+  sends nothing.
 * **Windows is unverified.** The Windows code paths compile but have not been
   run. That includes the owner-only DACL: if HavenKeys runs elevated, the
   pipe's owner is the Administrators group, and a non-elevated host will be

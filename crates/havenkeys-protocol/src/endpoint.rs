@@ -7,8 +7,9 @@
 //!   checks each peer's effective UID.
 //! * **Windows:** a named pipe `\\.\pipe\havenkeys-bridge-<hash of profile
 //!   path>` with an explicit DACL that grants access to the pipe's owner only
-//!   (the default DACL would let every user open it for reading). See
-//!   docs/native-messaging.md for the pipe-squatting caveat.
+//!   (the default DACL would let every user open it for reading). The DACL
+//!   protects only a pipe HavenKeys created, so the client also checks that
+//!   the pipe's server process runs as the current user before using it.
 //!
 //! Linux abstract-namespace sockets are deliberately not used: they have no
 //! file permissions, so any local user could connect.
@@ -128,8 +129,24 @@ impl Endpoint {
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()
     }
 
+    /// Connect as a client, then make sure the pipe's server runs as us:
+    /// another account can create this pipe name first (BR-1), and the
+    /// DACL protects only a pipe HavenKeys itself created.
     pub fn connect(&self) -> io::Result<Stream> {
-        Stream::connect(self.name()?)
+        use interprocess::local_socket::traits::StreamCommon;
+        let stream = Stream::connect(self.name()?)?;
+        let ours = stream
+            .peer_creds()
+            .ok()
+            .and_then(|c| c.pid())
+            .is_some_and(|pid| crate::win_identity::process_is_current_user(pid).unwrap_or(false));
+        if !ours {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "the bridge pipe belongs to another user",
+            ));
+        }
+        Ok(stream)
     }
 }
 

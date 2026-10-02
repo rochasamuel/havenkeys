@@ -2770,6 +2770,7 @@ dependencies = [
  "sha2 0.11.0",
  "uuid",
  "widestring",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 

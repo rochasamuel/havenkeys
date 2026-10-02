@@ -14,13 +14,17 @@
 //!
 //! This crate has no access to the vault and nothing in it logs.
 
-#![forbid(unsafe_code)]
+// The one Windows module that calls the OS (win_identity) opts in to unsafe.
+#![cfg_attr(not(windows), forbid(unsafe_code))]
+#![cfg_attr(windows, deny(unsafe_code))]
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 pub mod endpoint;
 pub mod frame;
 pub mod message;
 pub mod secret;
+#[cfg(windows)]
+pub mod win_identity;
 
 pub use message::*;
 pub use secret::WireSecret;

@@ -190,7 +190,7 @@ and three low issues were fixed.
 | P7 | Info | Desktop | `unlocked` event could arrive after a concurrent `locked` | **Fixed** (sent under the vault lock) |
 | P8 | Info | Scripts | Control characters in the host path produced an invalid manifest | **Fixed** |
 | P9 | Medium | Architecture | Any same-user process can use the bridge like the extension | Accepted, documented (`native-messaging.md` §8) |
-| P10 | Low | Protocol (Windows) | Another user can squat the pipe name before HavenKeys starts | Open, documented |
+| P10 | Low | Protocol (Windows) | Another user can squat the pipe name before HavenKeys starts | Fixed in code (see BR-1), not yet verified on Windows |
 | P11 | Info | Extension | Unpacked-extension ID is pinned by a public key, which anyone can reuse | Accepted, documented |
 
 ## Details
@@ -1785,7 +1785,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | CR1 / SV-1 | A hostile server can splice an old item overview (URL rules) with a newer details blob (password), or vice versa, so the current secret reaches an origin the item no longer names | Medium | Core sync / server | Fixed |
 | CR2 | A corrupt or missing settings blob silently falls back to `auto_sign_in`/`auto_passkey_upgrade` = on | Low | Core vault | Open (planned) |
 | CR3 | A crafted `.1pux` with millions of ZIP central-directory entries costs ~7× its size in memory before any size check runs | Low | Core import | Open (planned) |
-| BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Open |
+| BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Fixed in code, not yet verified on Windows |
 | BR-2 | The per-item password-change rate-limit budget is spent even when the write is denied or fails | Low | Bridge | Open (planned) |
 | EX-01 | Popup Fill writes credentials into a CSP-sandboxed (opaque-origin) document on the login's own origin | Medium | Extension (popup) | **Fixed** |
 | EX-02 | "Visible" field detection admits off-screen/clipped/covered/near-transparent inputs; fill and auto-submit ignore a cross-origin form `action` | Low | Extension (autofill) | Open (planned) |
@@ -1827,10 +1827,11 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 **Evidence:** CONFIRMED — a 98 MB / 1,000,000-entry crafted `.1pux` parsed at 717 MB peak RSS in 933 ms; extrapolated to the 256 MiB cap, roughly 1.8 GB.
 **Suggested fix:** read the end-of-central-directory record (or use the zip crate's own entry-count limit) before calling `ZipArchive::new`; refuse more than about 10,000 entries.
 
-#### BR-1. Windows pipe squatting: understated impact on the existing P10 entry (Medium, open)
+#### BR-1. Windows pipe squatting: understated impact on the existing P10 entry (Medium, fixed in code, not yet verified on Windows)
 **Attack scenario:** another account on the same Windows machine pre-computes and creates the predictable named pipe (a hash of the profile path) before HavenKeys starts, or after it exits; the client side of `Endpoint::connect` never verifies who owns the server end of the pipe it opens. The existing P10 entry above (Native Messaging Phase) says the squatter "would receive your page URLs and could return fake answers. It could not read your vault." That is incomplete: every login form the victim submits sends `check_login {url, username, password}` with the **plaintext typed password**, automatically, before any save prompt, and a confirmed save sends `save_login` the same way. The squatter can also answer `generate_password` with a password of its own choosing, or answer `fill_item`/`autoSubmit: true` with attacker-controlled credentials to silently sign the victim into an attacker account. This is a cross-user credential compromise, in scope because P1 already treats other local users as attackers.
 **Evidence:** LIKELY (Windows is not runnable in this environment); traced through `crates/havenkeys-protocol/src/endpoint.rs:103-147`, `crates/havenkeys-native-host/src/lib.rs:95-110`, and `apps/extension/src/background/inline-handler.ts:241-243`.
 **Suggested fix:** on Windows, have `Endpoint::connect` check the pipe server process's token SID against the caller's own SID (`GetNamedPipeServerProcessId` + `GetSecurityInfo`) before trusting the connection; surface a failed `serve()` in Settings → Browser extension instead of swallowing it.
+**Fix:** `Endpoint::connect` on Windows reads the pipe server's process ID (`peer_creds().pid()`) and refuses the pipe (`PermissionDenied`) unless that process's token user SID equals ours (`havenkeys_protocol::win_identity::process_is_current_user`); the desktop bridge checks each client the same way in `peer_is_same_user`. Every failure path (no PID, process not openable, token unreadable) answers "not the same user". P10 is fixed by the same change. Residual: a squatter can still deny service by holding the name. **Not yet verified on Windows:** with a second Windows account, create the pipe name first; the extension must report HavenKeys unreachable and send nothing.
 **Note on P10 (this file, Native Messaging Phase, above):** P10's recorded impact — "could not read your vault" — remains true but is incomplete on its own: a squatter cannot read the vault, but it does receive plaintext passwords the user types or generates during the squatted session, and can plant fake fills. Read P10 together with this finding until it is fixed; status stays Open.
 
 #### BR-2. Per-item rate-limit budget spent before authorization or success (Low, open)
