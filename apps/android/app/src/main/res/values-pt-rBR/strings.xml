@@ -266,4 +266,6 @@
     <string name="autofill_save_offline">O HavenKeys está offline. O login não foi salvo.</string>
     <string name="autofill_save_locked">O HavenKeys foi bloqueado antes de salvar. O login não foi salvo.</string>
     <string name="autofill_save_failed">O HavenKeys não conseguiu salvar este login.</string>
+    <string name="credential_provider_subtitle">Senhas e chaves de acesso do seu cofre HavenKeys</string>
+    <string name="credential_create_entry">Salva no seu cofre e sincronizada com seus dispositivos</string>
 </resources>

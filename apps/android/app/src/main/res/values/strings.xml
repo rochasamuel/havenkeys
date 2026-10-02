@@ -278,4 +278,6 @@
     <string name="autofill_save_offline">HavenKeys is offline. The login was not saved.</string>
     <string name="autofill_save_locked">HavenKeys locked before saving. The login was not saved.</string>
     <string name="autofill_save_failed">HavenKeys could not save this login.</string>
+    <string name="credential_provider_subtitle">Passwords and passkeys from your HavenKeys vault</string>
+    <string name="credential_create_entry">Saved in your vault and synced to your devices</string>
 </resources>

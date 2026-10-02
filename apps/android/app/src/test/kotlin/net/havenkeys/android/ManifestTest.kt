@@ -29,6 +29,14 @@ class ManifestTest {
         val activities = elements("activity")
         assertTrue(activities.any { it.android("name") == ".autofill.AutofillAuthActivity" })
         assertTrue(activities.any { it.android("name") == ".autofill.AutofillSearchActivity" })
+        val credentialActivities = listOf(
+            ".credentials.CredentialUnlockActivity",
+            ".credentials.CredentialGetActivity",
+            ".credentials.PasskeyCreateActivity",
+        )
+        for (name in credentialActivities) {
+            assertTrue(name, activities.any { it.android("name") == name })
+        }
         for (activity in activities) {
             val name = activity.android("name")
             if (name == ".MainActivity") {
@@ -40,10 +48,29 @@ class ManifestTest {
     }
 
     @Test
-    fun theOnlyServiceIsTheAutofillServiceGuardedByTheSystemPermission() {
-        val service = elements("service").single()
-        assertEquals(".autofill.HavenAutofillService", service.android("name"))
-        assertEquals("android.permission.BIND_AUTOFILL_SERVICE", service.android("permission"))
+    fun theServicesAreAutofillAndCredentialsEachGuardedByItsSystemPermission() {
+        val services = elements("service").associate { it.android("name") to it.android("permission") }
+        assertEquals(
+            mapOf(
+                ".autofill.HavenAutofillService" to "android.permission.BIND_AUTOFILL_SERVICE",
+                ".credentials.HavenCredentialService" to "android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE",
+            ),
+            services,
+        )
+    }
+
+    @Test
+    fun theCredentialServiceDeclaresPasskeysAndPasswords() {
+        val provider = DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder()
+            .parse(File("src/main/res/xml/credential_provider.xml"))
+            .documentElement
+        val nodes = provider.getElementsByTagName("capability")
+        val capabilities = (0 until nodes.length).map { (nodes.item(it) as Element).getAttribute("name") }.toSet()
+        assertEquals(
+            setOf("android.credentials.TYPE_PASSWORD_CREDENTIAL", "androidx.credentials.TYPE_PUBLIC_KEY_CREDENTIAL"),
+            capabilities,
+        )
     }
 
     @Test
@@ -81,6 +108,9 @@ class ManifestTest {
         assertFalse(File("src/play/AndroidManifest.xml").exists())
     }
 
+    /** `hardenWindow()` sets all three flags (security/WindowHardening.kt, covered below). */
+    private fun String.hardensWindow(literal: String) = literal in this || "hardenWindow()" in this
+
     private val sources = File("src/main/kotlin").walk().filter { it.extension == "kt" }.toList()
 
     private val activities: List<File> by lazy {
@@ -93,7 +123,7 @@ class ManifestTest {
     @Test
     fun everyActivitySetsFlagSecure() {
         for (file in activities) {
-            assertTrue("${file.name} must set FLAG_SECURE", file.readText().contains("FLAG_SECURE"))
+            assertTrue("${file.name} must set FLAG_SECURE", file.readText().hardensWindow("FLAG_SECURE"))
         }
     }
 
@@ -103,7 +133,9 @@ class ManifestTest {
         for (file in activities) {
             assertTrue(
                 "${file.name} must exclude its window from autofill",
-                file.readText().contains("importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS"),
+                file.readText().hardensWindow(
+                    "importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS",
+                ),
             )
         }
         for (file in sources.filter { "AlertDialog(" in it.readText() && "OutlinedTextField(" in it.readText() }) {
@@ -124,7 +156,7 @@ class ManifestTest {
     fun theAutofillActivitiesIgnoreObscuredTaps() {
         for (name in listOf("AutofillAuthActivity.kt", "AutofillSearchActivity.kt")) {
             val text = activities.single { it.name == name }.readText()
-            assertTrue("$name must filter obscured touches", "filterTouchesWhenObscured = true" in text)
+            assertTrue("$name must filter obscured touches", text.hardensWindow("filterTouchesWhenObscured = true"))
         }
         val search = activities.single { it.name == "AutofillSearchActivity.kt" }.readText()
         assertTrue(
@@ -144,5 +176,13 @@ class ManifestTest {
         for (change in changes) {
             assertTrue("MainActivity must handle $change", change in handled)
         }
+    }
+
+    @Test
+    fun hardenWindowSetsEveryFlag() {
+        val text = File("src/main/kotlin/net/havenkeys/android/security/WindowHardening.kt").readText()
+        assertTrue("FLAG_SECURE" in text)
+        assertTrue("importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS" in text)
+        assertTrue("filterTouchesWhenObscured = true" in text)
     }
 }

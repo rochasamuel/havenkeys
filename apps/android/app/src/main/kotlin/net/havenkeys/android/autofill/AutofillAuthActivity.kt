@@ -6,8 +6,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
-import android.view.View
-import android.view.WindowManager
 import android.view.autofill.AutofillManager
 import android.view.inputmethod.InlineSuggestionsRequest
 import android.widget.Toast
@@ -22,6 +20,7 @@ import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.clipboardClearSeconds
+import net.havenkeys.android.security.hardenWindow
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.unlock.UnlockScreen
 import net.havenkeys.android.ui.unlock.UnlockViewModel
@@ -40,13 +39,7 @@ class AutofillAuthActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-        // The master password and the Secret Key are typed here: no autofill
-        // service may read them or offer to save them (CLAUDE.md §9).
-        window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-        // A fill is confirmed here: a tap that passed through another app's
-        // overlay is not the user's (tapjacking).
-        window.decorView.filterTouchesWhenObscured = true
+        hardenWindow()
         val tapped = tappedRequest() ?: return cancel()
         val mode = intent.getStringExtra(DatasetFactory.EXTRA_MODE)
         val itemId = intent.getStringExtra(DatasetFactory.EXTRA_ITEM_ID)
@@ -150,11 +143,15 @@ internal fun Activity.tappedRequest(): TappedRequest? {
 internal fun structureNamesCaller(structurePackage: String, callingPackage: String?): Boolean =
     structurePackage.isNotEmpty() && structurePackage == callingPackage
 
-/** Runs [then] once the vault is unlocked, showing the unlock screen first when it is locked. */
-internal fun FragmentActivity.unlockThen(container: AppContainer, then: () -> Unit) {
+/**
+ * Runs [then] once the vault is unlocked, showing the unlock screen first
+ * when it is locked. `unlockedHere`: the user just proved who they are on
+ * this screen (password, or biometrics through the Keystore).
+ */
+internal fun FragmentActivity.unlockThen(container: AppContainer, then: (unlockedHere: Boolean) -> Unit) {
     lifecycleScope.launch {
         if (container.isUnlocked()) {
-            then()
+            then(false)
             return@launch
         }
         setContent {
@@ -170,7 +167,7 @@ internal fun FragmentActivity.unlockThen(container: AppContainer, then: () -> Un
                     },
                     activity = this@unlockThen,
                     container = container,
-                    onUnlocked = then,
+                    onUnlocked = { then(true) },
                 )
             }
         }
