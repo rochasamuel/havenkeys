@@ -101,15 +101,20 @@ pub fn classify(
     }
     // A browser's own screens (address bar, settings) carry no page.
     let domain = web_domain.ok_or(Error::Denied)?;
-    // Without a scheme an http page could pass for https; refuse rather
-    // than guess.
-    let scheme = match web_scheme {
+    let page_url = browser_page_url(domain, web_scheme).ok_or(Error::Denied)?;
+    Ok(FillTarget::Browser { page_url })
+}
+
+/// The URL of a page, or of one of its frames, as a privileged browser
+/// reported it. Without a scheme an http page could pass for https: none is
+/// guessed.
+pub fn browser_page_url(domain: &str, scheme: Option<&str>) -> Option<String> {
+    let scheme = match scheme {
         Some("https") => "https",
         Some("http") => "http",
-        _ => return Err(Error::Denied),
+        _ => return None,
     };
-    let page_url = page_url_for(scheme, domain).ok_or(Error::Denied)?;
-    Ok(FillTarget::Browser { page_url })
+    page_url_for(scheme, domain)
 }
 
 /// The domain is the browser's report of the page host (sometimes with a
@@ -209,6 +214,7 @@ mod tests {
     const OWN: &str = "net.havenkeys.android";
     const CHROME_RELEASE: &str =
         "F0:FD:6C:5B:41:0F:25:CB:25:C3:B5:33:46:C8:97:2F:AE:30:F8:EE:74:11:DF:91:04:80:AD:6B:2D:60:DB:83";
+
     const CHROME_USERDEBUG: &str =
         "19:75:B2:F1:71:77:BC:89:A5:DF:F3:1F:9E:64:A6:CA:E2:81:A5:3D:C1:D1:D5:9B:1D:14:7F:E1:C8:2A:FA:00";
     const FIREFOX: &str =
@@ -382,5 +388,21 @@ mod tests {
     fn the_allowlist_handed_to_android_is_the_vendored_list() {
         let json: serde_json::Value = serde_json::from_str(privileged_browsers_json()).unwrap();
         assert!(json["apps"].as_array().unwrap().len() > 20);
+    }
+
+    #[test]
+    fn a_frame_url_needs_a_known_scheme_and_a_plain_domain() {
+        assert_eq!(
+            browser_page_url("js.stripe.com", Some("https")).as_deref(),
+            Some("https://js.stripe.com/")
+        );
+        assert_eq!(
+            browser_page_url("shop.example", Some("http")).as_deref(),
+            Some("http://shop.example/")
+        );
+        assert!(browser_page_url("js.stripe.com", None).is_none());
+        assert!(browser_page_url("js.stripe.com", Some("ftp")).is_none());
+        assert!(browser_page_url("evil.com/@js.stripe.com", Some("https")).is_none());
+        assert!(browser_page_url("", Some("https")).is_none());
     }
 }

@@ -11,7 +11,7 @@ use crate::card::{
 };
 use crate::error::{Error, Result};
 use crate::identity_page::{truncate_bytes, MAX_SUMMARY_TITLE_BYTES};
-use crate::model::{clean_title, ItemInput, ItemType, SecretUpdate};
+use crate::model::{clean_title, ItemInput, ItemOverview, ItemType, SecretUpdate};
 use crate::origin::{host_key, same_site, PageUrl};
 use crate::secret::SecretString;
 use crate::vault::{StagedSave, VaultService};
@@ -74,6 +74,34 @@ pub fn is_payment_frame(page: &PageUrl) -> bool {
 /// May `frame`, in a tab showing `top`, be served a card?
 fn frame_allowed(frame: &PageUrl, top: &PageUrl) -> bool {
     frame.is_https() && (same_site(frame, top) || is_payment_frame(frame))
+}
+
+/// May a frame showing `frame_url`, in a tab showing `top_url`, be served a
+/// card? The rule `card_values_for_page` applies to every frame, for a
+/// caller that leaves a refused frame out instead of failing the whole fill.
+pub fn frame_may_get_cards(frame_url: &str, top_url: &str) -> bool {
+    match (PageUrl::parse(frame_url), PageUrl::parse(top_url)) {
+        (Some(frame), Some(top)) => top.is_https() && frame_allowed(&frame, &top),
+        _ => false,
+    }
+}
+
+fn offer_of(o: &ItemOverview) -> CardOffer {
+    let summary = o.card.clone();
+    CardOffer {
+        id: o.id,
+        title: truncate_bytes(o.title.clone(), MAX_SUMMARY_TITLE_BYTES),
+        brand: summary.as_ref().map(|s| s.brand),
+        last4: summary.as_ref().and_then(|s| s.last4.clone()),
+        expiry: summary.and_then(|s| s.expiry),
+    }
+}
+
+fn values_of(fields: &CardFields, roles: &[CardRole]) -> Vec<(CardRole, SecretString)> {
+    roles
+        .iter()
+        .filter_map(|r| role_value(fields, *r).map(|v| (*r, v)))
+        .collect()
 }
 
 /// What a checkout field asks for (spec §4). The extension shapes the value
@@ -155,6 +183,25 @@ fn role_value(f: &CardFields, role: CardRole) -> Option<SecretString> {
 }
 
 impl VaultService {
+    fn card_offers(&self) -> Result<Vec<CardOffer>> {
+        Ok(self
+            .list_items()?
+            .iter()
+            .filter(|o| o.item_type == ItemType::Card)
+            .take(MAX_PAGE_CARDS)
+            .map(offer_of)
+            .collect())
+    }
+
+    /// A card's fields for a fill. A login, a note or a missing item: one
+    /// answer, so a caller cannot learn which IDs exist.
+    fn fill_fields(&self, item_id: &Uuid) -> Result<CardFields> {
+        self.card_fields(*item_id).map_err(|e| match e {
+            Error::Denied => Error::NotFound,
+            other => other,
+        })
+    }
+
     /// The cards a page may be offered. `insecure` for a non-https tab.
     pub fn cards_for_page(&self, page_url: &str, top_url: Option<&str>) -> Result<CardList> {
         self.session()?;
@@ -169,22 +216,7 @@ impl VaultService {
         if top_url.is_some() && !frame_allowed(&page, &top) {
             return Err(Error::Denied);
         }
-        let cards = self
-            .list_items()?
-            .iter()
-            .filter(|o| o.item_type == ItemType::Card)
-            .take(MAX_PAGE_CARDS)
-            .map(|o| {
-                let summary = o.card.clone();
-                CardOffer {
-                    id: o.id,
-                    title: truncate_bytes(o.title.clone(), MAX_SUMMARY_TITLE_BYTES),
-                    brand: summary.as_ref().map(|s| s.brand),
-                    last4: summary.as_ref().and_then(|s| s.last4.clone()),
-                    expiry: summary.and_then(|s| s.expiry),
-                }
-            })
-            .collect();
+        let cards = self.card_offers()?;
         Ok(CardList {
             insecure: false,
             cards,
@@ -210,21 +242,10 @@ impl VaultService {
                 return Err(Error::Denied);
             }
         }
-        // A login, a note or a missing item: one answer, so a page cannot
-        // learn which IDs exist.
-        let fields = self.card_fields(*item_id).map_err(|e| match e {
-            Error::Denied => Error::NotFound,
-            other => other,
-        })?;
+        let fields = self.fill_fields(item_id)?;
         Ok(frames
             .iter()
-            .map(|frame| {
-                frame
-                    .roles
-                    .iter()
-                    .filter_map(|r| role_value(&fields, *r).map(|v| (*r, v)))
-                    .collect()
-            })
+            .map(|frame| values_of(&fields, frame.roles))
             .collect())
     }
 
@@ -248,6 +269,10 @@ impl VaultService {
                 return Err(Error::Denied);
             }
         }
+        self.stage_new_card(card, now_ms)
+    }
+
+    fn stage_new_card(&self, card: NewCard<'_>, now_ms: i64) -> Result<StagedSave> {
         let digits = clean_number(card.number.expose())?;
         if !check_digit_ok(&digits) {
             return Err(Error::InvalidInput("the card number fails its check digit"));
@@ -288,6 +313,56 @@ impl VaultService {
             item_id: write.item_id,
             write,
         })
+    }
+
+    /// Every card, for an Android app (spec 2026-10-01-android-app §7.6). An
+    /// app owns what it shows, its WebViews included, so no page rule
+    /// applies; what protects a card is the user's tap in Android's list.
+    pub fn cards_for_app(&self) -> Result<Vec<CardOffer>> {
+        self.session()?;
+        self.card_offers()
+    }
+
+    pub fn card_values_for_app(
+        &self,
+        item_id: &Uuid,
+        roles: &[CardRole],
+    ) -> Result<Vec<(CardRole, SecretString)>> {
+        self.session()?;
+        Ok(values_of(&self.fill_fields(item_id)?, roles))
+    }
+
+    /// Stage a card typed into an app and confirmed in Android's save sheet.
+    /// It has no website: an app cannot vouch for one.
+    pub fn stage_save_card_for_app(&self, card: NewCard<'_>, now_ms: i64) -> Result<StagedSave> {
+        self.session()?;
+        self.stage_new_card(card, now_ms)
+    }
+
+    /// Is a card with this number saved? Digits are compared, however the
+    /// number was typed.
+    pub fn card_number_saved(&self, number: &SecretString) -> Result<bool> {
+        self.session()?;
+        let digits = SecretString::new(clean_number(number.expose())?);
+        for o in self
+            .list_items()?
+            .iter()
+            .filter(|o| o.item_type == ItemType::Card)
+        {
+            match self.card_fields(o.id) {
+                Ok(f)
+                    if f.number
+                        .as_ref()
+                        .is_some_and(|n| n.expose() == digits.expose()) =>
+                {
+                    return Ok(true)
+                }
+                Err(Error::Locked) => return Err(Error::Locked),
+                // Another number, or a damaged card: not this one.
+                _ => {}
+            }
+        }
+        Ok(false)
     }
 }
 

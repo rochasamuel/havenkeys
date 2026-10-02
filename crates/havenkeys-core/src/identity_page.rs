@@ -67,13 +67,7 @@ impl VaultService {
         Ok(id)
     }
 
-    /// Title, email and the roles the identity has a value for.
-    pub fn identity_summary_for_page(
-        &self,
-        page_url: &str,
-        top_url: Option<&str>,
-    ) -> Result<IdentitySummary> {
-        let id = self.identity_id_for_page(page_url, top_url)?;
+    fn identity_summary(&self, id: Uuid) -> Result<IdentitySummary> {
         let overview = self.get_item(&id)?;
         let fields = self.reveal_identity(&id)?;
         let roles = FillRole::ALL
@@ -87,6 +81,31 @@ impl VaultService {
         })
     }
 
+    /// The values for `roles`, in that order, skipping roles with no value;
+    /// documents only when `documents`.
+    fn identity_values(
+        &self,
+        roles: &[FillRole],
+        documents: bool,
+    ) -> Result<Vec<(FillRole, SecretString)>> {
+        let fields = self.reveal_identity(&self.identity_item_id()?)?;
+        Ok(roles
+            .iter()
+            .filter(|r| !r.is_document() || documents)
+            .filter_map(|r| fields.fill_value(*r).map(|v| (*r, v)))
+            .collect())
+    }
+
+    /// Title, email and the roles the identity has a value for.
+    pub fn identity_summary_for_page(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<IdentitySummary> {
+        let id = self.identity_id_for_page(page_url, top_url)?;
+        self.identity_summary(id)
+    }
+
     /// The values for `roles`, in that order, skipping roles with no value.
     /// Documents only with `documents` and on an https page.
     pub fn identity_values_for_page(
@@ -96,15 +115,26 @@ impl VaultService {
         roles: &[FillRole],
         documents: bool,
     ) -> Result<Vec<(FillRole, SecretString)>> {
-        let id = self.identity_item_id()?;
+        // Locked before denied, as before.
+        self.identity_item_id()?;
         let page = checked_page(page_url, top_url)?;
-        let https = page.is_https();
-        let fields = self.reveal_identity(&id)?;
-        Ok(roles
-            .iter()
-            .filter(|r| !r.is_document() || (documents && https))
-            .filter_map(|r| fields.fill_value(*r).map(|v| (*r, v)))
-            .collect())
+        self.identity_values(roles, documents && page.is_https())
+    }
+
+    /// The identity for an Android app (spec 2026-10-01-android-app §7.6):
+    /// an app owns what it shows, so no page rule applies.
+    pub fn identity_summary_for_app(&self) -> Result<IdentitySummary> {
+        let id = self.identity_item_id()?;
+        self.identity_summary(id)
+    }
+
+    /// Documents only when `documents`: the user confirmed them in HavenKeys.
+    pub fn identity_values_for_app(
+        &self,
+        roles: &[FillRole],
+        documents: bool,
+    ) -> Result<Vec<(FillRole, SecretString)>> {
+        self.identity_values(roles, documents)
     }
 }
 

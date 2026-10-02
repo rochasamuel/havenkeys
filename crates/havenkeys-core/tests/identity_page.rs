@@ -230,3 +230,42 @@ fn the_id_for_page_is_the_identity() {
         v.identity_item_id().unwrap()
     );
 }
+
+#[test]
+fn an_app_gets_its_roles_and_documents_only_when_confirmed() {
+    let v = with_identity();
+    let s = v.identity_summary_for_app().unwrap();
+    assert_eq!(s.title, "Samuel Rocha");
+    assert!(s.roles.contains(&FillRole::Cpf));
+    let plain: Vec<(FillRole, String)> = v
+        .identity_values_for_app(&[FillRole::FirstName, FillRole::Cpf], false)
+        .unwrap()
+        .into_iter()
+        .map(|(r, s)| (r, s.expose().to_owned()))
+        .collect();
+    assert_eq!(plain, vec![(FillRole::FirstName, "Samuel".to_owned())]);
+    let with_docs: Vec<FillRole> = v
+        .identity_values_for_app(&[FillRole::FirstName, FillRole::Cpf], true)
+        .unwrap()
+        .into_iter()
+        .map(|(r, _)| r)
+        .collect();
+    assert_eq!(with_docs, vec![FillRole::FirstName, FillRole::Cpf]);
+}
+
+#[test]
+fn a_vault_without_an_identity_gives_an_app_nothing() {
+    let (v, _) = activated_vault();
+    assert!(matches!(v.identity_summary_for_app(), Err(Error::NotFound)));
+}
+
+#[test]
+fn a_locked_vault_gives_an_app_no_identity() {
+    let mut v = with_identity();
+    v.lock();
+    assert!(matches!(v.identity_summary_for_app(), Err(Error::Locked)));
+    assert!(matches!(
+        v.identity_values_for_app(&[FillRole::FirstName], true),
+        Err(Error::Locked)
+    ));
+}

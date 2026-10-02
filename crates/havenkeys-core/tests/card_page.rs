@@ -324,3 +324,99 @@ fn saving_refuses_bad_numbers_and_foreign_or_insecure_frames() {
         Err(Error::InvalidInput(_))
     ));
 }
+
+use havenkeys_core::card_page::frame_may_get_cards;
+
+#[test]
+fn frame_may_get_cards_follows_the_fill_rule() {
+    for (frame, top, want) in [
+        (SHOP, SHOP, true),
+        ("https://pay.example.com/", SHOP, true),
+        ("https://js.stripe.com/v3/", SHOP, true),
+        ("https://b.js.stripe.com/", SHOP, true),
+        ("https://ads.example.net/", SHOP, false),
+        ("http://shop.example.com/", SHOP, false),
+        (SHOP, "http://shop.example.com/", false),
+        ("not a url", SHOP, false),
+    ] {
+        assert_eq!(frame_may_get_cards(frame, top), want, "{frame} in {top}");
+    }
+}
+
+#[test]
+fn an_app_gets_every_card_and_only_the_roles_it_asks_for() {
+    let (v, card, _) = with_card();
+    let cards = v.cards_for_app().unwrap();
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].id, card);
+    let got: Vec<(CardRole, String)> = v
+        .card_values_for_app(&card, &[CardRole::Number, CardRole::ExpiryMonth])
+        .unwrap()
+        .into_iter()
+        .map(|(r, s)| (r, s.expose().to_owned()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (CardRole::Number, VISA.to_owned()),
+            (CardRole::ExpiryMonth, "4".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn an_app_asking_for_a_login_as_a_card_learns_nothing() {
+    let (v, _, github) = with_card();
+    assert!(matches!(
+        v.card_values_for_app(&github, &[CardRole::Number]),
+        Err(Error::NotFound)
+    ));
+    assert!(matches!(
+        v.card_values_for_app(&Uuid::new_v4(), &[CardRole::Number]),
+        Err(Error::NotFound)
+    ));
+}
+
+#[test]
+fn a_card_saved_from_an_app_has_no_website() {
+    let (mut v, _, _) = with_card();
+    let staged = v
+        .stage_save_card_for_app(new_card("4000 0566 5566 5556"), NOW)
+        .unwrap();
+    let id = staged.item_id;
+    v.commit_write(staged.write, 5).unwrap();
+    let saved = v.get_item(&id).unwrap();
+    assert_eq!(saved.title, "Visa");
+    assert!(saved.urls.is_empty());
+    assert!(matches!(
+        v.stage_save_card_for_app(new_card("4000 0566 5566 5557"), NOW),
+        Err(Error::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn a_saved_number_is_found_however_it_is_typed() {
+    let (v, _, _) = with_card();
+    assert!(v.card_number_saved(&secret("4111 1111 1111 1111")).unwrap());
+    assert!(v.card_number_saved(&secret("4111-1111-1111-1111")).unwrap());
+    assert!(!v.card_number_saved(&secret("4000056655665556")).unwrap());
+}
+
+#[test]
+fn a_locked_vault_serves_no_app() {
+    let (mut v, card, _) = with_card();
+    v.lock();
+    assert!(matches!(v.cards_for_app(), Err(Error::Locked)));
+    assert!(matches!(
+        v.card_values_for_app(&card, &[CardRole::Number]),
+        Err(Error::Locked)
+    ));
+    assert!(matches!(
+        v.card_number_saved(&secret(VISA)),
+        Err(Error::Locked)
+    ));
+    assert!(matches!(
+        v.stage_save_card_for_app(new_card(VISA), NOW),
+        Err(Error::Locked)
+    ));
+}
