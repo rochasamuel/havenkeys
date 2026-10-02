@@ -258,7 +258,7 @@ Editing and saving (Android M2; the same list is in `security-review.md`):
 - [ ] Autofill save in Chrome and Firefox: a new login is saved for that site only; a changed password updates it; the same password is "unchanged"; github.com.evil.com never updates github.com's login.
 - [ ] Autofill save in an app: the login is bound to that app with no website; an app with another certificate does not update it.
 - [ ] Username-first sign-in: one login on Android 10+; password step only on Android 9.
-- [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "Can't save while offline."; HavenKeys' own screens never offer to save.
+- [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "HavenKeys is offline. The login was not saved."; HavenKeys' own screens never offer to save.
 
 On "Confirm before filling on: each fill asks": with the setting on, each
 row opens HavenKeys, which unlocks first if the vault is locked; while it is

@@ -1438,7 +1438,10 @@ delete the identity from a phone).
   or `Remove`; Rust merges them into the stored item
   (`crates/havenkeys-mobile/src/edit.rs`). A hidden value (password, TOTP
   key, card number, security code, a note's text) is read into the editor
-  only when the user taps Change, through `reveal`. Everything the editor
+  only when the user taps Change, through `reveal`; a blank replacement of
+  a TOTP key keeps it (only Remove clears it).
+  A card whose title is its brand's name opens with a blank title, so a new
+  number of another brand renames it. Everything the editor
   does not show is kept by every phone edit: custom fields, passkeys, app
   bindings, "Sign in with" and a card's brand. The editing API returns field
   names and presence, never a value, so `havenkeys-mobile` still returns no
@@ -1458,16 +1461,21 @@ delete the identity from a phone).
   and single-line secrets use the password keyboard with autocorrect off.
   Keyboards may ignore the flag (an Android limitation), so a third-party
   keyboard can still see and retain what is typed.
-* **A value being loaded is read-only.** When the user taps Change on a
-  value that exists, it loads asynchronously; its field stays read-only
-  until it arrives, and Save waits for every load, so a save cannot replace a
-  value the user has not seen with an empty one.
+* **A value being loaded cannot be edited.** A present plain-text value
+  (for example a card's holder or expiry, an identity's name) loads when the
+  editor opens, and its field stays disabled until it arrives. A present
+  hidden value loads when the user taps Change, and its field opens only
+  after the load finishes. Save waits for every load, so a save cannot
+  replace a value the user has not seen with an empty one.
 * **Writes are online only.** `create_item`, `update_item` and `delete_item`
   refuse with `offline` before staging anything; the editor shows a banner.
   Nothing is recorded locally until the server has accepted the write
   (`stage → push → commit`). The server's revision check turns a concurrent
   edit into "This item changed on another device." and the app reloads;
-  nothing is overwritten silently.
+  nothing is overwritten silently. An edit made from an older revision than
+  the phone now holds (a pull brought another device's change while the
+  editor was open) is refused on the phone with the same "This item changed
+  on another device." and reloaded, before anything is sent.
 * **Typed values pass through JVM `String`s** that cannot be zeroed, the
   same limitation as the master password field (§22.12).
 
@@ -1502,6 +1510,7 @@ it, which is the confirmation CLAUDE.md §27 asks for.
   (for example the server refusing) shows a Toast. If the vault locks before
   the user submits, nothing is saved and the user sees "HavenKeys locked
   before saving."
-* Offline, a save answers "Can't save while offline" and stages nothing.
+* Offline, a save answers "HavenKeys is offline. The login was not saved."
+  and stages nothing.
 * Autofill is not app use: neither the fill nor the save path resets the
   idle timer.

@@ -1392,7 +1392,6 @@ Full verification was run for the automatic-sign-in feature (WSL2, Linux
 | `cargo test --workspace --exclude havenkeys-server --exclude havenkeys-sync-client` | 359 passed, 0 failed, across every other workspace crate (core, bridge, protocol, native-host, oslock, desktop-lib) |
 | `cargo test -p havenkeys-sync-client --test round_trip` | 6 failed, all `Postgres is not reachable — run scripts/test-server.sh: Error { kind: Connect, cause: Some(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }) }`. **Environmental, pre-existing:** no Postgres is running here, and this branch does not touch the sync client; the same failure mode as the `havenkeys-server` tests above |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
-| (not run: `cargo test --workspace`; the three Android-facing crates above were tested, not the server and desktop suites) | |
 | `pnpm audit --prod` | No known vulnerabilities found |
 | `cargo audit` | Same 7 allowed warnings as the previous re-run (`proc-macro-error`, five `unic-*`, `glib` `VariantStrIter`), all through Tauri's Linux GTK stack, none from this feature; **no vulnerabilities** |
 
@@ -2636,7 +2635,7 @@ None of these has been run.
 - [ ] Autofill save, Chrome and Firefox: sign in to a new site, confirm Android's save sheet; the login appears with that site only. Sign in again with a changed password: updated; with the same one: unchanged. github.com.evil.com does not update github.com's login.
 - [ ] Autofill save, an app: sign in to a sideloaded test app, confirm; the login appears bound to that app, with no website. A second app with another certificate and the same label does not update it.
 - [ ] A username-first sign-in on Android 10+: one login with both values. On Android 9: password step only (AN34).
-- [ ] Lock before submitting: "HavenKeys locked before saving." (AN33); offline: "Can't save while offline."
+- [ ] Lock before submitting: "HavenKeys locked before saving." (AN33); offline: "HavenKeys is offline. The login was not saved."
 - [ ] HavenKeys' own screens never offer to save.
 - [ ] Also owed from M1: `connectedGithubDebugAndroidTest` on an emulator or phone.
 
@@ -2645,6 +2644,7 @@ None of these has been run.
 | Command | Result |
 |---|---|
 | `cargo test -p havenkeys-core -p havenkeys-client -p havenkeys-mobile --features havenkeys-mobile/testing` | 568 passed, 0 failed |
+| (not run: `cargo test --workspace`; the three Android-facing crates above were tested, not the server and desktop suites) | |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
 | `cargo test -p havenkeys-mobile --features server-tests --test round_trip` (Postgres container) | 1 passed |
 | `cargo audit` | No vulnerabilities; the same 3 allowed warnings as Android M1 |
