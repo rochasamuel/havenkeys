@@ -20,6 +20,7 @@ mod events;
 mod items;
 mod key_file;
 mod onboarding;
+mod passkey_json;
 mod qr;
 mod save;
 mod settings;
