@@ -165,7 +165,7 @@ internal fun UnlockForm(
                         onRevealChange = { keyShown = it },
                         enabled = !state.busy,
                         onKeyboardAction = { submit() },
-                        hint = stringResource(R.string.unlock_secret_key_placeholder),
+                        placeholder = stringResource(R.string.unlock_secret_key_placeholder),
                     )
                 }
             }

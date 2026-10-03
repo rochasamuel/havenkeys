@@ -21,6 +21,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
@@ -165,6 +166,19 @@ class TextFieldsTest {
         rule.waitForIdle()
         assertTrue(texts(field).none { it == "On your Emergency Kit" })
         field.assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, "Check the Secret Key"))
+    }
+
+    /** Review (stage 4): the Secret Key's format was a hint under an empty line; now it is the placeholder. */
+    @Test
+    fun aSecretFieldsPlaceholderShowsOnlyWhileEmptyAndIsNotRead() {
+        rule.setKit {
+            SecretTextField(TextFieldState(), "Secret Key", revealed = false, onRevealChange = {}, placeholder = "H1-…")
+        }
+        rule.onNodeWithTag(SECRET_PLACEHOLDER_TAG, useUnmergedTree = true).assertExists()
+        val field = rule.onNode(hasSetTextAction())
+        assertTrue(texts(field).none { it.contains("H1-") })
+        field.performTextInput("H1-ABC")
+        rule.onNodeWithTag(SECRET_PLACEHOLDER_TAG, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

@@ -2,6 +2,7 @@ package net.havenkeys.android.ui.kit
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.BasicSecureTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -24,12 +27,16 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.theme.HavenTheme
 
+internal const val SECRET_PLACEHOLDER_TAG = "haven-secret-placeholder"
+
 /**
  * A secret field: mono, fully masked (no last-character flash) until the
  * user reveals it with the eye. The caller owns [revealed], so its lock
  * wipe resets it. Password semantics, password keyboard, no autocorrect,
  * no learning, no cut or copy; TalkBack reads the label (merged into the field's node) and
  * names the eye "Show"/"Hide" and the label; the value is never a description.
+ * A [placeholder] (a format such as the Secret Key's) is drawn muted in the
+ * empty value line and is not read: the label says what the field is.
  */
 @Composable
 fun SecretTextField(
@@ -43,6 +50,7 @@ fun SecretTextField(
     imeAction: ImeAction = ImeAction.Done,
     onKeyboardAction: KeyboardActionHandler? = null,
     hint: String? = null,
+    placeholder: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -76,7 +84,19 @@ fun SecretTextField(
                             onClick = { onRevealChange(!revealed) },
                         )
                     },
-                    field = field,
+                    field = {
+                        Box {
+                            if (placeholder != null && state.text.isEmpty()) {
+                                HavenText(
+                                    placeholder,
+                                    Modifier.testTag(SECRET_PLACEHOLDER_TAG).clearAndSetSemantics {},
+                                    style = HavenTheme.type.secret,
+                                    color = colors.muted,
+                                )
+                            }
+                            field()
+                        }
+                    },
                 )
             },
         )
