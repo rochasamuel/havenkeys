@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.kit
 
+import android.graphics.Paint
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
@@ -89,7 +93,17 @@ private fun DrawScope.drawSegmentThumb(fill: Color, line: Color, amount: Float) 
     val topLeft = Offset(0f, inset)
     val area = Size(size.width, size.height - 2 * inset)
     val corner = CornerRadius(HavenRadius.control.toPx())
-    drawRoundRect(fill, topLeft, area, corner, alpha = amount)
+    // The desktop's segmented thumb: 0 1px 3px rgba(0,0,0,0.25) under a hairline.
+    val paint = Paint().apply {
+        isAntiAlias = true
+        color = fill.copy(alpha = fill.alpha * amount).toArgb()
+        setShadowLayer(1.5.dp.toPx(), 0f, 1.dp.toPx(), Color.Black.copy(alpha = 0.25f * amount).toArgb())
+    }
+    drawIntoCanvas {
+        it.nativeCanvas.drawRoundRect(
+            topLeft.x, topLeft.y, topLeft.x + area.width, topLeft.y + area.height, corner.x, corner.y, paint,
+        )
+    }
     drawRoundRect(line, topLeft, area, corner, style = Stroke(1.dp.toPx()), alpha = amount)
 }
 
