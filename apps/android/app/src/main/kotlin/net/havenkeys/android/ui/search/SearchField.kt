@@ -59,11 +59,11 @@ internal fun SearchField(state: TextFieldState, modifier: Modifier = Modifier) {
                         .heightIn(min = HavenSpacing.touch)
                         .clip(HavenShape.pill)
                         .background(colors.searchPill)
-                        .padding(start = 14.dp),
+                        .padding(start = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconGlyph(HavenIcon.Search, contentDescription = null, tint = colors.muted, size = 18.dp)
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
                     Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                         if (state.text.isEmpty()) {
                             // Not cleared: it merges into the field's node, so TalkBack reads it with the text.
@@ -78,7 +78,7 @@ internal fun SearchField(state: TextFieldState, modifier: Modifier = Modifier) {
                             onClick = { state.clearText() },
                         )
                     } else {
-                        Spacer(Modifier.width(14.dp))
+                        Spacer(Modifier.width(12.dp))
                     }
                 }
             },

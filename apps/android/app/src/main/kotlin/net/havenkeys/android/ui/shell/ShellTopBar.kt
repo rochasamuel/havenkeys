@@ -73,14 +73,14 @@ fun ShellTopBar(
                 .clip(HavenShape.pill)
                 .havenClickable(onClick = actions.onSearch)
                 .background(colors.searchPill)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconGlyph(HavenIcon.Search, contentDescription = null, tint = colors.muted, size = 18.dp)
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             HavenText(stringResource(R.string.shell_search), style = HavenTheme.type.value, color = colors.muted)
         }
-        if (!online) Pill(stringResource(R.string.shell_offline), Modifier.padding(start = 8.dp))
+        if (!online) Pill(stringResource(R.string.shell_offline), Modifier.padding(start = 4.dp))
         Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, contentAlignment = Alignment.Center) {
             if (syncing) {
                 Box(Modifier.size(HavenSpacing.touch), contentAlignment = Alignment.Center) {
