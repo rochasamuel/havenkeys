@@ -56,6 +56,9 @@ class FakeVaultRepository : VaultRepository {
     var items: Outcome<List<ItemSummary>> = Outcome.Ok(emptyList())
     var view: Outcome<ItemView> = Outcome.Failed("not_found")
     var revealed: Outcome<String> = Outcome.Failed("not_found")
+
+    /** When set, reveal waits for it: a test can stop the app while Rust is still answering. */
+    var revealGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     var totpNow: Outcome<TotpNow> = Outcome.Failed("not_found")
     var bundle: Outcome<ByteArray> = Outcome.Failed("internal")
     val calls = mutableListOf<String>()
@@ -109,6 +112,7 @@ class FakeVaultRepository : VaultRepository {
 
     override suspend fun reveal(id: String, key: String): Outcome<String> {
         calls += "reveal:$key"
+        revealGate?.await()
         return revealed
     }
 

@@ -35,6 +35,18 @@ class RevealStateTest {
         assertNull(state.value)
     }
 
+    /** Final review (stage 4): an answer asked for before a clear is dropped, one asked for after is shown. */
+    @Test
+    fun anAnswerAskedForBeforeAClearIsNotShown() {
+        val state = RevealState(scope)
+        val asked = state.generation
+        state.clear()
+        state.showIfCurrent(asked, "hunter2")
+        assertNull(state.value)
+        state.showIfCurrent(state.generation, "hunter2")
+        assertEquals("hunter2", state.value)
+    }
+
     @Test
     fun clearEmptiesItAtOnce() {
         val state = RevealState(scope)

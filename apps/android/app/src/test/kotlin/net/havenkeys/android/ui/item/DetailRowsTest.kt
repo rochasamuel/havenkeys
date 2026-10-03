@@ -1,6 +1,7 @@
 package net.havenkeys.android.ui.item
 
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasContentDescription
@@ -43,9 +44,20 @@ class DetailRowsTest {
     @Test
     fun aSecretShowsTheMaskUntilRevealed() {
         rule.setKit { InsetGroup { row { SecretRow("Password", revealed = null, onReveal = {}, onCopy = {}) } } }
-        rule.onNode(hasText("Password") and hasContentDescription(text(R.string.hidden, "Password"))).assertExists()
+        rule.onNode(hasText("Password") and hasContentDescription(text(R.string.hidden_value))).assertExists()
         rule.onNodeWithContentDescription(text(R.string.reveal, "Password")).assert(hasRole(Role.Button))
         rule.onAllNodesWithText("hunter2").assertCountEquals(0)
+    }
+
+    /** Final review (stage 4): TalkBack read "Password, Hidden Password"; the label is now read once. */
+    @Test
+    fun aMaskedSecretReadsItsLabelOnce() {
+        rule.setKit { InsetGroup { row { SecretRow("Password", revealed = null, onReveal = {}, onCopy = {}) } } }
+        val row = rule.onNode(hasText("Password") and hasContentDescription(text(R.string.hidden_value)))
+            .fetchSemanticsNode().config
+        val spoken = row.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text } +
+            row.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }
+        assertEquals(1, spoken.count { "Password" in it })
     }
 
     @Test

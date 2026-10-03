@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isNotEnabled
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -91,7 +92,7 @@ class EditFieldsTest {
         vault.revealed = Outcome.Ok("hunter2")
         val (editor, _) = show(login(listOf(EditField("password", FieldKind.SECRET, true, null))))
         val password = text(R.string.field_password)
-        rule.onNodeWithContentDescription(text(R.string.hidden, password)).assertExists()
+        rule.onNode(hasText(password) and hasContentDescription(text(R.string.hidden_value))).assertExists()
         assertTrue(vault.calls.none { it == "reveal:password" })
         rule.onNodeWithText(text(R.string.edit_change)).performClick()
         rule.waitForIdle()

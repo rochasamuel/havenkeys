@@ -51,7 +51,8 @@ internal fun SecretRow(label: String, revealed: String?, onReveal: () -> Unit, o
         },
     ) {
         HavenText(label, style = HavenTheme.type.label, color = HavenTheme.colors.muted)
-        if (revealed == null) MaskedValue(label) else RevealedValue(revealed)
+        // The label is read just above: the dots say only "Hidden".
+        if (revealed == null) MaskedValue(label = null) else RevealedValue(revealed)
     }
 }
 

@@ -337,4 +337,6 @@
     <string name="edit_match">Corresponde a</string>
     <!-- The word of unlock_title set in the serif italic, as on the desktop -->
     <string name="unlock_title_locked">bloqueado</string>
+    <!-- A hidden value read after its field's label ("Password, Hidden") -->
+    <string name="hidden_value">Oculto</string>
 </resources>

@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isHeading
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import net.havenkeys.android.R
@@ -104,7 +106,8 @@ class ItemScreenTest {
         rule.onNodeWithText("hunter2").assertExists()
         rule.mainClock.advanceTimeBy(RevealState.REVEAL_MS + 1)
         rule.onAllNodesWithText("hunter2").assertCountEquals(0)
-        rule.onNodeWithContentDescription(text(R.string.hidden, text(R.string.field_password))).assertExists()
+        rule.onNode(hasText(text(R.string.field_password)) and hasContentDescription(text(R.string.hidden_value)))
+            .assertExists()
     }
 
     @Test
@@ -126,7 +129,8 @@ class ItemScreenTest {
         show()
         rule.onNodeWithContentDescription(text(R.string.reveal, text(R.string.field_password))).performClick()
         rule.onNodeWithText(text(errorText("locked"))).assertExists()
-        rule.onNodeWithContentDescription(text(R.string.hidden, text(R.string.field_password))).assertExists()
+        rule.onNode(hasText(text(R.string.field_password)) and hasContentDescription(text(R.string.hidden_value)))
+            .assertExists()
     }
 
     @Test
@@ -141,6 +145,34 @@ class ItemScreenTest {
         rule.waitForIdle()
         assertTrue("delete:id" in vault.calls)
         assertEquals(listOf("deleted"), went)
+    }
+
+    /** Final review (stage 4): the delete dialog's Cancel closes it and deletes nothing. */
+    @Test
+    fun cancellingTheDeleteDialogDeletesNothing() {
+        show()
+        rule.onNodeWithContentDescription(text(R.string.vault_more)).performClick()
+        rule.onNodeWithText(text(R.string.item_delete)).performClick()
+        rule.onNode(hasText(text(R.string.item_cancel)) and hasAnyAncestor(isDialog())).performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithText(text(R.string.item_confirm_delete, "GitHub")).assertCountEquals(0)
+        assertTrue(vault.calls.none { it.startsWith("delete") })
+        assertEquals(emptyList<String>(), went)
+    }
+
+    /** Final review (stage 4): the menu closed offline must stay closed when the server comes back. */
+    @Test
+    fun theMoreMenuStaysClosedWhenTheAppComesBackOnline() {
+        val vm = vm()
+        var online by mutableStateOf(true)
+        rule.setKit { ItemScreen(vm, clipboard, online, navigation) }
+        rule.onNodeWithContentDescription(text(R.string.vault_more)).performClick()
+        rule.onNodeWithText(text(R.string.item_delete)).assertExists()
+        online = false
+        rule.waitForIdle()
+        online = true
+        rule.waitForIdle()
+        rule.onAllNodesWithText(text(R.string.item_delete)).assertCountEquals(0)
     }
 
     @Test
@@ -179,7 +211,8 @@ class ItemScreenTest {
         rule.onNodeWithText("hunter2").assertExists()
         restoration.emulateSavedInstanceStateRestore()
         rule.onAllNodesWithText("hunter2").assertCountEquals(0)
-        rule.onNodeWithContentDescription(text(R.string.hidden, text(R.string.field_password))).assertExists()
+        rule.onNode(hasText(text(R.string.field_password)) and hasContentDescription(text(R.string.hidden_value)))
+            .assertExists()
     }
 
     private fun reveal() {
@@ -189,15 +222,16 @@ class ItemScreenTest {
 
     private fun assertMasked() {
         rule.onAllNodesWithText("hunter2").assertCountEquals(0)
-        rule.onNodeWithContentDescription(text(R.string.hidden, text(R.string.field_password))).assertExists()
+        rule.onNode(hasText(text(R.string.field_password)) and hasContentDescription(text(R.string.hidden_value)))
+            .assertExists()
     }
 
-    @Test
-    fun aRevealedValueIsClearedWhenTheAppStops() {
-        val owner = object : LifecycleOwner {
-            val registry = LifecycleRegistry.createUnsafe(this)
-            override val lifecycle: Lifecycle get() = registry
-        }
+    private class TestOwner : LifecycleOwner {
+        val registry = LifecycleRegistry.createUnsafe(this)
+        override val lifecycle: Lifecycle get() = registry
+    }
+
+    private fun showWith(owner: TestOwner) {
         rule.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
         val vm = vm()
         rule.setKit {
@@ -205,8 +239,32 @@ class ItemScreenTest {
                 ItemScreen(vm, clipboard, true, navigation)
             }
         }
+    }
+
+    @Test
+    fun aRevealedValueIsClearedWhenTheAppStops() {
+        val owner = TestOwner()
+        showWith(owner)
         reveal()
         rule.runOnUiThread { owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP) }
+        rule.waitForIdle()
+        assertMasked()
+    }
+
+    /** Final review (stage 4): Rust's answer arriving after ON_STOP showed the value on a stopped screen. */
+    @Test
+    fun aRevealAnsweredAfterTheAppStoppedIsNotShown() {
+        val owner = TestOwner()
+        val gate = CompletableDeferred<Unit>()
+        vault.revealGate = gate
+        showWith(owner)
+        rule.onNodeWithContentDescription(text(R.string.reveal, text(R.string.field_password))).performClick()
+        rule.waitForIdle()
+        assertTrue("reveal:password" in vault.calls)
+        rule.runOnUiThread { owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP) }
+        rule.waitForIdle()
+        gate.complete(Unit)
+        rule.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
         rule.waitForIdle()
         assertMasked()
     }
@@ -227,8 +285,9 @@ class ItemScreenTest {
         assertMasked()
     }
 
+    /** What it proves: the lock empties the screen's item, so the revealed row (and its value) goes. */
     @Test
-    fun aRevealedValueIsClearedOnLock() {
+    fun aLockEmptiesTheItemAndTheRevealedRowGoesWithIt() {
         show()
         reveal()
         hub.locked("manual")

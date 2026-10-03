@@ -204,7 +204,8 @@ private fun HiddenRow(label: String, masked: Boolean, onChange: suspend () -> Un
     ) {
         HavenText(label, style = HavenTheme.type.label, color = HavenTheme.colors.muted)
         if (masked) {
-            MaskedValue(label)
+            // The label is read just above: the dots say only "Hidden".
+            MaskedValue(label = null)
         } else {
             HavenText(
                 stringResource(R.string.edit_set_up),

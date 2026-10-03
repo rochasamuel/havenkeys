@@ -29,10 +29,14 @@ internal fun colourised(value: String, colors: HavenColors): AnnotatedString = b
     }
 }
 
-/** A hidden value: the fixed row of dots; TalkBack hears "Hidden <label>", never the value or its length. */
+/**
+ * A hidden value: the fixed row of dots; TalkBack hears "Hidden <label>", never the value or its length.
+ * Where the row already reads its label next to the dots, [label] is null and TalkBack hears only
+ * "Hidden", so the label is not read twice ("Password, Hidden").
+ */
 @Composable
-fun MaskedValue(label: String, modifier: Modifier = Modifier) {
-    val hidden = stringResource(R.string.hidden, label)
+fun MaskedValue(label: String?, modifier: Modifier = Modifier) {
+    val hidden = if (label != null) stringResource(R.string.hidden, label) else stringResource(R.string.hidden_value)
     HavenText(
         MASK,
         modifier.clearAndSetSemantics { contentDescription = hidden },

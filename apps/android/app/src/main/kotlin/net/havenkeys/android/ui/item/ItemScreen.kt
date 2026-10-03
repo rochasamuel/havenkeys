@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -160,8 +161,9 @@ private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, on
     // The identity is never deleted from the phone.
     if (view == null || view.summary.kind == ItemKind.IDENTITY) return
     var open by remember { mutableStateOf(false) }
-    // Going offline while More is open closes it: its only entry waits for the server.
-    if (!online) open = false
+    // Going offline while More is open closes it (its only entry waits for the server), and it
+    // stays closed when the server comes back.
+    LaunchedEffect(online) { if (!online) open = false }
     Box {
         // Delete is More's only entry, so More itself waits for the server.
         HavenIconButton(
@@ -171,7 +173,7 @@ private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, on
             enabled = online,
         )
         HavenMenu(
-            expanded = open,
+            expanded = open && online,
             onDismiss = { open = false },
             items = listOf(MenuItem(stringResource(R.string.item_delete), onDelete, HavenIcon.Trash, danger = true)),
         )
@@ -202,9 +204,11 @@ private class FieldActions(
             into.clear()
             return
         }
+        // A clear while Rust answers (the app stopped, the row left) wins: the late answer is dropped.
+        val asked = into.generation
         scope.launch {
             when (val r = viewModel.reveal(key)) {
-                is Outcome.Ok -> into.show(r.value)
+                is Outcome.Ok -> into.showIfCurrent(asked, r.value)
                 is Outcome.Failed -> fail(r.code)
             }
         }

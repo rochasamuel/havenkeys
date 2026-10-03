@@ -25,6 +25,13 @@ class RevealState(private val scope: CoroutineScope) {
         private set
     private var timer: Job? = null
 
+    /**
+     * Bumped by every [clear]. A reveal asked of Rust before a clear (ON_STOP, leave, a tap on hide)
+     * must not show its answer after it: the caller notes this before asking and shows only if unchanged.
+     */
+    var generation: Int = 0
+        private set
+
     fun show(v: String) {
         value = v
         timer?.cancel()
@@ -35,8 +42,14 @@ class RevealState(private val scope: CoroutineScope) {
     }
 
     fun clear() {
+        generation++
         timer?.cancel()
         value = null
+    }
+
+    /** Shows [v] only if nothing cleared this state since [asked] was read from [generation]. */
+    fun showIfCurrent(asked: Int, v: String) {
+        if (asked == generation) show(v)
     }
 
     companion object {
