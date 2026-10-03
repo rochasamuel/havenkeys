@@ -180,6 +180,33 @@ class OverlaysTest {
     }
 
     @Test
+    fun twoFailuresWithTheSameErrorCanBothBeRetriedWhenTheKeyIsACounter() {
+        var attempts = 0
+        rule.setKit {
+            var failures by remember { mutableStateOf(0) }
+            HavenDialog(
+                title = "Name?",
+                onDismiss = {},
+                confirm = DialogAction("Save", { attempts++ }),
+                answerKey = failures,
+                content = {
+                    // Every failure shows the same message; only the counter changes.
+                    HavenText("Wrong")
+                    HavenButton("Fail", onClick = { failures++ })
+                },
+            )
+        }
+        repeat(2) { round ->
+            rule.onNodeWithText("Save").performClick()
+            rule.runOnIdle { assertEquals(round + 1, attempts) }
+            rule.onNodeWithText("Save").assertIsNotEnabled()
+            rule.onNodeWithText("Fail").performClick()
+        }
+        rule.onNodeWithText("Save").performClick()
+        rule.runOnIdle { assertEquals(3, attempts) }
+    }
+
+    @Test
     fun whileBusyNothingDismissesTheDialog() {
         var removed = 0
         rule.setKit {

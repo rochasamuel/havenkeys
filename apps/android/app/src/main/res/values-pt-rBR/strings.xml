@@ -337,4 +337,5 @@
     <string name="search_clear">Limpar</string>
     <string name="search_cancel">Cancelar</string>
     <string name="search_clear_field">Limpar busca</string>
+    <string name="settings_signed_in_as">Conectado como</string>
 </resources>

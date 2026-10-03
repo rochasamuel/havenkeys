@@ -39,7 +39,9 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * confirm button shows progress and nothing dismisses the dialog (Back, an
  * outside tap and Cancel do nothing). The dialog may answer again when the
  * answer failed and the dialog stayed open: [busy] going back to false, or
- * a changed [answerKey] (for example the error text), re-arms it.
+ * a changed [answerKey], re-arms it. [answerKey] is an attempt counter the
+ * caller bumps on every failed confirm, never a message: two failures in a
+ * row can show the same error, and only a changed key re-arms the dialog.
  */
 @Composable
 @Suppress("LongParameterList")

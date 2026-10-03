@@ -22,6 +22,8 @@ data class SettingsUiState(
     val email: String? = null,
     val removing: Boolean = false,
     val removeErrorCode: String? = null,
+    /** How many removals have failed: the dialog re-arms its confirm on each (an error message could repeat). */
+    val removeFailures: Int = 0,
 )
 
 class SettingsViewModel(
@@ -88,7 +90,14 @@ class SettingsViewModel(
         _state.update { it.copy(removing = true, removeErrorCode = null) }
         viewModelScope.launch {
             val r = accounts.removeDevice(confirmation)
-            _state.update { it.copy(removing = false, removeErrorCode = (r as? Outcome.Failed)?.code) }
+            val code = (r as? Outcome.Failed)?.code
+            _state.update {
+                it.copy(
+                    removing = false,
+                    removeErrorCode = code,
+                    removeFailures = if (code != null) it.removeFailures + 1 else it.removeFailures,
+                )
+            }
         }
     }
 

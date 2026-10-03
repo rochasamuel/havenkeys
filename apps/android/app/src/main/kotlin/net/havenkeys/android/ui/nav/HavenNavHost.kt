@@ -8,7 +8,10 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -46,6 +49,7 @@ import net.havenkeys.android.ui.settings.DevicesViewModel
 import net.havenkeys.android.ui.settings.SettingsNavigation
 import net.havenkeys.android.ui.settings.SettingsScreen
 import net.havenkeys.android.ui.settings.SettingsViewModel
+import net.havenkeys.android.ui.settings.rememberSettingsActions
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.unlock.UnlockScreen
@@ -236,15 +240,14 @@ private fun NavGraphBuilder.toolScreens(
                     biometricEnrolled = container::hasBiometricUnlock,
                 )
             },
-            activity = activity,
-            container = container,
             online = online,
+            actions = rememberSettingsActions(container, activity),
             navigation = SettingsNavigation(
-                onBack = back,
-                onLock = lock,
                 onDevices = { navController.navigate(Routes.DEVICES) },
                 onAutofillSetup = { navController.navigate(Routes.AUTOFILL_SETUP) },
             ),
+            contentPadding = PaddingValues(),
+            modifier = Modifier.background(HavenTheme.colors.pane).statusBarsPadding(),
         )
     }
     composable(Routes.DEVICES) {
