@@ -333,10 +333,11 @@ private fun KitPasswordStep(state: OnboardingUiState, onSignIn: (password: Strin
     val password = rememberSecret()
     FormColumn(modifier) {
         state.preview?.let { KitSummary(it) }
+        // A lede in muted body, as unlock's and the generator's are.
         HavenText(
             stringResource(R.string.onboarding_kit_password),
             style = HavenTheme.type.body,
-            color = HavenTheme.colors.text,
+            color = HavenTheme.colors.muted,
         )
         InsetGroup {
             row { SecretRow(password, R.string.onboarding_master_password, !state.busy, imeAction = ImeAction.Done) }
