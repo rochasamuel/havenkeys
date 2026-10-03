@@ -15,6 +15,7 @@ import androidx.navigation.navArgument
 import net.havenkeys.android.ui.items.Category
 import net.havenkeys.android.ui.nav.enterFor
 import net.havenkeys.android.ui.nav.exitFor
+import net.havenkeys.android.ui.nav.pushOnce
 import net.havenkeys.android.ui.theme.HavenTheme
 
 /** How far a tab's content rises as it fades in (spec §7: a few dp). */
@@ -70,7 +71,8 @@ fun ShellNavHost(
         }
         navigation(startDestination = Tab.ITEMS.root, route = Tab.ITEMS.graph) {
             composable(Tab.ITEMS.root) {
-                screens.items(padding) { category -> navController.navigate(ShellRoutes.category(category)) }
+                // Two quick taps on a category open its list once.
+                screens.items(padding) { category -> navController.pushOnce(ShellRoutes.category(category)) }
             }
             composable(
                 ShellRoutes.CATEGORY,

@@ -24,10 +24,14 @@ class ShellNavHostTest {
     val rule = createComposeRule()
 
     private lateinit var nav: NavHostController
+    private var openCategory: ((Category) -> Unit)? = null
 
     private val screens = ShellScreens(
         home = { HavenText("Home root") },
-        items = { _, onCategory -> HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) }) },
+        items = { _, onCategory ->
+            openCategory = onCategory
+            HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) })
+        },
         category = { _, category, onBack -> HavenButton("List ${category.arg}", onClick = onBack) },
         settings = { HavenText("Settings root") },
     )
@@ -99,5 +103,15 @@ class ShellNavHostTest {
         select(Tab.ITEMS)
         rule.onNodeWithText("Open logins").performClick()
         rule.runOnIdle { assertEquals(Tab.ITEMS, nav.currentDestination?.tab()) }
+    }
+
+    /** Final review (stage 4): a double tap on a category pushed its list twice. */
+    @Test
+    fun twoQuickTapsOnACategoryOpenItOnce() {
+        select(Tab.ITEMS)
+        rule.runOnIdle { repeat(2) { openCategory!!(Category.LOGINS) } }
+        rule.waitForIdle()
+        val lists = nav.currentBackStack.value.count { it.destination.route == ShellRoutes.CATEGORY }
+        assertEquals(1, lists)
     }
 }

@@ -10,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import net.havenkeys.android.ui.kit.setKit
 import org.junit.Assert.assertEquals
+import uniffi.havenkeys_mobile.ItemKind
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -33,6 +34,12 @@ class DoubleTapTest {
                 composable(Routes.SEARCH) { Box {} }
                 composable(Routes.GENERATOR) { Box {} }
                 composable(Routes.ITEM, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
+                    Box {}
+                }
+                composable(Routes.EDIT, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
+                    Box {}
+                }
+                composable(Routes.NEW, arguments = listOf(navArgument(Routes.KIND) { type = NavType.StringType })) {
                     Box {}
                 }
             }
@@ -75,5 +82,17 @@ class DoubleTapTest {
         rule.runOnIdle { nav.pushOnce(Routes.item("abc")) }
         rule.waitForIdle()
         assertEquals("item/abc", nav.currentBackStackEntry?.concreteRoute())
+    }
+
+    /** Final review (stage 4): the editor's routes are read back with their argument too, so a double tap opens one. */
+    @Test
+    fun theEditorsRoutesAreReadBackWithTheirArguments() {
+        rule.runOnIdle { repeat(2) { nav.pushOnce(Routes.edit("abc")) } }
+        rule.waitForIdle()
+        assertEquals("edit/abc", nav.currentBackStackEntry?.concreteRoute())
+        rule.runOnIdle { repeat(2) { nav.pushOnce(Routes.new(ItemKind.CARD)) } }
+        rule.waitForIdle()
+        assertEquals("new/card", nav.currentBackStackEntry?.concreteRoute())
+        assertEquals(listOf("edit/abc", "new/card"), stack())
     }
 }
