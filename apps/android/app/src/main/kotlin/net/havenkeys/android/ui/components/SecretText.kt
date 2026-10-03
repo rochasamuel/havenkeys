@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import net.havenkeys.android.R
@@ -46,11 +47,11 @@ fun MaskedValue(label: String, modifier: Modifier = Modifier) {
  * a system copy would skip the clipboard's clearing.
  */
 @Composable
-fun RevealedValue(value: String, modifier: Modifier = Modifier) {
+fun RevealedValue(value: String, modifier: Modifier = Modifier, style: TextStyle = HavenTheme.type.secret) {
     HavenText(
         colourised(value, HavenTheme.colors),
         modifier,
-        style = HavenTheme.type.secret,
+        style = style,
         color = HavenTheme.colors.textStrong,
     )
 }

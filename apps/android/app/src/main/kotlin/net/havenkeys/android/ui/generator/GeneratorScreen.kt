@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -105,6 +106,12 @@ fun GeneratorScreen(
                 .padding(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
         ) {
             LargeTitle(stringResource(R.string.generator_title))
+            // Under the title, as on the desktop: the plate below holds only the password and its strength.
+            HavenText(
+                stringResource(R.string.generator_lede),
+                Modifier.padding(bottom = 16.dp),
+                color = HavenTheme.colors.muted,
+            )
             Output(password, failure, state.entropyBits)
             Actions(
                 canCopy = password != null,
@@ -125,6 +132,10 @@ fun GeneratorScreen(
     }
 }
 
+/** The desktop's generated password: mono at 20 on 30, a size up from a revealed field. */
+@Composable
+private fun generatedStyle() = HavenTheme.type.secret.copy(fontSize = 20.sp, lineHeight = 30.sp)
+
 /** The password on the output plate (the desktop's 14dp radius), digits and symbols coloured. */
 @Composable
 private fun Output(password: String?, failure: String?, entropyBits: Double?) {
@@ -135,12 +146,11 @@ private fun Output(password: String?, failure: String?, entropyBits: Double?) {
             .clip(HavenShape.output)
             .background(colors.group)
             .border(1.dp, colors.groupLine, HavenShape.output)
-            .padding(16.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        HavenText(stringResource(R.string.generator_lede), color = colors.muted)
         when {
-            password != null -> RevealedValue(password)
+            password != null -> RevealedValue(password, style = generatedStyle())
             failure != null -> HavenText(
                 stringResource(if (failure == "invalid_input") R.string.generator_failed else errorText(failure)),
                 color = colors.danger,
