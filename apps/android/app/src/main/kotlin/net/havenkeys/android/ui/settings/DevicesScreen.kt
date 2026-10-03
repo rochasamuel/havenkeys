@@ -1,17 +1,10 @@
 package net.havenkeys.android.ui.settings
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,14 +12,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 import net.havenkeys.android.R
-import net.havenkeys.android.ui.components.HavenTopBar
-import net.havenkeys.android.ui.components.errorText
-import net.havenkeys.android.ui.theme.HavenTheme
+import net.havenkeys.android.ui.components.ScreenBar
+import net.havenkeys.android.ui.kit.ButtonStyle
+import net.havenkeys.android.ui.kit.DialogAction
+import net.havenkeys.android.ui.kit.GroupRow
+import net.havenkeys.android.ui.kit.GroupRowText
+import net.havenkeys.android.ui.kit.HavenButton
+import net.havenkeys.android.ui.kit.HavenDialog
+import net.havenkeys.android.ui.kit.HavenScaffold
+import net.havenkeys.android.ui.kit.Pill
+import net.havenkeys.android.ui.shell.EmptyLine
+import net.havenkeys.android.ui.shell.ErrorLine
+import net.havenkeys.android.ui.shell.LargeTitle
+import net.havenkeys.android.ui.shell.insetGroup
+import net.havenkeys.android.ui.theme.HavenSpacing
 import uniffi.havenkeys_mobile.DeviceInfo
 
 /** The account's devices, this one marked; Revoke ends a device's session on the server. */
@@ -40,55 +43,42 @@ fun DevicesScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var revoking by remember { mutableStateOf<DeviceInfo?>(null) }
+    val gutter = Modifier.padding(horizontal = HavenSpacing.gutter)
 
-    Scaffold(
-        topBar = {
-            HavenTopBar(stringResource(R.string.devices_title), online = online, onLock = onLock, onBack = onBack)
-        },
-        containerColor = MaterialTheme.colorScheme.background,
+    HavenScaffold(
         modifier = modifier,
+        topBar = { ScreenBar(onBack = onBack, online = online, onLock = onLock) },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).fillMaxSize()) {
-            state.errorCode?.let { code ->
-                item {
-                    Text(
-                        stringResource(errorText(code)),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
-            }
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
+        ) {
+            item(key = "title") { LargeTitle(stringResource(R.string.devices_title), gutter) }
+            state.errorCode?.let { code -> item(key = "error") { ErrorLine(code, gutter) } }
             if (state.devices.isEmpty() && !state.loading && state.errorCode == null) {
-                item { Text(stringResource(R.string.devices_empty), modifier = Modifier.padding(16.dp)) }
+                item(key = "empty") { EmptyLine(stringResource(R.string.devices_empty), gutter) }
             }
-            items(state.devices, key = { it.id }) { device ->
-                DeviceRow(device, onRevoke = { revoking = device })
-            }
+            insetGroup(state.devices, key = { it.id }) { device -> DeviceRow(device, onRevoke = { revoking = device }) }
         }
     }
 
     revoking?.let { device ->
-        AlertDialog(
-            onDismissRequest = { revoking = null },
-            text = {
-                Text(
-                    if (device.current) {
-                        stringResource(R.string.devices_revoke_this)
-                    } else {
-                        stringResource(R.string.devices_revoke_confirm, device.name)
-                    },
-                )
+        HavenDialog(
+            title = if (device.current) {
+                stringResource(R.string.devices_revoke_this)
+            } else {
+                stringResource(R.string.devices_revoke_confirm, device.name)
             },
-            confirmButton = {
-                TextButton(onClick = {
+            onDismiss = { revoking = null },
+            confirm = DialogAction(
+                stringResource(R.string.devices_revoke),
+                {
                     revoking = null
                     viewModel.revoke(device.id)
-                }) { Text(stringResource(R.string.devices_revoke)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { revoking = null }) { Text(stringResource(R.string.settings_cancel)) }
-            },
+                },
+                danger = true,
+            ),
+            dismiss = DialogAction(stringResource(R.string.settings_cancel), { revoking = null }),
         )
     }
 }
@@ -96,25 +86,21 @@ fun DevicesScreen(
 @Composable
 private fun DeviceRow(device: DeviceInfo, onRevoke: () -> Unit) {
     val seen = device.lastSeenAt?.let(::relativeTime)
-    ListItem(
-        headlineContent = { Text(device.name) },
-        overlineContent = if (device.current) {
-            { Text(stringResource(R.string.devices_this_phone), color = HavenTheme.colors.brassInk) }
-        } else {
-            null
+    GroupRow(
+        trailing = {
+            HavenButton(stringResource(R.string.devices_revoke), onClick = onRevoke, style = ButtonStyle.Quiet)
         },
-        supportingContent = {
-            Text(
-                if (seen != null) {
-                    stringResource(R.string.devices_last_seen, seen)
-                } else {
-                    stringResource(R.string.devices_never_seen)
-                },
-            )
-        },
-        trailingContent = { TextButton(onClick = onRevoke) { Text(stringResource(R.string.devices_revoke)) } },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-    )
+    ) {
+        if (device.current) Pill(stringResource(R.string.devices_this_phone))
+        GroupRowText(
+            device.name,
+            if (seen != null) {
+                stringResource(R.string.devices_last_seen, seen)
+            } else {
+                stringResource(R.string.devices_never_seen)
+            },
+        )
+    }
 }
 
 /** "5 minutes ago" in the phone's language; the server's text as is if it is not RFC 3339. */
