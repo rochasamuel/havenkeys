@@ -55,6 +55,7 @@ import net.havenkeys.android.ui.kit.IconGlyph
 import net.havenkeys.android.ui.kit.InsetGroup
 import net.havenkeys.android.ui.kit.SecretTextField
 import net.havenkeys.android.ui.shell.ErrorLine
+import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
 
 /**
@@ -149,7 +150,7 @@ internal fun UnlockForm(
             .safeDrawingPadding()
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 48.dp),
+            .padding(horizontal = HavenSpacing.gutter, vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

@@ -20,11 +20,13 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.kit.setKit
+import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -62,6 +64,17 @@ class UnlockScreenTest {
         val word = text(R.string.unlock_title_locked)
         val italic = shown.spanStyles.single { it.item.fontStyle == FontStyle.Italic }
         assertEquals(word, shown.text.substring(italic.start, italic.end))
+    }
+
+    /** Review (stage 5): unlock sat on a 20dp gutter, every other screen on the 16dp one. */
+    @Test
+    fun unlockSitsOnTheSameGutterAsEveryOtherScreen() {
+        show()
+        val button = unlock().fetchSemanticsNode().boundsInRoot
+        val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        val gutter = HavenSpacing.gutter.value * rule.density.density
+        assertEquals(gutter, button.left - root.left, 1f)
+        assertEquals(gutter, root.right - button.right, 1f)
     }
 
     @Test
