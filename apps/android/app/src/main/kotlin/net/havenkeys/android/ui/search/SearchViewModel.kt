@@ -48,6 +48,12 @@ class SearchViewModel(private val vault: VaultRepository, events: VaultEventsHub
     /** The query that produced the current results: what a tapped result records, not what is typed since. */
     private var resultsQuery = ""
 
+    /** The field has taken focus once; coming back from an opened result must not raise the keyboard again. */
+    private var focusedOnce = false
+
+    /** True the first time only: the screen asks before it focuses the field. */
+    fun takeFirstFocus(): Boolean = !focusedOnce.also { focusedOnce = true }
+
     init {
         loadRecents()
         viewModelScope.launch {
@@ -136,6 +142,7 @@ class SearchViewModel(private val vault: VaultRepository, events: VaultEventsHub
         clearJob?.cancel()
         recordJob?.cancel()
         resultsQuery = ""
+        focusedOnce = false
         _state.update { SearchUiState(queryRevision = it.queryRevision + 1) }
     }
 }

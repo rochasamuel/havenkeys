@@ -82,7 +82,7 @@ fun SearchScreen(
             field.setTextAndPlaceCursorAtEnd(state.query)
         }
     }
-    LaunchedEffect(focus) { focus.requestFocus() }
+    LaunchedEffect(focus) { if (viewModel.takeFirstFocus()) focus.requestFocus() }
     val open: OpenItem = remember(viewModel, onOpen) {
         { id, origin ->
             viewModel.opened()

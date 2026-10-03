@@ -200,4 +200,13 @@ class SearchViewModelTest {
         scheduler.advanceUntilIdle()
         assertEquals(before, vault.calls.count { it == "search" })
     }
+
+    @Test
+    fun itAsksForFocusOnlyTheFirstTimeAndAgainAfterALock() {
+        val vm = vm()
+        assertTrue(vm.takeFirstFocus())
+        assertFalse(vm.takeFirstFocus())
+        events.locked("user")
+        assertTrue(vm.takeFirstFocus())
+    }
 }
