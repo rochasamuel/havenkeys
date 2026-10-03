@@ -11,6 +11,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -36,16 +37,29 @@ class TextFieldsTest {
     @get:Rule
     val rule = createComposeRule()
 
+    private fun texts(node: androidx.compose.ui.test.SemanticsNodeInteraction): List<String> =
+        node.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }
+
+    private fun descriptions(node: androidx.compose.ui.test.SemanticsNodeInteraction): List<String> =
+        node.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+
     @Test
-    fun typingFillsTheStateAndTheLabelNamesTheFieldOnce() {
+    fun typingFillsTheStateAndTheLabelIsReadOnceWithTheText() {
         val state = TextFieldState()
         rule.setKit { HavenTextField(state, label = "Username") }
         val field = rule.onNode(hasSetTextAction())
-        field.assertContentDescriptionEquals("Username").assertHeightIsAtLeast(48.dp)
+        field.assertHeightIsAtLeast(48.dp)
         field.performTextInput("sam")
         rule.runOnIdle { assertEquals("sam", state.text.toString()) }
-        // The visible label is not a second TalkBack stop.
-        rule.onAllNodesWithText("Username").assertCountEquals(0)
+        // The label is part of the field's own merged node, not a description that hides the text.
+        val merged = texts(field)
+        assertEquals(1, merged.count { it == "Username" })
+        assertEquals("sam", field.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text)
+        assertTrue(descriptions(field).none { it == "Username" })
+        // ... and not a second TalkBack stop.
+        assertEquals(1, rule.onAllNodes(SemanticsMatcher("has text Username") {
+            it.config.getOrNull(SemanticsProperties.Text)?.any { t -> t.text == "Username" } == true
+        }).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -61,7 +75,7 @@ class TextFieldsTest {
     }
 
     @Test
-    fun aSecretIsAPasswordFieldNamedByItsLabel() {
+    fun aSecretIsAPasswordFieldWhoseLabelMergesAndWhoseValueIsNeverADescription() {
         val state = TextFieldState()
         rule.setKit {
             var shown by remember { mutableStateOf(false) }
@@ -69,10 +83,14 @@ class TextFieldsTest {
         }
         val field = rule.onNode(hasSetTextAction())
         field.performTextInput("hunter2")
-        field.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
-            .assertContentDescriptionEquals("Master password")
-            .assertHeightIsAtLeast(48.dp)
+        field.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)).assertHeightIsAtLeast(48.dp)
         rule.runOnIdle { assertEquals("hunter2", state.text.toString()) }
+        assertEquals(1, texts(field).count { it == "Master password" })
+        assertTrue(descriptions(field).none { it == "Master password" || it.contains("hunter2") })
+        assertTrue(texts(field).none { it.contains("hunter2") })
+        rule.onAllNodes(SemanticsMatcher("has text Master password") {
+            it.config.getOrNull(SemanticsProperties.Text)?.any { t -> t.text == "Master password" } == true
+        }).assertCountEquals(1)
     }
 
     @Test

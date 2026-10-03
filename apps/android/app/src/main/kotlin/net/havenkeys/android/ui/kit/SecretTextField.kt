@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -29,8 +28,8 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * A secret field: mono, fully masked (no last-character flash) until the
  * user reveals it with the eye. The caller owns [revealed], so its lock
  * wipe resets it. Password semantics, password keyboard, no autocorrect,
- * no learning, no cut or copy; TalkBack names it by [label] and the eye by
- * "Show"/"Hide" and the label, never by the value.
+ * no learning, no cut or copy; TalkBack reads the label (merged into the field's node) and
+ * names the eye "Show"/"Hide" and the label; the value is never a description.
  */
 @Composable
 fun SecretTextField(
@@ -51,10 +50,7 @@ fun SecretTextField(
     KitTextInput {
         BasicSecureTextField(
             state = state,
-            modifier = modifier.fillMaxWidth().semantics {
-                contentDescription = label
-                if (error != null) error(error)
-            },
+            modifier = modifier.fillMaxWidth().semantics { if (error != null) error(error) },
             enabled = enabled,
             textStyle = HavenTheme.type.secret.copy(color = colors.textStrong),
             keyboardOptions = KeyboardOptions(

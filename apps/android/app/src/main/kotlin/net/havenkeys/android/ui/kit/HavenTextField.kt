@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -42,8 +41,8 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * A text field the desktop way: the row is the field (no box, no border of
  * its own). A muted label above the value; on focus the row takes the
  * selection wash and an inset brass ring. Put it in an [InsetGroup] row.
- * TalkBack reads the label as the field's name, once; an error is the
- * field's error. The keyboard is asked not to learn what is typed.
+ * TalkBack reads the label and the typed text as one node; an error is
+ * the field's error. The keyboard is asked not to learn what is typed.
  */
 @Composable
 fun HavenTextField(
@@ -64,10 +63,7 @@ fun HavenTextField(
     KitTextInput {
         BasicTextField(
             state = state,
-            modifier = modifier.fillMaxWidth().semantics {
-                contentDescription = label
-                if (error != null) error(error)
-            },
+            modifier = modifier.fillMaxWidth().semantics { if (error != null) error(error) },
             enabled = enabled,
             inputTransformation = inputTransformation,
             textStyle = HavenTheme.type.value.copy(color = colors.textStrong),
@@ -120,9 +116,10 @@ internal fun FieldRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Not cleared: drawn inside the field's decorator, the label merges into the field's own
+            // node, so TalkBack reads it with the typed text (a contentDescription would replace the text).
             HavenText(
                 label,
-                Modifier.clearAndSetSemantics {},
                 style = HavenTheme.type.label,
                 color = if (error != null) colors.danger else colors.muted,
             )
