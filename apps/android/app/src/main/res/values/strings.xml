@@ -347,4 +347,6 @@
 
     <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
     <string name="edit_match">Matches</string>
+    <!-- The word of unlock_title set in the serif italic, as on the desktop -->
+    <string name="unlock_title_locked">locked</string>
 </resources>

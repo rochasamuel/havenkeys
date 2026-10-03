@@ -23,9 +23,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -198,7 +204,11 @@ private fun UnlockHeader(needsSecretKey: Boolean) {
     val colors = HavenTheme.colors
     IconGlyph(HavenIcon.Lock, contentDescription = null, tint = colors.brass, size = 40.dp)
     HavenText(
-        stringResource(R.string.unlock_title),
+        lockedTitle(
+            stringResource(R.string.unlock_title),
+            stringResource(R.string.unlock_title_locked),
+            colors.brassInk,
+        ),
         Modifier.semantics { heading() },
         style = HavenTheme.type.display.copy(textAlign = TextAlign.Center),
         color = colors.textStrong,
@@ -242,4 +252,14 @@ private inline fun <T> keystoreOrNull(call: () -> T?): T? = try {
     null
 } catch (e: IOException) {
     null
+}
+
+/** "HavenKeys is *locked*.": the one word in the serif italic and brass ink, as the desktop sets it. */
+private fun lockedTitle(title: String, word: String, ink: Color): AnnotatedString = buildAnnotatedString {
+    append(title)
+    val at = title.indexOf(word)
+    if (word.isNotEmpty() && at >= 0) {
+        val italic = SpanStyle(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, color = ink)
+        addStyle(italic, at, at + word.length)
+    }
 }

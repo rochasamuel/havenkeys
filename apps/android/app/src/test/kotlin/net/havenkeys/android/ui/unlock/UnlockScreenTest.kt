@@ -3,6 +3,7 @@ package net.havenkeys.android.ui.unlock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -44,6 +45,17 @@ class UnlockScreenTest {
     private fun unlock() = rule.onNode(hasText(text(R.string.unlock_button)) and hasClickAction())
     private fun typed(label: Int) =
         field(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text.orEmpty()
+
+    /** Review (stage 4): the desktop's headline sets "locked" in the serif italic; the phone's had lost it. */
+    @Test
+    fun theHeadlineSetsLockedInItalic() {
+        show()
+        val title = rule.onNodeWithText(text(R.string.unlock_title)).fetchSemanticsNode()
+        val shown = title.config[SemanticsProperties.Text].single()
+        val word = text(R.string.unlock_title_locked)
+        val italic = shown.spanStyles.single { it.item.fontStyle == FontStyle.Italic }
+        assertEquals(word, shown.text.substring(italic.start, italic.end))
+    }
 
     @Test
     fun theMasterPasswordIsAPasswordFieldAndUnlockWaitsForIt() {
