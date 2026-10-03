@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.dp
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
 
+private val GlyphSize = 22.dp
+private val GlyphGap = 14.dp
+
 /**
  * One row of an [InsetGroup]: an optional glyph, the row's text
  * ([GroupRowText] or [GroupRowField]), then [trailing] controls or, when it
@@ -35,6 +38,7 @@ fun GroupRow(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = HavenTheme.colors
+    ReportRowTextStart(if (icon != null) HavenSpacing.rowX + GlyphSize + GlyphGap else HavenSpacing.rowX)
     val click = if (onClick == null) {
         Modifier
     } else {
@@ -54,8 +58,8 @@ fun GroupRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            IconGlyph(icon, contentDescription = null, tint = colors.muted, size = 22.dp)
-            Spacer(Modifier.width(14.dp))
+            IconGlyph(icon, contentDescription = null, tint = colors.muted, size = GlyphSize)
+            Spacer(Modifier.width(GlyphGap))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
         trailing?.invoke(this)

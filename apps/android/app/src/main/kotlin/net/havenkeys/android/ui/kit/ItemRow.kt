@@ -33,6 +33,9 @@ internal fun tileGlyphTag(icon: HavenIcon): String = "item-tile-glyph-${icon.nam
 
 private const val MONOGRAM_RATIO = 0.45f
 
+/** Between an item row's tile and its text. */
+private val TileGap = 12.dp
+
 /**
  * One vault item in a list: tile, title, non-secret subtitle, and marks for
  * a passkey and a one-time code. One button for TalkBack; the tile is
@@ -51,6 +54,7 @@ fun ItemRow(
     hasCode: Boolean = false,
 ) {
     val colors = HavenTheme.colors
+    ReportRowTextStart(HavenSpacing.rowX + HavenSpacing.tile + TileGap)
     Row(
         modifier
             .fillMaxWidth()
@@ -60,7 +64,7 @@ fun ItemRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ItemTile(leading)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(TileGap))
         Column(Modifier.weight(1f)) {
             HavenText(
                 title,

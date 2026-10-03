@@ -1,5 +1,7 @@
 package net.havenkeys.android.ui.kit
 
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasNoClickAction
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -135,5 +138,24 @@ class StructureTest {
         assertNull(monogramOf("   "))
         assertNull(monogramOf(""))
         assertTrue(monogramOf("😀 Fun")!!.length == 2)
+    }
+
+    @Test
+    fun eachHairlineStartsWhereTheTextOfTheRowBelowItStarts() {
+        rule.setKit {
+            InsetGroup(Modifier.testTag("group")) {
+                row { GroupRow { GroupRowText("Plain") } }
+                row { ItemRow("GitHub", null, RowLeading.Monogram("GitHub"), onClick = {}) }
+                row { GroupRow(onClick = {}, icon = HavenIcon.Clock) { GroupRowText("Auto-lock") } }
+                row { GroupRow { GroupRowText("Plain again") } }
+            }
+        }
+        val groupLeft = rule.onNodeWithTag("group").getUnclippedBoundsInRoot().left
+        val hairlines = rule.onAllNodesWithTag(HAIRLINE_TAG).fetchSemanticsNodes()
+        assertEquals(3, hairlines.size)
+        listOf("GitHub", "Auto-lock", "Plain again").forEachIndexed { i, text ->
+            val textLeft = rule.onNodeWithText(text, useUnmergedTree = true).getUnclippedBoundsInRoot().left
+            assertEquals((textLeft - groupLeft).value, hairlines[i].config[HairlineStart].value, 0.5f)
+        }
     }
 }
