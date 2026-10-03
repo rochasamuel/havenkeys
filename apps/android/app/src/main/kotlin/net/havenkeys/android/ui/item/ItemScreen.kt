@@ -2,33 +2,18 @@ package net.havenkeys.android.ui.item
 
 import android.content.res.Resources
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
@@ -46,20 +33,39 @@ import kotlinx.coroutines.launch
 import net.havenkeys.android.R
 import net.havenkeys.android.clipboard.SensitiveClipboard
 import net.havenkeys.android.data.Outcome
-import net.havenkeys.android.ui.components.HavenTopBar
-import net.havenkeys.android.ui.components.SecretField
+import net.havenkeys.android.ui.components.ScreenBar
 import net.havenkeys.android.ui.components.errorText
+import net.havenkeys.android.ui.kit.DialogAction
+import net.havenkeys.android.ui.kit.HavenDialog
+import net.havenkeys.android.ui.kit.HavenIcon
+import net.havenkeys.android.ui.kit.HavenIconButton
+import net.havenkeys.android.ui.kit.HavenMenu
+import net.havenkeys.android.ui.kit.HavenScaffold
+import net.havenkeys.android.ui.kit.HavenText
+import net.havenkeys.android.ui.kit.InsetGroup
+import net.havenkeys.android.ui.kit.ItemTile
+import net.havenkeys.android.ui.kit.MenuItem
+import net.havenkeys.android.ui.kit.ToastState
+import net.havenkeys.android.ui.kit.ToastTone
+import net.havenkeys.android.ui.kit.rememberToastState
+import net.havenkeys.android.ui.shell.ErrorLine
+import net.havenkeys.android.ui.shell.leading
+import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
-import net.havenkeys.android.ui.theme.HavenType
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.ItemKind
+import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.ViewField
+
+/** The header's tile: larger than a row's, so the row's tile grows into it. */
+private val HeaderTile = 56.dp
 
 /**
  * One item: its overview from the ViewModel, and each hidden field read from
  * Rust only when the user taps reveal or copy. A revealed value or a code
- * lives in this composition only (spec §9.4).
+ * lives in this composition only (spec §9.4). [titleModifier] and
+ * [tileModifier] carry the tapped row's title and tile into the header.
  */
 @Composable
 fun ItemScreen(
@@ -69,126 +75,119 @@ fun ItemScreen(
     navigation: ItemNavigation,
     modifier: Modifier = Modifier,
     titleModifier: Modifier = Modifier,
+    tileModifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
+    val toasts = rememberToastState()
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
-    val actions = remember(viewModel, clipboard, snackbar, scope, resources) {
-        FieldActions(viewModel, clipboard, snackbar, scope, resources)
+    val actions = remember(viewModel, clipboard, toasts, scope, resources) {
+        FieldActions(viewModel, clipboard, toasts, scope, resources)
     }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            HavenTopBar(
-                title = "",
-                online = online,
-                onLock = navigation.onLock,
-                onBack = navigation.onBack,
-                actions = { ItemActions(state.view, online, navigation.onEdit, onDelete = { confirmDelete = true }) },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-        containerColor = MaterialTheme.colorScheme.background,
+    HavenScaffold(
         modifier = modifier,
+        topBar = {
+            ScreenBar(onBack = navigation.onBack, online = online, onLock = navigation.onLock) {
+                ItemActions(state.view, online, navigation.onEdit, onDelete = { confirmDelete = true })
+            }
+        },
+        toastState = toasts,
     ) { padding ->
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = HavenSpacing.gutter)
+                .padding(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
         ) {
             state.view?.let { view ->
-                Text(
-                    text = view.summary.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = HavenTheme.colors.textStrong,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).then(titleModifier),
-                )
+                ItemHeader(view.summary, titleModifier, tileModifier)
                 ItemFields(view, actions)
             }
-            state.errorCode?.let { code ->
-                Text(
-                    text = stringResource(errorText(code)),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
+            state.errorCode?.let { ErrorLine(it) }
         }
     }
     val view = state.view
     if (confirmDelete && view != null) {
-        DeleteDialog(view, onCancel = { confirmDelete = false }) {
-            confirmDelete = false
-            actions.delete(navigation.onDeleted)
-        }
+        DeleteDialog(
+            view,
+            onCancel = { confirmDelete = false },
+            onDelete = {
+                confirmDelete = false
+                actions.delete(navigation.onDeleted)
+            },
+        )
     }
 }
 
+@Composable
+private fun ItemHeader(summary: ItemSummary, titleModifier: Modifier, tileModifier: Modifier) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+        ItemTile(summary.leading(), tileModifier, size = HeaderTile)
+        Spacer(Modifier.width(14.dp))
+        HavenText(
+            summary.title,
+            Modifier.weight(1f).then(titleModifier).semantics { heading() },
+            style = HavenTheme.type.headline,
+            color = HavenTheme.colors.textStrong,
+        )
+    }
+}
+
+/**
+ * The fields as one group. Each reveal is keyed by its field inside its row,
+ * so a reload that moves a field starts that row masked rather than showing
+ * a value on the wrong row.
+ */
 @Composable
 private fun ItemFields(view: ItemView, actions: FieldActions) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.padding(16.dp),
-    ) {
-        Column {
-            view.fields.forEachIndexed { i, field ->
-                // Keyed: after a reload adds or removes a field, a
-                // revealed value stays with its own row.
-                key(field.key) {
-                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    FieldRow(field, actions)
-                }
-            }
-        }
+    if (view.fields.isEmpty()) return
+    InsetGroup {
+        view.fields.forEach { field -> row { key(field.key) { FieldRow(field, actions) } } }
     }
 }
 
-/** Edit, and Delete in the overflow; both write to the server, so both need it online. */
+/** Edit, and Delete behind More; both write to the server, so both need it online. */
 @Composable
 private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
-    IconButton(onClick = onEdit, enabled = online && view != null) {
-        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.item_edit))
-    }
+    HavenIconButton(
+        HavenIcon.Edit,
+        stringResource(R.string.item_edit),
+        onClick = onEdit,
+        enabled = online && view != null,
+    )
     // The identity is never deleted from the phone.
     if (view == null || view.summary.kind == ItemKind.IDENTITY) return
     var open by remember { mutableStateOf(false) }
+    // Going offline while More is open closes it (its only entry waits for the server), and it
+    // stays closed when the server comes back.
+    LaunchedEffect(online) { if (!online) open = false }
     Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.vault_more))
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.item_delete)) },
-                leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
-                enabled = online,
-                onClick = {
-                    open = false
-                    onDelete()
-                },
-            )
-        }
+        // Delete is More's only entry, so More itself waits for the server.
+        HavenIconButton(
+            HavenIcon.More,
+            stringResource(R.string.vault_more),
+            onClick = { open = true },
+            enabled = online,
+        )
+        HavenMenu(
+            expanded = open && online,
+            onDismiss = { open = false },
+            items = listOf(MenuItem(stringResource(R.string.item_delete), onDelete, HavenIcon.Trash, danger = true)),
+        )
     }
 }
 
 @Composable
 private fun DeleteDialog(view: ItemView, onCancel: () -> Unit, onDelete: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.item_confirm_delete, view.summary.title)) },
-        text = if (view.summary.hasPasskey) {
-            { Text(stringResource(R.string.item_passkey_warning)) }
-        } else {
-            null
-        },
-        confirmButton = {
-            TextButton(onClick = onDelete) {
-                Text(stringResource(R.string.item_delete), color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.item_cancel)) } },
+    HavenDialog(
+        title = stringResource(R.string.item_confirm_delete, view.summary.title),
+        onDismiss = onCancel,
+        confirm = DialogAction(stringResource(R.string.item_delete), onDelete, danger = true),
+        message = if (view.summary.hasPasskey) stringResource(R.string.item_passkey_warning) else null,
+        dismiss = DialogAction(stringResource(R.string.item_cancel), onCancel),
     )
 }
 
@@ -196,7 +195,7 @@ private fun DeleteDialog(view: ItemView, onCancel: () -> Unit, onDelete: () -> U
 private class FieldActions(
     val viewModel: ItemViewModel,
     private val clipboard: SensitiveClipboard,
-    private val snackbar: SnackbarHostState,
+    private val toasts: ToastState,
     private val scope: CoroutineScope,
     private val resources: Resources,
 ) {
@@ -205,10 +204,12 @@ private class FieldActions(
             into.clear()
             return
         }
+        // A clear while Rust answers (the app stopped, the row left) wins: the late answer is dropped.
+        val asked = into.generation
         scope.launch {
             when (val r = viewModel.reveal(key)) {
-                is Outcome.Ok -> into.show(r.value)
-                is Outcome.Failed -> snackbar.showSnackbar(resources.getString(errorText(r.code)))
+                is Outcome.Ok -> into.showIfCurrent(asked, r.value)
+                is Outcome.Failed -> fail(r.code)
             }
         }
     }
@@ -217,7 +218,7 @@ private class FieldActions(
         scope.launch {
             when (val r = viewModel.reveal(key)) {
                 is Outcome.Ok -> copy(label, r.value)
-                is Outcome.Failed -> snackbar.showSnackbar(resources.getString(errorText(r.code)))
+                is Outcome.Failed -> fail(r.code)
             }
         }
     }
@@ -226,7 +227,7 @@ private class FieldActions(
         scope.launch {
             when (val r = viewModel.delete()) {
                 is Outcome.Ok -> onDeleted()
-                is Outcome.Failed -> snackbar.showSnackbar(resources.getString(errorText(r.code)))
+                is Outcome.Failed -> fail(r.code)
             }
         }
     }
@@ -238,8 +239,11 @@ private class FieldActions(
     private suspend fun copy(label: String, value: String) {
         val seconds = viewModel.clipboardClearSeconds()
         clipboard.copy(label, value, seconds)
-        snackbar.showSnackbar(resources.getString(R.string.copied, label, seconds))
+        viewModel.copied()
+        toasts.show(resources.getString(R.string.copied, label, seconds))
     }
+
+    private fun fail(code: String) = toasts.show(resources.getString(errorText(code)), ToastTone.Alert)
 }
 
 @Composable
@@ -247,19 +251,13 @@ private fun FieldRow(field: ViewField, actions: FieldActions) {
     val label = stringResource(fieldLabel(field.label))
     val shown = field.value
     when {
-        field.kind == FieldKind.TOTP -> TotpField(label, actions)
-        shown != null -> SecretField(
-            label = label,
-            revealed = shown,
-            onReveal = {},
-            onCopy = { actions.copyShown(label, shown) },
-            masked = false,
-        )
+        field.kind == FieldKind.TOTP -> CodeField(label, actions)
+        shown != null -> ShownRow(label, shown, onCopy = { actions.copyShown(label, shown) })
         else -> {
             val reveal = rememberRevealState()
-            SecretField(
-                label = label,
-                revealed = reveal.value,
+            SecretRow(
+                label,
+                reveal.value,
                 onReveal = { actions.reveal(field.key, reveal) },
                 onCopy = { actions.copyField(field.key, label) },
             )
@@ -267,45 +265,17 @@ private fun FieldRow(field: ViewField, actions: FieldActions) {
     }
 }
 
-/**
- * The live code. Collected only while the screen is visible, so Rust is not
- * asked for codes in the background.
- */
+/** The live code, asked of Rust once a second only while the screen is visible. */
 @Composable
-private fun TotpField(label: String, actions: FieldActions) {
+private fun CodeField(label: String, actions: FieldActions) {
     val ticks = remember(actions) { actions.viewModel.totpTicks() }
     val now by ticks.collectAsStateWithLifecycle(initialValue = null)
-    val code = (now as? Outcome.Ok)?.value
-    Row(
-        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            when {
-                code != null -> Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(groupedCode(code.code), style = HavenType.code, color = MaterialTheme.colorScheme.onSurface)
-                    TotpRing(code.secondsRemaining.toInt(), code.period.toInt())
-                }
-                now is Outcome.Failed -> Text(
-                    text = stringResource(R.string.item_code_failed),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        if (code != null) {
-            IconButton(onClick = { actions.copyShown(label, code.code) }) {
-                Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.copy, label))
-            }
-        }
-    }
+    CodeRow(
+        label,
+        (now as? Outcome.Ok)?.value,
+        failed = now is Outcome.Failed,
+        onCopy = { code -> actions.copyShown(label, code) },
+    )
 }
 
 private val labels = mapOf(

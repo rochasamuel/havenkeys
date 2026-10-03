@@ -1,9 +1,4 @@
 package net.havenkeys.android.ui.settings
 
-/** The navigation this screen leads to; none carries anything from the vault. */
-class SettingsNavigation(
-    val onBack: () -> Unit,
-    val onLock: () -> Unit,
-    val onDevices: () -> Unit,
-    val onAutofillSetup: () -> Unit,
-)
+/** Where Settings leads; none carries anything from the vault. The shell's top bar has Lock. */
+class SettingsNavigation(val onDevices: () -> Unit, val onAutofillSetup: () -> Unit)

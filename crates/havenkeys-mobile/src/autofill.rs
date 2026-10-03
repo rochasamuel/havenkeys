@@ -288,6 +288,7 @@ impl MobileVault {
                 FillCredentials { username, password }
             }
         };
+        self.note_use(&item);
         Ok(BoundFill {
             values: to_values(creds),
             saved,
@@ -417,6 +418,56 @@ mod tests {
         assert!(!once.saved);
         assert_eq!(once.values.password.as_deref(), Some("hunter2hunter2"));
         assert!(v.autofill_matches(app(1)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn prefetching_values_records_nothing_but_a_confirmed_binding_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = add_login(&v, "https://github.com");
+        let page = || chrome("github.com", Some("https"));
+        v.autofill_fill(id.clone(), page()).unwrap();
+        v.autofill_totp(id.clone(), page()).unwrap();
+        assert!(v.frequently_used(6).unwrap().is_empty());
+        v.autofill_bind_and_fill(id.clone(), app(1)).unwrap();
+        assert_eq!(v.frequently_used(6).unwrap()[0].id, id);
+    }
+
+    #[test]
+    fn card_and_identity_values_and_item_views_record_nothing() {
+        use crate::cards::{CardFrameRoles, CardRole};
+        use crate::identity_fill::IdentityRole;
+        use crate::testing::{seed_card, seed_identity};
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let card = seed_card(&v, "Visa", "4111111111111111");
+        seed_identity(&v);
+        let frame = || FrameFacts {
+            web_domain: None,
+            web_scheme: None,
+        };
+        let shop = || chrome("shop.example.com", Some("https"));
+        let values = v
+            .autofill_card_values(
+                card.clone(),
+                shop(),
+                vec![CardFrameRoles {
+                    frame: frame(),
+                    roles: vec![CardRole::Number],
+                }],
+            )
+            .unwrap();
+        assert_eq!(values[0].len(), 1);
+        let identity = v
+            .autofill_identity_values(shop(), frame(), vec![IdentityRole::FirstName], false)
+            .unwrap();
+        assert_eq!(identity.len(), 1);
+        v.item_view(card.clone()).unwrap();
+        v.reveal(card, "card.number".into()).unwrap();
+        let login = add_login(&v, "https://github.com");
+        v.item_view(login.clone()).unwrap();
+        v.reveal(login, "password".into()).unwrap();
+        assert!(v.frequently_used(6).unwrap().is_empty());
     }
 
     #[test]

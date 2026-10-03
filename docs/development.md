@@ -68,6 +68,7 @@ commands below assume.
 | Android: Rust library + Kotlin bindings | `scripts/build-android.sh` (`--release` for release builds); commit the bindings it changes |
 | Android: lint, unit tests, Android lint, release APK | `cd apps/android && ./gradlew detekt testGithubDebugUnitTest lintGithubDebug assembleGithubRelease` |
 | Android: refresh the privileged browser list | `scripts/update-android-browsers.sh`, then review the diff |
+| Android: rebuild the bundled fonts | `uvx --from fonttools==4.66.1 python scripts/build-android-fonts.py`; commit `apps/android/app/src/main/res/font` |
 
 Install the audit tools with `cargo install cargo-audit cargo-deny --locked`.
 

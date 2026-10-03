@@ -12,7 +12,8 @@ interface AccountRepository {
     suspend fun signInWithKit(password: String): Outcome<Status>
     suspend fun signIn(server: String, email: String, password: String, secretKey: String): Outcome<Status>
     suspend fun activate(invite: String, password: String): Outcome<Status>
-    suspend fun syncNow(): Outcome<Unit>
+    /** [fresh]: the sync must start after this call, not join one already running (see [Coalescer]). */
+    suspend fun syncNow(fresh: Boolean = false): Outcome<Unit>
     suspend fun syncIfDue(): Outcome<Unit>
     suspend fun devices(): Outcome<List<DeviceInfo>>
     suspend fun revoke(id: String): Outcome<Unit>
@@ -27,7 +28,10 @@ class RustAccountRepository(private val vault: MobileVault) : AccountRepository 
     override suspend fun signIn(server: String, email: String, password: String, secretKey: String) =
         rust { vault.signIn(server, email, password, secretKey) }
     override suspend fun activate(invite: String, password: String) = rust { vault.activate(invite, password) }
-    override suspend fun syncNow() = rust { vault.syncNow() }
+    private val syncing = Coalescer<Unit>()
+
+    /** One owner of the sync: concurrent requests share the run in flight. */
+    override suspend fun syncNow(fresh: Boolean) = syncing.run(fresh) { rust { vault.syncNow() } }
     override suspend fun syncIfDue() = rust { vault.syncIfDue() }
     override suspend fun devices() = rust { vault.devices() }
     override suspend fun revoke(id: String) = rust { vault.revokeDevice(id) }

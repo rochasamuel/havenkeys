@@ -49,6 +49,12 @@ class ItemViewModel(
     /** One field's value, for the caller to show or copy; never stored here. */
     suspend fun reveal(key: String): Outcome<String> = vault.reveal(id, key)
 
+    /** The screen copied one of this item's fields: Home's "Frequently used" counts it. */
+    // The Outcome is ignored on purpose: recording never fails a copy.
+    suspend fun copied() {
+        vault.recordUse(id)
+    }
+
     /** The current code, once per second while collected. */
     fun totpTicks(): Flow<Outcome<TotpNow>> = flow {
         while (true) {

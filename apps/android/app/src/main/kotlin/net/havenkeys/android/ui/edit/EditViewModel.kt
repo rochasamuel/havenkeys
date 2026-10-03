@@ -99,7 +99,7 @@ class EditViewModel(
                 }
                 (result as Outcome.Failed).code == CONFLICT -> {
                     // Bring the other device's version in before offering to reload it.
-                    accounts.syncNow()
+                    accounts.syncNow(fresh = true)
                     _state.update { it.copy(saving = false, conflict = true) }
                 }
                 else -> _state.update { it.copy(saving = false, errorCode = result.code) }

@@ -40,17 +40,12 @@
     <string name="vault_lock_now">Bloquear agora</string>
     <string name="vault_offline">Offline, somente leitura</string>
     <string name="item_passkey">Chave de acesso</string>
-    <string name="vault_title">Cofre</string>
-    <string name="vault_search">Buscar no cofre</string>
     <string name="vault_search_hint">A busca considera títulos, usuários e sites.</string>
     <string name="vault_filter_all">Todos os itens</string>
     <string name="vault_filter_logins">Logins</string>
     <string name="vault_filter_notes">Notas seguras</string>
     <string name="vault_filter_cards">Cartões</string>
-    <string name="vault_filter_identities">Identidade</string>
     <string name="vault_filter_passkeys">Chaves de acesso</string>
-    <string name="vault_offline_banner">Offline — o cofre fica somente leitura até reconectar.</string>
-    <string name="vault_empty">Seu cofre está vazio</string>
     <string name="vault_empty_hint">Os novos itens que você adicionar aparecem aqui.</string>
     <string name="vault_no_matches">Nenhum resultado</string>
     <string name="item_back">Voltar</string>
@@ -197,7 +192,7 @@
     <string name="devices_title">Dispositivos</string>
     <string name="devices_this_phone">Este celular</string>
     <string name="devices_last_seen">Visto por último: %1$s</string>
-    <string name="devices_never_seen">Visto por último: nunca</string>
+    <string name="devices_never_seen">Ainda não visto</string>
     <string name="devices_revoke">Revogar</string>
     <string name="devices_revoke_confirm">Desconectar %1$s e encerrar a sessão dele?</string>
     <string name="devices_revoke_this">Desconectar este celular?</string>
@@ -222,7 +217,6 @@
     <string name="autofill_filled_once">Preenchido desta vez — conecte-se para salvar este app para a próxima.</string>
 
     <!-- Create, edit and delete -->
-    <string name="vault_new_item">Novo item</string>
     <string name="vault_new_login">Login</string>
     <string name="vault_new_note">Nota segura</string>
     <string name="vault_new_card">Cartão</string>
@@ -305,4 +299,46 @@
     <string name="autofill_card_save_offline">O HavenKeys está offline. O cartão não foi salvo.</string>
     <string name="autofill_card_save_locked">O HavenKeys foi bloqueado antes de salvar. O cartão não foi salvo.</string>
     <string name="autofill_card_save_failed">O HavenKeys não conseguiu salvar este cartão.</string>
+    <!-- ui/kit (spec 2026-10-03 §5.2) -->
+    <string name="kit_copied">Copiado</string>
+    <string name="kit_new_item">Novo item</string>
+    <string name="kit_close">Fechar</string>
+    <string name="kit_refresh">Atualizar</string>
+    <string name="kit_refreshing">Atualizando</string>
+
+    <!-- Shell and new screens (spec 2026-10-03 §6) -->
+    <string name="tab_home">Início</string>
+    <string name="tab_items">Itens</string>
+    <string name="shell_search">Buscar</string>
+    <string name="shell_offline">Offline</string>
+    <string name="shell_sync">Sincronizar agora</string>
+    <string name="shell_syncing">Sincronizando</string>
+    <string name="add_generate">Gerar senha</string>
+    <string name="add_offline">Adicionar precisa de conexão</string>
+    <string name="identity_part_name">Nome</string>
+    <string name="identity_part_email">E-mail</string>
+    <string name="identity_part_phone">Telefone</string>
+    <string name="identity_part_address">Endereço</string>
+    <string name="identity_part_work">Trabalho</string>
+    <string name="identity_part_documents">Documentos</string>
+    <string name="identity_part_other">Outros dados</string>
+    <string name="home_recent">Adicionados recentemente</string>
+    <string name="home_frequent">Usados com frequência</string>
+    <string name="home_frequent_empty">Os itens que você preencher ou copiar aparecem aqui.</string>
+    <string name="home_identity_empty">Adicione seus dados</string>
+    <string name="items_empty">Nada aqui ainda</string>
+    <string name="search_recent">Buscas recentes</string>
+    <string name="search_clear">Limpar</string>
+    <string name="search_cancel">Cancelar</string>
+    <string name="search_clear_field">Limpar busca</string>
+    <string name="settings_signed_in_as">Conectado como</string>
+
+    <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
+    <string name="edit_match">Corresponde a</string>
+    <!-- The word of unlock_title set in the serif italic, as on the desktop -->
+    <string name="unlock_title_locked">bloqueado</string>
+    <!-- A hidden value read after its field's label ("Password, Hidden") -->
+    <string name="hidden_value">Oculto</string>
+    <!-- What TalkBack hears for a device's Revoke button: the device's name -->
+    <string name="devices_revoke_named">Revogar %1$s</string>
 </resources>

@@ -282,6 +282,13 @@ pub struct ItemInput {
 }
 
 impl ItemInput {
+    /// `blank` for other crates' tests.
+    #[cfg(any(test, feature = "test-util"))]
+    #[doc(hidden)]
+    pub fn blank_for_tests(item_type: ItemType, title: &str) -> ItemInput {
+        Self::blank(item_type, title.to_owned())
+    }
+
     /// An item of `item_type` with nothing set: no username, websites or
     /// secrets, every secret left as it is.
     pub(crate) fn blank(item_type: ItemType, title: String) -> ItemInput {

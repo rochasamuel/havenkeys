@@ -7,6 +7,7 @@
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 pub mod account;
+pub mod activity;
 mod app_fill;
 pub mod app_target;
 pub mod asset_links;

@@ -41,7 +41,15 @@ class ItemViewModelTest {
 
     private fun vm(vault: FakeVaultRepository) = ItemViewModel(vault, settings, events, "id")
 
-    private fun summary() = ItemSummary("id", ItemKind.LOGIN, "GitHub", "octo", "github.com", true, false, 0)
+    @Test
+    fun aCopyCountsAsAUseOfThisItem() = runTest {
+        val vault = FakeVaultRepository()
+        val vm = vm(vault)
+        vm.copied()
+        assertEquals(listOf("id"), vault.usesRecorded)
+    }
+
+    private fun summary() = ItemSummary("id", ItemKind.LOGIN, "GitHub", "octo", "github.com", true, false, 0, 0)
 
     private fun loginView() = ItemView(
         summary(),

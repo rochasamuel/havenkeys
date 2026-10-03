@@ -56,6 +56,9 @@ class FakeVaultRepository : VaultRepository {
     var items: Outcome<List<ItemSummary>> = Outcome.Ok(emptyList())
     var view: Outcome<ItemView> = Outcome.Failed("not_found")
     var revealed: Outcome<String> = Outcome.Failed("not_found")
+
+    /** When set, reveal waits for it: a test can stop the app while Rust is still answering. */
+    var revealGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     var totpNow: Outcome<TotpNow> = Outcome.Failed("not_found")
     var bundle: Outcome<ByteArray> = Outcome.Failed("internal")
     val calls = mutableListOf<String>()
@@ -63,9 +66,11 @@ class FakeVaultRepository : VaultRepository {
     override suspend fun status() = nextStatus
 
     var lastSecretKey: String? = null
+    var lastPassword: String? = null
 
     override suspend fun unlockPassword(password: String, secretKey: String?): Outcome<Status> {
         calls += "unlockPassword"
+        lastPassword = password
         lastSecretKey = secretKey
         return nextStatus
     }
@@ -107,6 +112,7 @@ class FakeVaultRepository : VaultRepository {
 
     override suspend fun reveal(id: String, key: String): Outcome<String> {
         calls += "reveal:$key"
+        revealGate?.await()
         return revealed
     }
 
@@ -156,6 +162,39 @@ class FakeVaultRepository : VaultRepository {
         calls += "delete:$id"
         return deleted
     }
+
+    val usesRecorded = mutableListOf<String>()
+    var frequent: Outcome<List<ItemSummary>> = Outcome.Ok(emptyList())
+    var recent: Outcome<List<ItemSummary>> = Outcome.Ok(emptyList())
+    val searches = mutableListOf<String>()
+
+    override suspend fun recordUse(id: String): Outcome<Unit> {
+        usesRecorded += id
+        return Outcome.Ok(Unit)
+    }
+
+    override suspend fun frequentlyUsed(n: Int): Outcome<List<ItemSummary>> {
+        calls += "frequent:$n"
+        return frequent
+    }
+
+    override suspend fun recentlyCreated(n: Int): Outcome<List<ItemSummary>> {
+        calls += "recent:$n"
+        return recent
+    }
+
+    override suspend fun recentSearches(): Outcome<List<String>> = Outcome.Ok(searches.toList())
+
+    override suspend fun recordSearch(query: String): Outcome<Unit> {
+        searches.removeAll { it.equals(query.trim(), ignoreCase = true) }
+        if (query.isNotBlank()) searches.add(0, query.trim())
+        return Outcome.Ok(Unit)
+    }
+
+    override suspend fun clearRecentSearches(): Outcome<Unit> {
+        searches.clear()
+        return Outcome.Ok(Unit)
+    }
 }
 
 class FakeAccountRepository : AccountRepository {
@@ -165,6 +204,10 @@ class FakeAccountRepository : AccountRepository {
     var deviceList: Outcome<List<DeviceInfo>> = Outcome.Ok(emptyList())
     var done: Outcome<Unit> = Outcome.Ok(Unit)
     val calls = mutableListOf<String>()
+    val freshCalls = mutableListOf<Boolean>()
+
+    /** When set, syncNow suspends until it completes. */
+    var syncGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     override suspend fun scanKit(frame: LumaFrame): Outcome<KitPreview?> {
         calls += "scanKit"
@@ -190,8 +233,10 @@ class FakeAccountRepository : AccountRepository {
         return nextStatus
     }
 
-    override suspend fun syncNow(): Outcome<Unit> {
+    override suspend fun syncNow(fresh: Boolean): Outcome<Unit> {
         calls += "syncNow"
+        freshCalls += fresh
+        syncGate?.await()
         return sync
     }
 
@@ -243,6 +288,12 @@ class FakeAutofillRepository : AutofillRepository {
     var code: Outcome<String> = Outcome.Failed("not_found")
     var bound: Outcome<BoundFill> = Outcome.Failed("not_found")
     val calls = mutableListOf<String>()
+    val usesRecorded = mutableListOf<String>()
+
+    override suspend fun recordUse(id: String): Outcome<Unit> {
+        usesRecorded += id
+        return Outcome.Ok(Unit)
+    }
 
     override suspend fun targetKind(target: TargetFacts) = kind
 

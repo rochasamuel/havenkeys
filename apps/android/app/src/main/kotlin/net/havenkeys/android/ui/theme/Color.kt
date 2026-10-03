@@ -1,175 +1,147 @@
+@file:Suppress("MatchingDeclarationName")
+
 package net.havenkeys.android.ui.theme
 
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
 /*
- * Every value comes from packages/ui/src/tokens.css, the desktop's tokens.
+ * The desktop's named colour roles (apps/desktop/DESIGN.md; packages/ui
+ * tokens; the per-theme layer at the top of apps/desktop/src/styles.css),
+ * light and dark, following the system setting. Dynamic colour is off on
+ * purpose: the vault must look like HavenKeys on every phone.
  *
- * Material 3 role          dark (:root)            light ([data-theme=light])
- * background, surface      --bg          #0f1614   --bg           #ffffff
- * surfaceContainerLowest   --bg-side     #0b110f   --bg           #ffffff
- * surfaceContainerLow      --bg-list     #121b18   --bg-list      #f4f7f5
- * surfaceContainer         --raised      #172320   --bg-list      #f4f7f5
- * surfaceContainerHigh     --hover       #1b2925   --hover        #e9efec
- * surfaceContainerHighest  --selected    #1f2f2a   --line         #e2e8e5
- * surfaceVariant           --raised      #172320   --bg-list      #f4f7f5
- * surfaceBright            --selected    #1f2f2a   --bg           #ffffff
- * surfaceDim, surfaceTint  --bg          #0f1614   --hover/--bg   #e9efec/#ffffff
- * onSurface, onBackground  --text        #e2eae6   --text         #1e2b27
- * onSurfaceVariant         --muted       #86968f   --muted        #66756f
- * outline                  --line-strong #2c3d37   --line-strong  #cbd5d0
- * outlineVariant           --line        #1f2c28   --line         #e2e8e5
- * primary                  --primary-bg  #c9a45c   --primary-bg   #16231f
- * onPrimary                --primary-fg  #121a17   --primary-fg   #f1f5f3
- * primaryContainer,        --brass-soft over --bg  --brass-soft over --bg
- *   secondaryContainer       #292a1e                 #f6f0e5
- * onPrimaryContainer,      --brass-ink   #e3c483   --text         #1e2b27
- *   onSecondaryContainer
- * secondary                --brass       #c9a45c   --brass-ink    #8f7236
- * onSecondary              --on-brass    #121a17   --primary-fg   #f1f5f3
- * tertiary                 --ok          #5fa785   --ok           #3d6b58
- * onTertiary               --on-brass    #121a17   --primary-fg   #f1f5f3
- * inversePrimary           --brass-ink(l)#8f7236   --brass        #c9a45c
- * error                    --danger      #e0775f   --danger       #b4412f
- * onError                  --on-danger   #ffffff   --on-danger    #ffffff
- * errorContainer           --danger 12% over --bg  --danger 12% over --bg
- *                            #28221d                 #f6e8e6
- * inverseSurface           --text-strong #f3f7f5   --bg-side      #16231f
- * inverseOnSurface         --on-brass    #121a17   --side-text    #c3cfc9
- *
- * Light text on the brass containers is --text, not --brass-ink: brass-ink
- * on brass-soft is 4.0:1, under the 4.5:1 small text needs.
- *
- * Material's opaque containers cannot take --brass-soft's alpha, so it is
- * composited over --bg once here; HavenColors.brassSoft keeps the alpha for
- * tints drawn over other surfaces. Dynamic colour is off on purpose: the
- * vault must look like HavenKeys on every phone.
+ * Where the phone departs from the desktop (WCAG AA at the phone's
+ * 13-16sp text; ContrastTest pins it):
+ * - light muted #606f69 (desktop #66756f: 4.45:1 on a group; #61706a was
+ *   4.47:1 on the hover ground of the search pill and segmented track)
+ * - light brassInk and digit #7d632f (desktop #8f7236: 4.17:1 on a group,
+ *   4.0:1 on a brass-soft pill)
+ * - dark onDanger #121a17 (desktop white: 3.0:1 on #e0775f)
+ * New for the phone: onGlass (toast text; the glass is dark in both themes),
+ * thumb (switch and slider thumbs, the desktop's paper white) and scrim (the
+ * dim behind a sheet; the desktop has no sheets).
  */
-
-private val DarkBg = Color(0xFF0F1614)
-private val LightBg = Color(0xFFFFFFFF)
-
-/** The brand roles Material's ColorScheme has no slot for. */
 @Immutable
 data class HavenColors(
+    val isDark: Boolean,
+    /** The window ground: screens, unlock. */
+    val pane: Color,
+    /** A list's ground. */
+    val list: Color,
+    /** An inset group of rows. */
+    val group: Color,
+    /** The border of a group and the hairlines between its rows. */
+    val groupLine: Color,
+    /** An input's or a segmented control's track. */
+    val field: Color,
+    /** Something lifted: a sheet, a dialog, a menu, the segmented thumb. */
+    val raised: Color,
+    val hover: Color,
+    val line: Color,
+    /** The edge of anything interactive. */
+    val lineStrong: Color,
+    val text: Color,
     val textStrong: Color,
+    val muted: Color,
+    /** The fitting: controls and thin lines, never large surfaces. */
     val brass: Color,
     val brassHi: Color,
+    /** Brass that carries text. */
     val brassInk: Color,
+    /** The brass wash: pills, press feedback, a secure note's tile. */
     val brassSoft: Color,
+    /** The selection wash: a focused field row. */
+    val sel: Color,
+    /** The one committing button: brass in dark, forest in light. */
+    val primary: Color,
+    val onPrimary: Color,
+    val onBrass: Color,
     val ok: Color,
     val danger: Color,
+    val onDanger: Color,
+    /** The toast's ground, dark in both themes. */
+    val glass: Color,
+    val onGlass: Color,
+    /** Digits inside a generated password. */
     val digit: Color,
+    /** Symbols inside a generated password. */
     val symbol: Color,
+    /** The monogram tile and its initial. */
     val avatarBg: Color,
     val avatarFg: Color,
-    val onBrass: Color,
+    /** Switch and slider thumbs. */
+    val thumb: Color,
+    /** The dim behind a sheet. */
+    val scrim: Color,
 )
 
 val DarkHavenColors = HavenColors(
+    isDark = true,
+    pane = Color(0xFF0F1614),
+    list = Color(0xFF121B18),
+    group = Color(0xFF152120),
+    groupLine = Color(0x12E2EAE6),
+    field = Color(0xFF0B110F),
+    raised = Color(0xFF172320),
+    hover = Color(0xFF1B2925),
+    line = Color(0xFF1F2C28),
+    lineStrong = Color(0xFF2C3D37),
+    text = Color(0xFFE2EAE6),
     textStrong = Color(0xFFF3F7F5),
+    muted = Color(0xFF86968F),
     brass = Color(0xFFC9A45C),
     brassHi = Color(0xFFE3C483),
     brassInk = Color(0xFFE3C483),
     brassSoft = Color(0x24C9A45C),
+    sel = Color(0x26C9A45C),
+    primary = Color(0xFFC9A45C),
+    onPrimary = Color(0xFF121A17),
+    onBrass = Color(0xFF121A17),
     ok = Color(0xFF5FA785),
     danger = Color(0xFFE0775F),
+    onDanger = Color(0xFF121A17),
+    glass = Color(0xF20F1614),
+    onGlass = Color(0xFFF3F7F5),
     digit = Color(0xFFE3C483),
     symbol = Color(0xFF8FC4AD),
     avatarBg = Color(0xFF1D2B27),
     avatarFg = Color(0xFFE3C483),
-    onBrass = Color(0xFF121A17),
+    thumb = Color(0xFFFBFCFB),
+    scrim = Color(0x8C000000),
 )
 
 val LightHavenColors = HavenColors(
+    isDark = false,
+    pane = Color(0xFFFFFFFF),
+    list = Color(0xFFF4F7F5),
+    group = Color(0xFFF3F6F4),
+    groupLine = Color(0xFFE2E8E5),
+    field = Color(0xFFFFFFFF),
+    raised = Color(0xFFFFFFFF),
+    hover = Color(0xFFE9EFEC),
+    line = Color(0xFFE2E8E5),
+    lineStrong = Color(0xFFCBD5D0),
+    text = Color(0xFF1E2B27),
     textStrong = Color(0xFF121A17),
+    muted = Color(0xFF606F69),
     brass = Color(0xFFC9A45C),
     brassHi = Color(0xFFE3C483),
-    brassInk = Color(0xFF8F7236),
+    brassInk = Color(0xFF7D632F),
     brassSoft = Color(0x29C9A45C),
+    sel = Color(0x2EC9A45C),
+    primary = Color(0xFF16231F),
+    onPrimary = Color(0xFFF1F5F3),
+    onBrass = Color(0xFF121A17),
     ok = Color(0xFF3D6B58),
     danger = Color(0xFFB4412F),
-    digit = Color(0xFF8F7236),
+    onDanger = Color(0xFFFFFFFF),
+    glass = Color(0xF216231F),
+    onGlass = Color(0xFFF3F7F5),
+    digit = Color(0xFF7D632F),
     symbol = Color(0xFF3D6B58),
     avatarBg = Color(0xFF16231F),
     avatarFg = Color(0xFFE3C483),
-    onBrass = Color(0xFF121A17),
-)
-
-internal val DarkScheme: ColorScheme = darkColorScheme(
-    primary = Color(0xFFC9A45C),
-    onPrimary = Color(0xFF121A17),
-    primaryContainer = Color(0xFF292A1E),
-    onPrimaryContainer = Color(0xFFE3C483),
-    inversePrimary = Color(0xFF8F7236),
-    secondary = Color(0xFFC9A45C),
-    onSecondary = Color(0xFF121A17),
-    secondaryContainer = Color(0xFF292A1E),
-    onSecondaryContainer = Color(0xFFE3C483),
-    tertiary = Color(0xFF5FA785),
-    onTertiary = Color(0xFF121A17),
-    background = DarkBg,
-    onBackground = Color(0xFFE2EAE6),
-    surface = DarkBg,
-    onSurface = Color(0xFFE2EAE6),
-    surfaceVariant = Color(0xFF172320),
-    onSurfaceVariant = Color(0xFF86968F),
-    surfaceTint = DarkBg,
-    inverseSurface = Color(0xFFF3F7F5),
-    inverseOnSurface = Color(0xFF121A17),
-    error = Color(0xFFE0775F),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFF28221D),
-    onErrorContainer = Color(0xFFE0775F),
-    outline = Color(0xFF2C3D37),
-    outlineVariant = Color(0xFF1F2C28),
-    scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFF1F2F2A),
-    surfaceDim = DarkBg,
-    surfaceContainerLowest = Color(0xFF0B110F),
-    surfaceContainerLow = Color(0xFF121B18),
-    surfaceContainer = Color(0xFF172320),
-    surfaceContainerHigh = Color(0xFF1B2925),
-    surfaceContainerHighest = Color(0xFF1F2F2A),
-)
-
-internal val LightScheme: ColorScheme = lightColorScheme(
-    primary = Color(0xFF16231F),
-    onPrimary = Color(0xFFF1F5F3),
-    primaryContainer = Color(0xFFF6F0E5),
-    onPrimaryContainer = Color(0xFF1E2B27),
-    inversePrimary = Color(0xFFC9A45C),
-    secondary = Color(0xFF8F7236),
-    onSecondary = Color(0xFFF1F5F3),
-    secondaryContainer = Color(0xFFF6F0E5),
-    onSecondaryContainer = Color(0xFF1E2B27),
-    tertiary = Color(0xFF3D6B58),
-    onTertiary = Color(0xFFF1F5F3),
-    background = LightBg,
-    onBackground = Color(0xFF1E2B27),
-    surface = LightBg,
-    onSurface = Color(0xFF1E2B27),
-    surfaceVariant = Color(0xFFF4F7F5),
-    onSurfaceVariant = Color(0xFF66756F),
-    surfaceTint = LightBg,
-    inverseSurface = Color(0xFF16231F),
-    inverseOnSurface = Color(0xFFC3CFC9),
-    error = Color(0xFFB4412F),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFF6E8E6),
-    onErrorContainer = Color(0xFFB4412F),
-    outline = Color(0xFFCBD5D0),
-    outlineVariant = Color(0xFFE2E8E5),
-    scrim = Color(0xFF000000),
-    surfaceBright = LightBg,
-    surfaceDim = Color(0xFFE9EFEC),
-    surfaceContainerLowest = LightBg,
-    surfaceContainerLow = Color(0xFFF4F7F5),
-    surfaceContainer = Color(0xFFF4F7F5),
-    surfaceContainerHigh = Color(0xFFE9EFEC),
-    surfaceContainerHighest = Color(0xFFE2E8E5),
+    thumb = Color(0xFFFBFCFB),
+    scrim = Color(0x4D16231F),
 )

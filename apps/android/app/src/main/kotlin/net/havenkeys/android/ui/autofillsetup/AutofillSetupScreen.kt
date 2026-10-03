@@ -10,27 +10,20 @@ import android.view.autofill.AutofillManager
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -39,7 +32,17 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import net.havenkeys.android.R
 import net.havenkeys.android.credentials.HavenCredentialService
-import net.havenkeys.android.ui.components.HavenTopBar
+import net.havenkeys.android.ui.components.ScreenBar
+import net.havenkeys.android.ui.kit.ButtonStyle
+import net.havenkeys.android.ui.kit.GroupRow
+import net.havenkeys.android.ui.kit.GroupRowText
+import net.havenkeys.android.ui.kit.HavenButton
+import net.havenkeys.android.ui.kit.HavenIcon
+import net.havenkeys.android.ui.kit.HavenScaffold
+import net.havenkeys.android.ui.kit.HavenText
+import net.havenkeys.android.ui.kit.InsetGroup
+import net.havenkeys.android.ui.shell.LargeTitle
+import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
 
 /**
@@ -60,46 +63,33 @@ fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit,
         onPauseOrDispose { }
     }
 
-    Scaffold(
-        topBar = {
-            HavenTopBar(
-                stringResource(R.string.autofill_setup_title),
-                online = online,
-                onLock = onLock,
-                onBack = onBack,
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background,
+    HavenScaffold(
         modifier = modifier,
+        topBar = { ScreenBar(onBack = onBack, online = online, onLock = onLock) },
     ) { padding ->
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = HavenSpacing.gutter)
+                .padding(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ServiceState(enabled)
+            LargeTitle(stringResource(R.string.autofill_setup_title))
+            ServiceState(
+                enabled,
+                stringResource(if (enabled) R.string.autofill_setup_on else R.string.autofill_setup_off),
+            )
             if (!enabled) {
-                Button(
+                HavenButton(
+                    stringResource(R.string.autofill_setup_open),
                     onClick = { openFailed = !requestAutofillService(context) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.autofill_setup_open)) }
+                    Modifier.fillMaxWidth(),
+                )
             }
-            if (openFailed) {
-                Text(stringResource(R.string.autofill_setup_unavailable), color = MaterialTheme.colorScheme.error)
-            }
-            Text(
-                stringResource(R.string.autofill_setup_chrome_title),
-                style = MaterialTheme.typography.titleSmall,
-                color = HavenTheme.colors.textStrong,
-            )
-            Text(
-                stringResource(R.string.autofill_setup_chrome),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (openFailed) Problem(stringResource(R.string.autofill_setup_unavailable))
+            Heading(stringResource(R.string.autofill_setup_chrome_title))
+            HavenText(stringResource(R.string.autofill_setup_chrome), color = HavenTheme.colors.muted)
             PasskeysSection(passkeysOn, providerOpenFailed) { providerOpenFailed = !openProviderSettings(context) }
         }
     }
@@ -107,59 +97,51 @@ fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit,
 
 @Composable
 private fun PasskeysSection(passkeysOn: Boolean, openFailed: Boolean, onOpen: () -> Unit) {
-    Text(
-        stringResource(R.string.autofill_setup_passkeys_title),
-        style = MaterialTheme.typography.titleSmall,
-        color = HavenTheme.colors.textStrong,
-    )
+    Heading(stringResource(R.string.autofill_setup_passkeys_title))
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        Text(
-            stringResource(R.string.autofill_setup_passkeys_old),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        HavenText(stringResource(R.string.autofill_setup_passkeys_old), color = HavenTheme.colors.muted)
+        return
+    }
+    // A state row like autofill's above, so the two settings read alike.
+    ServiceState(
+        passkeysOn,
+        stringResource(if (passkeysOn) R.string.autofill_setup_passkeys_on else R.string.autofill_setup_passkeys_off),
+    )
+    if (!passkeysOn) {
+        // Secondary: Open settings above may already be the screen's one primary.
+        HavenButton(
+            stringResource(R.string.autofill_setup_passkeys_open),
+            onClick = onOpen,
+            Modifier.fillMaxWidth(),
+            style = ButtonStyle.Secondary,
         )
-    } else {
-        Text(
-            stringResource(
-                if (passkeysOn) R.string.autofill_setup_passkeys_on else R.string.autofill_setup_passkeys_off,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        if (!passkeysOn) {
-            Button(
-                onClick = onOpen,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.autofill_setup_passkeys_open)) }
-        }
-        if (openFailed) {
-            Text(stringResource(R.string.autofill_setup_passkeys_unavailable), color = MaterialTheme.colorScheme.error)
+    }
+    if (openFailed) Problem(stringResource(R.string.autofill_setup_passkeys_unavailable))
+}
+
+/** Whether a setting is HavenKeys': a check when it is, an alert while it is not. */
+@Composable
+private fun ServiceState(enabled: Boolean, text: String) {
+    InsetGroup {
+        row {
+            GroupRow(icon = if (enabled) HavenIcon.Check else HavenIcon.Alert) { GroupRowText(text) }
         }
     }
 }
 
 @Composable
-private fun ServiceState(enabled: Boolean) {
-    Surface(
-        color = if (enabled) MaterialTheme.colorScheme.surfaceContainerLow else HavenTheme.colors.brassSoft,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(16.dp),
-        ) {
-            Icon(
-                if (enabled) Icons.Outlined.CheckCircle else Icons.Outlined.Info,
-                contentDescription = null,
-                tint = HavenTheme.colors.brassInk,
-            )
-            Text(
-                stringResource(if (enabled) R.string.autofill_setup_on else R.string.autofill_setup_off),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
+private fun Heading(text: String) {
+    HavenText(
+        text,
+        Modifier.padding(top = 12.dp).semantics { heading() },
+        style = HavenTheme.type.groupTitle,
+        color = HavenTheme.colors.textStrong,
+    )
+}
+
+@Composable
+private fun Problem(text: String) {
+    HavenText(text, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = HavenTheme.colors.danger)
 }
 
 /** True only when the chosen autofill service is this app's. */

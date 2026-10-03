@@ -56,6 +56,14 @@ class UnlockViewModelTest {
     }
 
     @Test
+    fun thePasswordAndTheSecretKeyReachRustInTheirOwnParameters() = runTest {
+        val vault = FakeVaultRepository()
+        vm(vault).unlockPassword("the-password", " the-key ")
+        assertEquals("the-password", vault.lastPassword)
+        assertEquals("the-key", vault.lastSecretKey)
+    }
+
+    @Test
     fun theBiometricButtonNeedsBothHardwareAndABundle() = runTest {
         assertTrue(vm(FakeVaultRepository(), biometricAvailable = true, hasBundle = true).state.value.offerBiometric)
         assertFalse(vm(FakeVaultRepository(), biometricAvailable = false, hasBundle = true).state.value.offerBiometric)

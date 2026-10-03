@@ -374,6 +374,11 @@ Hybrid (QR from a computer) is Android's job and out of scope.
 
 ### 9.1 Screens
 
+> Amended on 2026-10-03 by
+> `docs/superpowers/specs/2026-10-03-android-redesign-design.md`: own
+> component set instead of Material 3, Home/Items/Settings navigation,
+> per-device activity data.
+
 Onboarding (scan kit, type kit, invite) · Unlock · Vault (search; Logins,
 Notes, Cards, Identities, Passkeys; offline/sync banner) · Item detail
 (hidden fields, reveal, copy with clear, live TOTP) · Edit/create (M2, with
@@ -385,6 +390,11 @@ service"). The autofill picker, "Search HavenKeys…" and the passkey sheet
 reuse the same Compose components.
 
 ### 9.2 Design
+
+> Amended on 2026-10-03 by
+> `docs/superpowers/specs/2026-10-03-android-redesign-design.md`: the app no
+> longer uses Material 3. It is built on Compose foundation with its own
+> component set (`ui/kit`, recorded in `apps/android/DESIGN.md`).
 
 Jetpack Compose with Material 3. The visual design is done with the
 `/impeccable` skill at implementation time, starting from the existing

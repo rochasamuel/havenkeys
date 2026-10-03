@@ -11,6 +11,7 @@ import uniffi.havenkeys_mobile.MobileVault
 import uniffi.havenkeys_mobile.Status
 import uniffi.havenkeys_mobile.TotpNow
 
+@Suppress("TooManyFunctions") // the one seam to the Rust vault; activity calls extend it
 interface VaultRepository {
     suspend fun status(): Outcome<Status>
     /** [secretKey] only when the device lacks it (`Status.needsSecretKey`). */
@@ -33,6 +34,12 @@ interface VaultRepository {
     suspend fun create(draft: ItemDraft): Outcome<String>
     suspend fun update(id: String, draft: ItemDraft): Outcome<Unit>
     suspend fun delete(id: String): Outcome<Unit>
+    suspend fun recordUse(id: String): Outcome<Unit>
+    suspend fun frequentlyUsed(n: Int): Outcome<List<ItemSummary>>
+    suspend fun recentlyCreated(n: Int): Outcome<List<ItemSummary>>
+    suspend fun recentSearches(): Outcome<List<String>>
+    suspend fun recordSearch(query: String): Outcome<Unit>
+    suspend fun clearRecentSearches(): Outcome<Unit>
 }
 
 class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
@@ -63,4 +70,10 @@ class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
     override suspend fun create(draft: ItemDraft) = rust { vault.createItem(draft) }
     override suspend fun update(id: String, draft: ItemDraft) = rust { vault.updateItem(id, draft) }
     override suspend fun delete(id: String) = rust { vault.deleteItem(id) }
+    override suspend fun recordUse(id: String) = rust { vault.recordUse(id) }
+    override suspend fun frequentlyUsed(n: Int) = rust { vault.frequentlyUsed(n.toUInt()) }
+    override suspend fun recentlyCreated(n: Int) = rust { vault.recentlyCreated(n.toUInt()) }
+    override suspend fun recentSearches() = rust { vault.recentSearches() }
+    override suspend fun recordSearch(query: String) = rust { vault.recordSearch(query) }
+    override suspend fun clearRecentSearches() = rust { vault.clearRecentSearches() }
 }

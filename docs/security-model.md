@@ -1268,8 +1268,8 @@ hosts whose registrable domain's first label appears in the package name
 * The core `LockManager` and its auto-lock choices (never, 5, 15, 30, 60
   minutes), ticked every 5 seconds by a Rust thread and checked again when
   the app returns to the foreground. Only the user resets the idle timer:
-  taps in the main activity (`onUserInteraction`) and typing in the vault
-  search. No read does (list, search, open, reveal, TOTP), because the app
+  taps in the main activity (`onUserInteraction`) and typing in the search
+  screen. No read does (list, search, open, reveal, TOTP), because the app
   also makes them on its own — a sync's `items_changed` reloads every 30
   seconds in the foreground, the item screen's TOTP code every second — and
   counting those would keep the vault unlocked forever (`security-review.md`
@@ -1643,3 +1643,36 @@ Android's facts and draws UI. Nothing here has run on a phone yet.
   passkey or login names. Credential Manager and Autofill are not app use:
   neither touches the idle timer.
 * **Known limitations:** `security-review.md` AN37-AN44.
+
+### 22.19 Device-local sealed slots
+
+The following data is sealed with the vault's data key in device-local slots
+(`local_blob`), never synced to the server, and readable only while unlocked:
+
+* **Activity**: Item UUIDs with decayed use scores (most recent fills and copies
+  are weighted higher) and last-use times (Unix ms), plus up to 10 most recent
+  search queries. Used by the Home screen to list frequently used items and
+  recently created items, and by search to show recent queries. An unreadable
+  or newer-version document reads as empty.
+* **Asset Links cache**: Web hosts and their associated app packages/certificates
+  (schema 6), for matching Autofill requests to logins. A file is kept 7 days,
+  a fetch failure 1 hour, 256 hosts at most. See §22.7.
+* **Device settings**: "Lock when the screen turns off", "Confirm before
+  filling" and "Check website–app links" for this phone
+  (`crates/havenkeys-mobile/src/settings.rs`). Nothing written yet reads as
+  the defaults; a blob that does not open reads as the defaults with
+  "Confirm before filling" on, so a damaged blob never turns it off.
+
+Each slot is sealed under its own blob purpose (`device-settings`,
+`asset-links`, `activity`), so one slot's blob does not open as another's,
+and another vault's key opens none of them. The activity record reveals,
+to someone who can unlock the vault, which items are used most and the
+recent searches: no more than the vault itself; to anyone else it is
+ciphertext.
+
+On Android the Home and search screens hold this data only in their
+ViewModels' memory and drop it on lock, sign-out and removal. The query
+being typed lives in the search screen's ViewModel and its field's
+composition state; it is never put into a navigation route, saved instance
+state, `SavedStateHandle` or a log, and it becomes a recent search only
+when a result is opened.

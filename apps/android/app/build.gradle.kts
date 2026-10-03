@@ -25,8 +25,8 @@ android {
         applicationId = "net.havenkeys.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -62,6 +62,23 @@ android {
     }
     buildFeatures { compose = true }
     packaging { jniLibs { useLegacyPackaging = false } }
+
+    testOptions {
+        // The ui/kit component tests run on the JVM under Robolectric and
+        // need the merged resources (strings, fonts).
+        unitTests {
+            isIncludeAndroidResources = true
+            // -PscreensDir=.impeccable/review renders the kit catalogue to PNGs
+            // (CatalogueScreenshots); without it that test skips itself.
+            val screensDir = providers.gradleProperty("screensDir").orNull
+            all { test ->
+                if (screensDir != null) {
+                    test.systemProperty("havenkeys.screens.dir", rootProject.file(screensDir).absolutePath)
+                    test.outputs.upToDateWhen { false }
+                }
+            }
+        }
+    }
 }
 
 kotlin { jvmToolchain(17) }
@@ -82,7 +99,7 @@ val rustlsPlatformVerifierVersion: String = providers
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(files("detekt.yml"))
-    source.setFrom("src/main/kotlin", "src/test/kotlin")
+    source.setFrom("src/main/kotlin", "src/test/kotlin", "src/debug/kotlin", "src/testDebug/kotlin")
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
@@ -114,7 +131,31 @@ val forbidLogging by tasks.registering {
         }
     }
 }
-tasks.named("detekt") { dependsOn(forbidLogging) }
+// Spec 2026-10-03 §5 and §8: everything is drawn from ui/kit on Compose
+// foundation; the Material libraries were removed in stage 5. This scan keeps
+// them out of every source set (androidTest too, which detekt does not read),
+// catches qualified names that need no import, and fails on a Material module
+// in the version catalog before anything uses it. detekt's ForbiddenImport
+// (detekt.yml) says the same for imports.
+val forbidMaterial by tasks.registering {
+    description = "Fails on any Material: Compose Material, Material 3 or Material Components."
+    val sources = fileTree("src") { include("**/*.kt") }
+    val catalog = rootProject.file("gradle/libs.versions.toml")
+    inputs.files(sources)
+    inputs.file(catalog)
+    doLast {
+        val material = Regex("""\bandroidx\.compose\.material3?\b|\bcom\.google\.android\.material\b""")
+        val hits = (sources.files + catalog).flatMap { file ->
+            file.readLines().mapIndexedNotNull { i, line ->
+                if (material.containsMatchIn(line)) "${file.path}:${i + 1}" else null
+            }
+        }
+        if (hits.isNotEmpty()) {
+            throw GradleException("Material is not used in HavenKeys; build from ui/kit (spec 2026-10-03 §5):\n" + hits.joinToString("\n"))
+        }
+    }
+}
+tasks.named("detekt") { dependsOn(forbidLogging, forbidMaterial) }
 
 // detekt 1.23 embeds the Kotlin compiler it was built with; the project's
 // newer Kotlin must not replace it on detekt's own classpath.
@@ -125,6 +166,10 @@ configurations.matching { it.name == "detekt" }.configureEach {
 }
 
 dependencies {
+    constraints {
+        // material3 used to raise this; keep the version the app shipped with so verification needs no new hash.
+        implementation("androidx.collection:collection:1.6.0")
+    }
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.process)
@@ -134,8 +179,7 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.icons)
+    implementation(libs.compose.foundation)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
     implementation(libs.biometric)
@@ -152,6 +196,9 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test)
+    testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.androidx.test.runner)

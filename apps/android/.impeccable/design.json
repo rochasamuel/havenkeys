@@ -1,0 +1,626 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-03T00:00:00Z",
+  "title": "Design System: HavenKeys (Android app)",
+  "extensions": {
+    "colorMeta": {
+      "pane": {
+        "role": "neutral",
+        "displayName": "Window Green",
+        "tonalRamp": [
+          "#0b110f",
+          "#0f1614",
+          "#121b18",
+          "#152120",
+          "#172320",
+          "#1f2c28",
+          "#2c3d37",
+          "#86968f"
+        ]
+      },
+      "pane-light": {
+        "role": "neutral",
+        "displayName": "White Pane"
+      },
+      "list": {
+        "role": "neutral",
+        "displayName": "List Green"
+      },
+      "list-light": {
+        "role": "neutral",
+        "displayName": "Pale List"
+      },
+      "group": {
+        "role": "neutral",
+        "displayName": "Group Green"
+      },
+      "group-light": {
+        "role": "neutral",
+        "displayName": "Group Mist"
+      },
+      "group-line": {
+        "role": "neutral",
+        "displayName": "Group Hairline"
+      },
+      "group-line-light": {
+        "role": "neutral",
+        "displayName": "Group Hairline (light)"
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field Green"
+      },
+      "field-light": {
+        "role": "neutral",
+        "displayName": "Field (light, white)"
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised Green"
+      },
+      "raised-light": {
+        "role": "neutral",
+        "displayName": "Raised (light, white)"
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Hover Green"
+      },
+      "hover-light": {
+        "role": "neutral",
+        "displayName": "Hover Mist; light segmented track"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline"
+      },
+      "line-light": {
+        "role": "neutral",
+        "displayName": "Hairline (light)"
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline"
+      },
+      "line-strong-light": {
+        "role": "neutral",
+        "displayName": "Strong Hairline (light)"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Bone"
+      },
+      "text-light": {
+        "role": "neutral",
+        "displayName": "Forest Ink"
+      },
+      "text-strong": {
+        "role": "neutral",
+        "displayName": "Bright Bone"
+      },
+      "text-strong-light": {
+        "role": "neutral",
+        "displayName": "Deep Forest Ink"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Lichen"
+      },
+      "muted-light": {
+        "role": "neutral",
+        "displayName": "Lichen (light #606f69, phone contrast: 4.86:1 on a group, 4.53:1 on the hover ground; desktop #66756f)"
+      },
+      "brass": {
+        "role": "primary",
+        "displayName": "Fitting Brass",
+        "tonalRamp": [
+          "#1e0200",
+          "#3b1c00",
+          "#593900",
+          "#795700",
+          "#9a772d",
+          "#bd9850",
+          "#e4be76",
+          "#ffe99f"
+        ]
+      },
+      "brass-hi": {
+        "role": "primary",
+        "displayName": "Lit Brass"
+      },
+      "brass-ink": {
+        "role": "primary",
+        "displayName": "Brass Ink"
+      },
+      "brass-ink-light": {
+        "role": "primary",
+        "displayName": "Brass Ink (light, phone contrast: 5.22:1 on a group; desktop #8f7236)"
+      },
+      "brass-soft": {
+        "role": "primary",
+        "displayName": "Brass Wash"
+      },
+      "brass-soft-light": {
+        "role": "primary",
+        "displayName": "Brass Wash (light)"
+      },
+      "sel": {
+        "role": "primary",
+        "displayName": "Selection Wash"
+      },
+      "sel-light": {
+        "role": "primary",
+        "displayName": "Selection Wash (light)"
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Brass Primary (dark)"
+      },
+      "primary-light": {
+        "role": "primary",
+        "displayName": "Forest Primary (light)"
+      },
+      "on-primary": {
+        "role": "neutral",
+        "displayName": "Text on Brass Primary"
+      },
+      "on-primary-light": {
+        "role": "neutral",
+        "displayName": "Text on Forest Primary"
+      },
+      "on-brass": {
+        "role": "neutral",
+        "displayName": "Text on Brass"
+      },
+      "ok": {
+        "role": "tertiary",
+        "displayName": "Leaf OK",
+        "tonalRamp": [
+          "#001401",
+          "#003016",
+          "#004e31",
+          "#226d4e",
+          "#468e6d",
+          "#68b08e",
+          "#8ed7b3",
+          "#b8ffdd"
+        ]
+      },
+      "ok-light": {
+        "role": "tertiary",
+        "displayName": "Leaf OK (light)"
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Ember",
+        "tonalRamp": [
+          "#2d0000",
+          "#4f0000",
+          "#721e0b",
+          "#953f2c",
+          "#b9604c",
+          "#de816c",
+          "#ffa790",
+          "#ffd1b9"
+        ]
+      },
+      "danger-light": {
+        "role": "tertiary",
+        "displayName": "Ember (light)"
+      },
+      "on-danger": {
+        "role": "neutral",
+        "displayName": "Text on Ember (dark, phone contrast: 5.88:1; desktop white 3.01:1)"
+      },
+      "on-danger-light": {
+        "role": "neutral",
+        "displayName": "Text on Ember (light)"
+      },
+      "glass": {
+        "role": "neutral",
+        "displayName": "Toast Glass (95%)"
+      },
+      "glass-light": {
+        "role": "neutral",
+        "displayName": "Toast Glass (light, 95%)"
+      },
+      "glass-rim": {
+        "role": "neutral",
+        "displayName": "Glass Rim"
+      },
+      "on-glass": {
+        "role": "neutral",
+        "displayName": "Text on Glass"
+      },
+      "digit": {
+        "role": "secondary",
+        "displayName": "Digit Brass"
+      },
+      "digit-light": {
+        "role": "secondary",
+        "displayName": "Digit Brass (light)"
+      },
+      "symbol": {
+        "role": "secondary",
+        "displayName": "Cipher Green",
+        "tonalRamp": [
+          "#001305",
+          "#002d1d",
+          "#154a38",
+          "#366955",
+          "#578a74",
+          "#77ac95",
+          "#9dd2bb",
+          "#c6fde5"
+        ]
+      },
+      "symbol-light": {
+        "role": "secondary",
+        "displayName": "Cipher Green (light)"
+      },
+      "avatar-bg": {
+        "role": "neutral",
+        "displayName": "Avatar Green"
+      },
+      "avatar-bg-light": {
+        "role": "neutral",
+        "displayName": "Avatar Forest (light)"
+      },
+      "avatar-fg": {
+        "role": "primary",
+        "displayName": "Monogram Brass"
+      },
+      "thumb": {
+        "role": "neutral",
+        "displayName": "Paper Thumb"
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Scrim"
+      },
+      "scrim-light": {
+        "role": "neutral",
+        "displayName": "Forest Scrim (light)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The unlock headline; its one brass italic is a span."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Item and editor titles, a list screen's large title."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Sheet and dialog titles."
+      },
+      "title-small": {
+        "displayName": "Small Title",
+        "purpose": "Empty-state lines, small notices."
+      },
+      "monogram": {
+        "displayName": "Monogram",
+        "purpose": "The initial in an item tile, sized to 45% of the tile."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The reading size: messages, menu rows, toast text."
+      },
+      "value": {
+        "displayName": "Value",
+        "purpose": "A row's value, a field's typed text, a trailing count."
+      },
+      "row-title": {
+        "displayName": "Row Title",
+        "purpose": "First line of an item row."
+      },
+      "row-subtitle": {
+        "displayName": "Row Subtitle",
+        "purpose": "Second line of a row, muted."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The muted label above a value; segment options."
+      },
+      "group-title": {
+        "displayName": "Group Title",
+        "purpose": "Section headers and their action, sentence case."
+      },
+      "button": {
+        "displayName": "Button",
+        "purpose": "Button labels; they wrap."
+      },
+      "pill": {
+        "displayName": "Pill",
+        "purpose": "Markers."
+      },
+      "masked": {
+        "displayName": "Masked",
+        "purpose": "The fixed row of dots for a hidden value."
+      },
+      "secret": {
+        "displayName": "Secret",
+        "purpose": "Revealed passwords, keys, setup strings; the secret field."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "One-time codes, tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet",
+        "value": "Compose shadow 24dp, top corners 18dp",
+        "purpose": "The bottom sheet."
+      },
+      {
+        "name": "dialog",
+        "value": "Compose shadow 24dp, 18dp corners",
+        "purpose": "The dialog."
+      },
+      {
+        "name": "menu",
+        "value": "Compose shadow 16dp, 14dp corners, 1dp line-strong border",
+        "purpose": "The menu."
+      },
+      {
+        "name": "toast",
+        "value": "Compose shadow 16dp, round, 1dp glass-rim",
+        "purpose": "The toast."
+      },
+      {
+        "name": "add-button",
+        "value": "Compose shadow 10dp, circle",
+        "purpose": "The floating add button."
+      },
+      {
+        "name": "switch-thumb",
+        "value": "0 1dp 3dp rgba(0,0,0,0.35) (Paint shadow layer)",
+        "purpose": "Switch thumb."
+      },
+      {
+        "name": "slider-thumb",
+        "value": "0 1dp 4dp rgba(0,0,0,0.45) (Paint shadow layer)",
+        "purpose": "Slider thumb."
+      },
+      {
+        "name": "segment-thumb",
+        "value": "0 1dp 3dp rgba(0,0,0,0.25) under a 1dp line-strong hairline",
+        "purpose": "The chosen segment."
+      },
+      {
+        "name": "field-focus",
+        "value": "sel wash + 1.5dp brass border",
+        "purpose": "A focused field row (not a shadow)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "spring-smooth",
+        "value": "response 0.5s, damping 1.0 (Compose stiffness ~157.9, dampingRatio 1.0)",
+        "purpose": "Pushes, tab changes, pull to refresh settling."
+      },
+      {
+        "name": "spring-sheet",
+        "value": "response 0.4s, damping 0.86 (stiffness ~246.7, dampingRatio 0.86)",
+        "purpose": "Sheet rise, close and drag settle; menu scale-in from 0.96."
+      },
+      {
+        "name": "spring-toast",
+        "value": "response 0.35s, damping 0.8 (stiffness ~322.3, dampingRatio 0.8)",
+        "purpose": "The toast rising."
+      },
+      {
+        "name": "spring-press",
+        "value": "response 0.2s, damping 1.0 (stiffness ~987, dampingRatio 1.0)",
+        "purpose": "Press scale 0.97 and brass-soft wash; switch thumb."
+      },
+      {
+        "name": "fade",
+        "value": "160ms cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "Fades, colour changes, copy glyph to check, segmented thumb, switch track."
+      },
+      {
+        "name": "snap",
+        "value": "240ms cubic-bezier(0.3, 0.7, 0.2, 1)",
+        "purpose": "Reveal, state changes, list to detail."
+      },
+      {
+        "name": "tick",
+        "value": "250ms cubic-bezier(0.3, 0.7, 0.2, 1)",
+        "purpose": "The one-time code ring's step."
+      },
+      {
+        "name": "seal",
+        "value": "420ms cubic-bezier(0.3, 0.7, 0.2, 1)",
+        "purpose": "Unlock to vault, the lock wipe."
+      },
+      {
+        "name": "spin",
+        "value": "900ms linear, repeating",
+        "purpose": "Indeterminate ProgressRing."
+      },
+      {
+        "name": "stagger",
+        "value": "30ms",
+        "purpose": "Items arriving in sequence (sheet tiles, Home's groups); for stage 3 screens."
+      },
+      {
+        "name": "remove-animations",
+        "value": "animator scale 0: snap() everywhere, still ring",
+        "purpose": "Everything cuts, spinner included."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one committing action on a screen: brass in dark, forest in light.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Unlock</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; min-height:48px; min-width:48px; padding:12px 18px; border:1px solid transparent; border-radius:10px; font:550 16px/20px \"Hanken Grotesk\", system-ui, sans-serif; transition: transform 200ms cubic-bezier(0.32,0.72,0,1), background-color 160ms cubic-bezier(0.32,0.72,0,1); } .ds-btn-primary { background:#c9a45c; color:#121a17; } .ds-btn:active { transform:scale(0.97); box-shadow: inset 0 0 0 999px rgba(201,164,92,0.14); } .ds-btn:focus-visible { outline:none; box-shadow:0 0 0 2px #0f1614, 0 0 0 4px rgba(201,164,92,0.6); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined, transparent: every non-committing action.",
+      "html": "<button class=\"ds-btn-secondary\">Generate</button>",
+      "css": ".ds-btn-secondary { min-height:48px; padding:12px 18px; border:1px solid #2c3d37; border-radius:10px; background:transparent; color:#f3f7f5; font:550 16px/20px \"Hanken Grotesk\", system-ui, sans-serif; transition: transform 200ms cubic-bezier(0.32,0.72,0,1); } .ds-btn-secondary:active { transform:scale(0.97); background:rgba(201,164,92,0.14); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Ember with dark text in dark theme (white on ember fails AA).",
+      "html": "<button class=\"ds-btn-danger\">Remove</button>",
+      "css": ".ds-btn-danger { min-height:48px; padding:12px 18px; border:0; border-radius:10px; background:#e0775f; color:#121a17; font:550 16px/20px \"Hanken Grotesk\", system-ui, sans-serif; transition: transform 200ms cubic-bezier(0.32,0.72,0,1); } .ds-btn-danger:active { transform:scale(0.97); }"
+    },
+    {
+      "name": "Inset Group with Item Rows",
+      "kind": "card",
+      "refersTo": "inset-group",
+      "description": "Item rows on a group; hairlines start at the text, past the 40dp tile.",
+      "html": "<div class=\"ds-group\"><div class=\"ds-item\"><span class=\"ds-tile\">G</span><span class=\"ds-txt\"><span class=\"ds-t\">GitHub</span><span class=\"ds-s\">sam@example.com</span></span></div><div class=\"ds-item\"><span class=\"ds-tile ds-soft\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 3.5h7l4.5 4.5v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1zM13.5 3.5V8.5h5M9 12.5h6M9 16h4\"/></svg></span><span class=\"ds-txt\"><span class=\"ds-t\">Wi-Fi at home</span><span class=\"ds-s\">Secure note</span></span></div></div>",
+      "css": ".ds-group { width:360px; border:1px solid rgba(226,234,230,0.07); border-radius:12px; background:#152120; overflow:hidden; font-family:\"Hanken Grotesk\", system-ui, sans-serif; } .ds-item { display:flex; align-items:center; gap:12px; min-height:64px; padding:10px 16px; box-sizing:border-box; position:relative; transition: transform 200ms cubic-bezier(0.32,0.72,0,1); } .ds-item + .ds-item::before { content:\"\"; position:absolute; top:0; left:68px; right:0; height:1px; background:rgba(226,234,230,0.07); } .ds-item:active { transform:scale(0.97); background:rgba(201,164,92,0.14); } .ds-tile { flex:none; display:grid; place-items:center; width:40px; height:40px; border-radius:10px; background:#1d2b27; color:#e3c483; font:520 18px \"HavenKeys Serif\", \"Source Serif 4\", Georgia, serif; } .ds-soft { background:rgba(201,164,92,0.14); color:#e3c483; } .ds-txt { display:grid; } .ds-t { font-weight:600; font-size:16px; line-height:21px; color:#f3f7f5; } .ds-s { font-size:14px; line-height:19px; color:#86968f; }"
+    },
+    {
+      "name": "Field Row",
+      "kind": "input",
+      "refersTo": "field-row-focused",
+      "description": "The row is the field: label above value; focus washes the row and borders it in brass.",
+      "html": "<div class=\"ds-fgroup\"><label class=\"ds-field\"><span class=\"ds-flabel\">Username</span><input class=\"ds-finput\" value=\"sam@example.com\"></label><label class=\"ds-field\"><span class=\"ds-flabel\">Password</span><input class=\"ds-finput ds-secret\" type=\"password\" value=\"hunter2hunter2\"></label></div>",
+      "css": ".ds-fgroup { width:360px; border:1px solid rgba(226,234,230,0.07); border-radius:12px; background:#152120; overflow:hidden; font-family:\"Hanken Grotesk\", system-ui, sans-serif; } .ds-field { display:flex; flex-direction:column; gap:2px; min-height:52px; padding:8px 16px; box-sizing:border-box; border:1.5px solid transparent; } .ds-field + .ds-field { border-top:1px solid rgba(226,234,230,0.07); } .ds-field:focus-within { background:rgba(201,164,92,0.15); border-color:#c9a45c; } .ds-flabel { font-weight:560; font-size:13px; line-height:17px; color:#86968f; } .ds-finput { border:0; background:none; outline:none; padding:0; color:#f3f7f5; caret-color:#c9a45c; font:400 16px/22px \"Hanken Grotesk\", system-ui, sans-serif; } .ds-secret { font:500 16px/22px \"JetBrains Mono\", ui-monospace, monospace; letter-spacing:0.02em; }"
+    },
+    {
+      "name": "Switch Row",
+      "kind": "custom",
+      "refersTo": "switch-on",
+      "description": "The whole row is the switch: line-strong off, brass on, paper-white thumb.",
+      "html": "<div class=\"ds-trow\"><span>Unlock with biometrics</span><span class=\"ds-sw ds-on\"><span class=\"ds-knob\"></span></span></div>",
+      "css": ".ds-trow { width:360px; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; min-height:52px; padding:10px 8px 10px 16px; background:#152120; border-radius:12px; color:#f3f7f5; font:400 16px/22px \"Hanken Grotesk\", system-ui, sans-serif; } .ds-sw { position:relative; width:44px; height:26px; margin:0 4px; border-radius:13px; background:#2c3d37; transition: background-color 160ms cubic-bezier(0.32,0.72,0,1); } .ds-on { background:#c9a45c; } .ds-knob { position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fbfcfb; box-shadow:0 1px 3px rgba(0,0,0,0.35); transition: transform 200ms cubic-bezier(0.32,0.72,0,1); } .ds-on .ds-knob { transform:translateX(18px); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "nav",
+      "refersTo": "segmented-selected",
+      "description": "Field track; the chosen segment raised on a hairline with a small shadow; 48dp tabs.",
+      "html": "<div class=\"ds-seg\"><button>Random</button><button class=\"ds-sel\">Words</button><button>PIN</button></div>",
+      "css": ".ds-seg { display:flex; width:360px; padding:4px 3px; box-sizing:border-box; border-radius:10px; background:#0b110f; } .ds-seg button { flex:1; height:40px; border:1px solid transparent; border-radius:8px; background:transparent; color:#86968f; font:560 13px/17px \"Hanken Grotesk\", system-ui, sans-serif; transition: background-color 160ms cubic-bezier(0.32,0.72,0,1), color 160ms cubic-bezier(0.32,0.72,0,1); } .ds-seg .ds-sel { background:#172320; border-color:#2c3d37; color:#f3f7f5; box-shadow:0 1px 3px rgba(0,0,0,0.25); }"
+    },
+    {
+      "name": "Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Brass-wash marker; an outlined variant says how something applies.",
+      "html": "<span class=\"ds-pill\">This device</span> <span class=\"ds-pill ds-out\">Whole site</span>",
+      "css": ".ds-pill { display:inline-block; padding:3px 9px; border:1px solid transparent; border-radius:999px; background:rgba(201,164,92,0.14); color:#e3c483; font:600 12px/16px \"Hanken Grotesk\", system-ui, sans-serif; } .ds-out { background:transparent; border-color:#2c3d37; color:#86968f; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Near-opaque dark glass with a hairline rim, in both themes; never carries a secret.",
+      "html": "<div class=\"ds-toast\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#5fa785\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"/></svg>Password copied · clears in 30 s</div>",
+      "css": ".ds-toast { display:inline-flex; align-items:center; gap:8px; padding:10px 16px 10px 13px; border:1px solid rgba(226,234,230,0.1); border-radius:999px; background:rgba(15,22,20,0.95); color:#f3f7f5; font:400 15px/22px \"Hanken Grotesk\", system-ui, sans-serif; box-shadow:0 12px 32px -8px rgba(0,0,0,0.55); }"
+    },
+    {
+      "name": "Bottom Sheet",
+      "kind": "card",
+      "refersTo": "sheet",
+      "description": "Raised, 18dp top corners, a handle and a serif title; springs up over the scrim.",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-handle\"></div><h2>New item</h2><p>Login · Secure note · Card</p></div>",
+      "css": ".ds-sheet { width:360px; padding:0 16px 16px; box-sizing:border-box; border-radius:18px 18px 0 0; background:#172320; color:#e2eae6; box-shadow:0 -8px 32px rgba(0,0,0,0.5); font:400 15px/22px \"Hanken Grotesk\", system-ui, sans-serif; } .ds-handle { width:36px; height:5px; margin:10px auto; border-radius:3px; background:#2c3d37; } .ds-sheet h2 { margin:4px 0 12px; font:480 22px/28px \"HavenKeys Serif\", \"Source Serif 4\", Georgia, serif; letter-spacing:-0.012em; color:#f3f7f5; } .ds-sheet p { margin:0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Vault Room, in the hand",
+    "overview": "**Creative North Star: \"The Vault Room, in the hand\"**\n\nThe phone is the desktop's Vault Room carried in one hand: the same forest-green grounds, the same single brass fitting, serif titles over a warm grotesque, and secrets alone in mono. Where the desktop arranges the room in three panes, the phone stacks it: a screen is a column of inset groups of hairline-separated rows on the window ground, framed by `HavenScaffold` between the status bar and the navigation bar, with a floating add button and a glass toast above the bottom edge. Overlays are the room's furniture: a bottom sheet that springs up on a dim, a dialog, a small menu under its trigger.\n\nThe kit (`ui/kit`) is built on `androidx.compose.foundation` only. Nothing in it is Material: there is no ripple (press is a 0.97 scale and a brass-soft wash), no Material type scale, no Material sheet; the switch, slider and segmented control are the desktop's shapes at phone size, and the icon set is the desktop's `Icon.tsx` path for path. Dynamic colour is off on purpose: the vault looks like HavenKeys on every phone. Light and dark follow the system setting.\n\nThe desktop's density is opened up for a thumb: reading text rises from 13.5px to 15sp, rows to 52dp, every control is at least 48dp. Motion is physical and named in Apple's terms (four springs and one fade), and the system's \"Remove animations\" cuts all of it.",
+    "keyCharacteristics": [
+      "Inset groups (12dp) of hairline rows; hairlines start where the text of the row below starts.",
+      "Serif titles (HavenKeys Serif) and monogram tiles; Hanken Grotesk for everything else; JetBrains Mono for secrets and codes.",
+      "Brass as a fitting: the dark primary, focus, the switch and slider fill, the ring, brass-ink text; the light primary is forest.",
+      "No ripple, no Material: press scales to 0.97 with a brass-soft wash.",
+      "Every control at least 48dp; text sizes in sp, so they follow the system font size.",
+      "Sheets, dialogs and menus live in secure windows (FLAG_SECURE, no autofill, obscured taps dropped)."
+    ],
+    "rules": [
+      {
+        "name": "The One Fitting Rule",
+        "body": "Brass is a fitting, not a finish: controls and thin lines, never large surfaces. One primary per screen: brass in dark, forest in light. The dark add button is a brass disc because it is the screen's one primary; a screen that shows it shows no primary `HavenButton`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Literal String Rule",
+        "body": "JetBrains Mono is for secrets, one-time codes, keys and setup strings. Never for labels, headings or counts.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Labels, group titles and section actions are sentence case at their size; no all-caps tracked labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Floating-Only Shadow Rule",
+        "body": "Only sheet, dialog, menu, toast and add button cast elevation shadows. Groups, rows and the screen stay flat with a hairline.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Stillness Rule",
+        "body": "\"Remove animations\" cuts everything: springs, fades, the press, the toast, the sheet, and the spinner. Nothing waits on an animation to finish.",
+        "section": "motion"
+      },
+      {
+        "name": "The No Ripple Rule",
+        "body": "Nothing ripples. Every press is `HavenPress`: a 0.97 scale and a brass-soft wash on the press spring, cut under \"Remove animations\". Put it after the clip and before the background so the ground scales with the content.",
+        "section": "components"
+      },
+      {
+        "name": "The Row Is the Field Rule",
+        "body": "A field never gets a box. The grouped row is the field; focus marks the row with the selection wash and a brass border, and the label above names it.",
+        "section": "components"
+      },
+      {
+        "name": "The Secure Windows Rule",
+        "body": "Every overlay that opens a window of its own (sheet, dialog, menu) sets FLAG_SECURE, excludes itself from autofill and drops taps that pass through another app's window (`SecureDialogWindow`). The activity's protections do not reach these windows, so each states them.",
+        "section": "components"
+      },
+      {
+        "name": "The Words Wrap Rule",
+        "body": "Our own words wrap and are never cut, at any font size: button labels, titles, messages, menu rows. Only user data (titles, usernames, URLs) may end in an ellipsis.",
+        "section": "components"
+      },
+      {
+        "name": "The Foundation Only Rule",
+        "body": "`ui/kit` and `ui/theme` build on `androidx.compose.foundation` alone. Material lives only in `MaterialBridge.kt`, for screens not yet rebuilt, until stage 5 deletes it with `material3`; nothing in the kit may use it.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** build details, forms and settings from `InsetGroup` rows, with hairlines starting at the text of the row below.",
+      "**Do** give every control a 48dp target, and size text in sp.",
+      "**Do** keep one primary per screen: brass in dark, forest in light; count the add button as it.",
+      "**Do** set titles in HavenKeys Serif (32 unlock, 28 item and list, 22 sheet and dialog) and secrets and codes in JetBrains Mono.",
+      "**Do** use the phone's contrast values (light muted `#606f69`, light brass ink `#7d632f`, dark on-danger `#121a17`) and keep `ContrastTest` passing.",
+      "**Do** move on the named springs and the 160ms fade through `HavenTheme.motion`, so \"Remove animations\" cuts them.",
+      "**Do** open sheets, dialogs and menus through the kit, so their windows are secure.",
+      "**Do** name copy and reveal buttons by the field (\"Copy Password\"), and say what happened in a toast, never the value.",
+      "**Do** rebuild fonts only with `scripts/build-android-fonts.py` and commit its output."
+    ],
+    "donts": [
+      "**Don't** add a ripple, a Material component or a Material icon to the kit.",
+      "**Don't** give a field its own box or border inside a row.",
+      "**Don't** fill large surfaces with brass, or put brass ink text on light grounds at the desktop's `#8f7236`.",
+      "**Don't** cut our own words with an ellipsis or a line limit.",
+      "**Don't** put a secret in a toast, a content description or a label.",
+      "**Don't** give groups or rows a shadow.",
+      "**Don't** set labels, headings or counts in mono, or put all-caps tracked labels above headings.",
+      "**Don't** download fonts or let a system face stand in for the serif.",
+      "**Don't** turn dynamic colour on."
+    ]
+  }
+}

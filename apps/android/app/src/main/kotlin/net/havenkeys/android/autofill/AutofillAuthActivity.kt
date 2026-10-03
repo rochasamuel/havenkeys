@@ -74,10 +74,15 @@ class AutofillAuthActivity : FragmentActivity() {
             itemId == null -> null
             mode == DatasetFactory.MODE_FILL ->
                 (repo.fill(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::loginDataset)
+                    ?.also { repo.recordUse(itemId) }
             mode == DatasetFactory.MODE_TOTP ->
                 (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let(factory::totpDataset)
+                    ?.also { repo.recordUse(itemId) }
             mode == DatasetFactory.MODE_COPY_TOTP -> {
-                (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let { copyCode(it) }
+                (repo.totp(itemId, tapped.target) as? Outcome.Ok)?.value?.let {
+                    copyCode(it)
+                    repo.recordUse(itemId)
+                }
                 null // Nothing is filled: the copy is the whole answer.
             }
             else -> null

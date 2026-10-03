@@ -1,30 +1,18 @@
 package net.havenkeys.android.ui.generator
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,23 +21,40 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import net.havenkeys.android.R
 import net.havenkeys.android.clipboard.SensitiveClipboard
 import net.havenkeys.android.data.Outcome
-import net.havenkeys.android.ui.components.HavenTopBar
-import net.havenkeys.android.ui.components.colourised
+import net.havenkeys.android.ui.components.ScreenBar
+import net.havenkeys.android.ui.components.RevealedValue
 import net.havenkeys.android.ui.components.errorText
+import net.havenkeys.android.ui.kit.ButtonStyle
+import net.havenkeys.android.ui.kit.HavenButton
+import net.havenkeys.android.ui.kit.HavenIcon
+import net.havenkeys.android.ui.kit.HavenScaffold
+import net.havenkeys.android.ui.kit.HavenSlider
+import net.havenkeys.android.ui.kit.HavenText
+import net.havenkeys.android.ui.kit.InsetGroup
+import net.havenkeys.android.ui.kit.SectionHeader
+import net.havenkeys.android.ui.kit.ToggleRow
+import net.havenkeys.android.ui.kit.rememberToastState
+import net.havenkeys.android.ui.shell.LargeTitle
+import net.havenkeys.android.ui.theme.HavenShape
+import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
-import net.havenkeys.android.ui.theme.HavenType
 import uniffi.havenkeys_mobile.GeneratorOptions
+
+/** Every whole length from the core's minimum to its maximum is a stop. */
+private val LengthSteps = (GeneratorViewModel.MAX_LENGTH - GeneratorViewModel.MIN_LENGTH).toInt() - 1
 
 /**
  * A new password for each change of the options. The password lives only in
@@ -70,7 +75,7 @@ fun GeneratorScreen(
     var failure by remember { mutableStateOf<String?>(null) }
     // Bumped by Regenerate, so the same options give a new password.
     var round by remember { mutableIntStateOf(0) }
-    val snackbar = remember { SnackbarHostState() }
+    val toasts = rememberToastState()
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
     val label = stringResource(R.string.field_password)
@@ -88,20 +93,25 @@ fun GeneratorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            HavenTopBar(stringResource(R.string.generator_title), online = online, onLock = onLock, onBack = onBack)
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-        containerColor = MaterialTheme.colorScheme.background,
+    HavenScaffold(
         modifier = modifier,
+        topBar = { ScreenBar(onBack = onBack, online = online, onLock = onLock) },
+        toastState = toasts,
     ) { padding ->
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = HavenSpacing.gutter)
+                .padding(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
         ) {
+            LargeTitle(stringResource(R.string.generator_title))
+            // Under the title, as on the desktop: the plate below holds only the password and its strength.
+            HavenText(
+                stringResource(R.string.generator_lede),
+                Modifier.padding(bottom = 16.dp),
+                color = HavenTheme.colors.muted,
+            )
             Output(password, failure, state.entropyBits)
             Actions(
                 canCopy = password != null,
@@ -112,7 +122,7 @@ fun GeneratorScreen(
                         scope.launch {
                             val seconds = viewModel.clipboardClearSeconds()
                             clipboard.copy(label, value, seconds)
-                            snackbar.showSnackbar(resources.getString(R.string.generator_copied, seconds))
+                            toasts.show(resources.getString(R.string.generator_copied, seconds))
                         }
                     }
                 },
@@ -122,109 +132,116 @@ fun GeneratorScreen(
     }
 }
 
+/** The desktop's generated password: mono at 20 on 30, a size up from a revealed field. */
 @Composable
-private fun Actions(canCopy: Boolean, onRegenerate: () -> Unit, onCopy: () -> Unit) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.padding(horizontal = 16.dp),
+private fun generatedStyle() = HavenTheme.type.secret.copy(fontSize = 20.sp, lineHeight = 30.sp)
+
+/** The password on the output plate (the desktop's 14dp radius), digits and symbols coloured. */
+@Composable
+private fun Output(password: String?, failure: String?, entropyBits: Double?) {
+    val colors = HavenTheme.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(HavenShape.output)
+            .background(colors.group)
+            .border(1.dp, colors.groupLine, HavenShape.output)
+            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedButton(onClick = onRegenerate) {
-            Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text(stringResource(R.string.generator_regenerate))
+        when {
+            password != null -> RevealedValue(password, style = generatedStyle())
+            failure != null -> HavenText(
+                stringResource(if (failure == "invalid_input") R.string.generator_failed else errorText(failure)),
+                color = colors.danger,
+            )
         }
-        Button(enabled = canCopy, onClick = onCopy) {
-            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text(stringResource(R.string.generator_copy))
+        if (password != null && entropyBits != null) {
+            HavenText(
+                stringResource(
+                    R.string.generator_strength,
+                    stringResource(strengthLabel(strengthOf(entropyBits))),
+                    entropyBits.roundToInt(),
+                ),
+                style = HavenTheme.type.label,
+                color = colors.brassInk,
+            )
         }
     }
 }
 
 @Composable
-private fun Output(password: String?, failure: String?, entropyBits: Double?) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                stringResource(R.string.generator_lede),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            when {
-                password != null -> Text(
-                    colourised(password, HavenTheme.colors),
-                    style = HavenType.secret,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                failure != null -> Text(
-                    stringResource(if (failure == "invalid_input") R.string.generator_failed else errorText(failure)),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (password != null && entropyBits != null) {
-                Text(
-                    stringResource(
-                        R.string.generator_strength,
-                        stringResource(strengthLabel(strengthOf(entropyBits))),
-                        entropyBits.roundToInt(),
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = HavenTheme.colors.brassInk,
-                )
-            }
-        }
+private fun Actions(canCopy: Boolean, onRegenerate: () -> Unit, onCopy: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        HavenButton(
+            stringResource(R.string.generator_regenerate),
+            onClick = onRegenerate,
+            Modifier.weight(1f),
+            style = ButtonStyle.Secondary,
+            icon = HavenIcon.Refresh,
+        )
+        HavenButton(
+            stringResource(R.string.generator_copy),
+            onClick = onCopy,
+            Modifier.weight(1f),
+            enabled = canCopy,
+            icon = HavenIcon.Copy,
+        )
     }
 }
 
 @Composable
 private fun Options(options: GeneratorOptions, onChange: (GeneratorOptions) -> Unit) {
-    SectionTitle(R.string.generator_length)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(horizontal = 16.dp),
-    ) {
-        Slider(
-            value = options.length.toFloat(),
-            onValueChange = { onChange(options.copy(length = it.roundToInt().toUInt())) },
-            valueRange = GeneratorViewModel.MIN_LENGTH.toFloat()..GeneratorViewModel.MAX_LENGTH.toFloat(),
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            options.length.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = 16.dp),
-        )
+    val length = stringResource(R.string.generator_length)
+    InsetGroup {
+        row {
+            Column(Modifier.padding(horizontal = HavenSpacing.rowX, vertical = 8.dp)) {
+                // The slider shows no number of its own (DESIGN.md): the row shows it. TalkBack hears
+                // label and value from the slider, so the row is hidden from it rather than read twice.
+                Row(Modifier.clearAndSetSemantics {}) {
+                    val colors = HavenTheme.colors
+                    HavenText(length, Modifier.weight(1f), style = HavenTheme.type.value, color = colors.text)
+                    HavenText(
+                        options.length.toString(),
+                        style = HavenTheme.type.value,
+                        color = colors.textStrong,
+                    )
+                }
+                HavenSlider(
+                    value = options.length.toFloat(),
+                    onValueChange = { onChange(options.copy(length = it.roundToInt().toUInt())) },
+                    valueRange = GeneratorViewModel.MIN_LENGTH.toFloat()..GeneratorViewModel.MAX_LENGTH.toFloat(),
+                    label = length,
+                    steps = LengthSteps,
+                    valueText = options.length.toString(),
+                )
+            }
+        }
     }
-    SectionTitle(R.string.generator_characters)
-    Toggle(R.string.generator_uppercase, "A–Z", options.uppercase) { onChange(options.copy(uppercase = it)) }
-    Toggle(R.string.generator_lowercase, "a–z", options.lowercase) { onChange(options.copy(lowercase = it)) }
-    Toggle(R.string.generator_digits, "0–9", options.digits) { onChange(options.copy(digits = it)) }
-    Toggle(R.string.generator_symbols, "!@#…", options.symbols) { onChange(options.copy(symbols = it)) }
-    Toggle(R.string.generator_avoid_ambiguous, "l, 1, O, 0", options.avoidAmbiguous) {
-        onChange(options.copy(avoidAmbiguous = it))
+    Spacer(Modifier.height(HavenSpacing.groupGap))
+    SectionHeader(stringResource(R.string.generator_characters))
+    InsetGroup {
+        row {
+            Toggle(R.string.generator_uppercase, "A–Z", options.uppercase) { onChange(options.copy(uppercase = it)) }
+        }
+        row {
+            Toggle(R.string.generator_lowercase, "a–z", options.lowercase) { onChange(options.copy(lowercase = it)) }
+        }
+        row { Toggle(R.string.generator_digits, "0–9", options.digits) { onChange(options.copy(digits = it)) } }
+        row {
+            Toggle(R.string.generator_symbols, "!@#…", options.symbols) { onChange(options.copy(symbols = it)) }
+        }
+        row {
+            Toggle(R.string.generator_avoid_ambiguous, "l, 1, O, 0", options.avoidAmbiguous) {
+                onChange(options.copy(avoidAmbiguous = it))
+            }
+        }
     }
-}
-
-@Composable
-private fun SectionTitle(@StringRes text: Int) {
-    Text(
-        stringResource(text),
-        style = MaterialTheme.typography.titleSmall,
-        color = HavenTheme.colors.textStrong,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-    )
 }
 
 @Composable
 private fun Toggle(@StringRes label: Int, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    ListItem(
-        headlineContent = { Text(stringResource(label)) },
-        supportingContent = { Text(hint) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = onChange) },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-    )
+    ToggleRow(stringResource(label), checked, onChange, detail = hint)
 }
 
 @StringRes

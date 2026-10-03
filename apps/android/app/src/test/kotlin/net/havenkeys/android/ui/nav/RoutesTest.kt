@@ -7,15 +7,28 @@ import uniffi.havenkeys_mobile.ItemKind
 
 class RoutesTest {
     @Test
-    fun aRestoredVaultScreenGivesWayToUnlockWhenLocked() {
-        assertEquals(Routes.UNLOCK, routeToForce(Routes.VAULT, Start.UNLOCK))
+    fun aRestoredShellScreenGivesWayToUnlockWhenLocked() {
+        assertEquals(Routes.UNLOCK, routeToForce(Routes.SHELL, Start.UNLOCK))
         assertEquals(Routes.UNLOCK, routeToForce(Routes.ITEM, Start.UNLOCK))
-        assertEquals(Routes.UNLOCK, routeToForce(Routes.SETTINGS, Start.UNLOCK))
+        assertEquals(Routes.UNLOCK, routeToForce(Routes.SEARCH, Start.UNLOCK))
+    }
+
+    @Test
+    fun aRestoredSearchGivesWayToUnlock() {
+        assertEquals(Routes.UNLOCK, routeToForce(Routes.SEARCH, Start.UNLOCK))
+        assertEquals(Routes.ONBOARDING, routeToForce(Routes.SEARCH, Start.ONBOARDING))
+    }
+
+    @Test
+    fun theUnlockedVaultOpensTheShellAndSearchTakesNoArgument() {
+        assertEquals(Routes.SHELL, routeOf(Start.VAULT))
+        assertEquals("search", Routes.SEARCH)
+        assertEquals("shell", Routes.SHELL)
     }
 
     @Test
     fun aRestoredScreenGivesWayToOnboardingWithoutAVault() {
-        assertEquals(Routes.ONBOARDING, routeToForce(Routes.VAULT, Start.ONBOARDING))
+        assertEquals(Routes.ONBOARDING, routeToForce(Routes.SHELL, Start.ONBOARDING))
         assertEquals(Routes.ONBOARDING, routeToForce(Routes.UNLOCK, Start.ONBOARDING))
     }
 
@@ -28,7 +41,7 @@ class RoutesTest {
     @Test
     fun anUnlockedVaultKeepsTheRestoredScreen() {
         assertNull(routeToForce(Routes.ITEM, Start.VAULT))
-        assertNull(routeToForce(Routes.VAULT, Start.VAULT))
+        assertNull(routeToForce(Routes.SHELL, Start.VAULT))
     }
 
     @Test

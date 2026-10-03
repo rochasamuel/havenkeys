@@ -1,19 +1,15 @@
 package net.havenkeys.android.ui.nav
 
 import androidx.activity.compose.LocalActivity
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
@@ -27,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
 import net.havenkeys.android.ui.autofillsetup.AutofillSetupScreen
@@ -41,66 +38,87 @@ import net.havenkeys.android.ui.item.ItemScreen
 import net.havenkeys.android.ui.item.ItemViewModel
 import net.havenkeys.android.ui.onboarding.OnboardingScreen
 import net.havenkeys.android.ui.onboarding.OnboardingViewModel
+import net.havenkeys.android.ui.search.SearchScreen
+import net.havenkeys.android.ui.search.SearchViewModel
 import net.havenkeys.android.ui.settings.DevicesScreen
 import net.havenkeys.android.ui.settings.DevicesViewModel
-import net.havenkeys.android.ui.settings.SettingsNavigation
-import net.havenkeys.android.ui.settings.SettingsScreen
-import net.havenkeys.android.ui.settings.SettingsViewModel
+import net.havenkeys.android.ui.shell.OpenItem
+import net.havenkeys.android.ui.shell.ShellNavigation
+import net.havenkeys.android.ui.shell.ShellScreen
+import net.havenkeys.android.ui.shell.ShellViewModel
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
-import net.havenkeys.android.ui.unlock.UnlockScreen
-import net.havenkeys.android.ui.unlock.UnlockViewModel
-import net.havenkeys.android.ui.vault.VaultNavigation
-import net.havenkeys.android.ui.vault.VaultScreen
-import net.havenkeys.android.ui.vault.VaultViewModel
 
+/** What every destination of the app's graph needs. */
+private class Nav(
+    val services: NavServices,
+    val controller: NavHostController,
+    val shared: SharedTransitionScope,
+    val motion: HavenMotion,
+    val travel: TitleTravel,
+) {
+    /** Opens an item over the shell; its title travels from the tapped row. */
+    val open: OpenItem = { id, origin ->
+        if (controller.pushOnce(Routes.item(id))) travel.tap(id, origin)
+    }
+
+    val back: () -> Unit = { controller.popBackStack() }
+    val lock: () -> Unit = services.vault::lock
+}
+
+/** The app's navigation over the [AppContainer] and this activity. */
 @Composable
 fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
     val activity = requireNotNull(LocalActivity.current as? FragmentActivity)
-    val root = viewModel { RootViewModel(container.vaultRepository, container.events) }
+    HavenNavHost(rememberNavServices(container, activity), modifier)
+}
+
+/**
+ * The app's navigation: onboarding and unlock outside the shell; the shell
+ * and search; and the full-screen screens over the shell (spec §6.1). A lock
+ * replaces the whole back stack with Unlock, at once. [navController] is a
+ * parameter so a test can watch the back stack.
+ */
+@Composable
+internal fun HavenNavHost(
+    services: NavServices,
+    modifier: Modifier = Modifier,
+    navController: NavHostController = rememberNavController(),
+) {
+    val root = viewModel { RootViewModel(services.vault, services.events) }
     val start by root.start.collectAsStateWithLifecycle()
     val first = start
     if (first == null) {
-        Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
+        Box(modifier.fillMaxSize().background(HavenTheme.colors.pane))
         return
     }
 
-    val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val motion = HavenTheme.motion
-    SharedTransitionLayout(modifier) {
-        val shared = this
+    val travel = remember { TitleTravel() }
+    // The window's ground shows through a screen that fades under a push, which reads as dimmed.
+    SharedTransitionLayout(modifier.background(HavenTheme.colors.pane)) {
+        val nav = Nav(services, navController, this, motion, travel)
         NavHost(
             navController = navController,
             startDestination = routeOf(first),
-            enterTransition = { fadeIn(spec(motion)) },
-            exitTransition = { fadeOut(spec(motion)) },
-            popEnterTransition = { fadeIn(spec(motion)) },
-            popExitTransition = { fadeOut(spec(motion)) },
+            enterTransition = {
+                enterFor(outerMove(initialState.destination.route, targetState.destination.route), motion, pop = false)
+            },
+            exitTransition = {
+                exitFor(outerMove(initialState.destination.route, targetState.destination.route), motion, pop = false)
+            },
+            popEnterTransition = {
+                enterFor(outerMove(initialState.destination.route, targetState.destination.route), motion, pop = true)
+            },
+            popExitTransition = {
+                exitFor(outerMove(initialState.destination.route, targetState.destination.route), motion, pop = true)
+            },
         ) {
-            composable(Routes.ONBOARDING) {
-                OnboardingScreen(
-                    viewModel = viewModel { OnboardingViewModel(container.accountRepository) },
-                    onDone = { scope.launch { navController.replaceAll(routeOf(root.current())) } },
-                )
-            }
-            composable(Routes.UNLOCK) {
-                UnlockScreen(
-                    viewModel = viewModel {
-                        UnlockViewModel(
-                            container.vaultRepository,
-                            biometricAvailable = container.biometricGate.available(activity),
-                            hasBundle = container::hasBiometricUnlock,
-                            deleteBundle = container::forgetBiometricUnlock,
-                        )
-                    },
-                    activity = activity,
-                    container = container,
-                    onUnlocked = { navController.replaceAll(Routes.VAULT) },
-                )
-            }
-            vaultScreens(container, navController, shared, motion)
-            toolScreens(container, navController, activity)
+            entryScreens(nav, root, scope)
+            shellAndSearch(nav)
+            itemScreens(nav)
+            toolScreens(nav)
         }
     }
 
@@ -113,170 +131,174 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
     // The lock wipe: no screen that showed vault data stays in the back stack.
     LaunchedEffect(navController) {
         root.lockedSignal.collect { target ->
+            travel.clear()
             val route = routeOf(target)
             if (navController.currentDestination?.route != route) navController.replaceAll(route)
         }
     }
 }
 
+/**
+ * Pushes [route] unless the screen on top is already that route with the
+ * same arguments. Two quick taps on one target open it once; a tap on
+ * another target goes there at once, even mid-transition (spec §7). The
+ * back stack changes synchronously, so the second tap of a pair sees the
+ * first one's entry on top. Returns whether it pushed.
+ */
+internal fun NavHostController.pushOnce(route: String): Boolean {
+    if (currentBackStackEntry?.concreteRoute() == route) return false
+    navigate(route)
+    return true
+}
+
+/** This entry's route with its arguments filled in ("item/{id}" → "item/abc"). Ids and kinds only. */
+internal fun NavBackStackEntry.concreteRoute(): String? {
+    val pattern = destination.route ?: return null
+    return ArgumentSlot.replace(pattern) { slot -> arguments?.getString(slot.groupValues[1]) ?: slot.value }
+}
+
+private val ArgumentSlot = Regex("\\{([^}]+)\\}")
+
 private fun NavHostController.replaceAll(route: String) =
     navigate(route) { popUpTo(graph.id) { inclusive = true } }
 
-/** Unlock → vault and the lock wipe take the seal's time; reduced motion cuts instantly. */
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.spec(motion: HavenMotion): FiniteAnimationSpec<Float> {
-    val sealed = initialState.destination.route == Routes.UNLOCK || targetState.destination.route == Routes.UNLOCK
-    return if (sealed) motion.sealSpec() else motion.snapSpec()
-}
-
-/** The vault list and an item; their titles share an element across the move. */
-private fun NavGraphBuilder.vaultScreens(
-    container: AppContainer,
-    navController: NavHostController,
-    shared: SharedTransitionScope,
-    motion: HavenMotion,
-) {
-    composable(Routes.VAULT) {
-        val visibility = this
-        VaultScreen(
-            viewModel = viewModel {
-                VaultViewModel(container.vaultRepository, container.accountRepository, container.events)
-            },
-            navigation = VaultNavigation(
-                onOpen = { id -> navController.navigate(Routes.item(id)) },
-                onNew = { kind -> navController.navigate(Routes.new(kind)) },
-                onLock = container.vaultRepository::lock,
-                onGenerator = { navController.navigate(Routes.GENERATOR) },
-                onSettings = { navController.navigate(Routes.SETTINGS) },
-            ),
-            titleModifier = { id -> Modifier.sharedTitle(shared, id, visibility, motion) },
+/** Onboarding and unlock, outside the shell. */
+private fun NavGraphBuilder.entryScreens(nav: Nav, root: RootViewModel, scope: CoroutineScope) {
+    composable(Routes.ONBOARDING) {
+        OnboardingScreen(
+            viewModel = viewModel { OnboardingViewModel(nav.services.accounts) },
+            onDone = { scope.launch { nav.controller.replaceAll(routeOf(root.current())) } },
         )
     }
+    composable(Routes.UNLOCK) {
+        nav.services.unlockScreen { nav.controller.replaceAll(Routes.SHELL) }
+    }
+}
+
+/** The shell and search; the pill and the field are one shared element. */
+private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
+    val services = nav.services
+    composable(Routes.SHELL) {
+        ShellScreen(
+            viewModel = viewModel {
+                ShellViewModel(services.vault, services.accounts, services.events)
+            },
+            screens = shellScreens(
+                nav.services,
+                nav.controller,
+                nav.open,
+                nav.travel.from(nav.shared, this, nav.motion),
+            ),
+            navigation = ShellNavigation(
+                onSearch = { nav.controller.pushOnce(Routes.SEARCH) },
+                onNew = { kind -> nav.controller.pushOnce(Routes.new(kind)) },
+                onGenerator = { nav.controller.pushOnce(Routes.GENERATOR) },
+            ),
+            searchPillModifier = Modifier.sharedIfMoving(nav.shared, SEARCH_KEY, this, nav.motion),
+        )
+    }
+    composable(Routes.SEARCH) {
+        SearchScreen(
+            viewModel = viewModel { SearchViewModel(services.vault, services.events) },
+            onOpen = nav.open,
+            onCancel = nav.back,
+            fieldModifier = Modifier.sharedIfMoving(
+                nav.shared,
+                SEARCH_KEY,
+                this,
+                nav.motion,
+                SharedTransitionScope.ResizeMode.RemeasureToBounds,
+            ),
+            sharedTitle = nav.travel.from(nav.shared, this, nav.motion),
+        )
+    }
+}
+
+/** An item and its editors, over the shell. */
+private fun NavGraphBuilder.itemScreens(nav: Nav) {
+    val services = nav.services
     composable(Routes.ITEM, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
         val id = requireNotNull(it.arguments?.getString(Routes.ITEM_ID))
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         ItemScreen(
             viewModel = viewModel {
-                ItemViewModel(container.vaultRepository, container.settingsRepository, container.events, id)
+                ItemViewModel(services.vault, services.settings, services.events, id)
             },
-            clipboard = container.clipboard,
+            clipboard = services.clipboard,
             online = online,
             navigation = ItemNavigation(
-                onBack = { navController.popBackStack() },
-                onLock = container.vaultRepository::lock,
-                onEdit = { navController.navigate(Routes.edit(id)) },
-                onDeleted = { navController.popBackStack() },
+                onBack = nav.back,
+                onLock = nav.lock,
+                onEdit = { nav.controller.pushOnce(Routes.edit(id)) },
+                onDeleted = nav.back,
             ),
-            titleModifier = Modifier.sharedTitle(shared, id, this, motion),
+            titleModifier = Modifier.sharedIfMoving(nav.shared, titleKey(id), this, nav.motion),
+            tileModifier = Modifier.sharedIfMoving(nav.shared, tileKey(id), this, nav.motion),
         )
     }
     composable(Routes.EDIT, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
         val id = requireNotNull(it.arguments?.getString(Routes.ITEM_ID))
-        EditRoute(container, navController, EditTarget.Existing(id))
+        EditRoute(nav, EditTarget.Existing(id))
     }
     composable(Routes.NEW, arguments = listOf(navArgument(Routes.KIND) { type = NavType.StringType })) {
         val kind = it.arguments?.getString(Routes.KIND)?.let(::creatableKind)
         if (kind == null) {
-            LaunchedEffect(Unit) { navController.popBackStack() }
+            LaunchedEffect(Unit) { nav.controller.popBackStack() }
         } else {
-            EditRoute(container, navController, EditTarget.New(kind))
+            EditRoute(nav, EditTarget.New(kind))
         }
     }
 }
 
 @Composable
-private fun EditRoute(container: AppContainer, navController: NavHostController, target: EditTarget) {
-    val online by container.events.online.collectAsStateWithLifecycle()
+private fun EditRoute(nav: Nav, target: EditTarget) {
+    val services = nav.services
+    val online by services.events.online.collectAsStateWithLifecycle()
     EditScreen(
         viewModel = viewModel {
-            EditViewModel(container.vaultRepository, container.accountRepository, container.events, target)
+            EditViewModel(services.vault, services.accounts, services.events, target)
         },
         isNew = target is EditTarget.New,
         online = online,
         navigation = EditNavigation(
             onDone = { id ->
                 if (target is EditTarget.New) {
-                    // The new item's screen replaces the editor, so Back goes to the list.
-                    navController.navigate(Routes.item(id)) { popUpTo(Routes.NEW) { inclusive = true } }
+                    // The new item's screen replaces the editor, so Back goes to where the add began.
+                    nav.controller.navigate(Routes.item(id)) { popUpTo(Routes.NEW) { inclusive = true } }
                 } else {
-                    navController.popBackStack()
+                    nav.controller.popBackStack()
                 }
             },
-            onBack = { navController.popBackStack() },
-            onLock = container.vaultRepository::lock,
+            onBack = nav.back,
+            onLock = nav.lock,
         ),
     )
 }
 
-/** Generator, Settings and the screens Settings leads to. No route carries an argument. */
-private fun NavGraphBuilder.toolScreens(
-    container: AppContainer,
-    navController: NavHostController,
-    activity: FragmentActivity,
-) {
-    val back: () -> Unit = { navController.popBackStack() }
-    val lock: () -> Unit = container.vaultRepository::lock
+/** The generator, and the screens Settings leads to. No route carries an argument. */
+private fun NavGraphBuilder.toolScreens(nav: Nav) {
+    val services = nav.services
     composable(Routes.GENERATOR) {
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         GeneratorScreen(
-            viewModel = viewModel { GeneratorViewModel(container.vaultRepository, container.settingsRepository) },
-            clipboard = container.clipboard,
+            viewModel = viewModel { GeneratorViewModel(services.vault, services.settings) },
+            clipboard = services.clipboard,
             online = online,
-            onBack = back,
-            onLock = lock,
-        )
-    }
-    composable(Routes.SETTINGS) {
-        val online by container.events.online.collectAsStateWithLifecycle()
-        SettingsScreen(
-            viewModel = viewModel {
-                SettingsViewModel(
-                    container.settingsRepository,
-                    container.accountRepository,
-                    container.vaultRepository,
-                    biometricEnrolled = container::hasBiometricUnlock,
-                )
-            },
-            activity = activity,
-            container = container,
-            online = online,
-            navigation = SettingsNavigation(
-                onBack = back,
-                onLock = lock,
-                onDevices = { navController.navigate(Routes.DEVICES) },
-                onAutofillSetup = { navController.navigate(Routes.AUTOFILL_SETUP) },
-            ),
+            onBack = nav.back,
+            onLock = nav.lock,
         )
     }
     composable(Routes.DEVICES) {
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         DevicesScreen(
-            viewModel = viewModel { DevicesViewModel(container.accountRepository, container.events) },
+            viewModel = viewModel { DevicesViewModel(services.accounts, services.events) },
             online = online,
-            onBack = back,
-            onLock = lock,
+            onBack = nav.back,
+            onLock = nav.lock,
         )
     }
     composable(Routes.AUTOFILL_SETUP) {
-        val online by container.events.online.collectAsStateWithLifecycle()
-        AutofillSetupScreen(online = online, onBack = back, onLock = lock)
-    }
-}
-
-/** The item's title moves from its list row to its screen; reduced motion cuts instead. */
-@Composable
-private fun Modifier.sharedTitle(
-    shared: SharedTransitionScope,
-    id: String,
-    visibility: AnimatedVisibilityScope,
-    motion: HavenMotion,
-): Modifier = if (motion.reduced) {
-    this
-} else {
-    with(shared) {
-        this@sharedTitle.sharedBounds(
-            rememberSharedContentState(key = "title-$id"),
-            visibility,
-            resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(),
-        )
+        val online by services.events.online.collectAsStateWithLifecycle()
+        AutofillSetupScreen(online = online, onBack = nav.back, onLock = nav.lock)
     }
 }

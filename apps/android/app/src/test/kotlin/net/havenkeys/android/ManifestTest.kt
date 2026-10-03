@@ -158,11 +158,21 @@ class ManifestTest {
             val text = activities.single { it.name == name }.readText()
             assertTrue("$name must filter obscured touches", text.hardensWindow("filterTouchesWhenObscured = true"))
         }
-        val search = activities.single { it.name == "AutofillSearchActivity.kt" }.readText()
+        // The binding dialog and the wallet confirmation are kit dialogs, whose window ignores
+        // obscured touches; they must not go back to a dialog of their own.
+        val kitDialog = sources.single { it.name == "HavenDialog.kt" }.readText()
         assertTrue(
-            "the binding dialog must filter obscured touches",
-            "SecureDialogWindow(ignoreObscuredTouches = true)" in search,
+            "the kit dialog must filter obscured touches",
+            "SecureDialogWindow(ignoreObscuredTouches = true)" in kitDialog,
         )
+        for (name in listOf("AutofillSearchScreen.kt", "WalletConfirmDialog.kt")) {
+            val text = sources.single { it.name == name }.readText()
+            assertTrue("$name must ask through the kit dialog", "HavenDialog(" in text)
+            assertFalse("$name must not open a dialog of its own", "AlertDialog(" in text)
+            // Nor a bare Compose Dialog or Popup, whose window would not filter obscured touches.
+            assertFalse("$name must not open a bare Dialog", BareWindow.Dialog.containsMatchIn(text))
+            assertFalse("$name must not open a Popup", BareWindow.Popup.containsMatchIn(text))
+        }
     }
 
     /** A rotation must not recreate the activity: an open draft lives in composition only. */
@@ -185,4 +195,22 @@ class ManifestTest {
         assertTrue("importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS" in text)
         assertTrue("filterTouchesWhenObscured = true" in text)
     }
+
+    @Test
+    fun theMainActivityScrubsBackPredictively() {
+        val main = elements("activity").single { it.android("name") == ".MainActivity" }
+        assertEquals("true", main.android("enableOnBackInvokedCallback"))
+    }
+
+    @Test
+    fun thePasskeySheetOpensOverTheCallingApp() {
+        val activity = elements("activity").single { it.android("name") == ".credentials.PasskeyCreateActivity" }
+        assertEquals("@style/Theme.HavenKeys.Translucent", activity.android("theme"))
+    }
+}
+
+/** `Dialog(` or `Popup(` as a call of their own: `HavenDialog(` or `AlertDialog(` do not match. */
+private object BareWindow {
+    val Dialog = Regex("(?<![A-Za-z0-9_])Dialog\\(")
+    val Popup = Regex("(?<![A-Za-z0-9_])Popup\\(")
 }

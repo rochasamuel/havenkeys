@@ -10,18 +10,18 @@ and signatures.
 
 | Stage | Plan | Status | Depends on |
 |---|---|---|---|
-| 1. Activity data | `2026-10-03-android-redesign-stage1-activity.md` | Planned | — |
-| 2. Design system | written when stage 1 is done | Not planned | Nothing in stage 1 (can start in parallel if wanted) |
-| 3. Shell and new screens | written when stage 2 is done | Not planned | Stages 1 and 2 |
-| 4. Existing screens rebuilt | written when stage 3 is done | Not planned | Stage 2 (and 3 for navigation) |
-| 5. Remove Material | written when stage 4 is done | Not planned | Stage 4 |
+| 1. Activity data | `2026-10-03-android-redesign-stage1-activity.md` | Done (`cb5c461..576f07c`) | — |
+| 2. Design system | `2026-10-03-android-redesign-stage2-design-system.md` | Done (`6a4a2f8..83fbc18`) | Nothing in stage 1 (can start in parallel if wanted) |
+| 3. Shell and new screens | `2026-10-03-android-redesign-stage3-shell.md` | Done (`5b72db6..a9def0d`) | Stages 1 and 2 |
+| 4. Existing screens rebuilt | `2026-10-03-android-redesign-stage4-screens.md` | Done (`5744144..1a1ff47`) | Stage 2 (and 3 for navigation) |
+| 5. Remove Material | `2026-10-03-android-redesign-stage5-remove-material.md` | Done (`638bef9..a18cca1`) | Stage 4 |
 
 ## What each later plan must cover
 
 ### Stage 2: Design system (spec §5)
 
 - `ui/theme` rewritten without Material types: `HavenColors` (all desktop
-  roles, light and dark), `HavenType` with bundled Hanken Grotesk, Source
+  roles, light and dark), `HavenTypography` with bundled Hanken Grotesk, Source
   Serif 4, JetBrains Mono under `res/font` (OFL notices in
   `THIRD-PARTY-NOTICES.md`), shapes, `HavenMotion` springs.
 - `HavenIcon`: the desktop icon paths (`apps/desktop/src/components/Icon.tsx`)
@@ -36,6 +36,9 @@ and signatures.
 
 ### Stage 3: Shell and new screens (spec §6.1–6.8, §7)
 
+- Builds on the kit as shipped: read `apps/android/DESIGN.md` and the `ui/kit`
+  sources for component names and signatures; carry the open questions from
+  DESIGN.md's review notes.
 - Navigation: shell with per-tab back stacks (save and restore state),
   reselect pops to root, non-secret route arguments only.
 - Fixed top bar, search screen (recents, Clear, record on result open only,
@@ -47,14 +50,17 @@ and signatures.
   animations".
 - ViewModel tests with fakes for Home, search, Items lists, add sheet.
 - Emulator pass, including stage 1's deferred check: pick a direct-fill row
-  in Chrome, open another form, then see that login under Frequently used.
+  in Chrome, open another form, then see that login under Frequently used; fill event history still
+  delivers TYPE_DATASET_SELECTED on Android 14+ (FillEventHistory is
+  deprecated in API 36 with no replacement); a pick after a null response is
+  counted once; a confirmed login fill counts once.
 
 ### Stage 4: Existing screens (spec §6.9)
 
 - Item detail, editors, generator, unlock, onboarding, devices, autofill
   setup, the autofill picker and "Search HavenKeys…", passkey sheets, all
   from `ui/kit`, behaviour unchanged (existing tests keep passing).
-- Editor copy actions call `copied()` / `recordUse` like the detail's.
+- The editor has no copy actions, so it records no use (stage 4 plan, decision R5).
 
 ### Stage 5: Remove Material (spec §8.5)
 
@@ -63,3 +69,12 @@ and signatures.
 - A detekt rule (or the existing `forbidLogging`-style Gradle check)
   forbidding `androidx.compose.material` imports.
 - Final `/impeccable` and TalkBack pass over the whole app.
+- What is left: `ui/theme/MaterialBridge.kt` (the whole file: `MaterialBridge`,
+  the colour schemes, `MaterialTypography`, `HavenType`, `MaterialShapes`), the
+  `MaterialBridge(...)` call in `ui/theme/Theme.kt`, `compose-material3` and
+  `compose-icons` in `gradle/libs.versions.toml` and `app/build.gradle.kts`,
+  and the `MaterialBridge.kt` exclusion in `forbidMaterialInKit` (which then
+  becomes the permanent rule). The platform theme's `android:Theme.Material`
+  parent in `res/values*/themes.xml` is the window behind Compose, not
+  Compose Material, and stays.
+- Open questions from `apps/android/DESIGN.md` "Review notes (stage 4)".

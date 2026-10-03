@@ -18,7 +18,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 import net.havenkeys.android.HavenApp
 import net.havenkeys.android.R
 import net.havenkeys.android.autofill.unlockThen
@@ -34,6 +33,9 @@ import uniffi.havenkeys_mobile.CredentialCaller
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 class PasskeyCreateActivity : FragmentActivity() {
     private val container get() = (application as HavenApp).container
+
+    /** One verification at a time: a double tap on Save asks the user once and creates once. */
+    private val verifying = OneAtATime()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +73,7 @@ class PasskeyCreateActivity : FragmentActivity() {
                         state = state,
                         onSelect = vm::select,
                         onSave = {
-                            lifecycleScope.launch { verifyAndCreate(vm, state.rpId, unlockedHere) }
+                            verifying.launch(lifecycleScope) { verifyAndCreate(vm, state.rpId, unlockedHere) }
                         },
                         onCancel = { failCreate(CreateCredentialCancellationException()) },
                         onClose = { failCreate(CreatePublicKeyCredentialDomException(InvalidStateError())) },

@@ -1,5 +1,6 @@
 //! Values that belong to this device and never sync: the Android app's own
-//! settings and its Digital Asset Links cache. Sealed with the vault's data
+//! settings, its Digital Asset Links cache, and item activity (uses, recent
+//! searches). Sealed with the vault's data
 //! key like every other blob, so they read only while unlocked.
 
 use crate::crypto::blob::{BlobContext, Purpose};
@@ -12,6 +13,7 @@ use serde::Serialize;
 pub enum LocalSlot {
     DeviceSettings,
     AssetLinks,
+    Activity,
 }
 
 impl LocalSlot {
@@ -19,6 +21,7 @@ impl LocalSlot {
         match self {
             Self::DeviceSettings => "device_settings",
             Self::AssetLinks => "asset_links",
+            Self::Activity => "activity",
         }
     }
 
@@ -26,6 +29,7 @@ impl LocalSlot {
         match self {
             Self::DeviceSettings => Purpose::DeviceSettings,
             Self::AssetLinks => Purpose::AssetLinks,
+            Self::Activity => Purpose::Activity,
         }
     }
 }
@@ -145,5 +149,32 @@ pub(crate) mod tests {
         assert!(b.read_local::<Prefs>(LocalSlot::DeviceSettings).is_err());
         a.store.set_local_blob("asset_links", &blob).unwrap();
         assert!(a.read_local::<Prefs>(LocalSlot::AssetLinks).is_err());
+    }
+
+    #[test]
+    fn the_activity_slot_is_its_own() {
+        let vault = unlocked_vault();
+        vault
+            .write_local(LocalSlot::Activity, &Prefs { flag: true })
+            .unwrap();
+        assert_eq!(
+            vault.read_local::<Prefs>(LocalSlot::Activity).unwrap(),
+            Some(Prefs { flag: true })
+        );
+        assert_eq!(
+            vault
+                .read_local::<Prefs>(LocalSlot::DeviceSettings)
+                .unwrap(),
+            None
+        );
+        // Sealed under its own purpose: another slot's blob does not open here.
+        let blob = vault.store.local_blob("activity").unwrap().unwrap();
+        vault
+            .store
+            .set_local_blob("device_settings", &blob)
+            .unwrap();
+        assert!(vault
+            .read_local::<Prefs>(LocalSlot::DeviceSettings)
+            .is_err());
     }
 }

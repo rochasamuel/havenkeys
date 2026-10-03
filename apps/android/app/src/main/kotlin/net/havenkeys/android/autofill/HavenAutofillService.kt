@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.CancellationSignal
 import android.service.autofill.AutofillService
 import android.service.autofill.FillCallback
+import android.service.autofill.FillEventHistory
 import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
@@ -35,17 +36,24 @@ import uniffi.havenkeys_mobile.SaveResult
  */
 class HavenAutofillService : AutofillService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + swallowUncaught)
+    private val picks = DatasetIds.Ledger()
     private val container get() = (application as HavenApp).container
 
     override fun onFillRequest(request: FillRequest, cancellation: CancellationSignal, callback: FillCallback) {
         val answered = AtomicBoolean(false)
         fun answer(response: FillResponse?) {
-            if (answered.compareAndSet(false, true)) callback.onSuccess(response)
+            if (answered.compareAndSet(false, true)) {
+                if (response != null) picks.responded()
+                callback.onSuccess(response)
+            }
         }
         val structure = request.fillContexts.lastOrNull()?.structure ?: return answer(null)
         val inlineRequest =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.inlineSuggestionsRequest else null
         val work = scope.launch {
+            // Read before answering: the answer resets the history.
+            val picked = guarded(emptyList()) { freshPicks() }
+            launchRecording(picked)
             val response = withContext(Dispatchers.Default) { guarded(null) { respond(structure, inlineRequest) } }
             answer(response)
         }
@@ -60,6 +68,37 @@ class HavenAutofillService : AutofillService() {
             answered.set(true)
             work.cancel()
             deadline.cancel()
+        }
+    }
+
+    /**
+     * Rows picked since the last request: Android reports them here and
+     * nowhere else. Direct rows only (they carry an item id); confirmed rows
+     * counted in AutofillAuthActivity. Read synchronously, before the answer.
+     */
+    // FillEventHistory is deprecated from API 34 with no replacement.
+    @Suppress("DEPRECATION")
+    private fun freshPicks(): List<String> {
+        val events = fillEventHistory?.events.orEmpty().map { event ->
+            val kind = when (event.type) {
+                FillEventHistory.Event.TYPE_DATASET_SELECTED -> DatasetIds.Kind.SELECTED
+                FillEventHistory.Event.TYPE_DATASET_AUTHENTICATION_SELECTED -> DatasetIds.Kind.AUTHENTICATION_SELECTED
+                else -> DatasetIds.Kind.OTHER
+            }
+            DatasetIds.Picked(kind, event.datasetId)
+        }
+        return picks.fresh(events)
+    }
+
+    /** Activity is a convenience: this never fails or delays a fill. */
+    private fun launchRecording(items: List<String>) {
+        if (items.isEmpty()) return
+        scope.launch {
+            guarded(Unit) {
+                if (container.events.unlocked.value) {
+                    items.forEach { container.autofillRepository.recordUse(it) }
+                }
+            }
         }
     }
 

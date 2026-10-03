@@ -83,7 +83,7 @@ class RootViewModelTest {
         assertEquals(Start.UNLOCK, vm.start.value)
         vault.nextStatus = Outcome.Ok(status(LockState.UNLOCKED))
         assertEquals(Start.VAULT, vm.current())
-        assertNull(routeToForce(Routes.VAULT, vm.current()))
+        assertNull(routeToForce(Routes.SHELL, vm.current()))
     }
 
     @Test
@@ -92,7 +92,7 @@ class RootViewModelTest {
         val vm = RootViewModel(vault, VaultEventsHub())
         assertEquals(Start.ONBOARDING, vm.start.value)
         vault.nextStatus = Outcome.Ok(status(LockState.UNLOCKED))
-        assertNull(routeToForce(Routes.VAULT, vm.current()))
+        assertNull(routeToForce(Routes.SHELL, vm.current()))
     }
 
     @Test

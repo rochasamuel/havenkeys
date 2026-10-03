@@ -88,6 +88,7 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         subtitle: String?,
         auth: IntentSender?,
         @DrawableRes icon: Int? = null,
+        datasetId: String? = null,
     ): Dataset? {
         if (fields.isEmpty()) return null
         val menu = menu(title, subtitle, icon)
@@ -96,9 +97,10 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
             val builder = Dataset.Builder(presentations(menu, inline))
             fields.forEach { (id, value) -> builder.setField(id, value?.let { Field.Builder().setValue(it).build() }) }
             auth?.let(builder::setAuthentication)
+            datasetId?.let(builder::setId)
             builder.build()
         } else {
-            legacyDataset(fields, menu, inline, auth)
+            legacyDataset(fields, menu, inline, auth, datasetId)
         }
     }
 
@@ -109,11 +111,13 @@ internal class Rows(private val context: Context, private val inlineRequest: Inl
         menu: RemoteViews,
         inline: InlinePresentation?,
         auth: IntentSender?,
+        datasetId: String?,
     ): Dataset {
         val builder = Dataset.Builder(menu)
         fields.forEach { (id, value) -> builder.setValue(id, value) }
         if (inline != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) builder.setInlinePresentation(inline)
         auth?.let(builder::setAuthentication)
+        datasetId?.let(builder::setId)
         return builder.build()
     }
 

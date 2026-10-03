@@ -18,7 +18,10 @@ concurrent edit shows "This item changed on another device." It also adds
 saving from Autofill: after you confirm Android's save sheet, a login typed
 into a browser is saved for that site, and one typed into an app is bound to
 that app (`security-model.md` §22.16, §22.17). Android M3 adds passkeys
-and Android M4 cards and the identity in Autofill (below). Not yet: editing
+and Android M4 cards and the identity in Autofill (below). The redesign's
+shell (2026-10-03 spec §6) replaces the vault list: Home, Items and Settings
+tabs with their own back stacks, a search screen with recent searches, and
+an add sheet. Not yet: editing
 custom fields (kept as they are), scanning a TOTP QR code (type or paste the
 key), saving a login typed while locked, and an in-app updater.
 
@@ -156,7 +159,7 @@ Then, from `apps/android`:
 
 | Task | Command |
 |---|---|
-| Lint, including the no-logging scan | `./gradlew detekt` (runs `forbidLogging` first) |
+| Lint, including the no-logging and no-Material scans | `./gradlew detekt` (runs `forbidLogging` and `forbidMaterial` first) |
 | JVM unit tests | `./gradlew testGithubDebugUnitTest` |
 | Android lint | `./gradlew lintGithubDebug` |
 | Debug APK | `./gradlew assembleGithubDebug` → `app/build/outputs/apk/github/debug/` |
@@ -326,6 +329,63 @@ Editing and saving (Android M2; the same list is in `security-review.md`):
 - [ ] Autofill save in an app: the login is bound to that app with no website; an app with another certificate does not update it.
 - [ ] Username-first sign-in: one login on Android 10+; password step only on Android 9.
 - [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "HavenKeys is offline. The login was not saved."; HavenKeys' own screens never offer to save.
+
+### Redesign stage 3 (shell)
+
+Run on an emulator or phone (Android 14+), in light and dark, once with
+`adb shell settings put global animator_duration_scale 1` and once with `0`
+(restore `1` afterwards).
+
+- [ ] Unlock: Home appears on the slower reveal; the identity card and both groups settle in sequence; nothing settles again on a tab return. With animations removed, it is an instant cut.
+- [ ] Tabs: Items → Logins → Home → Items shows Logins again; tapping Items again shows the Items root; Back from Items or Settings root goes to Home; the top bar does not move or flicker on a tab change; a light tick on a change, none on a reselect.
+- [ ] Per-tab back stacks survive tab switches, rotation and a theme change: open Items → Logins, switch tabs and back, rotate, change theme: Logins is still there. After a process kill (`adb shell am kill net.havenkeys.android`) or any lock, unlocking opens a fresh Home with nothing behind it.
+- [ ] Push and pop: a category list and an item slide in from the right while the old screen shifts left and dims; Back reverses; the predictive back gesture scrubs the item screen (Android 14+). A row tapped during a tab crossfade, a push or a pop opens at once; the same row (or the search pill, an add tile, Generate) tapped twice quickly opens once.
+- [ ] Shared title and bounds: an item in both Recently added and Frequently used: tapping either row moves that row's title into the item screen; the search pill's bounds grow into the search field and shrink back, across the two NavHosts, without a jump.
+- [ ] Search: the pill grows into the focused field with the keyboard up; recent searches fade in after; Clear empties them; typing shows results and records nothing; opening a result records the query (it is at the top of recents next time); Cancel and Back shrink the field into the pill; Back from an opened result returns to the results.
+- [ ] Search and the lock: with a query typed, lock (button, screen off, auto-lock): Unlock appears at once; after unlocking the query and results are gone. Kill the process with a query typed (`adb shell am kill net.havenkeys.android` after Home): the query never comes back.
+- [ ] Lock from any tab (Home, Items, a category list, Settings, the add sheet): Unlock appears and nothing survives (query, lists, recents); after unlocking, Home reloads its identity card and groups.
+- [ ] Add sheet: springs up, backdrop dims, tiles stagger; drag down and a backdrop tap close it; Login, Secure note and Card open their editors; Generate password opens the generator. Airplane mode: the item tiles are dimmed with "Adding needs a connection"; the generator still opens. The identity is never offered.
+- [ ] Offline: the top bar shows "Offline" and Sync now is disabled (dimmed, not tappable, read as disabled by TalkBack). Online, Sync now shows a ring while syncing and TalkBack announces that it is syncing.
+- [ ] Top bar at the largest font size on a narrow (360dp) phone, offline: nothing is cut and the pill's words wrap (the bar may grow); Home's identity card summary may wrap to two lines in Portuguese.
+- [ ] Pull to refresh on Home and a category list syncs; Sync now in the top bar does the same, and doing both at once runs one sync.
+- [ ] Settings: every row works (auto-lock and clipboard sheets, the three switches, biometric enrolment dialog, autofill setup, devices, sign out, remove device with a wrong then right email).
+- [ ] FLAG_SECURE: screenshots blocked and the recents thumbnail blank on Home, search, the add sheet and the Settings dialogs.
+- [ ] TalkBack: tabs read "Home, tab, 1 of 3, selected"; the pill reads "Search HavenKeys, button"; Sync now and Lock now are named; the offline badge is read; the add sheet's dimmed tiles read as disabled; Home's headings are headings; the identity card reads its title and summary as one button; the category back chevron reads "Back"; Sync now is the reachable way to sync (the pull's custom action may not be).
+- [ ] Stage 2 kit checks (`apps/android/DESIGN.md` "Review notes (stage 2)", in the debug catalogue `net.havenkeys.android/.catalogue.KitCatalogueActivity`): emulator or device screenshots including the elevation shadows of sheet, dialog, menu, toast and add button; the animations by hand at scale 1 and 0 (sheet spring, drag down and backdrop tap, a tap during the rise closes once; dialog, menu, toast, copy glyph, switch, segmented control, pull to refresh; at 0 each cuts, nothing blocked); the full TalkBack pass (button, switch on/off, tab selected, slider "24"; a text field reads its label once, and whether its label and typed value are both read; a secret field reads as a password and never speaks its value; "Copy Password" then "Copied"; the toast is announced; sheet, dialog and menu titles are announced; an item row is one stop; the pull-to-refresh "Refresh" action is reachable, and if not Home needs a visible sync control; hairlines skipped); FLAG_SECURE on the sheet, dialog and menu windows.
+- [ ] Stage 1's deferred checks: pick a direct-fill row in Chrome, open another form, then see that login under Frequently used; fill event history still delivers `TYPE_DATASET_SELECTED` on Android 14+ (`FillEventHistory` is deprecated in API 36 with no replacement); a pick after a null response is counted once; a confirmed login fill counts once.
+
+### Redesign stage 4 (screens)
+
+Run on an emulator or phone (Android 14+), in light and dark, once with
+`adb shell settings put global animator_duration_scale 1` and once with `0`
+(restore `1` afterwards), and once in Portuguese (Brazil) at the largest
+font size.
+
+- [ ] Item: from Home, Items and search, the row's tile and title grow into the header; with animations off it cuts. Show reveals the password in mono with coloured digits; it hides after 30 s, on leaving the screen, when the app goes to the background (ON_STOP) and on lock. Copy turns the glyph to a check with a light haptic and the toast "Password copied. The clipboard clears in 30 s."; the item then appears under Frequently used. Offline, Edit and More are dimmed. More, Delete asks, warns about passkeys when the login has one, and returns to the list.
+- [ ] Editor: a new login's Generate fills and shows the password; a saved login's password shows the mask until Change (which reads it); Remove then Undo; the website's "Matches" row opens a sheet of three rules; the one-time code's setup key is typed masked with the eye to show it. Gboard: no suggestions and nothing learned in the title, the secret fields and the setup key (Gboard's incognito marker shows on secret fields). Back with changes asks. Edit the same item on the desktop meanwhile, then Save on the phone: the conflict dialog ignores Back and an outside tap; Reload loads the new version.
+- [ ] Generator: the length row and the slider agree; the switches regenerate; Copy shows its toast.
+- [ ] Unlock: a wrong password is read by TalkBack as the field's error; the field is empty after each attempt; rotating or killing the process (`adb shell am kill net.havenkeys.android`) never brings the password back; the Secret Key field shows its format as a placeholder only while empty; biometrics as before.
+- [ ] Onboarding: scan (camera), type and invite; the hints under server, Secret Key and the new password; too short and mismatch read as the fields' errors.
+- [ ] Devices: this phone is marked; Revoke asks in a dialog; revoking this phone signs it out.
+- [ ] Autofill setup: the state row, Open settings, the Chrome help, the passkeys state row; coming back from Android's settings updates it.
+- [ ] Autofill: in an app with no saved login, "Search HavenKeys..." opens the search, a pick asks "Use ... in <package>?" with the app's own name under it, and fills. A card and an identity with documents ask with three stacked answers. The outlined copy glyph of "Copy one-time code" is legible in the dropdown and in the keyboard chip.
+- [ ] Passkeys: create a passkey on a site in Chrome: the translucent sheet rises over the real calling app (Chrome), with Save reachable; its footer (Save and Cancel) stays pinned above the keyboard and the navigation bar, also with many logins and a large font; dragging it down, a backdrop tap and Back cancel and return to the site (which reports a cancellation); locked, unlock fills the screen first, then the sheet.
+- [ ] FLAG_SECURE: screenshots blocked and the recents thumbnail blank on every screen above, the passkey sheet, the dialogs and the menu.
+- [ ] TalkBack: unlock reads the password as a password field (never speaking it), with the error as the field's; item detail has one stop per read-only row (label and value) with Show and Copy separate, a hidden value reads "Hidden Password", never dots or a length, the code row reads its digits and "12 seconds remaining"; the editor's and onboarding's secret fields read as password fields and never speak their value; the generator's slider reads "Length, 24" once; dialog and sheet titles are announced; the passkey sheet's logins are radio buttons, one selected.
+- [ ] pt-BR at the largest font: the stacked dialog answers, the editor's hidden rows and the generator's switches wrap without cutting; the catalogue's segmented control keeps one height; unlock's italic word wraps with the line.
+
+### Redesign stage 5 (no Material)
+
+The whole app, on an emulator or phone (Android 14+), in light and dark, in
+English and Portuguese (Brazil), at the default and the largest font size.
+This is the redesign's final pass; the stage 2–4 lists above still apply.
+
+- [ ] Press: every tappable thing (rows, buttons, tabs, tiles, switches, chips, the search pill, menu and sheet rows, dialog buttons) scales slightly with a brass-soft wash; nothing ripples and nothing flashes grey, anywhere in the app, the autofill screens and the passkey sheet included.
+- [ ] Text selection: long-press text in a field (title, a website, search, notes): the handles and highlight are brass, not blue or purple.
+- [ ] TalkBack, the whole app in one sitting: unlock, Home, search, Items and a category list, an item (reveal, copy, the code row), the editor (each field, hidden rows, Matches), the generator, Settings with each sheet and dialog, devices, autofill setup, onboarding (on a second install), "Search HavenKeys…", the fill confirmation and the passkey sheet. Each control is read once with its name, role and state; headings are headings; nothing reads a secret, a length of dots, or "unlabelled"; focus never lands on a hairline or a decoration; every dialog and sheet title is announced; the order follows the screen top to bottom.
+- [ ] Switch Access or a keyboard (Tab and Enter) reaches every control the same way, and the focused one is visibly marked.
+- [ ] Release APK (`scripts/build-android.sh --release`, then `./gradlew assembleGithubRelease` with the release key, see "Release key custody"): unlock, Home, an item, reveal, copy, edit, sync, autofill in Chrome, a passkey. Nothing crashes for a missing class (R8 with no Material).
+- [ ] FLAG_SECURE: screenshots blocked and the recents thumbnail blank on every screen, sheet, dialog and menu.
 
 ### Android M4
 - [ ] Chrome, https checkout with number, expiry (one field) and CVV: rows show `•••• 1111 · 04/33`; tapping fills all three; a field already typed in stays.

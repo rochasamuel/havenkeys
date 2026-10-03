@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug builds only (spec 2026-10-03 §8, stage 2): every ui/kit
+             component in both themes, for design review. It shows no vault
+             data. It has a launcher entry so a reviewer can open it; release
+             builds do not contain it. -->
+        <activity
+            android:name=".catalogue.KitCatalogueActivity"
+            android:exported="true"
+            android:label="@string/kit_catalogue_label"
+            android:theme="@style/Theme.HavenKeys">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

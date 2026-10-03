@@ -787,6 +787,18 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_sync_now(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_clear_recent_searches(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_frequently_used(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_recent_searches(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_recently_created(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_record_search(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_record_use(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_bind_and_fill(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_fill(
@@ -946,6 +958,18 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sync_if_due(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sync_now(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_clear_recent_searches(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_frequently_used(`ptr`: Long,`n`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_recent_searches(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_recently_created(`ptr`: Long,`n`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_record_search(`ptr`: Long,`query`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_record_use(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_bind_and_fill(`ptr`: Long,`id`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1201,6 +1225,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sync_now() and 0xFFFF) != 35368) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_clear_recent_searches() and 0xFFFF) != 32065) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_frequently_used() and 0xFFFF) != 15240) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_recent_searches() and 0xFFFF) != 34405) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_recently_created() and 0xFFFF) != 52902) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_record_search() and 0xFFFF) != 7361) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_record_use() and 0xFFFF) != 7469) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_bind_and_fill() and 0xFFFF) != 37703) {
@@ -2171,6 +2213,21 @@ public interface MobileVaultInterface {
     
     fun `syncNow`()
     
+    fun `clearRecentSearches`()
+    
+    fun `frequentlyUsed`(`n`: kotlin.UInt): List<ItemSummary>
+    
+    fun `recentSearches`(): List<kotlin.String>
+    
+    fun `recentlyCreated`(`n`: kotlin.UInt): List<ItemSummary>
+    
+    fun `recordSearch`(`query`: kotlin.String)
+    
+    /**
+     * The app copied a field of `id`, or Android filled a row of it.
+     */
+    fun `recordUse`(`id`: kotlin.String)
+    
     /**
      * The user confirmed "Use <login> in <app>?". Stores the binding when
      * online (an item write); offline, fills this once and stores nothing.
@@ -2565,6 +2622,94 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_sync_now(
         it,
         _status)
+}
+    }
+    
+    
+
+    
+    @Throws(MobileException::class)override fun `clearRecentSearches`()
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_clear_recent_searches(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
+    @Throws(MobileException::class)override fun `frequentlyUsed`(`n`: kotlin.UInt): List<ItemSummary> {
+            return FfiConverterSequenceTypeItemSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_frequently_used(
+        it,
+        
+        FfiConverterUInt.lower(`n`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(MobileException::class)override fun `recentSearches`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_recent_searches(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(MobileException::class)override fun `recentlyCreated`(`n`: kotlin.UInt): List<ItemSummary> {
+            return FfiConverterSequenceTypeItemSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_recently_created(
+        it,
+        
+        FfiConverterUInt.lower(`n`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(MobileException::class)override fun `recordSearch`(`query`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_record_search(
+        it,
+        
+        FfiConverterString.lower(`query`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * The app copied a field of `id`, or Android filled a row of it.
+     */
+    @Throws(MobileException::class)override fun `recordUse`(`id`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_record_use(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
 }
     }
     
@@ -4708,6 +4853,8 @@ data class ItemSummary (
     var `hasPasskey`: kotlin.Boolean
     , 
     var `updatedAt`: kotlin.Long
+    , 
+    var `createdAt`: kotlin.Long
     
 ){
     
@@ -4732,6 +4879,7 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
         )
     }
 
@@ -4743,7 +4891,8 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterOptionalString.allocationSize(value.`website`) +
             FfiConverterBoolean.allocationSize(value.`hasTotp`) +
             FfiConverterBoolean.allocationSize(value.`hasPasskey`) +
-            FfiConverterLong.allocationSize(value.`updatedAt`)
+            FfiConverterLong.allocationSize(value.`updatedAt`) +
+            FfiConverterLong.allocationSize(value.`createdAt`)
     )
 
     override fun write(value: ItemSummary, buf: ByteBuffer) {
@@ -4755,6 +4904,7 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.write(value.`hasTotp`, buf)
             FfiConverterBoolean.write(value.`hasPasskey`, buf)
             FfiConverterLong.write(value.`updatedAt`, buf)
+            FfiConverterLong.write(value.`createdAt`, buf)
     }
 }
 
@@ -6148,6 +6298,34 @@ public object FfiConverterSequenceBoolean: FfiConverterRustBuffer<List<kotlin.Bo
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterBoolean.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
+    override fun read(buf: ByteBuffer): List<kotlin.String> {
+        val len = buf.getInt()
+        return List<kotlin.String>(len) {
+            FfiConverterString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.String>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterString.write(it, buf)
         }
     }
 }

@@ -46,17 +46,12 @@
     <string name="vault_lock_now">Lock now</string>
     <string name="vault_offline">Offline, read-only</string>
     <string name="item_passkey">Passkey</string>
-    <string name="vault_title">Vault</string>
-    <string name="vault_search">Search vault</string>
     <string name="vault_search_hint">Search looks at titles, usernames and websites.</string>
     <string name="vault_filter_all">All items</string>
     <string name="vault_filter_logins">Logins</string>
     <string name="vault_filter_notes">Secure notes</string>
     <string name="vault_filter_cards">Cards</string>
-    <string name="vault_filter_identities">Identity</string>
     <string name="vault_filter_passkeys">Passkeys</string>
-    <string name="vault_offline_banner">Offline — the vault is read-only until it reconnects.</string>
-    <string name="vault_empty">Your vault is empty</string>
     <string name="vault_empty_hint">New items you add appear here.</string>
     <string name="vault_no_matches">No matches</string>
     <string name="item_back">Back</string>
@@ -208,7 +203,7 @@
     <string name="devices_title">Devices</string>
     <string name="devices_this_phone">This phone</string>
     <string name="devices_last_seen">Last seen %1$s</string>
-    <string name="devices_never_seen">Last seen never</string>
+    <string name="devices_never_seen">Not seen yet</string>
     <string name="devices_revoke">Revoke</string>
     <string name="devices_revoke_confirm">Sign %1$s out and end its session?</string>
     <string name="devices_revoke_this">Sign this phone out?</string>
@@ -234,7 +229,6 @@
     <string name="autofill_filled_once">Filled once — connect to save this app for next time.</string>
 
     <!-- Create, edit and delete -->
-    <string name="vault_new_item">New item</string>
     <string name="vault_new_login">Login</string>
     <string name="vault_new_note">Secure note</string>
     <string name="vault_new_card">Card</string>
@@ -317,4 +311,46 @@
     <string name="autofill_card_save_offline">HavenKeys is offline. The card was not saved.</string>
     <string name="autofill_card_save_locked">HavenKeys locked before saving. The card was not saved.</string>
     <string name="autofill_card_save_failed">HavenKeys could not save this card.</string>
+    <!-- ui/kit (spec 2026-10-03 §5.2) -->
+    <string name="kit_copied">Copied</string>
+    <string name="kit_new_item">New item</string>
+    <string name="kit_close">Close</string>
+    <string name="kit_refresh">Refresh</string>
+    <string name="kit_refreshing">Refreshing</string>
+
+    <!-- Shell and new screens (spec 2026-10-03 §6) -->
+    <string name="tab_home">Home</string>
+    <string name="tab_items">Items</string>
+    <string name="shell_search">Search HavenKeys</string>
+    <string name="shell_offline">Offline</string>
+    <string name="shell_sync">Sync now</string>
+    <string name="shell_syncing">Syncing</string>
+    <string name="add_generate">Generate password</string>
+    <string name="add_offline">Adding needs a connection</string>
+    <string name="identity_part_name">Name</string>
+    <string name="identity_part_email">Email</string>
+    <string name="identity_part_phone">Phone</string>
+    <string name="identity_part_address">Address</string>
+    <string name="identity_part_work">Work</string>
+    <string name="identity_part_documents">Documents</string>
+    <string name="identity_part_other">Other details</string>
+    <string name="home_recent">Recently added</string>
+    <string name="home_frequent">Frequently used</string>
+    <string name="home_frequent_empty">Items you fill or copy will show here.</string>
+    <string name="home_identity_empty">Add your details</string>
+    <string name="items_empty">Nothing here yet</string>
+    <string name="search_recent">Recent searches</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_cancel">Cancel</string>
+    <string name="search_clear_field">Clear search</string>
+    <string name="settings_signed_in_as">Signed in as</string>
+
+    <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
+    <string name="edit_match">Matches</string>
+    <!-- The word of unlock_title set in the serif italic, as on the desktop -->
+    <string name="unlock_title_locked">locked</string>
+    <!-- A hidden value read after its field's label ("Password, Hidden") -->
+    <string name="hidden_value">Hidden</string>
+    <!-- What TalkBack hears for a device's Revoke button: the device's name -->
+    <string name="devices_revoke_named">Revoke %1$s</string>
 </resources>

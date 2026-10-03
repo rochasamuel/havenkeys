@@ -57,7 +57,7 @@ class WalletDatasets(
                 rows.dataset(targets, cardTitle(row.card), subtitle, auth)
             } else {
                 val entries = valuedIn(screen, WalletEntries.card(screen.fields, plan.frames, values))
-                rows.dataset(entries, cardTitle(row.card), subtitle, null)
+                rows.dataset(entries, cardTitle(row.card), subtitle, null, datasetId = DatasetIds.of(row.card.id))
             }
         }
         val saveInfo = if (plan.save) cardSaveInfo(screen, plan.frames.first()) else null
