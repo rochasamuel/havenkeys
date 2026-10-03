@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -56,7 +57,11 @@ fun SecretTextField(
             },
             enabled = enabled,
             textStyle = HavenTheme.type.secret.copy(color = colors.textStrong),
-            keyboardOptions = KeyboardOptions(imeAction = imeAction),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+                imeAction = imeAction,
+            ),
             onKeyboardAction = onKeyboardAction,
             interactionSource = interaction,
             cursorBrush = SolidColor(colors.brass),
