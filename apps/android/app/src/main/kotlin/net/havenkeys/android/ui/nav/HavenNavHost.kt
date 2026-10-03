@@ -13,9 +13,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -48,41 +48,44 @@ import net.havenkeys.android.ui.shell.ShellScreen
 import net.havenkeys.android.ui.shell.ShellViewModel
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
-import net.havenkeys.android.ui.unlock.UnlockScreen
-import net.havenkeys.android.ui.unlock.UnlockViewModel
 
 /** What every destination of the app's graph needs. */
 private class Nav(
-    val container: AppContainer,
+    val services: NavServices,
     val controller: NavHostController,
-    val activity: FragmentActivity,
     val shared: SharedTransitionScope,
     val motion: HavenMotion,
     val travel: TitleTravel,
 ) {
     /** Opens an item over the shell; its title travels from the tapped row. */
     val open: OpenItem = { id, origin ->
-        ifSettled {
-            travel.tap(id, origin)
-            controller.navigate(Routes.item(id))
-        }
+        if (controller.pushOnce(Routes.item(id))) travel.tap(id, origin)
     }
 
-    fun ifSettled(navigate: () -> Unit) = controller.ifSettled(navigate)
-
     val back: () -> Unit = { controller.popBackStack() }
-    val lock: () -> Unit = container.vaultRepository::lock
+    val lock: () -> Unit = services.vault::lock
+}
+
+/** The app's navigation over the [AppContainer] and this activity. */
+@Composable
+fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
+    val activity = requireNotNull(LocalActivity.current as? FragmentActivity)
+    HavenNavHost(rememberNavServices(container, activity), modifier)
 }
 
 /**
  * The app's navigation: onboarding and unlock outside the shell; the shell
  * and search; and the full-screen screens over the shell (spec §6.1). A lock
- * replaces the whole back stack with Unlock, at once.
+ * replaces the whole back stack with Unlock, at once. [navController] is a
+ * parameter so a test can watch the back stack.
  */
 @Composable
-fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
-    val activity = requireNotNull(LocalActivity.current as? FragmentActivity)
-    val root = viewModel { RootViewModel(container.vaultRepository, container.events) }
+internal fun HavenNavHost(
+    services: NavServices,
+    modifier: Modifier = Modifier,
+    navController: NavHostController = rememberNavController(),
+) {
+    val root = viewModel { RootViewModel(services.vault, services.events) }
     val start by root.start.collectAsStateWithLifecycle()
     val first = start
     if (first == null) {
@@ -90,13 +93,12 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
         return
     }
 
-    val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val motion = HavenTheme.motion
     val travel = remember { TitleTravel() }
     // The window's ground shows through a screen that fades under a push, which reads as dimmed.
     SharedTransitionLayout(modifier.background(HavenTheme.colors.pane)) {
-        val nav = Nav(container, navController, activity, this, motion, travel)
+        val nav = Nav(services, navController, this, motion, travel)
         NavHost(
             navController = navController,
             startDestination = routeOf(first),
@@ -137,68 +139,67 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
 }
 
 /**
- * Runs a navigation only while the current screen is settled (RESUMED): a second tap during a push,
- * or a tap during a crossfade, finds the old entry leaving and is ignored.
+ * Pushes [route] unless the screen on top is already that route with the
+ * same arguments. Two quick taps on one target open it once; a tap on
+ * another target goes there at once, even mid-transition (spec §7). The
+ * back stack changes synchronously, so the second tap of a pair sees the
+ * first one's entry on top. Returns whether it pushed.
  */
-internal fun NavHostController.ifSettled(navigate: () -> Unit) {
-    if (currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) navigate()
+internal fun NavHostController.pushOnce(route: String): Boolean {
+    if (currentBackStackEntry?.concreteRoute() == route) return false
+    navigate(route)
+    return true
 }
+
+/** This entry's route with its arguments filled in ("item/{id}" → "item/abc"). Ids and kinds only. */
+internal fun NavBackStackEntry.concreteRoute(): String? {
+    val pattern = destination.route ?: return null
+    return ArgumentSlot.replace(pattern) { slot -> arguments?.getString(slot.groupValues[1]) ?: slot.value }
+}
+
+private val ArgumentSlot = Regex("\\{([^}]+)\\}")
 
 private fun NavHostController.replaceAll(route: String) =
     navigate(route) { popUpTo(graph.id) { inclusive = true } }
 
 /** Onboarding and unlock, outside the shell. */
 private fun NavGraphBuilder.entryScreens(nav: Nav, root: RootViewModel, scope: CoroutineScope) {
-    val container = nav.container
     composable(Routes.ONBOARDING) {
         OnboardingScreen(
-            viewModel = viewModel { OnboardingViewModel(container.accountRepository) },
+            viewModel = viewModel { OnboardingViewModel(nav.services.accounts) },
             onDone = { scope.launch { nav.controller.replaceAll(routeOf(root.current())) } },
         )
     }
     composable(Routes.UNLOCK) {
-        UnlockScreen(
-            viewModel = viewModel {
-                UnlockViewModel(
-                    container.vaultRepository,
-                    biometricAvailable = container.biometricGate.available(nav.activity),
-                    hasBundle = container::hasBiometricUnlock,
-                    deleteBundle = container::forgetBiometricUnlock,
-                )
-            },
-            activity = nav.activity,
-            container = container,
-            onUnlocked = { nav.controller.replaceAll(Routes.SHELL) },
-        )
+        nav.services.unlockScreen { nav.controller.replaceAll(Routes.SHELL) }
     }
 }
 
 /** The shell and search; the pill and the field are one shared element. */
 private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
-    val container = nav.container
+    val services = nav.services
     composable(Routes.SHELL) {
         ShellScreen(
             viewModel = viewModel {
-                ShellViewModel(container.vaultRepository, container.accountRepository, container.events)
+                ShellViewModel(services.vault, services.accounts, services.events)
             },
             screens = shellScreens(
-                container,
-                nav.activity,
+                nav.services,
                 nav.controller,
                 nav.open,
                 nav.travel.from(nav.shared, this, nav.motion),
             ),
             navigation = ShellNavigation(
-                onSearch = { nav.ifSettled { nav.controller.navigate(Routes.SEARCH) { launchSingleTop = true } } },
-                onNew = { kind -> nav.ifSettled { nav.controller.navigate(Routes.new(kind)) } },
-                onGenerator = { nav.ifSettled { nav.controller.navigate(Routes.GENERATOR) } },
+                onSearch = { nav.controller.pushOnce(Routes.SEARCH) },
+                onNew = { kind -> nav.controller.pushOnce(Routes.new(kind)) },
+                onGenerator = { nav.controller.pushOnce(Routes.GENERATOR) },
             ),
             searchPillModifier = Modifier.sharedIfMoving(nav.shared, SEARCH_KEY, this, nav.motion),
         )
     }
     composable(Routes.SEARCH) {
         SearchScreen(
-            viewModel = viewModel { SearchViewModel(container.vaultRepository, container.events) },
+            viewModel = viewModel { SearchViewModel(services.vault, services.events) },
             onOpen = nav.open,
             onCancel = nav.back,
             fieldModifier = Modifier.sharedIfMoving(
@@ -215,20 +216,20 @@ private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
 
 /** An item and its editors, over the shell. */
 private fun NavGraphBuilder.itemScreens(nav: Nav) {
-    val container = nav.container
+    val services = nav.services
     composable(Routes.ITEM, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
         val id = requireNotNull(it.arguments?.getString(Routes.ITEM_ID))
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         ItemScreen(
             viewModel = viewModel {
-                ItemViewModel(container.vaultRepository, container.settingsRepository, container.events, id)
+                ItemViewModel(services.vault, services.settings, services.events, id)
             },
-            clipboard = container.clipboard,
+            clipboard = services.clipboard,
             online = online,
             navigation = ItemNavigation(
                 onBack = nav.back,
                 onLock = nav.lock,
-                onEdit = { nav.controller.navigate(Routes.edit(id)) },
+                onEdit = { nav.controller.pushOnce(Routes.edit(id)) },
                 onDeleted = nav.back,
             ),
             titleModifier = Modifier.sharedIfMoving(nav.shared, titleKey(id), this, nav.motion),
@@ -250,11 +251,11 @@ private fun NavGraphBuilder.itemScreens(nav: Nav) {
 
 @Composable
 private fun EditRoute(nav: Nav, target: EditTarget) {
-    val container = nav.container
-    val online by container.events.online.collectAsStateWithLifecycle()
+    val services = nav.services
+    val online by services.events.online.collectAsStateWithLifecycle()
     EditScreen(
         viewModel = viewModel {
-            EditViewModel(container.vaultRepository, container.accountRepository, container.events, target)
+            EditViewModel(services.vault, services.accounts, services.events, target)
         },
         isNew = target is EditTarget.New,
         online = online,
@@ -275,28 +276,28 @@ private fun EditRoute(nav: Nav, target: EditTarget) {
 
 /** The generator, and the screens Settings leads to. No route carries an argument. */
 private fun NavGraphBuilder.toolScreens(nav: Nav) {
-    val container = nav.container
+    val services = nav.services
     composable(Routes.GENERATOR) {
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         GeneratorScreen(
-            viewModel = viewModel { GeneratorViewModel(container.vaultRepository, container.settingsRepository) },
-            clipboard = container.clipboard,
+            viewModel = viewModel { GeneratorViewModel(services.vault, services.settings) },
+            clipboard = services.clipboard,
             online = online,
             onBack = nav.back,
             onLock = nav.lock,
         )
     }
     composable(Routes.DEVICES) {
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         DevicesScreen(
-            viewModel = viewModel { DevicesViewModel(container.accountRepository, container.events) },
+            viewModel = viewModel { DevicesViewModel(services.accounts, services.events) },
             online = online,
             onBack = nav.back,
             onLock = nav.lock,
         )
     }
     composable(Routes.AUTOFILL_SETUP) {
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         AutofillSetupScreen(online = online, onBack = nav.back, onLock = nav.lock)
     }
 }

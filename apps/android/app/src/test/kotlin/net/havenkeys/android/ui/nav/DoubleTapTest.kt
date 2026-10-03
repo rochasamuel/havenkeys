@@ -3,9 +3,11 @@ package net.havenkeys.android.ui.nav
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import net.havenkeys.android.ui.kit.setKit
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -14,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
+/** Pushes made in one frame: the second lands while the first is still moving in (spec §7). */
 @RunWith(RobolectricTestRunner::class)
 class DoubleTapTest {
     @get:Rule
@@ -29,35 +32,48 @@ class DoubleTapTest {
                 composable(Routes.SHELL) { Box {} }
                 composable(Routes.SEARCH) { Box {} }
                 composable(Routes.GENERATOR) { Box {} }
+                composable(Routes.ITEM, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {
+                    Box {}
+                }
             }
         }
         rule.waitForIdle()
     }
 
-    private fun entries(route: String) = nav.currentBackStack.value.count { it.destination.route == route }
+    private fun stack() = nav.currentBackStack.value.mapNotNull { it.concreteRoute() }.filter { it != Routes.SHELL }
 
     @Test
-    fun twoQuickTapsOnThePillOpenOneSearch() {
-        rule.runOnIdle {
-            repeat(2) { nav.ifSettled { nav.navigate(Routes.SEARCH) { launchSingleTop = true } } }
-        }
+    fun twoQuickTapsOnOneTargetOpenItOnce() {
+        rule.runOnIdle { repeat(2) { nav.pushOnce(Routes.SEARCH) } }
+        rule.runOnIdle { repeat(2) { nav.pushOnce(Routes.item("1")) } }
         rule.waitForIdle()
-        assertEquals(1, entries(Routes.SEARCH))
+        assertEquals(listOf(Routes.SEARCH, "item/1"), stack())
     }
 
     @Test
-    fun aSecondTapDuringAPushIsIgnoredEvenWithoutSingleTop() {
+    fun aTapOnAnotherTargetDuringAPushStillGoesThere() {
         rule.runOnIdle {
-            repeat(2) { nav.ifSettled { nav.navigate(Routes.GENERATOR) } }
+            nav.pushOnce(Routes.item("1"))
+            nav.pushOnce(Routes.GENERATOR)
         }
         rule.waitForIdle()
-        assertEquals(1, entries(Routes.GENERATOR))
+        assertEquals(listOf("item/1", Routes.GENERATOR), stack())
     }
 
     @Test
-    fun aTapOnASettledScreenNavigates() {
-        rule.runOnIdle { nav.ifSettled { nav.navigate(Routes.GENERATOR) } }
+    fun anotherItemIsAnotherTarget() {
+        rule.runOnIdle {
+            nav.pushOnce(Routes.item("1"))
+            nav.pushOnce(Routes.item("2"))
+        }
         rule.waitForIdle()
-        assertEquals(1, entries(Routes.GENERATOR))
+        assertEquals(listOf("item/1", "item/2"), stack())
+    }
+
+    @Test
+    fun aRouteIsReadBackWithItsArguments() {
+        rule.runOnIdle { nav.pushOnce(Routes.item("abc")) }
+        rule.waitForIdle()
+        assertEquals("item/abc", nav.currentBackStackEntry?.concreteRoute())
     }
 }

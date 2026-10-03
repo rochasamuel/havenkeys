@@ -1,11 +1,9 @@
 package net.havenkeys.android.ui.nav
 
 import androidx.compose.runtime.getValue
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import net.havenkeys.android.AppContainer
 import net.havenkeys.android.ui.home.HomeScreen
 import net.havenkeys.android.ui.home.HomeViewModel
 import net.havenkeys.android.ui.items.CategoryScreen
@@ -14,7 +12,6 @@ import net.havenkeys.android.ui.items.ItemsScreen
 import net.havenkeys.android.ui.settings.SettingsNavigation
 import net.havenkeys.android.ui.settings.SettingsScreen
 import net.havenkeys.android.ui.settings.SettingsViewModel
-import net.havenkeys.android.ui.settings.rememberSettingsActions
 import net.havenkeys.android.ui.shell.OpenItem
 import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.shell.ShellScreens
@@ -25,8 +22,7 @@ import net.havenkeys.android.ui.shell.ShellScreens
  * tab, survives tab switches (saved state), and goes with the shell on lock.
  */
 internal fun shellScreens(
-    container: AppContainer,
-    activity: FragmentActivity,
+    services: NavServices,
     navController: NavHostController,
     open: OpenItem,
     sharedTitle: SharedTitle,
@@ -34,7 +30,7 @@ internal fun shellScreens(
     home = { padding ->
         HomeScreen(
             viewModel = viewModel {
-                HomeViewModel(container.vaultRepository, container.accountRepository, container.events)
+                HomeViewModel(services.vault, services.accounts, services.events)
             },
             onOpen = open,
             contentPadding = padding,
@@ -44,7 +40,7 @@ internal fun shellScreens(
     items = { padding, onCategory ->
         ItemsScreen(
             viewModel = viewModel {
-                ItemListViewModel(container.vaultRepository, container.accountRepository, container.events)
+                ItemListViewModel(services.vault, services.accounts, services.events)
             },
             onCategory = onCategory,
             contentPadding = padding,
@@ -53,7 +49,7 @@ internal fun shellScreens(
     category = { padding, category, onBack ->
         CategoryScreen(
             viewModel = viewModel {
-                ItemListViewModel(container.vaultRepository, container.accountRepository, container.events)
+                ItemListViewModel(services.vault, services.accounts, services.events)
             },
             category = category,
             onOpen = open,
@@ -63,21 +59,21 @@ internal fun shellScreens(
         )
     },
     settings = { padding ->
-        val online by container.events.online.collectAsStateWithLifecycle()
+        val online by services.events.online.collectAsStateWithLifecycle()
         SettingsScreen(
             viewModel = viewModel {
                 SettingsViewModel(
-                    container.settingsRepository,
-                    container.accountRepository,
-                    container.vaultRepository,
-                    biometricEnrolled = container::hasBiometricUnlock,
+                    services.settings,
+                    services.accounts,
+                    services.vault,
+                    biometricEnrolled = services.hasBiometricUnlock,
                 )
             },
             online = online,
-            actions = rememberSettingsActions(container, activity),
+            actions = services.settingsActions(),
             navigation = SettingsNavigation(
-                onDevices = { navController.navigate(Routes.DEVICES) },
-                onAutofillSetup = { navController.navigate(Routes.AUTOFILL_SETUP) },
+                onDevices = { navController.pushOnce(Routes.DEVICES) },
+                onAutofillSetup = { navController.pushOnce(Routes.AUTOFILL_SETUP) },
             ),
             contentPadding = padding,
         )
