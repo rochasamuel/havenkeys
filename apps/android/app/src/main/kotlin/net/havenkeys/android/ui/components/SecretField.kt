@@ -19,19 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
-import net.havenkeys.android.ui.theme.HavenColors
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.theme.HavenType
-
-// Always the same count: the mask must not tell the value's length.
-internal const val MASK = "••••••••••••"
 
 /**
  * One field of an item. The caller owns [revealed] (remembered state that
@@ -104,17 +96,6 @@ fun SecretField(
         }
         IconButton(onClick = onCopy) {
             Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.copy, label))
-        }
-    }
-}
-
-/** Digits and symbols in their own colours, as on the desktop, so 0/O and l/1 read apart. */
-internal fun colourised(value: String, colors: HavenColors): AnnotatedString = buildAnnotatedString {
-    for (c in value) {
-        when {
-            c.isDigit() -> withStyle(SpanStyle(color = colors.digit)) { append(c) }
-            !c.isLetter() && !c.isWhitespace() -> withStyle(SpanStyle(color = colors.symbol)) { append(c) }
-            else -> append(c)
         }
     }
 }

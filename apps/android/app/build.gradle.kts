@@ -150,6 +150,8 @@ val forbidMaterialInKit by tasks.registering {
             "**/ui/settings/SettingsChoices.kt",
             "**/ui/settings/SettingsDialog.kt",
             "**/ui/settings/SettingsActions.kt",
+            "**/ui/components/ScreenBar.kt",
+            "**/ui/components/SecretText.kt",
         )
         exclude("**/ui/theme/MaterialBridge.kt")
     }
