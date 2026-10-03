@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.CancellationSignal
 import android.service.autofill.AutofillService
 import android.service.autofill.FillCallback
+import android.service.autofill.FillEventHistory
 import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
@@ -46,6 +47,7 @@ class HavenAutofillService : AutofillService() {
         val inlineRequest =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.inlineSuggestionsRequest else null
         val work = scope.launch {
+            recordPickedRows()
             val response = withContext(Dispatchers.Default) { guarded(null) { respond(structure, inlineRequest) } }
             answer(response)
         }
@@ -60,6 +62,28 @@ class HavenAutofillService : AutofillService() {
             answered.set(true)
             work.cancel()
             deadline.cancel()
+        }
+    }
+
+    /**
+     * Rows picked since the last request: Android reports them here and
+     * nowhere else. Direct rows only (they carry an item id); confirmed rows
+     * counted in AutofillAuthActivity. Activity is a convenience: nothing
+     * here may fail or delay the fill.
+     */
+    // FillEventHistory is deprecated from API 34 with no replacement.
+    @Suppress("DEPRECATION")
+    private suspend fun recordPickedRows() = guarded(Unit) {
+        val events = fillEventHistory?.events.orEmpty().map { event ->
+            val kind = when (event.type) {
+                FillEventHistory.Event.TYPE_DATASET_SELECTED -> DatasetIds.Kind.SELECTED
+                FillEventHistory.Event.TYPE_DATASET_AUTHENTICATION_SELECTED -> DatasetIds.Kind.AUTHENTICATION_SELECTED
+                else -> DatasetIds.Kind.OTHER
+            }
+            DatasetIds.Picked(kind, event.datasetId)
+        }
+        if (container.events.unlocked.value) {
+            DatasetIds.usedItems(events).forEach { container.autofillRepository.recordUse(it) }
         }
     }
 

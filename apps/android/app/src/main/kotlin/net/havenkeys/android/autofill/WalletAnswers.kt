@@ -40,7 +40,9 @@ internal suspend fun AutofillAuthActivity.answerCard(
                 alternativeLabel = null,
             ) { _ ->
                 val values = confirmation.values(repo, tapped.target)
-                finishOrCancel(values?.let { tapped.wallet(this).cardDataset(card, confirmation.frames, it) })
+                val dataset = values?.let { tapped.wallet(this).cardDataset(card, confirmation.frames, it) }
+                if (dataset != null) repo.recordUse(itemId)
+                finishOrCancel(dataset)
             }
         }
         else -> cancel()

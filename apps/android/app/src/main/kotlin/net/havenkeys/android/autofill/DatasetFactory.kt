@@ -84,7 +84,8 @@ class DatasetFactory(
         }
         val mode = if (otpOnly) MODE_TOTP else MODE_FILL
         val auth = if (gated) autofillSender(context, mode, plan.match.id) else null
-        return rows.dataset(fields, plan.match.title, subtitle, auth)
+        val datasetId = if (auth == null) DatasetIds.of(plan.match.id) else null
+        return rows.dataset(fields, plan.match.title, subtitle, auth, datasetId = datasetId)
     }
 
     private fun filled(values: FillValues) = listOfNotNull(
