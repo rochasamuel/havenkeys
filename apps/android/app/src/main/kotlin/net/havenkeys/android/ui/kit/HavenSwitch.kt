@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.kit
 
+import android.graphics.Paint
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
@@ -20,10 +21,15 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.ui.theme.HavenSprings
 import net.havenkeys.android.ui.theme.HavenSpacing
@@ -76,8 +82,7 @@ fun HavenSwitch(
             drawRoundRect(track, cornerRadius = CornerRadius(radius))
             val thumb = radius - 3.dp.toPx()
             val x = radius + (size.width - 2 * radius) * position
-            drawCircle(Color.Black.copy(alpha = 0.25f), thumb, Offset(x, radius + 1.dp.toPx()))
-            drawCircle(colors.thumb, thumb, Offset(x, radius))
+            drawThumb(colors.thumb, thumb, Offset(x, radius), shadowAlpha = 0.35f, blur = 3.dp)
         }
     }
 }
@@ -110,6 +115,20 @@ fun ToggleRow(
         Column(Modifier.weight(1f)) { GroupRowText(title, detail) }
         HavenSwitch(checked, onCheckedChange = null, enabled = enabled)
     }
+}
+
+/**
+ * A paper-white thumb with the desktop's soft shadow (styles.css: 0 1px 3px
+ * on the switch, 0 1px 4px on the slider): offset 1dp down and blurred, so it
+ * rings the whole thumb and lifts it off a white ground too.
+ */
+internal fun DrawScope.drawThumb(fill: Color, radius: Float, center: Offset, shadowAlpha: Float, blur: Dp) {
+    val paint = Paint().apply {
+        isAntiAlias = true
+        color = fill.toArgb()
+        setShadowLayer(blur.toPx() / 2, 0f, 1.dp.toPx(), Color.Black.copy(alpha = shadowAlpha).toArgb())
+    }
+    drawIntoCanvas { it.nativeCanvas.drawCircle(center.x, center.y, radius, paint) }
 }
 
 @PreviewLightDark

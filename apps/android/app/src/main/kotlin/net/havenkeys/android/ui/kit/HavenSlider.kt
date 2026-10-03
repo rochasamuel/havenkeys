@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -104,8 +103,7 @@ fun HavenSlider(
             val stroke = 4.dp.toPx()
             drawLine(colors.lineStrong, Offset(start, y), Offset(end, y), strokeWidth = stroke, cap = StrokeCap.Round)
             drawLine(colors.brass, Offset(start, y), Offset(x, y), strokeWidth = stroke, cap = StrokeCap.Round)
-            drawCircle(Color.Black.copy(alpha = 0.3f), thumbPx / 2, Offset(x, y + 1.dp.toPx()))
-            drawCircle(colors.thumb, thumbPx / 2, Offset(x, y))
+            drawThumb(colors.thumb, thumbPx / 2, Offset(x, y), shadowAlpha = 0.45f, blur = 4.dp)
         }
     }
 }
