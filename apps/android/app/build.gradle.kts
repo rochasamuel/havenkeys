@@ -153,6 +153,7 @@ val forbidMaterialInKit by tasks.registering {
             "**/ui/onboarding/**/*.kt",
             "**/ui/settings/**/*.kt",
             "**/ui/autofillsetup/**/*.kt",
+            "**/autofill/**/*.kt",
             "**/ui/components/ScreenBar.kt",
             "**/ui/components/SecretText.kt",
         )

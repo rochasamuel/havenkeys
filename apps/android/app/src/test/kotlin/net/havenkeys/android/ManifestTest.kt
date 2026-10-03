@@ -158,11 +158,18 @@ class ManifestTest {
             val text = activities.single { it.name == name }.readText()
             assertTrue("$name must filter obscured touches", text.hardensWindow("filterTouchesWhenObscured = true"))
         }
-        val search = activities.single { it.name == "AutofillSearchActivity.kt" }.readText()
+        // The binding dialog and the wallet confirmation are kit dialogs, whose window ignores
+        // obscured touches; they must not go back to a dialog of their own.
+        val kitDialog = sources.single { it.name == "HavenDialog.kt" }.readText()
         assertTrue(
-            "the binding dialog must filter obscured touches",
-            "SecureDialogWindow(ignoreObscuredTouches = true)" in search,
+            "the kit dialog must filter obscured touches",
+            "SecureDialogWindow(ignoreObscuredTouches = true)" in kitDialog,
         )
+        for (name in listOf("AutofillSearchScreen.kt", "WalletConfirmDialog.kt")) {
+            val text = sources.single { it.name == name }.readText()
+            assertTrue("$name must ask through the kit dialog", "HavenDialog(" in text)
+            assertFalse("$name must not open a dialog of its own", "AlertDialog(" in text)
+        }
     }
 
     /** A rotation must not recreate the activity: an open draft lives in composition only. */
