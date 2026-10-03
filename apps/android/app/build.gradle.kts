@@ -62,6 +62,12 @@ android {
     }
     buildFeatures { compose = true }
     packaging { jniLibs { useLegacyPackaging = false } }
+
+    testOptions {
+        // The ui/kit component tests run on the JVM under Robolectric and
+        // need the merged resources (strings, fonts).
+        unitTests { isIncludeAndroidResources = true }
+    }
 }
 
 kotlin { jvmToolchain(17) }
@@ -152,6 +158,9 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test)
+    testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.androidx.test.runner)

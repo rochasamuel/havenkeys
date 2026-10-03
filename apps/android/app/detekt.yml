@@ -1,9 +1,10 @@
 style:
   MagicNumber:
-    # The theme is token values from packages/ui/src/tokens.css by design.
-    excludes: ['**/test/**', '**/androidTest/**', '**/ui/theme/**']
+    # The theme is token values from packages/ui/src/tokens.css by design, and
+    # the kit's geometry is design tokens too (apps/android/DESIGN.md).
+    excludes: ['**/test/**', '**/testDebug/**', '**/androidTest/**', '**/ui/theme/**', '**/ui/kit/**', '**/catalogue/**']
   UnusedPrivateMember:
-    ignoreAnnotated: ['Preview']
+    ignoreAnnotated: ['Preview', 'PreviewLightDark']
   ForbiddenMethodCall:
     active: true
     methods:
