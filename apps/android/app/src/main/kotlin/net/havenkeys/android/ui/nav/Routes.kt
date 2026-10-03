@@ -3,13 +3,14 @@ package net.havenkeys.android.ui.nav
 import uniffi.havenkeys_mobile.ItemKind
 
 /**
- * Navigation routes. An argument is never a secret: `item/{id}` and
- * `edit/{id}` carry only the item's UUID, `new/{kind}` only a kind.
+ * The app's routes. An argument is never a secret: `item/{id}` and
+ * `edit/{id}` carry only the item's UUID, `new/{kind}` only a kind;
+ * `search` takes none (the query lives only in its ViewModel). The tabs
+ * and category lists are routes of the shell's own NavHost (ShellRoutes).
  */
 object Routes {
     const val ONBOARDING = "onboarding"
     const val UNLOCK = "unlock"
-    const val VAULT = "vault"
 
     /** The shell: top bar, the tabs, bottom bar (spec §6.1). The tabs have routes of their own inside it. */
     const val SHELL = "shell"
@@ -20,7 +21,6 @@ object Routes {
     const val ITEM_ID = "id"
     const val ITEM = "item/{$ITEM_ID}"
     const val GENERATOR = "generator"
-    const val SETTINGS = "settings"
     const val DEVICES = "devices"
     const val AUTOFILL_SETUP = "autofill-setup"
     const val EDIT = "edit/{$ITEM_ID}"
@@ -50,7 +50,7 @@ internal fun creatableKind(arg: String): ItemKind? = when (arg) {
 internal fun routeOf(start: Start): String = when (start) {
     Start.ONBOARDING -> Routes.ONBOARDING
     Start.UNLOCK -> Routes.UNLOCK
-    Start.VAULT -> Routes.VAULT
+    Start.VAULT -> Routes.SHELL
 }
 
 /**

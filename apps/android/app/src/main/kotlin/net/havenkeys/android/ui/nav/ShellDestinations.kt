@@ -1,0 +1,85 @@
+package net.havenkeys.android.ui.nav
+
+import androidx.compose.runtime.getValue
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import net.havenkeys.android.AppContainer
+import net.havenkeys.android.ui.home.HomeScreen
+import net.havenkeys.android.ui.home.HomeViewModel
+import net.havenkeys.android.ui.items.CategoryScreen
+import net.havenkeys.android.ui.items.ItemListViewModel
+import net.havenkeys.android.ui.items.ItemsScreen
+import net.havenkeys.android.ui.settings.SettingsNavigation
+import net.havenkeys.android.ui.settings.SettingsScreen
+import net.havenkeys.android.ui.settings.SettingsViewModel
+import net.havenkeys.android.ui.settings.rememberSettingsActions
+import net.havenkeys.android.ui.shell.OpenItem
+import net.havenkeys.android.ui.shell.SharedTitle
+import net.havenkeys.android.ui.shell.ShellScreens
+
+/**
+ * The shell's tab screens. Each `viewModel { }` runs inside its tab's back
+ * stack entry, so a ViewModel lives as long as that screen's place in its
+ * tab, survives tab switches (saved state), and goes with the shell on lock.
+ */
+internal fun shellScreens(
+    container: AppContainer,
+    activity: FragmentActivity,
+    navController: NavHostController,
+    open: OpenItem,
+    sharedTitle: SharedTitle,
+): ShellScreens = ShellScreens(
+    home = { padding ->
+        HomeScreen(
+            viewModel = viewModel {
+                HomeViewModel(container.vaultRepository, container.accountRepository, container.events)
+            },
+            onOpen = open,
+            contentPadding = padding,
+            sharedTitle = sharedTitle,
+        )
+    },
+    items = { padding, onCategory ->
+        ItemsScreen(
+            viewModel = viewModel {
+                ItemListViewModel(container.vaultRepository, container.accountRepository, container.events)
+            },
+            onCategory = onCategory,
+            contentPadding = padding,
+        )
+    },
+    category = { padding, category, onBack ->
+        CategoryScreen(
+            viewModel = viewModel {
+                ItemListViewModel(container.vaultRepository, container.accountRepository, container.events)
+            },
+            category = category,
+            onOpen = open,
+            onBack = onBack,
+            contentPadding = padding,
+            sharedTitle = sharedTitle,
+        )
+    },
+    settings = { padding ->
+        val online by container.events.online.collectAsStateWithLifecycle()
+        SettingsScreen(
+            viewModel = viewModel {
+                SettingsViewModel(
+                    container.settingsRepository,
+                    container.accountRepository,
+                    container.vaultRepository,
+                    biometricEnrolled = container::hasBiometricUnlock,
+                )
+            },
+            online = online,
+            actions = rememberSettingsActions(container, activity),
+            navigation = SettingsNavigation(
+                onDevices = { navController.navigate(Routes.DEVICES) },
+                onAutofillSetup = { navController.navigate(Routes.AUTOFILL_SETUP) },
+            ),
+            contentPadding = padding,
+        )
+    },
+)

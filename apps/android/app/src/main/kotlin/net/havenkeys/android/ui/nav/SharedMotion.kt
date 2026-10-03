@@ -55,9 +55,16 @@ internal class TitleTravel {
         tapped = "$origin/$id"
     }
 
+    /** Dropped on lock: nothing of the last session's taps outlives it. */
+    fun clear() {
+        tapped = null
+    }
+
+    internal fun isTapped(id: String, origin: String): Boolean = tapped == "$origin/$id"
+
     @OptIn(ExperimentalSharedTransitionApi::class)
     fun from(shared: SharedTransitionScope, visibility: AnimatedVisibilityScope, motion: HavenMotion): SharedTitle =
         { id, origin ->
-            if (tapped == "$origin/$id") Modifier.sharedIfMoving(shared, titleKey(id), visibility, motion) else Modifier
+            if (isTapped(id, origin)) Modifier.sharedIfMoving(shared, titleKey(id), visibility, motion) else Modifier
         }
 }
