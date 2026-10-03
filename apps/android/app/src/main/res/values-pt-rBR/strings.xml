@@ -192,7 +192,7 @@
     <string name="devices_title">Dispositivos</string>
     <string name="devices_this_phone">Este celular</string>
     <string name="devices_last_seen">Visto por último: %1$s</string>
-    <string name="devices_never_seen">Visto por último: nunca</string>
+    <string name="devices_never_seen">Ainda não visto</string>
     <string name="devices_revoke">Revogar</string>
     <string name="devices_revoke_confirm">Desconectar %1$s e encerrar a sessão dele?</string>
     <string name="devices_revoke_this">Desconectar este celular?</string>

@@ -203,7 +203,7 @@
     <string name="devices_title">Devices</string>
     <string name="devices_this_phone">This phone</string>
     <string name="devices_last_seen">Last seen %1$s</string>
-    <string name="devices_never_seen">Last seen never</string>
+    <string name="devices_never_seen">Not seen yet</string>
     <string name="devices_revoke">Revoke</string>
     <string name="devices_revoke_confirm">Sign %1$s out and end its session?</string>
     <string name="devices_revoke_this">Sign this phone out?</string>
