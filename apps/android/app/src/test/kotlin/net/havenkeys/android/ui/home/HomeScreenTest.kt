@@ -94,4 +94,14 @@ class HomeScreenTest {
     }
 
     private fun field(key: String) = ViewField(key, key, FieldKind.TEXT, null)
+
+    @Test
+    fun aFailedLoadSaysSoAndClaimsNoEmptyList() {
+        vault.recent = Outcome.Failed("network")
+        vault.frequent = Outcome.Ok(emptyList())
+        show()
+        rule.onNodeWithText("Something went wrong. Try again.").assertIsDisplayed()
+        rule.onNodeWithText("New items you add appear here.").assertDoesNotExist()
+        rule.onNodeWithText("Items you fill or copy will show here.").assertDoesNotExist()
+    }
 }

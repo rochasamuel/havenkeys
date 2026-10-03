@@ -65,7 +65,7 @@ fun HomeScreen(
             settle = false
         }
     }
-    val rows = HomeRows(onOpen, sharedTitle, settle)
+    val rows = HomeRows(onOpen, sharedTitle, settle, failed = state.errorCode != null)
     PullToRefresh(refreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -86,8 +86,11 @@ fun HomeScreen(
     }
 }
 
-/** What every Home row needs besides its item. */
-private class HomeRows(val onOpen: OpenItem, val sharedTitle: SharedTitle, val settle: Boolean)
+/**
+ * What every Home row needs besides its item. [failed]: a load or sync failed,
+ * so an empty list may only be unknown and its empty line would mislead.
+ */
+private class HomeRows(val onOpen: OpenItem, val sharedTitle: SharedTitle, val settle: Boolean, val failed: Boolean)
 
 /** One of Home's two lists: its title, what it says when empty, its rows' origin, its place in the settle. */
 private class GroupSpec(@StringRes val title: Int, @StringRes val emptyText: Int, val origin: String, val index: Int)
@@ -102,7 +105,7 @@ private fun LazyListScope.activityGroup(rows: HomeRows, spec: GroupSpec, items: 
             SectionHeader(stringResource(spec.title), Gutter.padding(top = 12.dp))
         }
     }
-    if (items.isEmpty()) {
+    if (items.isEmpty() && !rows.failed) {
         item(key = "${spec.origin}-empty") {
             Settle(spec.index, active = rows.settle) { EmptyLine(stringResource(spec.emptyText), Gutter) }
         }
