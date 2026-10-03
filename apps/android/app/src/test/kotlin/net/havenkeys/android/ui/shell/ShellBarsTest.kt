@@ -8,6 +8,8 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -74,7 +76,9 @@ class ShellBarsTest {
     fun theSyncSlotIsAPoliteLiveRegion() {
         rule.setKit { ShellTopBar(online = true, syncing = false, actions = actions) }
         rule.onNode(
-            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite) and
+                hasAnyDescendant(hasContentDescription("Sync now")),
+            useUnmergedTree = true,
         ).assertExists()
     }
 
@@ -83,5 +87,15 @@ class ShellBarsTest {
         rule.setKit { ShellTopBar(online = false, syncing = false, actions = actions) }
         rule.onNodeWithContentDescription("Sync now").assertIsNotEnabled().performClick()
         assertEquals(emptyList<String>(), done)
+    }
+
+    @Test
+    fun theOfflineBadgeIsAnnouncedWhenItAppears() {
+        rule.setKit { ShellTopBar(online = false, syncing = false, actions = actions) }
+        rule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite) and
+                hasAnyDescendant(hasText("Offline")),
+            useUnmergedTree = true,
+        ).assertExists()
     }
 }

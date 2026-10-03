@@ -80,7 +80,9 @@ fun ShellTopBar(
             Spacer(Modifier.width(8.dp))
             HavenText(stringResource(R.string.shell_search), style = HavenTheme.type.value, color = colors.muted)
         }
-        if (!online) Pill(stringResource(R.string.shell_offline), Modifier.padding(start = 4.dp))
+        Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+            if (!online) Pill(stringResource(R.string.shell_offline), Modifier.padding(start = 4.dp))
+        }
         Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, contentAlignment = Alignment.Center) {
             if (syncing) {
                 Box(Modifier.size(HavenSpacing.touch), contentAlignment = Alignment.Center) {
