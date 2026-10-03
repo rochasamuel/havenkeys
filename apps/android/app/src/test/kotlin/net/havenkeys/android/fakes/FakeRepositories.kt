@@ -63,9 +63,11 @@ class FakeVaultRepository : VaultRepository {
     override suspend fun status() = nextStatus
 
     var lastSecretKey: String? = null
+    var lastPassword: String? = null
 
     override suspend fun unlockPassword(password: String, secretKey: String?): Outcome<Status> {
         calls += "unlockPassword"
+        lastPassword = password
         lastSecretKey = secretKey
         return nextStatus
     }
