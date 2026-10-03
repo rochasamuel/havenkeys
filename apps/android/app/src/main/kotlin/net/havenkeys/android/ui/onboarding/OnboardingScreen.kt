@@ -89,11 +89,14 @@ fun OnboardingScreen(viewModel: OnboardingViewModel, onDone: () -> Unit, modifie
     }
 }
 
-/** Back (from a step) above the large title; the slot keeps its height so the title does not jump. */
+/**
+ * Back (from a step) above the large title; the slot keeps its height so the title does not jump.
+ * It is as tall as ScreenBar (4dp above and below the button), so the title sits where it does there.
+ */
 @Composable
 private fun OnboardingBar(showBack: Boolean, onBack: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = HavenSpacing.gutter)) {
-        Box(Modifier.heightIn(min = HavenSpacing.touch)) {
+        Box(Modifier.padding(vertical = 4.dp).heightIn(min = HavenSpacing.touch)) {
             if (showBack) {
                 HavenIconButton(
                     HavenIcon.ChevronLeft,

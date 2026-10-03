@@ -12,9 +12,11 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +74,20 @@ class OnboardingScreenTest {
             it.choose(OnboardingUiState.Mode.SCAN)
             it.onFrame(LumaFrame(1u, 1u, byteArrayOf(7)))
         }
+    }
+
+    /**
+     * Review (stage 5): onboarding's bar was 48dp, the other full-screen screens' ScreenBar 56dp
+     * (a 48dp button and 4dp above and below), so its large title sat 8dp higher.
+     */
+    @Test
+    fun theLargeTitleSitsWhereItDoesUnderTheScreenBar() {
+        show()
+        val title = rule.onNode(hasText(text(R.string.onboarding_title)) and isHeading()).fetchSemanticsNode()
+        val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        val density = rule.density.density
+        // ScreenBar (56dp) and LargeTitle's own 8dp above its text.
+        assertEquals(64f * density, title.boundsInRoot.top - root.top, 1f)
     }
 
     @Test
