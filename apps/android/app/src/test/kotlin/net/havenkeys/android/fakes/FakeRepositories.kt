@@ -167,9 +167,15 @@ class FakeVaultRepository : VaultRepository {
         return Outcome.Ok(Unit)
     }
 
-    override suspend fun frequentlyUsed(n: Int) = frequent
+    override suspend fun frequentlyUsed(n: Int): Outcome<List<ItemSummary>> {
+        calls += "frequent:$n"
+        return frequent
+    }
 
-    override suspend fun recentlyCreated(n: Int) = recent
+    override suspend fun recentlyCreated(n: Int): Outcome<List<ItemSummary>> {
+        calls += "recent:$n"
+        return recent
+    }
 
     override suspend fun recentSearches(): Outcome<List<String>> = Outcome.Ok(searches.toList())
 

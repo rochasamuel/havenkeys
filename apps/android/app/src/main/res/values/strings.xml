@@ -333,4 +333,11 @@
     <string name="shell_syncing">Syncing</string>
     <string name="add_generate">Generate password</string>
     <string name="add_offline">Adding needs a connection</string>
+    <string name="identity_part_name">Name</string>
+    <string name="identity_part_email">Email</string>
+    <string name="identity_part_phone">Phone</string>
+    <string name="identity_part_address">Address</string>
+    <string name="identity_part_work">Work</string>
+    <string name="identity_part_documents">Documents</string>
+    <string name="identity_part_other">Other details</string>
 </resources>

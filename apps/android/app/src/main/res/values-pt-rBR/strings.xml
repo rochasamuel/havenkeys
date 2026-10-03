@@ -321,4 +321,11 @@
     <string name="shell_syncing">Sincronizando</string>
     <string name="add_generate">Gerar senha</string>
     <string name="add_offline">Adicionar precisa de conexão</string>
+    <string name="identity_part_name">Nome</string>
+    <string name="identity_part_email">E-mail</string>
+    <string name="identity_part_phone">Telefone</string>
+    <string name="identity_part_address">Endereço</string>
+    <string name="identity_part_work">Trabalho</string>
+    <string name="identity_part_documents">Documentos</string>
+    <string name="identity_part_other">Outros dados</string>
 </resources>
