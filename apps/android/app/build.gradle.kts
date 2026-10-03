@@ -66,7 +66,18 @@ android {
     testOptions {
         // The ui/kit component tests run on the JVM under Robolectric and
         // need the merged resources (strings, fonts).
-        unitTests { isIncludeAndroidResources = true }
+        unitTests {
+            isIncludeAndroidResources = true
+            // -PscreensDir=.impeccable/review renders the kit catalogue to PNGs
+            // (CatalogueScreenshots); without it that test skips itself.
+            val screensDir = providers.gradleProperty("screensDir").orNull
+            all { test ->
+                if (screensDir != null) {
+                    test.systemProperty("havenkeys.screens.dir", rootProject.file(screensDir).absolutePath)
+                    test.outputs.upToDateWhen { false }
+                }
+            }
+        }
     }
 }
 
