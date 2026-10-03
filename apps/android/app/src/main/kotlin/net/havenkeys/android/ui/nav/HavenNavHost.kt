@@ -233,6 +233,7 @@ private fun NavGraphBuilder.itemScreens(nav: Nav) {
                 onDeleted = nav.back,
             ),
             titleModifier = Modifier.sharedIfMoving(nav.shared, titleKey(id), this, nav.motion),
+            tileModifier = Modifier.sharedIfMoving(nav.shared, tileKey(id), this, nav.motion),
         )
     }
     composable(Routes.EDIT, arguments = listOf(navArgument(Routes.ITEM_ID) { type = NavType.StringType })) {

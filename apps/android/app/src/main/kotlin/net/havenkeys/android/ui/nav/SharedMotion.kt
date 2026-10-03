@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import net.havenkeys.android.ui.shell.SharedPart
 import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenSprings
@@ -19,6 +20,9 @@ internal const val SEARCH_KEY = "search-pill"
 
 /** A row's title and the item screen's title. */
 internal fun titleKey(id: String): String = "title-$id"
+
+/** A row's monogram tile and the item screen's header tile. */
+internal fun tileKey(id: String): String = "tile-$id"
 
 /** A shared element that moves with its screen; under "Remove animations" nothing is shared and screens cut. */
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -43,7 +47,7 @@ internal fun Modifier.sharedIfMoving(
 }
 
 /**
- * Which row's title travels to the item screen: the one tapped last. An
+ * Which row's title and tile travel to the item screen: the one tapped last. An
  * item can be in Recently added and Frequently used at once, and two
  * elements with one key would fight. Ids and list names only, in memory.
  */
@@ -64,7 +68,12 @@ internal class TitleTravel {
 
     @OptIn(ExperimentalSharedTransitionApi::class)
     fun from(shared: SharedTransitionScope, visibility: AnimatedVisibilityScope, motion: HavenMotion): SharedTitle =
-        { id, origin ->
-            if (isTapped(id, origin)) Modifier.sharedIfMoving(shared, titleKey(id), visibility, motion) else Modifier
+        { id, origin, part ->
+            if (isTapped(id, origin)) {
+                val key = if (part == SharedPart.Title) titleKey(id) else tileKey(id)
+                Modifier.sharedIfMoving(shared, key, visibility, motion)
+            } else {
+                Modifier
+            }
         }
 }

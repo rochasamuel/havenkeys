@@ -11,10 +11,13 @@ import uniffi.havenkeys_mobile.ItemSummary
 /** Opens an item; [origin] names the list the row was in (an item can be in two lists at once). */
 typealias OpenItem = (id: String, origin: String) -> Unit
 
-/** The modifier that carries a row's title to the item screen; nothing by default. */
-typealias SharedTitle = @Composable (id: String, origin: String) -> Modifier
+/** Which part of a row travels to the item screen (spec §7: the title and the monogram tile). */
+enum class SharedPart { Title, Tile }
 
-val NoSharedTitle: SharedTitle = { _, _ -> Modifier }
+/** The modifier that carries one part of a row to the item screen; nothing by default. */
+typealias SharedTitle = @Composable (id: String, origin: String, part: SharedPart) -> Modifier
+
+val NoSharedTitle: SharedTitle = { _, _, _ -> Modifier }
 
 /** The lists a row can be opened from. */
 object Origins {
@@ -51,7 +54,8 @@ fun SummaryRow(
         leading = summary.leading(),
         onClick = { onOpen(summary.id, origin) },
         modifier = modifier,
-        titleModifier = sharedTitle(summary.id, origin),
+        titleModifier = sharedTitle(summary.id, origin, SharedPart.Title),
+        tileModifier = sharedTitle(summary.id, origin, SharedPart.Tile),
         hasPasskey = summary.hasPasskey,
         hasCode = summary.hasTotp,
     )

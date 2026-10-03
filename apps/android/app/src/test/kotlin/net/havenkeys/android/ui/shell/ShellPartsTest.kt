@@ -1,6 +1,7 @@
 package net.havenkeys.android.ui.shell
 
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -104,5 +105,22 @@ class ShellPartsTest {
         assertNotEquals(LightHavenColors.pane, LightHavenColors.searchPill)
         assertEquals(LightHavenColors.hover, LightHavenColors.searchPill)
         assertEquals(DarkHavenColors.field, DarkHavenColors.searchPill)
+    }
+
+    @Test
+    fun aSummaryRowAsksForItsTitleAndItsTileToTravel() {
+        val asked = mutableListOf<SharedPart>()
+        rule.setKit {
+            SummaryRow(
+                summary(ItemKind.LOGIN),
+                Origins.RECENT,
+                onOpen = { _, _ -> },
+                sharedTitle = { _, _, part ->
+                    asked += part
+                    Modifier
+                },
+            )
+        }
+        rule.runOnIdle { assertEquals(setOf(SharedPart.Title, SharedPart.Tile), asked.toSet()) }
     }
 }

@@ -1,6 +1,7 @@
 package net.havenkeys.android.ui.nav
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,5 +22,11 @@ class TitleTravelTest {
         travel.tap("a", "recent")
         travel.clear()
         assertFalse(travel.isTapped("a", "recent"))
+    }
+
+    @Test
+    fun theTileAndTheTitleTravelUnderTheirOwnKeys() {
+        assertNotEquals(titleKey("a"), tileKey("a"))
+        assertNotEquals(tileKey("a"), tileKey("b"))
     }
 }
