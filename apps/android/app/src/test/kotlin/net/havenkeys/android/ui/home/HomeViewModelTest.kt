@@ -161,6 +161,20 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun aLockDuringARefreshLeavesTheWipedState() {
+        val vm = vm()
+        vm.shown()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        accounts.syncGate = gate
+        accounts.sync = Outcome.Failed("offline")
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        events.locked("user")
+        gate.complete(Unit)
+        assertEquals(HomeUiState(), vm.state.value)
+    }
+
+    @Test
     fun partsFollowTheFieldNames() {
         val keys = listOf(
             "identity.last_name",

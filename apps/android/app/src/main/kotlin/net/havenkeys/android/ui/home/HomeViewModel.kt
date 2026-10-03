@@ -38,6 +38,7 @@ class HomeViewModel(
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
     private var pending: Job? = null
+    private var refreshJob: Job? = null
 
     /** Home's groups settle in sequence the first time it shows, not on every return to the tab. */
     var settled = false
@@ -59,7 +60,7 @@ class HomeViewModel(
 
     /** Pull to refresh: a sync, then the lists again. */
     fun refresh() {
-        viewModelScope.launch {
+        refreshJob = viewModelScope.launch {
             _state.update { it.copy(refreshing = true, errorCode = null) }
             val sync = accounts.syncNow()
             _state.update { it.copy(refreshing = false, errorCode = (sync as? Outcome.Failed)?.code) }
@@ -97,6 +98,7 @@ class HomeViewModel(
     /** The lock wipe: no overview or activity data stays in this ViewModel. */
     private fun wipe() {
         pending?.cancel()
+        refreshJob?.cancel()
         _state.value = HomeUiState()
     }
 

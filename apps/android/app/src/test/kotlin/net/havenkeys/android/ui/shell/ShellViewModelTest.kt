@@ -93,4 +93,18 @@ class ShellViewModelTest {
         events.locked("user")
         assertNull(vm.state.value.syncError)
     }
+
+    @Test
+    fun aLockDuringASyncLeavesNoStaleState() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        accounts.syncGate = gate
+        accounts.sync = Outcome.Failed("offline")
+        val vm = vm()
+        vm.sync()
+        assertTrue(vm.state.value.syncing)
+        events.locked("user")
+        gate.complete(Unit)
+        assertFalse(vm.state.value.syncing)
+        assertNull(vm.state.value.syncError)
+    }
 }

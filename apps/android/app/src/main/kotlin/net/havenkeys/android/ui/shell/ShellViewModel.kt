@@ -3,6 +3,7 @@ package net.havenkeys.android.ui.shell
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,11 +51,14 @@ class ShellViewModel(
     private val _state = MutableStateFlow(ShellUiState(online = events.online.value))
     val state: StateFlow<ShellUiState> = _state.asStateFlow()
 
+    private var syncJob: Job? = null
+
     init {
         viewModelScope.launch { events.online.collect { online -> _state.update { it.copy(online = online) } } }
         viewModelScope.launch {
             events.events.collect { event ->
                 if (event is VaultEvent.Locked || event == VaultEvent.Removed || event == VaultEvent.SignedOut) {
+                    syncJob?.cancel()
                     _state.update { it.copy(syncing = false, syncError = null) }
                 }
             }
@@ -68,7 +72,7 @@ class ShellViewModel(
     fun sync() {
         if (_state.value.syncing) return
         _state.update { it.copy(syncing = true, syncError = null) }
-        viewModelScope.launch {
+        syncJob = viewModelScope.launch {
             val result = accounts.syncNow()
             _state.update { it.copy(syncing = false, syncError = (result as? Outcome.Failed)?.code) }
         }

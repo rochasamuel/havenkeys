@@ -107,6 +107,7 @@ class EditViewModelTest {
         vm.save(draft)
         assertTrue(vm.state.value.conflict)
         assertTrue("syncNow" in accounts.calls)
+        assertEquals(listOf(true), accounts.freshCalls)
         vm.reload()
         assertFalse(vm.state.value.conflict)
         assertEquals(1, vm.state.value.generation)

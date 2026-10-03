@@ -198,6 +198,10 @@ class FakeAccountRepository : AccountRepository {
     var deviceList: Outcome<List<DeviceInfo>> = Outcome.Ok(emptyList())
     var done: Outcome<Unit> = Outcome.Ok(Unit)
     val calls = mutableListOf<String>()
+    val freshCalls = mutableListOf<Boolean>()
+
+    /** When set, syncNow suspends until it completes. */
+    var syncGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     override suspend fun scanKit(frame: LumaFrame): Outcome<KitPreview?> {
         calls += "scanKit"
@@ -223,8 +227,10 @@ class FakeAccountRepository : AccountRepository {
         return nextStatus
     }
 
-    override suspend fun syncNow(): Outcome<Unit> {
+    override suspend fun syncNow(fresh: Boolean): Outcome<Unit> {
         calls += "syncNow"
+        freshCalls += fresh
+        syncGate?.await()
         return sync
     }
 
