@@ -16,6 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.kit.HavenIcon
@@ -69,12 +72,23 @@ fun ShellTopBar(
             HavenText(stringResource(R.string.shell_search), style = HavenTheme.type.value, color = colors.muted)
         }
         if (!online) Pill(stringResource(R.string.shell_offline), Modifier.padding(start = 8.dp))
-        if (syncing) {
-            Box(Modifier.size(HavenSpacing.touch), contentAlignment = Alignment.Center) {
-                ProgressRing(progress = null, size = 20.dp, contentDescription = stringResource(R.string.shell_syncing))
+        Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, contentAlignment = Alignment.Center) {
+            if (syncing) {
+                Box(Modifier.size(HavenSpacing.touch), contentAlignment = Alignment.Center) {
+                    ProgressRing(
+                        progress = null,
+                        size = 20.dp,
+                        contentDescription = stringResource(R.string.shell_syncing),
+                    )
+                }
+            } else {
+                HavenIconButton(
+                    HavenIcon.Refresh,
+                    stringResource(R.string.shell_sync),
+                    onClick = actions.onSync,
+                    enabled = online,
+                )
             }
-        } else {
-            HavenIconButton(HavenIcon.Refresh, stringResource(R.string.shell_sync), onClick = actions.onSync)
         }
         HavenIconButton(HavenIcon.Lock, stringResource(R.string.vault_lock_now), onClick = actions.onLock)
     }

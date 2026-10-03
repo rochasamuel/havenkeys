@@ -1,6 +1,10 @@
 package net.havenkeys.android.ui.shell
 
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -64,5 +68,20 @@ class ShellBarsTest {
     fun offlineTheTopBarSaysSo() {
         rule.setKit { ShellTopBar(online = false, syncing = false, actions = actions) }
         rule.onNodeWithText("Offline").assertIsDisplayed()
+    }
+
+    @Test
+    fun theSyncSlotIsAPoliteLiveRegion() {
+        rule.setKit { ShellTopBar(online = true, syncing = false, actions = actions) }
+        rule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
+        ).assertExists()
+    }
+
+    @Test
+    fun offlineSyncIsDisabledAndDoesNotFire() {
+        rule.setKit { ShellTopBar(online = false, syncing = false, actions = actions) }
+        rule.onNodeWithContentDescription("Sync now").assertIsNotEnabled().performClick()
+        assertEquals(emptyList<String>(), done)
     }
 }
