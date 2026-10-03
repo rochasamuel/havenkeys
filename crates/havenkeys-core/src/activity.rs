@@ -187,6 +187,15 @@ mod tests {
         id
     }
 
+    fn add_identity(vault: &mut VaultService, at: i64) -> Uuid {
+        let staged = vault
+            .stage_identity_if_missing("user@example.com", at)
+            .unwrap()
+            .expect("the test vault has no identity yet");
+        vault.commit_write(staged, 1).unwrap();
+        vault.identity_item_id().unwrap()
+    }
+
     fn titles(items: &[ItemOverview]) -> Vec<&str> {
         items.iter().map(|o| o.title.as_str()).collect()
     }
@@ -234,15 +243,14 @@ mod tests {
         let mut v = unlocked_vault();
         let gone = add(&mut v, "Gone", T0);
         let kept = add(&mut v, "Kept", T0);
-        let identity = v.identity_item_id().unwrap();
+        let identity = add_identity(&mut v, T0);
+        assert!(v.session().unwrap().overviews.contains_key(&identity));
         v.record_use(&gone, T0).unwrap();
         v.record_use(&kept, T0).unwrap();
         let staged = v.stage_delete(&gone).unwrap();
         v.commit_write(staged, 2).unwrap();
         // The identity is never listed, even if something recorded it.
-        if v.session().unwrap().overviews.contains_key(&identity) {
-            v.record_use(&identity, T0).unwrap();
-        }
+        v.record_use(&identity, T0).unwrap();
         assert_eq!(titles(&v.frequently_used(10, T0).unwrap()), ["Kept"]);
     }
 
@@ -250,12 +258,18 @@ mod tests {
     fn writes_prune_deleted_and_year_old_entries() {
         let mut v = unlocked_vault();
         let stale = add(&mut v, "Stale", T0);
-        let gone = add(&mut v, "Gone", T0);
+        let gone = add(&mut v, "Gone", T0 + 100 * DAY);
         let fresh = add(&mut v, "Fresh", T0);
         v.record_use(&stale, T0).unwrap();
-        v.record_use(&gone, T0).unwrap();
+        v.record_use(&gone, T0 + 100 * DAY).unwrap();
         let staged = v.stage_delete(&gone).unwrap();
         v.commit_write(staged, 2).unwrap();
+        // Deleted rule alone: `gone` is young, `stale` is still within a year.
+        v.record_use(&fresh, T0 + 101 * DAY).unwrap();
+        let stored = v.activity().unwrap();
+        assert!(!stored.uses.contains_key(&gone));
+        assert!(stored.uses.contains_key(&stale));
+        // Age rule alone: `stale` is over a year old, `fresh` is not.
         v.record_use(&fresh, T0 + 366 * DAY).unwrap();
         let stored = v.activity().unwrap();
         assert_eq!(stored.uses.keys().collect::<Vec<_>>(), [&fresh]);
@@ -290,14 +304,13 @@ mod tests {
         add(&mut v, "First", T0);
         add(&mut v, "Second", T0 + 1);
         add(&mut v, "Third", T0 + 2);
+        let identity = add_identity(&mut v, T0 + 3);
+        assert!(v.session().unwrap().overviews.contains_key(&identity));
         let listed = v.recently_created(2).unwrap();
         assert_eq!(titles(&listed), ["Third", "Second"]);
-        let identity = v.identity_item_id().ok();
-        assert!(v
-            .recently_created(100)
-            .unwrap()
-            .iter()
-            .all(|o| Some(o.id) != identity));
+        let all = v.recently_created(100).unwrap();
+        assert_eq!(titles(&all), ["Third", "Second", "First"]);
+        assert!(all.iter().all(|o| o.id != identity));
         v.lock();
         assert_eq!(v.recently_created(6).unwrap_err(), Error::Locked);
     }
