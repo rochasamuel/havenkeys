@@ -332,4 +332,7 @@
     <string name="search_cancel">Cancelar</string>
     <string name="search_clear_field">Limpar busca</string>
     <string name="settings_signed_in_as">Conectado como</string>
+
+    <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
+    <string name="edit_match">Corresponde a</string>
 </resources>
