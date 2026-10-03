@@ -97,18 +97,31 @@ struct Use {
 | `clear_recent_searches()` | Empties the list |
 
 All fail with `Locked` while locked. `ItemOverview` already has
-`created_at`; the mobile `ItemSummary` gains `created_at: i64`.
+`created_at`; the mobile `ItemSummary` gains `created_at: i64`. Both lists
+leave out the account's Identity: Home pins it above them (§6.5), and the
+desktop would do the same.
 
 ### 4.4 Who records uses
 
-- The Rust calls that hand out an item's values for a fill on the phone
-  record a use themselves: Android direct fill and confirmed fill, and
-  passkey assertions (in `havenkeys-mobile`, calling `record_use`). The
-  desktop's bridge fills (browser extension) do not record yet; that comes
-  with the desktop adopting this data.
-- The app calls `record_use` after a copy (password, username, code, any
-  revealed field), through `havenkeys-mobile`.
+A use is recorded only where the user picked that item, never where values
+are fetched ahead of a pick. Direct fill fetches the values of every offered
+login, card and identity before the user taps one (`autofill_fill`,
+`autofill_totp`, `autofill_card_values`, `autofill_identity_values`), so
+those calls record nothing.
+
+- **Rust** records in the calls that run only after a pick:
+  `passkey_sign_in`, `credential_password` and `autofill_bind_and_fill`.
+- **Kotlin** records through `record_use`:
+  - after a copy in the app (password, username, code, any revealed field);
+  - in the autofill confirmation activity, after a confirmed login or card
+    fill;
+  - for a direct-fill row the user picked: direct login and card rows carry
+    the dataset id `item:<uuid>`, and the autofill service reads Android's
+    fill event history (`TYPE_DATASET_SELECTED`) on its next request.
+- Identity fills record nothing: the Identity is not in either list.
 - Opening or viewing an item records nothing.
+- The desktop's bridge fills (browser extension) do not record yet; that
+  comes with the desktop adopting this data.
 
 `havenkeys-mobile` exposes the six calls through UniFFI. The desktop's Tauri
 layer gets nothing in this change.
