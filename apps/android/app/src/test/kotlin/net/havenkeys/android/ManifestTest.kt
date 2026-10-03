@@ -198,4 +198,10 @@ class ManifestTest {
         val main = elements("activity").single { it.android("name") == ".MainActivity" }
         assertEquals("true", main.android("enableOnBackInvokedCallback"))
     }
+
+    @Test
+    fun thePasskeySheetOpensOverTheCallingApp() {
+        val activity = elements("activity").single { it.android("name") == ".credentials.PasskeyCreateActivity" }
+        assertEquals("@style/Theme.HavenKeys.Translucent", activity.android("theme"))
+    }
 }

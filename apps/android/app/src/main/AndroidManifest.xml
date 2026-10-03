@@ -75,6 +75,7 @@
             android:name=".credentials.PasskeyCreateActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:theme="@style/Theme.HavenKeys.Translucent"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Android 14+ binds it; older versions never see it. -->

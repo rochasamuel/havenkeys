@@ -82,6 +82,7 @@ private const val SHEET_MAX_FRACTION = 0.9f
  * drops taps that pass through another app's overlay and is excluded from
  * autofill. [onDismiss] is called once, after the sheet has gone; a close
  * tapped while it is still rising goes straight to closing.
+ * With [dismissible] false (work in flight) drag, backdrop and Back do nothing.
  * It takes at most 90% of the window's height (taller content scrolls inside it)
  * and rises above the keyboard.
  */
@@ -90,6 +91,7 @@ fun HavenSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     title: String? = null,
+    dismissible: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val state = remember { AnchoredDraggableState(SheetValue.Hidden) }
@@ -113,8 +115,10 @@ fun HavenSheet(
         }
     }
     Dialog(
-        onDismissRequest = close,
+        onDismissRequest = { if (dismissible) close() },
         properties = DialogProperties(
+            dismissOnBackPress = dismissible,
+            dismissOnClickOutside = dismissible,
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false,
             securePolicy = SecureFlagPolicy.SecureOn,
@@ -124,14 +128,16 @@ fun HavenSheet(
         WindowDim(0f)
         OpenWhenMeasured(state)
         CloseWhenDraggedAway(state, draggedAway)
-        SheetFrame(state, close, modifier, title, content)
+        SheetFrame(state, close, dismissible, modifier, title, content)
     }
 }
 
+@Suppress("LongParameterList") // the window's state and callbacks, passed straight through
 @Composable
 private fun SheetFrame(
     state: AnchoredDraggableState<SheetValue>,
     close: () -> Unit,
+    dismissible: Boolean,
     modifier: Modifier,
     title: String?,
     content: @Composable ColumnScope.() -> Unit,
@@ -146,14 +152,21 @@ private fun SheetFrame(
                 .fillMaxSize()
                 .graphicsLayer { alpha = shownFraction(state) }
                 .background(HavenTheme.colors.scrim)
-                .clickable(
-                    interactionSource = null,
-                    indication = null,
-                    onClickLabel = closeLabel,
-                    role = Role.Button,
-                    onClick = close,
-                )
-                .semantics { contentDescription = closeLabel },
+                .then(
+                    if (dismissible) {
+                        Modifier
+                            .clickable(
+                                interactionSource = null,
+                                indication = null,
+                                onClickLabel = closeLabel,
+                                role = Role.Button,
+                                onClick = close,
+                            )
+                            .semantics { contentDescription = closeLabel }
+                    } else {
+                        Modifier
+                    },
+                ),
         )
         SheetSurface(
             title = title,
@@ -172,6 +185,7 @@ private fun SheetFrame(
                 .anchoredDraggable(
                     state = state,
                     orientation = Orientation.Vertical,
+                    enabled = dismissible,
                     flingBehavior = AnchoredDraggableDefaults.flingBehavior(
                         state = state,
                         positionalThreshold = { distance -> distance * DRAG_DISMISS_FRACTION },
