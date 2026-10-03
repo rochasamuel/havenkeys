@@ -391,6 +391,11 @@ reuse the same Compose components.
 
 ### 9.2 Design
 
+> Amended on 2026-10-03 by
+> `docs/superpowers/specs/2026-10-03-android-redesign-design.md`: the app no
+> longer uses Material 3. It is built on Compose foundation with its own
+> component set (`ui/kit`, recorded in `apps/android/DESIGN.md`).
+
 Jetpack Compose with Material 3. The visual design is done with the
 `/impeccable` skill at implementation time, starting from the existing
 identity (desktop app, `packages/ui` tokens, `apps/web/DESIGN.md`) and
