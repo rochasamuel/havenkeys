@@ -1,7 +1,9 @@
 package net.havenkeys.android.ui.kit
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -58,5 +60,17 @@ class KitLargeFontTest {
         val lines = with(rule.density) { (title.size.height + sub.size.height).toDp() }
         assertTrue(lines > 64.dp - 20.dp)
         rule.onNodeWithText("GitHub").assertHeightIsAtLeast(lines + 20.dp)
+    }
+
+    @Test
+    fun segmentsKeepOneHeightWhenALabelWraps() {
+        rule.setKit(fontScale = 1.5f) {
+            Box(Modifier.width(320.dp)) {
+                SegmentedControl(listOf("Site inteiro, qualquer subdomínio", "Somente este site", "Página"), 0, {})
+            }
+        }
+        val heights = rule.onAllNodes(hasRole(Role.Tab)).fetchSemanticsNodes().map { it.size.height }
+        assertEquals(3, heights.size)
+        assertEquals(1, heights.distinct().size)
     }
 }

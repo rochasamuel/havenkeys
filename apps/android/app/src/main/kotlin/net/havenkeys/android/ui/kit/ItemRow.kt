@@ -39,7 +39,8 @@ private val TileGap = 12.dp
 /**
  * One vault item in a list: tile, title, non-secret subtitle, and marks for
  * a passkey and a one-time code. One button for TalkBack; the tile is
- * decoration. [titleModifier] lets the title travel to the detail screen.
+ * decoration. [titleModifier] and [tileModifier] let the title and the tile travel
+ * to the detail screen.
  * Only the title and subtitle (user data) may be cut with an ellipsis.
  */
 @Composable
@@ -50,6 +51,7 @@ fun ItemRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     titleModifier: Modifier = Modifier,
+    tileModifier: Modifier = Modifier,
     hasPasskey: Boolean = false,
     hasCode: Boolean = false,
 ) {
@@ -63,7 +65,7 @@ fun ItemRow(
             .padding(horizontal = HavenSpacing.rowX, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ItemTile(leading)
+        ItemTile(leading, tileModifier)
         Spacer(Modifier.width(TileGap))
         Column(Modifier.weight(1f)) {
             HavenText(

@@ -145,4 +145,31 @@ class TextFieldsTest {
         val info = editorInfoOf { HavenTextField(TextFieldState(), label = "Title") }
         assertTrue(info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0)
     }
+
+    @Test
+    fun aHintIsReadWithTheFieldAndAnErrorTakesItsPlace() {
+        var error by mutableStateOf<String?>(null)
+        rule.setKit {
+            SecretTextField(
+                TextFieldState(),
+                "Secret Key",
+                revealed = false,
+                onRevealChange = {},
+                error = error,
+                hint = "On your Emergency Kit",
+            )
+        }
+        val field = rule.onNode(hasSetTextAction())
+        assertTrue(texts(field).contains("On your Emergency Kit"))
+        error = "Check the Secret Key"
+        rule.waitForIdle()
+        assertTrue(texts(field).none { it == "On your Emergency Kit" })
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, "Check the Secret Key"))
+    }
+
+    @Test
+    fun anOrdinaryFieldShowsItsHintToo() {
+        rule.setKit { HavenTextField(TextFieldState(), "Server", hint = "The address your server answers on") }
+        assertTrue(texts(rule.onNode(hasSetTextAction())).contains("The address your server answers on"))
+    }
 }

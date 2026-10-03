@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
@@ -28,7 +29,9 @@ private val TrailingEnd = 8.dp
 /**
  * One row of an [InsetGroup]: an optional glyph, the row's text
  * ([GroupRowText] or [GroupRowField]), then [trailing] controls or, when it
- * opens something, a chevron. A tappable row is one button for TalkBack.
+ * opens something, a chevron. A tappable row is one button for TalkBack; a
+ * read-only row's text (a label and its value) is one stop, and its trailing
+ * controls stay their own.
  */
 @Composable
 fun GroupRow(
@@ -64,7 +67,13 @@ fun GroupRow(
             IconGlyph(icon, contentDescription = null, tint = colors.muted, size = GlyphSize)
             Spacer(Modifier.width(GlyphGap))
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+        // Read-only: label and value are one TalkBack stop; Copy, Show and the like stay separate.
+        val text = if (onClick == null) Modifier.semantics(mergeDescendants = true) {} else Modifier
+        Column(
+            Modifier.weight(1f).then(text),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            content = content,
+        )
         trailing?.invoke(this)
         if (chevron) {
             IconGlyph(

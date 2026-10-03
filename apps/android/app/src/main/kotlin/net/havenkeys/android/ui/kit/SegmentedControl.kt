@@ -3,7 +3,10 @@ package net.havenkeys.android.ui.kit
 import android.graphics.Paint
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -35,6 +38,7 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * raised on a hairline. Each segment is a tab for TalkBack and a full 48dp
  * target; the track is drawn inset inside that height. In light theme the
  * track is the hover green (the field is white there, like the pane).
+ * When a label wraps (pt-BR, a large font), every segment takes the tallest one's height.
  */
 @Composable
 fun SegmentedControl(
@@ -48,6 +52,7 @@ fun SegmentedControl(
     Row(
         modifier
             .fillMaxWidth()
+            .height(IntrinsicSize.Min)
             .selectableGroup()
             .drawBehind {
                 val inset = 4.dp.toPx()
@@ -66,6 +71,7 @@ fun SegmentedControl(
             Box(
                 Modifier
                     .weight(1f)
+                    .fillMaxHeight()
                     .heightIn(min = HavenSpacing.touch)
                     .selectable(
                         selected = selected,

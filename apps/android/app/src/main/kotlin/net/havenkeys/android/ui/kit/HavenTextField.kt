@@ -43,6 +43,7 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * selection wash and an inset brass ring. Put it in an [InsetGroup] row.
  * TalkBack reads the label and the typed text as one node; an error is
  * the field's error. The keyboard is asked not to learn what is typed.
+ * [hint] is a muted line under the value, read with the field; an error takes its place.
  */
 @Composable
 fun HavenTextField(
@@ -56,6 +57,7 @@ fun HavenTextField(
     onKeyboardAction: KeyboardActionHandler? = null,
     lineLimits: TextFieldLineLimits = TextFieldLineLimits.SingleLine,
     inputTransformation: InputTransformation? = null,
+    hint: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -73,7 +75,7 @@ fun HavenTextField(
             interactionSource = interaction,
             cursorBrush = SolidColor(colors.brass),
             decorator = TextFieldDecorator { field ->
-                FieldRow(label, error, focused) {
+                FieldRow(label, error, focused, hint) {
                     Box {
                         if (placeholder != null && state.text.isEmpty()) {
                             HavenText(
@@ -97,6 +99,7 @@ internal fun FieldRow(
     label: String,
     error: String?,
     focused: Boolean,
+    hint: String? = null,
     trailing: (@Composable () -> Unit)? = null,
     field: @Composable () -> Unit,
 ) {
@@ -126,6 +129,9 @@ internal fun FieldRow(
             field()
             if (error != null) {
                 HavenText(error, Modifier.clearAndSetSemantics {}, style = HavenTheme.type.label, color = colors.danger)
+            } else if (hint != null) {
+                // Not cleared: it merges into the field's node, so TalkBack reads it after the text.
+                HavenText(hint, style = HavenTheme.type.label, color = colors.muted)
             }
         }
         trailing?.invoke()

@@ -1,6 +1,7 @@
 package net.havenkeys.android.ui.kit
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assert
@@ -15,10 +16,13 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import net.havenkeys.android.ui.theme.HavenSpacing
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -170,5 +174,35 @@ class StructureTest {
         val text = rule.onNodeWithText("Logins").getUnclippedBoundsInRoot()
         val value = rule.onNodeWithText("12").getUnclippedBoundsInRoot()
         assertEquals((text.left - group.left).value, (group.right - value.right).value, 0.5f)
+    }
+
+    @Test
+    fun aReadOnlyRowReadsItsLabelAndValueAsOneStopAndKeepsItsCopyButton() {
+        rule.setKit {
+            InsetGroup {
+                row {
+                    GroupRow(trailing = { CopyButton("Username", onCopy = {}) }) {
+                        GroupRowField("Username", "sam@example.com")
+                    }
+                }
+            }
+        }
+        rule.onNode(hasText("Username") and hasText("sam@example.com")).assertExists()
+        rule.onNodeWithContentDescription("Copy Username").assert(hasRole(Role.Button))
+    }
+
+    @Test
+    fun anItemRowsTileTakesItsOwnModifier() {
+        var tile = IntSize.Zero
+        rule.setKit {
+            ItemRow(
+                "GitHub",
+                null,
+                RowLeading.Monogram("GitHub"),
+                onClick = {},
+                tileModifier = Modifier.onSizeChanged { tile = it },
+            )
+        }
+        rule.runOnIdle { assertEquals(with(rule.density) { HavenSpacing.tile.roundToPx() }, tile.width) }
     }
 }

@@ -23,7 +23,7 @@ import net.havenkeys.android.ui.unlock.UnlockViewModel
  * activity (biometric prompts).
  */
 @Suppress("LongParameterList") // One property per thing the graph needs; grouping them would only hide them.
-class NavServices(
+internal class NavServices(
     val vault: VaultRepository,
     val accounts: AccountRepository,
     val settings: SettingsRepository,

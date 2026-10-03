@@ -42,6 +42,7 @@ fun SecretTextField(
     enabled: Boolean = true,
     imeAction: ImeAction = ImeAction.Done,
     onKeyboardAction: KeyboardActionHandler? = null,
+    hint: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -67,6 +68,7 @@ fun SecretTextField(
                     label = label,
                     error = error,
                     focused = focused,
+                    hint = hint,
                     trailing = {
                         HavenIconButton(
                             if (revealed) HavenIcon.EyeOff else HavenIcon.Eye,
