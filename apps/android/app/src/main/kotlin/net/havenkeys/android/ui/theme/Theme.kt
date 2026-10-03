@@ -16,7 +16,7 @@ fun HavenTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable 
         LocalHavenColors provides if (darkTheme) DarkHavenColors else LightHavenColors,
         LocalHavenMotion provides rememberHavenMotion(),
     ) {
-        // Screens not yet rebuilt from ui/kit still read MaterialTheme.
+        // Nothing reads MaterialTheme since stage 4; stage 5 removes this wrapper with material3.
         MaterialBridge(darkTheme, content)
     }
 }

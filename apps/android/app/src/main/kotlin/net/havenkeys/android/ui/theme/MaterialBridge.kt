@@ -1,9 +1,10 @@
 package net.havenkeys.android.ui.theme
 
 /*
- * Material, for the screens not yet rebuilt from ui/kit (spec 2026-10-03
- * §8: stage 4 rebuilds them, stage 5 deletes this file with material3).
- * Nothing in ui/kit or the rest of ui/theme may use what is here.
+ * Material, kept only so the material3 dependency still has a theme while it
+ * is on the classpath. No screen reads it any more (stage 4); stage 5
+ * deletes this file, the call in HavenTheme, and the material3 and
+ * material-icons-extended dependencies. Nothing may use what is here.
  */
 
 import androidx.compose.foundation.shape.RoundedCornerShape
