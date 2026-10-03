@@ -4,6 +4,8 @@ import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createComposeRule
+import net.havenkeys.android.ui.theme.DarkHavenColors
+import net.havenkeys.android.ui.theme.LightHavenColors
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -60,4 +62,21 @@ class OverlayWindowsTest {
     fun theMenuWindowIsSecure() = assertEveryNewWindowIsSecure {
         HavenMenu(expanded = true, onDismiss = {}, items = listOf(MenuItem("Edit", {})))
     }
+
+    private fun dialogDim(dark: Boolean): Float {
+        val before = windows().map { it.view }.toSet()
+        rule.setKit(dark = dark) { HavenDialog("Title", onDismiss = {}, confirm = DialogAction("Ok", {})) }
+        rule.waitForIdle()
+        val params = windows().single { it.view !in before }.view.rootView.layoutParams as WindowManager.LayoutParams
+        assertTrue("FLAG_DIM_BEHIND", params.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0)
+        return params.dimAmount
+    }
+
+    @Test
+    fun aLightDialogDimsTheScreenAsMuchAsTheSheetsScrim() =
+        assertEquals(LightHavenColors.scrim.alpha, dialogDim(dark = false), 0.01f)
+
+    @Test
+    fun aDarkDialogDimsTheScreenAsMuchAsTheSheetsScrim() =
+        assertEquals(DarkHavenColors.scrim.alpha, dialogDim(dark = true), 0.01f)
 }

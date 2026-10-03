@@ -109,7 +109,7 @@ fun HavenSheet(
         ),
     ) {
         SecureDialogWindow(ignoreObscuredTouches = true)
-        NoWindowDim()
+        WindowDim(0f)
         OpenWhenMeasured(state)
         CloseWhenDraggedAway(state, draggedAway)
         SheetFrame(state, close, modifier, title, content)
@@ -233,11 +233,16 @@ private fun CloseWhenDraggedAway(state: AnchoredDraggableState<SheetValue>, onGo
     }
 }
 
-/** The sheet draws its own animated scrim; the window's fixed dim would double it. */
+/**
+ * Sets how much this dialog window dims the screen behind it. The sheet
+ * passes 0 (it draws its own animated scrim; the window's dim would double
+ * it); the dialog passes the scrim's alpha, so both darken the screen alike
+ * instead of the platform's heavier 60% black.
+ */
 @Composable
-private fun NoWindowDim() {
+internal fun WindowDim(amount: Float) {
     val view = LocalView.current
-    SideEffect { (view.parent as? DialogWindowProvider)?.window?.setDimAmount(0f) }
+    SideEffect { (view.parent as? DialogWindowProvider)?.window?.setDimAmount(amount) }
 }
 
 @PreviewLightDark

@@ -54,6 +54,7 @@ fun HavenDialog(
         properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
     ) {
         SecureDialogWindow(ignoreObscuredTouches = true)
+        WindowDim(HavenTheme.colors.scrim.alpha)
         DialogContent(title, confirm, modifier, message, dismiss, DialogAnswer(answered, answer))
     }
 }
