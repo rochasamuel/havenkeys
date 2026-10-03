@@ -5,6 +5,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
@@ -188,7 +189,8 @@ class StructureTest {
             }
         }
         rule.onNode(hasText("Username") and hasText("sam@example.com")).assertExists()
-        rule.onNodeWithContentDescription("Copy Username").assert(hasRole(Role.Button))
+        rule.onNodeWithContentDescription("Copy Username").assert(hasRole(Role.Button)).assertHasClickAction()
+        rule.onNode(hasText("Username") and hasText("sam@example.com")).assertHasNoClickAction()
     }
 
     @Test

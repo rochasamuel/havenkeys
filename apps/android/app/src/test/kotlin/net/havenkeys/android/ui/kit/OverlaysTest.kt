@@ -3,6 +3,9 @@ package net.havenkeys.android.ui.kit
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.getValue
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -12,6 +15,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isHeading
@@ -24,7 +28,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -268,12 +274,19 @@ class OverlaysTest {
     @Test
     fun aTallSheetStopsShortOfTheTopAndScrollsToItsLastRow() {
         rule.setKit {
-            HavenSheet(onDismiss = {}, title = "Save to") {
+            HavenSheet(onDismiss = { dismissed++ }, title = "Save to") {
                 repeat(TALL_ROWS) { HavenText("Login $it", Modifier.heightIn(min = 48.dp)) }
             }
         }
         rule.waitForIdle()
-        assertTrue(rule.onNodeWithTag(SHEET_TAG).fetchSemanticsNode().boundsInRoot.top > 0f)
+        val bounds = rule.onNodeWithTag(SHEET_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue(bounds.top > 0f)
+        // At most 90% of the window: the root is as tall as the window.
+        val window = windowHeight()
+        assertTrue("sheet ${bounds.height} of $window", bounds.height <= window * 0.9f + 1f)
+        rule.onNodeWithTag(SHEET_TAG).performTouchInput { swipeUp(startY = centerY + 100f, endY = centerY - 100f) }
+        rule.waitForIdle()
+        assertEquals(0, dismissed)
         rule.onNodeWithText("Login ${TALL_ROWS - 1}").performScrollTo().assertIsDisplayed()
     }
 
@@ -320,6 +333,83 @@ class OverlaysTest {
         rule.onNodeWithText("Reload").assertIsEnabled().performClick()
         assertEquals(0, backs)
         assertEquals(1, reloads)
+    }
+
+    @Test
+    fun theAlternativeAnswerIsGatedByBusyNotByConfirmEnabled() {
+        var busy by mutableStateOf(false)
+        rule.setKit {
+            HavenDialog(
+                title = "Fill your identity?",
+                onDismiss = {},
+                confirm = DialogAction("Fill with documents", {}),
+                alternative = DialogAction("Fill without documents", {}),
+                confirmEnabled = false,
+                busy = busy,
+            )
+        }
+        rule.onNodeWithText("Fill with documents").assertIsNotEnabled()
+        rule.onNodeWithText("Fill without documents").assertIsEnabled()
+        busy = true
+        rule.waitForIdle()
+        rule.onNodeWithText("Fill without documents").assertIsNotEnabled()
+    }
+
+    private fun dispatchSheetInsets(ime: Int, nav: Int) = rule.runOnUiThread {
+        val view = ShadowDialog.getLatestDialog().window!!.decorView
+        val insets = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, nav))
+            .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, ime))
+            .setVisible(WindowInsetsCompat.Type.ime(), ime > 0)
+            .build()
+        ViewCompat.dispatchApplyWindowInsets(view, insets)
+    }
+
+    private fun tallSheet() = rule.setKit {
+        HavenSheet(onDismiss = {}, title = "Save to") {
+            repeat(TALL_ROWS) { HavenText("Login $it", Modifier.heightIn(min = 48.dp)) }
+        }
+    }
+
+    /** The dialog's root is the tall one; the host activity's root is empty. */
+    private fun windowHeight() = rule.onAllNodes(isRoot()).fetchSemanticsNodes().maxOf { it.boundsInRoot.height }
+
+    private fun sheetBottomGap(): Float {
+        val window = windowHeight()
+        return window - rule.onNodeWithTag(SHEET_TAG).fetchSemanticsNode().boundsInRoot.bottom
+    }
+
+    @Test
+    fun theSheetRisesAboveTheKeyboardWithoutCountingTheNavBarTwice() {
+        showSheet()
+        rule.waitForIdle()
+        dispatchSheetInsets(ime = 300, nav = 48)
+        rule.waitForIdle()
+        val gap = sheetBottomGap()
+        assertTrue("gap $gap", gap in 295f..305f)
+    }
+
+    @Test
+    fun withOnlyTheNavBarTheSheetSitsAboveIt() {
+        showSheet()
+        rule.waitForIdle()
+        dispatchSheetInsets(ime = 0, nav = 48)
+        rule.waitForIdle()
+        // The surface pads its content by the bar; its bottom edge is the window's.
+        val window = windowHeight()
+        val text = rule.onNodeWithText("Login").fetchSemanticsNode().boundsInRoot.bottom
+        assertTrue("text ${text} window $window", window - text >= 48f)
+    }
+
+    @Test
+    fun theCapShrinksWithTheKeyboard() {
+        tallSheet()
+        rule.waitForIdle()
+        val tall = rule.onNodeWithTag(SHEET_TAG).fetchSemanticsNode().boundsInRoot.height
+        dispatchSheetInsets(ime = 300, nav = 48)
+        rule.waitForIdle()
+        val shrunk = rule.onNodeWithTag(SHEET_TAG).fetchSemanticsNode().boundsInRoot.height
+        assertTrue("$tall -> $shrunk", shrunk < tall - 200f)
     }
 
     private companion object {

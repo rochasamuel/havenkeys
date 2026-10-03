@@ -43,8 +43,10 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * caller bumps on every failed confirm, never a message: two failures in a
  * row can show the same error, and only a changed key re-arms the dialog.
  * With an [alternative] (a second way to say yes) the three buttons stack full
- * width: confirm, alternative, dismiss. With [dismissible] false, Back and an
- * outside tap do nothing; only a button answers.
+ * width: confirm, alternative, dismiss; the alternative is gated by the same
+ * busy/answered state as confirm, not by [confirmEnabled] (that is confirm's
+ * alone). With [dismissible] false, Back and an outside tap do nothing; only a
+ * button answers.
  */
 @Composable
 @Suppress("LongParameterList")
