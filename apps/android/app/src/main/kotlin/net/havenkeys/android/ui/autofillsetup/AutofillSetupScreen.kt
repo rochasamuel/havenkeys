@@ -76,7 +76,10 @@ fun AutofillSetupScreen(online: Boolean, onBack: () -> Unit, onLock: () -> Unit,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             LargeTitle(stringResource(R.string.autofill_setup_title))
-            ServiceState(enabled)
+            ServiceState(
+                enabled,
+                stringResource(if (enabled) R.string.autofill_setup_on else R.string.autofill_setup_off),
+            )
             if (!enabled) {
                 HavenButton(
                     stringResource(R.string.autofill_setup_open),
@@ -99,9 +102,10 @@ private fun PasskeysSection(passkeysOn: Boolean, openFailed: Boolean, onOpen: ()
         HavenText(stringResource(R.string.autofill_setup_passkeys_old), color = HavenTheme.colors.muted)
         return
     }
-    HavenText(
+    // A state row like autofill's above, so the two settings read alike.
+    ServiceState(
+        passkeysOn,
         stringResource(if (passkeysOn) R.string.autofill_setup_passkeys_on else R.string.autofill_setup_passkeys_off),
-        color = HavenTheme.colors.text,
     )
     if (!passkeysOn) {
         // Secondary: Open settings above may already be the screen's one primary.
@@ -115,13 +119,12 @@ private fun PasskeysSection(passkeysOn: Boolean, openFailed: Boolean, onOpen: ()
     if (openFailed) Problem(stringResource(R.string.autofill_setup_passkeys_unavailable))
 }
 
+/** Whether a setting is HavenKeys': a check when it is, an alert while it is not. */
 @Composable
-private fun ServiceState(enabled: Boolean) {
+private fun ServiceState(enabled: Boolean, text: String) {
     InsetGroup {
         row {
-            GroupRow(icon = if (enabled) HavenIcon.Check else HavenIcon.Alert) {
-                GroupRowText(stringResource(if (enabled) R.string.autofill_setup_on else R.string.autofill_setup_off))
-            }
+            GroupRow(icon = if (enabled) HavenIcon.Check else HavenIcon.Alert) { GroupRowText(text) }
         }
     }
 }
