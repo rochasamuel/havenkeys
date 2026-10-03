@@ -305,4 +305,7 @@
     <string name="autofill_card_save_offline">O HavenKeys está offline. O cartão não foi salvo.</string>
     <string name="autofill_card_save_locked">O HavenKeys foi bloqueado antes de salvar. O cartão não foi salvo.</string>
     <string name="autofill_card_save_failed">O HavenKeys não conseguiu salvar este cartão.</string>
+    <!-- ui/kit (spec 2026-10-03 §5.2) -->
+    <string name="kit_copied">Copiado</string>
+    <string name="kit_new_item">Novo item</string>
 </resources>
