@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,12 +54,12 @@ import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.IconGlyph
 import net.havenkeys.android.ui.kit.InsetGroup
 import net.havenkeys.android.ui.kit.SecretTextField
+import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.theme.HavenTheme
 
 /**
  * The master password and the Secret Key live only in this composition
- * (`remember`, never `rememberSaveable`) and are cleared as soon as they are
- * submitted.
+ * (`remember`, never `rememberSaveable`); see [UnlockForm] for when each is emptied.
  */
 @Composable
 fun UnlockScreen(
@@ -111,8 +112,9 @@ fun UnlockScreen(
 /**
  * The master password and the Secret Key live only in this composition
  * (`remember { TextFieldState() }`, never `rememberTextFieldState`, which is
- * saved with the instance state) and are emptied the moment they are sent,
- * before Rust answers.
+ * saved with the instance state). The password is emptied the moment it is
+ * sent, before Rust answers; the Secret Key stays for another attempt (it is
+ * long to retype) and is emptied once the vault opens and when the screen goes.
  */
 @Composable
 internal fun UnlockForm(
@@ -120,9 +122,10 @@ internal fun UnlockForm(
     onSubmit: (password: String, secretKey: String?) -> Unit,
     onBiometric: () -> Unit,
     modifier: Modifier = Modifier,
+    // Parameters only so a test can watch them being emptied; never saveable.
+    password: TextFieldState = remember { TextFieldState() },
+    secretKey: TextFieldState = remember { TextFieldState() },
 ) {
-    val password = remember { TextFieldState() }
-    val secretKey = remember { TextFieldState() }
     var passwordShown by remember { mutableStateOf(false) }
     var keyShown by remember { mutableStateOf(false) }
     val ready = password.text.isNotEmpty() && (!state.needsSecretKey || secretKey.text.isNotBlank()) && !state.busy
@@ -130,12 +133,20 @@ internal fun UnlockForm(
         if (ready) {
             onSubmit(password.text.toString(), if (state.needsSecretKey) secretKey.text.toString() else null)
             password.clearText()
-            secretKey.clearText()
             passwordShown = false
             keyShown = false
         }
     }
-    val error = state.errorCode?.let { stringResource(errorText(it)) }
+    LaunchedEffect(state.unlocked) { if (state.unlocked) secretKey.clearText() }
+    DisposableEffect(Unit) {
+        onDispose {
+            password.clearText()
+            secretKey.clearText()
+        }
+    }
+    // Only a refused password (or key) is the field's error; biometric, network and other failures are not.
+    val fieldError = state.errorCode?.takeIf { it == UNLOCK_FAILED }?.let { stringResource(errorText(it)) }
+    val otherError = state.errorCode?.takeIf { it != UNLOCK_FAILED }
 
     Column(
         modifier
@@ -156,7 +167,7 @@ internal fun UnlockForm(
                     stringResource(R.string.unlock_password_hint),
                     revealed = passwordShown,
                     onRevealChange = { passwordShown = it },
-                    error = error,
+                    error = fieldError,
                     enabled = !state.busy,
                     imeAction = if (state.needsSecretKey) ImeAction.Next else ImeAction.Done,
                     onKeyboardAction = if (state.needsSecretKey) null else KeyboardActionHandler { submit() },
@@ -176,9 +187,13 @@ internal fun UnlockForm(
                 }
             }
         }
+        otherError?.let { ErrorLine(it) }
         UnlockButtons(state, ready, submit, onBiometric)
     }
 }
+
+/** The code Rust answers when the master password (or the Secret Key) is wrong. */
+private const val UNLOCK_FAILED = "unlock_failed"
 
 @Composable
 private fun UnlockButtons(state: UnlockUiState, ready: Boolean, onSubmit: () -> Unit, onBiometric: () -> Unit) {

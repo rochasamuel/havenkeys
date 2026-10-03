@@ -64,7 +64,8 @@ private const val MIN_PASSWORD_LENGTH = 10
  * First run: scan the Emergency Kit, type it, or activate an invite.
  * Typed secrets (master password, Secret Key, invite) live only in this
  * composition: plain `remember`, never `rememberSaveable`, so they are not
- * written to the saved instance state; they are emptied when sent and when
+ * written to the saved instance state. A password is emptied when sent; the
+ * Secret Key and the invite stay for another attempt; all are emptied when
  * their step is left. Only the server and email (not secrets) are saved.
  */
 @Composable
@@ -169,7 +170,7 @@ private fun ScanStep(errorCode: String?, onFrame: (LumaFrame) -> Unit, onCancel:
  * A typed secret and whether it is shown. Plain state, never saved with the instance; it is
  * emptied when sent and when its step leaves the composition.
  */
-private class Secret {
+internal class Secret {
     val text = TextFieldState()
     var shown by mutableStateOf(false)
 
@@ -180,7 +181,7 @@ private class Secret {
 }
 
 @Composable
-private fun rememberSecret(): Secret {
+internal fun rememberSecret(): Secret {
     val secret = remember { Secret() }
     DisposableEffect(secret) { onDispose { secret.clear() } }
     return secret
@@ -241,8 +242,12 @@ private fun TypeStep(
                 )
             }
             row {
-                SecretRow(secretKey, R.string.onboarding_secret_key, !state.busy,
-                    hint = stringResource(R.string.onboarding_secret_key_hint))
+                SecretRow(
+                    secretKey,
+                    R.string.onboarding_secret_key,
+                    !state.busy,
+                    hint = stringResource(R.string.onboarding_secret_key_hint),
+                )
             }
             row { SecretRow(password, R.string.onboarding_master_password, !state.busy) }
         }
@@ -253,8 +258,8 @@ private fun TypeStep(
             onClick = {
                 val key = secretKey.text.text.toString()
                 onSignIn(server.text.toString(), email.text.toString(), password.text.text.toString(), key)
-                // Emptied as they are sent; the handoff itself is unchanged.
-                secretKey.clear()
+                // The password is emptied as it is sent; the Secret Key stays for another attempt
+                // (long to retype) and is emptied when the step is left, which success does too.
                 password.clear()
             },
         )
@@ -278,8 +283,12 @@ private fun InviteStep(
     FormColumn(modifier) {
         InsetGroup {
             row {
-                SecretRow(invite, R.string.onboarding_invite, !state.busy,
-                    hint = stringResource(R.string.onboarding_invite_hint))
+                SecretRow(
+                    invite,
+                    R.string.onboarding_invite,
+                    !state.busy,
+                    hint = stringResource(R.string.onboarding_invite_hint),
+                )
             }
             row {
                 SecretRow(
@@ -306,7 +315,8 @@ private fun InviteStep(
             enabled = ready && !state.busy,
             onClick = {
                 onActivate(invite.text.text.toString(), password.text.text.toString())
-                invite.clear()
+                // The passwords are emptied as they are sent; the invite stays for another attempt
+                // and is emptied when the step is left, which success does too.
                 password.clear()
                 repeat.clear()
             },

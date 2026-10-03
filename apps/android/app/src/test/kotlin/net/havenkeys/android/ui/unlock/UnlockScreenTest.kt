@@ -1,5 +1,12 @@
 package net.havenkeys.android.ui.unlock
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -85,7 +92,42 @@ class UnlockScreenTest {
         field(R.string.unlock_secret_key).performTextInput("A3-KEY")
         unlock().performClick()
         assertEquals(listOf("hunter2" to "A3-KEY"), submitted)
+        // Ruling (final review): the password is emptied on submit; the Secret Key stays for another attempt.
+        assertTrue(typed(R.string.unlock_password_hint).isEmpty())
+        assertEquals("A3-KEY", typed(R.string.unlock_secret_key))
+    }
+
+    /** Final review (stage 4): the kept Secret Key is emptied once the vault opens. */
+    @Test
+    fun theSecretKeyIsEmptiedOnceTheVaultOpens() {
+        var state by mutableStateOf(UnlockUiState(needsSecretKey = true))
+        rule.setKit { UnlockForm(state, onSubmit = { p, k -> submitted += p to k }, onBiometric = {}) }
+        field(R.string.unlock_password_hint).performTextInput("hunter2")
+        field(R.string.unlock_secret_key).performTextInput("A3-KEY")
+        unlock().performClick()
+        state = state.copy(errorCode = "unlock_failed")
+        rule.waitForIdle()
+        assertEquals("A3-KEY", typed(R.string.unlock_secret_key))
+        state = state.copy(errorCode = null, unlocked = true)
+        rule.waitForIdle()
         assertTrue(typed(R.string.unlock_secret_key).isEmpty())
+    }
+
+    /** Final review (stage 4): leaving the screen empties both fields, not only dropping them. */
+    @Test
+    fun leavingTheScreenEmptiesBothFields() {
+        var shown by mutableStateOf(true)
+        val password = TextFieldState()
+        val secretKey = TextFieldState()
+        rule.setKit {
+            if (shown) UnlockForm(UnlockUiState(), { _, _ -> }, {}, password = password, secretKey = secretKey)
+        }
+        password.edit { append("hunter2") }
+        secretKey.edit { append("A3-KEY") }
+        shown = false
+        rule.waitForIdle()
+        assertTrue(password.text.isEmpty())
+        assertTrue(secretKey.text.isEmpty())
     }
 
     @Test
@@ -93,6 +135,31 @@ class UnlockScreenTest {
         show(UnlockUiState(errorCode = "unlock_failed"))
         field(R.string.unlock_password_hint)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, text(errorText("unlock_failed"))))
+    }
+
+    /** Final review (stage 4): only a refused password is the field's error; the rest is a line under the form. */
+    @Test
+    fun otherFailuresAreALineNotThePasswordFieldsError() {
+        var state by mutableStateOf(UnlockUiState())
+        rule.setKit { UnlockForm(state, onSubmit = { _, _ -> }, onBiometric = {}) }
+        for (code in listOf("offline", "biometric_unavailable", "secret_key_required", "keychain_unavailable")) {
+            state = UnlockUiState(errorCode = code)
+            rule.waitForIdle()
+            field(R.string.unlock_password_hint).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Error))
+            rule.onNodeWithText(text(errorText(code))).assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun aFailedUnlockIsNotAlsoALine() {
+        show(UnlockUiState(errorCode = "unlock_failed"))
+        rule.onAllNodesWithText(text(errorText("unlock_failed"))).assertCountEquals(0)
+    }
+
+    @Test
+    fun withoutBiometricsSetUpThereIsNoBiometricButton() {
+        show(UnlockUiState(offerBiometric = false))
+        rule.onNodeWithText(text(R.string.unlock_biometric)).assertDoesNotExist()
     }
 
     @Test

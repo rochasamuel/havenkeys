@@ -1,5 +1,8 @@
 package net.havenkeys.android.ui.onboarding
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -26,6 +29,7 @@ import net.havenkeys.android.ui.kit.setKit
 import net.havenkeys.android.ui.theme.HavenTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -111,7 +115,7 @@ class OnboardingScreenTest {
     }
 
     @Test
-    fun theKitPasswordIsTypedAsAPasswordAndTheKitShowsOnlyAddressAndServer() {
+    fun theKitPasswordIsTypedAsAPasswordUnderTheKitsAddressAndServer() {
         show(kitPasswordVm())
         field(R.string.onboarding_master_password).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
         rule.onNode(hasText("a@example.com")).assertExists()
@@ -172,8 +176,9 @@ class OnboardingScreenTest {
         assertTrue(typed(R.string.onboarding_master_password).isEmpty())
     }
 
+    /** What the user sees: a step opened again starts empty (each opening is a fresh composition). */
     @Test
-    fun leavingAStepEmptiesItsSecrets() {
+    fun aStepOpenedAgainStartsEmpty() {
         show()
         choose(R.string.onboarding_type_kit)
         field(R.string.onboarding_secret_key).performTextInput("A3-KEY")
@@ -203,8 +208,41 @@ class OnboardingScreenTest {
         rule.onNode(hasText(text(R.string.onboarding_sign_in)) and hasClickAction()).performClick()
         rule.waitForIdle()
         assertTrue("signIn" in accounts.calls)
-        assertTrue(typed(R.string.onboarding_secret_key).isEmpty())
+        // Ruling (final review): the password is emptied as it is sent; the Secret Key stays for another attempt.
         assertTrue(typed(R.string.onboarding_master_password).isEmpty())
+        assertEquals("A3-KEY", typed(R.string.onboarding_secret_key))
+    }
+
+    /** Final review (stage 4): a failed activation keeps the invite and empties both passwords. */
+    @Test
+    fun activatingEmptiesThePasswordsAndKeepsTheInvite() {
+        show()
+        choose(R.string.onboarding_invite_choice)
+        field(R.string.onboarding_invite).performTextInput("invite-token")
+        field(R.string.onboarding_master_password).performTextInput("long enough password")
+        field(R.string.onboarding_repeat_password).performTextInput("long enough password")
+        rule.onNode(hasText(text(R.string.onboarding_create)) and hasClickAction()).performClick()
+        rule.waitForIdle()
+        assertTrue("activate" in accounts.calls)
+        assertEquals("invite-token", typed(R.string.onboarding_invite))
+        assertTrue(typed(R.string.onboarding_master_password).isEmpty())
+        assertTrue(typed(R.string.onboarding_repeat_password).isEmpty())
+    }
+
+    /** Final review (stage 4): pins the clear itself, not only that a new step starts empty. */
+    @Test
+    fun aSecretLeavingTheCompositionIsEmptied() {
+        var shown by mutableStateOf(true)
+        var secret: Secret? = null
+        rule.setKit { if (shown) secret = rememberSecret() }
+        rule.runOnIdle {
+            secret!!.text.edit { append("A3-KEY") }
+            secret!!.shown = true
+        }
+        shown = false
+        rule.waitForIdle()
+        assertTrue(secret!!.text.text.isEmpty())
+        assertFalse(secret!!.shown)
     }
 
     @Test
