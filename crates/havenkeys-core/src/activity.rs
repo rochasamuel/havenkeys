@@ -7,7 +7,7 @@
 use crate::error::{Error, Result};
 use crate::local::LocalSlot;
 use crate::model::ItemOverview;
-use crate::vault::VaultService;
+use crate::vault::{VaultService, MAX_SEARCH_QUERY_CHARS};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -133,6 +133,38 @@ impl VaultService {
             .collect();
         items.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)));
         Ok(items.into_iter().take(n).cloned().collect())
+    }
+
+    /// Newest first.
+    pub fn recent_searches(&self) -> Result<Vec<String>> {
+        self.session()?;
+        Ok(self.activity()?.searches)
+    }
+
+    /// Keeps `query` (trimmed) on top; a blank one is ignored, and the same
+    /// words in another case replace the older spelling.
+    pub fn record_search(&self, query: &str, now_ms: i64) -> Result<()> {
+        self.session()?;
+        let query = query.trim();
+        if query.is_empty() {
+            return Ok(());
+        }
+        if query.chars().count() > MAX_SEARCH_QUERY_CHARS {
+            return Err(Error::InvalidInput("search query too long"));
+        }
+        let mut activity = self.activity()?;
+        let lower = query.to_lowercase();
+        activity.searches.retain(|q| q.to_lowercase() != lower);
+        activity.searches.insert(0, query.to_owned());
+        activity.searches.truncate(MAX_RECENT_SEARCHES);
+        self.save_activity(activity, now_ms)
+    }
+
+    pub fn clear_recent_searches(&self, now_ms: i64) -> Result<()> {
+        self.session()?;
+        let mut activity = self.activity()?;
+        activity.searches.clear();
+        self.save_activity(activity, now_ms)
     }
 }
 
@@ -268,5 +300,56 @@ mod tests {
             .all(|o| Some(o.id) != identity));
         v.lock();
         assert_eq!(v.recently_created(6).unwrap_err(), Error::Locked);
+    }
+
+    #[test]
+    fn recent_searches_keep_ten_newest_first_without_duplicates() {
+        let v = unlocked_vault();
+        for i in 0..12 {
+            v.record_search(&format!("q{i}"), T0).unwrap();
+        }
+        let recent = v.recent_searches().unwrap();
+        assert_eq!(recent.len(), MAX_RECENT_SEARCHES);
+        assert_eq!(recent[0], "q11");
+        assert_eq!(recent[9], "q2");
+        // Same words in another case move to the top, keeping the new spelling.
+        v.record_search("Q5", T0).unwrap();
+        let recent = v.recent_searches().unwrap();
+        assert_eq!(recent[0], "Q5");
+        assert_eq!(
+            recent
+                .iter()
+                .filter(|q| q.eq_ignore_ascii_case("q5"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn blank_and_overlong_searches_are_not_kept() {
+        let v = unlocked_vault();
+        v.record_search("   ", T0).unwrap();
+        v.record_search("  github  ", T0).unwrap();
+        assert_eq!(v.recent_searches().unwrap(), ["github"]);
+        let long = "x".repeat(crate::vault::MAX_SEARCH_QUERY_CHARS + 1);
+        assert!(matches!(
+            v.record_search(&long, T0),
+            Err(Error::InvalidInput(_))
+        ));
+        assert_eq!(v.recent_searches().unwrap(), ["github"]);
+    }
+
+    #[test]
+    fn clearing_searches_keeps_uses() {
+        let mut v = unlocked_vault();
+        let a = add(&mut v, "A", T0);
+        v.record_use(&a, T0).unwrap();
+        v.record_search("a", T0).unwrap();
+        v.clear_recent_searches(T0).unwrap();
+        assert!(v.recent_searches().unwrap().is_empty());
+        assert_eq!(titles(&v.frequently_used(6, T0).unwrap()), ["A"]);
+        v.lock();
+        assert_eq!(v.recent_searches().unwrap_err(), Error::Locked);
+        assert_eq!(v.record_search("a", T0).unwrap_err(), Error::Locked);
     }
 }
