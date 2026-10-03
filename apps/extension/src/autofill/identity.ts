@@ -94,6 +94,7 @@ const BIRTH = ["nascimento", "birth", "naturalidade", "dob"];
 const PLACE = ["cidade", "city", "town", "municipio", "pais", "country", "local", "place", "estado", "state", "uf"];
 const DOCUMENT = ["documento", "document", "doc"];
 const ADDRESS = ["endereco", "address", "logradouro", "rua", "street", "cep", "zip"];
+const NEW = ["new", "novo", "nova", "nuevo", "nueva"];
 
 /** Null when the words make a role match wrong; the role otherwise. */
 function compound(role: IdentityRole, all: string): IdentityRole | null {
@@ -104,6 +105,9 @@ function compound(role: IdentityRole, all: string): IdentityRole | null {
   // "Endereço da empresa", "Company address": the company's address, not a
   // company name; ambiguous as the user's street, so neither.
   if (role === "company" && hasAny(all, ADDRESS)) return null;
+  // "New Yahoo email", "Novo e-mail": an address being chosen or changed
+  // to, not the user's own.
+  if (role === "email" && hasAny(all, NEW)) return null;
   return role;
 }
 

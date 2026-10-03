@@ -110,6 +110,50 @@ describe("field classification", () => {
 });
 
 describe("login groups", () => {
+  it("an identity provider's button says nothing about the form's intent", () => {
+    page(`<form><h1>Create account</h1><input id="u" type="email"><input id="p" type="password">
+      <button type="submit">Sign in with Google</button><button type="submit">Continuar com a Apple</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("signup");
+    page(`<form><input id="u" type="email"><input id="p" type="password"><button type="submit">Continue with Google</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("unknown");
+    // "Sign in with" a passkey or an email is a sign-in, not a provider.
+    page(`<form><input id="u" type="email"><input id="p" type="password"><button type="submit">Sign in with a passkey</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("login");
+    page(`<form><input id="u" type="email"><input id="p" type="password"><button type="submit">Log in with email</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("login");
+    // A real sign-in button still counts.
+    page(`<form><input id="u" type="email"><input id="p" type="password"><button type="submit">Sign in</button><button type="button">Sign in with Google</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("login");
+  });
+
+  it("labels asking for a name or birth date make a signup unless a heading or button says sign in", () => {
+    const signup = (extra: string) => `<form>
+      <label for="fn">First name</label><input id="fn"><label for="ln">Sobrenome</label><input id="ln">
+      <label for="e">Email</label><input id="e" type="email"><label for="p">Password</label><input id="p" type="password">
+      <label for="b">Date of birth</label><input id="b">${extra}</form>`;
+    page(signup(`<button type="submit">Next</button><a href="/">Sign in instead</a>`));
+    expect(groupFor($("#p"), env()).group.intent).toBe("signup");
+    expect(kinds("#p")).toMatchObject({ p: "new-password" });
+    // No intent words at all: the fields decide.
+    page(signup(`<button type="submit">Continue</button>`));
+    expect(groupFor($("#p"), env()).group.intent).toBe("signup");
+    // A library catalog's sign-in asks for a last name and a PIN.
+    page(`<form><h1>Log in</h1><label for="ln">Last name</label><input id="ln"><label for="p">PIN</label><input id="p" type="password"><button type="submit">Log in</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("login");
+    // Nothing but a username and password: no evidence either way.
+    page(`<form><input id="u"><input id="p" type="password"><button type="submit">Continue</button></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("unknown");
+  });
+
+  it("a password beside name or birthday fields is a signup, whatever the wording says", () => {
+    page(`<form><input id="fn" autocomplete="given-name"><input id="u"><input id="p" type="password">
+      <input id="m" autocomplete="bday-month"><button type="submit">Sign in with Google</button><a href="/">Sign in instead</a></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("signup");
+    // Same wording, login fields only: still a login.
+    page(`<form><input id="u"><input id="p" type="password"><button type="submit">Sign in with Google</button><a href="/">Sign in instead</a></form>`);
+    expect(groupFor($("#p"), env()).group.intent).toBe("login");
+  });
+
   it("normal username + password form", () => {
     page(`<form><h1>Sign in</h1>
       <input name="login" type="text"><input name="password" type="password">

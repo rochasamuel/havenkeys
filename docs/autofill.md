@@ -202,6 +202,20 @@ text field before the first password field.
    the form's name and action, and the page path, which weigh three times
    more than other links and buttons in the group. "Already have an account?
    Log in" on a signup page therefore does not flip the form to login.
+   An identity provider's button ("Sign in with Google", "Continuar com a
+   Apple": a provider phrase plus a provider name) is not counted, since
+   signup and sign-in pages both have them; "Sign in with a passkey" or
+   "with email" still counts as sign-in.
+   Fields can outrank wording when the vote is login or unknown and the
+   group has a password. A field whose autocomplete asks for a name or
+   birthday (`name`, `given-name`, `family-name`, `additional-name`,
+   `bday`, `bday-day/month/year`, `sex`) makes it a signup whatever the
+   words (Yahoo's signup says only "Sign in with Google" and "Sign in
+   instead"). A field labelled with such a detail (first/last/family name,
+   surname, date of birth, birthday, sobrenome, data de nascimento,
+   apellido; never bare "name") does too, but only when no heading, submit
+   button or form name says sign in: a library catalog's sign-in asks for a
+   last name and a PIN.
    * One password: `new-password` if the intent is signup or change,
      otherwise `password` (login).
    * Two: new + confirmation, or current + new for a change form.
@@ -1035,7 +1049,10 @@ birthplace, so the field gets no role (not `birthDate`, `city` or
 `country`); a document word (documento, document, doc) means the field is
 never `number`; an address word (endereco, address, logradouro, rua, street,
 CEP, zip) with a company word means the company's address, so the field gets
-no role (neither `company` nor `street`: whose street it is is ambiguous).
+no role (neither `company` nor `street`: whose street it is is ambiguous);
+an email word with "new" (new, novo, nova, nuevo, nueva) is an address being
+chosen or changed to ("New Yahoo email", "Novo e-mail"), so the field gets no
+role.
 "Estado civil" and marital status are negatives.
 
 Never an identity field: password and one-time-code fields, **card fields**

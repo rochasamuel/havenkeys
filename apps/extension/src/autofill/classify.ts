@@ -239,10 +239,64 @@ const AC_NOT_LOGIN = [
   "country",
   "country-name",
   "bday",
+  "bday-day",
+  "bday-month",
+  "bday-year",
   "sex",
   "url",
   "photo",
 ];
+
+/**
+ * An identity provider's button ("Sign in with Google", "Continuar com a
+ * Apple"). Signup and sign-in pages both have them, so their words are not
+ * intent evidence.
+ */
+const PROVIDER_BUTTON = [
+  "sign in with", "signin with", "log in with", "login with", "sign up with", "signup with", "continue with",
+  "entrar com", "acessar com", "continuar com", "cadastre se com", "cadastrar com", "inscreva se com",
+  "iniciar sesion con", "registrate con", "registrarse con", "continuar con",
+];
+
+/** Named providers: "Sign in with a passkey" or "with email" is still a sign-in. */
+const PROVIDER_NAMES = [
+  "google", "apple", "microsoft", "facebook", "meta", "github", "gitlab", "twitter", "x", "linkedin",
+  "amazon", "yahoo", "discord", "slack", "gov br", "paypal", "steam", "twitch",
+];
+
+export function isProviderButton(text: string): boolean {
+  return hasAny(text, PROVIDER_BUTTON) && hasAny(text, PROVIDER_NAMES);
+}
+
+/**
+ * Details a sign-in form never asks for: your name or birthday. A group with
+ * a password and such a field is a signup. By autocomplete token this
+ * outweighs any wording (Yahoo's signup says only "Sign in with Google" and
+ * "Sign in instead"). By label it is weaker evidence (a library catalog's
+ * sign-in asks for a last name and a PIN), so `classifyGroup` lets it decide
+ * only when no heading, submit button or form name says sign in.
+ */
+const AC_SIGNUP_ONLY = ["name", "given-name", "family-name", "additional-name", "bday", "bday-day", "bday-month", "bday-year", "sex"];
+/** Unambiguous label words only: "name"/"nome"/"nombre" alone also label usernames. */
+const SIGNUP_ONLY_WORDS = [
+  "first name", "firstname", "given name", "middle name", "last name", "lastname", "family name", "surname",
+  "date of birth", "birth date", "birthdate", "birthday",
+  "primeiro nome", "sobrenome", "data de nascimento",
+  "apellido", "apellidos", "fecha de nacimiento",
+];
+
+export function signupDetailByAutocomplete(f: FieldFeatures): boolean {
+  return f.autocomplete.some((t) => AC_SIGNUP_ONLY.includes(t));
+}
+
+export function signupDetailByWords(f: FieldFeatures): boolean {
+  return f.type !== "password" && hasAny(`${f.attrs} ${f.text}`, SIGNUP_ONLY_WORDS);
+}
+
+/** Does this (primary) text say sign in? */
+export function saysLogin(text: string): boolean {
+  return hasAny(text, INTENT_LOGIN);
+}
 
 // ---------------------------------------------------------------- scores
 

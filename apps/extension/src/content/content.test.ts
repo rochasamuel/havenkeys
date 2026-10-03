@@ -376,6 +376,38 @@ describe("menuKindFor", () => {
     expect(await kindFor(f("#c"))).toEqual({ kind: "identity", roles: ["fullName", "cpf"] });
   });
 
+  // Yahoo's "Create a Yahoo account" (login.yahoo.com/account/create, 2026-10).
+  // Its only intent words are "Sign in with Google" (submit) and "Sign in
+  // instead": the fields themselves (given-name, family-name, bday-*) say signup.
+  const YAHOO_SIGNUP = `<form id="challenge-form" method="post">
+    <label for="fn">First name</label><input id="fn" type="text" autocomplete="given-name" name="firstName">
+    <label for="ln">Last name</label><input id="ln" type="text" autocomplete="family-name" name="lastName">
+    <label for="uid">New Yahoo email</label><input id="uid" type="text" autocomplete="off" name="userId"><span>@yahoo.com</span>
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="new-password" name="password">
+    <button type="button" aria-label="Show password"></button>
+    <fieldset><legend>Date of birth</legend>
+      <label for="mm">Month (MM)</label><input id="mm" type="tel" autocomplete="bday-month" maxlength="2" aria-label="Birthday month" name="mm">
+      <label for="dd">Day (DD)</label><input id="dd" type="tel" autocomplete="bday-day" maxlength="2" aria-label="Birthday day" name="dd">
+      <label for="yyyy">Year (YYYY)</label><input id="yyyy" type="tel" autocomplete="bday-year" maxlength="4" aria-label="Birthday year" name="yyyy">
+    </fieldset>
+    <button type="submit">Next</button>
+    <button type="submit">Sign in with Google</button>
+    <a href="/">Sign in instead</a>
+  </form>`;
+
+  it("offers the identity on a signup whose only intent words say sign in (Yahoo)", async () => {
+    set(YAHOO_SIGNUP);
+    // "New Yahoo email" picks a new address: the saved email does not go there.
+    const identity = { kind: "identity", roles: ["firstName", "lastName", "birthMonth", "birthDay", "birthYear"] };
+    for (const id of ["#fn", "#ln", "#mm", "#dd", "#yyyy"]) expect(await kindFor(f(id))).toEqual(identity);
+    expect(await kindFor(f("#pw"))).toEqual({ kind: "new_password" });
+  });
+
+  it("keeps a sign-in form a login when it asks only for login fields", async () => {
+    set(`<form><input id="u" autocomplete="username"><input id="p" type="password" autocomplete="current-password"><button type="submit">Sign in with Google</button><a href="/">Sign in instead</a></form>`);
+    expect(await kindFor(f("#u"))).toEqual({ kind: "login" });
+  });
+
   it("keeps the login menu on a gov.br-style CPF login", async () => {
     set(`<form><h1>Entrar</h1><input id="c" name="cpf" aria-label="CPF"><button type="submit">Entrar</button></form>`);
     expect((await kindFor(f("#c")))?.kind).toBe("login");

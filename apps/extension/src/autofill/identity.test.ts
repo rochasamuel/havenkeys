@@ -91,6 +91,19 @@ describe("identityRoleOf", () => {
 });
 
 describe("compound labels", () => {
+  it("does not read an address being chosen or changed to as the user's email", () => {
+    page(`<form>
+      <label>New Yahoo email<input id="a" autocomplete="off"></label>
+      <label>Novo e-mail<input id="b"></label>
+      <label>Email<input id="c"></label>
+      <label>Newsletter email<input id="d"></label>
+    </form>`);
+    expect(role("#a")).toBeNull();
+    expect(role("#b")).toBeNull();
+    expect(role("#c")).toBe("email");
+    expect(role("#d")).toBe("email");
+  });
+
   it("does not read a birthplace as a birth date, city or country", () => {
     page(`<form>
       <label>Cidade de nascimento<input id="a"></label>

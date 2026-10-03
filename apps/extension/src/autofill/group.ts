@@ -12,7 +12,11 @@ import {
   classifyPasswords,
   confidenceOf,
   groupIntent,
+  isProviderButton,
   otpScore,
+  saysLogin,
+  signupDetailByAutocomplete,
+  signupDetailByWords,
   OTP_THRESHOLD,
   USERNAME_ALONE_THRESHOLD,
   USERNAME_THRESHOLD,
@@ -166,6 +170,8 @@ function intentText(root: ParentNode, env: Env): { primary: string; secondary: s
   for (const el of els) {
     const text =
       el instanceof HTMLInputElement ? el.value : (el.textContent ?? "") + " " + (el.getAttribute("aria-label") ?? "");
+    // "Sign in with Google" is on signup and sign-in pages alike.
+    if (isProviderButton(normalize(text.slice(0, MAX_HINT_CHARS)))) continue;
     const isPrimary =
       /^H[1-3]$|^LEGEND$/.test(el.tagName) ||
       (el instanceof HTMLButtonElement && el.type === "submit") ||
@@ -195,12 +201,20 @@ export function classifyGroup(root: ParentNode, env: Env): LoginGroup {
     .filter((el) => isFillable(el, env) && !cardKindOf(el, false))
     .slice(0, MAX_GROUP_INPUTS);
   const { primary, secondary } = intentText(root, env);
-  const intent = groupIntent(primary, secondary);
   const feats = new Map(inputs.map((el) => [el, features(el)]));
   const kinds = new Map<HTMLInputElement, { kind: FieldClassification; confidence: number }>();
 
   // Passwords (by type), resolved as a set.
   const passwords = inputs.filter((el) => el.type === "password");
+  // Wording can say "sign in" on a signup ("Sign in instead"); a password
+  // next to name or birthday fields is not a login. Autocomplete tokens
+  // decide over any wording; label words only when no heading, submit
+  // button or form name says sign in (classify.ts, SIGNUP_ONLY_WORDS).
+  let intent = groupIntent(primary, secondary);
+  if ((intent === "login" || intent === "unknown") && passwords.length > 0) {
+    const fs = inputs.map((el) => feats.get(el) as FieldFeatures);
+    if (fs.some(signupDetailByAutocomplete) || (!saysLogin(primary) && fs.some(signupDetailByWords))) intent = "signup";
+  }
   const pwFeats = passwords.map((el) => feats.get(el) as FieldFeatures);
   const split = splitOtpRun(inputs);
 
