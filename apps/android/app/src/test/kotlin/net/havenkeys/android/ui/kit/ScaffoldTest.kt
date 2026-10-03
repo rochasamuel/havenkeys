@@ -65,4 +65,51 @@ class ScaffoldTest {
         rule.mainClock.advanceTimeBy(TOAST_MILLIS + 1_000)
         rule.onNodeWithText("Password copied").assertDoesNotExist()
     }
+
+    @Test
+    fun anAlertToastIsAnnouncedAssertively() {
+        rule.mainClock.autoAdvance = false
+        rule.setKit {
+            val toasts = rememberToastState()
+            LaunchedEffect(Unit) { toasts.show("HavenKeys is offline", ToastTone.Alert) }
+            HavenScaffold(toastState = toasts) { HavenText("Content") }
+        }
+        rule.mainClock.advanceTimeBy(500)
+        rule.onNodeWithText("HavenKeys is offline")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
+    }
+
+    @Test
+    fun aToastStaysAsLongAsTheSystemRecommends() {
+        rule.mainClock.autoAdvance = false
+        val manager = object : androidx.compose.ui.platform.AccessibilityManager {
+            var asked: Triple<Long, Boolean, Boolean>? = null
+
+            override fun calculateRecommendedTimeoutMillis(
+                originalTimeoutMillis: Long,
+                containsIcons: Boolean,
+                containsText: Boolean,
+                containsControls: Boolean,
+            ): Long {
+                asked = Triple(originalTimeoutMillis, containsIcons, containsText)
+                return 10_000L
+            }
+        }
+        rule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalAccessibilityManager provides manager,
+            ) {
+                net.havenkeys.android.ui.theme.HavenTheme {
+                    val toasts = rememberToastState()
+                    LaunchedEffect(Unit) { toasts.show("Password copied") }
+                    HavenScaffold(toastState = toasts) { HavenText("Content") }
+                }
+            }
+        }
+        rule.mainClock.advanceTimeBy(TOAST_MILLIS + 1_000)
+        rule.onNodeWithText("Password copied").assertIsDisplayed()
+        org.junit.Assert.assertEquals(Triple(TOAST_MILLIS, true, true), manager.asked)
+        rule.mainClock.advanceTimeBy(10_000)
+        rule.onNodeWithText("Password copied").assertDoesNotExist()
+    }
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -76,9 +77,17 @@ fun rememberToastState(): ToastState = remember { ToastState() }
 fun ToastHost(state: ToastState, modifier: Modifier = Modifier) {
     val motion = HavenTheme.motion
     val message = state.current
+    // The system's "Time to take action" lengthens it for TalkBack and switch users.
+    val accessibility = LocalAccessibilityManager.current
     LaunchedEffect(message) {
         if (message != null) {
-            delay(TOAST_MILLIS)
+            delay(
+                accessibility?.calculateRecommendedTimeoutMillis(
+                    TOAST_MILLIS,
+                    containsIcons = true,
+                    containsText = true,
+                ) ?: TOAST_MILLIS,
+            )
             state.expire(message)
         }
     }
@@ -114,7 +123,11 @@ private fun ToastPill(message: ToastMessage) {
             // vanishes into the dark window ground.
             .border(1.dp, GlassRim, HavenShape.pill)
             .padding(start = 13.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
-            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            .semantics(mergeDescendants = true) { liveRegion = when (message.tone) {
+                    ToastTone.Done -> LiveRegionMode.Polite
+                    ToastTone.Alert -> LiveRegionMode.Assertive
+                }
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconGlyph(icon, contentDescription = null, tint = tint, size = 18.dp)
