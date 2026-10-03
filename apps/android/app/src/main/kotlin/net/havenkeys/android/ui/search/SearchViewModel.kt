@@ -27,6 +27,11 @@ data class SearchUiState(
     /** A search for the current query has answered, so "No matches" may show. */
     val searched: Boolean = false,
     val errorCode: String? = null,
+    /**
+     * Bumped each time the ViewModel itself changes the query (a recent search tapped, the lock
+     * wipe), so the field can tell those from the echo of its own typing.
+     */
+    val queryRevision: Int = 0,
 )
 
 /** Typed queries wait this long for the next keystroke, so fast typing runs one search, not several. */
@@ -76,7 +81,10 @@ class SearchViewModel(private val vault: VaultRepository, events: VaultEventsHub
     }
 
     /** A recent search tapped: it runs again. It is recorded only if a result is then opened. */
-    fun useRecent(query: String) = setQuery(query)
+    fun useRecent(query: String) {
+        _state.update { it.copy(queryRevision = it.queryRevision + 1) }
+        setQuery(query)
+    }
 
     /** A result was opened: the query that produced the list it was tapped in becomes a recent search. */
     fun opened() {
@@ -128,6 +136,6 @@ class SearchViewModel(private val vault: VaultRepository, events: VaultEventsHub
         clearJob?.cancel()
         recordJob?.cancel()
         resultsQuery = ""
-        _state.value = SearchUiState()
+        _state.update { SearchUiState(queryRevision = it.queryRevision + 1) }
     }
 }

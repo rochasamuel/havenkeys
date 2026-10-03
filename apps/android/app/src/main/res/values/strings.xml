@@ -345,4 +345,8 @@
     <string name="home_frequent_empty">Items you fill or copy will show here.</string>
     <string name="home_identity_empty">Add your details</string>
     <string name="items_empty">Nothing here yet</string>
+    <string name="search_recent">Recent searches</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_cancel">Cancel</string>
+    <string name="search_clear_field">Clear search</string>
 </resources>

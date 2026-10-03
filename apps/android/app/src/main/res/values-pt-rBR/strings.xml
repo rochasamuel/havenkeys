@@ -333,4 +333,8 @@
     <string name="home_frequent_empty">Os itens que você preencher ou copiar aparecem aqui.</string>
     <string name="home_identity_empty">Adicione seus dados</string>
     <string name="items_empty">Nada aqui ainda</string>
+    <string name="search_recent">Buscas recentes</string>
+    <string name="search_clear">Limpar</string>
+    <string name="search_cancel">Cancelar</string>
+    <string name="search_clear_field">Limpar busca</string>
 </resources>

@@ -139,7 +139,7 @@ class SearchViewModelTest {
         vm.setQuery("git")
         scheduler.advanceUntilIdle()
         events.locked("user")
-        assertEquals(SearchUiState(), vm.state.value)
+        assertEquals(SearchUiState(queryRevision = 1), vm.state.value)
         assertFalse(vm.state.value.toString().contains("git"))
     }
 
@@ -149,7 +149,7 @@ class SearchViewModelTest {
         vm.setQuery("git")
         scheduler.advanceUntilIdle()
         events.signedOut()
-        assertEquals(SearchUiState(), vm.state.value)
+        assertEquals(SearchUiState(queryRevision = 1), vm.state.value)
     }
 
     @Test
@@ -164,7 +164,7 @@ class SearchViewModelTest {
         val vm = SearchViewModel(gated, events)
         events.locked("user")
         gate.complete(Unit)
-        assertEquals(SearchUiState(), vm.state.value)
+        assertEquals(SearchUiState(queryRevision = 1), vm.state.value)
     }
 
     @Test
