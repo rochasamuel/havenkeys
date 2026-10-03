@@ -93,6 +93,18 @@ class ItemsScreensTest {
         rule.onNodeWithText("Nothing here yet").assertIsDisplayed()
     }
 
+    @Test
+    fun theBackChevronsGlyphLinesUpWithTheLargeTitle() {
+        val vm = vm()
+        rule.setKit {
+            CategoryScreen(vm, Category.LOGINS, onOpen = { _, _ -> }, onBack = {}, contentPadding = PaddingValues())
+        }
+        val title = rule.onNodeWithText("Logins").getUnclippedBoundsInRoot()
+        val back = rule.onNodeWithContentDescription("Back").getUnclippedBoundsInRoot()
+        // A 22dp glyph centred in the 48dp target: its ink starts 13dp in, on the title's start.
+        assertEquals(title.left.value, back.left.value + 13f, 0.5f)
+    }
+
     private fun item(id: String, kind: ItemKind, title: String, passkey: Boolean = false) =
         ItemSummary(id, kind, title, null, null, false, passkey, 0, 0)
 }
