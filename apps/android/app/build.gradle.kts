@@ -163,6 +163,10 @@ configurations.matching { it.name == "detekt" }.configureEach {
 }
 
 dependencies {
+    constraints {
+        // material3 used to raise this; keep the version the app shipped with so verification needs no new hash.
+        implementation("androidx.collection:collection:1.6.0")
+    }
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.process)
@@ -172,8 +176,7 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.icons)
+    implementation(libs.compose.foundation)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
     implementation(libs.biometric)

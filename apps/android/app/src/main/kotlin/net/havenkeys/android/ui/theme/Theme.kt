@@ -1,24 +1,29 @@
 package net.havenkeys.android.ui.theme
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import net.havenkeys.android.ui.kit.HavenPress
 
 internal val LocalHavenColors = staticCompositionLocalOf { DarkHavenColors }
 internal val LocalHavenMotion = staticCompositionLocalOf { havenMotion(1f) }
 
-/** Light and dark follow the system, like the desktop's "match system". */
+/**
+ * Light and dark follow the system, like the desktop's "match system".
+ * The kit's press is the default indication, so a clickable that names none
+ * still presses the HavenKeys way: no ripple (spec 2026-10-03 §5).
+ */
 @Composable
 fun HavenTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalHavenColors provides if (darkTheme) DarkHavenColors else LightHavenColors,
         LocalHavenMotion provides rememberHavenMotion(),
-    ) {
-        // Nothing reads MaterialTheme since stage 4; stage 5 removes this wrapper with material3.
-        MaterialBridge(darkTheme, content)
-    }
+        LocalIndication provides HavenPress,
+        content = content,
+    )
 }
 
 object HavenTheme {

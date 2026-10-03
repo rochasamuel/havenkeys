@@ -29,8 +29,7 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-fragment = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
-compose-material3 = { module = "androidx.compose.material3:material3" }
-compose-icons = { module = "androidx.compose.material:material-icons-extended" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-test = { module = "androidx.compose.ui:ui-test-junit4" }
