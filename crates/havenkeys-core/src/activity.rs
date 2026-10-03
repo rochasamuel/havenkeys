@@ -121,6 +121,19 @@ impl VaultService {
             .map(|(_, _, o)| o.clone())
             .collect())
     }
+
+    /// Up to `n` items, newest first, the account's Identity left out.
+    pub fn recently_created(&self, n: usize) -> Result<Vec<ItemOverview>> {
+        let session = self.session()?;
+        let identity = self.identity_item_id().ok();
+        let mut items: Vec<&ItemOverview> = session
+            .overviews
+            .values()
+            .filter(|o| Some(o.id) != identity)
+            .collect();
+        items.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)));
+        Ok(items.into_iter().take(n).cloned().collect())
+    }
 }
 
 #[cfg(test)]
@@ -237,5 +250,23 @@ mod tests {
         assert!(v.frequently_used(6, T0).unwrap().is_empty());
         v.record_use(&a, T0).unwrap();
         assert_eq!(titles(&v.frequently_used(6, T0).unwrap()), ["A"]);
+    }
+
+    #[test]
+    fn recently_created_is_newest_first_without_the_identity() {
+        let mut v = unlocked_vault();
+        add(&mut v, "First", T0);
+        add(&mut v, "Second", T0 + 1);
+        add(&mut v, "Third", T0 + 2);
+        let listed = v.recently_created(2).unwrap();
+        assert_eq!(titles(&listed), ["Third", "Second"]);
+        let identity = v.identity_item_id().ok();
+        assert!(v
+            .recently_created(100)
+            .unwrap()
+            .iter()
+            .all(|o| Some(o.id) != identity));
+        v.lock();
+        assert_eq!(v.recently_created(6).unwrap_err(), Error::Locked);
     }
 }
