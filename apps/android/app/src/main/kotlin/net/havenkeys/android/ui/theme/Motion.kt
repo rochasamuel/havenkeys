@@ -98,9 +98,9 @@ data class HavenMotion(
     fun <T> springSpec(kind: HavenSpring): FiniteAnimationSpec<T> =
         if (reduced) snap() else spring(dampingRatio = kind.dampingRatio, stiffness = kind.stiffness)
 
-    /** --t-fast on the house curve: fades and colour changes. */
-    fun <T> fadeSpec(): FiniteAnimationSpec<T> =
-        if (reduced) snap() else tween(FADE_MILLIS, easing = HouseEasing)
+    /** --t-fast on the house curve: fades and colour changes; [delayMillis] holds it back (recents after the pill). */
+    fun <T> fadeSpec(delayMillis: Int = 0): FiniteAnimationSpec<T> =
+        if (reduced) snap() else tween(FADE_MILLIS, delayMillis = delayMillis, easing = HouseEasing)
 
     /**
      * One turn of a spinner, repeating. Callers draw a still arc instead when
