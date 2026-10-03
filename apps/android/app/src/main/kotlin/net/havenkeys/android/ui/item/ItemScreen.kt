@@ -160,6 +160,8 @@ private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, on
     // The identity is never deleted from the phone.
     if (view == null || view.summary.kind == ItemKind.IDENTITY) return
     var open by remember { mutableStateOf(false) }
+    // Going offline while More is open closes it: its only entry waits for the server.
+    if (!online) open = false
     Box {
         // Delete is More's only entry, so More itself waits for the server.
         HavenIconButton(

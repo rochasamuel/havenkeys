@@ -34,6 +34,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -145,6 +148,19 @@ class ItemScreenTest {
         show(online = false)
         rule.onNodeWithContentDescription(text(R.string.item_edit)).assertIsNotEnabled()
         rule.onNodeWithContentDescription(text(R.string.vault_more)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun theMoreMenuClosesWhenTheAppGoesOffline() {
+        vault.view = Outcome.Ok(login())
+        val vm = vm()
+        var online by mutableStateOf(true)
+        rule.setKit { ItemScreen(vm, clipboard, online, navigation) }
+        rule.onNodeWithContentDescription(text(R.string.vault_more)).performClick()
+        rule.onNodeWithText(text(R.string.item_delete)).assertExists()
+        online = false
+        rule.waitForIdle()
+        rule.onAllNodesWithText(text(R.string.item_delete)).assertCountEquals(0)
     }
 
     @Test
