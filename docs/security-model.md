@@ -1657,6 +1657,15 @@ The following data is sealed with the vault's data key in device-local slots
 * **Asset Links cache**: Web hosts and their associated app packages/certificates
   (schema 6), for matching Autofill requests to logins. A file is kept 7 days,
   a fetch failure 1 hour, 256 hosts at most. See §22.7.
-* **Device Settings**: Per-device UI preferences (e.g., auto-lock timing, whether
-  to check Asset Links) that do not travel with the vault. An unreadable or
-  newer-version document reads as defaults.
+* **Device settings**: "Lock when the screen turns off", "Confirm before
+  filling" and "Check website–app links" for this phone
+  (`crates/havenkeys-mobile/src/settings.rs`). Nothing written yet reads as
+  the defaults; a blob that does not open reads as the defaults with
+  "Confirm before filling" on, so a damaged blob never turns it off.
+
+Each slot is sealed under its own blob purpose (`device-settings`,
+`asset-links`, `activity`), so one slot's blob does not open as another's,
+and another vault's key opens none of them. The activity record reveals,
+to someone who can unlock the vault, which items are used most and the
+recent searches: no more than the vault itself; to anyone else it is
+ciphertext.
