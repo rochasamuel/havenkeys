@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
@@ -185,8 +186,9 @@ private fun Options(options: GeneratorOptions, onChange: (GeneratorOptions) -> U
     InsetGroup {
         row {
             Column(Modifier.padding(horizontal = HavenSpacing.rowX, vertical = 8.dp)) {
-                // The slider shows no number of its own (DESIGN.md): the row says it.
-                Row {
+                // The slider shows no number of its own (DESIGN.md): the row shows it. TalkBack hears
+                // label and value from the slider, so the row is hidden from it rather than read twice.
+                Row(Modifier.clearAndSetSemantics {}) {
                     val colors = HavenTheme.colors
                     HavenText(length, Modifier.weight(1f), style = HavenTheme.type.value, color = colors.text)
                     HavenText(

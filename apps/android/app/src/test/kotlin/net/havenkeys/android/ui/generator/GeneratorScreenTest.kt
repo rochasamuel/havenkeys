@@ -84,6 +84,15 @@ class GeneratorScreenTest {
         rule.runOnIdle { assertEquals(false, vault.generatedWith?.symbols) }
     }
 
+    /** Review (stage 4): TalkBack read "Length, 24" from the row and again from the slider; now only the slider. */
+    @Test
+    fun theLengthIsReadOnceByTheSliderAlone() {
+        show()
+        rule.onAllNodesWithText(text(R.string.generator_length)).assertCountEquals(0)
+        rule.onAllNodesWithText("24").assertCountEquals(0)
+        rule.onNodeWithContentDescription(text(R.string.generator_length)).assertExists()
+    }
+
     @Test
     fun aRestoredGeneratorDoesNotBringTheOldPasswordBack() {
         val restoration = StateRestorationTester(rule)
