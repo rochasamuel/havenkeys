@@ -12,7 +12,7 @@ and signatures.
 |---|---|---|---|
 | 1. Activity data | `2026-10-03-android-redesign-stage1-activity.md` | Done (`cb5c461..576f07c`) | — |
 | 2. Design system | `2026-10-03-android-redesign-stage2-design-system.md` | Planned | Nothing in stage 1 (can start in parallel if wanted) |
-| 3. Shell and new screens | written when stage 2 is done | Not planned | Stages 1 and 2 |
+| 3. Shell and new screens | `2026-10-03-android-redesign-stage3-shell.md` | Planned | Stages 1 and 2 |
 | 4. Existing screens rebuilt | written when stage 3 is done | Not planned | Stage 2 (and 3 for navigation) |
 | 5. Remove Material | written when stage 4 is done | Not planned | Stage 4 |
 
@@ -21,7 +21,7 @@ and signatures.
 ### Stage 2: Design system (spec §5)
 
 - `ui/theme` rewritten without Material types: `HavenColors` (all desktop
-  roles, light and dark), `HavenType` with bundled Hanken Grotesk, Source
+  roles, light and dark), `HavenTypography` with bundled Hanken Grotesk, Source
   Serif 4, JetBrains Mono under `res/font` (OFL notices in
   `THIRD-PARTY-NOTICES.md`), shapes, `HavenMotion` springs.
 - `HavenIcon`: the desktop icon paths (`apps/desktop/src/components/Icon.tsx`)
@@ -36,6 +36,9 @@ and signatures.
 
 ### Stage 3: Shell and new screens (spec §6.1–6.8, §7)
 
+- Builds on the kit as shipped: read `apps/android/DESIGN.md` and the `ui/kit`
+  sources for component names and signatures; carry the open questions from
+  DESIGN.md's review notes.
 - Navigation: shell with per-tab back stacks (save and restore state),
   reselect pops to root, non-secret route arguments only.
 - Fixed top bar, search screen (recents, Clear, record on result open only,
