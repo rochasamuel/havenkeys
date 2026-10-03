@@ -374,6 +374,11 @@ Hybrid (QR from a computer) is Android's job and out of scope.
 
 ### 9.1 Screens
 
+> Amended on 2026-10-03 by
+> `docs/superpowers/specs/2026-10-03-android-redesign-design.md`: own
+> component set instead of Material 3, Home/Items/Settings navigation,
+> per-device activity data.
+
 Onboarding (scan kit, type kit, invite) · Unlock · Vault (search; Logins,
 Notes, Cards, Identities, Passkeys; offline/sync banner) · Item detail
 (hidden fields, reveal, copy with clear, live TOTP) · Edit/create (M2, with

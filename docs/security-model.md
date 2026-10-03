@@ -1643,3 +1643,20 @@ Android's facts and draws UI. Nothing here has run on a phone yet.
   passkey or login names. Credential Manager and Autofill are not app use:
   neither touches the idle timer.
 * **Known limitations:** `security-review.md` AN37-AN44.
+
+### 22.19 Device-local sealed slots
+
+The following data is sealed with the vault's data key in device-local slots
+(`local_blob`), never synced to the server, and readable only while unlocked:
+
+* **Activity**: Item UUIDs with decayed use scores (most recent fills and copies
+  are weighted higher) and last-use times (Unix ms), plus up to 10 most recent
+  search queries. Used by the Home screen to list frequently used items and
+  recently created items, and by search to show recent queries. An unreadable
+  or newer-version document reads as empty.
+* **Asset Links cache**: Web hosts and their associated app packages/certificates
+  (schema 6), for matching Autofill requests to logins. A file is kept 7 days,
+  a fetch failure 1 hour, 256 hosts at most. See §22.7.
+* **Device Settings**: Per-device UI preferences (e.g., auto-lock timing, whether
+  to check Asset Links) that do not travel with the vault. An unreadable or
+  newer-version document reads as defaults.

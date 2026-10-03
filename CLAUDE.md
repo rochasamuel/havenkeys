@@ -56,6 +56,12 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > rows offered after an unlock open HavenKeys, which asks the user before
 > Rust returns anything.
 
+> Amended on 2026-10-03 by
+> `docs/superpowers/specs/2026-10-03-android-redesign-design.md`: each
+> device keeps a sealed, never-synced activity record (which items the user
+> filled or copied, and their last 10 searches) in Rust, for the phone's
+> Home and search screens; the desktop may adopt it later.
+
 ---
 
 # 1. Core philosophy
