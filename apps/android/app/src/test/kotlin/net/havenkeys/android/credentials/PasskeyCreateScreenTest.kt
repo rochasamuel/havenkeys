@@ -3,6 +3,7 @@ package net.havenkeys.android.credentials
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -12,7 +13,6 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.kit.SHEET_TAG
@@ -65,9 +65,9 @@ class PasskeyCreateScreenTest {
     @Test
     fun saveAndCancelAnswer() {
         show(state())
-        // The test window is small: the sheet caps and scrolls, so each button is scrolled to as a user would.
-        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).performScrollTo().performClick()
-        rule.onNode(hasText(text(R.string.passkey_cancel)) and hasClickAction()).performScrollTo().performClick()
+        // The answers are pinned under the scrolling list, so they are tapped without scrolling.
+        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).performClick()
+        rule.onNode(hasText(text(R.string.passkey_cancel)) and hasClickAction()).performClick()
         rule.waitForIdle()
         assertEquals(listOf("save", "cancel"), calls)
     }
@@ -91,9 +91,17 @@ class PasskeyCreateScreenTest {
     @Test
     fun aLongListAtALargeFontStillReachesSave() {
         show(state(homes = 30), fontScale = 1.5f)
-        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).performScrollTo().assertIsDisplayed()
-            .performClick()
+        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).assertIsDisplayed().performClick()
         assertEquals(listOf("save"), calls)
+    }
+
+    /** Review (stage 4): on a small phone the answers scrolled below the fold; they now stay pinned under the list. */
+    @Test
+    fun saveAndCancelStayInViewWhileTheLoginsScroll() {
+        show(state(homes = 30))
+        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).assertIsDisplayed()
+        rule.onNode(hasText(text(R.string.passkey_cancel)) and hasClickAction()).assertIsDisplayed()
+        rule.onNode(hasText("Login 30") and hasRole(Role.RadioButton)).assertIsNotDisplayed()
     }
 
     @Test

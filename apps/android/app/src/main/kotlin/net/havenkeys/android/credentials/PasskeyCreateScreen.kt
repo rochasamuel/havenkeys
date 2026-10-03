@@ -42,17 +42,21 @@ fun PasskeyCreateScreen(
         onDismiss = { if (!state.busy) (if (state.excluded) onClose else onCancel)() },
         title = stringResource(R.string.passkey_save_title),
         dismissible = !state.busy,
+        footer = if (state.offersChoice) {
+            { PasskeyCreateActions(state, onSave, onCancel) }
+        } else {
+            null
+        },
     ) {
-        PasskeyCreateContent(state, onSelect, onSave, onCancel, onClose)
+        PasskeyCreateContent(state, onSelect, onCancel, onClose)
     }
 }
 
-/** The sheet's content, without its window: the screenshots draw it inline. */
+/** The sheet's content, without its window or its answers ([PasskeyCreateActions]): the screenshots draw it inline. */
 @Composable
 internal fun ColumnScope.PasskeyCreateContent(
     state: PasskeyCreateUiState,
     onSelect: (String?) -> Unit,
-    onSave: () -> Unit,
     onCancel: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -83,12 +87,12 @@ internal fun ColumnScope.PasskeyCreateContent(
                 style = ButtonStyle.Secondary,
             )
         }
-        else -> Choice(state, onSelect, onSave, onCancel)
+        else -> Choice(state, onSelect)
     }
 }
 
 @Composable
-private fun Choice(state: PasskeyCreateUiState, onSelect: (String?) -> Unit, onSave: () -> Unit, onCancel: () -> Unit) {
+private fun Choice(state: PasskeyCreateUiState, onSelect: (String?) -> Unit) {
     val colors = HavenTheme.colors
     HavenText(state.rpId, style = HavenTheme.type.rowTitle, color = colors.textStrong)
     HavenText(
@@ -120,6 +124,14 @@ private fun Choice(state: PasskeyCreateUiState, onSelect: (String?) -> Unit, onS
         }
     }
     state.error?.let { ErrorLine(it) }
+}
+
+/** The choice is on screen (not loading, not refused): Save and Cancel answer it. */
+internal val PasskeyCreateUiState.offersChoice: Boolean get() = !loading && !excluded && !planFailed
+
+/** Save and Cancel, pinned under the logins so a small phone never scrolls to answer. */
+@Composable
+internal fun PasskeyCreateActions(state: PasskeyCreateUiState, onSave: () -> Unit, onCancel: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         HavenButton(
             stringResource(R.string.passkey_cancel),

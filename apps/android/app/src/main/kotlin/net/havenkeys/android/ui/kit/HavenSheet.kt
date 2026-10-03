@@ -84,7 +84,8 @@ private const val SHEET_MAX_FRACTION = 0.9f
  * tapped while it is still rising goes straight to closing.
  * With [dismissible] false (work in flight) drag, backdrop and Back do nothing.
  * It takes at most 90% of the window's height (taller content scrolls inside it)
- * and rises above the keyboard.
+ * and rises above the keyboard. A [footer] (the sheet's answers) stays pinned
+ * under the content and does not scroll with it.
  */
 @Composable
 fun HavenSheet(
@@ -92,6 +93,7 @@ fun HavenSheet(
     modifier: Modifier = Modifier,
     title: String? = null,
     dismissible: Boolean = true,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val state = remember { AnchoredDraggableState(SheetValue.Hidden) }
@@ -128,7 +130,7 @@ fun HavenSheet(
         WindowDim(0f)
         OpenWhenMeasured(state)
         CloseWhenDraggedAway(state, draggedAway)
-        SheetFrame(state, close, dismissible, modifier, title, content)
+        SheetFrame(state, close, dismissible, modifier, title, footer, content)
     }
 }
 
@@ -140,6 +142,7 @@ private fun SheetFrame(
     dismissible: Boolean,
     modifier: Modifier,
     title: String?,
+    footer: (@Composable ColumnScope.() -> Unit)?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val closeLabel = stringResource(R.string.kit_close)
@@ -194,6 +197,7 @@ private fun SheetFrame(
                 )
                 .testTag(SHEET_TAG),
             maxHeight = tallest,
+            footer = footer,
             content = content,
         )
     }
@@ -202,13 +206,15 @@ private fun SheetFrame(
 /**
  * The sheet as it draws, without its window: the catalogue shows it inline.
  * With a [maxHeight] (the window's sheet) it stops there and its content
- * scrolls; inline it takes its content's height.
+ * scrolls; inline it takes its content's height. The [footer] is drawn
+ * under the scrolling part, so it stays in view.
  */
 @Composable
 internal fun SheetSurface(
     title: String?,
     modifier: Modifier = Modifier,
     maxHeight: Dp = Dp.Unspecified,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = HavenTheme.colors
@@ -248,6 +254,7 @@ internal fun SheetSurface(
         } else {
             content()
         }
+        footer?.invoke(this)
     }
 }
 

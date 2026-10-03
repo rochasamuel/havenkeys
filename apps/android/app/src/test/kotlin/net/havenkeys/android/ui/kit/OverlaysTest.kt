@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -288,6 +289,18 @@ class OverlaysTest {
         rule.waitForIdle()
         assertEquals(0, dismissed)
         rule.onNodeWithText("Login ${TALL_ROWS - 1}").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun aTallSheetsFooterStaysInViewUnderItsScrollingContent() {
+        rule.setKit {
+            HavenSheet(onDismiss = {}, title = "Save to", footer = { HavenText("Answer") }) {
+                repeat(TALL_ROWS) { HavenText("Login $it", Modifier.heightIn(min = 48.dp)) }
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("Answer").assertIsDisplayed()
+        rule.onNodeWithText("Login ${TALL_ROWS - 1}").assertIsNotDisplayed()
     }
 
     @Test
