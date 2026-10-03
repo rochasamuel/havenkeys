@@ -10,6 +10,13 @@ object Routes {
     const val ONBOARDING = "onboarding"
     const val UNLOCK = "unlock"
     const val VAULT = "vault"
+
+    /** The shell: top bar, the tabs, bottom bar (spec §6.1). The tabs have routes of their own inside it. */
+    const val SHELL = "shell"
+
+    /** Search takes no argument: the query lives only in its ViewModel. */
+    const val SEARCH = "search"
+
     const val ITEM_ID = "id"
     const val ITEM = "item/{$ITEM_ID}"
     const val GENERATOR = "generator"

@@ -185,4 +185,10 @@ class ManifestTest {
         assertTrue("importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS" in text)
         assertTrue("filterTouchesWhenObscured = true" in text)
     }
+
+    @Test
+    fun theMainActivityScrubsBackPredictively() {
+        val main = elements("activity").single { it.android("name") == ".MainActivity" }
+        assertEquals("true", main.android("enableOnBackInvokedCallback"))
+    }
 }
