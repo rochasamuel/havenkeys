@@ -47,7 +47,10 @@ and signatures.
   animations".
 - ViewModel tests with fakes for Home, search, Items lists, add sheet.
 - Emulator pass, including stage 1's deferred check: pick a direct-fill row
-  in Chrome, open another form, then see that login under Frequently used.
+  in Chrome, open another form, then see that login under Frequently used; fill event history still
+  delivers TYPE_DATASET_SELECTED on Android 14+ (FillEventHistory is
+  deprecated in API 36 with no replacement); a pick after a null response is
+  counted once; a confirmed login fill counts once.
 
 ### Stage 4: Existing screens (spec §6.9)
 

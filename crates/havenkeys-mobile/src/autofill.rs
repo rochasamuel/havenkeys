@@ -434,6 +434,43 @@ mod tests {
     }
 
     #[test]
+    fn card_and_identity_values_and_item_views_record_nothing() {
+        use crate::cards::{CardFrameRoles, CardRole};
+        use crate::identity_fill::IdentityRole;
+        use crate::testing::{seed_card, seed_identity};
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let card = seed_card(&v, "Visa", "4111111111111111");
+        seed_identity(&v);
+        let frame = || FrameFacts {
+            web_domain: None,
+            web_scheme: None,
+        };
+        let shop = || chrome("shop.example.com", Some("https"));
+        let values = v
+            .autofill_card_values(
+                card.clone(),
+                shop(),
+                vec![CardFrameRoles {
+                    frame: frame(),
+                    roles: vec![CardRole::Number],
+                }],
+            )
+            .unwrap();
+        assert_eq!(values[0].len(), 1);
+        let identity = v
+            .autofill_identity_values(shop(), frame(), vec![IdentityRole::FirstName], false)
+            .unwrap();
+        assert_eq!(identity.len(), 1);
+        v.item_view(card.clone()).unwrap();
+        v.reveal(card, "card.number".into()).unwrap();
+        let login = add_login(&v, "https://github.com");
+        v.item_view(login.clone()).unwrap();
+        v.reveal(login, "password".into()).unwrap();
+        assert!(v.frequently_used(6).unwrap().is_empty());
+    }
+
+    #[test]
     fn manual_binding_is_for_apps_only() {
         let dir = tempfile::tempdir().unwrap();
         let (v, _) = unlocked(dir.path());

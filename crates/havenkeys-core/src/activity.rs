@@ -102,7 +102,9 @@ impl VaultService {
         let mut ranked: Vec<(f64, i64, &ItemOverview)> = activity
             .uses
             .iter()
-            .filter(|(id, _)| Some(**id) != identity)
+            .filter(|(id, u)| {
+                Some(**id) != identity && now_ms.saturating_sub(u.last_ms) <= FORGET_AFTER_MS
+            })
             .filter_map(|(id, u)| {
                 session
                     .overviews
@@ -218,6 +220,36 @@ mod tests {
     }
 
     #[test]
+    fn an_exact_score_tie_goes_to_the_latest_use() {
+        let mut v = unlocked_vault();
+        let a = add(&mut v, "A", T0);
+        let b = add(&mut v, "B", T0);
+        v.record_use(&b, T0).unwrap();
+        v.record_use(&b, T0).unwrap();
+        v.record_use(&a, T0 + 30 * DAY).unwrap();
+        // B: 2 * 0.5^1 = 1.0 exactly; A: 1.0 (no time has passed since its use).
+        let now = T0 + 30 * DAY;
+        let stored = v.activity().unwrap();
+        assert_eq!(
+            decayed(stored.uses[&b].score, stored.uses[&b].last_ms, now),
+            decayed(stored.uses[&a].score, stored.uses[&a].last_ms, now)
+        );
+        assert_eq!(titles(&v.frequently_used(10, now).unwrap()), ["A", "B"]);
+    }
+
+    #[test]
+    fn a_year_old_use_is_not_shown_even_before_the_next_write() {
+        let mut v = unlocked_vault();
+        let a = add(&mut v, "A", T0);
+        v.record_use(&a, T0).unwrap();
+        assert_eq!(
+            titles(&v.frequently_used(6, T0 + 365 * DAY).unwrap()),
+            ["A"]
+        );
+        assert!(v.frequently_used(6, T0 + 366 * DAY).unwrap().is_empty());
+    }
+
+    #[test]
     fn old_uses_fade() {
         let mut v = unlocked_vault();
         let old = add(&mut v, "Old", T0);
@@ -296,6 +328,17 @@ mod tests {
         assert!(v.frequently_used(6, T0).unwrap().is_empty());
         v.record_use(&a, T0).unwrap();
         assert_eq!(titles(&v.frequently_used(6, T0).unwrap()), ["A"]);
+    }
+
+    #[test]
+    fn a_different_version_with_valid_fields_reads_as_empty() {
+        let v = unlocked_vault();
+        v.write_local(
+            LocalSlot::Activity,
+            &serde_json::json!({"version": 2, "uses": {}, "searches": ["x"]}),
+        )
+        .unwrap();
+        assert!(v.recent_searches().unwrap().is_empty());
     }
 
     #[test]

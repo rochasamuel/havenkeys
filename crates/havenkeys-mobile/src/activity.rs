@@ -77,6 +77,7 @@ mod tests {
     use crate::vault::tests::unlocked;
     use havenkeys_core::model::{ItemInput, ItemType, SecretUpdate};
     use havenkeys_core::SecretString;
+    use uuid::Uuid;
 
     fn add_note(v: &crate::MobileVault, title: &str, at: i64) -> String {
         let mut input = ItemInput::blank_for_tests(ItemType::SecureNote, title);
@@ -93,7 +94,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (v, _) = unlocked(dir.path());
         let a = add_note(&v, "A", 1);
-        let b = add_note(&v, "B", 2);
+        add_note(&v, "B", 2);
         let recent = v.recently_created(6).unwrap();
         assert_eq!(
             recent.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(),
@@ -107,7 +108,6 @@ mod tests {
         v.clear_recent_searches().unwrap();
         assert!(v.recent_searches().unwrap().is_empty());
         assert!(v.record_use("not-a-uuid".into()).is_err());
-        let _ = b;
     }
 
     #[test]
@@ -118,5 +118,8 @@ mod tests {
         assert!(v.frequently_used(6).is_err());
         assert!(v.recent_searches().is_err());
         assert!(v.record_search("x".into()).is_err());
+        assert!(v.recently_created(6).is_err());
+        assert!(v.clear_recent_searches().is_err());
+        assert!(v.record_use(Uuid::nil().to_string()).is_err());
     }
 }
