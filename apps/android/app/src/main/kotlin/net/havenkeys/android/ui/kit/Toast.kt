@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -33,6 +35,9 @@ import net.havenkeys.android.ui.theme.HavenShape
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenSprings
 import net.havenkeys.android.ui.theme.HavenTheme
+
+/** The glass's 1dp rim: the desktop's rgba(226, 234, 230, 0.1), in both themes. */
+private val GlassRim = Color(0x1AE2EAE6)
 
 /** How long a toast stays. */
 internal const val TOAST_MILLIS = 2_500L
@@ -105,6 +110,9 @@ private fun ToastPill(message: ToastMessage) {
             .shadow(16.dp, HavenShape.pill)
             .clip(HavenShape.pill)
             .background(colors.glass)
+            // The desktop's rim (styles.css .toast): without it the dark glass
+            // vanishes into the dark window ground.
+            .border(1.dp, GlassRim, HavenShape.pill)
             .padding(start = 13.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)
             .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically,
