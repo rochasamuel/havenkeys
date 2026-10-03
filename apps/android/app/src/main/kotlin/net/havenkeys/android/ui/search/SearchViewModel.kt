@@ -3,6 +3,7 @@ package net.havenkeys.android.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,10 +29,19 @@ data class SearchUiState(
     val errorCode: String? = null,
 )
 
+/** Typed queries wait this long for the next keystroke, so fast typing runs one search, not several. */
+private const val TYPING_DEBOUNCE_MS = 120L
+
 class SearchViewModel(private val vault: VaultRepository, events: VaultEventsHub) : ViewModel() {
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
     private var pending: Job? = null
+    private var recentsJob: Job? = null
+    private var clearJob: Job? = null
+    private var recordJob: Job? = null
+
+    /** The query that produced the current results: what a tapped result records, not what is typed since. */
+    private var resultsQuery = ""
 
     init {
         loadRecents()
@@ -41,65 +51,83 @@ class SearchViewModel(private val vault: VaultRepository, events: VaultEventsHub
                     is VaultEvent.Locked, VaultEvent.Removed, VaultEvent.SignedOut -> wipe()
                     VaultEvent.ItemsChanged -> _state.value.query
                         .takeIf { it.isNotBlank() }
-                        ?.let(::run)
+                        ?.let { run(it, typed = false) }
                     else -> Unit
                 }
             }
         }
     }
 
-    /** Live search as the user types. Typing is activity for the auto-lock; it records nothing. */
+    /**
+     * Live search as the user types, after a short pause in typing. Typing is activity for the
+     * auto-lock; it records nothing. An empty field clears at once.
+     */
     fun setQuery(query: String) {
         if (query == _state.value.query) return
-        // Soft-keyboard typing does not reach `onUserInteraction`, and reads never count (Rust).
-        vault.touch()
         _state.update { it.copy(query = query, searched = false, errorCode = null) }
         if (query.isBlank()) {
             pending?.cancel()
+            resultsQuery = ""
             _state.update { it.copy(results = emptyList()) }
             loadRecents()
         } else {
-            run(query)
+            run(query, typed = true)
         }
     }
 
     /** A recent search tapped: it runs again. It is recorded only if a result is then opened. */
     fun useRecent(query: String) = setQuery(query)
 
-    /** A result was opened: the current query becomes a recent search (spec §6.3). */
+    /** A result was opened: the query that produced the list it was tapped in becomes a recent search. */
     fun opened() {
-        val query = _state.value.query.trim()
+        val query = resultsQuery.trim()
         if (query.isEmpty()) return
-        viewModelScope.launch { vault.recordSearch(query) }
+        recordJob = viewModelScope.launch { vault.recordSearch(query) }
     }
 
     fun clearRecents() {
-        viewModelScope.launch {
+        clearJob = viewModelScope.launch {
             if (vault.clearRecentSearches() is Outcome.Ok) _state.update { it.copy(recents = emptyList()) }
         }
     }
 
-    private fun run(query: String) {
+    private fun run(query: String, typed: Boolean) {
         pending?.cancel()
         pending = viewModelScope.launch {
+            if (typed) {
+                delay(TYPING_DEBOUNCE_MS)
+                // Soft-keyboard typing does not reach `onUserInteraction`, and reads never count (Rust).
+                vault.touch()
+            }
             when (val result = vault.search(query)) {
-                is Outcome.Ok -> _state.update { it.copy(results = result.value, searched = true, errorCode = null) }
-                is Outcome.Failed -> _state.update { it.copy(results = emptyList(), errorCode = result.code) }
+                is Outcome.Ok -> {
+                    resultsQuery = query
+                    _state.update { it.copy(results = result.value, searched = true, errorCode = null) }
+                }
+                is Outcome.Failed -> {
+                    resultsQuery = ""
+                    _state.update { it.copy(results = emptyList(), errorCode = result.code) }
+                }
             }
         }
     }
 
     private fun loadRecents() {
-        viewModelScope.launch {
+        recentsJob?.cancel()
+        recentsJob = viewModelScope.launch {
             (vault.recentSearches() as? Outcome.Ok)?.let { recents ->
                 _state.update { it.copy(recents = recents.value) }
             }
         }
     }
 
-    /** The lock wipe: the query, the results and the recents go. */
+    /** The lock wipe: the query, the results and the recents go, and nothing in flight can bring them back. */
     private fun wipe() {
         pending?.cancel()
+        recentsJob?.cancel()
+        clearJob?.cancel()
+        recordJob?.cancel()
+        resultsQuery = ""
         _state.value = SearchUiState()
     }
 }
