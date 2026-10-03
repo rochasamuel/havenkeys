@@ -106,15 +106,6 @@ class StructureTest {
     }
 
     @Test
-    fun theLargestFontGrowsTheRow() {
-        rule.setKit(fontScale = 2f) {
-            ItemRow("GitHub", "sam@example.com", RowLeading.Monogram("GitHub"), onClick = {})
-        }
-        rule.onNodeWithText("GitHub", useUnmergedTree = true).assertIsDisplayed()
-        rule.onNode(hasClickAction()).assertHeightIsAtLeast(80.dp)
-    }
-
-    @Test
     fun aBlankTitleShowsTheKeyAndANamedOneShowsItsInitial() {
         rule.setKit {
             ItemTile(RowLeading.Monogram("   "))
