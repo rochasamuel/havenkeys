@@ -319,4 +319,6 @@
     <string name="shell_offline">Offline</string>
     <string name="shell_sync">Sincronizar agora</string>
     <string name="shell_syncing">Sincronizando</string>
+    <string name="add_generate">Gerar senha</string>
+    <string name="add_offline">Adicionar precisa de conexão</string>
 </resources>

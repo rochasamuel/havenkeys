@@ -27,7 +27,10 @@ class RustAccountRepository(private val vault: MobileVault) : AccountRepository 
     override suspend fun signIn(server: String, email: String, password: String, secretKey: String) =
         rust { vault.signIn(server, email, password, secretKey) }
     override suspend fun activate(invite: String, password: String) = rust { vault.activate(invite, password) }
-    override suspend fun syncNow() = rust { vault.syncNow() }
+    private val syncing = Coalescer<Unit>()
+
+    /** One owner of the sync: concurrent requests share the run in flight. */
+    override suspend fun syncNow() = syncing.run { rust { vault.syncNow() } }
     override suspend fun syncIfDue() = rust { vault.syncIfDue() }
     override suspend fun devices() = rust { vault.devices() }
     override suspend fun revoke(id: String) = rust { vault.revokeDevice(id) }

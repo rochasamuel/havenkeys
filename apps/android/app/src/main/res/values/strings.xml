@@ -331,4 +331,6 @@
     <string name="shell_offline">Offline</string>
     <string name="shell_sync">Sync now</string>
     <string name="shell_syncing">Syncing</string>
+    <string name="add_generate">Generate password</string>
+    <string name="add_offline">Adding needs a connection</string>
 </resources>
