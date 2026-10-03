@@ -490,7 +490,7 @@ The **fade** is 160ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`: fades
 ### Text and plumbing
 - **HavenText:** the kit's text, plain or annotated (a password with coloured digits and symbols); colour defaults to the provided content colour, then `text`. It wraps and is never cut unless the caller passes an ellipsis for user data.
 - **HavenIcon / IconGlyph:** the desktop's icon set path for path, plus home, items, chevronRight, chevronLeft and more drawn to the same rules (and added to the desktop set; `HavenIconTest` keeps them identical). With a description it is an image TalkBack reads; with null it is decoration.
-- **HavenPress / havenClickable:** the kit's only press feedback and its clickable (role button by default, no ripple).
+- **HavenPress / havenClickable:** the kit's only press feedback and its clickable (role button by default, no ripple) `HavenTheme` provides `HavenPress` as the default indication, so a clickable that names none still presses this way.
 - **NoPersonalizedLearning:** asks the keyboard not to learn from any field inside it (`IME_FLAG_NO_PERSONALIZED_LEARNING`).
 - **KitPreview:** the preview frame (theme on the pane, 16dp padding); previews and the debug catalogue only.
 
@@ -508,7 +508,7 @@ The debug build's `KitCatalogueActivity` (`app/src/debug/.../catalogue/`) shows 
 
 **The Words Wrap Rule.** Our own words wrap and are never cut, at any font size: button labels, titles, messages, menu rows. Only user data (titles, usernames, URLs) may end in an ellipsis.
 
-**The Foundation Only Rule.** `ui/kit` and `ui/theme` build on `androidx.compose.foundation` alone. Material lives only in `MaterialBridge.kt`, for screens not yet rebuilt, until stage 5 deletes it with `material3`; nothing in the kit may use it.
+**The Foundation Only Rule.** Everything builds on `androidx.compose.foundation`; HavenKeys has no Material dependency (removed in stage 5). `forbidMaterial`, which `detekt` runs first, fails the build on any mention of `androidx.compose.material`, `androidx.compose.material3` or `com.google.android.material` in any Kotlin source (tests included) or in the version catalog, and detekt's `ForbiddenImport` refuses the same imports. The debug build still carries `material3` at runtime because `ui-tooling` depends on it; no source can compile against it.
 
 **The Floating-Only Shadow Rule.** Only sheet, dialog, menu, toast and add button cast elevation shadows.
 
@@ -639,3 +639,44 @@ The screens over the shell (item, editor, generator, devices, autofill setup) sh
 
 **Device checks not yet run** (for the owner's checklist in `docs/android.md`): the passkey sheet on a real small phone with many logins and a large font (answers stay in view above the navigation bar and the keyboard); TalkBack on the generator (length read once, "24"); unlock's italic word at large font sizes (it wraps with the line).
 
+## Review notes (stage 5)
+
+**How the review ran.** The three screenshot tests (`CatalogueScreenshots`, `ShellScreenshots`, `ScreenScreenshots`) rendered before and after the removal into `apps/android/.impeccable/review/stage5-before` and `stage5-after` (git-ignored) with `./gradlew testGithubDebugUnitTest --tests '*Screenshots*' -PscreensDir=...`; the files compared byte for byte: 72 of 72 identical after the removal itself. `/impeccable` critiqued the after set in a single context (no subagents, by the controller's rule; its interview was skipped because the owner was away); its detector does not scan Kotlin. After the three fixes below the set was rendered again: exactly the 8 files for unlock and the three onboarding steps (light and dark) differ from `stage5-before`, the other 64 are identical.
+
+**What left.** `ui/theme/MaterialBridge.kt` (the bridge, both Material colour schemes, `MaterialTypography`, the unused legacy `HavenType`, `MaterialShapes`), `compose-material3` and `compose-icons` (`material-icons-extended`), and the six `material-icons-*` verification entries (none had to be restored). `compose-foundation` is now an explicit dependency instead of arriving through `material3`.
+
+**Release APK** (unsigned `githubRelease`, same Rust libraries both times). Before: commit 61bf35b. After: commit a6d074a.
+
+| | Before | After | Difference |
+|---|---|---|---|
+| Total APK | 75,257,943 | 75,197,588 | -60,355 B (-58.9 KiB) |
+| `classes*.dex` | 4,213,576 | 4,181,768 | -31,808 B (-31.1 KiB) |
+| `resources.arsc` | 480,496 | 457,488 | -23,008 B (-22.5 KiB) |
+
+Nothing grew. The saving is small because R8 had already stripped most of Material; the APK is dominated by the Rust libraries.
+
+**Verdict.** The app reads as one product with no Material underneath: a serif large title over inset groups of hairline rows, a 12dp group radius, muted sans section headers, mono only for secrets and codes, 48dp targets. The One Fitting Rule holds across all screens at once, each screen has one primary, and nothing reads as Material (no ripple, sheet, type scale, icon or text-field box). Contrast in both themes is held by `ContrastTest`; no colour pairing was added. Heuristic score (single context, Operate surface): 31/40, Good.
+
+**Fixed in the review:**
+1. [P2] Unlock sat on a 20dp gutter left over from M1; it uses `HavenSpacing.gutter` (16dp) like every other screen (25c89b5; `UnlockScreenTest.unlockSitsOnTheSameGutterAsEveryOtherScreen`).
+2. [P3] Onboarding's back slot was 48dp where `ScreenBar` is 56dp, so its title sat 8dp higher than every other full-screen large title; the slot pads 4dp vertically (b3fc2d7; `OnboardingScreenTest.theLargeTitleSitsWhereItDoesUnderTheScreenBar`).
+3. [P3] Onboarding's kit-password lede was in body ink; it is muted, as unlock's and the generator's are (a6d074a; no behaviour, so no test).
+
+**Checked and kept.** Light item tiles are forest with a brass initial (Avatar is that in both themes, as on the desktop). The Secret Key placeholder's ending "..." belongs to the format hint `H1-XXXX-XXXX-...`. Onboarding's typed-kit fields keep their supporting hints under an empty value line (see the open question). The add sheet's dimmed tiles, the search Cancel, the passkey sheet's pinned answers and the generator's brass-ink strength line stay.
+
+**Decided.**
+- The kit's press is the default indication: `HavenTheme` provides `HavenPress` as `LocalIndication`, so no clickable can ripple, and `KitTextInput` provides the brass text-selection colours for every text field, search's included.
+- The debug build's runtime carries `material3` through `ui-tooling`; that is accepted, because no source can compile against it.
+- Two guards: `forbidMaterial` (Gradle, every source and the catalog, no exclusions) and detekt's `ForbiddenImport`.
+- The `androidx.collection:collection:1.6.0` constraint in `app/build.gradle.kts` exists only to avoid adding a new verification hash; drop it when a future verified bump makes it the natural resolution.
+
+**Open for the owner.**
+- Onboarding "How to set up": small serif title or `SectionHeader`? Seen with the whole app, the app has three section-heading forms (that one, `SectionHeader`, and strong `groupTitle` over prose in autofill setup). Recommendation: `SectionHeader` for "How to set up"; the autofill setup headings head prose and can stay.
+- Search HavenKeys names no app until the confirmation; a muted "Filling in <app>" line is the cheapest fix but adds copy the spec does not have.
+- Devices "This phone": the pill above the name costs a line and is the only pill-over-title row; the desktop's inline form would read more like the other rows.
+- Revoke on this phone's own row is one tap from revoking the device in hand (the most consequential question). Recommendation: Sign out, or nothing, on that row.
+- An empty hidden field (Passport in the identity editor) shows the eye with nothing to reveal (kit change).
+- Onboarding's typed-kit step puts supporting hints under empty value lines (Server, Secret Key) while Email and unlock's Secret Key use placeholders. Should Secret Key take unlock's `H1-XXXX-XXXX-...` placeholder so the same field looks the same in both places?
+- The TalkBack pass over the whole app is a device check (no emulator); it is on the stage 5 checklist in `docs/android.md`.
+
+**Device checks not yet run.** Everything in the stage 2 to 4 lists, plus the stage 5 list in `docs/android.md`: brass selection handles and wash in an editor field and the search pill, and the kit press (no ripple) on a long-press of any row.

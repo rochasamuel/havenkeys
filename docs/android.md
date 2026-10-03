@@ -374,6 +374,19 @@ font size.
 - [ ] TalkBack: unlock reads the password as a password field (never speaking it), with the error as the field's; item detail has one stop per read-only row (label and value) with Show and Copy separate, a hidden value reads "Hidden Password", never dots or a length, the code row reads its digits and "12 seconds remaining"; the editor's and onboarding's secret fields read as password fields and never speak their value; the generator's slider reads "Length, 24" once; dialog and sheet titles are announced; the passkey sheet's logins are radio buttons, one selected.
 - [ ] pt-BR at the largest font: the stacked dialog answers, the editor's hidden rows and the generator's switches wrap without cutting; the catalogue's segmented control keeps one height; unlock's italic word wraps with the line.
 
+### Redesign stage 5 (no Material)
+
+The whole app, on an emulator or phone (Android 14+), in light and dark, in
+English and Portuguese (Brazil), at the default and the largest font size.
+This is the redesign's final pass; the stage 2–4 lists above still apply.
+
+- [ ] Press: every tappable thing (rows, buttons, tabs, tiles, switches, chips, the search pill, menu and sheet rows, dialog buttons) scales slightly with a brass-soft wash; nothing ripples and nothing flashes grey, anywhere in the app, the autofill screens and the passkey sheet included.
+- [ ] Text selection: long-press text in a field (title, a website, search, notes): the handles and highlight are brass, not blue or purple.
+- [ ] TalkBack, the whole app in one sitting: unlock, Home, search, Items and a category list, an item (reveal, copy, the code row), the editor (each field, hidden rows, Matches), the generator, Settings with each sheet and dialog, devices, autofill setup, onboarding (on a second install), "Search HavenKeys…", the fill confirmation and the passkey sheet. Each control is read once with its name, role and state; headings are headings; nothing reads a secret, a length of dots, or "unlabelled"; focus never lands on a hairline or a decoration; every dialog and sheet title is announced; the order follows the screen top to bottom.
+- [ ] Switch Access or a keyboard (Tab and Enter) reaches every control the same way, and the focused one is visibly marked.
+- [ ] Release APK (`scripts/build-android.sh --release`, then `./gradlew assembleGithubRelease` with the release key, see "Release key custody"): unlock, Home, an item, reveal, copy, edit, sync, autofill in Chrome, a passkey. Nothing crashes for a missing class (R8 with no Material).
+- [ ] FLAG_SECURE: screenshots blocked and the recents thumbnail blank on every screen, sheet, dialog and menu.
+
 ### Android M4
 - [ ] Chrome, https checkout with number, expiry (one field) and CVV: rows show `•••• 1111 · 04/33`; tapping fills all three; a field already typed in stays.
 - [ ] Chrome, checkout with month and year lists: both chosen.
