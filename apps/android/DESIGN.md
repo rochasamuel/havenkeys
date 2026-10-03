@@ -589,10 +589,12 @@ The unlocked app is one frame (`ui/shell`, spec §6): a fixed top bar, the curre
 2. [P1] Home showed "New items you add appear here." and "Items you fill or copy will show here." under an error line, claiming empty lists it could not load; the empty lines now show only without an error, as the category list does (7c93078; `HomeScreenTest.aFailedLoadSaysSoAndClaimsNoEmptyList`).
 3. [P2] On a 360dp phone offline the pill's "Search HavenKeys" wrapped to two lines and the bar grew; tighter pill padding (14 to 12dp), glyph gap (10 to 8dp) and badge gap (8 to 4dp) keep it on one line in English; search's field matches so the shared-bounds move does not jump (bfdb03a; `ShellTopBarNarrowTest`).
 4. [P3] The category list's back chevron sat 13dp right of the large title (the glyph centred in its 48dp target on the gutter); it is now pulled out by that inset so its ink lines up with the title (765bfbd; `ItemsScreensTest.theBackChevronsGlyphLinesUpWithTheLargeTitle`).
+5. [P1] Light muted on the pill's hover ground was 4.47:1; light muted darkens from `#61706a` to `#606f69` (4.53:1 there, 4.86:1 on a group), and `ContrastTest` now checks text on the search pill and segmented track ground (94fb8c4).
+6. [P2] In Portuguese the placeholder is "Buscar" (was "Buscar no HavenKeys", which wrapped at 360dp offline); English is unchanged (`ShellTopBarNarrowTest.inPortugueseToo`).
 
 **Checked and kept.** Home without a large title (1Password's Home has none; the identity card leads). The add sheet's dimmed tiles keep their brass-ink glyphs at 42%. Dark item tiles (avatar green on group green) are quiet, as on the desktop; the brass initial carries them. Bottom-bar labels fit at 360dp in Portuguese ("Configurações").
 
 **Open for the owner.**
-- In Portuguese at 360dp offline, "Buscar no HavenKeys" still wraps (the words wrap, so nothing is cut, but the bar grows). Options: a shorter Portuguese placeholder ("Buscar"); or, while offline, the offline badge takes the place of the disabled Sync now (it cannot sync offline anyway), which changes the plan's top bar. Large font sizes wrap in English too.
+- At large font sizes the pill's placeholder still wraps on a narrow phone offline (the words wrap, so nothing is cut, but the bar grows). If that matters: while offline, the offline badge could take the place of the disabled Sync now, which changes the plan's top bar.
 - Sync now is disabled while offline (`enabled = online`), but the stage 3 device checklist expects "Sync now shows a ring, then a toast that HavenKeys is offline". One of the two should change.
 - The identity card's summary wraps to two lines in Portuguese; spec §6.5 says "a one-line summary". Keep wrapping (Words Wrap Rule) or cap the parts listed?

@@ -22,12 +22,18 @@ class ShellTopBarNarrowTest {
     @get:Rule
     val rule = createComposeRule()
 
-    @Test
-    fun offlineOnA360dpPhoneThePillStillReadsOnOneLine() {
+    private fun assertOneLine(placeholder: String) {
         rule.setKit { ShellTopBar(online = false, syncing = false, actions = TopBarActions({}, {}, {})) }
         val results = mutableListOf<TextLayoutResult>()
-        rule.onNodeWithText("Search HavenKeys", useUnmergedTree = true).fetchSemanticsNode()
+        rule.onNodeWithText(placeholder, useUnmergedTree = true).fetchSemanticsNode()
             .config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
         assertEquals(1, results.first().lineCount)
     }
+
+    @Test
+    fun offlineOnA360dpPhoneThePillStillReadsOnOneLine() = assertOneLine("Search HavenKeys")
+
+    @Test
+    @Config(qualifiers = "pt-rBR-w360dp-h780dp")
+    fun inPortugueseToo() = assertOneLine("Buscar")
 }

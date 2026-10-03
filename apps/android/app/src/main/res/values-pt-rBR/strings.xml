@@ -309,7 +309,7 @@
     <!-- Shell and new screens (spec 2026-10-03 §6) -->
     <string name="tab_home">Início</string>
     <string name="tab_items">Itens</string>
-    <string name="shell_search">Buscar no HavenKeys</string>
+    <string name="shell_search">Buscar</string>
     <string name="shell_offline">Offline</string>
     <string name="shell_sync">Sincronizar agora</string>
     <string name="shell_syncing">Sincronizando</string>
