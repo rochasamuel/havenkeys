@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -28,9 +29,17 @@ import net.havenkeys.android.ui.kit.IconGlyph
 import net.havenkeys.android.ui.kit.Pill
 import net.havenkeys.android.ui.kit.ProgressRing
 import net.havenkeys.android.ui.kit.havenClickable
+import net.havenkeys.android.ui.theme.HavenColors
 import net.havenkeys.android.ui.theme.HavenShape
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
+
+/**
+ * The search pill's ground, in the bar and as search's field: the field green
+ * in dark; the hover green in light, where the field is white like the pane
+ * (as the segmented track does).
+ */
+internal val HavenColors.searchPill: Color get() = if (isDark) field else hover
 
 /** What the top bar's controls do; built once by the shell, so the bar skips recomposition. */
 class TopBarActions(val onSearch: () -> Unit, val onSync: () -> Unit, val onLock: () -> Unit)
@@ -63,7 +72,7 @@ fun ShellTopBar(
                 .heightIn(min = HavenSpacing.touch)
                 .clip(HavenShape.pill)
                 .havenClickable(onClick = actions.onSearch)
-                .background(colors.field)
+                .background(colors.searchPill)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -28,6 +28,7 @@ import net.havenkeys.android.ui.kit.HavenIconButton
 import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.IconGlyph
 import net.havenkeys.android.ui.kit.KitTextInput
+import net.havenkeys.android.ui.shell.searchPill
 import net.havenkeys.android.ui.theme.HavenShape
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -57,7 +58,7 @@ internal fun SearchField(state: TextFieldState, modifier: Modifier = Modifier) {
                     Modifier
                         .heightIn(min = HavenSpacing.touch)
                         .clip(HavenShape.pill)
-                        .background(colors.field)
+                        .background(colors.searchPill)
                         .padding(start = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

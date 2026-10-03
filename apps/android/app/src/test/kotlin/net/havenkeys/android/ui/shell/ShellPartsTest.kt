@@ -16,7 +16,10 @@ import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.RowLeading
 import net.havenkeys.android.ui.kit.hasRole
 import net.havenkeys.android.ui.kit.setKit
+import net.havenkeys.android.ui.theme.DarkHavenColors
+import net.havenkeys.android.ui.theme.LightHavenColors
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -93,5 +96,13 @@ class ShellPartsTest {
         rule.mainClock.advanceTimeByFrame()
         rule.onNodeWithText("Login").performClick()
         assertEquals(1, taps)
+    }
+
+    @Test
+    fun theSearchPillStandsOffThePaneInBothThemes() {
+        // The light field is white like the pane, so the pill takes the hover green there.
+        assertNotEquals(LightHavenColors.pane, LightHavenColors.searchPill)
+        assertEquals(LightHavenColors.hover, LightHavenColors.searchPill)
+        assertEquals(DarkHavenColors.field, DarkHavenColors.searchPill)
     }
 }
