@@ -10,8 +10,8 @@ and signatures.
 
 | Stage | Plan | Status | Depends on |
 |---|---|---|---|
-| 1. Activity data | `2026-10-03-android-redesign-stage1-activity.md` | Planned | — |
-| 2. Design system | written when stage 1 is done | Not planned | Nothing in stage 1 (can start in parallel if wanted) |
+| 1. Activity data | `2026-10-03-android-redesign-stage1-activity.md` | Done (`cb5c461..576f07c`) | — |
+| 2. Design system | `2026-10-03-android-redesign-stage2-design-system.md` | Planned | Nothing in stage 1 (can start in parallel if wanted) |
 | 3. Shell and new screens | written when stage 2 is done | Not planned | Stages 1 and 2 |
 | 4. Existing screens rebuilt | written when stage 3 is done | Not planned | Stage 2 (and 3 for navigation) |
 | 5. Remove Material | written when stage 4 is done | Not planned | Stage 4 |
