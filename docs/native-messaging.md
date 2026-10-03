@@ -118,7 +118,8 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `find_matches` | `url`, `topUrl`? | yes | lookup |
 | `fill_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `get_totp` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
-| `generate_password` | none | yes | lookup |
+| `generator_options` | none (returns the policy saved in the desktop's generator tab) | yes | lookup |
+| `generate_password` | `options`? (`length` 8–128, `uppercase`, `lowercase`, `digits`, `symbols`, `avoidAmbiguous`; at least one class on; else the desktop generator tab's saved policy) | yes | lookup |
 | `check_login` | `url`, `topUrl`?, `username` (string or null), `password`, `currentPassword`? (a change-password form's current password) | yes | secret |
 | `save_login` | `url`, `topUrl`?, `username`, `password`, `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min |
 | `find_passkeys` | `url`, `topUrl`?, `rpId`, `allowCredentials` (list) | yes | lookup |

@@ -75,10 +75,21 @@ fn pick<R: rand::Rng>(rng: &mut R, set: &[u8]) -> Result<u8> {
     Ok(set[dist.sample(rng)])
 }
 
-pub fn generate(options: &GeneratorOptions) -> Result<GeneratedPassword> {
-    if !(MIN_LENGTH..=MAX_LENGTH).contains(&options.length) {
-        return Err(Error::InvalidInput("password length out of range"));
+impl GeneratorOptions {
+    /// The checks `generate` makes, for options saved as settings.
+    pub fn validate(&self) -> Result<()> {
+        if !(MIN_LENGTH..=MAX_LENGTH).contains(&self.length) {
+            return Err(Error::InvalidInput("password length out of range"));
+        }
+        if !(self.uppercase || self.lowercase || self.digits || self.symbols) {
+            return Err(Error::InvalidInput("select at least one character type"));
+        }
+        Ok(())
     }
+}
+
+pub fn generate(options: &GeneratorOptions) -> Result<GeneratedPassword> {
+    options.validate()?;
     let classes: Vec<Vec<u8>> = [
         (options.uppercase, UPPER),
         (options.lowercase, LOWER),

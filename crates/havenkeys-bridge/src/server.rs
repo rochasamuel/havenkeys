@@ -321,7 +321,8 @@ fn request_class(req: &Request) -> Option<RequestClass> {
     match req {
         Request::Status {} | Request::Lock {} => None,
         Request::FindMatches { .. }
-        | Request::GeneratePassword {}
+        | Request::GeneratorOptions {}
+        | Request::GeneratePassword { .. }
         | Request::FindPasskeys { .. }
         | Request::CheckPasskeyCreate { .. }
         | Request::PasskeyStatus { .. }

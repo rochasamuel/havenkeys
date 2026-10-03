@@ -403,6 +403,7 @@ export const en = {
     copy: "Copy",
     copied: (seconds: number) => `Password copied. The clipboard clears in ${seconds}\u00a0s.`,
     failed: "Could not generate a password.",
+    saveFailed: "Could not save the generator settings.",
     length: "Length",
     characters: "Characters",
     uppercase: "Uppercase",

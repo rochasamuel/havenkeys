@@ -234,7 +234,7 @@ attributes, never into hidden fields, and never into other forms.
 |---|---|---|
 | Login | a username or (current) password field | username and password fields of that group |
 | One-time code | an OTP field | the code, one digit per box for split fields |
-| New password | a new-password or confirmation field | a password generated **by the desktop** (Rust CSPRNG, default policy: 24 chars, all classes) into the new + confirmation fields |
+| New password | a new-password or confirmation field | a password generated **by the desktop** (Rust CSPRNG, with the policy saved in the desktop's generator tab) into the new + confirmation fields. The switches button inside the row opens a panel showing that policy (`generator_options`), where length (8–128) and character classes can be changed for this password only, and a **Generate and fill** button; the frame slides taller. Panel changes go as `generate_password`'s `options`, which Rust checks again; nothing is stored in the extension |
 
 ## User flow
 

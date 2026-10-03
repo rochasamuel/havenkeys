@@ -7,8 +7,9 @@ use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CARD_CODE_BYTES, MAX_CARD_FRAMES,
     MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, MAX_CHALLENGE_BYTES,
     MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES,
-    MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES,
-    MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, PROTOCOL_VERSION,
+    MAX_PASSWORD_LENGTH, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES,
+    MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES,
+    MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -68,8 +69,15 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top_url: Option<String>,
     },
-    /// A new random password from the desktop's generator (default policy).
-    GeneratePassword {},
+    /// The desktop generator's saved policy (its generator tab), so the
+    /// in-page menu can show it before the user changes anything.
+    GeneratorOptions {},
+    /// A new random password from the desktop's generator: its saved
+    /// policy, or the one in `options`.
+    GeneratePassword {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        options: Option<PasswordOptions>,
+    },
     /// Would saving this submitted login add a new item, update one, or do
     /// nothing? The password is compared inside the core, never returned.
     /// `current_password`: what a change-password form held as the current
@@ -273,6 +281,26 @@ pub enum IdentityRole {
     DriversLicense,
 }
 
+/// A password policy. Mirrors havenkeys_core::generator::GeneratorOptions;
+/// the bridge maps between them and the core checks them again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PasswordOptions {
+    pub length: u32,
+    pub uppercase: bool,
+    pub lowercase: bool,
+    pub digits: bool,
+    pub symbols: bool,
+    pub avoid_ambiguous: bool,
+}
+
+impl PasswordOptions {
+    fn is_valid(&self) -> bool {
+        (MIN_PASSWORD_LENGTH..=MAX_PASSWORD_LENGTH).contains(&self.length)
+            && (self.uppercase || self.lowercase || self.digits || self.symbols)
+    }
+}
+
 /// One identity value for a fill.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -461,7 +489,8 @@ impl Request {
             Request::FindMatches { .. } => "find_matches",
             Request::FillItem { .. } => "fill_item",
             Request::GetTotp { .. } => "get_totp",
-            Request::GeneratePassword {} => "generate_password",
+            Request::GeneratorOptions {} => "generator_options",
+            Request::GeneratePassword { .. } => "generate_password",
             Request::CheckLogin { .. } => "check_login",
             Request::SaveLogin { .. } => "save_login",
             Request::FindPasskeys { .. } => "find_passkeys",
@@ -484,7 +513,10 @@ impl Request {
 
     fn urls(&self) -> Vec<&str> {
         match self {
-            Request::Status {} | Request::Lock {} | Request::GeneratePassword {} => Vec::new(),
+            Request::Status {}
+            | Request::Lock {}
+            | Request::GeneratorOptions {}
+            | Request::GeneratePassword { .. } => Vec::new(),
             Request::FillCard {
                 top_url, frames, ..
             } => std::iter::once(top_url.as_str())
@@ -615,6 +647,7 @@ impl Request {
                         .is_none_or(|n| text_ok(n, MAX_CARD_VALUE_BYTES))
                     && expiry.as_deref().is_none_or(expiry_shape_ok)
             }
+            Request::GeneratePassword { options } => options.is_none_or(|o| o.is_valid()),
             _ => true,
         }
     }
@@ -723,6 +756,7 @@ impl Response {
         }
         match &self.result {
             Some(ResultBody::FindMatches { matches }) => matches.len() <= MAX_MATCHES,
+            Some(ResultBody::GeneratorOptions { options }) => options.is_valid(),
             Some(ResultBody::CheckLogin { action, item_id }) => {
                 (*action == SaveAction::Update) == item_id.is_some()
             }
@@ -843,6 +877,9 @@ pub enum ResultBody {
         seconds_remaining: u32,
         auto_submit: bool,
     },
+    GeneratorOptions {
+        options: PasswordOptions,
+    },
     GeneratePassword {
         password: WireSecret,
     },
@@ -942,6 +979,7 @@ impl fmt::Debug for ResultBody {
             ResultBody::FindMatches { .. } => "find_matches",
             ResultBody::FillItem { .. } => "fill_item",
             ResultBody::GetTotp { .. } => "get_totp",
+            ResultBody::GeneratorOptions { .. } => "generator_options",
             ResultBody::GeneratePassword { .. } => "generate_password",
             ResultBody::CheckLogin { .. } => "check_login",
             ResultBody::SaveLogin { .. } => "save_login",

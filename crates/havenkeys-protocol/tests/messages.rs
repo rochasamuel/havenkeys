@@ -44,6 +44,8 @@ fn valid_requests_parse() {
 fn phase5_requests_parse_and_reencode_canonically() {
     let ok = [
         r#"{"v":1,"id":1,"request":{"type":"generate_password"}}"#.to_owned(),
+        r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":40,"uppercase":false,"lowercase":true,"digits":true,"symbols":false,"avoidAmbiguous":true}}}"#.to_owned(),
+        r#"{"v":1,"id":1,"request":{"type":"generator_options"}}"#.to_owned(),
         r#"{"v":1,"id":2,"request":{"type":"find_matches","url":"https://a.com/","topUrl":"https://b.com/"}}"#.to_owned(),
         format!(r#"{{"v":1,"id":3,"request":{{"type":"get_totp","itemId":"{ITEM}","url":"https://a.com/","topUrl":"https://a.com/"}}}}"#),
         r#"{"v":1,"id":4,"request":{"type":"check_login","url":"https://a.com/","username":"octo","password":"pw"}}"#.to_owned(),
@@ -78,6 +80,10 @@ fn phase5_malformed_requests_rejected() {
         (r#"{"v":1,"id":1,"request":{"type":"check_login","url":"https://a.com/","username":"x"}}"#.into(), ErrorCode::Malformed),
         (r#"{"v":1,"id":1,"request":{"type":"save_login","url":"https://a.com/","username":null,"password":1,"itemId":null}}"#.into(), ErrorCode::Malformed),
         (r#"{"v":1,"id":1,"request":{"type":"generate_password","length":64}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":20,"uppercase":true,"lowercase":true,"digits":true,"symbols":true}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":20,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false,"extra":1}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":-1,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false}}}"#.into(), ErrorCode::Malformed),
+        (r#"{"v":1,"id":1,"request":{"type":"generator_options","options":null}}"#.into(), ErrorCode::Malformed),
         (r#"{"v":1,"id":1,"request":{"type":"find_matches","url":"https://a.com/","topUrl":7}}"#.into(), ErrorCode::Malformed),
         (r#"{"v":1,"id":1,"request":{"type":"status","topUrl":"https://a.com/"}}"#.into(), ErrorCode::Malformed),
         // sizes
@@ -93,6 +99,9 @@ fn phase5_malformed_requests_rejected() {
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":null,"password":"x","currentPassword":"{big_pw}"}}}}"#), ErrorCode::InvalidInput),
         (r#"{"v":1,"id":1,"request":{"type":"save_login","url":"https://a.com/","username":null,"password":"x","itemId":null,"currentPassword":"old"}}"#.into(), ErrorCode::Malformed),
         (format!(r#"{{"v":1,"id":1,"request":{{"type":"check_login","url":"https://a.com/","username":"{big_user}","password":"x"}}}}"#), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":7,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":129,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false}}}"#.into(), ErrorCode::InvalidInput),
+        (r#"{"v":1,"id":1,"request":{"type":"generate_password","options":{"length":20,"uppercase":false,"lowercase":false,"digits":false,"symbols":false,"avoidAmbiguous":false}}}"#.into(), ErrorCode::InvalidInput),
     ];
     for (input, code) in &cases {
         assert_eq!(
@@ -121,6 +130,7 @@ fn check_login_result_must_be_consistent() {
         r#"{"v":1,"id":1,"result":{"type":"check_login","action":"delete","itemId":null}}"#
             .to_owned(),
         r#"{"v":1,"id":1,"result":{"type":"generate_password"}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"generator_options","options":{"length":4,"uppercase":true,"lowercase":true,"digits":true,"symbols":true,"avoidAmbiguous":false}}}"#.to_owned(),
     ] {
         assert!(Outgoing::parse(bad.as_bytes()).is_none(), "{bad}");
     }

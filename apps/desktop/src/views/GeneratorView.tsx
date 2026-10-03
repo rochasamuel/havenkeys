@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { GeneratedPassword, GeneratorOptions } from "../lib/types";
 import { strengthLevel } from "../lib/format";
@@ -46,6 +46,41 @@ export function GeneratorView() {
   const [result, setResult] = useState<GeneratedPassword | null>(null);
   // The failure itself, so its text follows a language change.
   const [error, setError] = useState<{ cause: unknown } | null>(null);
+
+  // The policy last read from or written to the vault's settings, so the
+  // values loaded on open are not written straight back.
+  const saved = useRef<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api.getSettings().then(
+      (s) => {
+        if (!live) return;
+        saved.current = JSON.stringify(s.generator);
+        setOptions(s.generator);
+      },
+      // Unreadable: keep the default and do not save over what is there.
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Save each change (debounced for the slider). The browser extension's
+  // "Generate strong password" uses this policy too.
+  useEffect(() => {
+    const json = JSON.stringify(options);
+    if (saved.current === null || saved.current === json) return;
+    if (!(options.uppercase || options.lowercase || options.digits || options.symbols)) return;
+    const id = setTimeout(() => {
+      api.setGeneratorOptions(options).then(
+        () => (saved.current = json),
+        (e) => toast(errorMessage(e, t, t.generator.saveFailed), "error"),
+      );
+    }, 400);
+    return () => clearTimeout(id);
+  }, [options, toast, t]);
 
   const regenerate = useCallback(async (opts: GeneratorOptions) => {
     try {

@@ -358,6 +358,21 @@ async fn save_item(
 
 // ------------------------------------------------------------------ generator
 
+/// Save the generator tab's policy. The browser extension's "Generate strong
+/// password" uses it too.
+#[tauri::command]
+pub fn set_generator_options(
+    state: State<'_, AppState>,
+    options: GeneratorOptions,
+) -> CmdResult<GeneratorOptions> {
+    state.touch();
+    let mut v = state.vault()?;
+    let mut settings = v.settings()?;
+    settings.generator = options;
+    v.update_settings(settings)?;
+    Ok(options)
+}
+
 #[tauri::command]
 pub fn generate_password(
     state: State<'_, AppState>,
@@ -395,9 +410,12 @@ pub fn get_settings(state: State<'_, AppState>) -> CmdResult<Settings> {
 }
 
 #[tauri::command]
-pub fn update_settings(state: State<'_, AppState>, settings: Settings) -> CmdResult<Settings> {
+pub fn update_settings(state: State<'_, AppState>, mut settings: Settings) -> CmdResult<Settings> {
     state.touch();
     let mut v = state.vault()?;
+    // The generator tab saves its own policy (set_generator_options); a
+    // Settings screen holding an older copy must not undo it.
+    settings.generator = v.settings()?.generator;
     v.update_settings(settings)?;
     drop(v);
     state.arm_auto_lock(settings.auto_lock_minutes);

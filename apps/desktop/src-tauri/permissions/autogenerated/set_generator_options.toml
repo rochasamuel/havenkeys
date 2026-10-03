@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-generator-options"
+description = "Enables the set_generator_options command without any pre-configured scope."
+commands.allow = ["set_generator_options"]
+
+[[permission]]
+identifier = "deny-set-generator-options"
+description = "Denies the set_generator_options command without any pre-configured scope."
+commands.deny = ["set_generator_options"]

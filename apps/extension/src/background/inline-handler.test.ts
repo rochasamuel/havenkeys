@@ -63,6 +63,8 @@ function defaultAnswer(r: Request): unknown {
       return { type: "get_totp", code: "123456", period: 30, secondsRemaining: 10, autoSubmit: false };
     case "generate_password":
       return { type: "generate_password", password: "Gen!" };
+    case "generator_options":
+      return { type: "generator_options", options: { length: 32, uppercase: true, lowercase: true, digits: true, symbols: false, avoidAmbiguous: true } };
     case "check_login":
       return { type: "check_login", action: "add", itemId: null };
     case "save_login":
@@ -391,6 +393,35 @@ describe("suggestion menus", () => {
     expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
     await h.handleInline(1, { type: "menu_generate", token: T1 });
     expect(sent.at(-1)?.msg).toMatchObject({ fill: { kind: "generated", password: "Gen!" } });
+  });
+
+  it("passes the menu's generator options to the desktop", async () => {
+    const { h, requests } = setup();
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" });
+    const options = { length: 40, uppercase: false, lowercase: true, digits: true, symbols: false, avoidAmbiguous: false };
+    await h.handleInline(1, { type: "menu_generate", token: T1, options });
+    expect(requests.at(-1)).toEqual({ type: "generate_password", options });
+  });
+
+  it("without options, leaves the policy to the desktop's generator tab", async () => {
+    const { h, requests } = setup();
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" });
+    await h.handleInline(1, { type: "menu_generate", token: T1 });
+    expect(requests.at(-1)).toEqual({ type: "generate_password" });
+  });
+
+  it("reads the desktop generator's saved policy for a new-password menu only", async () => {
+    const { h, requests } = setup();
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "new_password" });
+    expect(await h.handleInline(1, { type: "menu_generator_options", token: T1 })).toEqual({
+      ok: true,
+      value: { length: 32, uppercase: true, lowercase: true, digits: true, symbols: false, avoidAmbiguous: true },
+    });
+    expect(requests.at(-1)).toEqual({ type: "generator_options" });
+
+    const other = setup();
+    await other.h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect((await other.h.handleInline(1, { type: "menu_generator_options", token: T1 })).ok).toBe(false);
   });
 
   it("locking drops menus", async () => {

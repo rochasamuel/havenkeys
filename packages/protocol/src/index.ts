@@ -19,6 +19,9 @@ export const MAX_MATCHES = 50;
 /** Byte limits for check_login/save_login (see the Rust protocol crate). */
 export const MAX_SECRET_BYTES = 4 * 4096;
 export const MAX_USERNAME_BYTES = 4 * 512;
+/** Generated password length bounds (the Rust core generator's). */
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
 
 /** Credential IDs HavenKeys creates, and the only length it accepts. */
 export const CREDENTIAL_ID_BYTES = 16;
@@ -31,6 +34,27 @@ export const COSE_ES256 = -7;
 
 // ------------------------------------------------------------------ requests
 
+/** A password policy (the desktop generator's). Rust checks it again. */
+export type PasswordOptions = { length: number; uppercase: boolean; lowercase: boolean; digits: boolean; symbols: boolean; avoidAmbiguous: boolean };
+
+const PASSWORD_OPTION_KEYS = ["length", "uppercase", "lowercase", "digits", "symbols", "avoidAmbiguous"] as const;
+
+export function isPasswordOptions(v: unknown): v is PasswordOptions {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const o = v as Record<string, unknown>;
+  const keys = Object.keys(o);
+  if (keys.length !== PASSWORD_OPTION_KEYS.length || !PASSWORD_OPTION_KEYS.every((k) => Object.prototype.hasOwnProperty.call(o, k))) return false;
+  const { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } = o;
+  return (
+    typeof length === "number" &&
+    Number.isInteger(length) &&
+    length >= MIN_PASSWORD_LENGTH &&
+    length <= MAX_PASSWORD_LENGTH &&
+    [uppercase, lowercase, digits, symbols, avoidAmbiguous].every((b) => typeof b === "boolean") &&
+    (uppercase || lowercase || digits || symbols) === true
+  );
+}
+
 /**
  * `topUrl` is set when `url` is an iframe: the tab's top-level page. The
  * desktop then only serves logins that match both.
@@ -42,7 +66,10 @@ export type Request =
   | { type: "fill_item"; itemId: string; url: string; topUrl?: string }
   | { type: "open_item"; itemId: string; url: string; topUrl?: string }
   | { type: "get_totp"; itemId: string; url: string; topUrl?: string }
-  | { type: "generate_password" }
+  /** The desktop generator's saved policy. */
+  | { type: "generator_options" }
+  /** Without `options`: the desktop generator's saved policy. */
+  | { type: "generate_password"; options?: PasswordOptions }
   | { type: "check_login"; url: string; topUrl?: string; username: string | null; password: string; currentPassword?: string }
   | {
       type: "save_login";
@@ -145,6 +172,7 @@ export type Result =
   | { type: "find_matches"; matches: Match[] }
   | { type: "fill_item"; username: string | null; password: string | null; autoSubmit: boolean }
   | { type: "get_totp"; code: string; period: number; secondsRemaining: number; autoSubmit: boolean }
+  | { type: "generator_options"; options: PasswordOptions }
   | { type: "generate_password"; password: string }
   | { type: "check_login"; action: SaveAction; itemId: string | null }
   | { type: "save_login"; itemId: string }
@@ -393,6 +421,11 @@ function parseResult(v: unknown): Result | null {
       if (!isStr(v.code) || !/^[0-9]{6,8}$/.test(v.code) || !isU32(v.period) || !isU32(v.secondsRemaining)) return null;
       if (!isBool(v.autoSubmit)) return null;
       return { type: "get_totp", code: v.code, period: v.period, secondsRemaining: v.secondsRemaining, autoSubmit: v.autoSubmit };
+    case "generator_options": {
+      if (!hasExactKeys(v, ["type", "options"]) || !isPasswordOptions(v.options)) return null;
+      const { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } = v.options;
+      return { type: "generator_options", options: { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } };
+    }
     case "generate_password":
       if (!hasExactKeys(v, ["type", "password"]) || !isStr(v.password) || v.password.length === 0) return null;
       return { type: "generate_password", password: v.password };

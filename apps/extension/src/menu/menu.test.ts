@@ -433,3 +433,110 @@ describe("card rows", () => {
     expect(document.getElementById("main")!.textContent).not.toBe("");
   });
 });
+
+describe("generator settings", () => {
+  const trusted = { isTrusted: true } as MouseEvent;
+  /** The desktop generator tab's saved policy. */
+  const DESKTOP = { length: 32, uppercase: true, lowercase: true, digits: true, symbols: false, avoidAmbiguous: true };
+
+  async function setup(optionsReply: unknown = { ok: true, value: DESKTOP }) {
+    const handlers = captureClicks();
+    replies = [{ ok: true, value: { state: "ready", kind: "new_password", site: "login.yahoo.com", items: [], passkeys: [], hint: null } }];
+    await load();
+    (globalThis as unknown as { chrome: { runtime: { sendMessage: unknown } } }).chrome.runtime.sendMessage = async (m: unknown) => {
+      asked.push(m);
+      return (m as { type: string }).type === "menu_generator_options" ? optionsReply : { ok: true, value: null };
+    };
+    await vi.advanceTimersByTimeAsync(1000);
+    const click = async (el: Element) => {
+      handlers.get(el)?.(trusted);
+      await vi.advanceTimersByTimeAsync(0);
+    };
+    return { click };
+  }
+
+  const generated = () => asked.filter((m) => (m as { type: string }).type === "menu_generate");
+
+  it("puts a settings button inside the generate row, closed", async () => {
+    await setup();
+    const toggle = document.querySelector<HTMLButtonElement>(".gen button.gen-toggle")!;
+    expect(toggle.getAttribute("aria-label")).toBe("Password settings");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".gen-panel")).toBeNull();
+  });
+
+  it("the row sends no options: Rust uses the desktop generator's saved policy", async () => {
+    const { click } = await setup();
+    await click(document.querySelector("button.row")!);
+    expect(generated()).toEqual([{ type: "menu_generate", token: TOKEN }]);
+    expect(asked.some((m) => (m as { type: string }).type === "menu_generator_options")).toBe(false);
+  });
+
+  it("opens the panel on the desktop's policy and generates with what the user changed", async () => {
+    const { click } = await setup();
+    await click(document.querySelector(".gen-toggle")!);
+    expect(document.querySelector(".gen-toggle")!.getAttribute("aria-expanded")).toBe("true");
+    const panel = document.querySelector(".gen-panel")!;
+    const range = panel.querySelector<HTMLInputElement>("input[type=range]")!;
+    expect(range.value).toBe("32");
+    expect(range.max).toBe("128");
+    const boxes = panel.querySelectorAll<HTMLInputElement>("input[type=checkbox]");
+    expect(Array.from(boxes, (b) => b.checked)).toEqual([true, true, true, false]);
+
+    range.value = "40";
+    range.dispatchEvent(new Event("input"));
+    expect(panel.querySelector("output")!.textContent).toBe("40");
+    boxes[3]!.checked = true;
+    boxes[3]!.dispatchEvent(new Event("change"));
+
+    await vi.advanceTimersByTimeAsync(400); // the panel's own guard
+    await click(panel.querySelector("button.gen-go")!);
+    // avoidAmbiguous has no chip here: the desktop's value goes back as it was.
+    expect(generated().at(-1)).toEqual({ type: "menu_generate", token: TOKEN, options: { ...DESKTOP, length: 40, symbols: true } });
+  });
+
+  it("keeps at least one character class on", async () => {
+    const { click } = await setup({ ok: true, value: { ...DESKTOP, uppercase: false, lowercase: false, digits: false, symbols: true } });
+    await click(document.querySelector(".gen-toggle")!);
+    const boxes = document.querySelectorAll<HTMLInputElement>(".gen-panel input[type=checkbox]");
+    boxes[3]!.checked = false;
+    boxes[3]!.dispatchEvent(new Event("change"));
+    expect(boxes[3]!.checked).toBe(true);
+  });
+
+  it("shows why when the desktop's policy cannot be read", async () => {
+    const { click } = await setup({ ok: false, message: "HavenKeys is locked." });
+    await click(document.querySelector(".gen-toggle")!);
+    expect(document.getElementById("gen-panel")!.textContent).toContain("HavenKeys is locked.");
+    expect(document.querySelector("button.gen-go")).toBeNull();
+  });
+
+  it("a fast click on the new Generate button does nothing until the panel has been visible", async () => {
+    const { click } = await setup();
+    await click(document.querySelector(".gen-toggle")!);
+    await click(document.querySelector("button.gen-go")!);
+    expect(generated()).toHaveLength(0);
+  });
+
+  it("closing the panel drops its changes: the row is back to the desktop's policy", async () => {
+    const { click } = await setup();
+    const toggle = document.querySelector(".gen-toggle")!;
+    await click(toggle);
+    await click(toggle);
+    expect(document.querySelector(".gen-panel")).toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    await click(document.querySelector("button.row")!);
+    expect(generated().at(-1)).toEqual({ type: "menu_generate", token: TOKEN });
+  });
+
+  it("marks the resize after opening the panel as animated", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const height = this.tagName === "HEADER" ? 34 : this.classList.contains("gen") ? 46 : this.classList.contains("gen-panel") ? 150 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    });
+    const { click } = await setup();
+    await click(document.querySelector(".gen-toggle")!);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(asked).toContainEqual({ type: "menu_resize", token: TOKEN, height: 34 + 46 + 150, animate: true });
+  });
+});

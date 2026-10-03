@@ -19,7 +19,8 @@ use havenkeys_core::vault::{SaveTarget, StagedWrite, VaultService};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
     CardFrameValues, CardMatch, CardValue, ErrorCode, IdentityValue, Match, PasskeyCandidate,
-    PasskeyMatch, Request, ResultBody, SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
+    PasskeyMatch, PasswordOptions, Request, ResultBody, SaveAction, UpgradeHint, WireSecret,
+    MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -179,8 +180,33 @@ pub fn dispatch(
                 auto_submit,
             }))
         }
-        Request::GeneratePassword {} => {
-            let generated = generate(&GeneratorOptions::default()).map_err(code)?;
+        Request::GeneratorOptions {} => {
+            let saved = v.settings().map_err(code)?.generator;
+            Ok(Dispatched::Done(ResultBody::GeneratorOptions {
+                options: PasswordOptions {
+                    length: u32::try_from(saved.length).map_err(|_| ErrorCode::Internal)?,
+                    uppercase: saved.uppercase,
+                    lowercase: saved.lowercase,
+                    digits: saved.digits,
+                    symbols: saved.symbols,
+                    avoid_ambiguous: saved.avoid_ambiguous,
+                },
+            }))
+        }
+        Request::GeneratePassword { options } => {
+            // Without options: the policy saved in the desktop's generator tab.
+            let policy = match options {
+                Some(o) => GeneratorOptions {
+                    length: o.length as usize,
+                    uppercase: o.uppercase,
+                    lowercase: o.lowercase,
+                    digits: o.digits,
+                    symbols: o.symbols,
+                    avoid_ambiguous: o.avoid_ambiguous,
+                },
+                None => v.settings().map_err(code)?.generator,
+            };
+            let generated = generate(&policy).map_err(code)?;
             Ok(Dispatched::Done(ResultBody::GeneratePassword {
                 password: wire_secret(&generated.password),
             }))

@@ -28,7 +28,7 @@
 //   Typed cards wait for the user's save in memory only, for at most
 //   CARD_SAVE_TTL_MS; the number goes to Rust only on Save.
 
-import type { Match, Request, ResultFor, RequestType } from "@havenkeys/protocol";
+import type { Match, PasswordOptions, Request, ResultFor, RequestType } from "@havenkeys/protocol";
 import {
   brandOf,
   CARD_BRAND_NAMES,
@@ -780,7 +780,7 @@ export function createInlineHandler(deps: InlineDeps) {
 
   // ------------------------------------------------------------ menu and save frames
 
-  async function handleInline(tabId: number, req: InlineRequest): Promise<InlineReply<MenuView | SaveView | CardSaveView | null>> {
+  async function handleInline(tabId: number, req: InlineRequest): Promise<InlineReply<MenuView | SaveView | CardSaveView | PasswordOptions | null>> {
     switch (req.type) {
       case "menu_state": {
         const m = liveMenu(tabId, req.token);
@@ -849,12 +849,22 @@ export function createInlineHandler(deps: InlineDeps) {
         closeMenu(tabId);
         return deps.passkeys.pickConditional(m.frame, req.itemId, req.credentialId);
       }
+      case "menu_generator_options": {
+        const m = liveMenu(tabId, req.token);
+        if (!m || m.locked || m.kind !== "new_password") return { ok: false, message: t.errors.menuExpired };
+        try {
+          const r = await deps.client.request({ type: "generator_options" });
+          return { ok: true, value: r.options };
+        } catch (e) {
+          return fail(e);
+        }
+      }
       case "menu_generate": {
         const m = liveMenu(tabId, req.token);
         if (!m || m.locked || m.kind !== "new_password") return { ok: false, message: t.errors.menuExpired };
         closeMenu(tabId);
         try {
-          const g = await deps.client.request({ type: "generate_password" });
+          const g = await deps.client.request({ type: "generate_password", ...(req.options ? { options: req.options } : {}) });
           await pickFill(m.frame, m.token, { kind: "generated", password: g.password }, null);
         } catch (e) {
           return fail(e);
@@ -903,7 +913,7 @@ export function createInlineHandler(deps: InlineDeps) {
       case "menu_resize": {
         const m = liveMenu(tabId, req.token);
         if (!m) return { ok: false, message: t.errors.menuExpired };
-        void deps.sendToFrame(m.host ?? m.frame, { type: "bg_resize_menu", token: m.token, height: req.height });
+        void deps.sendToFrame(m.host ?? m.frame, { type: "bg_resize_menu", token: m.token, height: req.height, ...(req.animate ? { animate: true as const } : {}) });
         return { ok: true, value: null };
       }
       case "save_state": {

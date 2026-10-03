@@ -235,6 +235,17 @@ export const extensionScenarios = [
       replies: () => ({ menu_state: ok(menuView({ kind: "new_password", items: [] })) }),
     },
     {
+      name: `menu-generate-settings-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({ menu_state: ok(menuView({ kind: "new_password", items: [] })) }),
+      async act(page) {
+        await page.waitForTimeout(600);
+        await page.click("button.gen-toggle");
+        await page.waitForTimeout(400);
+      },
+    },
+    {
       name: `menu-cards-${width}`,
       page: "menu.html",
       frame: { kind: "menu", width, rows: 4 },

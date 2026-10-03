@@ -69,3 +69,29 @@ export function idCardIcon(size = 16): SVGSVGElement {
   svg.append(path);
   return svg;
 }
+
+/**
+ * The generator settings glyph: two switches (sliders), drawn to the icon
+ * set's rules (24 grid, 1.6 stroke, round caps and joins; see the desktop's
+ * components/Icon.tsx), which has no such glyph of its own.
+ */
+export function switchesIcon(size = 17): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute(
+    "d",
+    "M4.5 8h9M18.5 8h1M16 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM4.5 16h1M10.5 16h9M8 18.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+  );
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.6");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+}

@@ -57,6 +57,7 @@
     "allow-copy-generated-password",
     "allow-get-settings",
     "allow-update-settings",
+    "allow-set-generator-options",
     "allow-launch-at-login",
     "allow-set-launch-at-login",
     "allow-import-1pux",

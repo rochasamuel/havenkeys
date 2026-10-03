@@ -313,6 +313,7 @@ pub fn run() {
             commands::copy_generated_password,
             commands::get_settings,
             commands::update_settings,
+            commands::set_generator_options,
             autostart::launch_at_login,
             autostart::set_launch_at_login,
             import::import_1pux,

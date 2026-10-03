@@ -61,6 +61,9 @@ pub const MAX_PROVIDER_ACCOUNTS: usize = 10;
 
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;
+/// Generated password length bounds (the core generator's own).
+pub const MIN_PASSWORD_LENGTH: u32 = 8;
+pub const MAX_PASSWORD_LENGTH: u32 = 128;
 /// Roles one fill_identity may ask for (a form has fewer fields than this).
 pub const MAX_IDENTITY_ROLES: usize = 40;
 /// Largest identity value returned (the core's longest field is 4096 characters of a custom value; filled roles are far shorter).

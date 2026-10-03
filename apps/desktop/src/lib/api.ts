@@ -167,6 +167,8 @@ export const api = {
 
   getSettings: () => call<Settings>("get_settings"),
   updateSettings: (settings: Settings) => call<Settings>("update_settings", { settings }),
+  /** The generator tab's policy; the extension's "Generate strong password" uses it too. */
+  setGeneratorOptions: (options: GeneratorOptions) => call<GeneratorOptions>("set_generator_options", { options }),
   /** Whether this computer opens HavenKeys at login (an OS setting, not a vault one). */
   launchAtLogin: () => call<boolean>("launch_at_login"),
   setLaunchAtLogin: (enabled: boolean) => call<boolean>("set_launch_at_login", { enabled }),

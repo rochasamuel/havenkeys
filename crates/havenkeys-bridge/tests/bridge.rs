@@ -5,6 +5,7 @@ use havenkeys_bridge::Bridge;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::card::{CardExpiry, CardInput};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+use havenkeys_core::generator::GeneratorOptions;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, Settings, UrlRule};
 use havenkeys_core::sso::{SignInWith, SsoProvider};
 use havenkeys_core::store::{AccountRecord, Store};
@@ -957,6 +958,63 @@ fn generate_password_uses_core_generator() {
     f.vault.lock().unwrap().lock();
     assert_eq!(
         error_code(&call(&f, serde_json::json!({"type": "generate_password"}))),
+        Some("locked")
+    );
+}
+
+#[test]
+fn generate_password_follows_requested_options() {
+    let f = fixture();
+    let r = call(
+        &f,
+        serde_json::json!({"type": "generate_password", "options": {
+            "length": 40, "uppercase": false, "lowercase": false, "digits": true, "symbols": false,
+            "avoidAmbiguous": true,
+        }}),
+    );
+    let pw = r["result"]["password"].as_str().unwrap();
+    assert_eq!(pw.chars().count(), 40);
+    assert!(pw
+        .chars()
+        .all(|c| c.is_ascii_digit() && c != '0' && c != '1'));
+}
+
+#[test]
+fn generator_follows_the_desktop_generator_tab() {
+    let f = fixture();
+    {
+        let mut v = f.vault.lock().unwrap();
+        let s = v.settings().unwrap();
+        v.update_settings(Settings {
+            generator: GeneratorOptions {
+                length: 12,
+                uppercase: true,
+                lowercase: false,
+                digits: false,
+                symbols: false,
+                avoid_ambiguous: true,
+            },
+            ..s
+        })
+        .unwrap();
+    }
+    let r = call(&f, serde_json::json!({"type": "generator_options"}));
+    assert_eq!(
+        r["result"]["options"],
+        serde_json::json!({"length": 12, "uppercase": true, "lowercase": false, "digits": false,
+            "symbols": false, "avoidAmbiguous": true})
+    );
+    // No options: the saved policy.
+    let r = call(&f, serde_json::json!({"type": "generate_password"}));
+    let pw = r["result"]["password"].as_str().unwrap();
+    assert_eq!(pw.chars().count(), 12);
+    assert!(pw
+        .chars()
+        .all(|c| c.is_ascii_uppercase() && c != 'I' && c != 'O'));
+
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&call(&f, serde_json::json!({"type": "generator_options"}))),
         Some("locked")
     );
 }

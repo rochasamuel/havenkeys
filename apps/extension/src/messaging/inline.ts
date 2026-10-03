@@ -16,6 +16,7 @@ import {
   isB64Url,
   isCardRole,
   isIdentityRole,
+  isPasswordOptions,
   isUuid,
   MAX_CARD_ROLES,
   MAX_CARD_VALUE_BYTES,
@@ -27,6 +28,7 @@ import {
   type CardValue,
   type IdentityRole,
   type IdentityValue,
+  type PasswordOptions,
   type SsoProvider,
 } from "@havenkeys/protocol";
 import type { PasskeyRow } from "../webauthn/messages";
@@ -120,7 +122,7 @@ export type BackgroundToContent =
   | { type: "bg_fill"; origin: string; token: string | null; fill: FillPayload; submit: boolean; totp: boolean }
   | { type: "bg_close_menu"; token: string }
   /** Resize the menu frame to the height its page reported (menu_resize). */
-  | { type: "bg_resize_menu"; token: string; height: number }
+  | { type: "bg_resize_menu"; token: string; height: number; animate?: true }
   | { type: "bg_show_save"; token: string }
   /** Resize the save prompt to the height its page reported (save_resize). */
   | { type: "bg_resize_save"; token: string; height: number }
@@ -148,7 +150,10 @@ export type InlineRequest =
   | { type: "menu_state"; token: string }
   | { type: "menu_pick"; token: string; itemId: string }
   | { type: "menu_pick_passkey"; token: string; itemId: string; credentialId: string }
-  | { type: "menu_generate"; token: string }
+  /** The desktop generator's saved policy, for the menu's settings panel. */
+  | { type: "menu_generator_options"; token: string }
+  /** `options`: the policy set in the menu's settings panel; else the desktop's saved one. */
+  | { type: "menu_generate"; token: string; options?: PasswordOptions }
   | { type: "menu_open_help"; token: string }
   /** Fill the identity; `documents`: the user confirmed the document fields. */
   | { type: "menu_pick_identity"; token: string; documents: boolean }
@@ -156,8 +161,8 @@ export type InlineRequest =
   /** Open the identity in the desktop app (the menu's empty-identity row). */
   | { type: "menu_open_identity"; token: string }
   | { type: "menu_close"; token: string }
-  /** The menu's content height, so wrapped rows are not clipped. */
-  | { type: "menu_resize"; token: string; height: number }
+  /** The menu's content height, so wrapped rows are not clipped. `animate`: the user opened or closed a panel. */
+  | { type: "menu_resize"; token: string; height: number; animate?: true }
   | { type: "save_state"; token: string }
   /** `title`: what the user left in the prompt's name field (a new login only). */
   | { type: "save_confirm"; token: string; title?: string }
@@ -478,11 +483,21 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
     case "menu_open_identity":
       return keysAre(o, ["type", "token"]) ? { type: "menu_open_identity", token } : null;
     case "menu_resize":
+      if (keysAre(o, ["type", "token", "height", "animate"])) {
+        return isMenuHeight(o.height) && o.animate === true ? { type: "menu_resize", token, height: o.height, animate: true } : null;
+      }
       return keysAre(o, ["type", "token", "height"]) && isMenuHeight(o.height) ? { type: "menu_resize", token, height: o.height } : null;
+    case "menu_generate":
+      if (keysAre(o, ["type", "token", "options"])) {
+        if (!isPasswordOptions(o.options)) return null;
+        const { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } = o.options;
+        return { type: "menu_generate", token, options: { length, uppercase, lowercase, digits, symbols, avoidAmbiguous } };
+      }
+      return keysAre(o, ["type", "token"]) ? { type: "menu_generate", token } : null;
     case "save_resize":
       return keysAre(o, ["type", "token", "height"]) && isSaveHeight(o.height) ? { type: "save_resize", token, height: o.height } : null;
     case "menu_state":
-    case "menu_generate":
+    case "menu_generator_options":
     case "menu_open_help":
     case "menu_close":
     case "save_state":
@@ -557,6 +572,11 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
       return fill && { type: "bg_fill", origin: o.origin, token: o.token, fill, submit: o.submit, totp: o.totp };
     }
     case "bg_resize_menu":
+      if (keysAre(o, ["type", "token", "height", "animate"])) {
+        return isToken(o.token) && isMenuHeight(o.height) && o.animate === true
+          ? { type: "bg_resize_menu", token: o.token, height: o.height, animate: true }
+          : null;
+      }
       return keysAre(o, ["type", "token", "height"]) && isToken(o.token) && isMenuHeight(o.height)
         ? { type: "bg_resize_menu", token: o.token, height: o.height }
         : null;

@@ -50,6 +50,7 @@ const COMMANDS: &[&str] = &[
     "copy_generated_password",
     "get_settings",
     "update_settings",
+    "set_generator_options",
     "launch_at_login",
     "set_launch_at_login",
     "import_1pux",

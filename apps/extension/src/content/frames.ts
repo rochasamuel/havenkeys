@@ -36,6 +36,12 @@ const BASE_STYLE: Record<string, string> = {
   overflow: "hidden",
 };
 
+const FRAME_TRANSITION = "height 220ms cubic-bezier(0.32, 0.72, 0, 1), top 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+
+function reducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export interface Box {
   top: number;
   left: number;
@@ -77,14 +83,22 @@ export class InlineFrame {
     this.#observer.observe(document.documentElement, { childList: true });
   }
 
-  #apply(box: Box): void {
-    const style = { ...BASE_STYLE, top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px` };
+  /** `animate`: slide top and height to the new box (a menu panel opening); else jump, so scrolling never lags. */
+  #apply(box: Box, animate = false): void {
+    const style = {
+      ...BASE_STYLE,
+      top: `${box.top}px`,
+      left: `${box.left}px`,
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+      transition: animate && !reducedMotion() ? FRAME_TRANSITION : "none",
+    };
     for (const [k, v] of Object.entries(style)) this.el.style.setProperty(k, v, "important");
   }
 
   /** Move the frame. Our own style changes are not tampering. */
-  place(box: Box): void {
-    this.#apply(box);
+  place(box: Box, animate = false): void {
+    this.#apply(box, animate);
     this.#observer.takeRecords();
   }
 

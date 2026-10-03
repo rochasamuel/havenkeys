@@ -302,6 +302,235 @@ main {
   opacity: 0.5;
 }
 
+/* New-password menu: the generate row with its settings button, and the
+   panel the button opens. The frame slides to the panel's height (frames.ts);
+   only the panel's contents fade in, never the .card.
+
+   The button sits inside the row: .gen draws the row's highlight around
+   both, since a <button> cannot hold another. */
+
+.gen {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  transition: background-color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.gen:hover,
+.gen:has(.row:focus-visible) {
+  background: var(--brass-soft);
+}
+
+.gen:has(.row:focus-visible) {
+  box-shadow: inset 0 0 0 1.5px rgba(201, 164, 92, 0.55);
+}
+
+.gen .row {
+  flex: 1;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.gen .row:hover,
+.gen .row:focus-visible {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The popup's icon button (popup.css .icon-btn): 30px, 17px glyph. Inside
+   the row's tint it deepens the same brass instead of turning gray. */
+.icon-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-right: 8px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 140ms,
+    color 140ms;
+  animation: row-in 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.icon-btn:hover,
+.icon-btn[aria-expanded="true"] {
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+main.sliding {
+  overflow-y: hidden;
+}
+
+.gen-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* No margins: menu.ts measures children with getBoundingClientRect. */
+  padding: 10px 8px 6px;
+  border-top: 1px solid var(--line);
+}
+
+.gen-panel > * {
+  animation: panel-in 300ms cubic-bezier(0.32, 0.72, 0, 1) 60ms both;
+}
+
+.gen-panel > :nth-child(n + 3) {
+  animation-delay: 100ms;
+}
+
+.gen-panel > :last-child {
+  animation-delay: 140ms;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.gen-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gen-label {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.gen-value {
+  color: var(--text-strong);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.gen-range {
+  --fill: 0%;
+  width: 100%;
+  height: 18px;
+  margin: -2px 0 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.gen-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--brass) var(--fill), var(--line-strong) var(--fill));
+}
+
+.gen-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+
+.gen-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--brass);
+}
+
+.gen-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass);
+}
+
+.gen-range::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass);
+}
+
+.gen-range:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.chip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.chip input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--hover);
+}
+
+.chip:has(input:checked) {
+  background: var(--brass-soft);
+  border-color: var(--brass);
+  color: var(--brass-ink);
+}
+
+.chip:has(input:focus-visible) {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+.gen-go {
+  width: 100%;
+  margin-top: 2px;
+}
+
 /* Save prompt. As tall as its content: the page reports that height
    (save_resize) and the content script sizes the frame. */
 

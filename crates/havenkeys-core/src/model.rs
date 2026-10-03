@@ -7,6 +7,7 @@
 use crate::card::{CardFields, CardInput, CardSummary};
 use crate::custom_field::{FieldSection, SectionInput};
 use crate::error::{Error, Result};
+use crate::generator::GeneratorOptions;
 use crate::identity::IdentityFields;
 use crate::passkey::Passkey;
 use crate::secret::SecretString;
@@ -354,6 +355,11 @@ pub struct Settings {
     /// login has its own switch too (`ItemOverview::auto_sign_in`).
     #[serde(default = "default_true")]
     pub auto_sign_in: bool,
+    /// The password generator's policy, set in the desktop's generator tab.
+    /// The browser extension's "Generate strong password" uses it too.
+    /// Settings saved before this field existed get the default policy.
+    #[serde(default)]
+    pub generator: GeneratorOptions,
 }
 
 fn default_true() -> bool {
@@ -371,6 +377,7 @@ impl Default for Settings {
             browser_integration: false,
             auto_passkey_upgrade: true,
             auto_sign_in: true,
+            generator: GeneratorOptions::default(),
         }
     }
 }
@@ -385,7 +392,7 @@ impl Settings {
                 "clipboard timeout must be 10-300 seconds",
             ));
         }
-        Ok(())
+        self.generator.validate()
     }
 }
 

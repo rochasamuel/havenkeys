@@ -187,14 +187,14 @@ function start(): void {
   /** sso.watchPage() is in effect (suggestions on). */
   let ssoWatching = false;
 
-  function placeMenu(): void {
+  function placeMenu(animate = false): void {
     if (!menu) return;
     if (!menu.field.isConnected || !isFillable(menu.field, defaultEnv())) {
       closeMenu(true);
       return;
     }
     if (!menu.frame) return;
-    menu.frame.place(menuBox(menu.field.getBoundingClientRect(), menu.rows, viewport(), menu.height));
+    menu.frame.place(menuBox(menu.field.getBoundingClientRect(), menu.rows, viewport(), menu.height), animate);
   }
 
   /** `explicit`: from the field icon, so show the menu even with nothing to offer. */
@@ -765,13 +765,14 @@ function start(): void {
         return false;
       case "bg_resize_menu":
         // Wrapped rows: grow or shrink to what the menu page laid out.
+        // `animate`: the user opened or closed the generator settings; slide.
         if (menu?.frame && menu.token === m.token) {
           menu.height = m.height;
-          placeMenu();
+          placeMenu(m.animate === true);
         }
         if (hosted?.frame.token === m.token) {
           hosted.height = m.height;
-          hosted.frame.place(menuBox(hosted.anchor, hosted.rows, viewport(), m.height));
+          hosted.frame.place(menuBox(hosted.anchor, hosted.rows, viewport(), m.height), m.animate === true);
         }
         return false;
       case "bg_card_scan": {

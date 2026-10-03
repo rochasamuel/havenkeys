@@ -413,6 +413,7 @@ export const ptBR: Messages = {
     copy: "Copiar",
     copied: (seconds: number) => `Senha copiada. A área de transferência é limpa em ${seconds}\u00a0s.`,
     failed: "Não foi possível gerar uma senha.",
+    saveFailed: "Não foi possível salvar as configurações do gerador.",
     length: "Tamanho",
     characters: "Caracteres",
     uppercase: "Maiúsculas",

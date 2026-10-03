@@ -228,7 +228,8 @@ means a live server session, which a locked vault does not have.
 | `delete_item` | yes (online) | no |
 | `generate_password` | no | a fresh password (not stored) |
 | `copy_generated_password` | no | no |
-| `get_settings`, `update_settings` | yes | no |
+| `get_settings`, `update_settings` | yes | no. `update_settings` keeps the stored generator policy |
+| `set_generator_options` | yes | no. Saves the generator tab's policy (encrypted settings); the extension's "Generate strong password" uses it |
 | `import_1pux` | yes (online) | no. Rust opens the native file picker; the renderer never supplies a path |
 | `delete_import_file` | yes | no. Deletes only the file picked in the last import |
 | `device_status` | no | no (key scheme, whether a Secret Key is needed, online) |

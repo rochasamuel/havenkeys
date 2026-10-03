@@ -2,11 +2,11 @@
 // codes go from the background straight to the content script and never
 // pass through this page.
 
-import { SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityRole, type PasswordOptions } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
-import { cardBrandIcon, idCardIcon, providerIcon } from "./icons";
+import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -151,6 +151,142 @@ function cardRow(t: string, c: CardRowView): HTMLButtonElement {
   return b;
 }
 
+type CharClass = "uppercase" | "lowercase" | "digits" | "symbols";
+
+/** Chip text is the same in every language; the full name is the accessible label. */
+const CLASSES: ReadonlyArray<{ key: CharClass; text: string; label: () => string }> = [
+  { key: "uppercase", text: "A–Z", label: () => msg.menu.generateUppercaseLabel },
+  { key: "lowercase", text: "a–z", label: () => msg.menu.generateLowercaseLabel },
+  { key: "digits", text: "0–9", label: () => msg.menu.generateDigitsLabel },
+  { key: "symbols", text: "!@#", label: () => msg.menu.generateSymbolsLabel },
+];
+
+/**
+ * The new-password menu: "Generate strong password" with a settings button
+ * inside the row. The row generates with the policy saved in the desktop's
+ * generator tab (Rust picks it; we send none). The button opens a panel (the
+ * frame slides taller) showing that policy; what the user changes there
+ * applies to this password only and is not saved. The password itself never
+ * passes through this page.
+ */
+function generateRows(t: string): HTMLElement[] {
+  /** The panel's policy while it is open. */
+  let chosen: PasswordOptions | null = null;
+  const generate = (): Promise<void> => pick({ type: "menu_generate", token: t, ...(chosen ? { options: { ...chosen } } : {}) });
+
+  const genRow = row(sparkle(), msg.menu.generateTitle, msg.menu.generateBody, generate, { title: true, detail: true });
+  const toggle = h("button", { className: "icon-btn gen-toggle" }, switchesIcon());
+  toggle.type = "button";
+  toggle.title = msg.menu.generateSettings;
+  toggle.setAttribute("aria-label", msg.menu.generateSettings);
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", "gen-panel");
+  const wrap = h("div", { className: "gen" }, genRow, toggle);
+
+  let panel: HTMLElement | null = null;
+  let loading = false;
+  const close = (): void => {
+    panel?.remove();
+    panel = null;
+    chosen = null;
+    toggle.setAttribute("aria-expanded", "false");
+    slide();
+  };
+  toggle.addEventListener("click", (e) => {
+    if (!e.isTrusted || !guard.armed() || loading) return;
+    if (panel) {
+      close();
+      return;
+    }
+    loading = true;
+    void ask<PasswordOptions>({ type: "menu_generator_options", token: t }).then((r) => {
+      loading = false;
+      if (!wrap.isConnected) return;
+      if (r.ok) {
+        chosen = { ...r.value };
+        panel = settingsPanel(chosen, generate);
+      } else {
+        panel = message(msg.menu.unavailable, r.message, true);
+        panel.id = "gen-panel";
+      }
+      toggle.setAttribute("aria-expanded", "true");
+      slide();
+      main.append(panel);
+      panel.querySelector<HTMLInputElement>("input[type=range]")?.focus();
+    });
+  });
+  return [wrap];
+}
+
+/** Edits `o` in place: the length and classes the next generate sends. */
+function settingsPanel(o: PasswordOptions, generate: () => Promise<void>): HTMLElement {
+  const panel = h("div", { className: "gen-panel" });
+  panel.id = "gen-panel";
+  panel.setAttribute("role", "group");
+  panel.setAttribute("aria-label", msg.menu.generateSettings);
+
+  const value = h("output", { className: "gen-value", text: String(o.length) });
+  const range = h("input", { className: "gen-range" });
+  range.type = "range";
+  range.min = String(MIN_PASSWORD_LENGTH);
+  range.max = String(MAX_PASSWORD_LENGTH);
+  range.step = "1";
+  range.value = String(o.length);
+  range.id = "gen-length";
+  range.setAttribute("aria-label", msg.menu.generateLength);
+  const paint = (): void => {
+    const pct = ((o.length - MIN_PASSWORD_LENGTH) / (MAX_PASSWORD_LENGTH - MIN_PASSWORD_LENGTH)) * 100;
+    range.style.setProperty("--fill", `${pct}%`);
+  };
+  paint();
+  range.addEventListener("input", () => {
+    o.length = Number(range.value);
+    value.textContent = range.value;
+    paint();
+  });
+  const lengthLabel = h("label", { className: "gen-label", text: msg.menu.generateLength });
+  lengthLabel.htmlFor = range.id;
+
+  const boxes: HTMLInputElement[] = [];
+  const chips = CLASSES.map(({ key, text, label }) => {
+    const box = h("input");
+    box.type = "checkbox";
+    box.checked = o[key];
+    box.setAttribute("aria-label", label());
+    box.addEventListener("change", () => {
+      // At least one class: the last one on cannot be turned off.
+      if (!box.checked && !boxes.some((b) => b.checked)) {
+        box.checked = true;
+        return;
+      }
+      o[key] = box.checked;
+    });
+    boxes.push(box);
+    const chip = h("label", { className: "chip" }, box, h("span", { text }));
+    chip.title = label();
+    return chip;
+  });
+
+  const go = h("button", { className: "btn primary gen-go", text: msg.menu.generateFill });
+  go.type = "button";
+  // Re-armed when the panel appears: a click meant for the toggle cannot land here.
+  const panelGuard = createClickGuard(panel);
+  go.addEventListener("click", (e) => {
+    if (!e.isTrusted || !guard.armed() || !panelGuard.armed() || go.disabled) return;
+    go.disabled = true;
+    void generate().finally(() => (go.disabled = false));
+  });
+
+  panel.append(
+    h("div", { className: "gen-line" }, lengthLabel, value),
+    range,
+    h("div", { className: "gen-line" }, h("span", { className: "gen-label", text: msg.menu.generateCharacters })),
+    h("div", { className: "chips" }, ...chips),
+    go,
+  );
+  return panel;
+}
+
 /** A row that only informs: no button, not in the arrow-key order. */
 function hintNote(title: string, detail: string): HTMLElement {
   return h(
@@ -216,9 +352,7 @@ function render(t: string, view: MenuView): void {
     return;
   }
   if (view.kind === "new_password") {
-    main.replaceChildren(
-      row(sparkle(), msg.menu.generateTitle, msg.menu.generateBody, () => pick({ type: "menu_generate", token: t }), { title: true, detail: true }),
-    );
+    main.replaceChildren(...generateRows(t));
     return;
   }
   if (view.kind === "identity") {
@@ -259,7 +393,9 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row, button.step-btn"));
+  // The length slider and the class boxes keep their own arrow keys.
+  if (document.activeElement instanceof HTMLInputElement) return;
+  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row, button.step-btn, button.gen-toggle"));
   if (rows.length === 0) return;
   const i = rows.indexOf(document.activeElement as HTMLButtonElement);
   const next = e.key === "ArrowDown" ? (i + 1) % rows.length : (i - 1 + rows.length) % rows.length;
@@ -292,6 +428,17 @@ window.addEventListener("focus", () => {
 // frame (menu_resize → bg_resize_menu). Past that many rows the list scrolls.
 
 let reported = 0;
+/** The next report follows a panel opening or closing: the frame slides. */
+let animateNext = false;
+let slideTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Open or close a panel: slide the frame, no scrollbar while it moves. */
+function slide(): void {
+  animateNext = true;
+  main.classList.add("sliding");
+  clearTimeout(slideTimer);
+  slideTimer = setTimeout(() => main.classList.remove("sliding"), 260);
+}
 
 function naturalHeight(): number {
   const head = card.firstElementChild as HTMLElement | null;
@@ -305,11 +452,13 @@ function naturalHeight(): number {
 }
 
 function reportSize(): void {
+  const animate = animateNext;
+  animateNext = false;
   if (!token || main.childElementCount === 0) return;
   const height = Math.min(MENU_MAX_HEIGHT, Math.max(MENU_MIN_HEIGHT, naturalHeight()));
   if (height === reported) return;
   reported = height;
-  void ask({ type: "menu_resize", token, height });
+  void ask({ type: "menu_resize", token, height, ...(animate ? { animate: true as const } : {}) });
 }
 
 let sizePending = false;
