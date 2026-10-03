@@ -37,6 +37,7 @@ import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.ui.components.HavenTopBar
 import net.havenkeys.android.ui.components.errorText
+import net.havenkeys.android.ui.kit.NoPersonalizedLearning
 import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.ItemEdit

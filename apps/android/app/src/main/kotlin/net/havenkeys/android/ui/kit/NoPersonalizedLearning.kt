@@ -1,4 +1,4 @@
-package net.havenkeys.android.ui.edit
+package net.havenkeys.android.ui.kit
 
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -14,7 +14,7 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun NoPersonalizedLearning(content: @Composable () -> Unit) {
+fun NoPersonalizedLearning(content: @Composable () -> Unit) {
     InterceptPlatformTextInput(
         interceptor = { request, next ->
             val private = object : PlatformTextInputMethodRequest {

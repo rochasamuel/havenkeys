@@ -1,0 +1,74 @@
+package net.havenkeys.android.ui.kit
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
+import net.havenkeys.android.ui.theme.LightHavenColors
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class PrimitivesTest {
+    @get:Rule
+    val rule = createComposeRule()
+
+    private fun colorOf(text: String): Color {
+        val layouts = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().layoutInput.style.color
+    }
+
+    @Test
+    fun textTakesTheContentColourUnlessItNamesOne() {
+        rule.setKit {
+            Column {
+                ProvideContentColor(Color.Red) {
+                    HavenText("inherits")
+                    HavenText("own", color = Color.Blue)
+                }
+                HavenText("plain")
+            }
+        }
+        assertEquals(Color.Red, colorOf("inherits"))
+        assertEquals(Color.Blue, colorOf("own"))
+        assertEquals(LightHavenColors.text, colorOf("plain"))
+    }
+
+    @Test
+    fun pressFeedbackLetsEveryClickThrough() {
+        var clicks = 0
+        rule.setKit {
+            Box(
+                Modifier.size(48.dp).clickable(
+                    interactionSource = null,
+                    indication = HavenPress,
+                    role = Role.Button,
+                ) { clicks++ },
+            )
+        }
+        val target = rule.onNode(hasClickAction())
+        target.performClick()
+        target.performTouchInput {
+            down(center)
+            up()
+        }
+        rule.waitForIdle()
+        assertEquals(2, clicks)
+    }
+}
