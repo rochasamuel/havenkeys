@@ -120,7 +120,28 @@ val forbidLogging by tasks.registering {
         }
     }
 }
-tasks.named("detekt") { dependsOn(forbidLogging) }
+// Spec 2026-10-03 §5: the theme, the kit and the catalogue are built on
+// foundation only. Stage 5 widens this to the whole app.
+val forbidMaterialInKit by tasks.registering {
+    description = "Fails on a Material import in ui/kit, ui/theme (but MaterialBridge.kt) or the catalogue."
+    val sources = fileTree("src") {
+        include("**/ui/kit/**/*.kt", "**/ui/theme/**/*.kt", "**/catalogue/**/*.kt")
+        exclude("**/ui/theme/MaterialBridge.kt")
+    }
+    inputs.files(sources)
+    doLast {
+        val material = Regex("""^\s*import\s+androidx\.compose\.material""")
+        val hits = sources.flatMap { file ->
+            file.readLines().mapIndexedNotNull { i, line ->
+                if (material.containsMatchIn(line)) "${file.path}:${i + 1}" else null
+            }
+        }
+        if (hits.isNotEmpty()) {
+            throw GradleException("Material is not used in the HavenKeys kit (spec 2026-10-03 §5):\n" + hits.joinToString("\n"))
+        }
+    }
+}
+tasks.named("detekt") { dependsOn(forbidLogging, forbidMaterialInKit) }
 
 // detekt 1.23 embeds the Kotlin compiler it was built with; the project's
 // newer Kotlin must not replace it on detekt's own classpath.
