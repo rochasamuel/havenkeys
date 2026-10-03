@@ -26,6 +26,9 @@ object HavenTheme {
         @Composable @ReadOnlyComposable
         get() = LocalHavenColors.current
 
+    val type: HavenTypography
+        get() = HavenTypography
+
     val motion: HavenMotion
         @Composable @ReadOnlyComposable
         get() = LocalHavenMotion.current
