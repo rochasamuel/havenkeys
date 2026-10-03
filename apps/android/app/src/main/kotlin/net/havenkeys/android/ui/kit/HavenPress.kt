@@ -25,7 +25,7 @@ import net.havenkeys.android.ui.theme.PRESS_SCALE
 
 private val FOCUS_RING = 1.5.dp
 
-/** Test seam: whether the latest focus change of any [HavenPress] node turned its focus ring on (the draw reads the same flag). */
+/** Test seam: the latest focus change of any [HavenPress] node (the draw reads the same flag). */
 internal object FocusDrawSeam {
     @Volatile
     var focused: Boolean = false
