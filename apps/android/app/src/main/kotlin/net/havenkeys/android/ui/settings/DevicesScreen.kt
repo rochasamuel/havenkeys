@@ -11,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.OffsetDateTime
@@ -88,7 +90,14 @@ private fun DeviceRow(device: DeviceInfo, onRevoke: () -> Unit) {
     val seen = device.lastSeenAt?.let(::relativeTime)
     GroupRow(
         trailing = {
-            HavenButton(stringResource(R.string.devices_revoke), onClick = onRevoke, style = ButtonStyle.Quiet)
+            // Every row's button says "Revoke": TalkBack hears which device it ends.
+            val named = stringResource(R.string.devices_revoke_named, device.name)
+            HavenButton(
+                stringResource(R.string.devices_revoke),
+                onClick = onRevoke,
+                Modifier.semantics { contentDescription = named },
+                style = ButtonStyle.Quiet,
+            )
         },
     ) {
         if (device.current) Pill(stringResource(R.string.devices_this_phone))

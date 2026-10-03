@@ -339,4 +339,6 @@
     <string name="unlock_title_locked">bloqueado</string>
     <!-- A hidden value read after its field's label ("Password, Hidden") -->
     <string name="hidden_value">Oculto</string>
+    <!-- What TalkBack hears for a device's Revoke button: the device's name -->
+    <string name="devices_revoke_named">Revogar %1$s</string>
 </resources>

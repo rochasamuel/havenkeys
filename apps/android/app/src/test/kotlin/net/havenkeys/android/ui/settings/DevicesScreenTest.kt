@@ -1,7 +1,10 @@
 package net.havenkeys.android.ui.settings
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -12,6 +15,7 @@ import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
+import net.havenkeys.android.ui.kit.hasRole
 import net.havenkeys.android.ui.kit.setKit
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -69,5 +73,15 @@ class DevicesScreenTest {
         rule.onNodeWithText(text(R.string.settings_cancel)).performClick()
         rule.waitForIdle()
         assertTrue(accounts.calls.none { it.startsWith("revoke") })
+    }
+
+    /** Final review (stage 4): every row's button read just "Revoke"; TalkBack now hears which device. */
+    @Test
+    fun eachRevokeButtonNamesItsDevice() {
+        show()
+        rule.onNode(hasContentDescription(text(R.string.devices_revoke_named, "Work laptop")) and hasClickAction())
+            .assert(hasRole(Role.Button))
+            .performClick()
+        rule.onNodeWithText(text(R.string.devices_revoke_confirm, "Work laptop")).assertExists()
     }
 }
