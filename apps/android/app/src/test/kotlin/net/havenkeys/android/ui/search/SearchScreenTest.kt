@@ -41,8 +41,7 @@ class SearchScreenTest {
     private val opened = mutableListOf<Pair<String, String>>()
     private var cancelled = 0
 
-    private fun show() {
-        val vm = SearchViewModel(vault, events)
+    private fun show(vm: SearchViewModel = SearchViewModel(vault, events)) {
         rule.setKit {
             SearchScreen(vm, onOpen = { id, origin -> opened += id to origin }, onCancel = { cancelled++ })
         }
@@ -85,12 +84,32 @@ class SearchScreenTest {
     }
 
     @Test
-    fun fastTypingIsNotOverwrittenByTheViewModel() {
-        show()
+    fun aViewModelQueryThatLagsTheFieldIsNotPushedIntoIt() {
+        val vm = SearchViewModel(vault, events)
+        show(vm)
         val field = rule.onNode(hasSetTextAction())
-        "github".forEach { field.performTextInput(it.toString()) }
+        field.performTextInput("git")
         rule.waitForIdle()
-        field.assert(hasText("github"))
+        // The ViewModel's query is behind what the field now shows (typing outran its state).
+        rule.runOnIdle { vm.setQuery("gi") }
+        rule.waitForIdle()
+        field.assert(hasText("git"))
+    }
+
+    @Test
+    fun aLockClearsTheFieldAndTheResults() = wipedBy { events.locked("user") }
+
+    @Test
+    fun signingOutClearsTheFieldAndTheResults() = wipedBy { events.signedOut() }
+
+    private fun wipedBy(event: () -> Unit) {
+        show()
+        rule.onNode(hasSetTextAction()).performTextInput("git")
+        awaitText("GitHub")
+        event()
+        rule.waitForIdle()
+        rule.onNode(hasSetTextAction()).assert(hasText("git", substring = true).not())
+        rule.onNode(hasText("GitHub") and hasClickAction()).assertDoesNotExist()
     }
 
     @Test

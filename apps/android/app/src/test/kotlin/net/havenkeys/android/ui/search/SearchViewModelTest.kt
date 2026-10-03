@@ -189,4 +189,15 @@ class SearchViewModelTest {
         vm.opened()
         assertEquals(listOf("git", "bank", "mail"), vault.searches)
     }
+
+    @Test
+    fun aRecentEqualToTheCurrentQueryDoesNotSearchAgain() {
+        val vm = vm()
+        vm.setQuery("git")
+        scheduler.advanceUntilIdle()
+        val before = vault.calls.count { it == "search" }
+        vm.useRecent("git")
+        scheduler.advanceUntilIdle()
+        assertEquals(before, vault.calls.count { it == "search" })
+    }
 }
