@@ -44,6 +44,8 @@ pub enum Purpose {
     DeviceSettings,
     /// The Digital Asset Links cache (never synced).
     AssetLinks,
+    /// This device's item uses and recent searches (never synced).
+    Activity,
 }
 
 impl Purpose {
@@ -56,6 +58,7 @@ impl Purpose {
             Purpose::SyncHeader => b"sync-header",
             Purpose::DeviceSettings => b"device-settings",
             Purpose::AssetLinks => b"asset-links",
+            Purpose::Activity => b"activity",
         }
     }
 
