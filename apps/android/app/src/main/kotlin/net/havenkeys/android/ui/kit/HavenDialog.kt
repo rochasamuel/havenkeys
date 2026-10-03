@@ -42,6 +42,9 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * a changed [answerKey], re-arms it. [answerKey] is an attempt counter the
  * caller bumps on every failed confirm, never a message: two failures in a
  * row can show the same error, and only a changed key re-arms the dialog.
+ * With an [alternative] (a second way to say yes) the three buttons stack full
+ * width: confirm, alternative, dismiss. With [dismissible] false, Back and an
+ * outside tap do nothing; only a button answers.
  */
 @Composable
 @Suppress("LongParameterList")
@@ -56,15 +59,21 @@ fun HavenDialog(
     confirmEnabled: Boolean = true,
     busy: Boolean = false,
     answerKey: Any? = null,
+    alternative: DialogAction? = null,
+    dismissible: Boolean = true,
 ) {
     val answer = rememberDialogAnswer(busy, answerKey)
     Dialog(
-        onDismissRequest = { if (!busy) answer.run(onDismiss) },
-        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
+        onDismissRequest = { if (!busy && dismissible) answer.run(onDismiss) },
+        properties = DialogProperties(
+            dismissOnBackPress = dismissible,
+            dismissOnClickOutside = dismissible,
+            securePolicy = SecureFlagPolicy.SecureOn,
+        ),
     ) {
         SecureDialogWindow(ignoreObscuredTouches = true)
         WindowDim(HavenTheme.colors.scrim.alpha)
-        DialogContent(title, confirm, modifier, message, dismiss, content, confirmEnabled, busy, answer)
+        DialogContent(title, confirm, modifier, message, dismiss, content, confirmEnabled, busy, answer, alternative)
     }
 }
 
@@ -84,9 +93,10 @@ internal fun DialogSurface(
     confirmEnabled: Boolean = true,
     busy: Boolean = false,
     answerKey: Any? = null,
+    alternative: DialogAction? = null,
 ) {
     val answer = rememberDialogAnswer(busy, answerKey)
-    DialogContent(title, confirm, modifier, message, dismiss, content, confirmEnabled, busy, answer)
+    DialogContent(title, confirm, modifier, message, dismiss, content, confirmEnabled, busy, answer, alternative)
 }
 
 @Composable
@@ -113,6 +123,7 @@ private fun DialogContent(
     confirmEnabled: Boolean,
     busy: Boolean,
     answer: DialogAnswer,
+    alternative: DialogAction?,
 ) {
     val colors = HavenTheme.colors
     fun once(action: () -> Unit): () -> Unit = { answer.run(action) }
@@ -134,25 +145,83 @@ private fun DialogContent(
         if (content != null) {
             Column(Modifier.fillMaxWidth().padding(top = 16.dp)) { content() }
         }
-        Row(
-            Modifier.align(Alignment.End).padding(top = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (dismiss != null) {
-                HavenButton(
-                    dismiss.label,
-                    once(dismiss.onClick),
-                    style = ButtonStyle.Quiet,
-                    enabled = !answered && !busy,
-                )
-            }
-            if (busy) ProgressRing(progress = null, size = 20.dp)
+        val enabled = !answered && !busy
+        if (alternative == null) {
+            AnswerRow(confirm, dismiss, ::once, enabled, confirmEnabled, busy)
+        } else {
+            AnswerStack(confirm, alternative, dismiss, ::once, enabled, confirmEnabled, busy)
+        }
+    }
+}
+
+/** Confirm and dismiss side by side, at the end. */
+@Suppress("LongParameterList")
+@Composable
+private fun ColumnScope.AnswerRow(
+    confirm: DialogAction,
+    dismiss: DialogAction?,
+    once: (() -> Unit) -> () -> Unit,
+    enabled: Boolean,
+    confirmEnabled: Boolean,
+    busy: Boolean,
+) {
+    Row(
+        Modifier.align(Alignment.End).padding(top = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (dismiss != null) {
+            HavenButton(dismiss.label, once(dismiss.onClick), style = ButtonStyle.Quiet, enabled = enabled)
+        }
+        if (busy) ProgressRing(progress = null, size = 20.dp)
+        HavenButton(
+            confirm.label,
+            once(confirm.onClick),
+            style = if (confirm.danger) ButtonStyle.Danger else ButtonStyle.Primary,
+            enabled = enabled && confirmEnabled,
+        )
+    }
+}
+
+/** Three answers, stacked full width so long labels wrap: confirm, the alternative, dismiss. */
+@Suppress("LongParameterList")
+@Composable
+private fun AnswerStack(
+    confirm: DialogAction,
+    alternative: DialogAction,
+    dismiss: DialogAction?,
+    once: (() -> Unit) -> () -> Unit,
+    enabled: Boolean,
+    confirmEnabled: Boolean,
+    busy: Boolean,
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (busy) ProgressRing(progress = null, size = 20.dp)
+        HavenButton(
+            confirm.label,
+            once(confirm.onClick),
+            Modifier.fillMaxWidth(),
+            style = if (confirm.danger) ButtonStyle.Danger else ButtonStyle.Primary,
+            enabled = enabled && confirmEnabled,
+        )
+        HavenButton(
+            alternative.label,
+            once(alternative.onClick),
+            Modifier.fillMaxWidth(),
+            style = if (alternative.danger) ButtonStyle.Danger else ButtonStyle.Secondary,
+            enabled = enabled,
+        )
+        if (dismiss != null) {
             HavenButton(
-                confirm.label,
-                once(confirm.onClick),
-                style = if (confirm.danger) ButtonStyle.Danger else ButtonStyle.Primary,
-                enabled = !answered && !busy && confirmEnabled,
+                dismiss.label,
+                once(dismiss.onClick),
+                Modifier.fillMaxWidth(),
+                style = ButtonStyle.Quiet,
+                enabled = enabled,
             )
         }
     }

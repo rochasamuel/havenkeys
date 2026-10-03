@@ -1,14 +1,17 @@
 package net.havenkeys.android.ui.kit
 
 import android.view.KeyEvent
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isHeading
@@ -17,11 +20,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -257,5 +263,66 @@ class OverlaysTest {
         field.assertIsDisplayed().performTextInput("abc")
         rule.runOnIdle { assertEquals("abc", state.text.toString()) }
         rule.onNodeWithText("Save").assertIsDisplayed()
+    }
+
+    @Test
+    fun aTallSheetStopsShortOfTheTopAndScrollsToItsLastRow() {
+        rule.setKit {
+            HavenSheet(onDismiss = {}, title = "Save to") {
+                repeat(TALL_ROWS) { HavenText("Login $it", Modifier.heightIn(min = 48.dp)) }
+            }
+        }
+        rule.waitForIdle()
+        assertTrue(rule.onNodeWithTag(SHEET_TAG).fetchSemanticsNode().boundsInRoot.top > 0f)
+        rule.onNodeWithText("Login ${TALL_ROWS - 1}").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun aShortSheetStillClosesWhenDraggedFromItsContent() {
+        showSheet()
+        rule.onNodeWithText("Login").performTouchInput { swipeDown(startY = centerY, endY = centerY + 2_000f) }
+        rule.waitForIdle()
+        assertEquals(1, dismissed)
+    }
+
+    @Test
+    fun aThirdAnswerStacksTheButtonsAndAnswersOnce() {
+        val answers = mutableListOf<String>()
+        rule.setKit {
+            HavenDialog(
+                title = "Fill your identity?",
+                onDismiss = { answers += "dismiss" },
+                confirm = DialogAction("Fill with documents", { answers += "confirm" }),
+                dismiss = DialogAction("Cancel", { answers += "cancel" }),
+                alternative = DialogAction("Fill without documents", { answers += "alternative" }),
+            )
+        }
+        rule.onNodeWithText("Fill without documents").assert(hasRole(Role.Button)).assertTouchTarget().performClick()
+        rule.onNodeWithText("Fill with documents").performClick()
+        pressBack()
+        rule.waitForIdle()
+        assertEquals(listOf("alternative"), answers)
+    }
+
+    @Test
+    fun anUndismissibleDialogIgnoresBackAndStillAnswers() {
+        var reloads = 0
+        var backs = 0
+        rule.setKit {
+            HavenDialog(
+                title = "Changed on another device",
+                onDismiss = { backs++ },
+                confirm = DialogAction("Reload", { reloads++ }),
+                dismissible = false,
+            )
+        }
+        pressBack()
+        rule.onNodeWithText("Reload").assertIsEnabled().performClick()
+        assertEquals(0, backs)
+        assertEquals(1, reloads)
+    }
+
+    private companion object {
+        const val TALL_ROWS = 60
     }
 }

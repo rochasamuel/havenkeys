@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import net.havenkeys.android.ui.kit.ButtonStyle
+import net.havenkeys.android.ui.kit.ChoiceRow
+import net.havenkeys.android.ui.kit.ChoiceSheet
 import net.havenkeys.android.ui.kit.CopyButton
 import net.havenkeys.android.ui.kit.DialogAction
 import net.havenkeys.android.ui.kit.DialogSurface
@@ -181,6 +184,8 @@ internal fun OverlaysSection() {
     var sheet by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    var choice by remember { mutableIntStateOf(5) }
+    var choosing by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HavenText(
             "Drawn inline below; the buttons open the real ones, in secure windows that screenshots show black.",
@@ -195,9 +200,11 @@ internal fun OverlaysSection() {
             dismiss = DialogAction("Cancel", {}),
         )
         MenuSurface(sampleMenu(), onDismiss = {})
+        ChoiceAndThirdAnswer(choice) { choice = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HavenButton("Sheet", onClick = { sheet = true }, style = ButtonStyle.Secondary)
             HavenButton("Dialog", onClick = { dialog = true }, style = ButtonStyle.Secondary)
+            HavenButton("Choice", onClick = { choosing = true }, style = ButtonStyle.Secondary)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
@@ -215,6 +222,39 @@ internal fun OverlaysSection() {
             confirm = DialogAction("Remove", { dialog = false }, danger = true),
             message = "Its local copy of the vault is erased.",
             dismiss = DialogAction("Cancel", { dialog = false }),
+        )
+    }
+    if (choosing) {
+        ChoiceSheet(
+            "Lock automatically",
+            listOf(5, 15, 30),
+            choice,
+            label = { "After $it minutes" },
+            onSelect = { choice = it },
+            onDismiss = { choosing = false },
+        )
+    }
+}
+
+@Composable
+private fun ChoiceAndThirdAnswer(choice: Int, onChoice: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        InsetGroup(Modifier.selectableGroup()) {
+            row { ChoiceRow("After 5 minutes", selected = choice == 5, onClick = { onChoice(5) }) }
+            row {
+                ChoiceRow(
+                    "After 15 minutes",
+                    selected = choice == 15,
+                    onClick = { onChoice(15) },
+                    detail = "Recommended",
+                )
+            }
+        }
+        DialogSurface(
+            title = "Fill your identity?",
+            confirm = DialogAction("Fill with documents", {}),
+            dismiss = DialogAction("Cancel", {}),
+            alternative = DialogAction("Fill without documents", {}),
         )
     }
 }

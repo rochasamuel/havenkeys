@@ -55,7 +55,10 @@ internal fun catalogueSections(): List<CatalogueSection> = listOf(
         "Inputs",
         listOf("HavenTextField", "SecretTextField", "HavenSwitch", "HavenSlider", "SegmentedControl"),
     ) { InputsSection() },
-    CatalogueSection("Overlays", listOf("HavenSheet", "HavenDialog", "Toast", "HavenMenu")) { OverlaysSection() },
+    CatalogueSection(
+        "Overlays",
+        listOf("HavenSheet", "HavenDialog", "Toast", "HavenMenu", "ChoiceSheet"),
+    ) { OverlaysSection() },
     CatalogueSection("Feedback", listOf("ProgressRing", "PullToRefresh")) { FeedbackSection() },
 )
 

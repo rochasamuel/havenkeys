@@ -2,27 +2,10 @@
 
 package net.havenkeys.android.ui.settings
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
 import net.havenkeys.android.R
-import net.havenkeys.android.ui.kit.HavenIcon
-import net.havenkeys.android.ui.kit.HavenPress
-import net.havenkeys.android.ui.kit.HavenSheet
-import net.havenkeys.android.ui.kit.HavenText
-import net.havenkeys.android.ui.kit.IconGlyph
-import net.havenkeys.android.ui.kit.InsetGroup
-import net.havenkeys.android.ui.theme.HavenSpacing
-import net.havenkeys.android.ui.theme.HavenTheme
+import net.havenkeys.android.ui.kit.ChoiceSheet
 import uniffi.havenkeys_mobile.MobileSettings
 
 /** The settings chosen from a short list. */
@@ -50,69 +33,21 @@ internal fun SettingsChoiceSheet(
 ) {
     when (choice) {
         SettingsChoice.AUTO_LOCK -> ChoiceSheet(
-            Choices(
-                stringResource(R.string.settings_auto_lock),
-                SettingsViewModel.AUTO_LOCK_CHOICES,
-                settings.autoLockMinutes,
-            ) { autoLockText(it) },
+            title = stringResource(R.string.settings_auto_lock),
+            values = SettingsViewModel.AUTO_LOCK_CHOICES,
+            selected = settings.autoLockMinutes,
+            label = { autoLockText(it) },
             onSelect = viewModel::setAutoLock,
-            onClose = onClose,
+            onDismiss = onClose,
         )
         SettingsChoice.CLIPBOARD -> ChoiceSheet(
-            Choices(
-                stringResource(R.string.settings_clipboard),
-                // A value set on the desktop outside the phone's list still shows, selected.
-                (SettingsViewModel.CLIPBOARD_CHOICES + settings.clipboardClearSeconds).distinct().sorted(),
-                settings.clipboardClearSeconds,
-            ) { clipboardText(it) },
+            title = stringResource(R.string.settings_clipboard),
+            // A value set on the desktop outside the phone's list still shows, selected.
+            values = (SettingsViewModel.CLIPBOARD_CHOICES + settings.clipboardClearSeconds).distinct().sorted(),
+            selected = settings.clipboardClearSeconds,
+            label = { clipboardText(it) },
             onSelect = viewModel::setClipboardSeconds,
-            onClose = onClose,
+            onDismiss = onClose,
         )
-    }
-}
-
-private class Choices(
-    val title: String,
-    val values: List<UInt>,
-    val selected: UInt,
-    val text: @Composable (UInt) -> String,
-)
-
-@Composable
-private fun ChoiceSheet(choices: Choices, onSelect: (UInt) -> Unit, onClose: () -> Unit) {
-    HavenSheet(onDismiss = onClose, title = choices.title) {
-        InsetGroup(Modifier.selectableGroup()) {
-            choices.values.forEach { value ->
-                row {
-                    ChoiceOption(choices.text(value), selected = value == choices.selected) {
-                        onClose()
-                        if (value != choices.selected) onSelect(value)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** One value: a radio button for TalkBack, a brass check when it is the current one. */
-@Composable
-private fun ChoiceOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = HavenTheme.colors
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = HavenSpacing.rowMin)
-            .selectable(
-                selected = selected,
-                interactionSource = null,
-                indication = HavenPress,
-                role = Role.RadioButton,
-                onClick = onClick,
-            )
-            .padding(horizontal = HavenSpacing.rowX, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        HavenText(label, Modifier.weight(1f), style = HavenTheme.type.value, color = colors.textStrong)
-        if (selected) IconGlyph(HavenIcon.Check, contentDescription = null, tint = colors.brass, size = 20.dp)
     }
 }

@@ -9,14 +9,19 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -42,8 +47,10 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -66,12 +73,17 @@ internal const val SHEET_TAG = "haven-sheet"
 /** Released past this share of its height, a dragged sheet closes. */
 private const val DRAG_DISMISS_FRACTION = 0.4f
 
+/** A sheet never covers more of the window than this; taller content scrolls inside it. */
+private const val SHEET_MAX_FRACTION = 0.9f
+
 /**
  * A bottom sheet (spec §7: springs up, the backdrop dims, drag down or tap
  * outside to close). It lives in a window of its own that sets FLAG_SECURE,
  * drops taps that pass through another app's overlay and is excluded from
  * autofill. [onDismiss] is called once, after the sheet has gone; a close
  * tapped while it is still rising goes straight to closing.
+ * It takes at most 90% of the window's height (taller content scrolls inside it)
+ * and rises above the keyboard.
  */
 @Composable
 fun HavenSheet(
@@ -126,7 +138,9 @@ private fun SheetFrame(
 ) {
     val closeLabel = stringResource(R.string.kit_close)
     val motion = HavenTheme.motion
-    Box(Modifier.fillMaxSize()) {
+    // imePadding consumes the keyboard's inset, so the surface's navigationBarsPadding is not added on top of it.
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        val tallest = maxHeight * SHEET_MAX_FRACTION
         Box(
             Modifier
                 .fillMaxSize()
@@ -142,8 +156,8 @@ private fun SheetFrame(
                 .semantics { contentDescription = closeLabel },
         )
         SheetSurface(
-            title,
-            modifier
+            title = title,
+            modifier = modifier
                 .align(Alignment.BottomCenter)
                 .onSizeChanged { size ->
                     state.updateAnchors(
@@ -165,18 +179,30 @@ private fun SheetFrame(
                     ),
                 )
                 .testTag(SHEET_TAG),
-            content,
+            maxHeight = tallest,
+            content = content,
         )
     }
 }
 
-/** The sheet as it draws, without its window: the catalogue shows it inline. */
+/**
+ * The sheet as it draws, without its window: the catalogue shows it inline.
+ * With a [maxHeight] (the window's sheet) it stops there and its content
+ * scrolls; inline it takes its content's height.
+ */
 @Composable
-internal fun SheetSurface(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun SheetSurface(
+    title: String?,
+    modifier: Modifier = Modifier,
+    maxHeight: Dp = Dp.Unspecified,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val colors = HavenTheme.colors
+    val capped = maxHeight.isSpecified
     Column(
         modifier
             .fillMaxWidth()
+            .then(if (capped) Modifier.heightIn(max = maxHeight) else Modifier)
             .shadow(24.dp, HavenShape.sheet)
             .clip(HavenShape.sheet)
             .background(colors.raised)
@@ -200,7 +226,14 @@ internal fun SheetSurface(title: String?, modifier: Modifier = Modifier, content
                 color = colors.textStrong,
             )
         }
-        content()
+        if (capped) {
+            val scroll = rememberScrollState()
+            // Only a sheet taller than its cap scrolls; a short one still drags down from anywhere.
+            val scrolls = scroll.maxValue in 1 until Int.MAX_VALUE
+            Column(Modifier.weight(1f, fill = false).verticalScroll(scroll, enabled = scrolls), content = content)
+        } else {
+            content()
+        }
     }
 }
 
