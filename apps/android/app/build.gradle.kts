@@ -143,6 +143,7 @@ val forbidMaterialInKit by tasks.registering {
             "**/catalogue/**/*.kt",
             "**/ui/shell/**/*.kt",
             "**/ui/home/**/*.kt",
+            "**/ui/item/**/*.kt",
             "**/ui/items/**/*.kt",
             "**/ui/search/**/*.kt",
             "**/ui/nav/**/*.kt",
