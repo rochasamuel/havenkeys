@@ -137,13 +137,7 @@ internal fun UnlockForm(
             keyShown = false
         }
     }
-    LaunchedEffect(state.unlocked) { if (state.unlocked) secretKey.clearText() }
-    DisposableEffect(Unit) {
-        onDispose {
-            password.clearText()
-            secretKey.clearText()
-        }
-    }
+    EmptiedOnLeave(state.unlocked, password, secretKey)
     // Only a refused password (or key) is the field's error; biometric, network and other failures are not.
     val fieldError = state.errorCode?.takeIf { it == UNLOCK_FAILED }?.let { stringResource(errorText(it)) }
     val otherError = state.errorCode?.takeIf { it != UNLOCK_FAILED }
@@ -189,6 +183,18 @@ internal fun UnlockForm(
         }
         otherError?.let { ErrorLine(it) }
         UnlockButtons(state, ready, submit, onBiometric)
+    }
+}
+
+/** The Secret Key is emptied once the vault opens; both fields when the screen goes. */
+@Composable
+private fun EmptiedOnLeave(unlocked: Boolean, password: TextFieldState, secretKey: TextFieldState) {
+    LaunchedEffect(unlocked) { if (unlocked) secretKey.clearText() }
+    DisposableEffect(password, secretKey) {
+        onDispose {
+            password.clearText()
+            secretKey.clearText()
+        }
     }
 }
 

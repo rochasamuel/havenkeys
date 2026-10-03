@@ -59,52 +59,25 @@ internal fun AutofillSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val query = remember { TextFieldState() }
-    var results by remember { mutableStateOf(emptyList<AutofillMatch>()) }
+    val found = rememberSearch(query, search)
     var picked by remember { mutableStateOf<AutofillMatch?>(null) }
     var errorCode by remember { mutableStateOf<String?>(null) }
-    // A typed query is being waited on (debounce) or asked of Rust: "No matches" waits for its answer.
-    var searching by remember { mutableStateOf(false) }
-    var searchError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     val gutter = Modifier.padding(horizontal = HavenSpacing.gutter)
-
-    LaunchedEffect(query) {
-        snapshotFlow { query.text.toString() }.collectLatest { typed ->
-            if (typed.isBlank()) {
-                results = emptyList()
-                searchError = null
-                searching = false
-            } else {
-                searching = true
-                delay(SEARCH_DEBOUNCE_MS)
-                when (val found = search(typed.trim())) {
-                    is Outcome.Ok -> {
-                        results = found.value
-                        searchError = null
-                    }
-                    is Outcome.Failed -> {
-                        results = emptyList()
-                        searchError = found.code
-                    }
-                }
-                searching = false
-            }
-        }
-    }
     LaunchedEffect(focus) { focus.requestFocus() }
 
     Column(modifier.fillMaxSize().background(HavenTheme.colors.pane).safeDrawingPadding().imePadding()) {
         SearchField(query, gutter.padding(vertical = 8.dp).fillMaxWidth().focusRequester(focus))
         errorCode?.let { ErrorLine(it, gutter) }
         // A failed search says why rather than looking like an empty result.
-        if (!searching) searchError?.let { ErrorLine(it, gutter) }
+        found.failed?.let { ErrorLine(it, gutter) }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = HavenSpacing.gutter)) {
-            if (query.text.isNotBlank() && !searching && searchError == null && results.isEmpty()) {
+            if (query.text.isNotBlank() && found.answeredEmpty) {
                 item(key = "none") { EmptyLine(stringResource(R.string.vault_no_matches), gutter) }
             }
-            insetGroup(results, key = { it.id }) { match ->
+            insetGroup(found.results, key = { it.id }) { match ->
                 ItemRow(
                     match.title,
                     match.username,
@@ -117,23 +90,94 @@ internal fun AutofillSearchScreen(
     }
 
     picked?.let { match ->
-        // The package name is what identifies the app (spec §7.2); the label is
-        // the app's own choice and could name anything, even this login.
-        HavenDialog(
-            title = stringResource(R.string.autofill_use_in_app, match.title, app.packageName),
-            onDismiss = { picked = null },
-            confirm = DialogAction(stringResource(R.string.autofill_use), {
+        UseInAppDialog(
+            match,
+            app,
+            busy = busy,
+            onCancel = { picked = null },
+            onUse = {
                 busy = true
                 scope.launch {
                     errorCode = onConfirmed(match)
                     busy = false
                     picked = null
                 }
-            }),
-            message = app.label?.takeIf { it.isNotBlank() && it != app.packageName }
-                ?.let { stringResource(R.string.autofill_app_label, it) },
-            dismiss = DialogAction(stringResource(R.string.autofill_cancel), { picked = null }),
-            busy = busy,
+            },
         )
     }
+}
+
+/** The search's answer for the typed query; "searching" covers the debounce and Rust's answer. */
+private class SearchAnswer {
+    var results by mutableStateOf(emptyList<AutofillMatch>())
+    var searching by mutableStateOf(false)
+    var error by mutableStateOf<String?>(null)
+
+    /** The error once the latest search has answered with one. */
+    val failed: String? get() = error.takeUnless { searching }
+
+    /** The latest search answered, without an error, with nothing: only then is it "No matches". */
+    val answeredEmpty: Boolean get() = !searching && error == null && results.isEmpty()
+
+    fun reset() {
+        results = emptyList()
+        error = null
+        searching = false
+    }
+
+    fun answer(outcome: Outcome<List<AutofillMatch>>) {
+        when (outcome) {
+            is Outcome.Ok -> {
+                results = outcome.value
+                error = null
+            }
+            is Outcome.Failed -> {
+                results = emptyList()
+                error = outcome.code
+            }
+        }
+        searching = false
+    }
+}
+
+/** Searches [query] after a short pause in typing; a newer query cancels the older search. */
+@Composable
+private fun rememberSearch(
+    query: TextFieldState,
+    search: suspend (String) -> Outcome<List<AutofillMatch>>,
+): SearchAnswer {
+    val answer = remember { SearchAnswer() }
+    LaunchedEffect(query) {
+        snapshotFlow { query.text.toString() }.collectLatest { typed ->
+            if (typed.isBlank()) {
+                answer.reset()
+            } else {
+                answer.searching = true
+                delay(SEARCH_DEBOUNCE_MS)
+                answer.answer(search(typed.trim()))
+            }
+        }
+    }
+    return answer
+}
+
+@Composable
+private fun UseInAppDialog(
+    match: AutofillMatch,
+    app: CallerApp,
+    busy: Boolean,
+    onCancel: () -> Unit,
+    onUse: () -> Unit,
+) {
+    // The package name is what identifies the app (spec §7.2); the label is
+    // the app's own choice and could name anything, even this login.
+    HavenDialog(
+        title = stringResource(R.string.autofill_use_in_app, match.title, app.packageName),
+        onDismiss = onCancel,
+        confirm = DialogAction(stringResource(R.string.autofill_use), onUse),
+        message = app.label?.takeIf { it.isNotBlank() && it != app.packageName }
+            ?.let { stringResource(R.string.autofill_app_label, it) },
+        dismiss = DialogAction(stringResource(R.string.autofill_cancel), onCancel),
+        busy = busy,
+    )
 }
