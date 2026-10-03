@@ -11,7 +11,7 @@ and signatures.
 | Stage | Plan | Status | Depends on |
 |---|---|---|---|
 | 1. Activity data | `2026-10-03-android-redesign-stage1-activity.md` | Done (`cb5c461..576f07c`) | — |
-| 2. Design system | `2026-10-03-android-redesign-stage2-design-system.md` | Planned | Nothing in stage 1 (can start in parallel if wanted) |
+| 2. Design system | `2026-10-03-android-redesign-stage2-design-system.md` | Done (`6a4a2f8..83fbc18`) | Nothing in stage 1 (can start in parallel if wanted) |
 | 3. Shell and new screens | `2026-10-03-android-redesign-stage3-shell.md` | Done (`5b72db6..a9def0d`) | Stages 1 and 2 |
 | 4. Existing screens rebuilt | `2026-10-03-android-redesign-stage4-screens.md` | Planned | Stage 2 (and 3 for navigation) |
 | 5. Remove Material | written when stage 4 is done | Not planned | Stage 4 |
@@ -60,7 +60,7 @@ and signatures.
 - Item detail, editors, generator, unlock, onboarding, devices, autofill
   setup, the autofill picker and "Search HavenKeys…", passkey sheets, all
   from `ui/kit`, behaviour unchanged (existing tests keep passing).
-- Editor copy actions call `copied()` / `recordUse` like the detail's.
+- The editor has no copy actions, so it records no use (stage 4 plan, decision R5).
 
 ### Stage 5: Remove Material (spec §8.5)
 
