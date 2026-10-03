@@ -108,7 +108,7 @@
       },
       "muted-light": {
         "role": "neutral",
-        "displayName": "Lichen (light, phone contrast: 4.78:1 on a group; desktop #66756f)"
+        "displayName": "Lichen (light #606f69, phone contrast: 4.86:1 on a group, 4.53:1 on the hover ground; desktop #66756f)"
       },
       "brass": {
         "role": "primary",
@@ -605,7 +605,7 @@
       "**Do** give every control a 48dp target, and size text in sp.",
       "**Do** keep one primary per screen: brass in dark, forest in light; count the add button as it.",
       "**Do** set titles in HavenKeys Serif (32 unlock, 28 item and list, 22 sheet and dialog) and secrets and codes in JetBrains Mono.",
-      "**Do** use the phone's contrast values (light muted `#61706a`, light brass ink `#7d632f`, dark on-danger `#121a17`) and keep `ContrastTest` passing.",
+      "**Do** use the phone's contrast values (light muted `#606f69`, light brass ink `#7d632f`, dark on-danger `#121a17`) and keep `ContrastTest` passing.",
       "**Do** move on the named springs and the 160ms fade through `HavenTheme.motion`, so \"Remove animations\" cuts them.",
       "**Do** open sheets, dialogs and menus through the kit, so their windows are secure.",
       "**Do** name copy and reveal buttons by the field (\"Copy Password\"), and say what happened in a toast, never the value.",

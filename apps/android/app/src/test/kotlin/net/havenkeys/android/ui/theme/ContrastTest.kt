@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import kotlin.math.max
 import kotlin.math.min
+import net.havenkeys.android.ui.shell.searchPill
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,6 +33,19 @@ class ContrastTest {
             )
             for ((surface, ground) in surfaces) {
                 for ((name, ink) in inks) assertReads("$theme $name on $surface", ink, ground)
+            }
+        }
+    }
+
+    /**
+     * The search pill and the segmented track share one ground (hover in light,
+     * field in dark); their placeholder and unselected labels are muted.
+     */
+    @Test
+    fun textReadsOnTheSearchPillAndTheSegmentedTrack() {
+        for ((theme, c) in themes) {
+            for ((name, ink) in mapOf("text" to c.text, "textStrong" to c.textStrong, "muted" to c.muted)) {
+                assertReads("$theme $name on the search pill and segmented track", ink, c.searchPill)
             }
         }
     }

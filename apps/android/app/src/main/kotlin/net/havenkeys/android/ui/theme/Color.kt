@@ -13,7 +13,8 @@ import androidx.compose.ui.graphics.Color
  *
  * Where the phone departs from the desktop (WCAG AA at the phone's
  * 13-16sp text; ContrastTest pins it):
- * - light muted #61706a (desktop #66756f: 4.45:1 on a group)
+ * - light muted #606f69 (desktop #66756f: 4.45:1 on a group; #61706a was
+ *   4.47:1 on the hover ground of the search pill and segmented track)
  * - light brassInk and digit #7d632f (desktop #8f7236: 4.17:1 on a group,
  *   4.0:1 on a brass-soft pill)
  * - dark onDanger #121a17 (desktop white: 3.0:1 on #e0775f)
@@ -123,7 +124,7 @@ val LightHavenColors = HavenColors(
     lineStrong = Color(0xFFCBD5D0),
     text = Color(0xFF1E2B27),
     textStrong = Color(0xFF121A17),
-    muted = Color(0xFF61706A),
+    muted = Color(0xFF606F69),
     brass = Color(0xFFC9A45C),
     brassHi = Color(0xFFE3C483),
     brassInk = Color(0xFF7D632F),

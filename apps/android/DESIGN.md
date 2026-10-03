@@ -25,7 +25,7 @@ colors:
   text-strong: "#f3f7f5"
   text-strong-light: "#121a17"
   muted: "#86968f"
-  muted-light: "#61706a"
+  muted-light: "#606f69"
   brass: "#c9a45c"
   brass-hi: "#e3c483"
   brass-ink: "#e3c483"
@@ -374,7 +374,7 @@ The desktop's named roles in light and dark (`ui/theme/Color.kt`, `HavenColors`)
 
 ### Contrast departures from the desktop
 `ContrastTest` pins these. Each desktop value fails WCAG AA at the phone's text sizes:
-- **Light muted** `#61706a` (desktop `#66756f`: 4.45:1 on a group; phone 4.78:1).
+- **Light muted** `#606f69` (desktop `#66756f`: 4.45:1 on a group; phone 4.86:1 on a group and 4.53:1 on the hover ground of the search pill and segmented track, where stage 2's `#61706a` gave 4.47:1).
 - **Light brass ink and digit** `#7d632f` (desktop `#8f7236`: 4.17:1 on a group and 4.0:1 on a brass-soft pill; phone 5.22:1 on a group).
 - **Dark on-danger** `#121a17` (desktop white on `#e0775f`: 3.01:1; phone 5.88:1). Dark danger buttons carry dark text.
 
@@ -520,7 +520,7 @@ The debug build's `KitCatalogueActivity` (`app/src/debug/.../catalogue/`) shows 
 - **Do** give every control a 48dp target, and size text in sp.
 - **Do** keep one primary per screen: brass in dark, forest in light; count the add button as it.
 - **Do** set titles in HavenKeys Serif (32 unlock, 28 item and list, 22 sheet and dialog) and secrets and codes in JetBrains Mono.
-- **Do** use the phone's contrast values (light muted `#61706a`, light brass ink `#7d632f`, dark on-danger `#121a17`) and keep `ContrastTest` passing.
+- **Do** use the phone's contrast values (light muted `#606f69`, light brass ink `#7d632f`, dark on-danger `#121a17`) and keep `ContrastTest` passing.
 - **Do** move on the named springs and the 160ms fade through `HavenTheme.motion`, so "Remove animations" cuts them.
 - **Do** open sheets, dialogs and menus through the kit, so their windows are secure.
 - **Do** name copy and reveal buttons by the field ("Copy Password"), and say what happened in a toast, never the value.
@@ -541,7 +541,7 @@ The debug build's `KitCatalogueActivity` (`app/src/debug/.../catalogue/`) shows 
 
 The unlocked app is one frame (`ui/shell`, spec §6): a fixed top bar, the current tab's content and a bottom bar, with item screens, editors, the generator, devices and autofill setup over it full screen.
 
-- **Top bar** (`ShellTopBar`): the search pill (field green in dark, hover green in light; an 18dp muted glyph, "Search HavenKeys" in muted value type, 12dp padding), then the offline badge (a `Pill`) when offline, Sync now (a 48dp icon button; a 20dp ring while syncing, a toast if it fails) and Lock. It sits outside the tabs' NavHost and takes only stable values, so a tab change neither moves nor recomposes it. Tapping the pill grows it into search's field (shared bounds).
+- **Top bar** (`ShellTopBar`): the search pill (field green in dark, hover green in light; an 18dp muted glyph, "Search HavenKeys" in muted value type, 12dp padding, an 8dp glyph gap), then the offline badge (a `Pill`, 4dp after the pill) when offline, Sync now (a 48dp icon button; a 20dp ring while syncing, a toast if it fails) and Lock. It sits outside the tabs' NavHost and takes only stable values, so a tab change neither moves nor recomposes it. Tapping the pill grows it into search's field (shared bounds).
 - **Bottom bar** (`BottomBar`): Home, Items, Settings on the pane under a hairline, 60dp tall; each tab a 24dp glyph over a label, muted, the selected one in strong ink with an 18 x 2dp brass marker under it; a light tick on a change, none on a reselect.
 - **Add sheet** (`AddSheet`): a kit `HavenSheet` titled "New item" with a two-column grid of 96dp tiles (12dp group radius, group ground, group hairline, a 24dp brass-ink glyph over the label) that settle in sequence: Login, Secure note, Card, Generate password. Offline the item tiles fade to 42% and a muted line says "Adding needs a connection"; the generator stays.
 - **Lazy inset groups** (`insetGroup`, `InsetSlice`): the kit's `InsetGroup` cut into one lazy item per row, so long lists stay lazy; each slice draws its part of the 12dp outline and the hairline above it, starting where its text starts.
