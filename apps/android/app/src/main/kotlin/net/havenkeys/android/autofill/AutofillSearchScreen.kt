@@ -62,6 +62,9 @@ internal fun AutofillSearchScreen(
     var results by remember { mutableStateOf(emptyList<AutofillMatch>()) }
     var picked by remember { mutableStateOf<AutofillMatch?>(null) }
     var errorCode by remember { mutableStateOf<String?>(null) }
+    // A typed query is being waited on (debounce) or asked of Rust: "No matches" waits for its answer.
+    var searching by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
@@ -71,9 +74,22 @@ internal fun AutofillSearchScreen(
         snapshotFlow { query.text.toString() }.collectLatest { typed ->
             if (typed.isBlank()) {
                 results = emptyList()
+                searchError = null
+                searching = false
             } else {
+                searching = true
                 delay(SEARCH_DEBOUNCE_MS)
-                results = (search(typed.trim()) as? Outcome.Ok)?.value.orEmpty()
+                when (val found = search(typed.trim())) {
+                    is Outcome.Ok -> {
+                        results = found.value
+                        searchError = null
+                    }
+                    is Outcome.Failed -> {
+                        results = emptyList()
+                        searchError = found.code
+                    }
+                }
+                searching = false
             }
         }
     }
@@ -82,8 +98,10 @@ internal fun AutofillSearchScreen(
     Column(modifier.fillMaxSize().background(HavenTheme.colors.pane).safeDrawingPadding().imePadding()) {
         SearchField(query, gutter.padding(vertical = 8.dp).fillMaxWidth().focusRequester(focus))
         errorCode?.let { ErrorLine(it, gutter) }
+        // A failed search says why rather than looking like an empty result.
+        if (!searching) searchError?.let { ErrorLine(it, gutter) }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = HavenSpacing.gutter)) {
-            if (query.text.isNotBlank() && results.isEmpty()) {
+            if (query.text.isNotBlank() && !searching && searchError == null && results.isEmpty()) {
                 item(key = "none") { EmptyLine(stringResource(R.string.vault_no_matches), gutter) }
             }
             insetGroup(results, key = { it.id }) { match ->

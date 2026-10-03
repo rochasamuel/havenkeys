@@ -6,6 +6,8 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -91,5 +93,29 @@ class AutofillSearchScreenTest {
         show(answer = null)
         search("zzz")
         rule.onNodeWithText(text(R.string.vault_no_matches)).assertExists()
+    }
+
+    /** Final review (stage 4): "No matches" flashed while the query was still being waited on. */
+    @Test
+    fun noMatchesWaitsForTheAnswer() {
+        repo.matchList = Outcome.Ok(emptyList())
+        show(answer = null)
+        rule.mainClock.autoAdvance = false
+        rule.onNode(hasSetTextAction()).performTextInput("zzz")
+        rule.mainClock.advanceTimeBy(100)
+        rule.onAllNodesWithText(text(R.string.vault_no_matches)).assertCountEquals(0)
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.vault_no_matches)).assertExists()
+    }
+
+    /** Final review (stage 4): a failed search looked like an empty result; it now says why. */
+    @Test
+    fun aFailedSearchSaysWhyAndNotNoMatches() {
+        repo.matchList = Outcome.Failed("locked")
+        show(answer = null)
+        search("git")
+        rule.onNodeWithText(text(errorText("locked"))).assertExists()
+        rule.onAllNodesWithText(text(R.string.vault_no_matches)).assertCountEquals(0)
     }
 }
