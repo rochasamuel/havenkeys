@@ -42,9 +42,19 @@ fun HavenDialog(
     message: String? = null,
     dismiss: DialogAction? = null,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn)) {
+    var answered by remember { mutableStateOf(false) }
+    val answer = { action: () -> Unit ->
+        if (!answered) {
+            answered = true
+            action()
+        }
+    }
+    Dialog(
+        onDismissRequest = { answer(onDismiss) },
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
+    ) {
         SecureDialogWindow(ignoreObscuredTouches = true)
-        DialogSurface(title, confirm, modifier, message, dismiss)
+        DialogContent(title, confirm, modifier, message, dismiss, DialogAnswer(answered, answer))
     }
 }
 
@@ -60,14 +70,29 @@ internal fun DialogSurface(
     message: String? = null,
     dismiss: DialogAction? = null,
 ) {
-    val colors = HavenTheme.colors
     var answered by remember { mutableStateOf(false) }
-    fun once(action: () -> Unit): () -> Unit = {
+    val answer = { action: () -> Unit ->
         if (!answered) {
             answered = true
             action()
         }
     }
+    DialogContent(title, confirm, modifier, message, dismiss, DialogAnswer(answered, answer))
+}
+
+@Suppress("LongParameterList")
+@Composable
+private fun DialogContent(
+    title: String,
+    confirm: DialogAction,
+    modifier: Modifier,
+    message: String?,
+    dismiss: DialogAction?,
+    answer: DialogAnswer,
+) {
+    val colors = HavenTheme.colors
+    fun once(action: () -> Unit): () -> Unit = { answer.run(action) }
+    val answered = answer.done
     Column(
         modifier
             .widthIn(max = 360.dp)
@@ -95,6 +120,9 @@ internal fun DialogSurface(
         }
     }
 }
+
+/** Whether a button has answered yet, and the guard that lets only the first answer through. */
+private class DialogAnswer(val done: Boolean, val run: (() -> Unit) -> Unit)
 
 @PreviewLightDark
 @Composable

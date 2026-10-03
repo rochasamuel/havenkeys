@@ -12,6 +12,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,9 +62,12 @@ fun PullToRefresh(
     SideEffect {
         state.onRefresh = onRefresh
         state.settle = settle
+        state.refreshing = refreshing
     }
-    LaunchedEffect(refreshing) {
-        if (!refreshing && state.pull > 0f) state.settleTo(0f)
+    // The one place the pull animates after a release: it rests at the hold
+    // while refreshing, and goes back to 0 as soon as that is not so.
+    LaunchedEffect(state.released, refreshing) {
+        if (state.released) state.settleTo(if (refreshing) state.hold else 0f)
     }
     val refreshLabel = stringResource(R.string.kit_refresh)
     val refreshingLabel = stringResource(R.string.kit_refreshing)
@@ -73,7 +77,7 @@ fun PullToRefresh(
             .semantics {
                 customActions = listOf(
                     CustomAccessibilityAction(refreshLabel) {
-                        onRefresh()
+                        if (!refreshing) onRefresh()
                         true
                     },
                 )
@@ -100,6 +104,11 @@ private class PullState(val threshold: Float, private val maxPull: Float) : Nest
     var pull by mutableFloatStateOf(0f)
         private set
     var onRefresh: () -> Unit = {}
+    var refreshing = false
+
+    /** The finger has lifted: the pull now settles by itself. */
+    var released by mutableStateOf(false)
+        private set
     var settle: AnimationSpec<Float> = snap()
     val hold: Float get() = threshold * HOLD_FRACTION
 
@@ -107,21 +116,22 @@ private class PullState(val threshold: Float, private val maxPull: Float) : Nest
         // Scrolling back up while pulled: give back the pull first.
         if (source != NestedScrollSource.UserInput || available.y >= 0f || pull <= 0f) return Offset.Zero
         val used = maxOf(available.y, -pull)
+        released = false
         pull += used
         return Offset(0f, used)
     }
 
     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
         if (source != NestedScrollSource.UserInput || available.y <= 0f) return Offset.Zero
+        released = false
         pull = (pull + available.y * RESISTANCE).coerceAtMost(maxPull)
         return Offset(0f, available.y)
     }
 
     override suspend fun onPreFling(available: Velocity): Velocity {
         if (pull <= 0f) return Velocity.Zero
-        val armed = pull >= threshold
-        if (armed) onRefresh()
-        settleTo(if (armed) hold else 0f)
+        if (pull >= threshold && !refreshing) onRefresh()
+        released = true
         return available
     }
 

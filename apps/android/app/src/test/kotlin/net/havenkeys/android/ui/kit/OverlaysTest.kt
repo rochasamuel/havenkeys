@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.kit
 
+import android.view.KeyEvent
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
@@ -20,6 +21,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
 class OverlaysTest {
@@ -95,5 +97,35 @@ class OverlaysTest {
         assertEquals(1, removed)
         rule.onNodeWithText("Cancel").assertIsNotEnabled()
         assertEquals(0, dismissed)
+    }
+
+    private fun showDialog(onConfirm: () -> Unit) = rule.setKit {
+        HavenDialog(title = "Remove?", onDismiss = { dismissed++ }, confirm = DialogAction("Remove", onConfirm))
+    }
+
+    private fun pressBack() = rule.runOnIdle {
+        val window = ShadowDialog.getLatestDialog().window!!
+        window.callback.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK))
+        window.callback.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK))
+    }
+
+    @Test
+    fun backAfterAConfirmDoesNotAnswerTwice() {
+        var removed = 0
+        showDialog { removed++ }
+        rule.onNodeWithText("Remove").performClick()
+        pressBack()
+        rule.waitForIdle()
+        assertEquals(1, removed)
+        assertEquals(0, dismissed)
+    }
+
+    @Test
+    fun backBeforeAnyAnswerDismissesOnce() {
+        showDialog {}
+        pressBack()
+        pressBack()
+        rule.waitForIdle()
+        assertEquals(1, dismissed)
     }
 }

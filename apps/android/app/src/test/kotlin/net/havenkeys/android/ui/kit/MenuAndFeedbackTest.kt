@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -13,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertRangeInfoEquals
+import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -111,5 +115,34 @@ class MenuAndFeedbackTest {
         val node = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions)).fetchSemanticsNode()
         node.config[SemanticsActions.CustomActions].single { it.label == "Refresh" }.action()
         assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun afterAFarPullWithoutRefreshingTheContentComesBack() {
+        rule.setKit { PullToRefresh(refreshing = false, onRefresh = {}) { Rows() } }
+        rule.onNodeWithTag("list").performTouchInput { swipeDown(startY = top + 10f, endY = bottom - 10f) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("list").assertTopPositionInRootIsEqualTo(0.dp)
+    }
+
+    @Test
+    fun flippingRefreshingOnAndOffBringsTheContentBack() {
+        var refreshing by mutableStateOf(false)
+        rule.setKit { PullToRefresh(refreshing = refreshing, onRefresh = { refreshing = true }) { Rows() } }
+        rule.onNodeWithTag("list").performTouchInput { swipeDown(startY = top + 10f, endY = bottom - 10f) }
+        refreshing = false
+        rule.waitForIdle()
+        rule.onNodeWithTag("list").assertTopPositionInRootIsEqualTo(0.dp)
+    }
+
+    @Test
+    fun noSecondRefreshStartsWhileOneIsRunning() {
+        var refreshes = 0
+        rule.setKit { PullToRefresh(refreshing = true, onRefresh = { refreshes++ }) { Rows() } }
+        rule.onNodeWithTag("list").performTouchInput { swipeDown(startY = top + 10f, endY = bottom - 10f) }
+        rule.waitForIdle()
+        val node = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions)).fetchSemanticsNode()
+        node.config[SemanticsActions.CustomActions].single { it.label == "Refresh" }.action()
+        assertEquals(0, refreshes)
     }
 }
