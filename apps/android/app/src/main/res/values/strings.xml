@@ -321,4 +321,6 @@
     <string name="kit_copied">Copied</string>
     <string name="kit_new_item">New item</string>
     <string name="kit_close">Close</string>
+    <string name="kit_refresh">Refresh</string>
+    <string name="kit_refreshing">Refreshing</string>
 </resources>

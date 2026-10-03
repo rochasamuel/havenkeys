@@ -7,6 +7,10 @@ import android.provider.Settings
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.InfiniteRepeatableSpec
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -34,6 +38,9 @@ const val STAGGER_MILLIS = 30
 
 /** --t-fast: fades, colour changes, the copy glyph. */
 const val FADE_MILLIS = 160
+
+/** One turn of the indeterminate ring. */
+const val SPIN_MILLIS = 900
 
 /**
  * A spring in Apple's terms (SwiftUI's response and damping fraction),
@@ -94,6 +101,13 @@ data class HavenMotion(
     /** --t-fast on the house curve: fades and colour changes. */
     fun <T> fadeSpec(): FiniteAnimationSpec<T> =
         if (reduced) snap() else tween(FADE_MILLIS, easing = HouseEasing)
+
+    /**
+     * One turn of a spinner, repeating. Callers draw a still arc instead when
+     * [reduced] (a spinner under "Remove animations" would never stop moving).
+     */
+    fun spinSpec(): InfiniteRepeatableSpec<Float> =
+        infiniteRepeatable(tween(SPIN_MILLIS, easing = LinearEasing), RepeatMode.Restart)
 
     private fun <T> spec(millis: Int): FiniteAnimationSpec<T> =
         if (reduced) snap() else tween(millis, easing = MechanicalEasing)
