@@ -65,6 +65,12 @@ class ChoicesTest {
     }
 
     @Test
+    fun aToggleRowsSwitchTrackEndsOnTheRowTextsMargin() {
+        // The switch box is 52dp around a 44dp track: 4dp of air each side, so 12 + 4 = 16.
+        assertEquals(net.havenkeys.android.ui.theme.HavenSpacing.rowX, TOGGLE_END + 4.dp)
+    }
+
+    @Test
     fun aSliderTakesTalkBacksSetProgressSnappedToItsSteps() {
         var last = 20f
         rule.setKit {

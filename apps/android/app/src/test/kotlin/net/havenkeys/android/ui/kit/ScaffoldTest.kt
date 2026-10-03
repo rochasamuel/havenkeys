@@ -7,7 +7,8 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import org.junit.Assert.assertTrue
@@ -19,7 +20,7 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ScaffoldTest {
     @get:Rule
-    val rule = createComposeRule()
+    val rule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun theSlotsStackTopContentBottom() {
@@ -111,5 +112,27 @@ class ScaffoldTest {
         org.junit.Assert.assertEquals(Triple(TOAST_MILLIS, true, true), manager.asked)
         rule.mainClock.advanceTimeBy(10_000)
         rule.onNodeWithText("Password copied").assertDoesNotExist()
+    }
+
+    @Test
+    fun contentStaysClearOfSideInsets() {
+        rule.runOnUiThread {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(rule.activity.window, false)
+        }
+        rule.setKit { HavenScaffold { HavenText("Content") } }
+        val before = rule.onNodeWithText("Content").getUnclippedBoundsInRoot()
+        rule.runOnUiThread {
+            val view = rule.activity.window.decorView
+            val insets = androidx.core.view.WindowInsetsCompat.Builder()
+                .setInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars(),
+                    androidx.core.graphics.Insets.of(40, 0, 60, 0),
+                )
+                .build()
+            androidx.core.view.ViewCompat.dispatchApplyWindowInsets(view, insets)
+        }
+        rule.waitForIdle()
+        val after = rule.onNodeWithText("Content").getUnclippedBoundsInRoot()
+        assertTrue("left ${before.left} -> ${after.left}", after.left > before.left)
     }
 }

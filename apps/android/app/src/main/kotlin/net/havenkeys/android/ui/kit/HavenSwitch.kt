@@ -87,6 +87,9 @@ fun HavenSwitch(
     }
 }
 
+/** Padding after the switch box so its track ends on the same margin as row text. */
+internal val TOGGLE_END = HavenSpacing.rowX - 4.dp
+
 /** A settings row with a switch: the whole row is the switch, named by its title. */
 @Composable
 fun ToggleRow(
@@ -109,7 +112,8 @@ fun ToggleRow(
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
             )
-            .padding(start = HavenSpacing.rowX, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            // The switch's box is 4dp wider than its track on each side: 12 + 4 = the 16dp row margin.
+            .padding(start = HavenSpacing.rowX, end = TOGGLE_END, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) { GroupRowText(title, detail) }

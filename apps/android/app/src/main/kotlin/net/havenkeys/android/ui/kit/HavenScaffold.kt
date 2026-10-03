@@ -2,6 +2,8 @@ package net.havenkeys.android.ui.kit
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -9,8 +11,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +44,14 @@ fun HavenScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val clearance = if (floatingButton != null) FloatingClearance else 0.dp
-    Column(modifier.fillMaxSize().background(HavenTheme.colors.pane).imePadding()) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(HavenTheme.colors.pane)
+            // Cutouts and a landscape side bar; consumed here, so nothing below pads them twice.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            .imePadding(),
+    ) {
         Box(Modifier.fillMaxWidth().statusBarsPadding()) { topBar() }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             content(PaddingValues(bottom = clearance))
