@@ -327,4 +327,8 @@
     <!-- Shell and new screens (spec 2026-10-03 §6) -->
     <string name="tab_home">Home</string>
     <string name="tab_items">Items</string>
+    <string name="shell_search">Search HavenKeys</string>
+    <string name="shell_offline">Offline</string>
+    <string name="shell_sync">Sync now</string>
+    <string name="shell_syncing">Syncing</string>
 </resources>
