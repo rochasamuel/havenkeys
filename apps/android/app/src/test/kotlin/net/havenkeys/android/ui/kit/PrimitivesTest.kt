@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import net.havenkeys.android.ui.theme.LightHavenColors
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,10 +78,15 @@ class PrimitivesTest {
         assertEquals(2, clicks)
     }
 
+    @After
+    fun clearTheFocusSeam() {
+        FocusDrawSeam.observer = null
+    }
+
     @Test
     fun aFocusedPressTargetDrawsTheBrassRing() {
-        // The seam is process-wide: another test class may have left a focused press target behind.
-        FocusDrawSeam.focused = false
+        var seen = false
+        FocusDrawSeam.observer = { seen = it }
         val source = MutableInteractionSource()
         val tag = "target"
         rule.setKit {
@@ -93,13 +99,13 @@ class PrimitivesTest {
             )
         }
         rule.waitForIdle()
-        assertEquals(false, FocusDrawSeam.focused)
+        assertEquals(false, seen)
         val focus = FocusInteraction.Focus()
         rule.runOnIdle { runBlocking { source.emit(focus) } }
         rule.waitForIdle()
-        assertEquals(true, FocusDrawSeam.focused)
+        assertEquals(true, seen)
         rule.runOnIdle { runBlocking { source.emit(FocusInteraction.Unfocus(focus)) } }
         rule.waitForIdle()
-        assertEquals(false, FocusDrawSeam.focused)
+        assertEquals(false, seen)
     }
 }

@@ -25,10 +25,9 @@ import net.havenkeys.android.ui.theme.PRESS_SCALE
 
 private val FOCUS_RING = 1.5.dp
 
-/** Test seam: the latest focus change of any [HavenPress] node (the draw reads the same flag). */
+/** Test seam: a test sets [observer] to hear each focus change; production never sets or stores anything. */
 internal object FocusDrawSeam {
-    @Volatile
-    var focused: Boolean = false
+    var observer: ((Boolean) -> Unit)? = null
 }
 
 /**
@@ -66,8 +65,8 @@ private class PressNode(private val source: InteractionSource) :
                 }
                 if ((focusing.isNotEmpty()) != focused) {
                     focused = focusing.isNotEmpty()
-                    FocusDrawSeam.focused = focused
                     invalidateDraw()
+                    FocusDrawSeam.observer?.invoke(focused)
                 }
                 when (interaction) {
                     is PressInteraction.Press -> held++
