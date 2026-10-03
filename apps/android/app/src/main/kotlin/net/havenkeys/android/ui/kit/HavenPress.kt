@@ -2,20 +2,34 @@ package net.havenkeys.android.ui.kit
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.node.currentValueOf
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import net.havenkeys.android.ui.theme.HavenSprings
 import net.havenkeys.android.ui.theme.LocalHavenColors
 import net.havenkeys.android.ui.theme.LocalHavenMotion
 import net.havenkeys.android.ui.theme.PRESS_SCALE
+
+private val FOCUS_RING = 1.5.dp
+
+/** Test seam: whether the latest focus change of any [HavenPress] node turned its focus ring on (the draw reads the same flag). */
+internal object FocusDrawSeam {
+    @Volatile
+    var focused: Boolean = false
+}
 
 /**
  * The kit's only press feedback (spec §5.2: no ripple anywhere). While
@@ -38,11 +52,23 @@ private class PressNode(private val source: InteractionSource) :
     CompositionLocalConsumerModifierNode {
     private val scale = Animatable(1f)
     private val wash = Animatable(0f)
+    private var focused = false
 
     override fun onAttach() {
         coroutineScope.launch {
             var held = 0
+            val focusing = mutableListOf<FocusInteraction.Focus>()
             source.interactions.collect { interaction ->
+                when (interaction) {
+                    is FocusInteraction.Focus -> focusing.add(interaction)
+                    is FocusInteraction.Unfocus -> focusing.remove(interaction.focus)
+                    else -> Unit
+                }
+                if ((focusing.isNotEmpty()) != focused) {
+                    focused = focusing.isNotEmpty()
+                    FocusDrawSeam.focused = focused
+                    invalidateDraw()
+                }
                 when (interaction) {
                     is PressInteraction.Press -> held++
                     is PressInteraction.Release, is PressInteraction.Cancel -> held = (held - 1).coerceAtLeast(0)
@@ -64,6 +90,16 @@ private class PressNode(private val source: InteractionSource) :
         scale(scale.value) {
             this@draw.drawContent()
             if (wash.value > 0f) drawRect(tint, alpha = wash.value)
+        }
+        // Keyboard and D-pad focus: the field row's inset 1.5dp brass ring, unscaled.
+        if (focused) {
+            val ring = FOCUS_RING.toPx()
+            drawRect(
+                currentValueOf(LocalHavenColors).brass,
+                topLeft = Offset(ring / 2, ring / 2),
+                size = Size(size.width - ring, size.height - ring),
+                style = Stroke(ring),
+            )
         }
     }
 }
