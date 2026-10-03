@@ -159,7 +159,7 @@ Then, from `apps/android`:
 
 | Task | Command |
 |---|---|
-| Lint, including the no-logging scan | `./gradlew detekt` (runs `forbidLogging` first) |
+| Lint, including the no-logging and no-Material scans | `./gradlew detekt` (runs `forbidLogging` and `forbidMaterial` first) |
 | JVM unit tests | `./gradlew testGithubDebugUnitTest` |
 | Android lint | `./gradlew lintGithubDebug` |
 | Debug APK | `./gradlew assembleGithubDebug` → `app/build/outputs/apk/github/debug/` |

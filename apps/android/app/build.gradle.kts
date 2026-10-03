@@ -131,18 +131,21 @@ val forbidLogging by tasks.registering {
         }
     }
 }
-// Spec 2026-10-03 §5: the app is built on foundation only. Since stage 4 this
-// covers every source file but the Material bridge, which stage 5 deletes.
-val forbidMaterialInKit by tasks.registering {
-    description = "Fails on a Material import anywhere but ui/theme/MaterialBridge.kt, which stage 5 deletes."
-    val sources = fileTree("src") {
-        include("**/*.kt")
-        exclude("**/ui/theme/MaterialBridge.kt")
-    }
+// Spec 2026-10-03 §5 and §8: everything is drawn from ui/kit on Compose
+// foundation; the Material libraries were removed in stage 5. This scan keeps
+// them out of every source set (androidTest too, which detekt does not read),
+// catches qualified names that need no import, and fails on a Material module
+// in the version catalog before anything uses it. detekt's ForbiddenImport
+// (detekt.yml) says the same for imports.
+val forbidMaterial by tasks.registering {
+    description = "Fails on any Material: Compose Material, Material 3 or Material Components."
+    val sources = fileTree("src") { include("**/*.kt") }
+    val catalog = rootProject.file("gradle/libs.versions.toml")
     inputs.files(sources)
+    inputs.file(catalog)
     doLast {
-        val material = Regex("""^\s*import\s+androidx\.compose\.material""")
-        val hits = sources.flatMap { file ->
+        val material = Regex("""\bandroidx\.compose\.material3?\b|\bcom\.google\.android\.material\b""")
+        val hits = (sources.files + catalog).flatMap { file ->
             file.readLines().mapIndexedNotNull { i, line ->
                 if (material.containsMatchIn(line)) "${file.path}:${i + 1}" else null
             }
@@ -152,7 +155,7 @@ val forbidMaterialInKit by tasks.registering {
         }
     }
 }
-tasks.named("detekt") { dependsOn(forbidLogging, forbidMaterialInKit) }
+tasks.named("detekt") { dependsOn(forbidLogging, forbidMaterial) }
 
 // detekt 1.23 embeds the Kotlin compiler it was built with; the project's
 // newer Kotlin must not replace it on detekt's own classpath.

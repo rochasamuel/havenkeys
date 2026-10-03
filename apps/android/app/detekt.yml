@@ -24,6 +24,12 @@ style:
     imports:
       - value: 'android.util.Log'
         reason: 'Never log in HavenKeys (CLAUDE.md §40).'
+      - value: 'androidx.compose.material.*'
+        reason: 'No Material in HavenKeys; build from ui/kit (spec 2026-10-03 §5).'
+      - value: 'androidx.compose.material3.*'
+        reason: 'No Material in HavenKeys; build from ui/kit (spec 2026-10-03 §5).'
+      - value: 'com.google.android.material.*'
+        reason: 'No Material in HavenKeys; build from ui/kit (spec 2026-10-03 §5).'
 complexity:
   LongParameterList:
     # Composables take a defaulted Modifier and options by convention.
