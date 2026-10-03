@@ -10,6 +10,7 @@
 uniffi::setup_scaffolding!();
 
 mod account;
+mod activity;
 #[cfg(target_os = "android")]
 mod android_tls;
 mod asset_links_fetch;

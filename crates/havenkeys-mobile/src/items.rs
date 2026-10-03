@@ -32,6 +32,7 @@ pub struct ItemSummary {
     pub has_totp: bool,
     pub has_passkey: bool,
     pub updated_at: i64,
+    pub created_at: i64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -106,7 +107,7 @@ fn url_host(raw: &str) -> Option<String> {
     })
 }
 
-fn summary(o: &ItemOverview) -> ItemSummary {
+pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
     let (kind, subtitle) = match o.item_type {
         ItemType::Login => (ItemKind::Login, o.username.clone()),
         ItemType::SecureNote => (ItemKind::SecureNote, None),
@@ -128,6 +129,7 @@ fn summary(o: &ItemOverview) -> ItemSummary {
         has_totp: o.has_totp,
         has_passkey: o.has_passkey,
         updated_at: o.updated_at,
+        created_at: o.created_at,
     }
 }
 

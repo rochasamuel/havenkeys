@@ -57,6 +57,7 @@ rustls-platform-verifier = "0.7"
 jni = "0.22"
 
 [dev-dependencies]
+havenkeys-core = { path = "../havenkeys-core", features = ["test-util"] }
 havenkeys-client = { path = "../havenkeys-client", features = ["testing"] }
 tempfile = "3"
 p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std", "pkcs8"] }
