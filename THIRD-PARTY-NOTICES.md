@@ -12,8 +12,8 @@ Five crates (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`,
 redistributed unmodified from crates.io.
 
 The fonts and data below are different: their files are embedded in the
-desktop application bundle, the browser extension package and the website's
-built assets, and their licences require this notice to accompany them.
+desktop application bundle, the browser extension package, the Android app
+and the website's built assets, and their licences require this notice to accompany them.
 
 ## Fonts
 
@@ -22,19 +22,27 @@ built assets, and their licences require this notice to accompany them.
 Copyright 2021 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-grotesk) HankenGrotesk-Italic[wght].ttf: Copyright 2021 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-grotesk)
 
 Distributed via the `@fontsource-variable/hanken-grotesk` package.
+The Android app bundles a Latin subset (`apps/android/app/src/main/res/font/hanken_grotesk.ttf`) built from google/fonts by `scripts/build-android-fonts.py`.
 
 ### JetBrains Mono
 
 Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) JetBrainsMono-Italic[wght].ttf: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
 
 Distributed via the `@fontsource/jetbrains-mono` package.
+The Android app bundles a Latin subset (`apps/android/app/src/main/res/font/jetbrains_mono.ttf`) built from google/fonts by `scripts/build-android-fonts.py`.
 
 ### Source Serif 4
 
 Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 
 Distributed via the `@fontsource-variable/source-serif-4` package. Used by
-the website, the desktop app and the browser extension.
+the website, the desktop app, the browser extension and the Android app.
+The Android app bundles a Latin subset built from google/fonts by
+`scripts/build-android-fonts.py` (`havenkeys_serif.ttf`,
+`havenkeys_serif_italic.ttf`). A subset is a Modified Version under the OFL,
+and the font declares the Reserved Font Name "Source", so those files are
+renamed "HavenKeys Serif"; their copyright and trademark notices are
+unchanged.
 
 ### Licence
 
