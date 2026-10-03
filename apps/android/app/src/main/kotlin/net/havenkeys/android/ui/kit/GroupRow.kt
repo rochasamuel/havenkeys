@@ -22,6 +22,9 @@ import net.havenkeys.android.ui.theme.HavenTheme
 private val GlyphSize = 22.dp
 private val GlyphGap = 14.dp
 
+/** A row's end padding when a control or chevron ends it. */
+private val TrailingEnd = 8.dp
+
 /**
  * One row of an [InsetGroup]: an optional glyph, the row's text
  * ([GroupRowText] or [GroupRowField]), then [trailing] controls or, when it
@@ -51,7 +54,7 @@ fun GroupRow(
             .then(click)
             .padding(
                 start = HavenSpacing.rowX,
-                end = if (trailing != null || chevron) 8.dp else HavenSpacing.rowX,
+                end = if (trailing != null || chevron) TrailingEnd else HavenSpacing.rowX,
                 top = 10.dp,
                 bottom = 10.dp,
             ),
@@ -89,10 +92,19 @@ fun GroupRowField(label: String, value: String, valueStyle: TextStyle = HavenThe
     HavenText(value, style = valueStyle, color = HavenTheme.colors.textStrong)
 }
 
-/** A muted value at a row's end: a count, the current setting. */
+/**
+ * A muted value at a row's end: a count, the current setting. A row with
+ * trailing content keeps only 8dp at its end (room a 48dp control fills), so
+ * the value adds the rest and sits on the same 16dp margin as the row's text.
+ */
 @Composable
 fun TrailingText(text: String) {
-    HavenText(text, style = HavenTheme.type.value, color = HavenTheme.colors.muted)
+    HavenText(
+        text,
+        Modifier.padding(end = HavenSpacing.rowX - TrailingEnd),
+        style = HavenTheme.type.value,
+        color = HavenTheme.colors.muted,
+    )
 }
 
 @PreviewLightDark

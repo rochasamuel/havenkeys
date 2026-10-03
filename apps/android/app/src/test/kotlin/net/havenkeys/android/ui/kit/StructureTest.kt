@@ -158,4 +158,17 @@ class StructureTest {
             assertEquals((textLeft - groupLeft).value, hairlines[i].config[HairlineStart].value, 0.5f)
         }
     }
+
+    @Test
+    fun aTrailingValueKeepsTheSameMarginAsTheRowsText() {
+        rule.setKit {
+            InsetGroup(Modifier.testTag("group")) {
+                row { GroupRow(trailing = { TrailingText("12") }) { GroupRowText("Logins") } }
+            }
+        }
+        val group = rule.onNodeWithTag("group").getUnclippedBoundsInRoot()
+        val text = rule.onNodeWithText("Logins").getUnclippedBoundsInRoot()
+        val value = rule.onNodeWithText("12").getUnclippedBoundsInRoot()
+        assertEquals((text.left - group.left).value, (group.right - value.right).value, 0.5f)
+    }
 }
