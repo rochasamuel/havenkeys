@@ -311,4 +311,8 @@
     <string name="kit_close">Fechar</string>
     <string name="kit_refresh">Atualizar</string>
     <string name="kit_refreshing">Atualizando</string>
+
+    <!-- Shell and new screens (spec 2026-10-03 §6) -->
+    <string name="tab_home">Início</string>
+    <string name="tab_items">Itens</string>
 </resources>

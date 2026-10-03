@@ -323,4 +323,8 @@
     <string name="kit_close">Close</string>
     <string name="kit_refresh">Refresh</string>
     <string name="kit_refreshing">Refreshing</string>
+
+    <!-- Shell and new screens (spec 2026-10-03 §6) -->
+    <string name="tab_home">Home</string>
+    <string name="tab_items">Items</string>
 </resources>
