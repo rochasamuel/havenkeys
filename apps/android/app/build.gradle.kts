@@ -134,9 +134,23 @@ val forbidLogging by tasks.registering {
 // Spec 2026-10-03 §5: the theme, the kit and the catalogue are built on
 // foundation only. Stage 5 widens this to the whole app.
 val forbidMaterialInKit by tasks.registering {
-    description = "Fails on a Material import in ui/kit, ui/theme (but MaterialBridge.kt) or the catalogue."
+    description = "Fails on a Material import in the kit, the theme (but MaterialBridge.kt), the catalogue, " +
+        "or the screens built from the kit (shell, Home, Items, search, navigation, Settings tab)."
     val sources = fileTree("src") {
-        include("**/ui/kit/**/*.kt", "**/ui/theme/**/*.kt", "**/catalogue/**/*.kt")
+        include(
+            "**/ui/kit/**/*.kt",
+            "**/ui/theme/**/*.kt",
+            "**/catalogue/**/*.kt",
+            "**/ui/shell/**/*.kt",
+            "**/ui/home/**/*.kt",
+            "**/ui/items/**/*.kt",
+            "**/ui/search/**/*.kt",
+            "**/ui/nav/**/*.kt",
+            "**/ui/settings/SettingsScreen.kt",
+            "**/ui/settings/SettingsChoices.kt",
+            "**/ui/settings/SettingsDialog.kt",
+            "**/ui/settings/SettingsActions.kt",
+        )
         exclude("**/ui/theme/MaterialBridge.kt")
     }
     inputs.files(sources)
@@ -148,7 +162,7 @@ val forbidMaterialInKit by tasks.registering {
             }
         }
         if (hits.isNotEmpty()) {
-            throw GradleException("Material is not used in the HavenKeys kit (spec 2026-10-03 §5):\n" + hits.joinToString("\n"))
+            throw GradleException("Material is not used in screens built from the HavenKeys kit (spec 2026-10-03 §5):\n" + hits.joinToString("\n"))
         }
     }
 }

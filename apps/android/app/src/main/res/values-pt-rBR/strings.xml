@@ -40,17 +40,12 @@
     <string name="vault_lock_now">Bloquear agora</string>
     <string name="vault_offline">Offline, somente leitura</string>
     <string name="item_passkey">Chave de acesso</string>
-    <string name="vault_title">Cofre</string>
-    <string name="vault_search">Buscar no cofre</string>
     <string name="vault_search_hint">A busca considera títulos, usuários e sites.</string>
     <string name="vault_filter_all">Todos os itens</string>
     <string name="vault_filter_logins">Logins</string>
     <string name="vault_filter_notes">Notas seguras</string>
     <string name="vault_filter_cards">Cartões</string>
-    <string name="vault_filter_identities">Identidade</string>
     <string name="vault_filter_passkeys">Chaves de acesso</string>
-    <string name="vault_offline_banner">Offline — o cofre fica somente leitura até reconectar.</string>
-    <string name="vault_empty">Seu cofre está vazio</string>
     <string name="vault_empty_hint">Os novos itens que você adicionar aparecem aqui.</string>
     <string name="vault_no_matches">Nenhum resultado</string>
     <string name="item_back">Voltar</string>
@@ -222,7 +217,6 @@
     <string name="autofill_filled_once">Preenchido desta vez — conecte-se para salvar este app para a próxima.</string>
 
     <!-- Create, edit and delete -->
-    <string name="vault_new_item">Novo item</string>
     <string name="vault_new_login">Login</string>
     <string name="vault_new_note">Nota segura</string>
     <string name="vault_new_card">Cartão</string>
