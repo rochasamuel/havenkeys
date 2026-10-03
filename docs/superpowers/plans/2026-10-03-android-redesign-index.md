@@ -14,7 +14,7 @@ and signatures.
 | 2. Design system | `2026-10-03-android-redesign-stage2-design-system.md` | Done (`6a4a2f8..83fbc18`) | Nothing in stage 1 (can start in parallel if wanted) |
 | 3. Shell and new screens | `2026-10-03-android-redesign-stage3-shell.md` | Done (`5b72db6..a9def0d`) | Stages 1 and 2 |
 | 4. Existing screens rebuilt | `2026-10-03-android-redesign-stage4-screens.md` | Planned | Stage 2 (and 3 for navigation) |
-| 5. Remove Material | written when stage 4 is done | Not planned | Stage 4 |
+| 5. Remove Material | `2026-10-03-android-redesign-stage5-remove-material.md` | Planned | Stage 4 |
 
 ## What each later plan must cover
 
