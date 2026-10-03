@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
@@ -61,9 +62,13 @@ private class Nav(
 ) {
     /** Opens an item over the shell; its title travels from the tapped row. */
     val open: OpenItem = { id, origin ->
-        travel.tap(id, origin)
-        controller.navigate(Routes.item(id))
+        ifSettled {
+            travel.tap(id, origin)
+            controller.navigate(Routes.item(id))
+        }
     }
+
+    fun ifSettled(navigate: () -> Unit) = controller.ifSettled(navigate)
 
     val back: () -> Unit = { controller.popBackStack() }
     val lock: () -> Unit = container.vaultRepository::lock
@@ -131,6 +136,14 @@ fun HavenNavHost(container: AppContainer, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Runs a navigation only while the current screen is settled (RESUMED): a second tap during a push,
+ * or a tap during a crossfade, finds the old entry leaving and is ignored.
+ */
+internal fun NavHostController.ifSettled(navigate: () -> Unit) {
+    if (currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) navigate()
+}
+
 private fun NavHostController.replaceAll(route: String) =
     navigate(route) { popUpTo(graph.id) { inclusive = true } }
 
@@ -176,9 +189,9 @@ private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
                 nav.travel.from(nav.shared, this, nav.motion),
             ),
             navigation = ShellNavigation(
-                onSearch = { nav.controller.navigate(Routes.SEARCH) },
-                onNew = { kind -> nav.controller.navigate(Routes.new(kind)) },
-                onGenerator = { nav.controller.navigate(Routes.GENERATOR) },
+                onSearch = { nav.ifSettled { nav.controller.navigate(Routes.SEARCH) { launchSingleTop = true } } },
+                onNew = { kind -> nav.ifSettled { nav.controller.navigate(Routes.new(kind)) } },
+                onGenerator = { nav.ifSettled { nav.controller.navigate(Routes.GENERATOR) } },
             ),
             searchPillModifier = Modifier.sharedIfMoving(nav.shared, SEARCH_KEY, this, nav.motion),
         )
