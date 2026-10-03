@@ -88,7 +88,7 @@ val rustlsPlatformVerifierVersion: String = providers
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(files("detekt.yml"))
-    source.setFrom("src/main/kotlin", "src/test/kotlin")
+    source.setFrom("src/main/kotlin", "src/test/kotlin", "src/debug/kotlin", "src/testDebug/kotlin")
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
