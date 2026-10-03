@@ -79,6 +79,8 @@ class PrimitivesTest {
 
     @Test
     fun aFocusedPressTargetDrawsTheBrassRing() {
+        // The seam is process-wide: another test class may have left a focused press target behind.
+        FocusDrawSeam.focused = false
         val source = MutableInteractionSource()
         val tag = "target"
         rule.setKit {
