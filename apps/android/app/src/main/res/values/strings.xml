@@ -320,4 +320,5 @@
     <!-- ui/kit (spec 2026-10-03 §5.2) -->
     <string name="kit_copied">Copied</string>
     <string name="kit_new_item">New item</string>
+    <string name="kit_close">Close</string>
 </resources>
