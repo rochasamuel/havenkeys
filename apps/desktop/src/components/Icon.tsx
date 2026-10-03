@@ -35,6 +35,13 @@ const paths = {
   idCard: "M4.5 6h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM9 12a1.8 1.8 0 1 0 0-3.6A1.8 1.8 0 0 0 9 12zM6 15.5c.5-1.3 1.6-2 3-2s2.5.7 3 2M14 10h3.5M14 13.5h3.5",
   card: "M4.5 6h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM3.5 10h17M7 14.5h3",
   printer: "M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M7 14h10v6H7z",
+  // Drawn for the phone (tab bar, disclosure, back, menus) to the same rules;
+  // kept here so both apps draw from one set (apps/android …/ui/kit/HavenIcon.kt).
+  home: "M4.5 10.5 12 4.5l7.5 6V19a1 1 0 0 1-1 1H15v-5.5H9V20H5.5a1 1 0 0 1-1-1v-8.5z",
+  items: "M9 7h10.5M9 12h10.5M9 17h10.5M5 7h.01M5 12h.01M5 17h.01",
+  chevronRight: "M9.5 6.5 15 12l-5.5 5.5",
+  chevronLeft: "M14.5 6.5 9 12l5.5 5.5",
+  more: "M5.4 12a.6.6 0 1 0 1.2 0a.6.6 0 1 0-1.2 0zM11.4 12a.6.6 0 1 0 1.2 0a.6.6 0 1 0-1.2 0zM17.4 12a.6.6 0 1 0 1.2 0a.6.6 0 1 0-1.2 0z",
 } as const;
 
 export type IconName = keyof typeof paths;
