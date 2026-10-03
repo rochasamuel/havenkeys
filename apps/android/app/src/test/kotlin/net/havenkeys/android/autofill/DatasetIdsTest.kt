@@ -45,6 +45,22 @@ class DatasetIdsTest {
     }
 
     @Test
+    fun anOtherEventAfterACountedPickCountsNothing() {
+        val ledger = DatasetIds.Ledger()
+        ledger.fresh(pick())
+        val grown = pick() + DatasetIds.Picked(DatasetIds.Kind.OTHER, null)
+        assertEquals(emptyList<String>(), ledger.fresh(grown))
+    }
+
+    @Test
+    fun aSecondPickOfTheSameRowCountsOnceMore() {
+        val ledger = DatasetIds.Ledger()
+        assertEquals(listOf(uuid), ledger.fresh(pick()))
+        assertEquals(listOf(uuid), ledger.fresh(pick() + pick()))
+        assertEquals(emptyList<String>(), ledger.fresh(pick() + pick()))
+    }
+
+    @Test
     fun onlyPickedDirectRowsCount() {
         val events = listOf(
             DatasetIds.Picked(DatasetIds.Kind.SELECTED, DatasetIds.of(uuid)),

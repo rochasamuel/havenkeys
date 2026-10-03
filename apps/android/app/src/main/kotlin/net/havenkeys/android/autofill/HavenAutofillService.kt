@@ -51,7 +51,9 @@ class HavenAutofillService : AutofillService() {
         val inlineRequest =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.inlineSuggestionsRequest else null
         val work = scope.launch {
-            recordPickedRows()
+            // Read before answering: the answer resets the history.
+            val picked = guarded(emptyList()) { freshPicks() }
+            launchRecording(picked)
             val response = withContext(Dispatchers.Default) { guarded(null) { respond(structure, inlineRequest) } }
             answer(response)
         }
@@ -72,12 +74,11 @@ class HavenAutofillService : AutofillService() {
     /**
      * Rows picked since the last request: Android reports them here and
      * nowhere else. Direct rows only (they carry an item id); confirmed rows
-     * counted in AutofillAuthActivity. Activity is a convenience: nothing
-     * here may fail or delay the fill.
+     * counted in AutofillAuthActivity. Read synchronously, before the answer.
      */
     // FillEventHistory is deprecated from API 34 with no replacement.
     @Suppress("DEPRECATION")
-    private suspend fun recordPickedRows() = guarded(Unit) {
+    private fun freshPicks(): List<String> {
         val events = fillEventHistory?.events.orEmpty().map { event ->
             val kind = when (event.type) {
                 FillEventHistory.Event.TYPE_DATASET_SELECTED -> DatasetIds.Kind.SELECTED
@@ -86,9 +87,18 @@ class HavenAutofillService : AutofillService() {
             }
             DatasetIds.Picked(kind, event.datasetId)
         }
-        val fresh = picks.fresh(events)
-        if (container.events.unlocked.value) {
-            fresh.forEach { container.autofillRepository.recordUse(it) }
+        return picks.fresh(events)
+    }
+
+    /** Activity is a convenience: this never fails or delays a fill. */
+    private fun launchRecording(items: List<String>) {
+        if (items.isEmpty()) return
+        scope.launch {
+            guarded(Unit) {
+                if (container.events.unlocked.value) {
+                    items.forEach { container.autofillRepository.recordUse(it) }
+                }
+            }
         }
     }
 

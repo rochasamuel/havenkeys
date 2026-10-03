@@ -25,23 +25,27 @@ object DatasetIds {
     data class Picked(val kind: Kind, val datasetId: String?)
 
     /**
-     * Android keeps the history of the LAST response and does not drain it on
-     * read, so a request that returns no new response would see the same pick
-     * again. A ledger counts a history once until a response replaces it.
+     * Android documents that the history is reset when the service answers
+     * (onSuccess/onFailure). This ledger guards the paths where it is read
+     * again without a new answer (a cancelled request) and repeated reads of
+     * a growing history: it remembers the SELECTED events already counted and
+     * counts only the new tail. Other events never matter.
      */
     class Ledger {
-        private var seen: List<Picked>? = null
+        private var counted: List<String> = emptyList()
 
         /** The items to count for [events], read now. */
         fun fresh(events: List<Picked>): List<String> {
-            if (events == seen) return emptyList()
-            seen = events
-            return usedItems(events)
+            val picked = usedItems(events)
+            val isGrowth = picked.size >= counted.size && picked.subList(0, counted.size) == counted
+            val news = if (isGrowth) picked.drop(counted.size) else picked
+            counted = picked
+            return news
         }
 
         /** A non-null response was returned: a new history starts. */
         fun responded() {
-            seen = null
+            counted = emptyList()
         }
     }
 

@@ -50,6 +50,7 @@ class ItemViewModel(
     suspend fun reveal(key: String): Outcome<String> = vault.reveal(id, key)
 
     /** The screen copied one of this item's fields: Home's "Frequently used" counts it. */
+    // The Outcome is ignored on purpose: recording never fails a copy.
     suspend fun copied() {
         vault.recordUse(id)
     }
