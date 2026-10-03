@@ -340,4 +340,8 @@
     <string name="identity_part_work">Work</string>
     <string name="identity_part_documents">Documents</string>
     <string name="identity_part_other">Other details</string>
+    <string name="home_recent">Recently added</string>
+    <string name="home_frequent">Frequently used</string>
+    <string name="home_frequent_empty">Items you fill or copy will show here.</string>
+    <string name="home_identity_empty">Add your details</string>
 </resources>

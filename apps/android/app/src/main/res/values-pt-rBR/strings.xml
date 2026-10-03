@@ -328,4 +328,8 @@
     <string name="identity_part_work">Trabalho</string>
     <string name="identity_part_documents">Documentos</string>
     <string name="identity_part_other">Outros dados</string>
+    <string name="home_recent">Adicionados recentemente</string>
+    <string name="home_frequent">Usados com frequência</string>
+    <string name="home_frequent_empty">Os itens que você preencher ou copiar aparecem aqui.</string>
+    <string name="home_identity_empty">Adicione seus dados</string>
 </resources>
