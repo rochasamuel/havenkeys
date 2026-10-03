@@ -218,11 +218,11 @@
       },
       "glass": {
         "role": "neutral",
-        "displayName": "Toast Glass (to about 95% in the stage's final fixes)"
+        "displayName": "Toast Glass (95%)"
       },
       "glass-light": {
         "role": "neutral",
-        "displayName": "Toast Glass (light; to about 95%)"
+        "displayName": "Toast Glass (light, 95%)"
       },
       "glass-rim": {
         "role": "neutral",

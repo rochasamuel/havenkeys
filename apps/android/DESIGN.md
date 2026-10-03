@@ -45,8 +45,8 @@ colors:
   danger-light: "#b4412f"
   on-danger: "#121a17"
   on-danger-light: "#ffffff"
-  glass: "rgba(15, 22, 20, 0.9)"
-  glass-light: "rgba(22, 35, 31, 0.94)"
+  glass: "rgba(15, 22, 20, 0.95)"
+  glass-light: "rgba(22, 35, 31, 0.95)"
   glass-rim: "rgba(226, 234, 230, 0.1)"
   on-glass: "#f3f7f5"
   digit: "#e3c483"
@@ -463,7 +463,7 @@ The **fade** is 160ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`: fades
 - **ItemRow:** one vault item: tile, title (row title), non-secret subtitle, and small clock and key marks for a one-time code and a passkey. The whole row is one button; the tile is decoration; the marks read "One-time code" and "Passkey". Only the title and subtitle (user data) may be cut with an ellipsis. **ItemTile:** a serif initial (a whole grapheme, upper-cased when that keeps its length) in brass on forest, or the kind's glyph; a secure note's glyph sits on the brass wash; a blank title shows the key.
 
 ### Inputs
-- **HavenTextField:** the row is the field: no box, no border of its own. A muted label above the 16sp value, an optional muted placeholder; on focus the row takes the selection wash and a 1.5dp brass border; an error turns the label ember and adds an ember line below. Brass cursor and handles; the keyboard is asked not to learn. TalkBack names it by its label once (the visible label is hidden from it) and reports the error as the field's error.
+- **HavenTextField:** the row is the field: no box, no border of its own. A muted label above the 16sp value, an optional muted placeholder; on focus the row takes the selection wash and a 1.5dp brass border; an error turns the label ember and adds an ember line below. Brass cursor and handles; the keyboard is asked not to learn. TalkBack reads its label and typed text as one node (the label is part of the field, not a second stop) and reports the error as the field's error.
 - **SecretTextField:** the same row in mono, fully masked (no last-character flash) until the eye reveals it; the caller owns the revealed state so a lock resets it. Password keyboard, no autocorrect, no learning, no cut or copy. TalkBack reads it as a password field named by its label and the eye as "Show Password" / "Hide Password", never the value.
 - **HavenSwitch / ToggleRow:** a 44 x 26dp track, line-strong off and brass on, a paper-white thumb that slides on the press spring, in a 52 x 48dp target. In a `ToggleRow` the whole row is the switch, named by its title, with press feedback; standalone it needs a label. TalkBack: name, "Switch", on/off.
 - **HavenSlider:** brass fill on a 4dp line-strong track with a 24dp paper-white thumb; tap or drag anywhere on its 48dp height, snapped to steps. It draws no visible label or value; TalkBack gets the label and `valueText` ("24", not a percentage) and adjusts it with its own gestures.
@@ -480,7 +480,7 @@ The **fade** is 160ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`: fades
 - **HavenSheet:** a bottom sheet in its own secure window: raised ground, 18dp top corners, a 36 x 5dp handle, an optional serif title (a heading, and the window's pane title). It rises on the sheet spring once measured, the scrim fades with it; drag down past 40% of its height or tap the backdrop (labelled "Close") to close. A close tapped while it rises goes straight to closing; `onDismiss` is called once, after it has gone.
 - **HavenDialog:** a question in its own secure window: raised, 18dp corners, up to 360dp, 24dp padding, serif title (heading and pane title), body message, quiet dismiss and primary or danger confirm at the end. The first tap answers; the buttons then disable. The window dims by the scrim's alpha.
 - **HavenMenu:** a small menu below its trigger, end-aligned (above it when there is no room), in a focusable secure window that Back and an outside tap close. Raised, 14dp corners, line-strong border; 48dp rows with a muted glyph and 15sp label, ember for danger. It fades and scales in from its top end. Picking a row closes the menu, then acts.
-- **Toast:** near-opaque dark glass in both themes (the phone cannot blur behind it), a fully round pill with a hairline rim (`glass-rim`) and a 16dp shadow: a green check or ember alert and one line of body text. A queue of one; a new toast replaces the current one; it stays 2.5 s, rises on the toast spring and fades out. It is a polite live region, so TalkBack announces it. It never carries a secret ("Password copied · clears in 30 s").
+- **Toast:** near-opaque dark glass in both themes (the phone cannot blur behind it), a fully round pill with a hairline rim (`glass-rim`) and a 16dp shadow: a green check or ember alert and one line of body text. A queue of one; a new toast replaces the current one; it stays 2.5 s, rises on the toast spring and fades out. It is a polite live region (assertive for an alert), so TalkBack announces it, and it stays as long as the system's accessibility timeout recommends. It never carries a secret ("Password copied · clears in 30 s").
 
 ### Feedback
 - **ProgressRing:** a 28dp ring with a 3dp round stroke on a line track: given progress it fills or drains on the tick spec (the one-time code), brass or ember when warning; without it a 270° arc spins, and under "Remove animations" it stands still. TalkBack gets a determinate or indeterminate progress range and an optional description.
@@ -555,7 +555,7 @@ The debug build's `KitCatalogueActivity` (`app/src/debug/.../catalogue/`) shows 
 
 **Decided.**
 - Serif titles are kept: the desktop does it and the review recommends it (spec §5.1 listed the serif for monograms only).
-- Toast glass: the phone cannot blur behind the toast, so its glass is raised to about 95% opacity, near-opaque, with the hairline rim (applied in the stage's final fixes; the frontmatter records the values the code carries at the time of writing, dark 90% and light 94%).
+- Toast glass: the phone cannot blur behind the toast, so its glass is 95% opaque (0xF2) in both themes, near-opaque, with the hairline rim.
 - GroupRow disclosure chevron for navigating rows with trailing content (the Items tab's counts): decided in stage 3.
 
 **Open for the owner.**
