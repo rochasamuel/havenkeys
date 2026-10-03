@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +37,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.kit.ButtonStyle
+import net.havenkeys.android.ui.kit.HavenButton
+import net.havenkeys.android.ui.kit.HavenText
+import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.LumaFrame
 
 /**
@@ -148,8 +149,12 @@ private fun ScannerMessage(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            if (action != null) OutlinedButton(onClick = onAction) { Text(action) }
+            HavenText(
+                text,
+                style = HavenTheme.type.body.copy(textAlign = TextAlign.Center),
+                color = HavenTheme.colors.text,
+            )
+            if (action != null) HavenButton(action, onClick = onAction, style = ButtonStyle.Secondary)
         }
     }
 }

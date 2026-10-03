@@ -150,6 +150,7 @@ val forbidMaterialInKit by tasks.registering {
             "**/ui/search/**/*.kt",
             "**/ui/nav/**/*.kt",
             "**/ui/unlock/**/*.kt",
+            "**/ui/onboarding/**/*.kt",
             "**/ui/settings/SettingsScreen.kt",
             "**/ui/settings/SettingsChoices.kt",
             "**/ui/settings/SettingsDialog.kt",
