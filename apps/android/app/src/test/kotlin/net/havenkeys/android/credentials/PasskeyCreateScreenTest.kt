@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -109,6 +110,28 @@ class PasskeyCreateScreenTest {
         show(state().copy(busy = true))
         rule.onAllNodesWithContentDescription(text(R.string.kit_close)).assertCountEquals(0)
         rule.onNodeWithTag(SHEET_TAG).assertIsDisplayed()
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    /** Final review (stage 4): Cancel stayed live while the passkey was being created. */
+    @Test
+    fun whileBusyNeitherAnswerCanBeTapped() {
+        show(state().copy(busy = true))
+        rule.onNode(hasText(text(R.string.passkey_cancel)) and hasClickAction()).assertIsNotEnabled().performClick()
+        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).assertIsNotEnabled().performClick()
+        rule.waitForIdle()
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    /** Final review (stage 4): between the server's answer and the site getting it, nothing else may answer. */
+    @Test
+    fun onceCreatedTheSheetCannotBeClosedOrCancelled() {
+        show(state().copy(response = "{}"))
+        rule.onAllNodesWithContentDescription(text(R.string.kit_close)).assertCountEquals(0)
+        rule.onNode(hasText(text(R.string.passkey_cancel)) and hasClickAction()).assertIsNotEnabled().performClick()
+        rule.onNode(hasText(text(R.string.passkey_save)) and hasClickAction()).assertIsNotEnabled()
+        rule.onNodeWithTag(SHEET_TAG).assertIsDisplayed()
+        rule.waitForIdle()
         assertEquals(emptyList<String>(), calls)
     }
 }

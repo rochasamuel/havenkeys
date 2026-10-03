@@ -37,11 +37,13 @@ fun PasskeyCreateScreen(
     onCancel: () -> Unit,
     onClose: () -> Unit,
 ) {
-    // While the passkey is being created, drag, backdrop and Back do nothing: the site is not answered twice.
+    // While the passkey is being created, and once it has been (the answer is on its way to the site),
+    // drag, backdrop and Back do nothing: the site is not answered twice.
+    val answering = state.answering
     HavenSheet(
-        onDismiss = { if (!state.busy) (if (state.excluded) onClose else onCancel)() },
+        onDismiss = { if (!answering) (if (state.excluded) onClose else onCancel)() },
         title = stringResource(R.string.passkey_save_title),
-        dismissible = !state.busy,
+        dismissible = !answering,
         footer = if (state.offersChoice) {
             { PasskeyCreateActions(state, onSave, onCancel) }
         } else {
@@ -126,6 +128,9 @@ private fun Choice(state: PasskeyCreateUiState, onSelect: (String?) -> Unit) {
     state.error?.let { ErrorLine(it) }
 }
 
+/** The passkey is being created, or was and the site is being answered: nothing else may answer it. */
+internal val PasskeyCreateUiState.answering: Boolean get() = busy || response != null
+
 /** The choice is on screen (not loading, not refused): Save and Cancel answer it. */
 internal val PasskeyCreateUiState.offersChoice: Boolean get() = !loading && !excluded && !planFailed
 
@@ -138,7 +143,13 @@ internal fun PasskeyCreateActions(state: PasskeyCreateUiState, onSave: () -> Uni
             onClick = onCancel,
             Modifier.weight(1f),
             style = ButtonStyle.Quiet,
+            enabled = !state.answering,
         )
-        HavenButton(stringResource(R.string.passkey_save), onClick = onSave, Modifier.weight(1f), enabled = !state.busy)
+        HavenButton(
+            stringResource(R.string.passkey_save),
+            onClick = onSave,
+            Modifier.weight(1f),
+            enabled = !state.answering,
+        )
     }
 }
