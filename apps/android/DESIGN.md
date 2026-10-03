@@ -537,6 +537,16 @@ The debug build's `KitCatalogueActivity` (`app/src/debug/.../catalogue/`) shows 
 - **Don't** download fonts or let a system face stand in for the serif.
 - **Don't** turn dynamic colour on.
 
+## Shell
+
+The unlocked app is one frame (`ui/shell`, spec §6): a fixed top bar, the current tab's content and a bottom bar, with item screens, editors, the generator, devices and autofill setup over it full screen.
+
+- **Top bar** (`ShellTopBar`): the search pill (field green in dark, hover green in light; an 18dp muted glyph, "Search HavenKeys" in muted value type, 12dp padding), then the offline badge (a `Pill`) when offline, Sync now (a 48dp icon button; a 20dp ring while syncing, a toast if it fails) and Lock. It sits outside the tabs' NavHost and takes only stable values, so a tab change neither moves nor recomposes it. Tapping the pill grows it into search's field (shared bounds).
+- **Bottom bar** (`BottomBar`): Home, Items, Settings on the pane under a hairline, 60dp tall; each tab a 24dp glyph over a label, muted, the selected one in strong ink with an 18 x 2dp brass marker under it; a light tick on a change, none on a reselect.
+- **Add sheet** (`AddSheet`): a kit `HavenSheet` titled "New item" with a two-column grid of 96dp tiles (12dp group radius, group ground, group hairline, a 24dp brass-ink glyph over the label) that settle in sequence: Login, Secure note, Card, Generate password. Offline the item tiles fade to 42% and a muted line says "Adding needs a connection"; the generator stays.
+- **Lazy inset groups** (`insetGroup`, `InsetSlice`): the kit's `InsetGroup` cut into one lazy item per row, so long lists stay lazy; each slice draws its part of the 12dp outline and the hairline above it, starting where its text starts.
+- **Lists**: Home has no large title (the identity card, then Recently added and Frequently used); Items, a category list and Settings open on a 28sp serif large title; a category list's back chevron sits above its title with its ink on the title's start.
+
 ## Review notes (stage 2)
 
 **How the review ran.** No emulator or adb on the build machine. The catalogue was rendered with Robolectric native graphics (`CatalogueScreenshots` in `app/src/testDebug/.../catalogue/`), one PNG per section per theme plus the scaffold frame with a live toast, into `apps/android/.impeccable/review/kit-<light|dark>-<section>.png`, only when Gradle gets `-PscreensDir=.impeccable/review` (`./gradlew testGithubDebugUnitTest --tests '*CatalogueScreenshots*' -PscreensDir=.impeccable/review`). `captureToImage()` times out under Robolectric, so the test draws the decor view into a bitmap. Text renders correctly. Robolectric draws the window directly, so elevation shadows (`Modifier.shadow`) are not in the screenshots: the sheet, dialog, menu, toast and add button appear without them, and the light sheet and dialog drawn inline look edgeless (white on white); Paint shadow layers (thumbs, segmented thumb) do render. The `/impeccable` critique ran in a single context; its detector does not scan Kotlin, so the evidence was the screenshots, the kit sources and the desktop references.
@@ -567,3 +577,22 @@ The debug build's `KitCatalogueActivity` (`app/src/debug/.../catalogue/`) shows 
 - Animations by hand at animator scale 1 and 0: the sheet spring, drag down and backdrop tap close it, a tap during the rise closes it once; dialog, menu (scales in from its top end), toast (rises), copy glyph to check, switch, segmented control, pull to refresh. At 0 each cuts with nothing blocked. Judge the springs' feel.
 - The full TalkBack pass: each control's name, role and state once (button, switch on/off, tab selected, slider "24"); a text field reads its label once, and whether a label set as `contentDescription` hides the typed value of a non-secret field; the secret field reads as a password and never speaks its value; the copy button says "Copy Password" then "Copied"; the toast is announced; sheet, dialog and menu titles are announced; an item row is one stop (title, subtitle, "One-time code", "Passkey"); the pull-to-refresh "Refresh" action is reachable, and if not, Home needs a visible sync control. Confirm TalkBack skips the hairlines.
 - FLAG_SECURE on the sheet, dialog and menu windows: a screenshot of them comes out black.
+
+## Review notes (stage 3)
+
+**How the review ran.** As in stage 2: `ShellScreenshots` (`app/src/testDebug/.../screens/`) renders with fake repositories (no vault data) the shell on Home, Items, a category list and Settings, Home with a failed load, search empty and with results, and the add sheet offline, in light and dark at 411dp, plus the shell at 360dp in English and Portuguese, into `apps/android/.impeccable/review/shell-*.png` (git-ignored), only with `-PscreensDir=.impeccable/review`. Shadows and the status-bar inset are not in the images (Robolectric draws the window directly); the sheet is drawn in place because it opens its own window. The `/impeccable` critique ran in a single context; its detector does not scan Kotlin.
+
+**Verdict.** One product with the desktop and the stage 2 kit; nothing reads as Material. Home's rhythm (identity card, two titled groups) and the Items and Settings groupings hold; the One Fitting Rule holds (brass on the switch, the marker, the add button, tile glyphs and "Clear"; one primary, the add button).
+
+**Fixed in the review:**
+1. [P1] In light theme the search pill had no ground (the field colour is white like the pane), so the bar read as loose text; it now takes the hover green, as the segmented track does, in the bar and in search (9e6bed8; `ShellPartsTest.theSearchPillStandsOffThePaneInBothThemes`).
+2. [P1] Home showed "New items you add appear here." and "Items you fill or copy will show here." under an error line, claiming empty lists it could not load; the empty lines now show only without an error, as the category list does (7c93078; `HomeScreenTest.aFailedLoadSaysSoAndClaimsNoEmptyList`).
+3. [P2] On a 360dp phone offline the pill's "Search HavenKeys" wrapped to two lines and the bar grew; tighter pill padding (14 to 12dp), glyph gap (10 to 8dp) and badge gap (8 to 4dp) keep it on one line in English; search's field matches so the shared-bounds move does not jump (bfdb03a; `ShellTopBarNarrowTest`).
+4. [P3] The category list's back chevron sat 13dp right of the large title (the glyph centred in its 48dp target on the gutter); it is now pulled out by that inset so its ink lines up with the title (765bfbd; `ItemsScreensTest.theBackChevronsGlyphLinesUpWithTheLargeTitle`).
+
+**Checked and kept.** Home without a large title (1Password's Home has none; the identity card leads). The add sheet's dimmed tiles keep their brass-ink glyphs at 42%. Dark item tiles (avatar green on group green) are quiet, as on the desktop; the brass initial carries them. Bottom-bar labels fit at 360dp in Portuguese ("Configurações").
+
+**Open for the owner.**
+- In Portuguese at 360dp offline, "Buscar no HavenKeys" still wraps (the words wrap, so nothing is cut, but the bar grows). Options: a shorter Portuguese placeholder ("Buscar"); or, while offline, the offline badge takes the place of the disabled Sync now (it cannot sync offline anyway), which changes the plan's top bar. Large font sizes wrap in English too.
+- Sync now is disabled while offline (`enabled = online`), but the stage 3 device checklist expects "Sync now shows a ring, then a toast that HavenKeys is offline". One of the two should change.
+- The identity card's summary wraps to two lines in Portuguese; spec §6.5 says "a one-line summary". Keep wrapping (Words Wrap Rule) or cap the parts listed?
