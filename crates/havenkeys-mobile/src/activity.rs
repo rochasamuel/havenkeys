@@ -11,7 +11,6 @@ impl MobileVault {
     /// password, confirmed binding). Never fails the pick: the activity is a
     /// convenience, the fill is the point. Call it only after every
     /// `client.vault()` guard of the caller is dropped (not re-entrant).
-    #[allow(dead_code)] // used from Task 6
     pub(crate) fn note_use(&self, id: &Uuid) {
         if let Ok(vault) = self.client.vault() {
             let _ = vault.record_use(id, havenkeys_client::now_ms());

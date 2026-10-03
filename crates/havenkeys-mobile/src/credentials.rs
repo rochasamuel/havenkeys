@@ -263,6 +263,7 @@ impl MobileVault {
                 )?
             }
         };
+        self.note_use(&item);
         Ok(assertion_json(&assertion))
     }
 
@@ -387,6 +388,7 @@ impl MobileVault {
                 self.client.vault()?.fill_for_app(&id, &app, &hosts)?
             }
         };
+        self.note_use(&id);
         Ok(FillValues {
             username: creds.username,
             password: creds.password.map(|p| p.expose().to_owned()),
@@ -492,14 +494,21 @@ mod tests {
         assert_eq!(offers[0].item_id, item);
         assert_eq!(offers[0].user_name, "octo");
         let out = json(
-            &v.passkey_sign_in(chrome("https://github.com"), GET.into(), None, item, cred)
-                .unwrap(),
+            &v.passkey_sign_in(
+                chrome("https://github.com"),
+                GET.into(),
+                None,
+                item.clone(),
+                cred,
+            )
+            .unwrap(),
         );
         let cdj = b64(&out["response"]["clientDataJSON"]);
         assert!(String::from_utf8(cdj.clone())
             .unwrap()
             .contains(r#""origin":"https://github.com""#));
         assert!(verifies(&spki, &out["response"], &Sha256::digest(&cdj)));
+        assert_eq!(v.frequently_used(6).unwrap()[0].id, item);
     }
 
     #[test]
@@ -758,6 +767,7 @@ mod tests {
             .credential_password(chrome("https://github.com"), offers[0].id.clone())
             .unwrap();
         assert_eq!(filled.password.as_deref(), Some("hunter2hunter2"));
+        assert_eq!(v.frequently_used(6).unwrap()[0].id, offers[0].id);
         assert!(v
             .credential_password_offers(chrome("https://github.com.evil.com"))
             .unwrap()

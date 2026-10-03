@@ -288,6 +288,7 @@ impl MobileVault {
                 FillCredentials { username, password }
             }
         };
+        self.note_use(&item);
         Ok(BoundFill {
             values: to_values(creds),
             saved,
@@ -417,6 +418,19 @@ mod tests {
         assert!(!once.saved);
         assert_eq!(once.values.password.as_deref(), Some("hunter2hunter2"));
         assert!(v.autofill_matches(app(1)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn prefetching_values_records_nothing_but_a_confirmed_binding_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = add_login(&v, "https://github.com");
+        let page = || chrome("github.com", Some("https"));
+        v.autofill_fill(id.clone(), page()).unwrap();
+        v.autofill_totp(id.clone(), page()).unwrap();
+        assert!(v.frequently_used(6).unwrap().is_empty());
+        v.autofill_bind_and_fill(id.clone(), app(1)).unwrap();
+        assert_eq!(v.frequently_used(6).unwrap()[0].id, id);
     }
 
     #[test]
