@@ -76,6 +76,7 @@ class AutofillSearchActivity : FragmentActivity() {
         }
     }
 
+    // Rust records this pick as a use; recording it here too would count it twice.
     private suspend fun bindAndFill(tapped: TappedRequest, match: AutofillMatch): String? =
         when (val r = container.autofillRepository.bindAndFill(match.id, tapped.target)) {
             is Outcome.Failed -> r.code

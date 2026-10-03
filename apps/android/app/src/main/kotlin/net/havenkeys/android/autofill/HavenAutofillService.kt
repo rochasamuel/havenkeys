@@ -36,12 +36,16 @@ import uniffi.havenkeys_mobile.SaveResult
  */
 class HavenAutofillService : AutofillService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + swallowUncaught)
+    private val picks = DatasetIds.Ledger()
     private val container get() = (application as HavenApp).container
 
     override fun onFillRequest(request: FillRequest, cancellation: CancellationSignal, callback: FillCallback) {
         val answered = AtomicBoolean(false)
         fun answer(response: FillResponse?) {
-            if (answered.compareAndSet(false, true)) callback.onSuccess(response)
+            if (answered.compareAndSet(false, true)) {
+                if (response != null) picks.responded()
+                callback.onSuccess(response)
+            }
         }
         val structure = request.fillContexts.lastOrNull()?.structure ?: return answer(null)
         val inlineRequest =
@@ -82,8 +86,9 @@ class HavenAutofillService : AutofillService() {
             }
             DatasetIds.Picked(kind, event.datasetId)
         }
+        val fresh = picks.fresh(events)
         if (container.events.unlocked.value) {
-            DatasetIds.usedItems(events).forEach { container.autofillRepository.recordUse(it) }
+            fresh.forEach { container.autofillRepository.recordUse(it) }
         }
     }
 

@@ -19,6 +19,31 @@ class DatasetIdsTest {
         assertNull(DatasetIds.itemOf("item:$uuid:extra"))
     }
 
+    private fun pick(id: String = uuid) = listOf(DatasetIds.Picked(DatasetIds.Kind.SELECTED, DatasetIds.of(id)))
+
+    @Test
+    fun theSameHistoryWithoutAResponseCountsOnce() {
+        val ledger = DatasetIds.Ledger()
+        assertEquals(listOf(uuid), ledger.fresh(pick()))
+        assertEquals(emptyList<String>(), ledger.fresh(pick()))
+    }
+
+    @Test
+    fun theSameHistoryAfterAResponseCountsAgain() {
+        val ledger = DatasetIds.Ledger()
+        ledger.fresh(pick())
+        ledger.responded()
+        assertEquals(listOf(uuid), ledger.fresh(pick()))
+    }
+
+    @Test
+    fun aDifferentHistoryCounts() {
+        val ledger = DatasetIds.Ledger()
+        ledger.fresh(pick())
+        val other = "11111111-2222-4333-8444-555555555555"
+        assertEquals(listOf(other), ledger.fresh(pick(other)))
+    }
+
     @Test
     fun onlyPickedDirectRowsCount() {
         val events = listOf(
