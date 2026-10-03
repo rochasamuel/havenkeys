@@ -344,4 +344,5 @@
     <string name="home_frequent">Frequently used</string>
     <string name="home_frequent_empty">Items you fill or copy will show here.</string>
     <string name="home_identity_empty">Add your details</string>
+    <string name="items_empty">Nothing here yet</string>
 </resources>
