@@ -1268,8 +1268,8 @@ hosts whose registrable domain's first label appears in the package name
 * The core `LockManager` and its auto-lock choices (never, 5, 15, 30, 60
   minutes), ticked every 5 seconds by a Rust thread and checked again when
   the app returns to the foreground. Only the user resets the idle timer:
-  taps in the main activity (`onUserInteraction`) and typing in the vault
-  search. No read does (list, search, open, reveal, TOTP), because the app
+  taps in the main activity (`onUserInteraction`) and typing in the search
+  screen. No read does (list, search, open, reveal, TOTP), because the app
   also makes them on its own — a sync's `items_changed` reloads every 30
   seconds in the foreground, the item screen's TOTP code every second — and
   counting those would keep the vault unlocked forever (`security-review.md`
@@ -1669,3 +1669,10 @@ and another vault's key opens none of them. The activity record reveals,
 to someone who can unlock the vault, which items are used most and the
 recent searches: no more than the vault itself; to anyone else it is
 ciphertext.
+
+On Android the Home and search screens hold this data only in their
+ViewModels' memory and drop it on lock, sign-out and removal. The query
+being typed lives in the search screen's ViewModel and its field's
+composition state; it is never put into a navigation route, saved instance
+state, `SavedStateHandle` or a log, and it becomes a recent search only
+when a result is opened.

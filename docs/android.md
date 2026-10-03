@@ -18,7 +18,7 @@ concurrent edit shows "This item changed on another device." It also adds
 saving from Autofill: after you confirm Android's save sheet, a login typed
 into a browser is saved for that site, and one typed into an app is bound to
 that app (`security-model.md` §22.16, §22.17). Android M3 adds passkeys
-and Android M4 cards and the identity in Autofill (below). Not yet: editing
+and Android M4 cards and the identity in Autofill (below). The redesign's shell (2026-10-03 spec §6) replaces the vault list: Home, Items and Settings tabs with their own back stacks, a search screen with recent searches, and an add sheet. Not yet: editing
 custom fields (kept as they are), scanning a TOTP QR code (type or paste the
 key), saving a login typed while locked, and an in-app updater.
 
@@ -326,6 +326,30 @@ Editing and saving (Android M2; the same list is in `security-review.md`):
 - [ ] Autofill save in an app: the login is bound to that app with no website; an app with another certificate does not update it.
 - [ ] Username-first sign-in: one login on Android 10+; password step only on Android 9.
 - [ ] Lock before submitting: "HavenKeys locked before saving."; offline: "HavenKeys is offline. The login was not saved."; HavenKeys' own screens never offer to save.
+
+### Redesign stage 3 (shell)
+
+Run on an emulator or phone (Android 14+), in light and dark, once with
+`adb shell settings put global animator_duration_scale 1` and once with `0`
+(restore `1` afterwards).
+
+- [ ] Unlock: Home appears on the slower reveal; the identity card and both groups settle in sequence; nothing settles again on a tab return. With animations removed, it is an instant cut.
+- [ ] Tabs: Items → Logins → Home → Items shows Logins again; tapping Items again shows the Items root; Back from Items or Settings root goes to Home; the top bar does not move or flicker on a tab change; a light tick on a change, none on a reselect.
+- [ ] Per-tab back stacks survive process death: open Items → Logins, send the app to the background, `adb shell am kill net.havenkeys.android`, reopen and unlock: the tabs and their stacks are as left (the query is not).
+- [ ] Push and pop: a category list and an item slide in from the right while the old screen shifts left and dims; Back reverses; the predictive back gesture scrubs the item screen (Android 14+). A row tapped during a tab crossfade or a push opens at once.
+- [ ] Shared title and bounds: an item in both Recently added and Frequently used: tapping either row moves that row's title into the item screen; the search pill's bounds grow into the search field and shrink back, across the two NavHosts, without a jump.
+- [ ] Search: the pill grows into the focused field with the keyboard up; recent searches fade in after; Clear empties them; typing shows results and records nothing; opening a result records the query (it is at the top of recents next time); Cancel and Back shrink the field into the pill; Back from an opened result returns to the results.
+- [ ] Search and the lock: with a query typed, lock (button, screen off, auto-lock): Unlock appears at once; after unlocking the query and results are gone. Kill the process with a query typed (`adb shell am kill net.havenkeys.android` after Home): the query never comes back.
+- [ ] Lock from any tab (Home, Items, a category list, Settings, the add sheet): Unlock appears and nothing survives (query, lists, recents); after unlocking, Home reloads its identity card and groups.
+- [ ] Add sheet: springs up, backdrop dims, tiles stagger; drag down and a backdrop tap close it; Login, Secure note and Card open their editors; Generate password opens the generator. Airplane mode: the item tiles are dimmed with "Adding needs a connection"; the generator still opens. The identity is never offered.
+- [ ] Offline: the top bar shows "Offline" and Sync now is disabled (dimmed, not tappable, read as disabled by TalkBack). Online, Sync now shows a ring while syncing and TalkBack announces that it is syncing.
+- [ ] Top bar at the largest font size on a narrow (360dp) phone, offline: nothing is cut and the pill's words wrap (the bar may grow); Home's identity card summary may wrap to two lines in Portuguese.
+- [ ] Pull to refresh on Home and a category list syncs; Sync now in the top bar does the same, and doing both at once runs one sync.
+- [ ] Settings: every row works (auto-lock and clipboard sheets, the three switches, biometric enrolment dialog, autofill setup, devices, sign out, remove device with a wrong then right email).
+- [ ] FLAG_SECURE: screenshots blocked and the recents thumbnail blank on Home, search, the add sheet and the Settings dialogs.
+- [ ] TalkBack: tabs read "Home, tab, 1 of 3, selected"; the pill reads "Search HavenKeys, button"; Sync now and Lock now are named; the offline badge is read; the add sheet's dimmed tiles read as disabled; Home's headings are headings; the identity card reads its title and summary as one button; the category back chevron reads "Back"; Sync now is the reachable way to sync (the pull's custom action may not be).
+- [ ] Stage 2 kit checks (`apps/android/DESIGN.md` "Review notes (stage 2)", in the debug catalogue `net.havenkeys.android/.catalogue.KitCatalogueActivity`): emulator or device screenshots including the elevation shadows of sheet, dialog, menu, toast and add button; the animations by hand at scale 1 and 0 (sheet spring, drag down and backdrop tap, a tap during the rise closes once; dialog, menu, toast, copy glyph, switch, segmented control, pull to refresh; at 0 each cuts, nothing blocked); the full TalkBack pass (button, switch on/off, tab selected, slider "24"; a text field reads its label once, and whether its label and typed value are both read; a secret field reads as a password and never speaks its value; "Copy Password" then "Copied"; the toast is announced; sheet, dialog and menu titles are announced; an item row is one stop; the pull-to-refresh "Refresh" action is reachable, and if not Home needs a visible sync control; hairlines skipped); FLAG_SECURE on the sheet, dialog and menu windows.
+- [ ] Stage 1's deferred checks: pick a direct-fill row in Chrome, open another form, then see that login under Frequently used; fill event history still delivers `TYPE_DATASET_SELECTED` on Android 14+ (`FillEventHistory` is deprecated in API 36 with no replacement); a pick after a null response is counted once; a confirmed login fill counts once.
 
 ### Android M4
 - [ ] Chrome, https checkout with number, expiry (one field) and CVV: rows show `•••• 1111 · 04/33`; tapping fills all three; a field already typed in stays.
