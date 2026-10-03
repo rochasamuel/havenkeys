@@ -44,12 +44,6 @@ fun TotpRing(secondsRemaining: Int, period: Int, modifier: Modifier = Modifier, 
 
 private const val ENDING_SECONDS = 5
 
-/** "381492" → "381 492", "12345678" → "1234 5678": easier to read and type. */
-internal fun groupedCode(code: String): String =
-    if (code.length < GROUP_MIN) code else code.substring(0, code.length / 2) + " " + code.substring(code.length / 2)
-
-private const val GROUP_MIN = 6
-
 @Preview
 @Composable
 private fun TotpRingPreview() {
