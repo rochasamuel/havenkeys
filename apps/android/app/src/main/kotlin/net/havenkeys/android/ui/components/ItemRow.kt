@@ -117,6 +117,7 @@ private fun ItemRowPreview() {
                 hasTotp = true,
                 hasPasskey = true,
                 updatedAt = 0,
+                createdAt = 0,
             ),
             onClick = {},
         )

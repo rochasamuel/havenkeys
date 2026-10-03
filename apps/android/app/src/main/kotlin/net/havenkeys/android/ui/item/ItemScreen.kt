@@ -238,6 +238,7 @@ private class FieldActions(
     private suspend fun copy(label: String, value: String) {
         val seconds = viewModel.clipboardClearSeconds()
         clipboard.copy(label, value, seconds)
+        viewModel.copied()
         snackbar.showSnackbar(resources.getString(R.string.copied, label, seconds))
     }
 }

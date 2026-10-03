@@ -156,6 +156,33 @@ class FakeVaultRepository : VaultRepository {
         calls += "delete:$id"
         return deleted
     }
+
+    val usesRecorded = mutableListOf<String>()
+    var frequent: Outcome<List<ItemSummary>> = Outcome.Ok(emptyList())
+    var recent: Outcome<List<ItemSummary>> = Outcome.Ok(emptyList())
+    val searches = mutableListOf<String>()
+
+    override suspend fun recordUse(id: String): Outcome<Unit> {
+        usesRecorded += id
+        return Outcome.Ok(Unit)
+    }
+
+    override suspend fun frequentlyUsed(n: Int) = frequent
+
+    override suspend fun recentlyCreated(n: Int) = recent
+
+    override suspend fun recentSearches(): Outcome<List<String>> = Outcome.Ok(searches.toList())
+
+    override suspend fun recordSearch(query: String): Outcome<Unit> {
+        searches.removeAll { it.equals(query.trim(), ignoreCase = true) }
+        if (query.isNotBlank()) searches.add(0, query.trim())
+        return Outcome.Ok(Unit)
+    }
+
+    override suspend fun clearRecentSearches(): Outcome<Unit> {
+        searches.clear()
+        return Outcome.Ok(Unit)
+    }
 }
 
 class FakeAccountRepository : AccountRepository {
@@ -243,6 +270,12 @@ class FakeAutofillRepository : AutofillRepository {
     var code: Outcome<String> = Outcome.Failed("not_found")
     var bound: Outcome<BoundFill> = Outcome.Failed("not_found")
     val calls = mutableListOf<String>()
+    val usesRecorded = mutableListOf<String>()
+
+    override suspend fun recordUse(id: String): Outcome<Unit> {
+        usesRecorded += id
+        return Outcome.Ok(Unit)
+    }
 
     override suspend fun targetKind(target: TargetFacts) = kind
 

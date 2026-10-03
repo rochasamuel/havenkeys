@@ -153,5 +153,5 @@ class VaultViewModelTest {
     }
 
     private fun item(id: String, kind: ItemKind, hasPasskey: Boolean = false) =
-        ItemSummary(id, kind, "Title $id", null, null, false, hasPasskey, 0)
+        ItemSummary(id, kind, "Title $id", null, null, false, hasPasskey, 0, 0)
 }

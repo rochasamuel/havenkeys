@@ -18,6 +18,7 @@ import uniffi.havenkeys_mobile.TargetFacts
 import uniffi.havenkeys_mobile.TargetKind
 
 interface AutofillRepository {
+    suspend fun recordUse(id: String): Outcome<Unit>
     suspend fun targetKind(target: TargetFacts): Outcome<TargetKind>
     suspend fun confirmBeforeFilling(): Boolean
     suspend fun matches(target: TargetFacts): Outcome<List<AutofillMatch>>
@@ -43,6 +44,7 @@ interface AutofillRepository {
 }
 
 class RustAutofillRepository(private val vault: MobileVault) : AutofillRepository {
+    override suspend fun recordUse(id: String) = rust { vault.recordUse(id) }
     override suspend fun targetKind(target: TargetFacts) = rust { vault.autofillTargetKind(target) }
 
     // A failed read asks for confirmation: the safe side.
