@@ -596,5 +596,7 @@ The unlocked app is one frame (`ui/shell`, spec §6): a fixed top bar, the curre
 
 **Open for the owner.**
 - At large font sizes the pill's placeholder still wraps on a narrow phone offline (the words wrap, so nothing is cut, but the bar grows). If that matters: while offline, the offline badge could take the place of the disabled Sync now, which changes the plan's top bar.
-- Sync now is disabled while offline (`enabled = online`), but the stage 3 device checklist expects "Sync now shows a ring, then a toast that HavenKeys is offline". One of the two should change.
-- The identity card's summary wraps to two lines in Portuguese; spec §6.5 says "a one-line summary". Keep wrapping (Words Wrap Rule) or cap the parts listed?
+
+**Decided.**
+- Sync now is disabled while offline (dimmed, read as disabled by TalkBack) and announced while syncing; the device checklist matches.
+- The identity card's summary may wrap under the Words Wrap Rule; spec §6.5's "one-line summary" is read as "one summary".

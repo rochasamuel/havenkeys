@@ -18,7 +18,10 @@ concurrent edit shows "This item changed on another device." It also adds
 saving from Autofill: after you confirm Android's save sheet, a login typed
 into a browser is saved for that site, and one typed into an app is bound to
 that app (`security-model.md` §22.16, §22.17). Android M3 adds passkeys
-and Android M4 cards and the identity in Autofill (below). The redesign's shell (2026-10-03 spec §6) replaces the vault list: Home, Items and Settings tabs with their own back stacks, a search screen with recent searches, and an add sheet. Not yet: editing
+and Android M4 cards and the identity in Autofill (below). The redesign's
+shell (2026-10-03 spec §6) replaces the vault list: Home, Items and Settings
+tabs with their own back stacks, a search screen with recent searches, and
+an add sheet. Not yet: editing
 custom fields (kept as they are), scanning a TOTP QR code (type or paste the
 key), saving a login typed while locked, and an in-app updater.
 
@@ -335,7 +338,7 @@ Run on an emulator or phone (Android 14+), in light and dark, once with
 
 - [ ] Unlock: Home appears on the slower reveal; the identity card and both groups settle in sequence; nothing settles again on a tab return. With animations removed, it is an instant cut.
 - [ ] Tabs: Items → Logins → Home → Items shows Logins again; tapping Items again shows the Items root; Back from Items or Settings root goes to Home; the top bar does not move or flicker on a tab change; a light tick on a change, none on a reselect.
-- [ ] Per-tab back stacks survive process death: open Items → Logins, send the app to the background, `adb shell am kill net.havenkeys.android`, reopen and unlock: the tabs and their stacks are as left (the query is not).
+- [ ] Per-tab back stacks survive tab switches, rotation and a theme change: open Items → Logins, switch tabs and back, rotate, change theme: Logins is still there. After a process kill (`adb shell am kill net.havenkeys.android`) or any lock, unlocking opens a fresh Home with nothing behind it.
 - [ ] Push and pop: a category list and an item slide in from the right while the old screen shifts left and dims; Back reverses; the predictive back gesture scrubs the item screen (Android 14+). A row tapped during a tab crossfade or a push opens at once.
 - [ ] Shared title and bounds: an item in both Recently added and Frequently used: tapping either row moves that row's title into the item screen; the search pill's bounds grow into the search field and shrink back, across the two NavHosts, without a jump.
 - [ ] Search: the pill grows into the focused field with the keyboard up; recent searches fade in after; Clear empties them; typing shows results and records nothing; opening a result records the query (it is at the top of recents next time); Cancel and Back shrink the field into the pill; Back from an opened result returns to the results.
