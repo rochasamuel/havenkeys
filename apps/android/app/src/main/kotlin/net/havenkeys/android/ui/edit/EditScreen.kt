@@ -2,24 +2,11 @@ package net.havenkeys.android.ui.edit
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,17 +15,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
-import net.havenkeys.android.ui.components.HavenTopBar
-import net.havenkeys.android.ui.components.errorText
-import net.havenkeys.android.ui.kit.NoPersonalizedLearning
-import net.havenkeys.android.ui.theme.HavenTheme
+import net.havenkeys.android.ui.components.OfflineNote
+import net.havenkeys.android.ui.components.ScreenBar
+import net.havenkeys.android.ui.kit.DialogAction
+import net.havenkeys.android.ui.kit.HavenButton
+import net.havenkeys.android.ui.kit.HavenDialog
+import net.havenkeys.android.ui.kit.HavenScaffold
+import net.havenkeys.android.ui.shell.ErrorLine
+import net.havenkeys.android.ui.shell.LargeTitle
+import net.havenkeys.android.ui.theme.HavenSpacing
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
@@ -80,35 +71,30 @@ fun EditScreen(
     }
     BackHandler(enabled = editor?.dirty == true) { confirmDiscard = true }
 
-    Scaffold(
-        topBar = {
-            HavenTopBar(
-                title = edit?.let { stringResource(screenTitle(it.kind, isNew)) }.orEmpty(),
-                online = online,
-                onLock = navigation.onLock,
-                onBack = leave,
-                actions = {
-                    TextButton(onClick = { editor?.let { viewModel.save(it.toDraft()) } }, enabled = canSave) {
-                        Text(stringResource(R.string.edit_save))
-                    }
-                },
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background,
+    HavenScaffold(
         modifier = modifier,
+        topBar = {
+            ScreenBar(onBack = leave, online = online, onLock = navigation.onLock) {
+                HavenButton(
+                    stringResource(R.string.edit_save),
+                    onClick = { editor?.let { viewModel.save(it.toDraft()) } },
+                    Modifier.padding(start = 4.dp, end = 8.dp),
+                    enabled = canSave,
+                )
+            }
+        },
     ) { padding ->
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
-                .imePadding()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = HavenSpacing.gutter)
+                .padding(bottom = padding.calculateBottomPadding() + HavenSpacing.gutter),
         ) {
-            if (!online) OfflineNote()
+            edit?.let { LargeTitle(stringResource(screenTitle(it.kind, isNew))) }
+            if (!online) OfflineNote(stringResource(R.string.edit_offline))
             state.errorCode?.let { ErrorLine(it) }
-            if (editor != null && edit != null) {
-                NoPersonalizedLearning { EditFields(editor, edit, FieldValues(viewModel, loading)) }
-            }
+            if (editor != null && edit != null) EditFields(editor, edit, FieldValues(viewModel, loading))
         }
     }
     if (confirmDiscard) {
@@ -151,50 +137,23 @@ private fun screenTitle(kind: ItemKind, isNew: Boolean): Int = when (kind) {
 }
 
 @Composable
-private fun OfflineNote() {
-    Surface(color = HavenTheme.colors.brassSoft, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = HavenTheme.colors.brassInk)
-            Text(stringResource(R.string.edit_offline), style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun ErrorLine(code: String) {
-    Text(
-        text = stringResource(errorText(code)),
-        color = MaterialTheme.colorScheme.error,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}
-
-@Composable
 private fun DiscardDialog(isNew: Boolean, onKeep: () -> Unit, onDiscard: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onKeep,
-        title = { Text(stringResource(if (isNew) R.string.edit_discard_new else R.string.edit_discard_changes)) },
-        confirmButton = {
-            TextButton(onClick = onDiscard) {
-                Text(stringResource(R.string.edit_discard), color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = { TextButton(onClick = onKeep) { Text(stringResource(R.string.edit_keep_editing)) } },
+    HavenDialog(
+        title = stringResource(if (isNew) R.string.edit_discard_new else R.string.edit_discard_changes),
+        onDismiss = onKeep,
+        confirm = DialogAction(stringResource(R.string.edit_discard), onDiscard, danger = true),
+        dismiss = DialogAction(stringResource(R.string.edit_keep_editing), onKeep),
     )
 }
 
-/** Not dismissable: the draft was made against a version that no longer exists. */
+/** Not dismissible: the draft was made against a version that no longer exists; Reload is the only way on. */
 @Composable
 private fun ConflictDialog(onReload: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text(stringResource(R.string.error_item_changed_elsewhere)) },
-        text = { Text(stringResource(R.string.edit_conflict_text)) },
-        confirmButton = { TextButton(onClick = onReload) { Text(stringResource(R.string.edit_reload)) } },
+    HavenDialog(
+        title = stringResource(R.string.error_item_changed_elsewhere),
+        onDismiss = {},
+        confirm = DialogAction(stringResource(R.string.edit_reload), onReload),
+        message = stringResource(R.string.edit_conflict_text),
+        dismissible = false,
     )
 }
