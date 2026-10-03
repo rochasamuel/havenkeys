@@ -169,6 +169,9 @@ class ManifestTest {
             val text = sources.single { it.name == name }.readText()
             assertTrue("$name must ask through the kit dialog", "HavenDialog(" in text)
             assertFalse("$name must not open a dialog of its own", "AlertDialog(" in text)
+            // Nor a bare Compose Dialog or Popup, whose window would not filter obscured touches.
+            assertFalse("$name must not open a bare Dialog", BareWindow.Dialog.containsMatchIn(text))
+            assertFalse("$name must not open a Popup", BareWindow.Popup.containsMatchIn(text))
         }
     }
 
@@ -204,4 +207,10 @@ class ManifestTest {
         val activity = elements("activity").single { it.android("name") == ".credentials.PasskeyCreateActivity" }
         assertEquals("@style/Theme.HavenKeys.Translucent", activity.android("theme"))
     }
+}
+
+/** `Dialog(` or `Popup(` as a call of their own: `HavenDialog(` or `AlertDialog(` do not match. */
+private object BareWindow {
+    val Dialog = Regex("(?<![A-Za-z0-9_])Dialog\\(")
+    val Popup = Regex("(?<![A-Za-z0-9_])Popup\\(")
 }

@@ -348,6 +348,21 @@ class OverlaysTest {
         assertEquals(1, reloads)
     }
 
+    /** Final review (stage 4): an undismissible sheet (work in flight) ignores Back, drag and the backdrop. */
+    @Test
+    fun anUndismissibleSheetIgnoresBackAndDrag() {
+        rule.setKit {
+            HavenSheet(onDismiss = { dismissed++ }, title = "Saving", dismissible = false) { HavenText("Login") }
+        }
+        pressBack()
+        rule.onNodeWithTag(SHEET_TAG).performTouchInput { swipeDown(startY = top + 1f, endY = bottom + height) }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Close").assertDoesNotExist()
+        rule.onNodeWithTag(SHEET_TAG).assertIsDisplayed()
+        rule.onNodeWithText("Login").assertIsDisplayed()
+        assertEquals(0, dismissed)
+    }
+
     @Test
     fun theAlternativeAnswerIsGatedByBusyNotByConfirmEnabled() {
         var busy by mutableStateOf(false)

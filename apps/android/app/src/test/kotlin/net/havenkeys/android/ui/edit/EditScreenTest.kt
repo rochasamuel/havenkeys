@@ -14,7 +14,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
@@ -138,5 +141,35 @@ class EditScreenTest {
         title().performTextReplacement("Typed before the restore")
         restoration.emulateSavedInstanceStateRestore()
         assertEquals("GitHub", title().fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text)
+    }
+
+    /** Final review (stage 4): the restore test now types a secret too, and it does not come back. */
+    @Test
+    fun aRestoredEditorBringsNoTypedPasswordBack() {
+        vault.edit = Outcome.Ok(
+            ItemEdit(
+                ItemKind.LOGIN,
+                "GitHub",
+                emptyList(),
+                listOf(
+                    EditField("username", FieldKind.TEXT, true, "sam"),
+                    EditField("password", FieldKind.SECRET, false, null),
+                ),
+                false,
+                true,
+                3L,
+            ),
+        )
+        val restoration = StateRestorationTester(rule)
+        val vm = vm()
+        restoration.setContent { HavenTheme { EditScreen(vm, false, true, navigation) } }
+        val password = rule.onNode(hasSetTextAction() and hasText(text(R.string.field_password)))
+        password.performTextInput("hunter2")
+        assertEquals(7, password.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.length)
+        restoration.emulateSavedInstanceStateRestore()
+        val after = rule.onNode(hasSetTextAction() and hasText(text(R.string.field_password)))
+            .fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text.orEmpty()
+        assertTrue("the typed password came back", after.isEmpty())
+        rule.onAllNodesWithText("hunter2").assertCountEquals(0)
     }
 }

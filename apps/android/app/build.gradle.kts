@@ -131,8 +131,8 @@ val forbidLogging by tasks.registering {
         }
     }
 }
-// Spec 2026-10-03 §5: the theme, the kit and the catalogue are built on
-// foundation only. Stage 5 widens this to the whole app.
+// Spec 2026-10-03 §5: the app is built on foundation only. Since stage 4 this
+// covers every source file but the Material bridge, which stage 5 deletes.
 val forbidMaterialInKit by tasks.registering {
     description = "Fails on a Material import anywhere but ui/theme/MaterialBridge.kt, which stage 5 deletes."
     val sources = fileTree("src") {
