@@ -78,7 +78,8 @@ fun EditScreen(
                 HavenButton(
                     stringResource(R.string.edit_save),
                     onClick = { editor?.let { viewModel.save(it.toDraft()) } },
-                    Modifier.padding(start = 4.dp, end = 8.dp),
+                    // The bar pads 4dp: 12 more puts Save's edge on the fields' 16dp gutter.
+                    Modifier.padding(start = 4.dp, end = 12.dp),
                     enabled = canSave,
                 )
             }

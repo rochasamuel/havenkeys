@@ -1,9 +1,11 @@
 package net.havenkeys.android.ui.edit
 
 import android.view.KeyEvent
+import kotlin.math.abs
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -72,6 +74,16 @@ class EditScreenTest {
         val window = ShadowDialog.getLatestDialog().window!!
         window.callback.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK))
         window.callback.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK))
+    }
+
+    /** Review (stage 4): Save sat 12dp from the edge, 4dp outside the fields' 16dp gutter. */
+    @Test
+    fun saveEndsOnTheSameGutterAsTheFields() {
+        show()
+        val save = rule.onNode(hasText(text(R.string.edit_save)) and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val field = title().fetchSemanticsNode().boundsInRoot
+        val density = rule.density.density
+        assertTrue("save ends at ${save.right}, field at ${field.right}", abs(save.right - field.right) < density)
     }
 
     @Test
