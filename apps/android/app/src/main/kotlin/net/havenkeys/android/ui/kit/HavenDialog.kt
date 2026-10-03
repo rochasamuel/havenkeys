@@ -3,6 +3,7 @@ package net.havenkeys.android.ui.kit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,8 +33,16 @@ import net.havenkeys.android.ui.theme.HavenTheme
  * A question that needs an answer. Its window sets FLAG_SECURE, drops taps
  * through another app's overlay and is excluded from autofill. The first
  * tap on either button answers; a second tap does nothing.
+ *
+ * [content] sits between the message and the buttons (a field and its
+ * error). The caller owns [confirmEnabled] and [busy]: while busy the
+ * confirm button shows progress and nothing dismisses the dialog (Back, an
+ * outside tap and Cancel do nothing). The dialog may answer again when the
+ * answer failed and the dialog stayed open: [busy] going back to false, or
+ * a changed [answerKey] (for example the error text), re-arms it.
  */
 @Composable
+@Suppress("LongParameterList")
 fun HavenDialog(
     title: String,
     onDismiss: () -> Unit,
@@ -41,21 +50,19 @@ fun HavenDialog(
     modifier: Modifier = Modifier,
     message: String? = null,
     dismiss: DialogAction? = null,
+    content: (@Composable ColumnScope.() -> Unit)? = null,
+    confirmEnabled: Boolean = true,
+    busy: Boolean = false,
+    answerKey: Any? = null,
 ) {
-    var answered by remember { mutableStateOf(false) }
-    val answer = { action: () -> Unit ->
-        if (!answered) {
-            answered = true
-            action()
-        }
-    }
+    val answer = rememberDialogAnswer(busy, answerKey)
     Dialog(
-        onDismissRequest = { answer(onDismiss) },
+        onDismissRequest = { if (!busy) answer.run(onDismiss) },
         properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
     ) {
         SecureDialogWindow(ignoreObscuredTouches = true)
         WindowDim(HavenTheme.colors.scrim.alpha)
-        DialogContent(title, confirm, modifier, message, dismiss, DialogAnswer(answered, answer))
+        DialogContent(title, confirm, modifier, message, dismiss, content, confirmEnabled, busy, answer)
     }
 }
 
@@ -64,21 +71,32 @@ class DialogAction(val label: String, val onClick: () -> Unit, val danger: Boole
 
 /** The dialog as it draws, without its window: the catalogue shows it inline. */
 @Composable
+@Suppress("LongParameterList")
 internal fun DialogSurface(
     title: String,
     confirm: DialogAction,
     modifier: Modifier = Modifier,
     message: String? = null,
     dismiss: DialogAction? = null,
+    content: (@Composable ColumnScope.() -> Unit)? = null,
+    confirmEnabled: Boolean = true,
+    busy: Boolean = false,
+    answerKey: Any? = null,
 ) {
-    var answered by remember { mutableStateOf(false) }
-    val answer = { action: () -> Unit ->
+    val answer = rememberDialogAnswer(busy, answerKey)
+    DialogContent(title, confirm, modifier, message, dismiss, content, confirmEnabled, busy, answer)
+}
+
+@Composable
+private fun rememberDialogAnswer(busy: Boolean, answerKey: Any?): DialogAnswer {
+    // The keys re-arm the guard: a failed confirm ends busy (or changes the key) and the dialog stays open.
+    var answered by remember(busy, answerKey) { mutableStateOf(false) }
+    return DialogAnswer(answered) { action ->
         if (!answered) {
             answered = true
             action()
         }
     }
-    DialogContent(title, confirm, modifier, message, dismiss, DialogAnswer(answered, answer))
 }
 
 @Suppress("LongParameterList")
@@ -89,6 +107,9 @@ private fun DialogContent(
     modifier: Modifier,
     message: String?,
     dismiss: DialogAction?,
+    content: (@Composable ColumnScope.() -> Unit)?,
+    confirmEnabled: Boolean,
+    busy: Boolean,
     answer: DialogAnswer,
 ) {
     val colors = HavenTheme.colors
@@ -108,15 +129,28 @@ private fun DialogContent(
         if (message != null) {
             HavenText(message, Modifier.padding(top = 8.dp), style = HavenTheme.type.body, color = colors.text)
         }
-        Row(Modifier.align(Alignment.End).padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (content != null) {
+            Column(Modifier.fillMaxWidth().padding(top = 16.dp)) { content() }
+        }
+        Row(
+            Modifier.align(Alignment.End).padding(top = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (dismiss != null) {
-                HavenButton(dismiss.label, once(dismiss.onClick), style = ButtonStyle.Quiet, enabled = !answered)
+                HavenButton(
+                    dismiss.label,
+                    once(dismiss.onClick),
+                    style = ButtonStyle.Quiet,
+                    enabled = !answered && !busy,
+                )
             }
+            if (busy) ProgressRing(progress = null, size = 20.dp)
             HavenButton(
                 confirm.label,
                 once(confirm.onClick),
                 style = if (confirm.danger) ButtonStyle.Danger else ButtonStyle.Primary,
-                enabled = !answered,
+                enabled = !answered && !busy && confirmEnabled,
             )
         }
     }

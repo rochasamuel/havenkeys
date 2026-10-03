@@ -1,6 +1,10 @@
 package net.havenkeys.android.ui.kit
 
 import android.view.KeyEvent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
@@ -14,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import org.junit.Assert.assertEquals
@@ -127,5 +132,103 @@ class OverlaysTest {
         pressBack()
         rule.waitForIdle()
         assertEquals(1, dismissed)
+    }
+
+    @Test
+    fun aDialogLeftOpenAfterAFailedConfirmAnswersAgain() {
+        var attempts = 0
+        rule.setKit {
+            var busy by remember { mutableStateOf(false) }
+            HavenDialog(
+                title = "Name?",
+                onDismiss = {},
+                confirm = DialogAction("Save", { attempts++; busy = true }),
+                busy = busy,
+                content = {
+                    HavenText("go")
+                    HavenButton("Fail", onClick = { busy = false })
+                },
+            )
+        }
+        rule.onNodeWithText("Save").performClick()
+        rule.runOnIdle { assertEquals(1, attempts) }
+        rule.onNodeWithText("Save").assertIsNotEnabled()
+        rule.onNodeWithText("Fail").performClick()
+        rule.onNodeWithText("Save").performClick()
+        rule.runOnIdle { assertEquals(2, attempts) }
+    }
+
+    @Test
+    fun aChangedAnswerKeyReArmsTheDialogAndADoubleTapStillAnswersOnce() {
+        var attempts = 0
+        rule.setKit {
+            var error by remember { mutableStateOf<String?>(null) }
+            HavenDialog(
+                title = "Name?",
+                onDismiss = {},
+                confirm = DialogAction("Save", { attempts++ }),
+                answerKey = error,
+                content = { HavenButton("Err", onClick = { error = "wrong" }) },
+            )
+        }
+        rule.onNodeWithText("Save").performClick()
+        rule.onNodeWithText("Save").performClick()
+        rule.runOnIdle { assertEquals(1, attempts) }
+        rule.onNodeWithText("Err").performClick()
+        rule.onNodeWithText("Save").performClick()
+        rule.runOnIdle { assertEquals(2, attempts) }
+    }
+
+    @Test
+    fun whileBusyNothingDismissesTheDialog() {
+        var removed = 0
+        rule.setKit {
+            HavenDialog(
+                title = "Remove?",
+                onDismiss = { dismissed++ },
+                confirm = DialogAction("Remove", { removed++ }),
+                dismiss = DialogAction("Cancel", { dismissed++ }),
+                busy = true,
+            )
+        }
+        rule.onNodeWithText("Cancel").assertIsNotEnabled()
+        rule.onNodeWithText("Remove").assertIsNotEnabled()
+        pressBack()
+        rule.waitForIdle()
+        assertEquals(0, dismissed)
+        assertEquals(0, removed)
+    }
+
+    @Test
+    fun theCallerCanDisableConfirm() {
+        var removed = 0
+        rule.setKit {
+            HavenDialog(
+                title = "Name?",
+                onDismiss = {},
+                confirm = DialogAction("Save", { removed++ }),
+                confirmEnabled = false,
+            )
+        }
+        rule.onNodeWithText("Save").assertIsNotEnabled().performClick()
+        rule.runOnIdle { assertEquals(0, removed) }
+    }
+
+    @Test
+    fun theContentSlotRendersAFieldBetweenMessageAndButtons() {
+        val state = androidx.compose.foundation.text.input.TextFieldState()
+        rule.setKit {
+            HavenDialog(
+                title = "Name?",
+                onDismiss = {},
+                confirm = DialogAction("Save", {}),
+                message = "Pick a name",
+                content = { HavenTextField(state, label = "Name", error = "Too short") },
+            )
+        }
+        val field = rule.onNode(androidx.compose.ui.test.hasSetTextAction())
+        field.assertIsDisplayed().performTextInput("abc")
+        rule.runOnIdle { assertEquals("abc", state.text.toString()) }
+        rule.onNodeWithText("Save").assertIsDisplayed()
     }
 }
