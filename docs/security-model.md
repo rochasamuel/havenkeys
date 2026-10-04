@@ -1694,27 +1694,30 @@ Rust, in memory only. Its QR code carries
 core accepts only that link, refuses another server's, and refuses when
 locked or offline. After Allow (behind `BiometricGate`) the core seals the
 vault key, the Secret Key, the account and vault ids and the email to `pk`;
-the server stores that ciphertext and the desktop claims it. The desktop
-checks the vault header's attestation with the vault key it received and
-that its account and vault ids equal the envelope's, builds the local vault,
-and goes online. The next unlock is the ordinary one (master password and
+the server stores that ciphertext and the desktop claims it. The public key
+is never sent to the server, only shown in the QR code: HPKE base mode does
+not authenticate the sender, so this is what keeps the server from sealing
+an envelope of its own to the desktop. The desktop checks the vault
+header's attestation with the vault key it received and that its account
+and vault ids equal the envelope's, builds the local vault, goes online,
+and shows "Signed in as <email>" (PA14). The next unlock is the ordinary one (master password and
 the stored Secret Key).
 
 ### 23.2 Endpoints
 
 | Route | Auth | Limits | Returns |
 |---|---|---|---|
-| `POST /v1/pairings` | none | At most 10 pairings per IP in 10 minutes and 3 pending per IP; over that, `429`. Unknown fields refused; device name cleaned to 64 characters; `publicKey` and `claimHash` exactly 32 bytes base64url | `{pairingId, expiresAt}` (expiry 120 s) |
+| `POST /v1/pairings` | none | At most 10 pairings per IP in 10 minutes and 3 pending per IP; over that, `429`. Unknown fields refused; device name cleaned to 64 characters; `claimHash` exactly 32 bytes base64url; no public key (a `publicKey` field is refused as unknown) | `{pairingId, expiresAt}` (expiry 120 s) |
 | `GET /v1/pairings/{id}` | session | Id must be 22 base64url characters (else 404) | `{deviceName, ip, location, createdAt, expiresAt}`; binds the pairing to the caller's account |
-| `POST /v1/pairings/{id}/approve` | session | Envelope at most 4096 bytes (`MAX_PAIRING_ENVELOPE_BYTES`), standard base64 in JSON | `204`. In one transaction: registers the device (`register_device`, so the 64-device cap and revoked-device rules apply), sets `devices.approved_by`, replaces any sessions of that device, issues a 24-hour token |
+| `POST /v1/pairings/{id}/approve` | session | Envelope at most 4096 bytes (`MAX_PAIRING_ENVELOPE_BYTES`), standard base64 in JSON | `204`. In one transaction: registers the device (`register_device`, so the 64-device cap and revoked-device rules apply; a revoked or other-account device id, or the approver's own, is `400`, never `401`, so the phone is not signed out), sets `devices.approved_by`, stores the envelope. No session yet |
 | `POST /v1/pairings/{id}/deny` | session | as above | `204` |
-| `POST /v1/pairings/{id}/claim` | `claim_secret` (not a session) | A wrong secret counts against the IP like a failed login (`rate_limit`); a blocked IP is refused first | `{state: "waiting"}`, `{state: "denied"}`, or `{state: "approved", token, expiresAt, accountId, vaultId, envelope}` |
+| `POST /v1/pairings/{id}/claim` | `claim_secret` (not a session) | A wrong secret counts against the IP like a failed login (`rate_limit`); a blocked IP is refused first | `{state: "waiting"}`, `{state: "denied"}`, or `{state: "approved", token, expiresAt, accountId, vaultId, envelope}`; the approved answer replaces any sessions of that device and issues its 24-hour token in the claim's transaction |
 
 Unknown, expired, used, denied, other-account and malformed-id pairings all
 answer 404 (`not_found`), so the answers do not say which. A device cannot
 approve its own pairing. The claim runs under a row lock in one transaction,
-so two claims with the right secret cannot both get the token; it answers
-once (the row becomes `claimed`, its envelope and token cleared) and refuses
+so two claims with the right secret cannot both get a session; it answers
+once (the row becomes `claimed`, its envelope cleared) and refuses
 any row older than 10 minutes. A pairing is bound to the first account whose
 session reads or approves it. All bodies are under the global request-size
 limit; there is no per-route limit on the unauthenticated routes (PA6).
@@ -1727,18 +1730,19 @@ against its IP's limit; an approved row can still be claimed after the
 ### 23.3 What the `pairings` table holds, and for how long
 
 Migration `0002_pairings.sql`: `id`, `state` (`pending`, `approved`,
-`denied`, `claimed`), the desktop's `device_id` and `device_name`, its
-`public_key`, `claim_hash` (SHA-256 of the claim secret), the requester's
-`ip` and `location` label, timestamps, `account_id` (once bound), and, after
-approval, the `envelope` and the session `token` **in plaintext**. The token
-and envelope are cleared when the claim succeeds. The server has no periodic
-task: every `POST /v1/pairings` first deletes all pairings older than 10
-minutes, whatever their state, and the claim refuses older rows. So an
-approved pairing nobody claims keeps its token and envelope until the next
-create (by anyone) deletes it, which is not bounded in time on a server that
-sees no new pairings (PA3). The envelope is ciphertext the server cannot
-open; the token is a live session for the new device, for up to 24 hours.
-`claim_hash` is a hash of a 256-bit random secret.
+`denied`, `claimed`), the desktop's `device_id` and `device_name`,
+`claim_hash` (SHA-256 of the claim secret), the requester's `ip` and
+`location` label, timestamps, `account_id` (once bound), and, after
+approval, the `envelope`. It holds no public key and no session token: the
+key travels only in the QR code, and the session is issued by the claim
+(its hash goes in `sessions` as for any login), so an approval never
+claimed leaves no session. The envelope is cleared when the claim succeeds.
+The server has no periodic task: every `POST /v1/pairings` first deletes all
+pairings older than 10 minutes, whatever their state, and the claim refuses
+older rows. So an approved pairing nobody claims keeps its envelope until
+the next create (by anyone) deletes it, which is not bounded in time on a
+server that sees no new pairings (PA3). The envelope is ciphertext the
+server cannot open. `claim_hash` is a hash of a 256-bit random secret.
 
 `devices.approved_by` holds the approving device's id, and the Devices lists
 (desktop and phone) show "Approved by <name>". The new device is an ordinary
@@ -1773,7 +1777,9 @@ Tauri, uniffi or Kotlin layers.
   React gets the QR module grid and states (waiting, expired, denied,
   approved), never a key. Polls are serialised, and the panel never drops an
   approved poll answer, even if the window re-renders or the code expires
-  during the poll.
+  during the poll. The code's 120 s are counted on the desktop's own clock,
+  with one last poll at 0; a failed or gone pairing stops the polling and
+  keeps its message, while being offline does not.
 * The three Tauri commands (`pairing_start`, `pairing_poll`,
   `pairing_cancel`) are allowlisted; the server address is typed, the
   account comes from the phone.

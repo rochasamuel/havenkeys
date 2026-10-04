@@ -203,8 +203,10 @@ Desktop (new)                    Server                       Phone (unlocked)
  generate HPKE key pair,
  claim_secret (in memory)
  POST /v1/pairings  ─────────────► store request (pending,
- {device_id, name, public_key,      ip, location), 2 min
+ {device_id, name,                  ip, location), 2 min
   SHA-256(claim_secret)}  ◄──────  {pairing_id, expires_at}
+ (the public key is not sent: it
+  goes only into the QR code)
  show QR: havenkeys://pair/v1
   ?server=&id=&pk=            ═══ camera ═══════════════════►  scan_pairing (Rust keeps only
                                                                a pair/v1 link of this server)
@@ -215,14 +217,15 @@ Desktop (new)                    Server                       Phone (unlocked)
                                                                seal {ids, email, Secret Key,
                                                                 vault key} to pk (HPKE)
                                   approve: register device     POST .../approve {envelope}
-                                  (approved_by), issue 24 h
-                                  token, state = approved
- POST .../claim ─────────────►  once: {token, account_id,
-                                  vault_id, envelope};
-                                  token+envelope cleared
+                                  (approved_by),
+                                  state = approved
+ POST .../claim ─────────────►  once, under a row lock: issue
+                                  the 24 h token; {token,
+                                  account_id, vault_id,
+                                  envelope}; envelope cleared
  open envelope; GET /v1/vault/header; verify header with
   the vault key; check ids; create local vault; store
-  account + Secret Key; go online, sync
+  account + Secret Key; go online, sync; show "Signed in as <email>"
  (later unlocks: master password + stored Secret Key)
 ```
 

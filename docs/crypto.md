@@ -525,12 +525,18 @@ RustCrypto `hpke` crate (0.14.x, `single_shot_seal` / `single_shot_open`).
 | `info` | `"havenkeys/pair/v1" ‖ 0x00 ‖ server_url ‖ 0x00 ‖ pairing_id` (ASCII, `server_url` as in the QR link) |
 
 The `info` string binds an envelope to one server and one pairing, so it
-does not open for another. Base mode does not authenticate the sender: the
-receiver knows who sealed it because only an account's signed-in device
-could approve the pairing at the server and the contents are checked
-against the desktop's own sign-in (the vault header's attestation under the
-received vault key, and the ids). The sender is not cryptographically
-proven by the envelope alone.
+does not open for another. Base mode does not authenticate the sender:
+anyone who knows the recipient's public key can seal a well-formed envelope
+to it, with a vault key of their choosing and a header attested with that
+key. What makes an envelope trustworthy is who knows the key: the public key
+travels only in the QR code, from the desktop's screen to the camera of the
+phone that scanned it, and is never sent to the server. So the server (or
+anyone else who has only what the server has: its URL and the pairing id)
+cannot seal to it, and an envelope it made up does not open. The desktop
+also checks the contents against its own sign-in (the vault header's
+attestation under the received vault key, and that the account and vault
+ids equal the claim's). Someone else who sees the screen (a screen share)
+could seal to the key; that residual is in `security-review.md` PA14.
 
 ### Envelope byte layout (version 1)
 

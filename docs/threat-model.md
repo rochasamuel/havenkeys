@@ -719,18 +719,22 @@ because:
 1. The phone must be unlocked and online, and Allow asks for the phone's
    biometrics or device credential again. A phone with no screen lock shows
    "biometric unavailable" and approves nothing.
-2. The key material is sealed (HPKE) to a public key that travels from the
-   desktop's screen to the phone's camera. The server relays only ciphertext
-   and cannot swap the recipient.
+2. The key material is sealed (HPKE) to a public key that travels only from
+   the desktop's screen to the phone's camera; the server is never sent it.
+   HPKE base mode does not authenticate the sender, so this is what the
+   desktop relies on: only a device that saw the screen can seal to that
+   key. The server relays only ciphertext; it can neither swap the
+   recipient nor seal an envelope of its own to the desktop.
 3. The confirmation names the device and where the server saw it; the code
    expires in 2 minutes and works once.
 
 | Threat | Defence |
 |---|---|
-| Hostile or compromised server | Sees only the envelope, sealed to a key it did not choose; it can lie about the device name and location but cannot open or redirect the keys. |
+| Hostile or compromised server | Is never sent the desktop's public key, so it can neither open the envelope nor seal one of its own (its own account, or a vault key it chose with a header attested by it) to the desktop; such an envelope does not open, and one whose account or vault ids differ from the claim's is refused, so no vault is created. It can lie about the device name and location. |
+| Another account on the same server sees the code (screen share) | It could approve first, with its own vault. **Residual, documented below.** |
 | A code from an attacker ("scan this...") | Name, IP and location shown; Allow needs biometrics; 2-minute, single-use code. **Residual, documented below.** |
 | Guessed or leaked `pairing_id` | Details and approve need a session on the account; claim needs `claim_secret`, which is not in the code. |
-| Replay | The pairing's token and envelope are cleared on claim; `info` binds the envelope to the server and the pairing. |
+| Replay | The envelope is cleared on claim, and the session is issued only by that claim; `info` binds the envelope to the server and the pairing. |
 | Abuse of the open endpoints | Per-IP limits, pending cap, size limits, generic errors. |
 | Compromised desktop renderer | Keys stay in Rust; React gets the QR grid and states. |
 | Accidental disclosure | Envelope, Secret Key, vault key and token zeroized after use, never logged or put in errors; `Debug` impls are redacted. |
@@ -751,9 +755,18 @@ because:
   user's unlocked phone and able to pass the biometric gate (or a phone
   without one) can sign in a device of their own. That is already the
   power they have over the phone's vault.
+* **Residual: another account sees the code.** On a server with several
+  accounts, someone signed in to another account who sees the desktop's QR
+  code (a screen share, a shoulder) can scan it and approve first, sealing
+  their own vault to it. The desktop then signs in to their account, not
+  the user's; the user's vault is not exposed, but what the user saves there
+  goes to the other account. Mitigation: after pairing, the desktop shows
+  "Signed in as <email>" and how to remove the computer
+  (`security-review.md` PA14).
 * **A server operator** can create a pairing request of its own, but it
-  cannot read the envelope the phone seals to a camera-delivered key, and
-  cannot make a phone approve without the user's tap.
+  is never sent the desktop's public key, so it cannot read the envelope
+  the phone seals to that camera-delivered key or seal one of its own to
+  the desktop, and cannot make a phone approve without the user's tap.
 
 ## 4. Out of scope (not defended)
 
