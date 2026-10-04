@@ -336,3 +336,35 @@ async fn a_revoked_device_id_cannot_be_approved_in() {
     assert_eq!(approve(&server, &id, &phone).await, 401);
     server.cleanup().await;
 }
+
+#[tokio::test]
+async fn two_concurrent_claims_get_the_session_once() {
+    let server = TestServer::start().await;
+    let (_, phone) = support::signed_in(&server, "ana@example.com").await;
+    let id = create(&server, Uuid::new_v4()).await;
+    assert_eq!(approve(&server, &id, &phone).await, 204);
+    let (a, b) = tokio::join!(claim(&server, &id, SECRET), claim(&server, &id, SECRET));
+    let mut statuses = [a.0, b.0];
+    statuses.sort();
+    assert_eq!(statuses, [200, 404]);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn an_approved_pairing_older_than_ten_minutes_is_gone_without_a_create() {
+    let server = TestServer::start().await;
+    let (_, phone) = support::signed_in(&server, "ana@example.com").await;
+    let id = create(&server, Uuid::new_v4()).await;
+    assert_eq!(approve(&server, &id, &phone).await, 204);
+    server
+        .db()
+        .await
+        .execute(
+            "UPDATE pairings SET created_at = now() - interval '11 minutes' WHERE id = $1",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(claim(&server, &id, SECRET).await.0, 404);
+    server.cleanup().await;
+}

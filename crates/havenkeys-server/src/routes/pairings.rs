@@ -253,20 +253,26 @@ pub async fn claim(
     let id = pairing_id(&raw)?;
     let secret = fixed32(&req.claim_secret, "claimSecret is not valid")?;
     let ip_key = rate_limit::ip_key(&client_ip(&state, &headers, peer));
-    let db = state.pool.get().await?;
+    let mut db = state.pool.get().await?;
     rate_limit::check(&db, &ip_key).await?;
 
-    let row = db
+    // Read and consume in one transaction under a row lock, so two claims
+    // racing with the right secret cannot both receive the token.
+    let tx = db.transaction().await?;
+    let row = tx
         .query_opt(
             "SELECT state, claim_hash, expires_at > now(), account_id, envelope, token, token_expires_at
-               FROM pairings WHERE id = $1",
-            &[&id],
+               FROM pairings
+              WHERE id = $1 AND created_at > now() - make_interval(mins => $2)
+              FOR UPDATE",
+            &[&id, &PAIRING_MAX_AGE_MINUTES],
         )
         .await?
         .ok_or(ApiError::NotFound)?;
     let stored: Vec<u8> = row.get(1);
     let given = Sha256::digest(secret);
     if !bool::from(stored.as_slice().ct_eq(given.as_slice())) {
+        drop(tx);
         rate_limit::record_failure(&db, &ip_key).await?;
         return Err(ApiError::NotFound);
     }
@@ -274,11 +280,12 @@ pub async fn claim(
     match row.get::<_, String>(0).as_str() {
         "pending" if live => Ok(axum::Json(serde_json::json!({ "state": "waiting" }))),
         "denied" => {
-            db.execute(
+            tx.execute(
                 "UPDATE pairings SET state = 'claimed' WHERE id = $1",
                 &[&id],
             )
             .await?;
+            tx.commit().await?;
             Ok(axum::Json(serde_json::json!({ "state": "denied" })))
         }
         "approved" => {
@@ -286,7 +293,7 @@ pub async fn claim(
             let envelope: Vec<u8> = row.get(4);
             let token: String = row.get(5);
             let expires: chrono::DateTime<chrono::Utc> = row.get(6);
-            let vault_id: Uuid = db
+            let vault_id: Uuid = tx
                 .query_one(
                     "SELECT id FROM vaults WHERE account_id = $1",
                     &[&account_id],
@@ -294,12 +301,13 @@ pub async fn claim(
                 .await?
                 .get(0);
             // Single use: the token and envelope leave the database here.
-            db.execute(
+            tx.execute(
                 "UPDATE pairings SET state = 'claimed', envelope = NULL, token = NULL
                   WHERE id = $1 AND state = 'approved'",
                 &[&id],
             )
             .await?;
+            tx.commit().await?;
             tracing::info!(account_id = %account_id, outcome = "claimed", "pairing");
             Ok(axum::Json(serde_json::json!({
                 "state": "approved",
