@@ -34,6 +34,7 @@ docker build -t havenkeys-server .
 | `PORT` | no | Defaults to 8080. Railway sets it. |
 | `HAVENKEYS_CORS_ORIGIN` | no | Exactly one browser origin. Leave unset: nothing in the MVP calls this API from a browser, and there is no wildcard. |
 | `HAVENKEYS_TRUST_FORWARDED_FOR` | no | `1` only when a proxy you control sets `X-Forwarded-For`. Off by default, because a client could otherwise spread its login attempts over invented addresses and escape the per-IP rate limit. **Known weakness — read the note below before enabling it.** |
+| `HAVENKEYS_GEOIP_DATABASE` | no | Path to a MaxMind-format city database (`.mmdb`) on the server's disk. With it, the phone's "Sign in a new desktop?" confirmation shows a rough location ("City, CC") beside the IP; without it, only the IP. The lookup is local: no third party is ever called. DB-IP "IP to City Lite" (free, licensed CC BY 4.0, **which requires attribution** — credit "IP Geolocation by DB-IP" with a link to https://db-ip.com in your deployment) or MaxMind GeoLite2 City both work. An unreadable file is logged (without its path) and location is simply off. |
 
 > **`X-Forwarded-For` is read left-to-right, which is the wrong end.** With
 > this on, the server takes the *first* entry of the header and uses it as the

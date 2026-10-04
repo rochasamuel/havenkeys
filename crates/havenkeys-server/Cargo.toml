@@ -41,6 +41,7 @@ data-encoding = "2"
 unicode-normalization = "0.1"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 tracing = "0.1"
+maxminddb = "0.32"   # ISC; local IP → city lookups, no network
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 clap = { version = "4", features = ["derive"] }
 

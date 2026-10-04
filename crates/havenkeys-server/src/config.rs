@@ -13,6 +13,9 @@ pub struct Config {
     /// the service is known to sit behind a proxy that sets it, because a
     /// client-supplied header would otherwise defeat per-IP rate limiting.
     pub trust_forwarded_for: bool,
+    /// A MaxMind-format city database for the pairing confirmation's
+    /// location. Optional; without it the phone sees the IP only.
+    pub geoip_database: Option<std::path::PathBuf>,
 }
 
 impl Config {
@@ -55,6 +58,11 @@ impl Config {
                 std::env::var("HAVENKEYS_TRUST_FORWARDED_FOR").as_deref(),
                 Ok("1") | Ok("true")
             ),
+            geoip_database: std::env::var("HAVENKEYS_GEOIP_DATABASE")
+                .ok()
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .map(Into::into),
         })
     }
 }
