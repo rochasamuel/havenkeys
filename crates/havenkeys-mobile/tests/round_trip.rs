@@ -372,3 +372,66 @@ fn two_phones_edit_one_vault_through_the_server() {
 
     rt.block_on(server.cleanup());
 }
+
+struct QuietClient;
+
+impl havenkeys_client::ClientEvents for QuietClient {
+    fn unlocked(&self, _: u32) {}
+    fn locked(&self, _: &'static str, _: bool) {}
+    fn connectivity(&self, _: bool) {}
+    fn signed_out(&self) {}
+    fn synced(&self, _: havenkeys_core::sync::SyncReport) {}
+    fn items_changed(&self) {}
+    fn removed(&self, _: bool) {}
+}
+
+/// A bare desktop client with no vault, as the sign-in screen has.
+fn desktop_client(dir: &std::path::Path) -> Arc<havenkeys_client::HavenClient> {
+    use havenkeys_client::device::Device;
+    use havenkeys_client::key_store::MemoryKeyStore;
+    havenkeys_client::HavenClient::new(
+        Arc::new(std::sync::Mutex::new(
+            havenkeys_core::vault::VaultService::new(
+                havenkeys_core::store::Store::open_in_memory().unwrap(),
+            ),
+        )),
+        Device::load(dir, Box::new(MemoryKeyStore::default())),
+        None,
+        Arc::new(QuietClient),
+        havenkeys_client::ClientConfig {
+            device_name: "Test",
+            vault_path: dir.join("vault.sqlite3"),
+        },
+    )
+}
+
+#[test]
+fn the_phone_approves_a_new_desktop_once() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let server = rt.block_on(Server::start());
+    let invite = rt.block_on(server.invite());
+
+    let phone_dir = tempfile::tempdir().unwrap();
+    let phone = phone(phone_dir.path());
+    phone.activate(invite, PASSWORD.into()).unwrap();
+    online(&phone);
+
+    let desk_dir = tempfile::tempdir().unwrap();
+    let desktop = desktop_client(desk_dir.path());
+    let start = rt
+        .block_on(desktop.start_pairing(format!("{}/", server.base), "Desktop"))
+        .unwrap();
+
+    let request = phone.pairing_request(start.link.clone()).unwrap();
+    assert_eq!(request.device_name, "Desktop");
+    phone.approve_pairing(start.link.clone()).unwrap();
+    assert!(matches!(
+        rt.block_on(desktop.poll_pairing()).unwrap(),
+        havenkeys_client::PairingPoll::Approved(_)
+    ));
+
+    let again = phone.approve_pairing(start.link).err().unwrap();
+    assert_eq!(code(again), "pairing_gone");
+
+    rt.block_on(server.cleanup());
+}
