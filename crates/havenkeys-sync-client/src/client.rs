@@ -8,7 +8,7 @@ use crate::error::{Conflict, Result, SyncError};
 use crate::session::Session;
 use crate::transport::{HttpRequest, HttpResponse, Method, Transport};
 use crate::wire::{self, MAX_CHANGES, MAX_HEADER_BYTES};
-use data_encoding::BASE64;
+use data_encoding::{BASE64, BASE64URL_NOPAD};
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::keys::AuthKey;
 use havenkeys_core::sync::RemoteChange;
@@ -74,6 +74,46 @@ pub struct Device {
     pub created_at: String,
     pub last_seen_at: Option<String>,
     pub current: bool,
+    /// The device that approved this one's sign-in, when it came by a pairing.
+    pub approved_by: Option<Uuid>,
+}
+
+pub struct CreatedPairing {
+    pub pairing_id: String,
+    pub expires_at: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct PairingDetails {
+    pub device_name: String,
+    pub ip: String,
+    pub location: Option<String>,
+    pub created_at: String,
+    pub expires_at: String,
+}
+
+pub enum Claim {
+    Waiting,
+    Denied,
+    Approved { session: Session, envelope: Vec<u8> },
+}
+
+impl std::fmt::Debug for Claim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Claim::Waiting => "Claim::Waiting",
+            Claim::Denied => "Claim::Denied",
+            Claim::Approved { .. } => "Claim::Approved(<redacted>)",
+        })
+    }
+}
+
+/// `/v1/pairings/{id}{suffix}`, only for an id that cannot change the path.
+fn pairing_path(pairing_id: &str, suffix: &str) -> Result<String> {
+    if !havenkeys_core::pairing::valid_pairing_id(pairing_id) {
+        return Err(SyncError::Refused("not found"));
+    }
+    Ok(format!("/v1/pairings/{pairing_id}{suffix}"))
 }
 
 /// What a device needs to activate an account.
@@ -364,6 +404,7 @@ impl<T: Transport> SyncClient<T> {
                 created_at: d.created_at,
                 last_seen_at: d.last_seen_at,
                 current: d.current,
+                approved_by: d.approved_by,
             })
             .collect())
     }
@@ -381,6 +422,120 @@ impl<T: Transport> SyncClient<T> {
             200 | 204 => Ok(()),
             _ => Err(error_for(response.status)),
         }
+    }
+
+    /// Open a pairing request for this (new) device. No session.
+    pub async fn create_pairing(
+        &self,
+        device_id: Uuid,
+        device_name: &str,
+        public_key: &[u8; 32],
+        claim_hash: &[u8; 32],
+    ) -> Result<CreatedPairing> {
+        let body = wire::CreatePairingBody {
+            device_id,
+            device_name,
+            public_key: BASE64URL_NOPAD.encode(public_key),
+            claim_hash: BASE64URL_NOPAD.encode(claim_hash),
+        };
+        let dto: wire::CreatedPairingDto =
+            expect_ok(self.post("/v1/pairings", None, &body).await?)?;
+        if !havenkeys_core::pairing::valid_pairing_id(&dto.pairing_id) || dto.expires_at.len() > 64
+        {
+            return Err(SyncError::Protocol("pairing"));
+        }
+        Ok(CreatedPairing {
+            pairing_id: dto.pairing_id,
+            expires_at: dto.expires_at,
+        })
+    }
+
+    /// What the server says about a pairing. Shown to the user, never trusted
+    /// for anything else.
+    pub async fn pairing_details(
+        &self,
+        session: &Session,
+        pairing_id: &str,
+    ) -> Result<PairingDetails> {
+        let path = pairing_path(pairing_id, "")?;
+        let dto: wire::PairingDetailsDto = expect_ok(self.get(&path, Some(session)).await?)?;
+        let short = |s: &str| s.chars().count() <= 64;
+        if !short(&dto.device_name)
+            || !short(&dto.ip)
+            || !dto.location.as_deref().is_none_or(short)
+            || dto.created_at.len() > 64
+            || dto.expires_at.len() > 64
+        {
+            return Err(SyncError::Protocol("pairing"));
+        }
+        Ok(PairingDetails {
+            device_name: dto.device_name,
+            ip: dto.ip,
+            location: dto.location,
+            created_at: dto.created_at,
+            expires_at: dto.expires_at,
+        })
+    }
+
+    pub async fn approve_pairing(
+        &self,
+        session: &Session,
+        pairing_id: &str,
+        envelope: &[u8],
+    ) -> Result<()> {
+        let path = pairing_path(pairing_id, "/approve")?;
+        let body = wire::ApprovePairingBody {
+            envelope: BASE64.encode(envelope),
+        };
+        let response = self.post(&path, Some(session), &body).await?;
+        match response.status {
+            200 | 204 => Ok(()),
+            _ => Err(error_for(response.status)),
+        }
+    }
+
+    pub async fn deny_pairing(&self, session: &Session, pairing_id: &str) -> Result<()> {
+        let path = pairing_path(pairing_id, "/deny")?;
+        let response = self.send(Method::Post, &path, Some(session), None).await?;
+        match response.status {
+            200 | 204 => Ok(()),
+            _ => Err(error_for(response.status)),
+        }
+    }
+
+    /// Ask whether the pairing was approved. The session comes from here,
+    /// but the caller checks its account and vault against the envelope.
+    pub async fn claim_pairing(&self, pairing_id: &str, claim_secret: &[u8; 32]) -> Result<Claim> {
+        let path = pairing_path(pairing_id, "/claim")?;
+        let body = wire::ClaimPairingBody {
+            claim_secret: BASE64URL_NOPAD.encode(claim_secret),
+        };
+        let dto: wire::ClaimDto = expect_ok(self.post(&path, None, &body).await?)?;
+        Ok(match dto {
+            wire::ClaimDto::Waiting => Claim::Waiting,
+            wire::ClaimDto::Denied => Claim::Denied,
+            wire::ClaimDto::Approved {
+                token,
+                expires_at,
+                account_id,
+                vault_id,
+                envelope,
+            } => {
+                if token.is_empty() || token.len() > 128 || expires_at.len() > 64 {
+                    return Err(SyncError::Protocol("token"));
+                }
+                if envelope.len() > havenkeys_core::pairing::MAX_ENVELOPE_LEN / 3 * 4 + 4 {
+                    return Err(SyncError::TooLarge);
+                }
+                let envelope = BASE64
+                    .decode(envelope.as_bytes())
+                    .map_err(|_| SyncError::Protocol("envelope"))?;
+                Claim::Approved {
+                    session: Session::new(token, expires_at, account_id, vault_id),
+                    envelope,
+                }
+            }
+        })
     }
 
     async fn get(&self, path: &str, session: Option<&Session>) -> Result<HttpResponse> {
@@ -444,5 +599,18 @@ fn error_for(status: u16) -> SyncError {
         429 => SyncError::RateLimited,
         400..=499 => SyncError::Refused("the request was refused"),
         _ => SyncError::Unavailable,
+    }
+}
+
+#[cfg(test)]
+mod pairing_tests {
+    use super::*;
+
+    #[test]
+    fn a_pairing_id_that_could_change_the_path_is_refused_before_sending() {
+        assert!(pairing_path("AAAAAAAAAAAAAAAAAAAAAA", "claim").is_ok());
+        for bad in ["", "../devices", "AAAAAAAAAAAAAAAAAAAAA/", "A".repeat(23).as_str()] {
+            assert!(pairing_path(bad, "claim").is_err());
+        }
     }
 }

@@ -64,6 +64,7 @@ pub struct DeviceEntry {
     pub created_at: String,
     pub last_seen_at: Option<String>,
     pub current: bool,
+    pub approved_by: Option<Uuid>,
 }
 
 /// The values of the HavenKeys Account item, pinned first in the vault list.
@@ -670,6 +671,7 @@ impl HavenClient {
                 created_at: d.created_at,
                 last_seen_at: d.last_seen_at,
                 current: d.current,
+                approved_by: d.approved_by,
             })
             .collect())
     }

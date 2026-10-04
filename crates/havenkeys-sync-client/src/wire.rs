@@ -385,9 +385,89 @@ pub struct DeviceDto {
     #[serde(default)]
     pub last_seen_at: Option<String>,
     pub current: bool,
+    #[serde(default)]
+    pub approved_by: Option<Uuid>,
+}
+
+// ------------------------------------------------------------------ pairing
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePairingBody<'a> {
+    pub device_id: Uuid,
+    pub device_name: &'a str,
+    pub public_key: String,
+    pub claim_hash: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedPairingDto {
+    pub pairing_id: String,
+    pub expires_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingDetailsDto {
+    pub device_name: String,
+    pub ip: String,
+    #[serde(default)]
+    pub location: Option<String>,
+    pub created_at: String,
+    pub expires_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovePairingBody {
+    pub envelope: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimPairingBody {
+    pub claim_secret: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum ClaimDto {
+    Waiting,
+    Denied,
+    #[serde(rename_all = "camelCase")]
+    Approved {
+        token: String,
+        expires_at: String,
+        account_id: Uuid,
+        vault_id: Uuid,
+        envelope: String,
+    },
 }
 
 /// Parse a JSON body into a response type.
 pub fn parse<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T> {
     serde_json::from_slice(body).map_err(|_| SyncError::Protocol("unexpected response"))
+}
+
+#[cfg(test)]
+mod pairing_tests {
+    use super::*;
+
+    #[test]
+    fn a_claim_answer_parses_each_state_and_refuses_unknown_ones() {
+        let waiting: ClaimDto = parse(br#"{"state":"waiting"}"#).unwrap();
+        assert!(matches!(waiting, ClaimDto::Waiting));
+        let denied: ClaimDto = parse(br#"{"state":"denied"}"#).unwrap();
+        assert!(matches!(denied, ClaimDto::Denied));
+        let approved: ClaimDto = parse(
+            br#"{"state":"approved","token":"t","expiresAt":"2099-01-01T00:00:00Z",
+                 "accountId":"00000000-0000-0000-0000-000000000001",
+                 "vaultId":"00000000-0000-0000-0000-000000000002","envelope":"AQID"}"#,
+        )
+        .unwrap();
+        assert!(matches!(approved, ClaimDto::Approved { .. }));
+        assert!(parse::<ClaimDto>(br#"{"state":"approved"}"#).is_err());
+        assert!(parse::<ClaimDto>(br#"{"state":"granted"}"#).is_err());
+    }
 }

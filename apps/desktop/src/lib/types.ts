@@ -338,6 +338,7 @@ export interface DeviceEntry {
   createdAt: string;
   lastSeenAt: string | null;
   current: boolean;
+  approvedBy?: string | null;
 }
 
 /** Counts from a pull. Never item data. */

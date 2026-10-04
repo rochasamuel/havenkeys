@@ -9,6 +9,7 @@ pub struct DeviceInfo {
     pub created_at: String,
     pub last_seen_at: Option<String>,
     pub current: bool,
+    pub approved_by: Option<String>,
 }
 
 #[uniffi::export]
@@ -39,6 +40,7 @@ impl MobileVault {
                 created_at: d.created_at,
                 last_seen_at: d.last_seen_at,
                 current: d.current,
+                approved_by: d.approved_by.map(|u| u.to_string()),
             })
             .collect())
     }
