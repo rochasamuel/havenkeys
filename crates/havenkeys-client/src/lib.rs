@@ -23,7 +23,7 @@ mod sync;
 pub mod testing;
 
 pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
-pub use client::{ClientConfig, HavenClient};
+pub use client::{ClientConfig, HavenClient, RETRY_INTERVAL};
 pub use error::{ClientError, ClientResult};
 pub use events::ClientEvents;
 pub use sync::PULL_INTERVAL;

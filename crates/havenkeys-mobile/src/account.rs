@@ -19,9 +19,10 @@ impl MobileVault {
         Ok(())
     }
 
-    /// The periodic pull while unlocked and in the foreground.
+    /// The periodic pull while unlocked and in the foreground; while the
+    /// server is unreachable it is also how the device finds it again.
     pub fn sync_if_due(&self) -> MobileResult<()> {
-        if self.client.is_online() && self.client.sync_due(havenkeys_client::PULL_INTERVAL) {
+        if self.client.pull_due() {
             self.sync_now()?;
         }
         Ok(())

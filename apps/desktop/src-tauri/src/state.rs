@@ -88,10 +88,6 @@ impl AppState {
         self.client.vault()
     }
 
-    pub fn is_online(&self) -> bool {
-        self.client.is_online()
-    }
-
     pub fn require_unlocked(&self) -> CmdResult<()> {
         self.client.require_unlocked()
     }

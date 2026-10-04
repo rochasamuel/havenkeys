@@ -242,8 +242,9 @@ deleted.
 `AppState` gains a connectivity state alongside the lock state:
 
 ```text
-Offline            no token: reads work, writes refused
-Online { token }   reads and writes
+Offline                 no token: reads work, writes refused
+Online { token }        reads and writes
+Unreachable { token }   shown offline, writes refused; the token is kept
 ```
 
 Every mutating Tauri command checks it first and returns `Error::Offline`
@@ -251,8 +252,16 @@ with "HavenKeys is offline — the vault is read-only until it reconnects."
 The UI shows a persistent banner and disables the affected controls rather
 than letting a click fail.
 
-Losing connectivity mid-session drops to `Offline` without locking: the
+Losing connectivity mid-session drops to `Unreachable` without locking: the
 replica is still readable and autofill keeps working.
+
+> Amended on 2026-10-03: a server that does not answer (no network, a phone
+> waking from sleep, the server restarting) no longer drops the token. It
+> used to, and since only an unlock can sign in again, a device stayed
+> offline until the next unlock. Now the token stays in memory (it still
+> goes on lock), the periodic pull retries every 15 seconds instead of every
+> 60, and the first answer brings the device back online. Only a refused
+> token (401) drops it and signs the device out.
 
 The extension is unchanged, and inherits the behaviour: fill, TOTP and
 generation work offline; the save-login prompt is not shown when offline,

@@ -38,7 +38,6 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Url, WindowEvent};
 
 pub(crate) const VAULT_FILE: &str = "vault.sqlite3";
 const AUTO_LOCK_TICK: Duration = Duration::from_secs(5);
-use havenkeys_client::PULL_INTERVAL;
 
 /// Only the bundled app may be loaded in the webview. Everything else
 /// (remote sites, file://, javascript:, data:) is refused.
@@ -166,9 +165,10 @@ fn start_auto_lock(handle: AppHandle) -> std::io::Result<()> {
                     state.lock("screen_lock");
                 }
                 state.auto_lock_tick();
-                // Catch up with the server while unlocked. A locked
-                // vault has no session, so this simply does not run.
-                if state.is_online() && state.client().sync_due(PULL_INTERVAL) {
+                // Catch up with the server while unlocked, and find it
+                // again after it stopped answering. A locked vault has no
+                // session, so this simply does not run.
+                if state.client().pull_due() {
                     let client = state.client().clone();
                     tauri::async_runtime::spawn(async move {
                         let _ = client.sync_now().await;

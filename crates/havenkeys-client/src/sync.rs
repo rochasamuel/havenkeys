@@ -26,15 +26,19 @@ pub const PULL_INTERVAL: Duration = Duration::from_secs(60);
 pub(crate) const MAX_BATCH: usize = 500;
 
 impl HavenClient {
-    /// Map a failure, and drop the session when the server says it is gone,
-    /// so the device falls back to read-only instead of retrying with a dead
-    /// token. A refused session is announced as signed out, not just offline.
+    /// Map a failure. A refused session is dropped, so the device falls back
+    /// to read-only instead of retrying with a dead token, and is announced
+    /// as signed out. A server that did not answer only marks the device
+    /// unreachable: the session is kept and the next pull tries again.
     pub(crate) fn failed(&self, err: SyncError) -> ClientError {
-        if matches!(err, SyncError::Unauthorized | SyncError::Unavailable) {
-            let dropped = self.go_offline();
-            if dropped && err == SyncError::Unauthorized {
-                self.events.signed_out();
+        match err {
+            SyncError::Unauthorized => {
+                if self.go_offline() {
+                    self.events.signed_out();
+                }
             }
+            SyncError::Unavailable => self.mark_unreachable(),
+            _ => {}
         }
         err.into()
     }
@@ -129,6 +133,8 @@ impl HavenClient {
         // here. The core checks the attestation and refuses a revision that
         // goes backwards.
         let remote = server.header(&session).await.map_err(|e| self.failed(e))?;
+        // It answered: a device that had lost the server is online again.
+        self.mark_reachable();
         {
             let revision = self.vault()?.header_revision()?.unwrap_or(0);
             if remote.revision as u64 > revision {

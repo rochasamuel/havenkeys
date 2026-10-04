@@ -55,6 +55,6 @@ class HavenApp : Application() {
     }
 
     private companion object {
-        const val SYNC_CHECK_MS = 30_000L
+        const val SYNC_CHECK_MS = 15_000L
     }
 }
