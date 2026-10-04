@@ -14,12 +14,12 @@ import net.havenkeys.android.ui.theme.HavenSprings
 import net.havenkeys.android.ui.theme.HavenTheme
 import net.havenkeys.android.ui.theme.STAGGER_MILLIS
 
-private val SettleShift = 12.dp
+private val SettleShift = 8.dp
 
 /**
  * Content that settles into place (spec §7: Home's groups after unlock, the
  * add sheet's tiles): it fades in and rises a few dp on the smooth spring,
- * [index] × 30 ms after it first appears. Under "Remove animations", or when
+ * [index] × 20 ms after it first appears. Under "Remove animations", or when
  * not [active], it is simply there. It takes taps from the first frame:
  * nothing waits for the animation.
  */

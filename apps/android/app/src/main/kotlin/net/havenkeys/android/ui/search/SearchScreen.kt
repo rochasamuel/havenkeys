@@ -49,7 +49,7 @@ import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
 
 /** Recent searches wait this long, so they fade in after the pill has grown (spec §7). */
-private const val RECENTS_DELAY_MILLIS = 160
+private const val RECENTS_DELAY_MILLIS = 100
 
 private val Gutter = Modifier.padding(horizontal = HavenSpacing.gutter)
 

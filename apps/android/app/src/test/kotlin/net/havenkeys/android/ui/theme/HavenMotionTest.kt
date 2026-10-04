@@ -20,7 +20,7 @@ class HavenMotionTest {
     fun anyOtherScaleKeepsTheTokenDurations() {
         val motion = havenMotion(0.5f)
         assertFalse(motion.reduced)
-        assertEquals(listOf(240, 250, 420, 1200), durations(motion))
+        assertEquals(listOf(160, 250, 260, 1200), durations(motion))
     }
 
     @Test
@@ -37,10 +37,10 @@ class HavenMotionTest {
         val motion = havenMotion(1f)
         val smooth = motion.springSpec<Float>(HavenSprings.smooth) as SpringSpec<Float>
         assertEquals(1f, smooth.dampingRatio, 0f)
-        assertEquals(157.91f, smooth.stiffness, 0.01f)
+        assertEquals(438.65f, smooth.stiffness, 0.01f)
         val sheet = motion.springSpec<Float>(HavenSprings.sheet) as SpringSpec<Float>
         assertEquals(0.86f, sheet.dampingRatio, 0f)
-        assertEquals(246.74f, sheet.stiffness, 0.01f)
+        assertEquals(438.65f, sheet.stiffness, 0.01f)
     }
 
     @Test

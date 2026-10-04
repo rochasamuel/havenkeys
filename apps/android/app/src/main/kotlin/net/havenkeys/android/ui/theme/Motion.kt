@@ -34,10 +34,10 @@ val HouseEasing: Easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 const val PRESS_SCALE = 0.97f
 
 /** The gap between items that arrive in sequence (sheet tiles, Home's groups). */
-const val STAGGER_MILLIS = 30
+const val STAGGER_MILLIS = 20
 
 /** --t-fast: fades, colour changes, the copy glyph. */
-const val FADE_MILLIS = 160
+const val FADE_MILLIS = 120
 
 /** One turn of the indeterminate ring. */
 const val SPIN_MILLIS = 900
@@ -56,19 +56,23 @@ data class HavenSpring(val dampingRatio: Float, val stiffness: Float) {
     }
 }
 
-/** The named springs of the kit. */
+/**
+ * The named springs of the kit. Quicker than SwiftUI's defaults: on a phone
+ * the user is usually on the way to one value, and a long settle reads as
+ * the app holding them back.
+ */
 object HavenSprings {
     /** Pushes, tab changes, Home's groups settling, the search pill growing: no bounce. */
-    val smooth = HavenSpring.of(responseSeconds = 0.5f, damping = 1f)
+    val smooth = HavenSpring.of(responseSeconds = 0.3f, damping = 1f)
 
     /** Sheets and menus: a hint of settle. */
-    val sheet = HavenSpring.of(responseSeconds = 0.4f, damping = 0.86f)
+    val sheet = HavenSpring.of(responseSeconds = 0.3f, damping = 0.86f)
 
     /** The toast rising. */
-    val toast = HavenSpring.of(responseSeconds = 0.35f, damping = 0.8f)
+    val toast = HavenSpring.of(responseSeconds = 0.28f, damping = 0.8f)
 
     /** Press scale, switch thumb, copy check: quick, no bounce. */
-    val press = HavenSpring.of(responseSeconds = 0.2f, damping = 1f)
+    val press = HavenSpring.of(responseSeconds = 0.15f, damping = 1f)
 }
 
 /**
@@ -114,9 +118,9 @@ data class HavenMotion(
 }
 
 private val FullMotion = HavenMotion(
-    snapMillis = 240,
+    snapMillis = 160,
     tickMillis = 250,
-    sealMillis = 420,
+    sealMillis = 260,
     breathMillis = 1200,
     reduced = false,
 )

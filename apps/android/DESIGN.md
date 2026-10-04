@@ -441,12 +441,12 @@ Five radii, sized to the object (`HavenRadius`): 8dp small controls, menu rows a
 ## Motion
 
 Named springs in Apple's terms (SwiftUI response and damping fraction), converted for Compose as stiffness = (2π / response)² and dampingRatio = damping (`ui/theme/Motion.kt`, `HavenSprings`):
-- **smooth** (response 0.5 s, damping 1.0; Compose stiffness ≈ 157.9, damping ratio 1.0): pushes, tab changes, pull to refresh settling; no bounce.
-- **sheet** (0.4 s, 0.86; stiffness ≈ 246.7, ratio 0.86): the sheet rising, closing and settling after a drag; the menu scaling in from its top end (from 0.96).
-- **toast** (0.35 s, 0.8; stiffness ≈ 322.3, ratio 0.8): the toast rising half its height.
-- **press** (0.2 s, 1.0; stiffness ≈ 987, ratio 1.0): press scale and wash, the switch thumb.
+- **smooth** (response 0.3 s, damping 1.0; Compose stiffness ≈ 438.6, damping ratio 1.0): pushes, tab changes, pull to refresh settling; no bounce.
+- **sheet** (0.3 s, 0.86; stiffness ≈ 438.6, ratio 0.86): the sheet rising, closing and settling after a drag; the menu scaling in from its top end (from 0.96).
+- **toast** (0.28 s, 0.8; stiffness ≈ 503.6, ratio 0.8): the toast rising half its height.
+- **press** (0.15 s, 1.0; stiffness ≈ 1755, ratio 1.0): press scale and wash, the switch thumb.
 
-The **fade** is 160ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`: fades in and out, colour changes, the copy glyph's cross-fade to a check, the switch track colour, the segmented thumb. Durations from the shared tokens run on the mechanical curve `cubic-bezier(0.3, 0.7, 0.2, 1)`: snap 240ms, tick 250ms (the one-time code ring's step), seal 420ms (unlock to vault). A spinner turns once every 900ms, linear. The **stagger** between items that arrive in sequence is 30ms (sheet tiles, Home's groups); it is a theme constant that the screens of stage 3 will use.
+The **fade** is 120ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`: fades in and out, colour changes, the copy glyph's cross-fade to a check, the switch track colour, the segmented thumb. Durations from the shared tokens run on the mechanical curve `cubic-bezier(0.3, 0.7, 0.2, 1)`: snap 160ms, tick 250ms (the one-time code ring's step), seal 260ms (unlock to vault). A spinner turns once every 900ms, linear. The springs are quicker than SwiftUI's defaults on purpose: the slower first set (smooth at 0.5 s) read as the app holding the user back. The **stagger** between items that arrive in sequence is 20ms (sheet tiles, Home's groups); it is a theme constant that the screens of stage 3 will use.
 
 `HavenMotion` follows the system animator scale live. Under "Remove animations" (scale 0) every spring and tween becomes an instant cut, and `ProgressRing` stops spinning and draws a still arc.
 
