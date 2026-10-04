@@ -24,6 +24,7 @@ pub mod local;
 pub mod lock;
 pub mod model;
 pub mod origin;
+pub mod pairing;
 pub mod passkey;
 pub mod secret;
 pub mod sso;

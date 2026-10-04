@@ -19,7 +19,7 @@
 //! The server is untrusted storage; anything that does not authenticate
 //! under this vault's data key is skipped, not applied.
 
-use crate::account::AccountRef;
+use crate::account::{AccountRef, NormalizedEmail};
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
 use crate::crypto::keys::{derive_auth_key_from_master, derive_data_key, derive_kek_v3, AuthKey};
@@ -189,6 +189,43 @@ pub fn prepare_sign_in(
         },
         auth_key,
     ))
+}
+
+/// What a device signing in from another device's approval needs.
+pub struct PairedSignIn {
+    pub prepared: PreparedVault,
+    pub account: AccountRef,
+    pub secret_key: SecretKey,
+}
+
+/// Sign in from an approving device's envelope instead of the master
+/// password: the vault key comes from the payload, and the header the server
+/// serves must be this vault's and carry an attestation that key made.
+/// Refuses any key scheme below 3, as `prepare_sign_in` does.
+pub fn prepare_paired_sign_in(
+    header: &[u8],
+    payload: crate::pairing::PairingPayload,
+) -> Result<PairedSignIn> {
+    let file = parse_header(header)?;
+    if file.body.key_scheme != KeyScheme::AccountBound {
+        return Err(Error::UnsupportedVersion);
+    }
+    let record = body_to_record(&file.body)?;
+    if record.vault_id != payload.vault_id {
+        return Err(Error::Corrupted);
+    }
+    if !verify_header(&derive_data_key(&payload.vault_key)?, &file) {
+        return Err(Error::Corrupted);
+    }
+    let email = NormalizedEmail::parse(&payload.email)?;
+    Ok(PairedSignIn {
+        account: AccountRef::new(payload.account_id, email),
+        secret_key: payload.secret_key,
+        prepared: PreparedVault {
+            header: record,
+            vault_key: payload.vault_key,
+        },
+    })
 }
 
 /// One item as the server serves it. Blobs are the same per-item ciphertexts
@@ -477,6 +514,7 @@ mod tests {
     use super::*;
     use crate::account::NormalizedEmail;
     use crate::crypto::kdf::test_params;
+    use crate::crypto::keys::Key256;
     use crate::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
     use crate::store::{AccountRecord, Store};
     use crate::vault::prepare_new_account_vault;
@@ -542,6 +580,59 @@ mod tests {
             .unlock_for_account(&SecretString::from(PASSWORD), &sk, &account())
             .unwrap();
         vault
+    }
+
+    fn new_account_header() -> (PreparedVault, Vec<u8>, AccountRecord) {
+        let made = prepare_new_account_vault(
+            &SecretString::from(PASSWORD),
+            &account(),
+            test_params(),
+            NOW,
+        )
+        .unwrap();
+        let header = encode_header_for(&made.prepared).unwrap();
+        let record = AccountRecord {
+            account_id: account().id,
+            email: "user@example.com".into(),
+            server_url: "https://vault.example.com".into(),
+            server_cursor: 0,
+            max_header_rev: 0,
+            last_synced_at: None,
+        };
+        (made.prepared, header, record)
+    }
+
+    #[test]
+    fn a_paired_sign_in_refuses_a_header_for_another_vault_or_a_wrong_key() {
+        let (prepared, header, record) = new_account_header();
+        let good = || crate::pairing::PairingPayload {
+            account_id: record.account_id,
+            vault_id: prepared.vault_id(),
+            email: record.email.clone(),
+            secret_key: SecretKey::generate().unwrap(),
+            vault_key: Key256::from_bytes(*prepared.vault_key.as_bytes()),
+        };
+        assert!(prepare_paired_sign_in(&header, good()).is_ok());
+
+        let mut other_vault = good();
+        other_vault.vault_id = Uuid::new_v4();
+        assert_eq!(
+            prepare_paired_sign_in(&header, other_vault).err(),
+            Some(Error::Corrupted)
+        );
+
+        let mut wrong_key = good();
+        wrong_key.vault_key = Key256::from_bytes([1u8; 32]);
+        assert_eq!(
+            prepare_paired_sign_in(&header, wrong_key).err(),
+            Some(Error::Corrupted)
+        );
+
+        let mut bad_email = good();
+        bad_email.email = "not an email".into();
+        assert!(prepare_paired_sign_in(&header, bad_email).is_err());
+
+        assert!(prepare_paired_sign_in(b"{}", good()).is_err());
     }
 
     #[test]

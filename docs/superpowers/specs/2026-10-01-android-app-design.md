@@ -11,6 +11,8 @@ HavenKeys gets an Android app (`net.havenkeys.android`) that is a full client
 of the same `havenkeys-server` account as the desktop app. A user can:
 
 1. Sign in on the phone with the Emergency Kit and the master password.
+   (Once signed in, the phone can also sign in a new desktop by scanning its
+   QR code: `2026-10-03-phone-approved-sign-in-design.md`.)
 2. Unlock with the master password or, once enabled, a fingerprint or face.
 3. Browse, search, reveal, copy and read TOTP codes, offline.
 4. Fill logins and TOTP codes in apps and browsers through Android Autofill.

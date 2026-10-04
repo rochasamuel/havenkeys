@@ -338,7 +338,18 @@ export interface DeviceEntry {
   createdAt: string;
   lastSeenAt: string | null;
   current: boolean;
+  approvedBy?: string | null;
 }
+
+export interface PairingCode {
+  qrSize: number;
+  qrModules: boolean[];
+  expiresAt: string;
+}
+
+export type PairingState =
+  | { state: "waiting" | "denied" | "expired" }
+  | { state: "approved"; status: VaultStatus };
 
 /** Counts from a pull. Never item data. */
 export interface SyncReport {

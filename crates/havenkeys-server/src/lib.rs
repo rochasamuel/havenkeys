@@ -22,6 +22,7 @@ pub mod error;
 pub mod invite;
 pub mod json;
 pub mod limits;
+pub mod locate;
 pub mod routes;
 
 pub use config::Config;

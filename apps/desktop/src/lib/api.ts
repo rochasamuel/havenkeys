@@ -14,6 +14,8 @@ import type {
   CopyField,
   CopyResult,
   DeviceEntry,
+  PairingCode,
+  PairingState,
   DeviceStatus,
   EmergencyKit,
   GeneratedPassword,
@@ -157,6 +159,9 @@ export const api = {
   /** Ends the server session and locks the vault. The vault stays on disk. */
   signOut: () => call<void>("sign_out"),
   accountStatus: () => call<AccountStatus | null>("account_status"),
+  pairingStart: (serverUrl: string) => call<PairingCode>("pairing_start", { serverUrl: serverUrl.trim() }),
+  pairingPoll: () => call<PairingState>("pairing_poll"),
+  pairingCancel: () => call<void>("pairing_cancel"),
   listDevices: () => call<DeviceEntry[]>("list_devices"),
   revokeDevice: (id: string) => call<void>("revoke_device", { id }),
   /** Remove this computer from the account; the vault stays on the server. */

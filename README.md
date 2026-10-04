@@ -101,6 +101,8 @@ What the Android app does (early release; tried on one phone, the instrumented t
 
 * Sign in by scanning the Emergency Kit's QR code (or typing it), or
   activate from an invite
+* Approve a new desktop's sign-in: Settings → "Sign in a new device", scan
+  its QR code, check the name and place, and tap Allow (behind biometrics)
 * Unlock with the master password, or with a fingerprint or face once turned
   on in Settings. The master password is asked for again after 14 days, after
   a restart, and when a fingerprint or face is added
@@ -127,7 +129,9 @@ What the Android app does (early release; tried on one phone, the instrumented t
 Setting up the first computer needs an invite from whoever runs the server
 (`havenkeys-server admin new-account`); see
 [docs/deployment.md](docs/deployment.md). A second computer needs the email,
-the master password and the Secret Key from your Emergency Kit.
+the master password and the Secret Key from your Emergency Kit, or the
+phone: scan the new desktop's QR code from Settings → "Sign in a new device"
+and tap Allow (see [docs/security-model.md](docs/security-model.md) §23).
 
 ## How it protects your data
 

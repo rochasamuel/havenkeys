@@ -72,6 +72,27 @@ impl ClientError {
         )
     }
 
+    /// The code expired, was used, or was denied. One message for all.
+    pub fn pairing_gone() -> Self {
+        Self::fixed(
+            "pairing_gone",
+            "This code has expired. Ask the new device for a new one.",
+        )
+    }
+
+    /// A code from a device signing in to a different server.
+    pub fn pairing_other_server() -> Self {
+        Self::fixed("pairing_other_server", "This code is for another server.")
+    }
+
+    /// The approval arrived but did not open or did not match this account.
+    pub fn pairing_failed() -> Self {
+        Self::fixed(
+            "pairing_failed",
+            "The sign-in could not be completed. Ask for a new code.",
+        )
+    }
+
     /// The vault file exists but this build cannot open it. Carries the
     /// folder so the message can tell the user where their file is; a path
     /// is not a secret, and without it the advice is unfollowable.

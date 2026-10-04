@@ -21,7 +21,13 @@ const CONNECT_DEADLINE: Duration = Duration::from_secs(60);
 
 /// Every migration, in the order they must run. Adding one means appending a
 /// line here; editing a shipped one is not allowed — write the next.
-const MIGRATIONS: &[(&str, &str)] = &[("0001_init", include_str!("../migrations/0001_init.sql"))];
+const MIGRATIONS: &[(&str, &str)] = &[
+    ("0001_init", include_str!("../migrations/0001_init.sql")),
+    (
+        "0002_pairings",
+        include_str!("../migrations/0002_pairings.sql"),
+    ),
+];
 
 #[derive(Debug)]
 pub enum DbError {

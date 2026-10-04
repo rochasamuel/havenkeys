@@ -12,6 +12,9 @@ publish = false
 aes-gcm = { version = "0.11", features = ["zeroize"] }
 argon2 = { version = "0.6", default-features = false, features = ["alloc", "zeroize"] }
 hkdf = "0.13"
+# HPKE (RFC 9180) for the pairing envelope: X25519, HKDF-SHA256, AES-256-GCM.
+# rozbb/rust-hpke; NCC Group audit (2021); MIT/Apache-2.0.
+hpke = { version = "0.14", default-features = false, features = ["alloc", "getrandom", "x25519", "aes"] }
 hmac = { version = "0.13", features = ["zeroize"] }
 sha1 = "0.11"
 sha2 = "0.11"

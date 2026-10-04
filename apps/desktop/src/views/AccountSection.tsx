@@ -29,6 +29,12 @@ function relative(iso: string | null, t: Messages): string {
   return t.account.daysAgo(Math.round(hours / 24));
 }
 
+/** The name of the device that approved this one, when it is still in the list. */
+function approver(device: DeviceEntry, all: DeviceEntry[]): string | undefined {
+  if (!device.approvedBy) return undefined;
+  return all.find((d) => d.id === device.approvedBy)?.name;
+}
+
 function Devices({ online }: { online: boolean }) {
   const toast = useToast();
   const { t } = useI18n();
@@ -83,6 +89,9 @@ function Devices({ online }: { online: boolean }) {
               {device.current && <span className="pill">{t.account.thisComputer}</span>}
             </span>
             <span className="device-meta">{t.account.lastSeen(relative(device.lastSeenAt, t))}</span>
+            {approver(device, devices) && (
+              <span className="device-meta">{t.account.approvedBy(approver(device, devices) ?? "")}</span>
+            )}
           </div>
           {confirming === device.id ? (
             <div className="device-confirm">

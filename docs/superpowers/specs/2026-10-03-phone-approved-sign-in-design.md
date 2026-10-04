@@ -1,6 +1,6 @@
 # Signing in a new desktop from the phone — Design
 
-Status: proposed, 2026-10-03.
+Status: accepted, 2026-10-03; implemented by docs/superpowers/plans/2026-10-03-phone-approved-sign-in.md.
 Builds on `2026-09-20-server-authoritative-vault-design.md` (accounts,
 sessions, devices) and `2026-10-01-android-app-design.md` (the phone app).
 Amends CLAUDE.md (a note, like the earlier ones), `docs/threat-model.md`
@@ -34,14 +34,21 @@ because:
 
 1. The phone must be unlocked and online, and Allow asks for the phone's
    biometrics or device credential again.
-2. The key material is sealed to a public key that travels from the
-   desktop's screen to the phone's camera. The server relays only
-   ciphertext and cannot swap the recipient.
+2. The key material is sealed to a public key that travels only from the
+   desktop's screen to the phone's camera; the server is never sent it.
+   HPKE base mode does not authenticate the sender, so this is what makes
+   the envelope trustworthy: only a device that saw the screen can seal to
+   that key. The server relays only ciphertext; it can neither swap the
+   recipient nor seal an envelope of its own (a vault key of its choosing)
+   to the desktop.
 3. The confirmation names the device and where the server saw it, and the
    code expires in 2 minutes and works once.
 
-The remaining risk is a person being talked into scanning an attacker's
-code and tapping Allow (§7). It is documented as such.
+The remaining risks are a person being talked into scanning an attacker's
+code and tapping Allow, and, on a server with several accounts, another
+account that sees the code (a screen share) approving it first with its own
+vault (§7). Both are documented as such; for the second, the desktop says
+which account it signed in as.
 
 ## 3. The flow
 
@@ -53,17 +60,22 @@ phone says which account it is.
 
 1. Rust generates an HPKE key pair (§4) and a 32-byte random
    `claim_secret`. Both live in memory only, in `HavenClient`.
-2. `POST /v1/pairings` with `{device_id, device_name, public_key,
+2. `POST /v1/pairings` with `{device_id, device_name,
    claim_hash = SHA-256(claim_secret)}`. `device_id` is the desktop's own
    persistent device id, the one a login would register. No
-   authentication.
+   authentication. The public key is not sent (§2): it goes only into the
+   code.
 3. The server stores the request (§5.1) and answers `{pairing_id,
    expires_at}`. `pairing_id` is 128 random bits, base64url.
 4. The desktop shows the code for
    `havenkeys://pair/v1?server=<url>&id=<pairing_id>&pk=<base64url public key>`
-   and the time left. At expiry it offers "New code", which starts again
-   from step 1 with a new key pair.
+   and the time left: 120 s counted on the desktop's own clock from when
+   the code was made (never the server's `expires_at`, which a skewed clock
+   would cut short). At 0 it polls once more, then offers "New code",
+   which starts again from step 1 with a new key pair.
 5. Every 2 seconds, `POST /v1/pairings/{id}/claim` with `claim_secret`.
+   A failed or gone pairing ends the polling and keeps its message; being
+   offline does not.
 
 The QR code is encoded in Rust (`qrcode`, already a desktop dependency)
 into a module grid, as the Emergency Kit's is, and React draws the grid;
@@ -111,11 +123,12 @@ In one transaction:
 3. The request's `device_id` is registered as a login does
    (`register_device`: refused if it belongs to another account or was
    revoked; the 64-device cap, `MAX_DEVICES_PER_ACCOUNT`), with the
-   request's `device_name`, marked `approved_by = <phone's device id>`.
-4. A session token is issued for that device (24 h,
-   `SESSION_TTL_HOURS`). The token itself is kept on the pairing only
-   until the claim; its hash goes in `sessions` as for any login.
-5. The pairing becomes `approved`, holding the envelope and the token.
+   request's `device_name`, marked `approved_by = <phone's device id>`, so
+   it shows in Devices. A refused `device_id`, or the phone approving its
+   own id, is `400` (`pairing_failed` on the phone), never `401`: the
+   phone's own session is fine and must not be signed out.
+4. The pairing becomes `approved`, holding the envelope. No session is
+   issued here: an approval that is never claimed leaves no token.
 
 ### 3.4 Desktop: claim and finish
 
@@ -123,8 +136,11 @@ In one transaction:
 
 * `pending` → `{state: "waiting"}`
 * `denied` → `{state: "denied"}`, and the pairing is deleted
-* `approved` → `{state: "approved", token, expires_at, account_id,
-  vault_id, envelope}`, and the pairing is deleted: a second claim gets
+* `approved` → a session token is issued for the pairing's device (24 h,
+  `SESSION_TTL_HOURS`; its hash goes in `sessions` as for any login), in
+  the claim's own transaction under the row lock, and the answer is
+  `{state: "approved", token, expires_at, account_id, vault_id,
+  envelope}`. The pairing is consumed: a second claim gets
   `pairing_gone`. The desktop does not take `account_id` or `vault_id`
   from this answer on trust: both must equal the ones inside the envelope.
 * wrong secret, unknown or expired → `pairing_gone`
@@ -179,7 +195,6 @@ data key, and never returned by any API). The envelope is sealed inside
 id              text primary key   -- 128-bit random, base64url
 state           text               -- pending | approved | denied | claimed
 device_name     text               -- ≤ MAX_DEVICE_NAME_CHARS
-public_key      bytea              -- 32 bytes
 claim_hash      bytea              -- SHA-256(claim_secret)
 ip              text               -- as `client_ip` gives it
 location        text null          -- "São Paulo, BR", from the local database
@@ -187,10 +202,11 @@ created_at      timestamptz
 expires_at      timestamptz        -- created_at + 2 minutes
 account_id      uuid null          -- set by the first details/approve
 device_id       uuid               -- the desktop's own id, from create
-envelope        bytea null
-token           text null          -- cleared at claim
-token_expires_at timestamptz null
+envelope        bytea null         -- cleared at claim
 ```
+
+No public key and no session token: the key travels only in the code
+(§2), and the token is issued at claim (§3.4).
 
 `devices` gains `approved_by uuid null`, the phone's device id, for the
 Devices list.
@@ -216,8 +232,7 @@ routes treat an expired row as gone.
 * `claim`: a wrong secret counts against the caller's IP like a failed
   login (`rate_limit::record_failure` on the IP key), and a blocked IP is
   refused before anything is read.
-* A claimed or denied pairing is kept as `claimed` (envelope and token
-  cleared) until it ages out, so it still counts against its IP's limit.
+* A claimed or denied pairing is kept as `claimed` (envelope cleared) until it ages out, so it still counts against its IP's limit.
 * All bodies under strict size limits; unknown fields refused.
 
 ### 5.3 Location
@@ -257,7 +272,8 @@ own (`client_ip`, which honours `X-Forwarded-For` only with
 
 | Threat | Defence |
 |---|---|
-| Hostile or compromised server | Sees only the envelope, sealed to a key it did not choose; it can lie about name and location but cannot open or redirect the keys. |
+| Hostile or compromised server | Is never sent the desktop's public key, so it can neither open the envelope nor seal one of its own (a vault key it chose) to the desktop; it can lie about name and location. An envelope that does not open with the desktop's key, or whose account and vault differ from the claim's, creates nothing. |
+| Another account on the same server sees the code (screen share) | It could approve first with its own vault. Residual; after pairing, the desktop shows which email it signed in as, with how to remove the computer. |
 | A code from an attacker ("scan this…") | Name, IP and location shown; Allow needs biometrics; 2-minute, single-use code. Residual, documented. |
 | Guessed or leaked `pairing_id` | Details and approve need a session on the account; claim needs `claim_secret`, which is not in the code. |
 | Replay | Deleted on claim, deny and expiry; `info` binds envelope to server and pairing. |
@@ -274,6 +290,8 @@ own (`client_ip`, which honours `X-Forwarded-For` only with
 * Desktop after Deny: "The sign-in was denied on your phone."
 * Desktop, any other failure: "The sign-in could not be completed. Ask
   for a new code."
+* Desktop after signing in: "Signed in as <email>. If that is not your
+  account, remove this computer in Settings → Account."
 
 ## 9. Tests
 
@@ -283,16 +301,21 @@ own (`client_ip`, which honours `X-Forwarded-For` only with
 * **server** (Postgres): create and its limits; expiry; details and
   approve from another account; approve twice; deny; claim with a wrong
   secret; claim once only; the device cap; a revoked approver's session;
-  the claimed token works and is the only session for that device.
+  the claimed token works and is the only session for that device; an
+  approval never claimed has no session; a revoked or other-account
+  device id is `400`, not `401`; a body with a public key is refused.
 * **client round trip**: phone approves, desktop claims, opens, syncs,
   locks, unlocks with the master password; a denied and an expired
-  pairing leave nothing on the desktop.
+  pairing leave nothing on the desktop; an envelope sealed to another key,
+  or for another account than the claim names, creates no vault; a code
+  whose device cannot be approved fails without signing the phone out.
 * **mobile**: `scan_pairing` keeps only `pair/v1` links; another server is
   refused; locked refuses.
 * **Android**: the sheet shows the details; Allow requires the gate; Deny
   calls deny.
 * **desktop**: panel states (waiting, expired → new code, denied,
-  approved).
+  approved, failed → new code); a local 120 s deadline with one last poll;
+  offline errors keep polling.
 
 ## 10. Documentation
 

@@ -22,8 +22,8 @@ pub mod transport;
 pub mod wire;
 
 pub use client::{
-    Activated, Activation, AuthParams, CredentialChange, Device, Fetched, Pulled, SyncClient,
-    WriteAck,
+    Activated, Activation, AuthParams, Claim, CreatedPairing, CredentialChange, Device, Fetched,
+    PairingDetails, Pulled, SyncClient, WriteAck,
 };
 pub use error::{Conflict, Result, SyncError};
 pub use invite::Invite;

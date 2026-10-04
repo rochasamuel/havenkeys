@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pairing-poll"
+description = "Enables the pairing_poll command without any pre-configured scope."
+commands.allow = ["pairing_poll"]
+
+[[permission]]
+identifier = "deny-pairing-poll"
+description = "Denies the pairing_poll command without any pre-configured scope."
+commands.deny = ["pairing_poll"]

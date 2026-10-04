@@ -70,6 +70,10 @@ pub struct VaultStatus {
 pub(crate) struct Session {
     pub(crate) vault_id: Uuid,
     pub(crate) data_key: Key256,
+    /// The vault key itself, for one purpose: sealing it to a new device the
+    /// user approves (`seal_pairing`). Zeroized with the session on lock, like
+    /// `data_key`, and never returned by any method.
+    pub(crate) vault_key: Key256,
     /// The item ID of the account's one Identity, derived from the vault key.
     pub(crate) identity_id: Uuid,
     pub(crate) overviews: HashMap<Uuid, ItemOverview>,
@@ -747,6 +751,7 @@ impl VaultService {
         self.store.set_account(account)?;
         let vault_id = prepared.header.vault_id;
         let data_key = derive_data_key(&prepared.vault_key)?;
+        let identity_id = derive_identity_item_id(&prepared.vault_key)?;
         let settings = Settings::default();
         let settings_blob = seal_json(
             &data_key,
@@ -757,14 +762,35 @@ impl VaultService {
         self.session = Some(Session {
             vault_id,
             data_key,
-            identity_id: derive_identity_item_id(&prepared.vault_key)?,
+            identity_id,
             overviews: HashMap::new(),
             settings,
             damaged_items: 0,
             recent_fills: Vec::new(),
+            vault_key: prepared.vault_key,
         });
         self.state = VaultState::Unlocked;
         Ok(())
+    }
+
+    /// Seal this vault's keys for a new device the user approved by
+    /// scanning its code (spec 2026-10-03-phone-approved-sign-in §4). Only
+    /// while unlocked; the vault key never leaves the core.
+    pub fn seal_pairing(
+        &self,
+        link: &crate::pairing::PairingLink,
+        account: &AccountRecord,
+        secret_key: SecretKey,
+    ) -> Result<Vec<u8>> {
+        let session = self.session()?;
+        let payload = crate::pairing::PairingPayload {
+            account_id: account.account_id,
+            vault_id: session.vault_id,
+            email: account.email.clone(),
+            secret_key,
+            vault_key: Key256::from_bytes(*session.vault_key.as_bytes()),
+        };
+        crate::pairing::seal(link, &payload)
     }
 
     /// LOCKED → UNLOCKING. Returns what the caller needs to run the KDF.
@@ -864,6 +890,7 @@ impl VaultService {
             settings,
             damaged_items,
             recent_fills: Vec::new(),
+            vault_key: Key256::from_bytes(*vault_key.as_bytes()),
         })
     }
 
@@ -2288,6 +2315,57 @@ mod tests {
             )
             .unwrap();
         (vault, made.secret_key, account)
+    }
+
+    fn account_vault_with_header() -> (VaultService, AccountRecord, Vec<u8>) {
+        let account = AccountRef::new(
+            Uuid::from_u128(7),
+            NormalizedEmail::parse("user@example.com").unwrap(),
+        );
+        let made =
+            prepare_new_account_vault(&SecretString::from(PASSWORD), &account, test_params(), 0)
+                .unwrap();
+        let header = crate::sync::encode_header_for(&made.prepared).unwrap();
+        let record = AccountRecord {
+            account_id: account.id,
+            email: "user@example.com".into(),
+            server_url: "https://vault.example.com".into(),
+            server_cursor: 0,
+            max_header_rev: 0,
+            last_synced_at: None,
+        };
+        let mut vault = VaultService::new(Store::open_in_memory().unwrap());
+        vault.create_account_vault(made.prepared, &record).unwrap();
+        (vault, record, header)
+    }
+
+    #[test]
+    fn an_unlocked_vault_seals_its_keys_for_a_new_device_and_a_locked_one_does_not() {
+        let (mut v, record, prepared_header) = account_vault_with_header();
+        let keys = crate::pairing::PairingKeys::generate();
+        let link = crate::pairing::PairingLink {
+            server_url: record.server_url.clone(),
+            pairing_id: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+            public_key: keys.public_key(),
+        };
+        let sk = SecretKey::generate().unwrap();
+        let sealed = v.seal_pairing(&link, &record, sk).unwrap();
+        let payload = keys
+            .open(&link.server_url, &link.pairing_id, &sealed)
+            .unwrap();
+        assert_eq!(payload.account_id, record.account_id);
+        assert_eq!(payload.email, record.email);
+
+        // The payload signs a new device in against the same header.
+        let paired = crate::sync::prepare_paired_sign_in(&prepared_header, payload).unwrap();
+        assert_eq!(paired.account.id, record.account_id);
+
+        v.lock();
+        assert_eq!(
+            v.seal_pairing(&link, &record, SecretKey::generate().unwrap())
+                .err(),
+            Some(Error::Locked)
+        );
     }
 
     #[test]

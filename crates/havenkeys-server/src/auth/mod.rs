@@ -18,7 +18,6 @@ use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
 use chrono::{DateTime, Duration, Utc};
 use data_encoding::{BASE64, BASE64URL_NOPAD};
-use deadpool_postgres::Object;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
@@ -105,7 +104,7 @@ pub fn token_hash(raw: &str) -> Vec<u8> {
 
 /// Issue a session for a device. 32 opaque random bytes, valid for a day.
 pub async fn issue_token(
-    db: &Object,
+    db: &impl deadpool_postgres::GenericClient,
     account_id: Uuid,
     device_id: Uuid,
 ) -> Result<(Zeroizing<String>, DateTime<Utc>), ApiError> {

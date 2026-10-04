@@ -19,7 +19,7 @@ pub async fn list(
     let db = state.pool.get().await?;
     let rows = db
         .query(
-            "SELECT id, name, created_at, last_seen_at
+            "SELECT id, name, created_at, last_seen_at, approved_by
                FROM devices
               WHERE account_id = $1 AND revoked_at IS NULL
               ORDER BY created_at",
@@ -38,6 +38,7 @@ pub async fn list(
                 "createdAt": created.to_rfc3339(),
                 "lastSeenAt": seen.map(|t| t.to_rfc3339()),
                 "current": id == session.device_id,
+                "approvedBy": row.get::<_, Option<Uuid>>(4),
             })
         })
         .collect();

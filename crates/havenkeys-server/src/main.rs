@@ -76,6 +76,16 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
         server_secret: config.server_secret,
         trust_forwarded_for: config.trust_forwarded_for,
         cors_origin: config.cors_origin.clone(),
+        locator: match &config.geoip_database {
+            Some(path) => match havenkeys_server::locate::Locator::open(path) {
+                Ok(locator) => Some(std::sync::Arc::new(locator)),
+                Err(why) => {
+                    tracing::warn!(reason = why.as_str(), "IP location disabled");
+                    None
+                }
+            },
+            None => None,
+        },
     };
     // `::` takes both families where the host allows it, which matters
     // because a platform's proxy may reach the container over IPv6 only.

@@ -196,6 +196,44 @@ UI: unlock_vault(password)
 Argon2id runs without holding the vault mutex, so `vault_status` keeps
 answering (and reports `unlocking`) while the key is being derived.
 
+## Data flow: signing in a new desktop from the phone
+
+```text
+Desktop (new)                    Server                       Phone (unlocked)
+ generate HPKE key pair,
+ claim_secret (in memory)
+ POST /v1/pairings  ─────────────► store request (pending,
+ {device_id, name,                  ip, location), 2 min
+  SHA-256(claim_secret)}  ◄──────  {pairing_id, expires_at}
+ (the public key is not sent: it
+  goes only into the QR code)
+ show QR: havenkeys://pair/v1
+  ?server=&id=&pk=            ═══ camera ═══════════════════►  scan_pairing (Rust keeps only
+                                                               a pair/v1 link of this server)
+ every 2 s: POST .../claim ───►  "waiting"                    GET /v1/pairings/{id} (session)
+                                                    ◄──────── {name, ip, location}; user sees
+                                                               "Sign in a new device?"
+                                                               Allow -> BiometricGate
+                                                               seal {ids, email, Secret Key,
+                                                                vault key} to pk (HPKE)
+                                  approve: register device     POST .../approve {envelope}
+                                  (approved_by),
+                                  state = approved
+ POST .../claim ─────────────►  once, under a row lock: issue
+                                  the 24 h token; {token,
+                                  account_id, vault_id,
+                                  envelope}; envelope cleared
+ open envelope; GET /v1/vault/header; verify header with
+  the vault key; check ids; create local vault; store
+  account + Secret Key; go online, sync; show "Signed in as <email>"
+ (later unlocks: master password + stored Secret Key)
+```
+
+Deny (`POST .../deny`) ends the request; an unclaimed or expired request is
+dropped by the next create after 10 minutes. The envelope is sealed inside
+`VaultService`, so the vault key never leaves the core. Details:
+`security-model.md` §23 and `crypto.md`.
+
 ## Data flow: reveal a password
 
 ```text

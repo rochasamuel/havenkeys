@@ -15,6 +15,7 @@ mod identity;
 mod import;
 mod item_input;
 mod native_host;
+mod pairing;
 mod qr_scan;
 mod removal;
 mod scan_slot;
@@ -280,6 +281,9 @@ pub fn run() {
             account::account_status,
             account::activate_account,
             account::sign_in,
+            pairing::pairing_start,
+            pairing::pairing_poll,
+            pairing::pairing_cancel,
             account::sign_out,
             account::list_devices,
             account::revoke_device,

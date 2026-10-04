@@ -37,6 +37,7 @@ internal val PUSHED = setOf(
     Routes.NEW,
     Routes.GENERATOR,
     Routes.DEVICES,
+    Routes.PAIRING,
     Routes.AUTOFILL_SETUP,
 )
 

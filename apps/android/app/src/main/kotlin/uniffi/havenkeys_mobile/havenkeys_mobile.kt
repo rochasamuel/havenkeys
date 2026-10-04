@@ -867,6 +867,14 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_sign_in_with_kit(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_approve_pairing(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_deny_pairing(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_pairing_request(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_pairing(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_settings(
@@ -1040,6 +1048,14 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sign_in(`ptr`: Long,`serverUrl`: RustBuffer.ByValue,`email`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sign_in_with_kit(`ptr`: Long,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_approve_pairing(`ptr`: Long,`link`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_deny_pairing(`ptr`: Long,`link`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_pairing_request(`ptr`: Long,`link`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_scan_pairing(`ptr`: Long,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_save(`ptr`: Long,`target`: RustBuffer.ByValue,`login`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1349,6 +1365,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sign_in_with_kit() and 0xFFFF) != 10376) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_approve_pairing() and 0xFFFF) != 2030) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_deny_pairing() and 0xFFFF) != 53413) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_pairing_request() and 0xFFFF) != 23940) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_pairing() and 0xFFFF) != 28935) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save() and 0xFFFF) != 64679) {
@@ -2389,6 +2417,21 @@ public interface MobileVaultInterface {
     fun `signInWithKit`(`password`: kotlin.String): Status
     
     /**
+     * Kotlin asks for biometrics before calling this.
+     */
+    fun `approvePairing`(`link`: kotlin.String)
+    
+    fun `denyPairing`(`link`: kotlin.String)
+    
+    fun `pairingRequest`(`link`: kotlin.String): PairingRequestView
+    
+    /**
+     * A camera frame on the "Sign in a new device" screen. Only a
+     * `havenkeys://pair/v1` link comes back; any other code is dropped.
+     */
+    fun `scanPairing`(`frame`: LumaFrame): kotlin.String?
+    
+    /**
      * After Android's save sheet was confirmed. Online only; not app use,
      * so the idle timer is not touched.
      */
@@ -3341,6 +3384,71 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
         it,
         
         FfiConverterString.lower(`password`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Kotlin asks for biometrics before calling this.
+     */
+    @Throws(MobileException::class)override fun `approvePairing`(`link`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_approve_pairing(
+        it,
+        
+        FfiConverterString.lower(`link`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(MobileException::class)override fun `denyPairing`(`link`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_deny_pairing(
+        it,
+        
+        FfiConverterString.lower(`link`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(MobileException::class)override fun `pairingRequest`(`link`: kotlin.String): PairingRequestView {
+            return FfiConverterTypePairingRequestView.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_pairing_request(
+        it,
+        
+        FfiConverterString.lower(`link`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * A camera frame on the "Sign in a new device" screen. Only a
+     * `havenkeys://pair/v1` link comes back; any other code is dropped.
+     */
+    @Throws(MobileException::class)override fun `scanPairing`(`frame`: LumaFrame): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_scan_pairing(
+        it,
+        
+        FfiConverterTypeLumaFrame.lower(`frame`),_status)
 }
     }
     )
@@ -4352,6 +4460,8 @@ data class DeviceInfo (
     var `lastSeenAt`: kotlin.String?
     , 
     var `current`: kotlin.Boolean
+    , 
+    var `approvedBy`: kotlin.String?
     
 ){
     
@@ -4373,6 +4483,7 @@ public object FfiConverterTypeDeviceInfo: FfiConverterRustBuffer<DeviceInfo> {
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -4381,7 +4492,8 @@ public object FfiConverterTypeDeviceInfo: FfiConverterRustBuffer<DeviceInfo> {
             FfiConverterString.allocationSize(value.`name`) +
             FfiConverterString.allocationSize(value.`createdAt`) +
             FfiConverterOptionalString.allocationSize(value.`lastSeenAt`) +
-            FfiConverterBoolean.allocationSize(value.`current`)
+            FfiConverterBoolean.allocationSize(value.`current`) +
+            FfiConverterOptionalString.allocationSize(value.`approvedBy`)
     )
 
     override fun write(value: DeviceInfo, buf: ByteBuffer) {
@@ -4390,6 +4502,7 @@ public object FfiConverterTypeDeviceInfo: FfiConverterRustBuffer<DeviceInfo> {
             FfiConverterString.write(value.`createdAt`, buf)
             FfiConverterOptionalString.write(value.`lastSeenAt`, buf)
             FfiConverterBoolean.write(value.`current`, buf)
+            FfiConverterOptionalString.write(value.`approvedBy`, buf)
     }
 }
 
@@ -5160,6 +5273,62 @@ public object FfiConverterTypeMobileSettings: FfiConverterRustBuffer<MobileSetti
             FfiConverterBoolean.write(value.`lockOnScreenOff`, buf)
             FfiConverterBoolean.write(value.`confirmBeforeFilling`, buf)
             FfiConverterBoolean.write(value.`assetLinks`, buf)
+    }
+}
+
+
+
+data class PairingRequestView (
+    /**
+     * The code as scanned, for `approve_pairing` / `deny_pairing`.
+     */
+    var `link`: kotlin.String
+    , 
+    var `deviceName`: kotlin.String
+    , 
+    var `ip`: kotlin.String
+    , 
+    var `location`: kotlin.String?
+    , 
+    var `createdAt`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePairingRequestView: FfiConverterRustBuffer<PairingRequestView> {
+    override fun read(buf: ByteBuffer): PairingRequestView {
+        return PairingRequestView(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PairingRequestView) = (
+            FfiConverterString.allocationSize(value.`link`) +
+            FfiConverterString.allocationSize(value.`deviceName`) +
+            FfiConverterString.allocationSize(value.`ip`) +
+            FfiConverterOptionalString.allocationSize(value.`location`) +
+            FfiConverterString.allocationSize(value.`createdAt`)
+    )
+
+    override fun write(value: PairingRequestView, buf: ByteBuffer) {
+            FfiConverterString.write(value.`link`, buf)
+            FfiConverterString.write(value.`deviceName`, buf)
+            FfiConverterString.write(value.`ip`, buf)
+            FfiConverterOptionalString.write(value.`location`, buf)
+            FfiConverterString.write(value.`createdAt`, buf)
     }
 }
 

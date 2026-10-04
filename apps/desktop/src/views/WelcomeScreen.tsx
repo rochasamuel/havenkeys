@@ -5,6 +5,7 @@ import { Guilloche } from "../components/Guilloche";
 import { Seal } from "../components/Seal";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
+import { PhoneSignInPanel } from "./PhoneSignInPanel";
 
 /**
  * First run on a computer that has no vault.
@@ -20,9 +21,11 @@ interface Props {
   onActivated: (status: VaultStatus) => void;
   /** Sign-in succeeded: this device already has a kit somewhere else. */
   onSignedIn: (status: VaultStatus) => void;
+  /** Signed in by the phone: the caller says which account it joined. */
+  onPaired: (status: VaultStatus) => void;
 }
 
-type Path = "invite" | "signin";
+type Path = "invite" | "signin" | "phone";
 
 function Field(props: {
   label: string;
@@ -217,7 +220,7 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
   );
 }
 
-export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
+export function WelcomeScreen({ onActivated, onSignedIn, onPaired }: Props) {
   const { t } = useI18n();
   const [path, setPath] = useState<Path>("invite");
 
@@ -229,7 +232,7 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
           <Seal size={60} />
           <h1>{t.welcome.title}</h1>
           <p className="welcome-sub">
-            {path === "invite" ? t.welcome.subInvite : t.welcome.subSignIn}
+            {path === "invite" ? t.welcome.subInvite : path === "phone" ? t.welcome.subPhone : t.welcome.subSignIn}
           </p>
         </header>
 
@@ -252,9 +255,20 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
           >
             {t.welcome.tabSignIn}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={path === "phone"}
+            className={path === "phone" ? "segmented-item is-active" : "segmented-item"}
+            onClick={() => setPath("phone")}
+          >
+            {t.welcome.tabPhone}
+          </button>
         </div>
 
-        {path === "invite" ? <InvitePanel onActivated={onActivated} /> : <SignInPanel onSignedIn={onSignedIn} />}
+        {path === "invite" && <InvitePanel onActivated={onActivated} />}
+        {path === "signin" && <SignInPanel onSignedIn={onSignedIn} />}
+        {path === "phone" && <PhoneSignInPanel onSignedIn={onPaired} onUseKit={() => setPath("signin")} />}
       </div>
     </main>
   );

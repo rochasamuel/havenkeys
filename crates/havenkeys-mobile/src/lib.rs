@@ -24,6 +24,7 @@ mod identity_fill;
 mod items;
 mod key_file;
 mod onboarding;
+mod pairing;
 mod passkey_json;
 mod qr;
 mod save;
@@ -48,6 +49,7 @@ pub use items::{
 };
 pub use key_file::{CipherError, KeystoreCipher};
 pub use onboarding::{KitPreview, LumaFrame};
+pub use pairing::PairingRequestView;
 pub use save::{SaveLogin, SaveResult};
 pub use settings::MobileSettings;
 pub use vault::{LockState, MobileConfig, MobileVault, Status};

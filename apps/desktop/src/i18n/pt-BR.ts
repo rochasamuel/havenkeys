@@ -33,6 +33,9 @@ const codes: Record<ErrorCode, string | null> = {
   internal: "Algo deu errado. Tente novamente.",
   file: "Não foi possível ler ou excluir o arquivo.",
   sign_in_failed: "E-mail, senha mestra ou Secret Key incorretos.",
+  pairing_gone: "Este código expirou. Peça um novo no novo dispositivo.",
+  pairing_other_server: "Este código é de outro servidor.",
+  pairing_failed: "Não foi possível concluir a entrada. Peça um novo código.",
   // Names the folder the file is in, which only Rust knows.
   vault_unreadable: null,
   clipboard: "Não foi possível acessar a área de transferência.",
@@ -165,6 +168,8 @@ export const ptBR: Messages = {
       "Este computador foi removido, mas o HavenKeys não conseguiu excluir a Secret Key do chaveiro do sistema. Exclua você mesmo a entrada “app.havenkeys”.",
     signedOut:
       "O servidor não aceitou a conexão deste computador. Se a sua senha mestra foi alterada em outro dispositivo, bloqueie e desbloqueie com a nova.",
+    pairedAs: (email: string) =>
+      `Conectado como ${email}. Se esta não for a sua conta, remova este computador em Configurações → Conta.`,
   },
 
   welcome: {
@@ -186,6 +191,18 @@ export const ptBR: Messages = {
     createNote:
       "Sua senha mestra e sua Secret Key nunca saem deste computador. O servidor guarda apenas dados criptografados.",
     serverHint: "Do seu Emergency Kit.",
+    tabPhone: "Usar o celular",
+    subPhone: "Aprove este computador pelo HavenKeys no seu celular.",
+    phoneServer: "Seu servidor",
+    phoneShowCode: "Mostrar código",
+    phoneStarting: "Preparando…",
+    phoneScan: "No celular, abra o HavenKeys → Ajustes → Entrar em um novo dispositivo e escaneie este código.",
+    phoneQrLabel: "Código de entrada para o seu celular",
+    phoneExpiresIn: (s: number) => `Expira em ${s}s`,
+    phoneExpired: "Este código expirou.",
+    phoneNewCode: "Novo código",
+    phoneDenied: "A entrada foi recusada no seu celular.",
+    phoneUseKit: "Usar o Emergency Kit",
     emailPlaceholder: "voce@exemplo.com",
     secretKeyHint: "O código longo do seu Emergency Kit. Deixe em branco se este computador já o tiver.",
     signIn: "Entrar",
@@ -637,6 +654,7 @@ export const ptBR: Messages = {
     devicesOffline: "Seus dispositivos aparecem quando este computador está conectado ao servidor.",
     thisComputer: "Este computador",
     lastSeen: (when: string) => `Visto por último: ${when}`,
+    approvedBy: (name: string) => `Aprovado por ${name}`,
     confirmSignOutThis: "Desconectar este computador?",
     confirmSignOutOther: "Desconectá-lo e encerrar a sessão dele?",
     revoke: "Revogar",

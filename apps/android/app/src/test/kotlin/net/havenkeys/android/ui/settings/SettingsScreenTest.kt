@@ -53,7 +53,11 @@ class SettingsScreenTest {
                 Outcome.Ok(Unit)
             },
         )
-        val navigation = SettingsNavigation(onDevices = { done += "devices" }, onAutofillSetup = { done += "setup" })
+        val navigation = SettingsNavigation(
+            onDevices = { done += "devices" },
+            onAutofillSetup = { done += "setup" },
+            onPairing = { done += "pairing" },
+        )
         rule.setKit { SettingsScreen(vm, online, actions, navigation, PaddingValues()) }
     }
 

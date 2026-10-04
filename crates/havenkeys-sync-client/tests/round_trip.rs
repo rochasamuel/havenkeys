@@ -60,6 +60,7 @@ impl Server {
             server_secret: [5u8; 32],
             trust_forwarded_for: false,
             cors_origin: None,
+            locator: None,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

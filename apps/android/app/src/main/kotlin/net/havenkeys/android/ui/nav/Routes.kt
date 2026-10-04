@@ -22,6 +22,7 @@ object Routes {
     const val ITEM = "item/{$ITEM_ID}"
     const val GENERATOR = "generator"
     const val DEVICES = "devices"
+    const val PAIRING = "pairing"
     const val AUTOFILL_SETUP = "autofill-setup"
     const val EDIT = "edit/{$ITEM_ID}"
     const val KIND = "kind"

@@ -2929,3 +2929,244 @@ Nothing below ran on a phone or an emulator (AN50).
 | Final fixes: `./gradlew :app:testGithubDebugUnitTest`, three runs | 315 JVM unit tests, 0 failed, each run |
 | Final fixes: `./gradlew :app:detekt :app:forbidLogging :app:lintGithubDebug :app:assembleGithubDebug` | BUILD SUCCESSFUL |
 | Final fixes: `LoginFormFinderTest.thousandsOfInputsStayFast` with all 16 cores busy, 8 runs each (best of 5, ms) | Before: 47 22 45 53 43 46 31 41; after normalizing each field once: 20 31 33 35 27 29 31 30 |
+
+## Phone-approved sign-in (2026-10-04)
+
+**Scope:** branch `phone-approved-sign-in`: `crates/havenkeys-core/src/pairing.rs`
+and the vault service's sealing of the envelope; `crates/havenkeys-server`
+(`routes/pairings.rs`, `locate.rs`, `migrations/0002_pairings.sql`, limits);
+`havenkeys-sync-client` and `havenkeys-client` (pairing calls);
+`havenkeys-mobile` (`scan_pairing`, approve, deny); the desktop's
+`PhoneSignInPanel` and Tauri commands; the Android Settings entry, scanner
+and confirmation sheet. Design:
+`docs/superpowers/specs/2026-10-03-phone-approved-sign-in-design.md`;
+documentation: `threat-model.md` T13, `security-model.md` §23, `crypto.md`.
+**The Android part has not run on a phone or an emulator.** This is an
+internal review, not an independent audit.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| PA1 | Medium | whole feature | A deceived user who scans an attacker's code and taps Allow gives the attacker's device the vault | Accepted, documented |
+| PA2 | Critical (fixed) | server, `pairing.rs` | A malicious server could seal its own envelope to the desktop's public key; it is no longer sent the key. It can still lie about name and location | Fixed |
+| PA3 | Low | `pairings` table | A plaintext `token` waited in the row until claimed; the session is now issued at claim. Removal of rows stays lazy | Fixed (token); accepted (lazy removal) |
+| PA4 | Low | `locate.rs`, `create`, confirmation sheet | Requester-chosen name and GeoIP label can carry bidi/zero-width characters; country code unchecked | Open |
+| PA5 | Low | `create` | Rate-limit count and insert are not atomic | Open |
+| PA6 | Low | `/v1/pairings*` | No per-route body limit on unauthenticated routes | Open |
+| PA7 | Low | `approve`, `claim` | An unused session from a failed finish, or an approved-but-never-claimed device (no session), stays until expiry or revoke | Accepted |
+| PA8 | Info | Android deny | A failed deny call is ignored | Accepted |
+| PA9 | Low | `VaultService` session | The core session now holds the vault key while unlocked | Accepted |
+| PA10 | Info | `pairing.rs` | Envelope and payload parsers | Mitigated |
+| PA11 | Info | logging | Secret logging | Mitigated |
+| PA12 | Info | `claim` | Atomic single-use claim and 10-minute cut-off | Mitigated |
+| PA13 | Info | Android | Not run on a device | Open |
+| PA14 | Low | whole feature | Another account on the same server that sees the code can approve it first with its own vault | Accepted, mitigated in the UI |
+| PA15 | Medium (fixed) | `approve`, phone client | A code naming a revoked or other-account device id answered `401`, which signed the phone out | Fixed |
+
+### PA1. An attacker's code approved by a deceived user (Medium, accepted)
+**Component:** the feature as a whole; the Android confirmation sheet.
+**Scenario:** an attacker shows a QR code ("scan to verify your account")
+and the user taps Allow on the phone, past the name, IP and location line
+and the biometric prompt.
+**Mitigation:** the confirmation names the device and shows the IP and
+location the server saw; Allow needs biometrics or the device credential;
+the code lives 2 minutes and works once; the approved device appears in
+Devices as "Approved by <phone>" and can be revoked.
+**Remaining:** nothing in the protocol distinguishes a deceived user from
+a willing one. The device receives the vault key and Secret Key, so it can
+read and change the vault without the master password until revoked, and
+revoking cannot take back what it read. Documented in `threat-model.md` T13.
+
+### PA2. A malicious server (Critical, fixed)
+**Component:** server routes; `PairingLink`, `seal`.
+**Scenario:** the server swaps the desktop's public key, lies about the
+requester, or answers the desktop's claim as approved with an envelope of
+its own. HPKE base mode does not authenticate the sender, and the first
+version sent the desktop's public key to the server on create (stored in
+`pairings.public_key`, never used). A hostile server could therefore seal
+to it an envelope naming the user's account and email with a vault key K′
+of its choosing, plus a header attested with K′, and the desktop would
+accept it: the user would then save new secrets into a vault the server
+can open.
+**Fix (final review):** the public key is no longer sent: it is gone from
+the create body, the wire types, the route and the `pairings` table, and
+travels only in the QR code from the screen to the camera. Only a device
+that saw the screen can seal to it. The envelope's `info` binds server and
+pairing id, and the desktop refuses an envelope whose account or vault ids
+differ from the claim's. Tests: `an_envelope_sealed_to_another_key_creates_no_vault`,
+`an_envelope_for_another_account_than_the_claim_names_creates_no_vault`
+(`crates/havenkeys-client/tests/pairing.rs`); the server refuses a create
+body with `publicKey`. The server can still invent the name or location
+text shown on the phone (see PA4); that is harmless without the private
+key, but it can make a request look more or less trustworthy. It can also
+create requests of its own and answer a claim with a token of its choice
+and an envelope that does not open; the desktop then creates nothing.
+**Remaining:** the confirmation's text is only as honest as the server;
+someone other than the user who sees the screen can seal to the key
+(PA14).
+
+### PA3. `pairings.token` in plaintext until claimed (Low, fixed)
+**Component:** `pairings` table, `approve`, `claim`, `create`.
+**Scenario:** in the first version, approve issued the new device's session
+and kept the token in plaintext in `pairings.token` until the claim, so
+someone who could read the database while a pairing was approved and
+unclaimed read a live 24-hour session, and an approval never claimed left
+one behind.
+**Fix (final review):** approve only registers the device and stores the
+envelope; the session is issued inside the claim's transaction, under the
+row lock, so only the claim that consumes the approval gets one and the
+token is never stored in plaintext. The `token` and `token_expires_at`
+columns are gone. Test: `an_approval_never_claimed_has_no_session`
+(`crates/havenkeys-server/tests/pairings.rs`).
+**Remaining:** removal of old rows is lazy: an approved, unclaimed row keeps
+its envelope (ciphertext the server cannot open) until the next
+`POST /v1/pairings` by anyone; the claim refuses it after 10 minutes. A
+periodic task would close it.
+
+### PA4. Bidi and zero-width characters in what the phone shows (Low, open)
+**Component:** `clean_device_name`, `locate.rs::label`, the Android sheet.
+**Scenario:** the unauthenticated requester chooses `deviceName`; it may
+contain Unicode bidirectional or zero-width characters that reorder or
+hide text on the phone's security confirmation ("Desktop – Linux" can be
+made to read as something else). The GeoIP label from the database drops
+control characters but not format characters, and the country code is not
+checked to be two ASCII letters.
+**Mitigation:** length (64 characters) and control characters are limited;
+the IP is the server's own, not the requester's; Allow still needs
+biometrics.
+**Remaining:** a spoofing aid for PA1. Fix by rejecting Unicode format
+(`Cf`) and bidi characters in the name and label and requiring two ASCII
+letters for the country code.
+
+### PA5. Create rate limit is not atomic (Low, open)
+**Component:** `routes/pairings.rs::create`.
+**Scenario:** the per-IP count and the insert are separate statements, so
+parallel creates from one IP can pass the check together and exceed the 10
+and 3 caps.
+**Mitigation:** the overshoot is bounded by the number of concurrent
+requests and the global limits; each row is small and removed after 10
+minutes.
+**Remaining:** a small, bounded flood of rows from one source. A
+transaction with an advisory lock per IP would close it.
+
+### PA6. No per-route body limit on unauthenticated routes (Low, open)
+**Component:** `POST /v1/pairings`, `POST /v1/pairings/{id}/claim`.
+**Scenario:** an anonymous caller sends bodies up to the server's global
+limit.
+**Mitigation:** the global body limit applies; JSON bodies are parsed with
+unknown fields refused and every field length-checked; the limits on
+fields are enforced after parsing.
+**Remaining:** a tighter limit (about 1 KiB) on these two routes would cut
+the work an anonymous caller can cause.
+
+### PA7. Unused sessions and unclaimed devices (Low, accepted)
+**Component:** `approve`, `claim`, Devices.
+**Scenario:** if the desktop fails after the claim (header check fails, it
+crashes), the session token it received stays valid until it expires (24
+hours) or the device is revoked. A pairing that is approved but never
+claimed leaves a registered device in Devices, with no session (the session
+is issued only at claim, PA3).
+**Mitigation:** the token is in a 24-hour session only; the user can revoke
+the device in Devices ("Approved by <phone>"); a later claim for the same
+device replaces its earlier sessions.
+**Remaining:** a stray device until revoked, or a stray session until expiry
+or revoke. It cannot open the vault: only the envelope's recipient has the
+keys.
+
+### PA8. A failed deny is ignored (Info, accepted)
+**Component:** Android confirmation sheet.
+**Scenario:** the deny call fails (offline); the app does not retry or report it.
+**Mitigation:** the request expires in 120 seconds and nothing was sealed;
+the desktop shows an expired code.
+**Remaining:** the request stays approvable for up to two minutes by
+someone else who has a session on the account and the link.
+
+### PA9. The vault key in the unlocked session (Low, accepted)
+**Component:** `VaultService`, `crypto::keys::Key256`.
+**Scenario:** a memory read of the unlocked core process now finds the
+vault key as well as the data key.
+**Mitigation:** the same class of exposure as the data key, which already
+opens every item; the vault key is zeroized on lock, never returned by an
+API, never crosses Tauri, uniffi or Kotlin, and the envelope is sealed
+inside the core.
+**Remaining:** memory zeroization is best effort (`security-model.md` §8).
+
+### PA10. Envelope and payload parsers (Info, mitigated)
+**Component:** `PairingKeys::open`, `PairingPayload::decode`,
+`PairingLink::parse`.
+**Mitigation:** every length is checked before use; versions and suites are
+exact; trailing bytes are refused; errors do not say which check failed;
+`garbage_never_panics` (deterministic garbage over the link, envelope and
+payload parsers) and tampering tests pass.
+**Remaining:** no `cargo-fuzz` target exists for these three parsers (the
+spec asked for one); the deterministic tests are the substitute.
+
+### PA11. Secret logging (Info, mitigated)
+**Component:** server routes, core types, desktop and Android.
+**Mitigation:** the server logs only the outcome and ids; `PairingKeys`,
+`ClaimSecret` and `PairingPayload` print as `<redacted>` (test
+`nothing_secret_is_printed`); Android's `forbidLogging` check still runs
+with `detekt`. There is no dedicated `no_logging` test for the server's
+pairing routes.
+**Remaining:** none known.
+
+### PA12. Claim is atomic and single-use (Info, mitigated)
+**Component:** `claim`.
+**Mitigation:** one transaction under `FOR UPDATE`; the right secret gets
+the token once; rows older than 10 minutes are refused even if not yet
+deleted; wrong secrets count against the IP.
+**Remaining:** none known.
+
+### PA13. Not run on a device (Info, open)
+The Android scanner, the confirmation sheet, the biometric gate and the
+"no screen lock" path were checked by JVM unit tests only.
+
+### PA14. Another account approves a code it saw (Low, accepted)
+**Component:** the feature as a whole; the desktop after pairing.
+**Scenario:** on a server with several accounts, someone signed in to
+another account sees the desktop's QR code (a screen share, a shoulder),
+scans it and taps Allow first. Their phone seals their own vault to the
+key, and the desktop signs in to their account. The user's own vault is not
+exposed, but whatever the user then saves on that computer goes to the
+other account.
+**Mitigation:** the code lives 2 minutes and works once; the pairing is
+bound to the first account that reads it, so the user's own phone then
+gets "This code has expired"; after pairing, the desktop shows "Signed in
+as <email>. If that is not your account, remove this computer in Settings →
+Account." until dismissed or locked (`App.tsx`, `pairedAs`).
+**Remaining:** the user must read the email. Nothing in the protocol ties a
+code to one account before it is scanned, since the desktop does not know
+the account.
+
+### PA15. A refused device id signed the phone out (Medium, fixed)
+**Component:** `routes/pairings.rs::approve`, `havenkeys-client` pairing errors.
+**Scenario:** approve calls `register_device`, which answers `401` for a
+device id that was revoked or belongs to another account; the id is chosen
+by the unauthenticated requester. The phone's client treats `401` as a
+revoked session and signs out, so anyone could make a phone sign out by
+showing it a code naming such a device id.
+**Fix (final review):** approve maps that refusal, and a device approving
+its own id, to `400`; the phone shows `pairing_failed` for any refusal
+other than `404` (`pairing_gone`) and stays signed in. Tests:
+`a_revoked_device_id_cannot_be_approved_in` (server) and
+`a_code_whose_device_cannot_be_approved_fails_without_signing_the_phone_out`
+(client).
+
+### Tests relied on
+
+`cargo test -p havenkeys-core` (the `pairing` tests); `scripts/test-server.sh`
+(`crates/havenkeys-server/tests/pairings.rs`); `havenkeys-client`'s
+`tests/pairing.rs` and `havenkeys-mobile`'s `tests/round_trip.rs`; the
+desktop's vitest suite; Android's `:app:testGithubDebugUnitTest`.
+
+### Audits (2026-10-04, branch tip)
+
+| Command | Result |
+|---|---|
+| `cargo audit` | No vulnerabilities; 2 allowed warnings (`proc-macro-error` RUSTSEC-2024-0370 unmaintained, `glib` RUSTSEC-2024-0429 unsound), both through Tauri's Linux stack and unchanged |
+| `cargo deny check` | `advisories ok, bans ok, licenses ok, sources ok` (one unused ignore, RUSTSEC-2025-0100, is reported as matching no crate) |
+| `npm audit --omit=dev` in `apps/desktop` | Not possible: the workspace uses pnpm and has no `package-lock.json` (ENOLOCK) |
+| `pnpm audit --prod` in `apps/desktop` | No known vulnerabilities |
+
+New dependencies for this feature: `hpke` 0.14.1 (RustCrypto family, the
+envelope) and `maxminddb` 0.32.0 (the optional location database); both
+pass `cargo deny`.

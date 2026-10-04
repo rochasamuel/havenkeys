@@ -73,6 +73,7 @@ internal fun shellScreens(
             navigation = SettingsNavigation(
                 onDevices = { navController.pushOnce(Routes.DEVICES) },
                 onAutofillSetup = { navController.pushOnce(Routes.AUTOFILL_SETUP) },
+                onPairing = { navController.pushOnce(Routes.PAIRING) },
             ),
             contentPadding = padding,
         )

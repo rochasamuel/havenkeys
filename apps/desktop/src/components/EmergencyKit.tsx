@@ -7,7 +7,7 @@ import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
 /** The QR code as one SVG path (one square per dark module). */
-function QrCode({ size, modules }: { size: number; modules: boolean[] }) {
+export function QrCode({ size, modules, label, className }: { size: number; modules: boolean[]; label?: string; className?: string }) {
   const { t } = useI18n();
   const d = useMemo(() => {
     const parts: string[] = [];
@@ -18,7 +18,7 @@ function QrCode({ size, modules }: { size: number; modules: boolean[] }) {
   }, [size, modules]);
   const box = size + 8; // 4-module quiet zone on each side
   return (
-    <svg className="kit-qr" viewBox={`0 0 ${box} ${box}`} role="img" aria-label={t.kit.qrLabel} shapeRendering="crispEdges">
+    <svg className={className ?? "kit-qr"} viewBox={`0 0 ${box} ${box}`} role="img" aria-label={label ?? t.kit.qrLabel} shapeRendering="crispEdges">
       <rect width={box} height={box} fill="#fff" />
       <path d={d} fill="#000" />
     </svg>

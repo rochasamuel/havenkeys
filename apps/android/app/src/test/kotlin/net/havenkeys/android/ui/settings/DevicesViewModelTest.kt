@@ -22,8 +22,8 @@ class DevicesViewModelTest {
 
     @After fun reset() = Dispatchers.resetMain()
 
-    private val phone = DeviceInfo("1", "Pixel", "2026-09-01T10:00:00Z", null, true)
-    private val laptop = DeviceInfo("2", "Laptop", "2026-08-01T10:00:00Z", "2026-09-30T10:00:00Z", false)
+    private val phone = DeviceInfo("1", "Pixel", "2026-09-01T10:00:00Z", null, true, null)
+    private val laptop = DeviceInfo("2", "Laptop", "2026-08-01T10:00:00Z", "2026-09-30T10:00:00Z", false, null)
     private val accounts = FakeAccountRepository().apply { deviceList = Outcome.Ok(listOf(phone, laptop)) }
     private val events = VaultEventsHub()
 

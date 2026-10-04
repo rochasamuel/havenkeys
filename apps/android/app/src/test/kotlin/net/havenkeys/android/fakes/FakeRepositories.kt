@@ -22,6 +22,7 @@ import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LockState
 import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileSettings
+import uniffi.havenkeys_mobile.PairingRequestView
 import uniffi.havenkeys_mobile.PasskeyCreatePlan
 import uniffi.havenkeys_mobile.PasskeyOffer
 import uniffi.havenkeys_mobile.CardChoices
@@ -213,9 +214,33 @@ class FakeAccountRepository : AccountRepository {
     var done: Outcome<Unit> = Outcome.Ok(Unit)
     val calls = mutableListOf<String>()
     val freshCalls = mutableListOf<Boolean>()
+    var scannedLink: Outcome<String?> = Outcome.Ok(null)
+    var request: Outcome<PairingRequestView> = Outcome.Failed("pairing_gone")
+    val approved = mutableListOf<String>()
+    val denied = mutableListOf<String>()
+    var approveResult: Outcome<Unit> = Outcome.Ok(Unit)
 
     /** When set, syncNow suspends until it completes. */
     var syncGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    override suspend fun scanPairing(frame: LumaFrame) = scannedLink
+
+    var requestCalls = 0
+
+    override suspend fun pairingRequest(link: String): Outcome<PairingRequestView> {
+        requestCalls++
+        return request
+    }
+
+    override suspend fun approvePairing(link: String): Outcome<Unit> {
+        approved += link
+        return approveResult
+    }
+
+    override suspend fun denyPairing(link: String): Outcome<Unit> {
+        denied += link
+        return Outcome.Ok(Unit)
+    }
 
     override suspend fun scanKit(frame: LumaFrame): Outcome<KitPreview?> {
         calls += "scanKit"

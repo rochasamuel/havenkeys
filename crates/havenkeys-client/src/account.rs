@@ -20,7 +20,9 @@ use havenkeys_core::vault::{
     self, prepare_new_account_vault, PreparedVault, VaultService, VaultStatus,
 };
 use havenkeys_core::SecretString;
-use havenkeys_sync_client::{invite as invite_parser, Activation, CredentialChange, SyncError};
+use havenkeys_sync_client::{
+    invite as invite_parser, Activation, CredentialChange, Session, SyncError,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -64,6 +66,7 @@ pub struct DeviceEntry {
     pub created_at: String,
     pub last_seen_at: Option<String>,
     pub current: bool,
+    pub approved_by: Option<Uuid>,
 }
 
 /// The values of the HavenKeys Account item, pinned first in the vault list.
@@ -280,11 +283,18 @@ impl HavenClient {
         self.device()?
             .set_secret_key(account.id, &secret_key)
             .map_err(|_| ClientError::file())?;
-        // The keychain can hold this up for seconds (a prompt), long enough
-        // for the new vault to auto-lock. As in `connect`, a lock wins: the
-        // session is dropped unused. The vault exists by then, so the sign-in
-        // still succeeded; it reports the locked status and is unlocked as
-        // usual.
+        self.go_online_after_sign_in(session)
+    }
+
+    /// The new vault exists and is open: go online with `session` and catch
+    /// up in the background. The keychain can hold the caller up for seconds
+    /// (a prompt), long enough for the new vault to auto-lock. As in
+    /// `connect`, a lock wins: the session is dropped unused and the locked
+    /// status is reported.
+    pub(crate) fn go_online_after_sign_in(
+        self: &Arc<Self>,
+        session: Session,
+    ) -> ClientResult<VaultStatus> {
         let (status, online) = {
             let vault = self.vault()?;
             let online = vault.is_unlocked();
@@ -670,6 +680,7 @@ impl HavenClient {
                 created_at: d.created_at,
                 last_seen_at: d.last_seen_at,
                 current: d.current,
+                approved_by: d.approved_by,
             })
             .collect())
     }
@@ -709,7 +720,7 @@ impl HavenClient {
 }
 
 /// This device's record of a newly joined account, before its first sync.
-fn new_account_record(
+pub(crate) fn new_account_record(
     account: &AccountRef,
     server_url: String,
     max_header_rev: i64,

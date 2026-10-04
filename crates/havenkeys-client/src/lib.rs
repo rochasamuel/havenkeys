@@ -15,6 +15,7 @@ mod error;
 mod events;
 pub mod key_store;
 pub mod kit;
+mod pairing;
 mod removal;
 #[cfg(test)]
 mod stub_server;
@@ -26,6 +27,7 @@ pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
 pub use client::{ClientConfig, HavenClient, RETRY_INTERVAL};
 pub use error::{ClientError, ClientResult};
 pub use events::ClientEvents;
+pub use pairing::{PairingPoll, PairingRequest, PairingStart};
 pub use sync::PULL_INTERVAL;
 
 /// Wall-clock time in Unix milliseconds.
