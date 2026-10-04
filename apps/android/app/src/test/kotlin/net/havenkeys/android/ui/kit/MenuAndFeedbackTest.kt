@@ -13,10 +13,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertRangeInfoEquals
 import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -26,6 +29,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -133,6 +137,25 @@ class MenuAndFeedbackTest {
         refreshing = false
         rule.waitForIdle()
         rule.onNodeWithTag("list").assertTopPositionInRootIsEqualTo(0.dp)
+    }
+
+    @Test
+    fun theRingGoesTheMomentTheRefreshEnds() {
+        var refreshing by mutableStateOf(false)
+        rule.setKit { PullToRefresh(refreshing = refreshing, onRefresh = { refreshing = true }) { Rows() } }
+        rule.onNodeWithTag("list").performTouchInput { swipeDown(startY = top + 10f, endY = bottom - 10f) }
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("Refreshing").assertExists()
+        // While the content is still settling back, the ring is already gone.
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { refreshing = false }
+        // A few frames for the change to land; the content takes about forty to settle back.
+        repeat(4) {
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        assertTrue(rule.onNodeWithTag("list").getUnclippedBoundsInRoot().top > 0.dp)
+        rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)).assertCountEquals(0)
     }
 
     @Test

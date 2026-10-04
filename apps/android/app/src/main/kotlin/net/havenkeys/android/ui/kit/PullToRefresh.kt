@@ -84,13 +84,19 @@ fun PullToRefresh(
             },
     ) {
         Box(Modifier.graphicsLayer { translationY = state.pull }) { content() }
-        if (refreshing || state.pull > 0f) {
+        // The ring goes the moment the refresh ends (or the finger lets go short of the
+        // threshold), not when the content has finished settling back: the spring's tail
+        // keeps the pull a hair above 0 for a while, which left the ring over the first row.
+        if (refreshing || (!state.released && state.pull > 0f)) {
             ProgressRing(
                 progress = if (refreshing) null else (state.pull / state.threshold).coerceIn(0f, 1f),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .graphicsLayer {
-                        translationY = (maxOf(state.pull, if (refreshing) state.hold else 0f) - size.height) / 2
+                        val gap = maxOf(state.pull, if (refreshing) state.hold else 0f)
+                        translationY = (gap - size.height) / 2
+                        // Only as visible as the gap is tall, so it never sits over the content.
+                        alpha = (gap / size.height).coerceIn(0f, 1f)
                     },
                 contentDescription = if (refreshing) refreshingLabel else null,
             )
