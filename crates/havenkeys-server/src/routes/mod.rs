@@ -16,6 +16,7 @@ pub mod auth;
 pub mod devices;
 pub mod health;
 pub mod items;
+pub mod pairings;
 pub mod sync;
 pub mod vault;
 
@@ -32,6 +33,9 @@ pub struct AppState {
     /// app is not a browser, so the default is that no web page may call this
     /// API at all (design §7.6).
     pub cors_origin: Option<String>,
+    /// Turns a client address into a coarse place name for the pairing
+    /// prompt; none when no location database is configured.
+    pub locator: Option<std::sync::Arc<crate::locate::Locator>>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -49,6 +53,11 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/items/fetch", post(items::fetch))
         .route("/v1/devices", get(devices::list))
         .route("/v1/devices/{id}", delete(devices::revoke))
+        .route("/v1/pairings", post(pairings::create))
+        .route("/v1/pairings/{id}", get(pairings::details))
+        .route("/v1/pairings/{id}/approve", post(pairings::approve))
+        .route("/v1/pairings/{id}/deny", post(pairings::deny))
+        .route("/v1/pairings/{id}/claim", post(pairings::claim))
         // Checked before the body is read, so an oversized request never
         // reaches serde and never allocates. Both layers are needed: the
         // tower layer stops a declared oversize immediately, and axum's own

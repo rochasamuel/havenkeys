@@ -14,7 +14,6 @@ use crate::routes::AppState;
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode};
 use data_encoding::BASE64;
-use deadpool_postgres::Object;
 use hkdf::Hkdf;
 use serde::Deserialize;
 use sha2::Sha256;
@@ -194,8 +193,8 @@ pub async fn logout(
 
 /// Insert the device if it is new, refuse it if it belongs to someone else or
 /// has been revoked, and keep the account under its device ceiling.
-async fn register_device(
-    db: &Object,
+pub(crate) async fn register_device(
+    db: &impl deadpool_postgres::GenericClient,
     account_id: Uuid,
     device_id: Uuid,
     name: &str,
@@ -245,7 +244,7 @@ async fn register_device(
 
 /// A label the user chose. Control characters would end up in the device list
 /// and in logs, so they are refused rather than stripped.
-fn clean_device_name(raw: &str) -> Result<String, ApiError> {
+pub(crate) fn clean_device_name(raw: &str) -> Result<String, ApiError> {
     const BAD: ApiError = ApiError::InvalidRequest("deviceName is not valid");
     let name = raw.trim();
     if name.is_empty() || name.chars().count() > MAX_DEVICE_NAME_CHARS {

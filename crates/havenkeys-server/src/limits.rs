@@ -34,3 +34,18 @@ pub const MAX_DEVICE_NAME_CHARS: usize = 64;
 /// answer stays under the client's 17 MiB cap. A page always holds at
 /// least one whole revision, which `MAX_BODY_BYTES` already bounds.
 pub const MAX_PAGE_BYTES: usize = 12 * 1024 * 1024;
+
+/// A pairing's QR code is good for this long.
+pub const PAIRING_TTL_SECONDS: f64 = 120.0;
+
+/// Every pairing older than this is deleted when a new one is created.
+pub const PAIRING_MAX_AGE_MINUTES: i32 = 10;
+
+/// Pairings one address may create in `PAIRING_MAX_AGE_MINUTES`.
+pub const PAIRINGS_PER_IP: i64 = 10;
+
+/// Pairings one address may have waiting at once.
+pub const PENDING_PAIRINGS_PER_IP: i64 = 3;
+
+/// The largest envelope an approving device may send.
+pub const MAX_PAIRING_ENVELOPE_BYTES: usize = 4096;
