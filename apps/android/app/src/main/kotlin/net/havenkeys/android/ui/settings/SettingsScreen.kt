@@ -177,6 +177,11 @@ private fun AccountGroup(email: String?, online: Boolean, navigation: SettingsNa
     InsetGroup {
         if (email != null) row { GroupRow { GroupRowText(stringResource(R.string.settings_signed_in_as), email) } }
         row { GroupRow(onClick = navigation.onDevices) { GroupRowText(stringResource(R.string.settings_devices)) } }
+        row {
+            GroupRow(onClick = navigation.onPairing) {
+                GroupRowText(stringResource(R.string.settings_pairing), offline)
+            }
+        }
         // Offline, signing out still locks; only the server's session end waits.
         row {
             GroupRow(onClick = { open.dialog(SettingsDialog.SIGN_OUT) }) {

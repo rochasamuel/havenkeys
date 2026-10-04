@@ -147,7 +147,7 @@ class ShellScreenshots {
                         },
                         online = false,
                         actions = SettingsActions(true, {}, { Outcome.Ok(Unit) }),
-                        navigation = SettingsNavigation({}, {}),
+                        navigation = SettingsNavigation({}, {}, {}),
                         contentPadding = p,
                     )
                 },

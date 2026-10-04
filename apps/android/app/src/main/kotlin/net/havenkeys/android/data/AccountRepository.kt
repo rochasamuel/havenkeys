@@ -4,6 +4,7 @@ import uniffi.havenkeys_mobile.DeviceInfo
 import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileVault
+import uniffi.havenkeys_mobile.PairingRequestView
 import uniffi.havenkeys_mobile.Status
 
 interface AccountRepository {
@@ -19,10 +20,28 @@ interface AccountRepository {
     suspend fun revoke(id: String): Outcome<Unit>
     suspend fun signOut(): Outcome<Unit>
     suspend fun removeDevice(confirmation: String): Outcome<Unit>
+
+    /** A `havenkeys://pair/v1` link in [frame], or null; the frame's pixels are wiped after. */
+    suspend fun scanPairing(frame: LumaFrame): Outcome<String?>
+    suspend fun pairingRequest(link: String): Outcome<PairingRequestView>
+
+    /** Call only after the user passed the biometric check. */
+    suspend fun approvePairing(link: String): Outcome<Unit>
+    suspend fun denyPairing(link: String): Outcome<Unit>
 }
 
 class RustAccountRepository(private val vault: MobileVault) : AccountRepository {
     override suspend fun scanKit(frame: LumaFrame) = rust { vault.scanKit(frame) }
+    override suspend fun scanPairing(frame: LumaFrame) = rust {
+        try {
+            vault.scanPairing(frame)
+        } finally {
+            frame.bytes.fill(0)
+        }
+    }
+    override suspend fun pairingRequest(link: String) = rust { vault.pairingRequest(link) }
+    override suspend fun approvePairing(link: String) = rust { vault.approvePairing(link) }
+    override suspend fun denyPairing(link: String) = rust { vault.denyPairing(link) }
     override fun forgetKit() = vault.forgetKit()
     override suspend fun signInWithKit(password: String) = rust { vault.signInWithKit(password) }
     override suspend fun signIn(server: String, email: String, password: String, secretKey: String) =

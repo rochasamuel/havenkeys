@@ -79,6 +79,7 @@ class HavenNavHostTest {
             )
         },
         settingsActions = { SettingsActions(false, {}, { Outcome.Ok(Unit) }) },
+        verifyUser = { _, _ -> true },
     )
 
     private fun text(id: Int) = RuntimeEnvironment.getApplication().getString(id)

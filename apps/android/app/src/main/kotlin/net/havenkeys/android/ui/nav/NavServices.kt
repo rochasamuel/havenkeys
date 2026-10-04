@@ -32,6 +32,7 @@ internal class NavServices(
     val hasBiometricUnlock: () -> Boolean,
     val unlockScreen: @Composable (onUnlocked: () -> Unit) -> Unit,
     val settingsActions: @Composable () -> SettingsActions,
+    val verifyUser: suspend (title: String, subtitle: String) -> Boolean,
 )
 
 @Composable
@@ -60,5 +61,9 @@ internal fun rememberNavServices(container: AppContainer, activity: FragmentActi
                 )
             },
             settingsActions = { rememberSettingsActions(container, activity) },
+            verifyUser = { title, subtitle ->
+                container.biometricGate.canVerifyUser(activity) &&
+                    container.biometricGate.verifyUser(activity, title, subtitle)
+            },
         )
     }

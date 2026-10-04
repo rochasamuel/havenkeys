@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -26,6 +27,7 @@ import androidx.navigation.navArgument
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.havenkeys.android.AppContainer
+import net.havenkeys.android.R
 import net.havenkeys.android.ui.autofillsetup.AutofillSetupScreen
 import net.havenkeys.android.ui.edit.EditNavigation
 import net.havenkeys.android.ui.edit.EditScreen
@@ -40,6 +42,8 @@ import net.havenkeys.android.ui.onboarding.OnboardingScreen
 import net.havenkeys.android.ui.onboarding.OnboardingViewModel
 import net.havenkeys.android.ui.search.SearchScreen
 import net.havenkeys.android.ui.search.SearchViewModel
+import net.havenkeys.android.ui.pairing.PairingScreen
+import net.havenkeys.android.ui.pairing.PairingViewModel
 import net.havenkeys.android.ui.settings.DevicesScreen
 import net.havenkeys.android.ui.settings.DevicesViewModel
 import net.havenkeys.android.ui.shell.OpenItem
@@ -293,6 +297,17 @@ private fun NavGraphBuilder.toolScreens(nav: Nav) {
         DevicesScreen(
             viewModel = viewModel { DevicesViewModel(services.accounts, services.events) },
             online = online,
+            onBack = nav.back,
+            onLock = nav.lock,
+        )
+    }
+    composable(Routes.PAIRING) {
+        val online by services.events.online.collectAsStateWithLifecycle()
+        val title = stringResource(R.string.pairing_verify_title)
+        PairingScreen(
+            viewModel = viewModel { PairingViewModel(services.accounts) },
+            online = online,
+            verifyUser = { _, subtitle -> services.verifyUser(title, subtitle) },
             onBack = nav.back,
             onLock = nav.lock,
         )

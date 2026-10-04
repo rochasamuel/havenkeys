@@ -358,4 +358,22 @@
     <string name="hidden_value">Hidden</string>
     <!-- What TalkBack hears for a device's Revoke button: the device's name -->
     <string name="devices_revoke_named">Revoke %1$s</string>
+    <string name="settings_pairing">Sign in a new device</string>
+    <string name="pairing_title">Sign in a new device</string>
+    <string name="pairing_scan_sub">On the new computer, choose “Use your phone” and scan the code it shows.</string>
+    <string name="pairing_camera_needed">Allow the camera to scan the new device’s code.</string>
+    <string name="pairing_camera_unavailable">The camera could not be opened.</string>
+    <string name="pairing_confirm_title">Sign in a new device?</string>
+    <string name="pairing_confirm_where">%1$s · %2$s</string>
+    <string name="pairing_confirm_warning">Allow only a device you are using right now. It will be able to open your whole vault.</string>
+    <string name="pairing_allow">Allow</string>
+    <string name="pairing_deny">Deny</string>
+    <string name="pairing_verify_title">Approve the new device</string>
+    <string name="pairing_done">The new device is signed in.</string>
+    <string name="pairing_denied">The sign-in was denied.</string>
+    <string name="pairing_finish">Done</string>
+    <string name="error_pairing_gone">This code has expired. Ask the new device for a new one.</string>
+    <string name="error_pairing_other_server">This code is for another server.</string>
+    <string name="error_pairing_failed">The sign-in could not be completed. Ask for a new code.</string>
+    <string name="devices_approved_by">Approved by %1$s</string>
 </resources>

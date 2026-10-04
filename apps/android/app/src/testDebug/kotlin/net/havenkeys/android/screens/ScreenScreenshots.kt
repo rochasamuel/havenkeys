@@ -170,8 +170,8 @@ class ScreenScreenshots {
     private val accounts = FakeAccountRepository().apply {
         deviceList = Outcome.Ok(
             listOf(
-                DeviceInfo("d1", "Pixel 8", "2026-01-01T00:00:00Z", null, true),
-                DeviceInfo("d2", "Work laptop", "2026-01-01T00:00:00Z", "2026-10-03T10:00:00Z", false),
+                DeviceInfo("d1", "Pixel 8", "2026-01-01T00:00:00Z", null, true, null),
+                DeviceInfo("d2", "Work laptop", "2026-01-01T00:00:00Z", "2026-10-03T10:00:00Z", false, "d1"),
             ),
         )
     }

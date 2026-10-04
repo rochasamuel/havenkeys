@@ -346,4 +346,22 @@
     <string name="hidden_value">Oculto</string>
     <!-- What TalkBack hears for a device's Revoke button: the device's name -->
     <string name="devices_revoke_named">Revogar %1$s</string>
+    <string name="settings_pairing">Entrar em um novo dispositivo</string>
+    <string name="pairing_title">Entrar em um novo dispositivo</string>
+    <string name="pairing_scan_sub">No novo computador, escolha “Usar o celular” e escaneie o código que ele mostra.</string>
+    <string name="pairing_camera_needed">Permita o uso da câmera para escanear o código do novo dispositivo.</string>
+    <string name="pairing_camera_unavailable">Não foi possível abrir a câmera.</string>
+    <string name="pairing_confirm_title">Entrar em um novo dispositivo?</string>
+    <string name="pairing_confirm_where">%1$s · %2$s</string>
+    <string name="pairing_confirm_warning">Permita só um dispositivo que você está usando agora. Ele poderá abrir todo o seu cofre.</string>
+    <string name="pairing_allow">Permitir</string>
+    <string name="pairing_deny">Recusar</string>
+    <string name="pairing_verify_title">Aprovar o novo dispositivo</string>
+    <string name="pairing_done">O novo dispositivo entrou.</string>
+    <string name="pairing_denied">A entrada foi recusada.</string>
+    <string name="pairing_finish">Concluir</string>
+    <string name="error_pairing_gone">Este código expirou. Peça um novo no novo dispositivo.</string>
+    <string name="error_pairing_other_server">Este código é de outro servidor.</string>
+    <string name="error_pairing_failed">Não foi possível concluir a entrada. Peça um novo código.</string>
+    <string name="devices_approved_by">Aprovado por %1$s</string>
 </resources>

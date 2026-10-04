@@ -26,12 +26,14 @@ import net.havenkeys.android.ui.kit.GroupRowText
 import net.havenkeys.android.ui.kit.HavenButton
 import net.havenkeys.android.ui.kit.HavenDialog
 import net.havenkeys.android.ui.kit.HavenScaffold
+import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.Pill
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.shell.LargeTitle
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
+import net.havenkeys.android.ui.theme.HavenTheme
 import uniffi.havenkeys_mobile.DeviceInfo
 
 /** The account's devices, this one marked; Revoke ends a device's session on the server. */
@@ -60,7 +62,10 @@ fun DevicesScreen(
             if (state.devices.isEmpty() && !state.loading && state.errorCode == null) {
                 item(key = "empty") { EmptyLine(stringResource(R.string.devices_empty), gutter) }
             }
-            insetGroup(state.devices, key = { it.id }) { device -> DeviceRow(device, onRevoke = { revoking = device }) }
+            insetGroup(state.devices, key = { it.id }) { device ->
+                val approver = state.devices.firstOrNull { it.id == device.approvedBy }
+                DeviceRow(device, approver?.name, onRevoke = { revoking = device })
+            }
         }
     }
 
@@ -86,7 +91,7 @@ fun DevicesScreen(
 }
 
 @Composable
-private fun DeviceRow(device: DeviceInfo, onRevoke: () -> Unit) {
+private fun DeviceRow(device: DeviceInfo, approvedBy: String?, onRevoke: () -> Unit) {
     val seen = device.lastSeenAt?.let(::relativeTime)
     GroupRow(
         trailing = {
@@ -109,12 +114,19 @@ private fun DeviceRow(device: DeviceInfo, onRevoke: () -> Unit) {
                 stringResource(R.string.devices_never_seen)
             },
         )
+        if (approvedBy != null) {
+            HavenText(
+                stringResource(R.string.devices_approved_by, approvedBy),
+                style = HavenTheme.type.rowSubtitle,
+                color = HavenTheme.colors.muted,
+            )
+        }
     }
 }
 
 /** "5 minutes ago" in the phone's language; the server's text as is if it is not RFC 3339. */
 @Suppress("SwallowedException")
-private fun relativeTime(rfc3339: String): String = try {
+internal fun relativeTime(rfc3339: String): String = try {
     val millis = OffsetDateTime.parse(rfc3339).toInstant().toEpochMilli()
     DateUtils.getRelativeTimeSpanString(millis, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
 } catch (e: DateTimeParseException) {
