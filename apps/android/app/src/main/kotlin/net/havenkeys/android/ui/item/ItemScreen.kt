@@ -27,15 +27,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.havenkeys.android.R
 import net.havenkeys.android.clipboard.SensitiveClipboard
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.ui.components.ScreenBar
 import net.havenkeys.android.ui.components.errorText
+import net.havenkeys.android.ui.kit.CopyButton
 import net.havenkeys.android.ui.kit.DialogAction
+import net.havenkeys.android.ui.kit.GroupRow
+import net.havenkeys.android.ui.kit.GroupRowField
 import net.havenkeys.android.ui.kit.HavenDialog
 import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.HavenIconButton
@@ -214,6 +219,14 @@ private class FieldActions(
         }
     }
 
+    /** Asks Rust for one plain field and hands it to [show]; a stop cancels the answer. */
+    fun load(key: String, show: (String) -> Unit): Job = scope.launch {
+        when (val r = viewModel.reveal(key)) {
+            is Outcome.Ok -> show(r.value)
+            is Outcome.Failed -> fail(r.code)
+        }
+    }
+
     fun copyField(key: String, label: String) {
         scope.launch {
             when (val r = viewModel.reveal(key)) {
@@ -253,6 +266,7 @@ private fun FieldRow(field: ViewField, actions: FieldActions) {
     when {
         field.kind == FieldKind.TOTP -> CodeField(label, actions)
         shown != null -> ShownRow(label, shown, onCopy = { actions.copyShown(label, shown) })
+        field.kind == FieldKind.TEXT -> OpenRow(field.key, label, actions)
         else -> {
             val reveal = rememberRevealState()
             SecretRow(
@@ -262,6 +276,27 @@ private fun FieldRow(field: ViewField, actions: FieldActions) {
                 onCopy = { actions.copyField(field.key, label) },
             )
         }
+    }
+}
+
+/**
+ * A plain field whose value Rust gives one at a time (an identity's name, a
+ * card's holder, a secure note's body): asked for as the row appears and
+ * shown as on the desktop, with no eye. Like a revealed value it lives only
+ * in this composition, and it is dropped when the app stops or the row leaves.
+ */
+@Composable
+private fun OpenRow(key: String, label: String, actions: FieldActions) {
+    var value by remember(key) { mutableStateOf<String?>(null) }
+    LifecycleStartEffect(key, actions) {
+        val job = actions.load(key) { value = it }
+        onStopOrDispose {
+            job.cancel()
+            value = null
+        }
+    }
+    GroupRow(trailing = { CopyButton(label, onCopy = { actions.copyField(key, label) }) }) {
+        GroupRowField(label, value.orEmpty())
     }
 }
 

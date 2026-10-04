@@ -429,6 +429,13 @@ Android's recommended app architecture
 * Repositories and ViewModel state expose overviews only.
 * A revealed value lives in the `remember`ed state of the composable showing
   it and is cleared when it leaves the screen, after 30 seconds, or on lock.
+* Amended on 2026-10-03: as on the desktop, the fields Rust marks plain text
+  (an identity's non-document fields, a card's holder and expiry, a secure
+  note's body, a login's plain custom fields) are shown when the item opens,
+  with no eye. Each is still asked of Rust one field at a time, held only by
+  its row, and dropped when the app stops or the row leaves; it has no 30
+  second timer. Passwords, card numbers and codes, documents, and a login's
+  or card's notes stay behind the eye.
 * Never in ViewModel state, navigation arguments, `SavedStateHandle`, logs
   or exceptions.
 * The lock event from Rust is a `StateFlow` every ViewModel observes: it

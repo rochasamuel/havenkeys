@@ -256,9 +256,9 @@ impl MobileVault {
                     fields.push(field("notes", "notes", FieldKind::Secret, None));
                 }
             }
-            ItemType::SecureNote => {
-                fields.push(field("content", "content", FieldKind::Secret, None))
-            }
+            // The body is shown as the note opens, as on the desktop; the
+            // screen still asks for it with `reveal`, so the view carries none.
+            ItemType::SecureNote => fields.push(field("content", "content", FieldKind::Text, None)),
             ItemType::Card => {
                 for (key, kind) in [
                     ("card.holder", FieldKind::Text),
@@ -632,6 +632,9 @@ mod tests {
         );
         let view = v.item_view(note_id).unwrap();
         assert!(view.fields.iter().all(|f| f.value.is_none()));
+        // Shown as the note opens (no eye), but still asked for with `reveal`.
+        let content = view.fields.iter().find(|f| f.key == "content").unwrap();
+        assert!(matches!(content.kind, FieldKind::Text));
     }
 
     #[test]
