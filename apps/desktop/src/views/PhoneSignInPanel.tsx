@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { api } from "../lib/api";
-import { nextStep, secondsLeft } from "../lib/pairing";
+import { api, ApiError } from "../lib/api";
+import { isTerminalPollError, nextStep, PAIRING_SECONDS, secondsLeft } from "../lib/pairing";
 import type { PairingCode, VaultStatus } from "../lib/types";
 import { QrCode } from "../components/EmergencyKit";
 import { useI18n } from "../i18n/context";
@@ -10,9 +10,12 @@ const POLL_MS = 2000;
 
 type Phase =
   | { kind: "server" }
-  | { kind: "code"; code: PairingCode }
+  /** `deadline`: Unix ms on this computer's clock, never the server's. */
+  | { kind: "code"; code: PairingCode; deadline: number }
   | { kind: "expired" }
-  | { kind: "denied" };
+  | { kind: "denied" }
+  /** Ended by Rust (pairing_failed, pairing_gone); `message` is the first one. */
+  | { kind: "failed"; message: string };
 
 /** The server, then the code, then the outcome. Keys never reach React. */
 export function PhoneSignInPanel({
@@ -39,9 +42,19 @@ export function PhoneSignInPanel({
 
   useEffect(() => {
     if (phase.kind !== "code") return;
+    const { deadline } = phase;
     const tick = setInterval(() => setNow(Date.now()), 1000);
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
+    // The next poll, at most at the deadline: the last one runs at 0, so an
+    // approval made in the final seconds still arrives. False once that last
+    // poll has answered.
+    const next = () => {
+      const wait = deadline - Date.now();
+      if (wait <= 0) return false;
+      timer = setTimeout(poll, Math.min(POLL_MS, wait));
+      return true;
+    };
     const poll = async () => {
       try {
         const answer = await api.pairingPoll();
@@ -52,17 +65,26 @@ export function PhoneSignInPanel({
           return;
         }
         if (stopped) return;
+        setError(null);
         const step = nextStep(answer.state);
         if (step === "denied") setPhase({ kind: "denied" });
-        else if (step === "expired") setPhase({ kind: "expired" });
-        else timer = setTimeout(poll, POLL_MS);
+        else if (step === "expired" || !next()) setPhase({ kind: "expired" });
       } catch (err) {
         if (stopped) return;
-        setError(errorMessage(err, t, t.welcome.signInFailed));
-        timer = setTimeout(poll, POLL_MS);
+        const message = errorMessage(err, t, t.welcome.signInFailed);
+        // Rust has ended the pairing: polling again could only replace this
+        // message with a less accurate one.
+        if (err instanceof ApiError && isTerminalPollError(err.code)) {
+          setError(null);
+          setPhase({ kind: "failed", message });
+          return;
+        }
+        // Offline or no answer: keep trying until the deadline.
+        setError(message);
+        if (!next()) setPhase({ kind: "expired" });
       }
     };
-    timer = setTimeout(poll, POLL_MS);
+    next();
     return () => {
       stopped = true;
       clearInterval(tick);
@@ -71,10 +93,7 @@ export function PhoneSignInPanel({
     // `t` is left out: a language change must not restart the pairing.
   }, [phase]);
 
-  const left = phase.kind === "code" ? secondsLeft(phase.code.expiresAt, now) : 0;
-  useEffect(() => {
-    if (phase.kind === "code" && left === 0) setPhase({ kind: "expired" });
-  }, [phase, left]);
+  const left = phase.kind === "code" ? secondsLeft(phase.deadline, now) : 0;
 
   async function start(e?: FormEvent) {
     e?.preventDefault();
@@ -83,8 +102,9 @@ export function PhoneSignInPanel({
     setError(null);
     try {
       const code = await api.pairingStart(server);
-      setNow(Date.now());
-      setPhase({ kind: "code", code });
+      const at = Date.now();
+      setNow(at);
+      setPhase({ kind: "code", code, deadline: at + PAIRING_SECONDS * 1000 });
     } catch (err) {
       setError(errorMessage(err, t, t.welcome.signInFailed));
     } finally {
@@ -133,9 +153,15 @@ export function PhoneSignInPanel({
         </div>
       )}
 
-      {(phase.kind === "expired" || phase.kind === "denied") && (
+      {(phase.kind === "expired" || phase.kind === "denied" || phase.kind === "failed") && (
         <div className="pair-code">
-          <p role="alert">{phase.kind === "expired" ? t.welcome.phoneExpired : t.welcome.phoneDenied}</p>
+          <p role="alert">
+            {phase.kind === "expired"
+              ? t.welcome.phoneExpired
+              : phase.kind === "denied"
+                ? t.welcome.phoneDenied
+                : phase.message}
+          </p>
           <button className="btn btn-primary" type="button" onClick={() => void start()} disabled={busy}>
             {t.welcome.phoneNewCode}
           </button>

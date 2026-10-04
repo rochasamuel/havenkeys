@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { nextStep, secondsLeft } from "./pairing";
+import { isTerminalPollError, nextStep, secondsLeft } from "./pairing";
 
 describe("secondsLeft", () => {
   it("counts down to zero and never below", () => {
-    const at = Date.parse("2026-10-03T12:02:00Z");
-    expect(secondsLeft("2026-10-03T12:02:00Z", at - 90_500)).toBe(91);
-    expect(secondsLeft("2026-10-03T12:02:00Z", at + 5_000)).toBe(0);
+    const deadline = 1_000_000;
+    expect(secondsLeft(deadline, deadline - 90_500)).toBe(91);
+    expect(secondsLeft(deadline, deadline + 5_000)).toBe(0);
   });
-  it("treats an unreadable time as expired", () => {
-    expect(secondsLeft("not a date", Date.now())).toBe(0);
+});
+
+describe("isTerminalPollError", () => {
+  it("ends the pairing only for a failed or gone pairing", () => {
+    expect(isTerminalPollError("pairing_failed")).toBe(true);
+    expect(isTerminalPollError("pairing_gone")).toBe(true);
+    expect(isTerminalPollError("offline")).toBe(false);
+    expect(isTerminalPollError(undefined)).toBe(false);
   });
 });
 
