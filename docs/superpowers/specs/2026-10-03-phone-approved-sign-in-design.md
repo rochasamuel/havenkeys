@@ -53,8 +53,10 @@ phone says which account it is.
 
 1. Rust generates an HPKE key pair (§4) and a 32-byte random
    `claim_secret`. Both live in memory only, in `HavenClient`.
-2. `POST /v1/pairings` with `{device_name, public_key,
-   claim_hash = SHA-256(claim_secret)}`. No authentication.
+2. `POST /v1/pairings` with `{device_id, device_name, public_key,
+   claim_hash = SHA-256(claim_secret)}`. `device_id` is the desktop's own
+   persistent device id, the one a login would register. No
+   authentication.
 3. The server stores the request (§5.1) and answers `{pairing_id,
    expires_at}`. `pairing_id` is 128 random bits, base64url.
 4. The desktop shows the code for
@@ -63,8 +65,9 @@ phone says which account it is.
    from step 1 with a new key pair.
 5. Every 2 seconds, `POST /v1/pairings/{id}/claim` with `claim_secret`.
 
-The QR code is drawn in Rust as SVG (`qrcode`, already a desktop
-dependency); React gets the SVG and the states, never a key.
+The QR code is encoded in Rust (`qrcode`, already a desktop dependency)
+into a module grid, as the Emergency Kit's is, and React draws the grid;
+React gets the grid and the states, never a key.
 
 ### 3.2 Phone: scan and confirm
 
@@ -105,9 +108,10 @@ In one transaction:
    `pairing_gone` (one error for unknown, expired, used, denied).
 2. The session's account is recorded on the pairing. A pairing that
    another account already looked at or approved is refused (§5.2).
-3. The new device is registered like a login does: a fresh device id,
-   the request's `device_name`, the 64-device cap
-   (`MAX_DEVICES_PER_ACCOUNT`), marked `approved_by = <phone's device id>`.
+3. The request's `device_id` is registered as a login does
+   (`register_device`: refused if it belongs to another account or was
+   revoked; the 64-device cap, `MAX_DEVICES_PER_ACCOUNT`), with the
+   request's `device_name`, marked `approved_by = <phone's device id>`.
 4. A session token is issued for that device (24 h,
    `SESSION_TTL_HOURS`). The token itself is kept on the pairing only
    until the claim; its hash goes in `sessions` as for any login.
@@ -119,9 +123,10 @@ In one transaction:
 
 * `pending` → `{state: "waiting"}`
 * `denied` → `{state: "denied"}`, and the pairing is deleted
-* `approved` → `{state: "approved", token, device_id, account_id,
-  envelope}`, and the pairing is deleted: a second claim gets
-  `pairing_gone`.
+* `approved` → `{state: "approved", token, expires_at, account_id,
+  vault_id, envelope}`, and the pairing is deleted: a second claim gets
+  `pairing_gone`. The desktop does not take `account_id` or `vault_id`
+  from this answer on trust: both must equal the ones inside the envelope.
 * wrong secret, unknown or expired → `pairing_gone`
 
 Then, in Rust (`finish_pairing`), as `sign_in` does from step 5 on:
@@ -161,6 +166,10 @@ and asks rather than substituting another construction.
 
 The vault key is sent rather than the data key so the desktop can build
 its local vault exactly as a sign-in does and verify the header itself.
+An unlocked vault keeps only the data key today, so the core session also
+keeps the vault key while unlocked (a `Key256`, zeroized on lock like the
+data key, and never returned by any API). The envelope is sealed inside
+`VaultService`, so the vault key never leaves the core.
 
 ## 5. Server
 
@@ -168,25 +177,27 @@ its local vault exactly as a sign-in does and verify the header itself.
 
 ```text
 id              text primary key   -- 128-bit random, base64url
-state           text               -- pending | approved | denied
+state           text               -- pending | approved | denied | claimed
 device_name     text               -- ≤ MAX_DEVICE_NAME_CHARS
 public_key      bytea              -- 32 bytes
 claim_hash      bytea              -- SHA-256(claim_secret)
-ip              inet
+ip              text               -- as `client_ip` gives it
 location        text null          -- "São Paulo, BR", from the local database
 created_at      timestamptz
 expires_at      timestamptz        -- created_at + 2 minutes
 account_id      uuid null          -- set by the first details/approve
-device_id       uuid null          -- the device approve registered
+device_id       uuid               -- the desktop's own id, from create
 envelope        bytea null
-token           bytea null         -- cleared at claim
+token           text null          -- cleared at claim
+token_expires_at timestamptz null
 ```
 
 `devices` gains `approved_by uuid null`, the phone's device id, for the
 Devices list.
 
-Expired and finished rows are deleted by the existing periodic cleanup;
-any row older than 10 minutes goes regardless of state.
+The server has no periodic task, so each create first deletes every
+pairing older than 10 minutes, whatever its state; claim and the session
+routes treat an expired row as gone.
 
 ### 5.2 Routes
 
@@ -202,13 +213,18 @@ any row older than 10 minutes goes regardless of state.
   it; any other account gets `pairing_gone`.
 * `create`: at most 10 per IP per 10 minutes and 3 pending per IP;
   over that, `429`.
-* `claim`: at most 1 per second per pairing, and wrong secrets count
-  against the IP like failed logins (`AttemptKeys`).
+* `claim`: a wrong secret counts against the caller's IP like a failed
+  login (`rate_limit::record_failure` on the IP key), and a blocked IP is
+  refused before anything is read.
+* A claimed or denied pairing is kept as `claimed` (envelope and token
+  cleared) until it ages out, so it still counts against its IP's limit.
 * All bodies under strict size limits; unknown fields refused.
 
 ### 5.3 Location
 
-Optional config `geoip_database = "/path/to/dbip-city-lite.mmdb"`, read
+Optional environment variable
+`HAVENKEYS_GEOIP_DATABASE=/path/to/dbip-city-lite.mmdb` (the server is
+configured from the environment), read
 with the `maxminddb` crate at start-up. The lookup is local; no third
 party is called. Without it, `location` is null. The IP is the server's
 own (`client_ip`, which honours `X-Forwarded-For` only with
