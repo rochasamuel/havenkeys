@@ -5,16 +5,13 @@ CREATE TABLE pairings (
   state            TEXT NOT NULL CHECK (state IN ('pending', 'approved', 'denied', 'claimed')),
   device_id        UUID NOT NULL,
   device_name      TEXT NOT NULL,
-  public_key       BYTEA NOT NULL CHECK (octet_length(public_key) = 32),
   claim_hash       BYTEA NOT NULL CHECK (octet_length(claim_hash) = 32),
   ip               TEXT NOT NULL,
   location         TEXT,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at       TIMESTAMPTZ NOT NULL,
   account_id       UUID REFERENCES accounts(id) ON DELETE CASCADE,
-  envelope         BYTEA,
-  token            TEXT,
-  token_expires_at TIMESTAMPTZ
+  envelope         BYTEA
 );
 CREATE INDEX pairings_by_ip ON pairings (ip);
 CREATE INDEX pairings_by_created ON pairings (created_at);

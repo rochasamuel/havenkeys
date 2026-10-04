@@ -396,7 +396,6 @@ pub struct DeviceDto {
 pub struct CreatePairingBody<'a> {
     pub device_id: Uuid,
     pub device_name: &'a str,
-    pub public_key: String,
     pub claim_hash: String,
 }
 

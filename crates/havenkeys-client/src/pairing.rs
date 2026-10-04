@@ -64,13 +64,10 @@ impl HavenClient {
         let keys = PairingKeys::generate();
         let claim = ClaimSecret::generate()?;
         let created = server
-            .create_pairing(
-                self.device_id()?,
-                device_name,
-                &keys.public_key(),
-                &claim.hash(),
-            )
+            .create_pairing(self.device_id()?, device_name, &claim.hash())
             .await?;
+        // The public key goes only into the QR code: whoever seals to it has
+        // seen this screen.
         let link = PairingLink {
             server_url: server_url.clone(),
             pairing_id: created.pairing_id.clone(),
@@ -238,11 +235,14 @@ impl HavenClient {
         Ok(link)
     }
 
-    /// A gone pairing is `pairing_gone`; a refused session or no answer go
-    /// through the usual handling.
+    /// A gone pairing (404) is `pairing_gone`; any other refusal of the code
+    /// (a device that cannot be approved, a bad envelope) is
+    /// `pairing_failed`. Only a refused session or no answer go through the
+    /// usual handling, which may sign this device out.
     fn pairing_error(&self, e: SyncError) -> ClientError {
         match e {
-            SyncError::Refused(_) => ClientError::pairing_gone(),
+            SyncError::Refused("not found") => ClientError::pairing_gone(),
+            SyncError::Refused(_) => ClientError::pairing_failed(),
             other => self.failed(other),
         }
     }

@@ -1,9 +1,11 @@
 //! Signing in a new device from an approving one
 //! (spec 2026-10-03-phone-approved-sign-in §3, §5).
 //!
-//! The server relays an envelope it cannot open and issues the new device's
-//! session when a signed-in device of the same account approves. Unknown,
-//! expired, used, denied and other-account pairings all answer 404.
+//! The server relays an envelope it cannot open. Approval by a signed-in
+//! device of the same account registers the new device; its session is issued
+//! only when it claims. The server never sees the new device's public key: it
+//! travels only in the QR code. Unknown, expired, used, denied and
+//! other-account pairings all answer 404.
 
 use crate::auth::{self, rate_limit, Session};
 use crate::error::ApiError;
@@ -29,7 +31,6 @@ use uuid::Uuid;
 pub struct CreateRequest {
     device_id: Uuid,
     device_name: String,
-    public_key: String,
     claim_hash: String,
 }
 
@@ -76,7 +77,6 @@ pub async fn create(
     Json(req): Json<CreateRequest>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
     let device_name = clean_device_name(&req.device_name)?;
-    let public_key = fixed32(&req.public_key, "publicKey is not valid")?;
     let claim_hash = fixed32(&req.claim_hash, "claimHash is not valid")?;
     let ip = client_ip(&state, &headers, peer);
     let db = state.pool.get().await?;
@@ -107,14 +107,13 @@ pub async fn create(
     let row = db
         .query_one(
             "INSERT INTO pairings
-               (id, state, device_id, device_name, public_key, claim_hash, ip, location, expires_at)
-             VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8))
+               (id, state, device_id, device_name, claim_hash, ip, location, expires_at)
+             VALUES ($1, 'pending', $2, $3, $4, $5, $6, now() + make_interval(secs => $7))
              RETURNING expires_at",
             &[
                 &id,
                 &req.device_id,
                 &device_name,
-                &public_key.as_slice(),
                 &claim_hash.as_slice(),
                 &ip,
                 &location,
@@ -190,30 +189,28 @@ pub async fn approve(
         .ok_or(ApiError::NotFound)?;
     let device_id: Uuid = row.get(0);
     let device_name: String = row.get(1);
+    // Both refusals are about the code, not the approving device's session:
+    // a 401 here would sign the phone out.
+    const CANNOT: ApiError = ApiError::InvalidRequest("this device cannot be approved");
     if device_id == session.device_id {
-        return Err(ApiError::InvalidRequest("a device cannot approve itself"));
+        return Err(CANNOT);
     }
-    register_device(&tx, session.account_id, device_id, &device_name).await?;
+    // Registered now so it shows in Devices with who approved it; the session
+    // waits for the claim, so an approval never claimed leaves no token.
+    register_device(&tx, session.account_id, device_id, &device_name)
+        .await
+        .map_err(|e| match e {
+            ApiError::Unauthorized => CANNOT,
+            other => other,
+        })?;
     tx.execute(
         "UPDATE devices SET approved_by = $2 WHERE id = $1",
         &[&device_id, &session.device_id],
     )
     .await?;
-    tx.execute("DELETE FROM sessions WHERE device_id = $1", &[&device_id])
-        .await?;
-    let (token, expires) = auth::issue_token(&tx, session.account_id, device_id).await?;
     tx.execute(
-        "UPDATE pairings
-            SET state = 'approved', account_id = $2, envelope = $3,
-                token = $4, token_expires_at = $5
-          WHERE id = $1",
-        &[
-            &id,
-            &session.account_id,
-            &envelope,
-            &token.as_str(),
-            &expires,
-        ],
+        "UPDATE pairings SET state = 'approved', account_id = $2, envelope = $3 WHERE id = $1",
+        &[&id, &session.account_id, &envelope],
     )
     .await?;
     tx.commit().await?;
@@ -257,11 +254,11 @@ pub async fn claim(
     rate_limit::check(&db, &ip_key).await?;
 
     // Read and consume in one transaction under a row lock, so two claims
-    // racing with the right secret cannot both receive the token.
+    // racing with the right secret cannot both receive a session.
     let tx = db.transaction().await?;
     let row = tx
         .query_opt(
-            "SELECT state, claim_hash, expires_at > now(), account_id, envelope, token, token_expires_at
+            "SELECT state, claim_hash, expires_at > now(), account_id, envelope, device_id
                FROM pairings
               WHERE id = $1 AND created_at > now() - make_interval(mins => $2)
               FOR UPDATE",
@@ -291,8 +288,7 @@ pub async fn claim(
         "approved" => {
             let account_id: Uuid = row.get(3);
             let envelope: Vec<u8> = row.get(4);
-            let token: String = row.get(5);
-            let expires: chrono::DateTime<chrono::Utc> = row.get(6);
+            let device_id: Uuid = row.get(5);
             let vault_id: Uuid = tx
                 .query_one(
                     "SELECT id FROM vaults WHERE account_id = $1",
@@ -300,9 +296,14 @@ pub async fn claim(
                 )
                 .await?
                 .get(0);
-            // Single use: the token and envelope leave the database here.
+            // The session is issued here, in the claim's transaction, so only
+            // the claim that consumes the approval receives one.
+            tx.execute("DELETE FROM sessions WHERE device_id = $1", &[&device_id])
+                .await?;
+            let (token, expires) = auth::issue_token(&tx, account_id, device_id).await?;
+            // Single use: the envelope leaves the database here.
             tx.execute(
-                "UPDATE pairings SET state = 'claimed', envelope = NULL, token = NULL
+                "UPDATE pairings SET state = 'claimed', envelope = NULL
                   WHERE id = $1 AND state = 'approved'",
                 &[&id],
             )
@@ -311,7 +312,7 @@ pub async fn claim(
             tracing::info!(account_id = %account_id, outcome = "claimed", "pairing");
             Ok(axum::Json(serde_json::json!({
                 "state": "approved",
-                "token": token,
+                "token": token.as_str(),
                 "expiresAt": expires.to_rfc3339(),
                 "accountId": account_id,
                 "vaultId": vault_id,

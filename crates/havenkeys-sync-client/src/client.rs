@@ -424,18 +424,18 @@ impl<T: Transport> SyncClient<T> {
         }
     }
 
-    /// Open a pairing request for this (new) device. No session.
+    /// Open a pairing request for this (new) device. No session. The device's
+    /// public key is not sent: it travels only in the QR code, so the server
+    /// cannot seal an envelope of its own to it.
     pub async fn create_pairing(
         &self,
         device_id: Uuid,
         device_name: &str,
-        public_key: &[u8; 32],
         claim_hash: &[u8; 32],
     ) -> Result<CreatedPairing> {
         let body = wire::CreatePairingBody {
             device_id,
             device_name,
-            public_key: BASE64URL_NOPAD.encode(public_key),
             claim_hash: BASE64URL_NOPAD.encode(claim_hash),
         };
         let dto: wire::CreatedPairingDto =

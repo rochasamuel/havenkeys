@@ -12,7 +12,6 @@ fn create_body(device_id: Uuid) -> Value {
     json!({
         "deviceId": device_id,
         "deviceName": "Desktop · Linux",
-        "publicKey": BASE64URL_NOPAD.encode(&[3u8; 32]),
         "claimHash": BASE64URL_NOPAD.encode(&Sha256::digest(SECRET)),
     })
 }
@@ -50,6 +49,19 @@ async fn approve(server: &TestServer, id: &str, phone: &Sess) -> u16 {
         .unwrap()
         .status()
         .as_u16()
+}
+
+async fn sessions_of(server: &TestServer, device_id: Uuid) -> i64 {
+    server
+        .db()
+        .await
+        .query_one(
+            "SELECT count(*) FROM sessions WHERE device_id = $1",
+            &[&device_id],
+        )
+        .await
+        .unwrap()
+        .get(0)
 }
 
 #[tokio::test]
@@ -283,11 +295,14 @@ async fn one_address_may_hold_three_pending_and_create_ten_per_window() {
 async fn malformed_requests_are_refused() {
     let server = TestServer::start().await;
     let (_, phone) = support::signed_in(&server, "ana@example.com").await;
+    let hash = BASE64URL_NOPAD.encode(&[0u8; 32]);
     for body in [
-        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D", "publicKey": "AA", "claimHash": BASE64URL_NOPAD.encode(&[0u8; 32]) }),
-        json!({ "deviceId": Uuid::new_v4(), "deviceName": "", "publicKey": BASE64URL_NOPAD.encode(&[0u8; 32]), "claimHash": BASE64URL_NOPAD.encode(&[0u8; 32]) }),
-        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D\u{7}", "publicKey": BASE64URL_NOPAD.encode(&[0u8; 32]), "claimHash": BASE64URL_NOPAD.encode(&[0u8; 32]) }),
-        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D", "publicKey": BASE64URL_NOPAD.encode(&[0u8; 32]), "claimHash": BASE64URL_NOPAD.encode(&[0u8; 32]), "accountId": Uuid::new_v4() }),
+        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D", "claimHash": "AA" }),
+        json!({ "deviceId": Uuid::new_v4(), "deviceName": "", "claimHash": hash }),
+        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D\u{7}", "claimHash": hash }),
+        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D", "claimHash": hash, "accountId": Uuid::new_v4() }),
+        // The desktop's public key travels only in the QR code, never to the server.
+        json!({ "deviceId": Uuid::new_v4(), "deviceName": "D", "claimHash": hash, "publicKey": hash }),
     ] {
         assert_eq!(
             server
@@ -333,7 +348,38 @@ async fn a_revoked_device_id_cannot_be_approved_in() {
         204
     );
     let id = create(&server, old.device_id).await;
-    assert_eq!(approve(&server, &id, &phone).await, 401);
+    // Refused as a failed pairing, never 401: the phone's own session is fine.
+    assert_eq!(approve(&server, &id, &phone).await, 400);
+
+    // Nor a device id that belongs to another account.
+    let (bob_account, _) = support::signed_in(&server, "bob@example.com").await;
+    let bobs = support::login(&server, &bob_account, "Bob's laptop").await;
+    let id = create(&server, bobs.device_id).await;
+    assert_eq!(approve(&server, &id, &phone).await, 400);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn an_approval_never_claimed_has_no_session() {
+    let server = TestServer::start().await;
+    let (_, phone) = support::signed_in(&server, "ana@example.com").await;
+    let desktop = Uuid::new_v4();
+    let id = create(&server, desktop).await;
+    assert_eq!(approve(&server, &id, &phone).await, 204);
+
+    let db = server.db().await;
+    // Approved: the device is listed, with who approved it, but has no session.
+    assert_eq!(sessions_of(&server, desktop).await, 0);
+    let approved_by: Option<Uuid> = db
+        .query_one("SELECT approved_by FROM devices WHERE id = $1", &[&desktop])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(approved_by, Some(phone.device_id));
+
+    // The session is issued when the desktop claims.
+    assert_eq!(claim(&server, &id, SECRET).await.0, 200);
+    assert_eq!(sessions_of(&server, desktop).await, 1);
     server.cleanup().await;
 }
 

@@ -317,9 +317,7 @@ async fn a_code_for_another_server_is_refused_by_the_phone() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_trailing_slash_on_the_desktop_still_matches_the_phone() {
-    // Covered by `a_phone_signs_a_new_desktop_in_without_the_password`, which
-    // starts with `format!("{}/", server.base)`; this test pins the locked case.
+async fn spaces_and_a_trailing_slash_on_the_desktop_still_match_the_phone() {
     let server = Server::start().await;
     let phone_dir = tempfile::tempdir().unwrap();
     let phone = client_in(phone_dir.path());
@@ -336,11 +334,130 @@ async fn a_trailing_slash_on_the_desktop_still_matches_the_phone() {
         .start_pairing(format!(" {}/ ", server.base), "Desktop")
         .await
         .unwrap();
+    // Locked: refused for being locked, not for naming another server.
     phone.lock("user");
     assert_eq!(
         phone.approve_pairing(&start.link).await.unwrap_err().code,
         "locked"
     );
+    phone
+        .unlock(SecretString::from(PASSWORD), None)
+        .await
+        .unwrap();
+    until(|| phone.is_online()).await;
+    phone.approve_pairing(&start.link).await.unwrap();
+    assert!(matches!(
+        desktop.poll_pairing().await.unwrap(),
+        havenkeys_client::PairingPoll::Approved(_)
+    ));
+    server.cleanup().await;
+}
+
+/// A signed-in, online phone for `email`, and an empty desktop showing a code.
+async fn phone_and_desktop_code(
+    server: &Server,
+    email: &str,
+    dirs: &(tempfile::TempDir, tempfile::TempDir),
+) -> (Arc<HavenClient>, Arc<HavenClient>, String) {
+    let phone = client_in(dirs.0.path());
+    phone
+        .activate(server.invite(email).await, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| phone.is_online()).await;
+    let desktop = client_in(dirs.1.path());
+    let start = desktop
+        .start_pairing(server.base.clone(), "Desktop")
+        .await
+        .unwrap();
+    (phone, desktop, start.link)
+}
+
+fn dirs() -> (tempfile::TempDir, tempfile::TempDir) {
+    (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_envelope_sealed_to_another_key_creates_no_vault() {
+    // What a hostile server could send: a genuine-looking approval and the
+    // real header, but an envelope not sealed to this desktop's key. The
+    // server never sees that key, so it cannot seal to it.
+    let server = Server::start().await;
+    let d = dirs();
+    let (phone, desktop, link) = phone_and_desktop_code(&server, "ana@example.com", &d).await;
+    let mut forged = havenkeys_core::pairing::PairingLink::parse(&link).unwrap();
+    forged.public_key = havenkeys_core::pairing::PairingKeys::generate().public_key();
+    phone.approve_pairing(&forged.to_text()).await.unwrap();
+
+    assert_eq!(
+        desktop.poll_pairing().await.unwrap_err().code,
+        "pairing_failed"
+    );
+    assert!(desktop.vault().unwrap().account().unwrap().is_none());
+    assert!(desktop.require_unlocked().is_err());
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_envelope_for_another_account_than_the_claim_names_creates_no_vault() {
+    let server = Server::start().await;
+    let ana_dir = tempfile::tempdir().unwrap();
+    let ana = client_in(ana_dir.path());
+    ana.activate(
+        server.invite("ana@example.com").await,
+        SecretString::from(PASSWORD),
+    )
+    .await
+    .unwrap();
+    let d = dirs();
+    let (bob, desktop, link) = phone_and_desktop_code(&server, "bob@example.com", &d).await;
+    bob.approve_pairing(&link).await.unwrap();
+    // The server answers the claim in Ana's name with Bob's envelope.
+    let id = havenkeys_core::pairing::PairingLink::parse(&link)
+        .unwrap()
+        .pairing_id;
+    exec_on(
+        &server,
+        &format!(
+            "UPDATE pairings SET account_id = \
+               (SELECT id FROM accounts WHERE email_normalized = 'ana@example.com') \
+             WHERE id = '{id}'"
+        ),
+    )
+    .await;
+
+    assert_eq!(
+        desktop.poll_pairing().await.unwrap_err().code,
+        "pairing_failed"
+    );
+    assert!(desktop.vault().unwrap().account().unwrap().is_none());
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_code_whose_device_cannot_be_approved_fails_without_signing_the_phone_out() {
+    let server = Server::start().await;
+    let d = dirs();
+    let (phone, desktop, link) = phone_and_desktop_code(&server, "ana@example.com", &d).await;
+    // The desktop's device id was revoked from this account before.
+    let device = desktop.device_id().unwrap();
+    exec_on(
+        &server,
+        &format!(
+            "INSERT INTO devices (id, account_id, name, created_at, revoked_at) \
+             SELECT '{device}', id, 'Old', now(), now() FROM accounts \
+              WHERE email_normalized = 'ana@example.com'"
+        ),
+    )
+    .await;
+
+    assert_eq!(
+        phone.approve_pairing(&link).await.unwrap_err().code,
+        "pairing_failed"
+    );
+    assert!(phone.is_online());
+    phone.sync_now().await.unwrap();
+    assert!(phone.vault().unwrap().account().unwrap().is_some());
     server.cleanup().await;
 }
 
