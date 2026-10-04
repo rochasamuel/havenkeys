@@ -190,8 +190,6 @@ pub struct PairingPayload {
     pub vault_id: Uuid,
     pub email: String,
     pub secret_key: SecretKey,
-    // Read by VaultService::seal_pairing / the new device (later tasks).
-    #[allow(dead_code)]
     pub(crate) vault_key: Key256,
 }
 
@@ -204,8 +202,6 @@ impl fmt::Debug for PairingPayload {
 impl PairingPayload {
     /// `1 ‖ account (16) ‖ vault (16) ‖ vault key (32) ‖ len u8 ‖ Secret Key
     /// text ‖ len u16 BE ‖ email`.
-    // Consumed by VaultService::seal_pairing (a later task).
-    #[allow(dead_code)]
     fn encode(&self) -> Result<Zeroizing<Vec<u8>>> {
         let key = self.secret_key.to_text();
         let key = key.expose().as_bytes();
@@ -282,8 +278,6 @@ fn info(server_url: &str, pairing_id: &str) -> Vec<u8> {
 
 /// Seal `payload` to the link's key. Only `VaultService::seal_pairing`
 /// calls this, so the vault key never leaves the core.
-// Called by VaultService::seal_pairing (a later task).
-#[allow(dead_code)]
 pub(crate) fn seal(link: &PairingLink, payload: &PairingPayload) -> Result<Vec<u8>> {
     let recipient = <Kem as hpke::Kem>::PublicKey::from_bytes(&link.public_key)
         .map_err(|_| Error::InvalidInput("that is not a HavenKeys sign-in code"))?;
