@@ -609,7 +609,12 @@ mod pairing_tests {
     #[test]
     fn a_pairing_id_that_could_change_the_path_is_refused_before_sending() {
         assert!(pairing_path("AAAAAAAAAAAAAAAAAAAAAA", "claim").is_ok());
-        for bad in ["", "../devices", "AAAAAAAAAAAAAAAAAAAAA/", "A".repeat(23).as_str()] {
+        for bad in [
+            "",
+            "../devices",
+            "AAAAAAAAAAAAAAAAAAAAA/",
+            "A".repeat(23).as_str(),
+        ] {
             assert!(pairing_path(bad, "claim").is_err());
         }
     }
