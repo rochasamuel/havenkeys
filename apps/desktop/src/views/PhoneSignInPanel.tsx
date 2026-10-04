@@ -29,6 +29,9 @@ export function PhoneSignInPanel({
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const first = useRef<HTMLInputElement>(null);
+  // The parent passes a new function every render; the poll must not restart for it.
+  const signedIn = useRef(onSignedIn);
+  signedIn.current = onSignedIn;
 
   useEffect(() => first.current?.focus(), []);
   // Leaving the panel ends the pairing on this side.
@@ -42,10 +45,15 @@ export function PhoneSignInPanel({
     const poll = async () => {
       try {
         const answer = await api.pairingPoll();
+        // Polling is consume-once: an approval means Rust has already signed this
+        // computer in, so it must reach the app even after the effect was torn down.
+        if (answer.state === "approved") {
+          signedIn.current(answer.status);
+          return;
+        }
         if (stopped) return;
         const step = nextStep(answer.state);
-        if (step === "done" && answer.state === "approved") onSignedIn(answer.status);
-        else if (step === "denied") setPhase({ kind: "denied" });
+        if (step === "denied") setPhase({ kind: "denied" });
         else if (step === "expired") setPhase({ kind: "expired" });
         else timer = setTimeout(poll, POLL_MS);
       } catch (err) {
@@ -61,7 +69,7 @@ export function PhoneSignInPanel({
       clearTimeout(timer);
     };
     // `t` is left out: a language change must not restart the pairing.
-  }, [phase, onSignedIn]);
+  }, [phase]);
 
   const left = phase.kind === "code" ? secondsLeft(phase.code.expiresAt, now) : 0;
   useEffect(() => {
