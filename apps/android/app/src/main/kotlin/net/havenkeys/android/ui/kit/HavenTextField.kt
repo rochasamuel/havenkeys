@@ -104,12 +104,14 @@ internal fun FieldRow(
     field: @Composable () -> Unit,
 ) {
     val colors = HavenTheme.colors
+    // The row's own outline, so the ring keeps the group's rounded corners instead of being cut by them.
+    val shape = LocalRowShape.current
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = HavenSpacing.rowMin)
-            .background(if (focused) colors.sel else Color.Transparent)
-            .then(if (focused) Modifier.border(1.5.dp, colors.brass) else Modifier)
+            .background(if (focused) colors.sel else Color.Transparent, shape)
+            .then(if (focused) Modifier.border(1.5.dp, colors.brass, shape) else Modifier)
             .padding(
                 start = HavenSpacing.rowX,
                 end = if (trailing != null) 4.dp else HavenSpacing.rowX,

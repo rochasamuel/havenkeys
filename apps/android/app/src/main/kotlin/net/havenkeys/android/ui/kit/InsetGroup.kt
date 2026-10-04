@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -21,6 +22,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -30,6 +33,7 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import net.havenkeys.android.ui.theme.HavenRadius
 import net.havenkeys.android.ui.theme.HavenShape
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -54,7 +58,10 @@ fun InsetGroup(modifier: Modifier = Modifier, content: InsetGroupScope.() -> Uni
         rows.forEachIndexed { index, row ->
             val textStart = remember { RowTextStart() }
             if (index > 0) Hairline(textStart, colors.groupLine)
-            CompositionLocalProvider(LocalRowTextStart provides textStart) { row() }
+            CompositionLocalProvider(
+                LocalRowTextStart provides textStart,
+                LocalRowShape provides rowShape(first = index == 0, last = index == rows.lastIndex),
+            ) { row() }
         }
     }
 }
@@ -89,6 +96,23 @@ internal class RowTextStart {
 }
 
 internal val LocalRowTextStart = staticCompositionLocalOf<RowTextStart?> { null }
+
+/**
+ * The outline of the row being drawn: the group's rounded corners on its
+ * first and last rows, square between. A row that draws its own ring (a
+ * focused field) follows it, so the group's clip does not cut the ring.
+ */
+internal val LocalRowShape = staticCompositionLocalOf<Shape> { RectangleShape }
+
+internal fun rowShape(first: Boolean, last: Boolean): Shape {
+    val top = if (first) HavenRadius.group else 0.dp
+    val bottom = if (last) HavenRadius.group else 0.dp
+    return if (top == 0.dp && bottom == 0.dp) {
+        RectangleShape
+    } else {
+        RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+    }
+}
 
 /** Tells an enclosing [InsetGroup] where this row's text starts (outside a group it does nothing). */
 @Composable
