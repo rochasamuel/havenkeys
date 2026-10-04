@@ -46,10 +46,16 @@ import uniffi.havenkeys_mobile.LumaFrame
 /**
  * The back camera, handing each frame's brightness plane to [onFrame]. The
  * camera permission is asked for here, when the user chose to scan, and
- * nowhere else.
+ * nowhere else. [cameraNeeded] and [cameraUnavailable] say what to do
+ * instead of scanning; they default to the Emergency Kit's words.
  */
 @Composable
-fun KitScanner(onFrame: (LumaFrame) -> Unit, modifier: Modifier = Modifier) {
+fun KitScanner(
+    onFrame: (LumaFrame) -> Unit,
+    modifier: Modifier = Modifier,
+    cameraNeeded: String = stringResource(R.string.onboarding_camera_needed),
+    cameraUnavailable: String = stringResource(R.string.onboarding_camera_unavailable),
+) {
     val context = LocalContext.current
     var granted by remember {
         mutableStateOf(
@@ -64,9 +70,9 @@ fun KitScanner(onFrame: (LumaFrame) -> Unit, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { if (!granted) request.launch(Manifest.permission.CAMERA) }
 
     when {
-        granted -> CameraFrames(onFrame, modifier)
+        granted -> CameraFrames(onFrame, cameraUnavailable, modifier)
         asked -> ScannerMessage(
-            text = stringResource(R.string.onboarding_camera_needed),
+            text = cameraNeeded,
             action = stringResource(R.string.onboarding_camera_allow),
             onAction = { request.launch(Manifest.permission.CAMERA) },
             modifier = modifier,
@@ -76,7 +82,7 @@ fun KitScanner(onFrame: (LumaFrame) -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CameraFrames(onFrame: (LumaFrame) -> Unit, modifier: Modifier) {
+private fun CameraFrames(onFrame: (LumaFrame) -> Unit, unavailable: String, modifier: Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context) }
@@ -131,7 +137,7 @@ private fun CameraFrames(onFrame: (LumaFrame) -> Unit, modifier: Modifier) {
     }
 
     if (failed) {
-        ScannerMessage(text = stringResource(R.string.onboarding_camera_unavailable), modifier = modifier)
+        ScannerMessage(text = unavailable, modifier = modifier)
     } else {
         AndroidView(factory = { previewView }, modifier = modifier)
     }

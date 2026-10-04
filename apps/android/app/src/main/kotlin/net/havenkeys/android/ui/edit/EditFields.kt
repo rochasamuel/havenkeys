@@ -93,7 +93,7 @@ private fun FieldEditor(field: EditField, editor: EditorState, values: FieldValu
             onChange = { editor.open(key) },
             onRemove = { editor.remove(key) },
         )
-        else -> SetupKeyEditor(key, label, editor)
+        else -> SetupKeyEditor(key, label, editor, values)
     }
 }
 
@@ -174,18 +174,38 @@ private fun SecretEditor(key: String, label: String, editor: EditorState, values
     }
 }
 
-/** A one-time code's setup key or otpauth:// link: a secret, typed masked; the eye shows it. */
+/**
+ * A one-time code's setup key or otpauth:// link: a secret, typed masked; the
+ * eye shows it. The QR button scans the code the site shows instead, and the
+ * link it finds goes in as if typed.
+ */
 @Composable
-private fun SetupKeyEditor(key: String, label: String, editor: EditorState) {
+private fun SetupKeyEditor(key: String, label: String, editor: EditorState, values: FieldValues) {
     val text = rememberDraftText(editor, key, initial = { editor.shown(key) }, onEdit = { editor.type(key, it) })
     var visible by remember { mutableStateOf(false) }
+    var scanning by remember { mutableStateOf(false) }
+    var scanned by remember { mutableStateOf(false) }
     SecretTextField(
         text,
         label,
         revealed = visible,
         onRevealChange = { visible = it },
-        hint = stringResource(R.string.edit_totp_placeholder),
+        hint = stringResource(if (scanned) R.string.edit_totp_scanned else R.string.edit_totp_placeholder),
+        action = {
+            HavenIconButton(HavenIcon.Qr, stringResource(R.string.edit_totp_scan), onClick = { scanning = true })
+        },
     )
+    if (scanning) {
+        TotpScanSheet(
+            scan = values.viewModel::scanTotp,
+            onFound = { link ->
+                text.setTextAndPlaceCursorAtEnd(link)
+                scanned = true
+                scanning = false
+            },
+            onDismiss = { scanning = false },
+        )
+    }
 }
 
 /** A present value that is not shown: the fixed mask (never its length) or "Set up.", with Change and Remove. */

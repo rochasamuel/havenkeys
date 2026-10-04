@@ -247,6 +247,11 @@
     <string name="edit_set_up">Configurado.</string>
     <string name="edit_replace">Substituir</string>
     <string name="edit_totp_placeholder">Chave de configuração ou link otpauth://</string>
+    <string name="edit_totp_scan">Escanear QR code</string>
+    <string name="edit_totp_scan_sub">Aponte a câmera para o QR code que o site mostra ao ativar a verificação em duas etapas.</string>
+    <string name="edit_totp_camera_needed">Permita o uso da câmera para escanear o código, ou feche e digite a chave de configuração.</string>
+    <string name="edit_totp_camera_unavailable">Não foi possível abrir a câmera. Feche e digite a chave de configuração.</string>
+    <string name="edit_totp_scanned">Chave de configuração adicionada. Salve para mantê-la.</string>
     <string name="edit_generate">Gerar</string>
     <string name="edit_expiry_placeholder">MM/AAAA</string>
     <string name="edit_custom_kept">Os campos personalizados ficam como estão. Edite-os no HavenKeys do computador.</string>

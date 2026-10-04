@@ -37,6 +37,7 @@ internal const val SECRET_PLACEHOLDER_TAG = "haven-secret-placeholder"
  * names the eye "Show"/"Hide" and the label; the value is never a description.
  * A [placeholder] (a format such as the Secret Key's) is drawn muted in the
  * empty value line and is not read: the label says what the field is.
+ * [action] is one more control before the eye (the one-time code's QR scan).
  */
 @Composable
 fun SecretTextField(
@@ -51,6 +52,7 @@ fun SecretTextField(
     onKeyboardAction: KeyboardActionHandler? = null,
     hint: String? = null,
     placeholder: String? = null,
+    action: (@Composable () -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -78,6 +80,7 @@ fun SecretTextField(
                     focused = focused,
                     hint = hint,
                     trailing = {
+                        action?.invoke()
                         HavenIconButton(
                             if (revealed) HavenIcon.EyeOff else HavenIcon.Eye,
                             eyeLabel,

@@ -259,6 +259,11 @@
     <string name="edit_set_up">Set up.</string>
     <string name="edit_replace">Replace</string>
     <string name="edit_totp_placeholder">Setup key or otpauth:// link</string>
+    <string name="edit_totp_scan">Scan QR code</string>
+    <string name="edit_totp_scan_sub">Point the camera at the QR code the site shows when you turn on two-factor authentication.</string>
+    <string name="edit_totp_camera_needed">Allow the camera to scan the code, or close this and type the setup key.</string>
+    <string name="edit_totp_camera_unavailable">The camera could not be opened. Close this and type the setup key.</string>
+    <string name="edit_totp_scanned">Setup key added. Save to keep it.</string>
     <string name="edit_generate">Generate</string>
     <string name="edit_expiry_placeholder">MM/YYYY</string>
     <string name="edit_custom_kept">Custom fields are kept as they are. Edit them in HavenKeys on your computer.</string>

@@ -129,6 +129,14 @@ class FakeVaultRepository : VaultRepository {
         return generated ?: Outcome.Ok(Generated("x".repeat(options.length.toInt()), 100.0))
     }
 
+    var scanned: Outcome<String?> = Outcome.Ok(null)
+    var scans = 0
+
+    override suspend fun scanTotp(frame: LumaFrame): Outcome<String?> {
+        scans++
+        return scanned
+    }
+
     var edit: Outcome<ItemEdit> = Outcome.Failed("not_found")
     var created: Outcome<String> = Outcome.Ok("new-id")
     var updated: Outcome<Unit> = Outcome.Ok(Unit)

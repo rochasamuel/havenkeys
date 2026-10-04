@@ -10,6 +10,8 @@
 
 use crate::error::{MobileError, MobileResult};
 use crate::items::{parse_id, FieldKind, ItemKind, DOCUMENTS};
+use crate::onboarding::LumaFrame;
+use crate::qr;
 use crate::vault::MobileVault;
 use havenkeys_core::card::{CardExpiry, CardInput};
 use havenkeys_core::identity::IdentityFields;
@@ -581,6 +583,32 @@ impl MobileVault {
     }
 }
 
+/// The scheme and type of the only QR codes the editor keeps.
+const TOTP_LINK: &str = "otpauth://totp";
+
+/// `text` if it is an `otpauth://totp` link the core can use; anything else a
+/// QR code might say is dropped (as the desktop's scan does).
+fn totp_link(text: &str) -> Option<&str> {
+    let is_link = text
+        .get(..TOTP_LINK.len())
+        .is_some_and(|p| p.eq_ignore_ascii_case(TOTP_LINK));
+    (is_link && parse_totp_input(text).is_ok()).then_some(text)
+}
+
+#[uniffi::export]
+impl MobileVault {
+    /// Decode a camera frame for the one-time code field. Only a usable
+    /// `otpauth://totp` link comes back, for the editor to put in the field
+    /// as if typed; it is saved only with the item.
+    pub fn scan_totp(&self, frame: LumaFrame) -> MobileResult<Option<String>> {
+        self.unlocked()?;
+        let Some(text) = qr::decode(frame.bytes, frame.width, frame.height) else {
+            return Ok(None);
+        };
+        Ok(totp_link(&text).map(str::to_owned))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -590,6 +618,58 @@ mod tests {
     use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
     use havenkeys_core::passkey::PasskeyCreate;
     use havenkeys_core::sso::{SignInWith, SsoProvider};
+
+    #[test]
+    fn a_scanned_totp_link_comes_back_and_any_other_code_does_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let scan = |text: &str| {
+            let (bytes, width, height) = crate::qr::tests::frame_of(text);
+            v.scan_totp(LumaFrame {
+                width,
+                height,
+                bytes,
+            })
+            .unwrap()
+        };
+        let link = "otpauth://totp/GitHub:alice?secret=JBSWY3DPEHPK3PXP&issuer=GitHub";
+        assert_eq!(scan(link).as_deref(), Some(link));
+        assert_eq!(
+            scan(&link.replace("otpauth://totp", "OTPAUTH://TOTP")).as_deref(),
+            Some(link.replace("otpauth://totp", "OTPAUTH://TOTP").as_str())
+        );
+        // Another QR code, a counter-based code, a link with no usable key, a bare key.
+        assert_eq!(scan("https://example.com"), None);
+        assert_eq!(
+            scan("otpauth://hotp/GitHub:alice?secret=JBSWY3DPEHPK3PXP&counter=1"),
+            None
+        );
+        assert_eq!(scan("otpauth://totp/GitHub:alice?secret=!!"), None);
+        assert_eq!(scan("JBSWY3DPEHPK3PXP"), None);
+        // No code at all.
+        let blank = LumaFrame {
+            width: 64,
+            height: 64,
+            bytes: vec![255; 64 * 64],
+        };
+        assert_eq!(v.scan_totp(blank).unwrap(), None);
+    }
+
+    #[test]
+    fn a_locked_vault_scans_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        v.lock();
+        let (bytes, width, height) =
+            crate::qr::tests::frame_of("otpauth://totp/A?secret=JBSWY3DPEHPK3PXP");
+        assert!(v
+            .scan_totp(LumaFrame {
+                width,
+                height,
+                bytes
+            })
+            .is_err());
+    }
 
     fn commit(v: &MobileVault, staged: StagedWrite) {
         v.client.vault().unwrap().commit_write(staged, 1).unwrap();

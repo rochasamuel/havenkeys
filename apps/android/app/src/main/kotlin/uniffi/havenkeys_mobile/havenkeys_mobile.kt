@@ -839,6 +839,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_totp(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity(
@@ -1010,6 +1012,8 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_edit(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_template(`ptr`: Long,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_scan_totp(`ptr`: Long,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_update_item(`ptr`: Long,`id`: RustBuffer.ByValue,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1221,7 +1225,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sign_out() and 0xFFFF) != 45637) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sync_if_due() and 0xFFFF) != 3692) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sync_if_due() and 0xFFFF) != 14261) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_sync_now() and 0xFFFF) != 35368) {
@@ -1303,6 +1307,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template() and 0xFFFF) != 49488) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_totp() and 0xFFFF) != 29331) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item() and 0xFFFF) != 43620) {
@@ -2207,7 +2214,8 @@ public interface MobileVaultInterface {
     fun `signOut`()
     
     /**
-     * The periodic pull while unlocked and in the foreground.
+     * The periodic pull while unlocked and in the foreground; while the
+     * server is unreachable it is also how the device finds it again.
      */
     fun `syncIfDue`()
     
@@ -2327,6 +2335,13 @@ public interface MobileVaultInterface {
      * The editor for a new item of `kind`. The identity cannot be created.
      */
     fun `itemTemplate`(`kind`: ItemKind): ItemEdit
+    
+    /**
+     * Decode a camera frame for the one-time code field. Only a usable
+     * `otpauth://totp` link comes back, for the editor to put in the field
+     * as if typed; it is saved only with the item.
+     */
+    fun `scanTotp`(`frame`: LumaFrame): kotlin.String?
     
     fun `updateItem`(`id`: kotlin.String, `draft`: ItemDraft)
     
@@ -2600,7 +2615,8 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
-     * The periodic pull while unlocked and in the foreground.
+     * The periodic pull while unlocked and in the foreground; while the
+     * server is unreachable it is also how the device finds it again.
      */
     @Throws(MobileException::class)override fun `syncIfDue`()
         = 
@@ -3083,6 +3099,26 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
         it,
         
         FfiConverterTypeItemKind.lower(`kind`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Decode a camera frame for the one-time code field. Only a usable
+     * `otpauth://totp` link comes back, for the editor to put in the field
+     * as if typed; it is saved only with the item.
+     */
+    @Throws(MobileException::class)override fun `scanTotp`(`frame`: LumaFrame): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_scan_totp(
+        it,
+        
+        FfiConverterTypeLumaFrame.lower(`frame`),_status)
 }
     }
     )

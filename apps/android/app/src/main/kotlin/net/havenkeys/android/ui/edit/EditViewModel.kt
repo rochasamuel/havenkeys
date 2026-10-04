@@ -19,6 +19,7 @@ import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
+import uniffi.havenkeys_mobile.LumaFrame
 
 sealed interface EditTarget {
     data class Existing(val id: String) : EditTarget
@@ -75,6 +76,9 @@ class EditViewModel(
         is EditTarget.Existing -> vault.reveal(target.id, key)
         is EditTarget.New -> Outcome.Failed("not_found")
     }
+
+    /** A camera frame for the one-time code field: an `otpauth://totp` link, or null. */
+    suspend fun scanTotp(frame: LumaFrame): Outcome<String?> = vault.scanTotp(frame)
 
     suspend fun generate(): Outcome<String> = when (val g = vault.generate(GENERATOR)) {
         is Outcome.Ok -> Outcome.Ok(g.value.password)
