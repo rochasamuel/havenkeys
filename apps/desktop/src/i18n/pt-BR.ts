@@ -168,6 +168,8 @@ export const ptBR: Messages = {
       "Este computador foi removido, mas o HavenKeys não conseguiu excluir a Secret Key do chaveiro do sistema. Exclua você mesmo a entrada “app.havenkeys”.",
     signedOut:
       "O servidor não aceitou a conexão deste computador. Se a sua senha mestra foi alterada em outro dispositivo, bloqueie e desbloqueie com a nova.",
+    pairedAs: (email: string) =>
+      `Conectado como ${email}. Se esta não for a sua conta, remova este computador em Configurações → Conta.`,
   },
 
   welcome: {

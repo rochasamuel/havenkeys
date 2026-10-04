@@ -163,6 +163,8 @@ export const en = {
       "This computer was removed, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry “app.havenkeys” yourself.",
     signedOut:
       "The server did not accept this computer's sign-in. If your master password was changed on another device, lock and unlock with the new one.",
+    /** After signing in with the phone: which account the phone approved this computer into. */
+    pairedAs: (email: string) => `Signed in as ${email}. If that is not your account, remove this computer in Settings → Account.`,
   },
 
   welcome: {

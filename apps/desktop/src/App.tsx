@@ -35,6 +35,10 @@ export function App() {
   // that the Secret Key was deleted. Shown until dismissed. Rust's text is
   // fixed, so the UI shows its own translation of it.
   const [removedWarning, setRemovedWarning] = useState(false);
+  // After signing in with the phone: the account the phone approved this
+  // computer into. Another account on the same server that saw the code could
+  // approve it first, so the user is told which one it is.
+  const [pairedAs, setPairedAs] = useState<string | null>(null);
   // The update version the user chose "Later" for, until the app restarts.
   const [dismissedUpdate, setDismissedUpdate] = useState<string | null>(null);
 
@@ -56,6 +60,7 @@ export function App() {
       setSession((s) => s + 1);
       setShowKit(false);
       setSignedOut(false);
+      setPairedAs(null);
       setStatus((s) => (s ? { ...s, state: "locked", damagedItems: 0, unreadableItems: 0 } : s));
     });
     return () => void unlisten.then((f) => f());
@@ -69,6 +74,7 @@ export function App() {
       setLockReason(null);
       setShowKit(false);
       setSignedOut(false);
+      setPairedAs(null);
       setSession((s) => s + 1);
       api.status().then(setStatus, () => undefined);
       api.deviceStatus().then(setDevice, () => setDevice(null));
@@ -159,6 +165,14 @@ export function App() {
             setRemovedWarning(false);
             setStatus(s);
           }}
+          onPaired={(s) => {
+            setRemovedWarning(false);
+            setStatus(s);
+            api.accountStatus().then(
+              (a) => setPairedAs(a?.email ?? null),
+              () => undefined,
+            );
+          }}
         />
       </div>
     );
@@ -197,6 +211,14 @@ export function App() {
   return (
     <div className="app-shell">
       {updateBanner}
+      {pairedAs && (
+        <div className="banner" role="status">
+          <span>{t.app.pairedAs(pairedAs)}</span>
+          <button className="btn btn-quiet" type="button" onClick={() => setPairedAs(null)}>
+            {t.common.dismiss}
+          </button>
+        </div>
+      )}
       {signedOut ? (
         <div className="banner" role="status">
           {t.app.signedOut}
@@ -216,6 +238,7 @@ export function App() {
         onLock={() => {
           setLockReason("user");
           setSignedOut(false);
+          setPairedAs(null);
           setSession((s) => s + 1);
           setStatus({ ...status, state: "locked", damagedItems: 0, unreadableItems: 0 });
         }}

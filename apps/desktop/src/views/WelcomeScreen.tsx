@@ -21,6 +21,8 @@ interface Props {
   onActivated: (status: VaultStatus) => void;
   /** Sign-in succeeded: this device already has a kit somewhere else. */
   onSignedIn: (status: VaultStatus) => void;
+  /** Signed in by the phone: the caller says which account it joined. */
+  onPaired: (status: VaultStatus) => void;
 }
 
 type Path = "invite" | "signin" | "phone";
@@ -218,7 +220,7 @@ function SignInPanel({ onSignedIn }: { onSignedIn: (s: VaultStatus) => void }) {
   );
 }
 
-export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
+export function WelcomeScreen({ onActivated, onSignedIn, onPaired }: Props) {
   const { t } = useI18n();
   const [path, setPath] = useState<Path>("invite");
 
@@ -266,7 +268,7 @@ export function WelcomeScreen({ onActivated, onSignedIn }: Props) {
 
         {path === "invite" && <InvitePanel onActivated={onActivated} />}
         {path === "signin" && <SignInPanel onSignedIn={onSignedIn} />}
-        {path === "phone" && <PhoneSignInPanel onSignedIn={onSignedIn} onUseKit={() => setPath("signin")} />}
+        {path === "phone" && <PhoneSignInPanel onSignedIn={onPaired} onUseKit={() => setPath("signin")} />}
       </div>
     </main>
   );
