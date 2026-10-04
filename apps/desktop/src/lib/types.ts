@@ -341,6 +341,16 @@ export interface DeviceEntry {
   approvedBy?: string | null;
 }
 
+export interface PairingCode {
+  qrSize: number;
+  qrModules: boolean[];
+  expiresAt: string;
+}
+
+export type PairingState =
+  | { state: "waiting" | "denied" | "expired" }
+  | { state: "approved"; status: VaultStatus };
+
 /** Counts from a pull. Never item data. */
 export interface SyncReport {
   added: number;

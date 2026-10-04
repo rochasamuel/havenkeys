@@ -32,6 +32,9 @@ export type ErrorCode =
   | "internal"
   | "file"
   | "sign_in_failed"
+  | "pairing_gone"
+  | "pairing_other_server"
+  | "pairing_failed"
   | "vault_unreadable"
   | "clipboard"
   | "open_website"
@@ -83,6 +86,9 @@ const codes: Record<ErrorCode, string | null> = {
   internal: null,
   file: "Could not read or delete the file.",
   sign_in_failed: "Email, master password or Secret Key is incorrect.",
+  pairing_gone: "This code has expired. Ask the new device for a new one.",
+  pairing_other_server: "This code is for another server.",
+  pairing_failed: "The sign-in could not be completed. Ask for a new code.",
   vault_unreadable: null,
   clipboard: "Could not access the clipboard.",
   open_website: "Could not open the website.",
@@ -177,6 +183,18 @@ export const en = {
     createFailed: "Could not set up this vault.",
     createNote: "Your master password and Secret Key never leave this computer. The server stores only encrypted data.",
     serverHint: "From your Emergency Kit.",
+    tabPhone: "Use your phone",
+    subPhone: "Approve this computer from HavenKeys on your phone.",
+    phoneServer: "Your server",
+    phoneShowCode: "Show code",
+    phoneStarting: "Preparing…",
+    phoneScan: "On your phone, open HavenKeys → Settings → Sign in a new device, and scan this code.",
+    phoneQrLabel: "Sign-in code for your phone",
+    phoneExpiresIn: (s: number) => `Expires in ${s}s`,
+    phoneExpired: "This code has expired.",
+    phoneNewCode: "New code",
+    phoneDenied: "The sign-in was denied on your phone.",
+    phoneUseKit: "Use the Emergency Kit instead",
     emailPlaceholder: "you@example.com",
     secretKeyHint: "The long code on your Emergency Kit. Leave it empty if this computer already has it.",
     signIn: "Sign in",
@@ -627,6 +645,7 @@ export const en = {
     devicesOffline: "Your devices are listed when this computer is connected to the server.",
     thisComputer: "This computer",
     lastSeen: (when: string) => `Last seen ${when}`,
+    approvedBy: (name: string) => `Approved by ${name}`,
     confirmSignOutThis: "Sign this computer out?",
     confirmSignOutOther: "Sign it out and end its session?",
     revoke: "Revoke",
