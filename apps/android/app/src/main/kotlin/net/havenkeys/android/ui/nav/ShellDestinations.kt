@@ -46,14 +46,13 @@ internal fun shellScreens(
             contentPadding = padding,
         )
     },
-    category = { padding, category, onBack ->
+    category = { padding, category, _ ->
         CategoryScreen(
             viewModel = viewModel {
                 ItemListViewModel(services.vault, services.accounts, services.events)
             },
             category = category,
             onOpen = open,
-            onBack = onBack,
             contentPadding = padding,
             sharedTitle = sharedTitle,
         )

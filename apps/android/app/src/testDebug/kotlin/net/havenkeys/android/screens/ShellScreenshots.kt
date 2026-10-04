@@ -137,8 +137,8 @@ class ShellScreenshots {
                     )
                 },
                 items = { p, open -> ItemsScreen(remember { ItemListViewModel(home, accounts, events) }, open, p) },
-                category = { p, c, back ->
-                    CategoryScreen(remember { ItemListViewModel(home, accounts, events) }, c, { _, _ -> }, back, p)
+                category = { p, c, _ ->
+                    CategoryScreen(remember { ItemListViewModel(home, accounts, events) }, c, { _, _ -> }, p)
                 },
                 settings = { p ->
                     SettingsScreen(

@@ -63,13 +63,11 @@ class ItemsScreensTest {
     fun aCategoryListsItsItemsAToZAndOpensThem() {
         val vm = vm()
         val opened = mutableListOf<Pair<String, String>>()
-        var back = 0
         rule.setKit {
             CategoryScreen(
                 vm,
                 Category.LOGINS,
                 onOpen = { id, origin -> opened += id to origin },
-                onBack = { back++ },
                 contentPadding = PaddingValues(),
             )
         }
@@ -80,29 +78,17 @@ class ItemsScreensTest {
         rule.onNodeWithText("Wi-Fi").assertDoesNotExist()
         rule.onNode(hasText("bank") and hasClickAction()).performClick()
         assertEquals(listOf("1" to Origins.CATEGORY), opened)
-        rule.onNodeWithContentDescription("Back").performClick()
-        assertEquals(1, back)
+        // The system Back returns to the categories: the list draws no chevron of its own.
+        rule.onNodeWithContentDescription("Back").assertDoesNotExist()
     }
 
     @Test
     fun anEmptyCategorySaysSo() {
         val vm = vm()
         rule.setKit {
-            CategoryScreen(vm, Category.CARDS, onOpen = { _, _ -> }, onBack = {}, contentPadding = PaddingValues())
+            CategoryScreen(vm, Category.CARDS, onOpen = { _, _ -> }, contentPadding = PaddingValues())
         }
         rule.onNodeWithText("Nothing here yet").assertIsDisplayed()
-    }
-
-    @Test
-    fun theBackChevronsGlyphLinesUpWithTheLargeTitle() {
-        val vm = vm()
-        rule.setKit {
-            CategoryScreen(vm, Category.LOGINS, onOpen = { _, _ -> }, onBack = {}, contentPadding = PaddingValues())
-        }
-        val title = rule.onNodeWithText("Logins").getUnclippedBoundsInRoot()
-        val back = rule.onNodeWithContentDescription("Back").getUnclippedBoundsInRoot()
-        // A 22dp glyph centred in the 48dp target: its ink starts 13dp in, on the title's start.
-        assertEquals(title.left.value, back.left.value + 13f, 0.5f)
     }
 
     private fun item(id: String, kind: ItemKind, title: String, passkey: Boolean = false) =
