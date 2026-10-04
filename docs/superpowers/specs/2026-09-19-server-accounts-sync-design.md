@@ -185,6 +185,11 @@ already holds. Device names are user-supplied labels (default "Desktop") —
 the client never sends the hostname, which would be metadata the server has
 no use for.
 
+> Amended on 2026-10-04: the device list could not tell two computers apart,
+> so a device now reports its hostname (desktop) or the phone's name
+> (Android) with its platform, e.g. "DESKTOP-SAMS (Windows)". The server is
+> the user's own; the name is listed in `security-model.md` §4.
+
 ## 7. Server
 
 ### 7.1 Schema

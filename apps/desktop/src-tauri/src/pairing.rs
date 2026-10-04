@@ -28,21 +28,12 @@ pub enum PairingState {
     Approved { status: VaultStatus },
 }
 
-/// "Desktop · Linux": the name the phone shows before Allow.
-fn device_label() -> String {
-    let os = match std::env::consts::OS {
-        "linux" => "Linux",
-        "windows" => "Windows",
-        "macos" => "macOS",
-        other => other,
-    };
-    format!("Desktop · {os}")
-}
-
 #[tauri::command]
 pub async fn pairing_start(app: AppHandle, server_url: String) -> CmdResult<PairingCode> {
     let client = app.state::<AppState>().client().clone();
-    let start = client.start_pairing(server_url, &device_label()).await?;
+    let start = client
+        .start_pairing(server_url, &crate::device_label::device_label())
+        .await?;
     let code = QrCode::with_error_correction_level(start.link.as_bytes(), EcLevel::M)
         .map_err(|_| CmdError::internal())?;
     Ok(PairingCode {

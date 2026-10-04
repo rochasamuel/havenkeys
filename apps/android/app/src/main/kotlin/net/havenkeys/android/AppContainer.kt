@@ -1,5 +1,8 @@
 package net.havenkeys.android
 
+import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import java.io.IOException
 import java.security.GeneralSecurityException
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +31,11 @@ import uniffi.havenkeys_mobile.MobileVault
 /** Manual wiring; one per process, so one vault for the app and its services. */
 class AppContainer(app: HavenApp, cipher: KeystoreCipher) {
     val events = VaultEventsHub()
-    private val vault = MobileVault(MobileConfig(app.filesDir.path, app.packageName), events, cipher)
+    private val vault = MobileVault(
+        MobileConfig(app.filesDir.path, app.packageName, phoneName(app)),
+        events,
+        cipher,
+    )
     val vaultRepository: VaultRepository = RustVaultRepository(vault)
     val accountRepository: AccountRepository = RustAccountRepository(vault)
     val settingsRepository: SettingsRepository = RustSettingsRepository(vault)
@@ -96,3 +103,9 @@ internal inline fun <T> keystoreOr(fallback: T, call: () -> T): T = try {
 } catch (e: RuntimeException) {
     fallback
 }
+
+/** The name set in the phone's About screen ("Sam's Pixel"), else its model. */
+private fun phoneName(context: Context): String =
+    Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
+        ?.takeIf { it.isNotBlank() }
+        ?: Build.MODEL.orEmpty()

@@ -60,6 +60,7 @@ fn setup() -> (Arc<MobileVault>, String, tempfile::TempDir) {
         MobileConfig {
             data_dir: dir.path().to_string_lossy().into_owned(),
             own_package: "net.havenkeys.android".into(),
+            device_name: "Pixel 8".into(),
         },
         Arc::new(Quiet),
         Arc::new(Xor),

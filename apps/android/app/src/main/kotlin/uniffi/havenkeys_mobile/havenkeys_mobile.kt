@@ -5191,6 +5191,12 @@ data class MobileConfig (
      * HavenKeys' own package: it is never a fill target.
      */
     var `ownPackage`: kotlin.String
+    , 
+    /**
+     * The phone's name ("Sam's Pixel"), shown in the account's device list
+     * as "Sam's Pixel (Android)".
+     */
+    var `deviceName`: kotlin.String
     
 ){
     
@@ -5209,17 +5215,20 @@ public object FfiConverterTypeMobileConfig: FfiConverterRustBuffer<MobileConfig>
         return MobileConfig(
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
     override fun allocationSize(value: MobileConfig) = (
             FfiConverterString.allocationSize(value.`dataDir`) +
-            FfiConverterString.allocationSize(value.`ownPackage`)
+            FfiConverterString.allocationSize(value.`ownPackage`) +
+            FfiConverterString.allocationSize(value.`deviceName`)
     )
 
     override fun write(value: MobileConfig, buf: ByteBuffer) {
             FfiConverterString.write(value.`dataDir`, buf)
             FfiConverterString.write(value.`ownPackage`, buf)
+            FfiConverterString.write(value.`deviceName`, buf)
     }
 }
 

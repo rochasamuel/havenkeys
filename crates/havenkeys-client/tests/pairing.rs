@@ -120,7 +120,7 @@ fn client_in(dir: &std::path::Path) -> Arc<HavenClient> {
         None,
         Arc::new(Quiet),
         ClientConfig {
-            device_name: "Test",
+            device_name: "Test".into(),
             vault_path: dir.join("vault.sqlite3"),
         },
     )

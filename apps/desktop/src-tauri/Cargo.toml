@@ -35,6 +35,9 @@ uuid = { version = "1.20", features = ["serde"] }
 # `image-data` lets the QR scan read a screenshot from the clipboard.
 arboard = { version = "3.6", default-features = false, features = ["image-data"] }
 sha2 = "0.11"
+# The computer's name for the account's device list (device_label.rs);
+# already in Cargo.lock through x11rb.
+gethostname = "1"
 zeroize = "1.8"
 tauri-plugin-dialog = "2"
 qrcode = { version = "0.14", default-features = false }

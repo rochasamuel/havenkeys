@@ -32,11 +32,35 @@ enum Connectivity {
 }
 
 pub struct ClientConfig {
-    /// The label this device reports. Deliberately not the hostname, which
-    /// is metadata the server has no use for.
-    pub device_name: &'static str,
+    /// The label this device reports, from [`device_label`]: the name the
+    /// user gave the computer or phone, so the device list tells them apart.
+    pub device_name: String,
     /// The vault database, which removing the device sets aside.
     pub vault_path: PathBuf,
+}
+
+/// Longest computer or phone name kept in a label, in characters. With the
+/// platform it stays under the server's 64-character limit.
+const MAX_LABEL_NAME_CHARS: usize = 40;
+
+/// "DESKTOP-SAMS (Windows)": the name this device shows in the account's
+/// device list. `name` comes from the OS and is cleaned here, because the
+/// server refuses control characters and names over 64 characters; when
+/// nothing is left, `kind` ("Desktop", "Android") stands in for it.
+pub fn device_label(name: &str, kind: &str, platform: &str) -> String {
+    let cleaned: String = name
+        .split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(MAX_LABEL_NAME_CHARS)
+        .collect();
+    let name = match cleaned.trim_end() {
+        "" => kind,
+        n => n,
+    };
+    format!("{name} ({platform})")
 }
 
 pub struct HavenClient {
@@ -347,11 +371,39 @@ pub(crate) mod tests {
             None,
             events.clone(),
             ClientConfig {
-                device_name: "Test",
+                device_name: "Test".into(),
                 vault_path: dir.join("vault.sqlite3"),
             },
         );
         (client, events)
+    }
+
+    #[test]
+    fn a_device_label_names_the_computer_and_its_platform() {
+        assert_eq!(
+            device_label("DESKTOP-SAMS", "Desktop", "Windows"),
+            "DESKTOP-SAMS (Windows)"
+        );
+        assert_eq!(
+            device_label("  Sam's\tPixel\n 8 ", "Android", "Android"),
+            "Sam's Pixel 8 (Android)"
+        );
+    }
+
+    #[test]
+    fn a_device_label_without_a_usable_name_falls_back_to_the_kind() {
+        assert_eq!(device_label("", "Desktop", "Linux"), "Desktop (Linux)");
+        assert_eq!(
+            device_label(" \u{0}\u{7} ", "Desktop", "Linux"),
+            "Desktop (Linux)"
+        );
+    }
+
+    #[test]
+    fn a_long_device_name_is_cut_to_fit_the_server_limit() {
+        let label = device_label(&"é".repeat(200), "Desktop", "Windows");
+        assert_eq!(label, format!("{} (Windows)", "é".repeat(40)));
+        assert!(label.chars().count() <= 64);
     }
 
     #[test]
@@ -375,7 +427,7 @@ pub(crate) mod tests {
             Some(ClientError::vault_unreadable(dir.path())),
             Arc::new(RecordingEvents::default()),
             ClientConfig {
-                device_name: "Test",
+                device_name: "Test".into(),
                 vault_path: dir.path().join("vault.sqlite3"),
             },
         );

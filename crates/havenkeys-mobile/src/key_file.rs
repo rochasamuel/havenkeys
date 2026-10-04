@@ -114,6 +114,7 @@ mod tests {
             crate::vault::MobileConfig {
                 data_dir: dir.path().to_string_lossy().into_owned(),
                 own_package: "net.havenkeys.android".into(),
+                device_name: "Pixel 8".into(),
             },
             seen,
             Arc::new(XorCipher(false)),

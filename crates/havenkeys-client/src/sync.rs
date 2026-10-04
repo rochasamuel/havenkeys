@@ -65,7 +65,7 @@ impl HavenClient {
                 &auth_key,
                 account_id,
                 device_id,
-                self.config.device_name,
+                &self.config.device_name,
             )
             .await
             .map_err(|e| {

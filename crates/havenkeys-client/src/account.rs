@@ -256,7 +256,7 @@ impl HavenClient {
                 &auth_key,
                 account.id,
                 device_id,
-                self.config.device_name,
+                &self.config.device_name,
             )
             .await
             .map_err(|_| ClientError::sign_in_failed())?;
@@ -530,7 +530,7 @@ impl HavenClient {
                 &auth_key,
                 account.id,
                 self.device_id()?,
-                self.config.device_name,
+                &self.config.device_name,
             )
             .await?;
         drop(auth_key);

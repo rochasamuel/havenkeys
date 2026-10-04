@@ -20,7 +20,7 @@ adversaries it does **not** defend against.
 | Item count, vault creation time, KDF parameters | Low | Plaintext in SQLite (needed to unlock). |
 | Auth key | Critical if reused elsewhere, but it unwraps nothing | Derived at unlock from the master password and the Secret Key; sent to the server over TLS, stored there only as an Argon2id hash. |
 | Session token | High while valid (24 h) | Server memory and the desktop's memory only. Never on disk; dropped when the vault locks. |
-| Account email, device names, item count, change times | Low, but visible to the server | Plaintext in the server's Postgres. |
+| Account email, device names (the computer's hostname or the phone's name), item count, change times | Low, but visible to the server | Plaintext in the server's Postgres. |
 | Android unlock bundle (vault key + auth key, enrolment time, boot count) | Critical | Only when biometric unlock is on. Sealed by a Keystore AES-256-GCM key that every use must unlock with a strong biometric; `noBackupFilesDir/unlock-bundle.bin`. Refused after 14 days or a reboot (`security-model.md` §22.2). |
 | Android Secret Key file | High (half of what opens a copy of the vault) | `filesDir/secret-key-<account>.bin`, sealed by a Keystore key that needs no user authentication. Never written in plaintext. |
 

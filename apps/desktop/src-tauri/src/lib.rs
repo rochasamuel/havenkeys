@@ -9,6 +9,7 @@ mod card;
 mod clipboard;
 mod commands;
 mod custom_field;
+mod device_label;
 mod emergency_kit;
 mod events;
 mod identity;
@@ -224,7 +225,7 @@ pub fn run() {
                 storage_error,
                 events,
                 havenkeys_client::ClientConfig {
-                    device_name: "Desktop",
+                    device_name: device_label::device_label(),
                     vault_path: path.clone(),
                 },
             );

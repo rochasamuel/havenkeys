@@ -119,6 +119,7 @@ fn phone(dir: &std::path::Path) -> Arc<MobileVault> {
         MobileConfig {
             data_dir: dir.to_string_lossy().into_owned(),
             own_package: "net.havenkeys.android".into(),
+            device_name: "Pixel 8".into(),
         },
         Arc::new(Quiet),
         Arc::new(Xor),
@@ -399,7 +400,7 @@ fn desktop_client(dir: &std::path::Path) -> Arc<havenkeys_client::HavenClient> {
         None,
         Arc::new(QuietClient),
         havenkeys_client::ClientConfig {
-            device_name: "Test",
+            device_name: "Test".into(),
             vault_path: dir.join("vault.sqlite3"),
         },
     )

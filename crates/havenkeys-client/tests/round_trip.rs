@@ -147,7 +147,7 @@ fn device(dir: &std::path::Path) -> (Arc<HavenClient>, Arc<Probe>) {
         None,
         probe.clone(),
         ClientConfig {
-            device_name: "Test",
+            device_name: "Test".into(),
             vault_path: dir.join("vault.sqlite3"),
         },
     );

@@ -18,6 +18,9 @@ pub struct MobileConfig {
     pub data_dir: String,
     /// HavenKeys' own package: it is never a fill target.
     pub own_package: String,
+    /// The phone's name ("Sam's Pixel"), shown in the account's device list
+    /// as "Sam's Pixel (Android)".
+    pub device_name: String,
 }
 
 #[derive(uniffi::Enum)]
@@ -115,7 +118,11 @@ impl MobileVault {
             storage_error,
             app_events.clone(),
             ClientConfig {
-                device_name: "Android",
+                device_name: havenkeys_client::device_label(
+                    &config.device_name,
+                    "Android",
+                    "Android",
+                ),
                 vault_path: path,
             },
         );
@@ -260,6 +267,7 @@ pub(crate) mod tests {
             MobileConfig {
                 data_dir: dir.to_string_lossy().into_owned(),
                 own_package: "net.havenkeys.android".into(),
+                device_name: "Pixel 8".into(),
             },
             seen.clone(),
             Arc::new(XorCipher(true)),

@@ -83,6 +83,9 @@ parameters and salt, an Argon2id hash of the auth key, device names and
 timestamps, and per item its random UUID, its revision, the size of each
 encrypted blob and when it last changed. That metadata is the price of this
 design; it is listed in `server-sync.md` §6 and in `threat-model.md` T1b.
+A device's name is the computer's hostname or the phone's name with its
+platform ("DESKTOP-SAMS (Windows)", "Sam's Pixel (Android)"), so the device
+list tells the user's devices apart; it is sent again at every sign-in.
 
 Everything else — item type, title, username, URLs, timestamps, passwords, TOTP
 configuration, notes, passkeys, and settings — is encrypted. Passkeys add no
