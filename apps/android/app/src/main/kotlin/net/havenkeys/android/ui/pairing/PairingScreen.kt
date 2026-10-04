@@ -41,10 +41,12 @@ import uniffi.havenkeys_mobile.PairingRequestView
  * Scan the new computer's code, show who is asking, and approve behind the
  * biometric check ([verifyUser]); Deny, or closing the sheet, denies.
  */
+@Suppress("LongParameterList") // the screen's state and what the app lends it
 @Composable
 fun PairingScreen(
     viewModel: PairingViewModel,
     online: Boolean,
+    canVerify: () -> Boolean,
     verifyUser: suspend (title: String, subtitle: String) -> Boolean,
     onBack: () -> Unit,
     onLock: () -> Unit,
@@ -74,7 +76,7 @@ fun PairingScreen(
         ConfirmSheet(
             state,
             request,
-            onAllow = { viewModel.allow { verifyUser(title, request.deviceName) } },
+            onAllow = { viewModel.allow(canVerify()) { verifyUser(title, request.deviceName) } },
             onDeny = viewModel::deny,
         )
     }

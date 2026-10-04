@@ -307,6 +307,7 @@ private fun NavGraphBuilder.toolScreens(nav: Nav) {
         PairingScreen(
             viewModel = viewModel { PairingViewModel(services.accounts) },
             online = online,
+            canVerify = services.canVerifyUser,
             verifyUser = { _, subtitle -> services.verifyUser(title, subtitle) },
             onBack = nav.back,
             onLock = nav.lock,

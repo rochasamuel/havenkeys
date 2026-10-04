@@ -33,6 +33,9 @@ class PairingViewModel(private val accounts: AccountRepository) : ViewModel() {
     val state: StateFlow<PairingUiState> = _state.asStateFlow()
     private val decoding = AtomicBoolean(false)
 
+    /** The code that just failed: the camera keeps seeing it, and asking the server again would only rate-limit. */
+    private var failedLink: String? = null
+
     fun onFrame(frame: LumaFrame) {
         if (_state.value.stage != PairingUiState.Stage.SCANNING || !decoding.compareAndSet(false, true)) {
             frame.bytes.fill(0)
@@ -41,9 +44,16 @@ class PairingViewModel(private val accounts: AccountRepository) : ViewModel() {
         viewModelScope.launch {
             try {
                 val link = (accounts.scanPairing(frame) as? Outcome.Ok)?.value ?: return@launch
+                if (link == failedLink) return@launch
                 when (val r = accounts.pairingRequest(link)) {
-                    is Outcome.Ok -> _state.value = PairingUiState(PairingUiState.Stage.CONFIRM, r.value)
-                    is Outcome.Failed -> _state.update { it.copy(errorCode = r.code) }
+                    is Outcome.Ok -> {
+                        failedLink = null
+                        _state.value = PairingUiState(PairingUiState.Stage.CONFIRM, r.value)
+                    }
+                    is Outcome.Failed -> {
+                        failedLink = link
+                        _state.update { it.copy(errorCode = r.code) }
+                    }
                 }
             } finally {
                 decoding.set(false)
@@ -51,10 +61,17 @@ class PairingViewModel(private val accounts: AccountRepository) : ViewModel() {
         }
     }
 
-    /** [verify] is the biometric prompt; false (cancelled, failed) approves nothing. */
-    fun allow(verify: suspend () -> Boolean) {
-        val request = _state.value.request ?: return
-        if (_state.value.busy) return
+    /**
+     * [verify] is the biometric prompt; false (cancelled, failed) approves nothing, silently.
+     * With no [canVerify] (no biometric or screen lock set up) nothing is asked and the screen says why.
+     */
+    fun allow(canVerify: Boolean, verify: suspend () -> Boolean) {
+        val request = _state.value.request
+        if (request == null || _state.value.busy) return
+        if (!canVerify) {
+            _state.update { it.copy(errorCode = "biometric_unavailable") }
+            return
+        }
         _state.update { it.copy(busy = true, errorCode = null) }
         viewModelScope.launch {
             if (!verify()) {
@@ -80,6 +97,7 @@ class PairingViewModel(private val accounts: AccountRepository) : ViewModel() {
 
     /** Back to the camera after an error or a finished approval. */
     fun scanAgain() {
+        failedLink = null
         _state.value = PairingUiState()
     }
 }

@@ -37,7 +37,14 @@ class PairingScreenTest {
         val vm = PairingViewModel(accounts)
         vm.onFrame(LumaFrame(1u, 1u, byteArrayOf(1)))
         rule.setKit {
-            PairingScreen(vm, online = true, verifyUser = { _, _ -> false }, onBack = {}, onLock = {})
+            PairingScreen(
+                vm,
+                online = true,
+                canVerify = { true },
+                verifyUser = { _, _ -> false },
+                onBack = {},
+                onLock = {},
+            )
         }
         rule.waitForIdle()
     }

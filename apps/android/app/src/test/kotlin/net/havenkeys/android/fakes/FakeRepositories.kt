@@ -225,7 +225,12 @@ class FakeAccountRepository : AccountRepository {
 
     override suspend fun scanPairing(frame: LumaFrame) = scannedLink
 
-    override suspend fun pairingRequest(link: String) = request
+    var requestCalls = 0
+
+    override suspend fun pairingRequest(link: String): Outcome<PairingRequestView> {
+        requestCalls++
+        return request
+    }
 
     override suspend fun approvePairing(link: String): Outcome<Unit> {
         approved += link

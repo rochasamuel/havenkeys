@@ -46,11 +46,11 @@ class PairingViewModelTest {
     @Test
     fun allowWithoutTheBiometricCheckApprovesNothing() = runTest {
         val vm = scanned()
-        vm.allow(verify = { false })
+        vm.allow(canVerify = true, verify = { false })
         advanceUntilIdle()
         assertTrue(accounts.approved.isEmpty())
         assertEquals(PairingUiState.Stage.CONFIRM, vm.state.value.stage)
-        vm.allow(verify = { true })
+        vm.allow(canVerify = true, verify = { true })
         advanceUntilIdle()
         assertEquals(listOf(link), accounts.approved)
         assertEquals(PairingUiState.Stage.DONE, vm.state.value.stage)
@@ -82,5 +82,43 @@ class PairingViewModelTest {
         vm.onFrame(frame())
         advanceUntilIdle()
         assertEquals(PairingUiState(), vm.state.value)
+    }
+
+    @Test
+    fun theSameFailedCodeIsNotAskedAboutAgain() = runTest {
+        accounts.scannedLink = Outcome.Ok(link)
+        accounts.request = Outcome.Failed("pairing_gone")
+        val vm = PairingViewModel(accounts)
+        vm.onFrame(frame())
+        vm.onFrame(frame())
+        advanceUntilIdle()
+        assertEquals(1, accounts.requestCalls)
+        assertEquals("pairing_gone", vm.state.value.errorCode)
+        vm.scanAgain()
+        vm.onFrame(frame())
+        advanceUntilIdle()
+        assertEquals(2, accounts.requestCalls)
+    }
+
+    @Test
+    fun noScreenLockSaysSoAndAsksNothing() = runTest {
+        val vm = scanned()
+        var asked = false
+        vm.allow(canVerify = false, verify = {
+            asked = true
+            true
+        })
+        advanceUntilIdle()
+        assertTrue(!asked)
+        assertTrue(accounts.approved.isEmpty())
+        assertEquals("biometric_unavailable", vm.state.value.errorCode)
+    }
+
+    @Test
+    fun aCancelledPromptStaysSilent() = runTest {
+        val vm = scanned()
+        vm.allow(canVerify = true, verify = { false })
+        advanceUntilIdle()
+        assertEquals(null, vm.state.value.errorCode)
     }
 }
