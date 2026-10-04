@@ -62,6 +62,14 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > filled or copied, and their last 10 searches) in Rust, for the phone's
 > Home and search screens; the desktop may adopt it later.
 
+> Amended on 2026-10-03 by
+> `docs/superpowers/specs/2026-10-03-phone-approved-sign-in-design.md`: a
+> new desktop may be signed in by scanning its QR code with the unlocked
+> phone and tapping Allow (behind biometrics). The phone seals the vault key
+> and Secret Key to the desktop's one-time key with HPKE; the server relays
+> ciphertext and issues the desktop's session. The master password is not
+> typed for that first sign-in; every later unlock needs it as usual.
+
 ---
 
 # 1. Core philosophy

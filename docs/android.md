@@ -8,7 +8,8 @@ Design: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Security:
 > This software has not undergone an independent security audit.
 
 **Status: Android M4.** Sign in with the Emergency Kit (QR code or typed) or
-an invite; unlock with the master password or, once turned on, a fingerprint
+an invite; approve a new desktop's sign-in by scanning its QR code (Settings →
+"Sign in a new device", behind biometrics; `security-model.md` §23); unlock with the master password or, once turned on, a fingerprint
 or face; browse, search, reveal, copy and read TOTP codes offline; generate
 passwords; fill logins and TOTP codes in apps and browsers through Android
 Autofill. Android M2 adds editing: create, edit and delete logins, secure

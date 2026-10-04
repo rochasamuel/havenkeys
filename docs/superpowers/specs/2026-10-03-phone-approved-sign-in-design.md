@@ -1,6 +1,6 @@
 # Signing in a new desktop from the phone — Design
 
-Status: proposed, 2026-10-03.
+Status: accepted, 2026-10-03; implemented by docs/superpowers/plans/2026-10-03-phone-approved-sign-in.md.
 Builds on `2026-09-20-server-authoritative-vault-design.md` (accounts,
 sessions, devices) and `2026-10-01-android-app-design.md` (the phone app).
 Amends CLAUDE.md (a note, like the earlier ones), `docs/threat-model.md`

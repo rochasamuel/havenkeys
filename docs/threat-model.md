@@ -701,6 +701,60 @@ emulator yet; the manual checklists in `security-review.md` ("Android M1",
   refuses card fields everywhere, so a username guess or a split code box
   never takes one.
 
+### T13 — Phone-approved sign-in
+
+Spec: `docs/superpowers/specs/2026-10-03-phone-approved-sign-in-design.md`.
+A new desktop shows a QR code; the user's unlocked phone scans it, shows the
+new device's name and where the server saw it, and, after Allow behind the
+phone's biometrics or device credential, seals the vault key and Secret Key to
+the desktop's one-time key. The master password is not typed for that first
+sign-in.
+
+**The trust decision.** Everywhere else the master password is the last
+barrier: the server and the Secret Key together cannot open a vault. Here an
+unlocked phone plus the user's Allow is enough to bring a new device into the
+vault. That is accepted, as in 1Password's and Bitwarden's device approval,
+because:
+
+1. The phone must be unlocked and online, and Allow asks for the phone's
+   biometrics or device credential again. A phone with no screen lock shows
+   "biometric unavailable" and approves nothing.
+2. The key material is sealed (HPKE) to a public key that travels from the
+   desktop's screen to the phone's camera. The server relays only ciphertext
+   and cannot swap the recipient.
+3. The confirmation names the device and where the server saw it; the code
+   expires in 2 minutes and works once.
+
+| Threat | Defence |
+|---|---|
+| Hostile or compromised server | Sees only the envelope, sealed to a key it did not choose; it can lie about the device name and location but cannot open or redirect the keys. |
+| A code from an attacker ("scan this...") | Name, IP and location shown; Allow needs biometrics; 2-minute, single-use code. **Residual, documented below.** |
+| Guessed or leaked `pairing_id` | Details and approve need a session on the account; claim needs `claim_secret`, which is not in the code. |
+| Replay | The pairing's token and envelope are cleared on claim; `info` binds the envelope to the server and the pairing. |
+| Abuse of the open endpoints | Per-IP limits, pending cap, size limits, generic errors. |
+| Compromised desktop renderer | Keys stay in Rust; React gets the QR grid and states. |
+| Accidental disclosure | Envelope, Secret Key, vault key and token zeroized after use, never logged or put in errors; `Debug` impls are redacted. |
+| Locked or offline phone | Rust refuses before calling the server. |
+
+* **Residual: social engineering.** A person who is talked into scanning an
+  attacker's code and tapping Allow, past the name, IP and location check
+  and a biometric prompt, gives the attacker's device the vault key, the
+  Secret Key and a session. That device can read and change the vault
+  without the master password, and keeps the keys (the master password is
+  needed only for later unlocks of the local copy) until the user revokes
+  the device in Devices; revoking stops its server access but cannot take
+  back what it already read. Nothing in the protocol can tell a deceived
+  user from a willing one. The confirmation shows text the unauthenticated
+  requester chose (the device name) and a location label from the server;
+  see `security-review.md` PA4.
+* **Residual: the same exposure class as the phone.** Someone holding the
+  user's unlocked phone and able to pass the biometric gate (or a phone
+  without one) can sign in a device of their own. That is already the
+  power they have over the phone's vault.
+* **A server operator** can create a pairing request of its own, but it
+  cannot read the envelope the phone seals to a camera-delivered key, and
+  cannot make a phone approve without the user's tap.
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can
