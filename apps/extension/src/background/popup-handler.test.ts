@@ -41,6 +41,7 @@ describe("parsePopupRequest", () => {
     expect(parsePopupRequest({ type: "popup_lock" })).toEqual({ type: "popup_lock" });
     expect(parsePopupRequest({ type: "popup_totp", itemId: ID })).toEqual({ type: "popup_totp", itemId: ID });
     expect(parsePopupRequest({ type: "popup_open_item", itemId: ID })).toEqual({ type: "popup_open_item", itemId: ID });
+    expect(parsePopupRequest({ type: "popup_show_unlock" })).toEqual({ type: "popup_show_unlock" });
   });
   it("rejects everything else, including a popup-supplied URL", () => {
     for (const m of [
@@ -55,6 +56,9 @@ describe("parsePopupRequest", () => {
       { type: "popup_open_item", itemId: ID, url: "https://github.com" },
       { type: "popup_open_item", itemId: "x" },
       { type: "open_item", itemId: ID, url: "https://github.com" },
+      { type: "popup_show_unlock", password: "hunter2" },
+      { type: "popup_show_unlock", url: "https://github.com" },
+      { type: "show_unlock" },
     ]) {
       expect(parsePopupRequest(m)).toBeNull();
     }
@@ -221,6 +225,24 @@ describe("popup handler", () => {
     const h = createPopupHandler(c, async () => ({ id: 1, url: "chrome://newtab/" }));
     expect((await h.handle({ type: "popup_open_item", itemId: ID })).ok).toBe(false);
     expect(c.seen).toHaveLength(0);
+  });
+
+  it("asks the desktop to show its unlock screen, whatever the tab", async () => {
+    const c = fakeClient(() => ({ type: "show_unlock" }));
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "chrome://newtab/" }));
+    expect(await h.handle({ type: "popup_show_unlock" })).toEqual({ ok: true, value: null });
+    expect(c.seen).toEqual([{ type: "show_unlock" }]);
+  });
+
+  it("passes a refused show_unlock to the popup", async () => {
+    const c = fakeClient(() => {
+      throw new BridgeError("rate_limited", "Too many requests. Try again shortly.");
+    });
+    const h = createPopupHandler(c, async () => undefined);
+    expect(await h.handle({ type: "popup_show_unlock" })).toEqual({
+      ok: false,
+      message: "Too many requests. Try again shortly.",
+    });
   });
 
   it("passes the desktop's refusal to the popup", async () => {

@@ -83,6 +83,8 @@ export const en = {
     locked: {
       title: "HavenKeys is locked",
       body: "Unlock it in the HavenKeys app to use your logins.",
+      unlock: "Unlock",
+      unlockTitle: "Open HavenKeys to enter your master password",
     },
     disabled: {
       title: "Browser integration is off",

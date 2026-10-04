@@ -234,6 +234,23 @@ function matchRow(m: Match): HTMLElement {
   return row;
 }
 
+/**
+ * Locked: Unlock brings the desktop app forward on its unlock screen. The
+ * master password is typed there, never here; the popup closes so the
+ * window can be seen.
+ */
+function lockedNotice(): HTMLElement {
+  const box = notice(t.popup.locked.title, t.popup.locked.body);
+  box.classList.add("locked");
+  const status = h("div", { className: "notice-status" });
+  const unlock = h("button", { className: "btn", text: t.popup.locked.unlock });
+  unlock.type = "button";
+  unlock.title = t.popup.locked.unlockTitle;
+  unlock.addEventListener("click", () => void fillFromPopup(unlock, { type: "popup_show_unlock" }, status));
+  box.append(unlock, status);
+  return box;
+}
+
 function render(state: PopupState): void {
   lockBtn.hidden = state.kind !== "unlocked";
   switch (state.kind) {
@@ -253,7 +270,7 @@ function render(state: PopupState): void {
       return;
     case "locked":
       setPill(t.popup.pill.locked, "locked");
-      main.replaceChildren(notice(t.popup.locked.title, t.popup.locked.body));
+      main.replaceChildren(lockedNotice());
       return;
     case "disabled":
       setPill(t.popup.pill.off);

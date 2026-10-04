@@ -22,6 +22,8 @@ export type PopupRequest =
   | { type: "popup_fill_card"; itemId: string; origin: string }
   /** Show this login in the desktop app's editor. */
   | { type: "popup_open_item"; itemId: string }
+  /** Bring the desktop app forward on its unlock screen (the password is typed there). */
+  | { type: "popup_show_unlock" }
   /**
    * Fill the page's first identity form. `documents`: null = not asked yet.
    * The answer carries the origin the question named; the background
@@ -72,6 +74,7 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
   switch (o.type) {
     case "popup_state":
     case "popup_lock":
+    case "popup_show_unlock":
       return keys.length === 1 ? { type: o.type } : null;
     case "popup_totp":
     case "popup_fill":

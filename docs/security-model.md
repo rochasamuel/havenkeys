@@ -276,12 +276,20 @@ through the native-messaging bridge, which has its own much narrower request
 set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`, `open_item`,
 `generate_password`, `check_login`, `save_login`, the four passkey
 requests and the three identity requests, `find_identity`, `fill_identity`
-and `open_identity`), all origin-bound and rate-limited. No request can name
+and `open_identity`, and `show_unlock`), all rate-limited and all origin-bound except
+`show_unlock`, which names no site or item and only raises the desktop
+window. No request can name
 a custom field, so none can read, fill or open one. See `native-messaging.md`.
 
 `open_item` returns nothing: when the item is a login saved for the page,
 the desktop shows its window with that login's editor open. It is in the
 `secret` rate class because it has a visible effect.
+
+`show_unlock` (the popup's "Unlock" button) also returns nothing: the
+desktop brings its window forward, on the unlock screen while locked. It is
+answered in any lock state because it carries no secret either way, and it
+is in the `secret` rate class for the same reason as `open_item`. The
+master password is still typed only in the desktop app.
 
 ## 8. Memory handling
 

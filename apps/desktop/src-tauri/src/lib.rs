@@ -129,6 +129,12 @@ fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
         tray::show_main_window(&open_handle);
         let _ = open_handle.emit(state::OPEN_ITEM_EVENT, id.to_string());
     });
+    // "Unlock" from the extension popup while the vault is locked: raise
+    // the window, which then shows its unlock screen. The master password
+    // is typed there, never in the browser. Nothing else happens when the
+    // vault is already unlocked.
+    let show_handle = app.clone();
+    bridge.set_show_unlock_hook(move || tray::show_main_window(&show_handle));
     bridge
 }
 

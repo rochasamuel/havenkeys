@@ -178,6 +178,16 @@ main {
   margin-top: 10px;
 }
 
+.notice.locked .btn {
+  margin-top: 12px;
+}
+
+.notice-status:not(:empty) {
+  margin-top: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .list {
   list-style: none;
   margin: 0;

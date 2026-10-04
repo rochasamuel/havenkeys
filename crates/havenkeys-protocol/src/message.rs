@@ -246,6 +246,10 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expiry: Option<String>,
     },
+    /// Bring the desktop window forward on its unlock screen, so the user
+    /// can type the master password there. Answered in any lock state; it
+    /// carries no secret and returns none. Sent by the popup only.
+    ShowUnlock {},
 }
 
 /// A form field's role for an identity fill. Mirrors
@@ -508,6 +512,7 @@ impl Request {
             Request::FindCards { .. } => "find_cards",
             Request::FillCard { .. } => "fill_card",
             Request::SaveCard { .. } => "save_card",
+            Request::ShowUnlock {} => "show_unlock",
         }
     }
 
@@ -516,7 +521,8 @@ impl Request {
             Request::Status {}
             | Request::Lock {}
             | Request::GeneratorOptions {}
-            | Request::GeneratePassword { .. } => Vec::new(),
+            | Request::GeneratePassword { .. }
+            | Request::ShowUnlock {} => Vec::new(),
             Request::FillCard {
                 top_url, frames, ..
             } => std::iter::once(top_url.as_str())
@@ -958,6 +964,7 @@ pub enum ResultBody {
     SaveCard {
         item_id: Uuid,
     },
+    ShowUnlock {},
 }
 
 /// What saving a submitted login would do.
@@ -998,6 +1005,7 @@ impl fmt::Debug for ResultBody {
             ResultBody::FindCards { .. } => "find_cards",
             ResultBody::FillCard { .. } => "fill_card",
             ResultBody::SaveCard { .. } => "save_card",
+            ResultBody::ShowUnlock {} => "show_unlock",
         };
         write!(f, "ResultBody({kind})")
     }

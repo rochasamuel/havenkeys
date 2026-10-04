@@ -30,6 +30,16 @@ export function UnlockScreen({ lockReason, needsSecretKey, onUnlocked }: Props) 
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => inputRef.current?.focus(), []);
+  // Raised from the tray or the extension's "Unlock": the password field
+  // takes the keyboard again, unless another field already has it.
+  useEffect(() => {
+    const refocus = () => {
+      const active = document.activeElement;
+      if (!active || active === document.body) inputRef.current?.focus();
+    };
+    window.addEventListener("focus", refocus);
+    return () => window.removeEventListener("focus", refocus);
+  }, []);
 
   const ready = !!password && (!askKey || !!secretKey);
 

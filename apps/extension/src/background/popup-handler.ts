@@ -211,6 +211,15 @@ export function createPopupHandler(
           return fail(e);
         }
       }
+      case "popup_show_unlock":
+        // No tab, URL or item: the desktop only raises its window. The
+        // master password is typed there, never in the browser.
+        try {
+          await client.request({ type: "show_unlock" });
+          return { ok: true, value: null };
+        } catch (e) {
+          return fail(e);
+        }
       case "popup_open_item": {
         // Same rule as fill: the URL is the tab's, and the desktop opens
         // only a login saved for it.

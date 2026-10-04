@@ -17,8 +17,8 @@ pub enum RequestClass {
     /// `fill_item`, `get_totp`, `passkey_get`, `passkey_create`, `fill_card`,
     /// `save_card`: return a secret (a password, TOTP code, WebAuthn
     /// assertion, a card, or a new passkey's registration) or write one;
-    /// `open_item`, which has a visible effect (it raises the desktop
-    /// window).
+    /// `open_item` and `show_unlock`, which have a visible effect (they
+    /// raise the desktop window).
     Secret,
 }
 

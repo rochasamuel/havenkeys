@@ -51,6 +51,8 @@ export const ptBR: Messages = {
     locked: {
       title: "O HavenKeys está bloqueado",
       body: "Desbloqueie-o no app HavenKeys para usar seus logins.",
+      unlock: "Desbloquear",
+      unlockTitle: "Abrir o HavenKeys para digitar sua senha mestra",
     },
     disabled: {
       title: "A integração com o navegador está desativada",
