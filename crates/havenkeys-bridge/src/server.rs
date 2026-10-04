@@ -40,6 +40,9 @@ type Frame = Zeroizing<Vec<u8>>;
 /// Hook run once `open_item` is allowed; see `Bridge::set_open_item_hook`.
 type OpenItemHook = Arc<dyn Fn(Uuid) + Send + Sync>;
 
+/// Hook run once `show_unlock` is allowed; see `Bridge::set_show_unlock_hook`.
+type ShowUnlockHook = Arc<dyn Fn() + Send + Sync>;
+
 struct Inner {
     vault: Arc<Mutex<VaultService>>,
     on_lock: Box<dyn Fn() + Send + Sync>,
@@ -52,6 +55,8 @@ struct Inner {
     next_conn: Mutex<u64>,
     /// What `open_item` does once allowed; see `set_open_item_hook`.
     on_open_item: Mutex<Option<OpenItemHook>>,
+    /// What `show_unlock` does once allowed; see `set_show_unlock_hook`.
+    on_show_unlock: Mutex<Option<ShowUnlockHook>>,
 }
 
 /// Cheap to clone; all clones share state.
@@ -119,6 +124,7 @@ impl Bridge {
                 connections: Mutex::new(Vec::new()),
                 next_conn: Mutex::new(0),
                 on_open_item: Mutex::new(None),
+                on_show_unlock: Mutex::new(None),
             }),
         }
     }
@@ -129,6 +135,14 @@ impl Bridge {
     /// answers `internal`: a bridge with no UI has nothing to open.
     pub fn set_open_item_hook(&self, hook: impl Fn(Uuid) + Send + Sync + 'static) {
         *guard(&self.inner.on_open_item) = Some(Arc::new(hook));
+    }
+
+    /// What `show_unlock` does once the bridge has allowed it: the desktop
+    /// brings its window forward (on the unlock screen while locked). Called
+    /// on the bridge's thread, without the vault lock held. Without a hook,
+    /// `show_unlock` answers `internal`, as `open_item` does.
+    pub fn set_show_unlock_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *guard(&self.inner.on_show_unlock) = Some(Arc::new(hook));
     }
 
     /// Handle one raw request frame and produce the reply. Never panics on
@@ -150,6 +164,13 @@ impl Bridge {
             return Ok(ResultBody::Lock {});
         }
         self.check_rate_limits(req)?;
+        // Answered in any lock state and without the vault: it carries no
+        // secret and returns none. The browser-integration switch is sealed
+        // in the vault, so it cannot be read while locked; the rate limit
+        // above bounds how often the window can be raised.
+        if let Request::ShowUnlock {} = req {
+            return self.show_unlock().map(|()| ResultBody::ShowUnlock {});
+        }
         let dispatched = {
             let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
             dispatch(&mut vault, req, unix_seconds())
@@ -195,6 +216,14 @@ impl Bridge {
         let hook = guard(&self.inner.on_open_item).clone();
         let hook = hook.ok_or(ErrorCode::Internal)?;
         hook(item);
+        Ok(())
+    }
+
+    /// Run the show-unlock hook, without holding its mutex while it runs.
+    fn show_unlock(&self) -> Result<(), ErrorCode> {
+        let hook = guard(&self.inner.on_show_unlock).clone();
+        let hook = hook.ok_or(ErrorCode::Internal)?;
+        hook();
         Ok(())
     }
 
@@ -335,6 +364,8 @@ fn request_class(req: &Request) -> Option<RequestClass> {
         | Request::PasskeyGet { .. }
         | Request::PasskeyCreate { .. }
         | Request::OpenItem { .. }
+        // `show_unlock` raises the desktop window: a visible effect.
+        | Request::ShowUnlock {}
         | Request::FillIdentity { .. }
         | Request::OpenIdentity { .. }
         // Each follows a user action; `start_sso` has a visible effect

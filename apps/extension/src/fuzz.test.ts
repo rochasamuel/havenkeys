@@ -49,6 +49,7 @@ describe("message validators", () => {
     { type: "bg_fill", origin: "https://a.com", token: TOKEN, fill: { kind: "otp", code: "123456" }, submit: false, totp: false },
     { type: "bg_run_end" },
     { type: "popup_fill", itemId: ID },
+    { type: "popup_show_unlock" },
   ];
   const atoms: unknown[] = [null, 0, -1, "", "x".repeat(5000), ID, TOKEN, [], {}, true, "https://evil.com", "__proto__"];
 

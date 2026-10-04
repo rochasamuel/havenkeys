@@ -137,6 +137,7 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `start_sso` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"`), `account` (string or null) | yes | secret |
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
+| `show_unlock` | none | no | secret |
 
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
@@ -144,6 +145,17 @@ be omitted, which means null.
 
 `open_item` shows the desktop window with that login open in the editor; the
 item must be saved for `url`, like `fill_item`. Nothing is returned.
+
+`show_unlock` brings the desktop window forward; while the vault is locked
+that window is the unlock screen, with the password field focused. It is
+the popup's "Unlock" button. It carries no secret and returns none
+(`{"type":"show_unlock"}`), so it is answered in any lock state and never
+touches the vault; the browser-integration switch is sealed in the vault
+and cannot be read while locked. It is in the `secret` rate class because
+it raises a window, so a script cannot keep pulling the desktop to the
+front. The master password is never sent over this protocol: there is
+still no request that unlocks the vault. Only the toolbar popup sends it;
+the background refuses `popup_*` messages from any other sender.
 
 **Identity requests.** The Identity has no saved website, so these three are
 not bound to a site the way `fill_item` is (`security-model.md` §20 explains
@@ -252,6 +264,7 @@ carries its account when the item has no username of its own.
 {"v":1,"id":17,"result":{"type":"passkey_create","credentialId":"…","attestationObject":"…","clientDataJson":"…","authenticatorData":"…","publicKey":"…","publicKeyAlgorithm":-7}}
 {"v":1,"id":18,"result":{"type":"passkey_status","hasPasskey":true}}
 {"v":1,"id":10,"result":{"type":"open_item"}}
+{"v":1,"id":25,"result":{"type":"show_unlock"}}
 {"v":1,"id":22,"result":{"type":"find_cards","insecure":false,"cards":[{"id":"…","title":"Visa","brand":"visa","last4":"4242","expiry":"11/33"}]}}
 {"v":1,"id":23,"result":{"type":"fill_card","frames":[{"values":[{"role":"number","value":"…"},{"role":"expiryMonth","value":"11"}]}]}}
 {"v":1,"id":24,"result":{"type":"save_card","itemId":"…"}}

@@ -107,3 +107,38 @@ describe("popup identity fill", () => {
     expect(document.querySelector(".item.identity .error")?.textContent).toContain("The page changed");
   });
 });
+
+describe("popup unlock", () => {
+  async function loadLocked(): Promise<HTMLButtonElement> {
+    replies.popup_state = async () => ({ ok: true, value: { kind: "locked" } });
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelector(".notice .btn")).not.toBeNull());
+    return document.querySelector<HTMLButtonElement>(".notice .btn")!;
+  }
+  const unlockRequests = () => asked.filter((m) => (m as { type: string }).type === "popup_show_unlock");
+
+  it("offers Unlock while locked and closes once the desktop is raised", async () => {
+    replies.popup_show_unlock = async () => ({ ok: true, value: null });
+    const unlock = await loadLocked();
+    expect(unlock.textContent).toBe("Unlock");
+    unlock.click();
+    await flush();
+    expect(unlockRequests()).toEqual([{ type: "popup_show_unlock" }]);
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it("shows the error and stays open when the desktop refuses", async () => {
+    replies.popup_show_unlock = async () => ({ ok: false, message: "Too many requests." });
+    const unlock = await loadLocked();
+    unlock.click();
+    await vi.waitFor(() => expect(document.querySelector(".notice .error")?.textContent).toBe("Too many requests."));
+    expect(window.close).not.toHaveBeenCalled();
+    expect(unlock.disabled).toBe(false);
+  });
+
+  it("has no password field: the password is typed in the desktop app", async () => {
+    await loadLocked();
+    expect(document.querySelector("input")).toBeNull();
+  });
+});

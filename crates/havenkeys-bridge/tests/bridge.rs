@@ -28,6 +28,8 @@ struct Fixture {
     locks: Arc<AtomicUsize>,
     changes: Arc<AtomicUsize>,
     opened: Arc<Mutex<Vec<Uuid>>>,
+    /// How many times `show_unlock` raised the desktop window.
+    shown: Arc<AtomicUsize>,
     github: Uuid,
     bank: Uuid,
     note: Uuid,
@@ -201,6 +203,11 @@ fn build_fixture(writer: Option<()>) -> Fixture {
     let opened = Arc::new(Mutex::new(Vec::new()));
     let o2 = opened.clone();
     bridge.set_open_item_hook(move |id| o2.lock().unwrap().push(id));
+    let shown = Arc::new(AtomicUsize::new(0));
+    let s2 = shown.clone();
+    bridge.set_show_unlock_hook(move || {
+        s2.fetch_add(1, Ordering::SeqCst);
+    });
 
     Fixture {
         vault,
@@ -208,6 +215,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
         locks,
         changes,
         opened,
+        shown,
         github,
         bank,
         note,
@@ -940,6 +948,80 @@ fn open_item_without_a_hook_is_an_internal_error() {
             "type": "open_item", "itemId": f.github, "url": "https://github.com/"
         }),
     ));
+    let r: serde_json::Value = serde_json::from_slice(&r.to_bytes().unwrap()).unwrap();
+    assert_eq!(error_code(&r), Some("internal"));
+}
+
+fn show_unlock(f: &Fixture) -> serde_json::Value {
+    call(f, serde_json::json!({"type": "show_unlock"}))
+}
+
+#[test]
+fn show_unlock_raises_the_window_while_locked() {
+    let f = fixture();
+    f.vault.lock().unwrap().lock();
+    let r = show_unlock(&f);
+    assert_eq!(r["result"], serde_json::json!({"type": "show_unlock"}));
+    assert_eq!(f.shown.load(Ordering::SeqCst), 1);
+    // It never touches the vault: still locked, nothing opened, no lock hook.
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("locked")
+    );
+    assert!(f.opened.lock().unwrap().is_empty());
+    assert_eq!(f.locks.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn show_unlock_while_unlocked_just_raises_the_window() {
+    let f = fixture();
+    let r = show_unlock(&f);
+    assert_eq!(r["result"], serde_json::json!({"type": "show_unlock"}));
+    assert_eq!(f.shown.load(Ordering::SeqCst), 1);
+    // The vault stays unlocked.
+    assert!(fill(&f, f.github, "https://github.com/")["result"].is_object());
+}
+
+#[test]
+fn show_unlock_rejects_extra_fields() {
+    let f = fixture();
+    let r = call(
+        &f,
+        serde_json::json!({"type": "show_unlock", "password": "hunter2"}),
+    );
+    assert_eq!(error_code(&r), Some("malformed"));
+    assert_eq!(f.shown.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn show_unlock_is_rate_limited_as_a_secret_request() {
+    let f = fixture();
+    f.vault.lock().unwrap().lock();
+    let mut limited = false;
+    for _ in 0..20 {
+        if error_code(&show_unlock(&f)) == Some("rate_limited") {
+            limited = true;
+            break;
+        }
+    }
+    assert!(limited);
+    assert!(f.shown.load(Ordering::SeqCst) <= 10);
+    // It shares the Secret bucket with fill_item.
+    let f = fixture();
+    for _ in 0..10 {
+        show_unlock(&f);
+    }
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+}
+
+#[test]
+fn show_unlock_without_a_hook_is_an_internal_error() {
+    let f = fixture();
+    let bare = Bridge::new(f.vault.clone(), || {});
+    let r = bare.handle_frame(&request(1, serde_json::json!({"type": "show_unlock"})));
     let r: serde_json::Value = serde_json::from_slice(&r.to_bytes().unwrap()).unwrap();
     assert_eq!(error_code(&r), Some("internal"));
 }

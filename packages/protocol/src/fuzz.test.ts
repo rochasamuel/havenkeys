@@ -36,6 +36,7 @@ const SEEDS: unknown[] = [
   { v: 1, id: 9, result: { type: "start_sso", provider: "google", account: "a@b.c", providerOrigins: ["https://accounts.google.com"], autoChoose: false } },
   { v: 1, id: 10, result: { type: "check_sso", action: "add", itemId: null } },
   { v: 1, id: 11, result: { type: "save_sso", itemId: ID } },
+  { v: 1, id: 12, result: { type: "show_unlock" } },
 ];
 
 const ATOMS: unknown[] = [null, true, false, 0, -1, 1.5, 2 ** 32, "", "x", ID, "__proto__", "constructor", [], {}, NaN];

@@ -124,7 +124,12 @@ export type Request =
       verificationNumber?: string;
       /** YYYY-MM. */
       expiry?: string;
-    };
+    }
+  /**
+   * Bring the desktop window forward on its unlock screen. Answered in any
+   * lock state; no secret goes either way. The password is typed there.
+   */
+  | { type: "show_unlock" };
 
 export type RequestType = Request["type"];
 
@@ -198,7 +203,8 @@ export type Result =
   | { type: "open_identity" }
   | { type: "find_cards"; insecure: boolean; cards: CardMatch[] }
   | { type: "fill_card"; frames: Array<{ values: CardValue[] }> }
-  | { type: "save_card"; itemId: string };
+  | { type: "save_card"; itemId: string }
+  | { type: "show_unlock" };
 
 /** The result type that answers request type `T`. */
 export type ResultFor<T extends RequestType> = Extract<Result, { type: T }>;
@@ -520,6 +526,8 @@ function parseResult(v: unknown): Result | null {
     }
     case "open_identity":
       return hasExactKeys(v, ["type"]) ? { type: "open_identity" } : null;
+    case "show_unlock":
+      return hasExactKeys(v, ["type"]) ? { type: "show_unlock" } : null;
     case "find_cards": {
       if (!hasExactKeys(v, ["type", "insecure", "cards"]) || !isBool(v.insecure)) return null;
       const cards = parseList(v.cards, parseCardMatch);

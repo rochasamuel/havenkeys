@@ -422,6 +422,41 @@ fn malformed_open_item_is_rejected() {
 }
 
 #[test]
+fn show_unlock_parses_and_reencodes() {
+    let env = parse(r#"{"v":1,"id":4,"request":{"type":"show_unlock"}}"#).unwrap();
+    assert_eq!(env.request, Request::ShowUnlock {});
+    assert_eq!(env.request.kind(), "show_unlock");
+    let again = serde_json::to_vec(&env).unwrap();
+    assert_eq!(parse_request(&again).unwrap(), env);
+}
+
+#[test]
+fn malformed_show_unlock_is_rejected() {
+    for s in [
+        r#"{"v":1,"id":1,"request":{"type":"show_unlock","extra":1}}"#,
+        r#"{"v":1,"id":1,"request":{"type":"show_unlock","password":"hunter2"}}"#,
+        r#"{"v":1,"id":1,"request":{"type":"show_unlock","url":"https://a.com/"}}"#,
+        r#"{"v":2,"id":1,"request":{"type":"show_unlock"}}"#,
+    ] {
+        assert!(parse(s).is_err(), "{s}");
+    }
+}
+
+#[test]
+fn show_unlock_result_round_trips() {
+    let bytes = Outgoing::from(Response::ok(5, ResultBody::ShowUnlock {}))
+        .to_bytes()
+        .unwrap();
+    assert_eq!(
+        &*bytes,
+        br#"{"v":1,"id":5,"result":{"type":"show_unlock"}}"#
+    );
+    assert!(Outgoing::parse(&bytes).is_some());
+    let extra = br#"{"v":1,"id":5,"result":{"type":"show_unlock","x":1}}"#;
+    assert!(Outgoing::parse(extra).is_none());
+}
+
+#[test]
 fn passkey_requests_parse() {
     let ok = [
         format!(r#"{{"v":1,"id":1,"request":{{"type":"find_passkeys","url":"https://github.com/","rpId":"github.com","allowCredentials":["{CRED}"]}}}}"#),
@@ -613,6 +648,7 @@ fn fuzz_parse_request_never_panics() {
         r#"{"v":1,"id":16,"request":{"type":"passkey_status","url":"https://github.com/"}}"#.to_string(),
         format!(r#"{{"v":1,"id":17,"request":{{"type":"start_sso","itemId":"{ITEM}","url":"https://a.com/"}}}}"#),
         r#"{"v":1,"id":18,"request":{"type":"save_sso","url":"https://a.com/","provider":"google","account":"a","itemId":null}}"#.to_string(),
+        r#"{"v":1,"id":19,"request":{"type":"show_unlock"}}"#.to_string(),
     ]
     .into_iter()
     .map(String::into_bytes)

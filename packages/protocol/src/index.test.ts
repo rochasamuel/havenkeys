@@ -24,6 +24,7 @@ describe("parseIncoming", () => {
       { v: 1, id: 11, result: { type: "check_login", action: "update", itemId: ID } },
       { v: 1, id: 12, result: { type: "save_login", itemId: ID } },
       { v: 1, id: 13, result: { type: "open_item" } },
+      { v: 1, id: 14, result: { type: "show_unlock" } },
     ];
     for (const m of ok) expect(parseIncoming(m), JSON.stringify(m)).not.toBeNull();
   });
@@ -53,6 +54,8 @@ describe("parseIncoming", () => {
       { v: 1, event: { type: "other" } },
       { v: 1, id: 1, event: { type: "locked" } },
       { v: 1, id: 1, result: { type: "open_item", itemId: ID } },
+      { v: 1, id: 1, result: { type: "show_unlock", extra: 1 } },
+      { v: 1, id: 1, result: { type: "show_unlock", password: "pw" } },
     ];
     for (const m of bad) expect(parseIncoming(m), JSON.stringify(m)).toBeNull();
   });

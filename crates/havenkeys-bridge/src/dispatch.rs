@@ -111,7 +111,7 @@ pub enum Dispatched {
     Open { item: Uuid, result: ResultBody },
 }
 
-/// Answer a request. `lock` is handled by the caller, which must not hold
+/// Answer a request. `lock` and `show_unlock` are handled by the caller, which must not hold
 /// the vault while locking.
 pub fn dispatch(
     v: &mut VaultService,
@@ -119,7 +119,10 @@ pub fn dispatch(
     unix_seconds: u64,
 ) -> Result<Dispatched, ErrorCode> {
     // Everything but status and lock comes from a web page.
-    if !matches!(req, Request::Status {} | Request::Lock {}) {
+    if !matches!(
+        req,
+        Request::Status {} | Request::Lock {} | Request::ShowUnlock {}
+    ) {
         require_enabled(v)?;
     }
     match req {
@@ -130,7 +133,8 @@ pub fn dispatch(
                 vault_exists: s.vault_exists,
             }))
         }
-        Request::Lock {} => Err(ErrorCode::Internal),
+        // Handled by the caller, without the vault.
+        Request::Lock {} | Request::ShowUnlock {} => Err(ErrorCode::Internal),
         Request::FindMatches { url, top_url } => {
             let matches = v
                 .find_matches(url, top_url.as_deref())
