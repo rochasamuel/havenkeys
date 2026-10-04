@@ -393,3 +393,35 @@ async fn approving_twice_is_refused_the_second_time() {
     );
     server.cleanup().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn overlapping_polls_after_approval_still_create_the_vault() {
+    let server = Server::start().await;
+    let phone_dir = tempfile::tempdir().unwrap();
+    let phone = client_in(phone_dir.path());
+    phone
+        .activate(
+            server.invite("ana@example.com").await,
+            SecretString::from(PASSWORD),
+        )
+        .await
+        .unwrap();
+    until(|| phone.is_online()).await;
+    let desk_dir = tempfile::tempdir().unwrap();
+    let desktop = client_in(desk_dir.path());
+    let start = desktop
+        .start_pairing(server.base.clone(), "Desktop")
+        .await
+        .unwrap();
+    phone.approve_pairing(&start.link).await.unwrap();
+
+    let (a, b) = tokio::join!(desktop.poll_pairing(), desktop.poll_pairing());
+    let approved = [&a, &b]
+        .iter()
+        .filter(|r| matches!(r, Ok(havenkeys_client::PairingPoll::Approved(_))))
+        .count();
+    assert_eq!(approved, 1, "{a:?} / {b:?}");
+    assert!(desktop.require_unlocked().is_ok());
+    assert!(desktop.vault().unwrap().account().unwrap().is_some());
+    server.cleanup().await;
+}

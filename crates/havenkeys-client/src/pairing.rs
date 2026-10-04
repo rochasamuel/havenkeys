@@ -97,39 +97,54 @@ impl HavenClient {
 
     /// One claim attempt. Any answer but `Waiting` ends the pairing.
     pub async fn poll_pairing(self: &Arc<Self>) -> ClientResult<PairingPoll> {
+        // One poll at a time: a second caller waits for the first, so an
+        // approval consumed by one poll cannot be cancelled by another.
+        let _gate = self.pairing_gate.lock().await;
         let (server_url, pairing_id, secret) = {
             let guard = self.pairing.lock().map_err(|_| ClientError::internal())?;
             let p = guard.as_ref().ok_or_else(ClientError::pairing_gone)?;
             (
                 p.server_url.clone(),
                 p.pairing_id.clone(),
-                *p.claim.as_bytes(),
+                zeroize::Zeroizing::new(*p.claim.as_bytes()),
             )
         };
-        let secret = zeroize::Zeroizing::new(secret);
         let server = self.server_for(&server_url)?;
         let answer = server.claim_pairing(&pairing_id, &secret).await;
         let (session, envelope) = match answer {
             Ok(Claim::Waiting) => return Ok(PairingPoll::Waiting),
             Ok(Claim::Denied) => {
-                self.cancel_pairing();
+                self.cancel_pairing_if(&pairing_id);
                 return Ok(PairingPoll::Denied);
             }
             Err(SyncError::Refused(_)) => {
-                self.cancel_pairing();
+                self.cancel_pairing_if(&pairing_id);
                 return Ok(PairingPoll::Expired);
             }
             Err(e) => return Err(e.into()),
             Ok(Claim::Approved { session, envelope }) => (session, envelope),
         };
-        let pending = self
-            .pairing
-            .lock()
-            .map_err(|_| ClientError::internal())?
-            .take()
-            .ok_or_else(ClientError::pairing_gone)?;
+        // Only the pairing this poll claimed; a newer one is left alone.
+        let pending = {
+            let mut guard = self.pairing.lock().map_err(|_| ClientError::internal())?;
+            if guard.as_ref().is_some_and(|p| p.pairing_id == pairing_id) {
+                guard.take()
+            } else {
+                None
+            }
+        }
+        .ok_or_else(ClientError::pairing_gone)?;
         let status = self.finish_pairing(pending, session, envelope).await?;
         Ok(PairingPoll::Approved(status))
+    }
+
+    /// Ends the pending pairing only if it is still `pairing_id`.
+    fn cancel_pairing_if(&self, pairing_id: &str) {
+        if let Ok(mut p) = self.pairing.lock() {
+            if p.as_ref().is_some_and(|x| x.pairing_id == pairing_id) {
+                *p = None;
+            }
+        }
     }
 
     async fn finish_pairing(

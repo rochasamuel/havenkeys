@@ -52,6 +52,8 @@ pub struct HavenClient {
     last_sync_attempt: Mutex<Option<Duration>>,
     /// The desktop's half of a pairing in progress: memory only.
     pub(crate) pairing: Mutex<Option<crate::pairing::PendingPairing>>,
+    /// Serialises `poll_pairing` calls.
+    pub(crate) pairing_gate: tokio::sync::Mutex<()>,
     /// Set when the vault file could not be opened. The app still starts —
     /// it has to, or there is nowhere to show the reason — and every vault
     /// access refuses with this.
@@ -76,6 +78,7 @@ impl HavenClient {
             server: Mutex::new(None),
             last_sync_attempt: Mutex::new(None),
             pairing: Mutex::new(None),
+            pairing_gate: tokio::sync::Mutex::new(()),
             storage_error,
             events,
             config,
