@@ -27,6 +27,7 @@ import type {
   CardView,
   IdentityView,
   ImportResult,
+  ImportSource,
   ItemInput,
   ItemOverview,
   PasskeyInfo,
@@ -116,7 +117,7 @@ export const api = {
   copyGenerated: (value: string) => call<CopyResult>("copy_generated_password", { value }),
 
   /** Opens the native file picker in Rust; resolves to null if cancelled. */
-  import1pux: () => call<ImportResult | null>("import_1pux"),
+  importFile: (source: ImportSource) => call<ImportResult | null>("import_file", { source }),
   /** Deletes the file chosen in the last import (the UI never sends a path). */
   deleteImportFile: () => call<void>("delete_import_file"),
 

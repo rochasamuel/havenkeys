@@ -2427,6 +2427,13 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   accent-color: var(--brass);
 }
 
+.row input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brass);
+}
+
 /* ---------------------------------------------------------------- toast */
 
 .toast-region {

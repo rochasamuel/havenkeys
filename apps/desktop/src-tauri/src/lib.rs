@@ -327,7 +327,7 @@ pub fn run() {
             commands::set_generator_options,
             autostart::launch_at_login,
             autostart::set_launch_at_login,
-            import::import_1pux,
+            import::import_file,
             import::delete_import_file,
             tray::set_ui_language,
             updater::update_status,

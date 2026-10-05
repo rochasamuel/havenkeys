@@ -408,7 +408,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
                       <Icon name="note" size={16} /> {t.vault.addNote}
                     </button>
                     <button className="btn" onClick={() => setSection("settings")} disabled={readOnly}>
-                      {t.vault.import1Password}
+                      {t.vault.importOther}
                     </button>
                   </div>
                 )}

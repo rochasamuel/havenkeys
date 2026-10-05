@@ -7,7 +7,7 @@
 //! batches of at most 500 (spec 2026-09-20 §8.4).
 
 use crate::state::{AppState, CmdError, CmdResult};
-use havenkeys_core::import::{onepux, ImportReport};
+use havenkeys_core::import::{self, ImportReport, ImportSource};
 use serde::Serialize;
 use std::io::Read;
 use tauri::{AppHandle, Manager};
@@ -22,26 +22,27 @@ pub struct ImportResult {
     file_name: String,
 }
 
-fn read_limited(path: &std::path::Path) -> CmdResult<Zeroizing<Vec<u8>>> {
+fn read_limited(path: &std::path::Path, limit: u64) -> CmdResult<Zeroizing<Vec<u8>>> {
     let meta = std::fs::metadata(path).map_err(|_| CmdError::file())?;
     if !meta.is_file() {
         return Err(CmdError::file());
     }
-    if meta.len() > onepux::MAX_ARCHIVE_BYTES {
+    if meta.len() > limit {
         return Err(havenkeys_core::Error::InvalidInput("export file is too large").into());
     }
     let file = std::fs::File::open(path).map_err(|_| CmdError::file())?;
     let mut buf = Zeroizing::new(Vec::with_capacity(meta.len() as usize));
-    file.take(onepux::MAX_ARCHIVE_BYTES + 1)
+    file.take(limit + 1)
         .read_to_end(&mut buf)
         .map_err(|_| CmdError::file())?;
     Ok(buf)
 }
 
-/// Let the user pick a 1Password `.1pux` export and import it.
+/// Let the user pick an export from `source` and import it. `source` is a
+/// closed set; the file must be that source's export or nothing is stored.
 /// Returns `None` if the picker was cancelled.
 #[tauri::command]
-pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
+pub async fn import_file(app: AppHandle, source: ImportSource) -> CmdResult<Option<ImportResult>> {
     {
         let state = app.state::<AppState>();
         state.touch();
@@ -57,8 +58,8 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
         handle
             .dialog()
             .file()
-            .set_title("Import from 1Password")
-            .add_filter("1Password export", &["1pux"])
+            .set_title(format!("Import from {}", source.name()))
+            .add_filter(format!("{} export", source.name()), &[source.extension()])
             .blocking_pick_file()
     })
     .await
@@ -70,9 +71,9 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
 
     // Read and parse off the async runtime; the vault lock is only taken to seal.
     let parse_path = path.clone();
-    let parsed = tauri::async_runtime::spawn_blocking(move || -> CmdResult<onepux::Parsed> {
-        let bytes = read_limited(&parse_path)?;
-        Ok(onepux::parse(&bytes)?)
+    let parsed = tauri::async_runtime::spawn_blocking(move || -> CmdResult<import::Parsed> {
+        let bytes = read_limited(&parse_path, source.max_bytes())?;
+        Ok(import::parse(source, &bytes)?)
     })
     .await
     .map_err(|_| CmdError::internal())??;
@@ -105,7 +106,7 @@ pub async fn import_1pux(app: AppHandle) -> CmdResult<Option<ImportResult>> {
     Ok(Some(ImportResult { report, file_name }))
 }
 
-/// Delete the export file chosen in the last `import_1pux` call. This is a
+/// Delete the export file chosen in the last `import_file` call. This is a
 /// normal file deletion, not a secure wipe (see docs/security-model.md).
 #[tauri::command]
 pub fn delete_import_file(state: tauri::State<'_, AppState>) -> CmdResult<()> {

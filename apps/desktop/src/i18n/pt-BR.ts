@@ -124,6 +124,13 @@ const invalidInput: Record<string, string> = {
   "TOTP input too long": "A chave de configuração é longa demais.",
   "HOTP is not supported": "HOTP não é suportado.",
   "not a valid 1Password export (.1pux) file": "Não é um arquivo de exportação do 1Password (.1pux) válido.",
+  "not a valid Bitwarden export file": "Não é um arquivo de exportação do Bitwarden válido.",
+  "encrypted Bitwarden exports are not supported":
+    "Exportações criptografadas do Bitwarden não são suportadas. Exporte de novo no formato .json sem criptografia.",
+  "not a valid Chrome export file": "Não é um arquivo de exportação de senhas do Chrome, Edge ou Brave válido.",
+  "not a valid Firefox export file": "Não é um arquivo de exportação de senhas do Firefox válido.",
+  "not a valid KeePassXC export file": "Não é um arquivo CSV do KeePassXC válido.",
+  "not a valid LastPass export file": "Não é um arquivo CSV do LastPass válido.",
   "export file is too large": "O arquivo de exportação é grande demais.",
   "export contains too many items": "A exportação tem itens demais.",
 };
@@ -262,12 +269,12 @@ export const ptBR: Messages = {
     deleteFailed: "Não foi possível excluir o item.",
     details: "Detalhes do item",
     emptyTitle: "Seu cofre está vazio",
-    emptyBody: "Adicione um login ou uma nota, ou traga tudo do 1Password.",
+    emptyBody: "Adicione um login ou uma nota, ou traga tudo de outro gerenciador de senhas.",
     nothingSelected: "Nada selecionado",
     chooseItem: "Escolha um item para ver os detalhes.",
     addLogin: "Adicionar login",
     addNote: "Adicionar nota segura",
-    import1Password: "Importar do 1Password",
+    importOther: "Importar de outro app",
     discardChanges: (title: string) => `Descartar suas alterações em “${title}”?`,
     discardNewItem: "Descartar o novo item?",
     keepEditing: "Continuar editando",
@@ -696,9 +703,31 @@ export const ptBR: Messages = {
   },
 
   import: {
-    title: "Importar do 1Password",
-    note: "No 1Password, escolha Arquivo › Exportar e o formato 1PUX, depois selecione esse arquivo aqui. A exportação contém todas as suas senhas sem criptografia, então exclua-a quando a importação terminar.",
-    choose: "Escolher arquivo .1pux…",
+    title: "Importar",
+    note: "Traga seus logins de outro gerenciador de senhas ou navegador. A exportação contém todas as suas senhas sem criptografia, então exclua o arquivo quando a importação terminar.",
+    sourceLabel: "Importar de",
+    sources: {
+      onePassword: "1Password",
+      bitwardenJson: "Bitwarden (.json)",
+      bitwardenCsv: "Bitwarden (.csv)",
+      chrome: "Chrome, Edge ou Brave",
+      firefox: "Firefox",
+      keePassXc: "KeePassXC",
+      lastPass: "LastPass",
+    },
+    howTo: {
+      onePassword: "No 1Password, escolha Arquivo › Exportar e o formato 1PUX.",
+      bitwardenJson:
+        "No Bitwarden, escolha Ferramentas › Exportar cofre e o formato .json. Exportações criptografadas não podem ser lidas; escolha a sem criptografia.",
+      bitwardenCsv:
+        "No Bitwarden, escolha Ferramentas › Exportar cofre e o formato .csv. O CSV não inclui cartões e identidades; a exportação .json inclui.",
+      chrome:
+        "No Chrome, abra Gerenciador de senhas › Configurações › Exportar senhas. O Edge e o Brave têm a mesma opção em Senhas.",
+      firefox: "No Firefox, abra Senhas (about:logins) e depois o menu ⋯ › Exportar senhas.",
+      keePassXc: "No KeePassXC, escolha Banco de dados › Exportar › Arquivo CSV.",
+      lastPass: "No LastPass, abra Opções avançadas › Exportar › Arquivo CSV do LastPass.",
+    },
+    choose: (extension: string) => `Escolher arquivo .${extension}…`,
     importing: "Importando…",
     failed: "A importação falhou.",
     fileDeleted: "Arquivo de exportação excluído.",
@@ -733,6 +762,10 @@ export const ptBR: Messages = {
       n === 1 ? "1 campo acima do limite de um login ficou nas notas dele." : `${n} campos acima do limite de um login ficaram nas notas deles.`,
     ssoUpgraded: (n: number) =>
       `${n} ${n === 1 ? "login que já estava no cofre agora entra" : "logins que já estavam no cofre agora entram"} com Google, Microsoft, GitHub ou Apple.`,
+    passkeysSkipped: (n: number) =>
+      n === 1
+        ? "1 passkey ficou de fora (importar passkeys ainda não é suportado)."
+        : `${n} passkeys ficaram de fora (importar passkeys ainda não é suportado).`,
     failedItems: (n: number) =>
       n === 1
         ? "1 item não pôde ser importado (um campo passou dos limites de tamanho)."

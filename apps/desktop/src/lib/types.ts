@@ -290,7 +290,18 @@ export interface ImportReport {
   urlsMovedToNotes: number;
   fieldsToNotes: number;
   ssoUpgraded: number;
+  passkeysSkipped: number;
 }
+
+/** Where an export came from; Rust refuses a file that isn't that source's. */
+export type ImportSource =
+  | "onePassword"
+  | "bitwardenJson"
+  | "bitwardenCsv"
+  | "chrome"
+  | "firefox"
+  | "keePassXc"
+  | "lastPass";
 
 export interface ImportResult {
   report: ImportReport;

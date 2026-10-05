@@ -63,7 +63,7 @@
     "allow-set-generator-options",
     "allow-launch-at-login",
     "allow-set-launch-at-login",
-    "allow-import-1pux",
+    "allow-import-file",
     "allow-delete-import-file",
     "allow-set-ui-language",
     "allow-update-status",

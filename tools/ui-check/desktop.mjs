@@ -232,7 +232,7 @@ function baseResponses() {
     get_emergency_kit: kit,
     reveal_account_secret_key: "H1-A3F9KQ-7XR2PL-M8WD4T-JC6VNB-2HYE5S",
     copy_account_field: { clearAfterSeconds: 30 },
-    import_1pux: {
+    import_file: {
       fileName: "1PasswordExport-ABCDEFGHIJKLMNOPQRSTUVWX-20260920-143000.1pux",
       report: {
         imported: 212,
@@ -769,7 +769,7 @@ export const desktopScenarios = [
       const count = await blocks.count();
       for (let i = 0; i < count; i++) {
         const b = blocks.nth(i);
-        const importBtn = b.locator(".group-note-top + .group-actions .btn");
+        const importBtn = b.locator('[role="radiogroup"] ~ .group-actions .btn');
         if ((await importBtn.count()) > 0 && (await b.locator(".danger-zone").count()) === 0) {
           await importBtn.first().click();
           await page.waitForTimeout(150);
@@ -782,7 +782,7 @@ export const desktopScenarios = [
       await pw.nth(2).fill("different");
       await page.fill(".danger-zone input", "x");
     },
-    shots: [".device-list", ".kit", ".kit-actions", ".import-result", "form.settings-block", ".danger-zone"],
+    shots: [".device-list", ".kit", ".kit-actions", ".import-result", "[role=\"radiogroup\"]", "form.settings-block", ".danger-zone"],
   },
   {
     name: "settings-offline",

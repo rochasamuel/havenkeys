@@ -255,12 +255,12 @@ export const en = {
     deleteFailed: "Could not delete the item.",
     details: "Item details",
     emptyTitle: "Your vault is empty",
-    emptyBody: "Add a login or a note, or bring everything over from 1Password.",
+    emptyBody: "Add a login or a note, or bring everything over from another password manager.",
     nothingSelected: "Nothing selected",
     chooseItem: "Choose an item to see its details.",
     addLogin: "Add a login",
     addNote: "Add a secure note",
-    import1Password: "Import from 1Password",
+    importOther: "Import from another app",
     discardChanges: (title: string) => `Discard your changes to “${title}”?`,
     discardNewItem: "Discard the new item?",
     keepEditing: "Keep editing",
@@ -688,9 +688,31 @@ export const en = {
   },
 
   import: {
-    title: "Import from 1Password",
-    note: "In 1Password, choose File › Export and the 1PUX format, then pick that file here. The export contains all of your passwords unencrypted, so delete it once the import is done.",
-    choose: "Choose .1pux file…",
+    title: "Import",
+    note: "Bring your logins over from another password manager or browser. Exports contain all of your passwords unencrypted, so delete the file once the import is done.",
+    sourceLabel: "Import from",
+    sources: {
+      onePassword: "1Password",
+      bitwardenJson: "Bitwarden (.json)",
+      bitwardenCsv: "Bitwarden (.csv)",
+      chrome: "Chrome, Edge or Brave",
+      firefox: "Firefox",
+      keePassXc: "KeePassXC",
+      lastPass: "LastPass",
+    },
+    howTo: {
+      onePassword: "In 1Password, choose File › Export and the 1PUX format.",
+      bitwardenJson:
+        "In Bitwarden, choose Tools › Export vault and the .json format. Encrypted exports can’t be read; choose the unencrypted one.",
+      bitwardenCsv:
+        "In Bitwarden, choose Tools › Export vault and the .csv format. The CSV leaves out cards and identities; the .json export keeps them.",
+      chrome:
+        "In Chrome, open Password Manager › Settings › Export passwords. Edge and Brave have the same option under Passwords.",
+      firefox: "In Firefox, open Passwords (about:logins), then the ⋯ menu › Export passwords.",
+      keePassXc: "In KeePassXC, choose Database › Export › CSV File.",
+      lastPass: "In LastPass, open Advanced Options › Export › LastPass CSV File.",
+    },
+    choose: (extension: string) => `Choose .${extension} file…`,
     importing: "Importing…",
     failed: "Import failed.",
     fileDeleted: "Export file deleted.",
@@ -716,6 +738,8 @@ export const en = {
       n === 1 ? "1 field over a login's limit was kept in its notes." : `${n} fields over a login's limit were kept in their notes.`,
     ssoUpgraded: (n: number) =>
       `${n} ${n === 1 ? "login already in your vault now signs" : "logins already in your vault now sign"} in with Google, Microsoft, GitHub or Apple.`,
+    passkeysSkipped: (n: number) =>
+      `${n} ${n === 1 ? "passkey was" : "passkeys were"} left out (importing passkeys is not supported yet).`,
     failedItems: (n: number) =>
       `${n} ${n === 1 ? "item" : "items"} couldn’t be imported (a field was over the size limits).`,
     wasDeleted: "The export file was deleted.",

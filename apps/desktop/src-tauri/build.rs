@@ -56,7 +56,7 @@ const COMMANDS: &[&str] = &[
     "set_generator_options",
     "launch_at_login",
     "set_launch_at_login",
-    "import_1pux",
+    "import_file",
     "delete_import_file",
     "set_ui_language",
     "update_status",
