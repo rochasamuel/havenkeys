@@ -159,9 +159,10 @@ export function createSsoHandler(deps: SsoDeps) {
         return {};
       }
       case "cs_sso_stop": {
-        // Any trusted input in the run's tab, or in a popup it opened, ends it (spec §6.3).
-        const owner = state.run(tab.tabId) ? tab.tabId : tab.openerTabId;
-        if (owner !== undefined && state.run(owner)) state.endRun(owner);
+        // Any trusted input in the run's tab, or in a popup it opened (or
+        // tied to it without an opener), ends it (spec §6.3).
+        const owner = state.runTabOf(tab);
+        if (owner !== null) state.endRun(owner);
         return {};
       }
       case "cs_sso_login":

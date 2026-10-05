@@ -43,6 +43,8 @@ export interface SsoRun {
   autoChoose: boolean;
   phase: "press" | "choose" | "login";
   expires: number;
+  /** The provider popup tied to this run without an opener tab (`popupFor`). */
+  popupTabId?: number;
 }
 
 export function createSsoState(now: () => number) {
@@ -75,7 +77,7 @@ export function createSsoState(now: () => number) {
    * pending for that provider and site, else nothing.
    */
   function popupFor(tab: TabRef, url: string): void {
-    if (tab.openerTabId !== undefined || pendingOf(tab)) return;
+    if (tab.openerTabId !== undefined || runs.has(tab.tabId)) return;
     let u: URL;
     let site: string;
     try {
@@ -92,6 +94,20 @@ export function createSsoState(now: () => number) {
         return false;
       }
     });
+    if (hits.length === 1 && hits[0] && !pendingOf(tab)) hits[0].popupTabId = tab.tabId;
+    runPopupFor(tab, u.origin, site);
+  }
+
+  /**
+   * The same for a run: Firefox opens Google's popup without an opener tab,
+   * so the run's chooser and login steps would never see it. A run
+   * whose provider origins include the page's and whose site is the page's
+   * `origin` parameter takes the tab; exactly one such run, else nothing.
+   */
+  function runPopupFor(tab: TabRef, pageOrigin: string, site: string): void {
+    const hits = [...runs.values()].filter(
+      (r) => r.expires > now() && r.tabId !== tab.tabId && r.siteOrigin === site && r.providerOrigins.includes(pageOrigin),
+    );
     if (hits.length === 1 && hits[0]) hits[0].popupTabId = tab.tabId;
   }
 
@@ -107,10 +123,15 @@ export function createSsoState(now: () => number) {
     return r;
   }
 
-  /** The run for this tab or its opener, if the origin is one of its provider origins. */
+  /** The run for this tab, its opener, or the run it is the tied popup of, if the origin is one of its provider origins. */
   function runFor(tab: TabRef, origin: string): SsoRun | null {
-    const r = run(tab.tabId) ?? (tab.openerTabId === undefined ? null : run(tab.openerTabId));
+    const r = run(tab.tabId) ?? (tab.openerTabId === undefined ? null : run(tab.openerTabId)) ?? tiedRun(tab.tabId);
     return r && r.providerOrigins.includes(origin) ? r : null;
+  }
+
+  function tiedRun(tabId: number): SsoRun | null {
+    for (const r of runs.values()) if (r.popupTabId === tabId) return run(r.tabId);
+    return null;
   }
 
   return {
@@ -197,6 +218,12 @@ export function createSsoState(now: () => number) {
       return full;
     },
     run,
+    /** The tab whose run `tab` belongs to: its own, its opener's, or the one it is the tied popup of. */
+    runTabOf(tab: TabRef): number | null {
+      if (run(tab.tabId)) return tab.tabId;
+      if (tab.openerTabId !== undefined && run(tab.openerTabId)) return tab.openerTabId;
+      return tiedRun(tab.tabId)?.tabId ?? null;
+    },
     pressed(tabId: number): SsoRun | null {
       const r = run(tabId);
       if (!r || r.phase !== "press") return null;

@@ -647,7 +647,12 @@ signs in too.
    switches (see Login, below). The **top frame** of the run's tab, or of a
    **popup that tab opened** (`openerTabId`, supplied by the browser, not the
    page), is told to choose only once its own origin is one of the run's
-   provider origins. Iframes are never told to choose (the background answers
+   provider origins. Firefox opens Google's popup with no opener tab: a tab
+   with none whose URL (as the browser reports it loading) is on one of the
+   run's provider origins and names the run's site in its `origin`
+   parameter is tied to that run, when exactly one run matches, and counts
+   as its popup from then on (choosing, the login, and ending the run on the
+   user's input). Iframes are never told to choose (the background answers
    them nothing and the content script ignores a choose outside the top
    frame), so a provider's embedded widget on some page, such as a Google
    Identity Services iframe, cannot spend the run. The first provider top

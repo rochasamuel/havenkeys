@@ -92,6 +92,13 @@ describe("offer", () => {
     expect(await h.start(top, ID)).toEqual({ ok: true, value: null });
     expect(h.ready(googleFrame(9), { tabId: 9, openerTabId: 1 })).toEqual({ kind: "choose", account: "me@gmail.com" });
   });
+  it("Firefox: Google's popup without an opener chooses once its URL names the site", async () => {
+    const { h } = setup({ start_sso: START_SSO });
+    expect(await h.start(top, ID)).toEqual({ ok: true, value: null });
+    expect(h.ready(googleFrame(9), { tabId: 9 })).toBeNull(); // not tied yet
+    h.tabUrl({ tabId: 9 }, `https://accounts.google.com/gsi/select?client_id=x&ux_mode=popup&origin=${encodeURIComponent(top.origin)}`);
+    expect(h.ready(googleFrame(9), { tabId: 9 })).toEqual({ kind: "choose", account: "me@gmail.com" });
+  });
   it("a provider-origin iframe does not choose or spend the run; the popup's top frame then does", async () => {
     const { h } = setup({ start_sso: START_SSO });
     await h.start(top, ID);

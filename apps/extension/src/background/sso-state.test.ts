@@ -109,6 +109,36 @@ describe("runs", () => {
     expect(s.chooseFor({ tabId: 7 }, G)).toBeNull();
     expect(s.chooseFor({ tabId: 7, openerTabId: 1 }, G)).toBe("me@gmail.com");
   });
+  it("Firefox: follows Google's popup without an opener when its origin parameter names the run's site", () => {
+    const { s } = setup();
+    start(s);
+    s.hint({ tabId: 7 }, `${G}/gsi/select?client_id=x&ux_mode=popup&origin=${encodeURIComponent("https://typeform.com")}`);
+    s.pressed(1);
+    expect(s.runTabOf({ tabId: 7 })).toBe(1);
+    expect(s.chooseFor({ tabId: 7 }, G)).toBe("me@gmail.com");
+    expect(s.loginFor({ tabId: 7 }, G)?.account).toBe("me@gmail.com");
+  });
+  it("does not tie a popup naming another site, off the provider's origin, or with an opener", () => {
+    const { s } = setup();
+    start(s);
+    s.pressed(1);
+    s.hint({ tabId: 7 }, `${G}/gsi/select?origin=${encodeURIComponent("https://evil.com")}`);
+    s.hint({ tabId: 8 }, `https://evil.com/gsi/select?origin=${encodeURIComponent("https://typeform.com")}`);
+    s.hint({ tabId: 9, openerTabId: 4 }, `${G}/gsi/select?origin=${encodeURIComponent("https://typeform.com")}`);
+    expect(s.chooseFor({ tabId: 7 }, G)).toBeNull();
+    expect(s.chooseFor({ tabId: 8 }, G)).toBeNull();
+    expect(s.chooseFor({ tabId: 9 }, G)).toBeNull();
+    expect(s.runTabOf({ tabId: 7 })).toBeNull();
+  });
+  it("does not tie a popup when two runs are for the same site", () => {
+    const { s } = setup();
+    start(s);
+    s.startRun({ tabId: 2, frameId: 0, siteOrigin: "https://typeform.com", provider: "google", account: "you@gmail.com", providerOrigins: [G], autoChoose: true });
+    s.pressed(1);
+    s.pressed(2);
+    s.hint({ tabId: 7 }, `${G}/gsi/select?origin=${encodeURIComponent("https://typeform.com")}`);
+    expect(s.chooseFor({ tabId: 7 }, G)).toBeNull();
+  });
   it("ends after pressing without account or auto choose", () => {
     const { s } = setup();
     start(s, { account: null });
