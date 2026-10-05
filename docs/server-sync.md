@@ -356,8 +356,13 @@ marker, so a wipe cut short finishes at the next start. The deleting device
 checks the master password locally first and erases its copy only after the
 server answers `204`. A daily task in the server deletes expired tombstones.
 
-A device whose session expired before it reconnected, or that stays offline
-for more than 30 days, sees only the ordinary signed-out state.
+The erase also stores a hash of each of the account's device ids in
+`deleted_devices` for 30 days. A device that was locked at the time holds no
+token and signs in again; when that sign-in fails and its device id is
+tombstoned, `login` answers `410 account_deleted` too. Only a device that
+stays away for more than 30 days sees the ordinary signed-out state. The
+client treats a `410` as a deletion only when the body's code is
+`account_deleted`, so a proxy's `410` never erases a device.
 
 ## 8. For a future mobile app
 

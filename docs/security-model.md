@@ -455,8 +455,8 @@ password (Android also asks for biometrics or the screen lock). Rust checks
 the password locally, then proves the auth key to the server, which erases
 the account in one transaction (`docs/server-sync.md` §7a). Only after the
 server's `204` does the device erase its vault file, the Secret Key and its
-device id; the account's other devices do the same when they next connect
-and get `410`.
+device id; the account's other devices do the same when they next sync or
+sign in within 30 days and get `410` (by session token or by device id).
 
 Not erased: database backups and server logs until they expire (≤ 30 days
 promised), anonymous session-token hashes for 30 days, IP-keyed rate-limit

@@ -726,9 +726,8 @@ export const ptBR: Messages = {
         <ul>
           <li>
             <strong>Imediatamente:</strong> o seu cofre cifrado e os itens, seus dispositivos e
-            sessões, seu endereço de e-mail, os parâmetros de derivação de chave e os contadores de
-            tentativas de login. A cópia no dispositivo que você usou também é apagada, e os outros
-            dispositivos apagam as deles na próxima vez que se conectarem.
+            sessões, seu endereço de e-mail, os parâmetros de derivação de chave e o contador de tentativas de login da sua conta. A cópia no dispositivo que você usou também é apagada, e os outros
+            dispositivos apagam as deles na próxima vez que se conectarem, se for em até 30 dias.
           </li>
           <li>
             <strong>Em até 30 dias:</strong> impressões digitais anônimas das suas sessões antigas,
@@ -738,6 +737,11 @@ export const ptBR: Messages = {
           <li>
             <strong>Em até 30 dias:</strong> cópias em backups do banco de dados e em logs do
             servidor, que expiram sozinhas.
+          </li>
+          <li>
+            <strong>Não ligado a você:</strong> contagens de tentativas de login que falharam,
+            guardadas por endereço de rede e que nunca identificam uma conta, não fazem parte da
+            exclusão.
           </li>
         </ul>
         <p>

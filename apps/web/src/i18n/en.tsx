@@ -709,9 +709,8 @@ export const en = {
         <ul>
           <li>
             <strong>Immediately:</strong> your encrypted vault and items, your devices and sessions,
-            your email address, your key-derivation parameters and your failed-sign-in counters. The
-            copy on the device you used is erased too, and your other devices erase theirs the next
-            time they connect.
+            your email address, your key-derivation parameters and your account's failed-sign-in counter. The
+            copy on the device you used is erased too, and your other devices erase theirs the next time they connect, if that is within 30 days.
           </li>
           <li>
             <strong>Within 30 days:</strong> anonymous fingerprints of your former sessions, kept
@@ -721,6 +720,10 @@ export const en = {
           <li>
             <strong>Within 30 days:</strong> copies in database backups and server logs, which
             expire on their own.
+          </li>
+          <li>
+            <strong>Not linked to you:</strong> counts of failed sign-ins kept per network address,
+            which never name an account, are not part of the deletion.
           </li>
         </ul>
         <p>
