@@ -230,7 +230,7 @@ impl<T: Transport> SyncClient<T> {
         match response.status {
             // A session that is already gone is a successful logout.
             204 | 200 | 401 => Ok(()),
-            _ => Err(error_for(response.status)),
+            _ => Err(error_from(&response)),
         }
     }
 
@@ -302,7 +302,7 @@ impl<T: Transport> SyncClient<T> {
             .await?;
         match response.status {
             204 | 200 => Ok(()),
-            _ => Err(error_for(response.status)),
+            _ => Err(error_from(&response)),
         }
     }
 
@@ -442,7 +442,7 @@ impl<T: Transport> SyncClient<T> {
             .await?;
         match response.status {
             200 | 204 => Ok(()),
-            _ => Err(error_for(response.status)),
+            _ => Err(error_from(&response)),
         }
     }
 
@@ -512,7 +512,7 @@ impl<T: Transport> SyncClient<T> {
         let response = self.post(&path, Some(session), &body).await?;
         match response.status {
             200 | 204 => Ok(()),
-            _ => Err(error_for(response.status)),
+            _ => Err(error_from(&response)),
         }
     }
 
@@ -521,7 +521,7 @@ impl<T: Transport> SyncClient<T> {
         let response = self.send(Method::Post, &path, Some(session), None).await?;
         match response.status {
             200 | 204 => Ok(()),
-            _ => Err(error_for(response.status)),
+            _ => Err(error_from(&response)),
         }
     }
 
@@ -604,9 +604,31 @@ fn check_header(header: &[u8]) -> Result<()> {
 /// A 200 answer's body, parsed; any other status as its error.
 fn expect_ok<D: serde::de::DeserializeOwned>(response: HttpResponse) -> Result<D> {
     if response.status != 200 {
-        return Err(error_for(response.status));
+        return Err(error_from(&response));
     }
     wire::parse(&response.body)
+}
+
+/// An error answer as its error. A 410 means the account was deleted only
+/// when the server itself says so: a proxy's or CDN's 410 in front of a live
+/// server must never make a device erase its copy. Only the code is read;
+/// the server's message is never used.
+fn error_from(response: &HttpResponse) -> SyncError {
+    #[derive(serde::Deserialize)]
+    struct Body {
+        error: Code,
+    }
+    #[derive(serde::Deserialize)]
+    struct Code {
+        code: String,
+    }
+    if response.status == 410 {
+        let said = serde_json::from_slice::<Body>(&response.body).ok();
+        if said.is_some_and(|b| b.error.code == "account_deleted") {
+            return SyncError::AccountDeleted;
+        }
+    }
+    error_for(response.status)
 }
 
 /// Map a status to an error. The server's own message is never used: it
@@ -617,7 +639,6 @@ fn error_for(status: u16) -> SyncError {
         401 | 403 => SyncError::Unauthorized,
         404 => SyncError::Refused("not found"),
         409 => SyncError::Conflict(Vec::new()),
-        410 => SyncError::AccountDeleted,
         413 => SyncError::Refused("too large"),
         429 => SyncError::RateLimited,
         400..=499 => SyncError::Refused("the request was refused"),
@@ -647,9 +668,26 @@ mod pairing_tests {
 mod deletion_tests {
     use super::*;
 
+    fn answer(status: u16, body: &str) -> HttpResponse {
+        HttpResponse {
+            status,
+            body: body.as_bytes().to_vec(),
+        }
+    }
+
     #[test]
-    fn gone_means_the_account_was_deleted() {
-        assert_eq!(error_for(410), SyncError::AccountDeleted);
-        assert_eq!(error_for(401), SyncError::Unauthorized);
+    fn only_the_servers_own_410_means_the_account_was_deleted() {
+        let deleted = r#"{"error":{"code":"account_deleted","message":"x"}}"#;
+        assert_eq!(error_from(&answer(410, deleted)), SyncError::AccountDeleted);
+        // A proxy's or CDN's 410 must never erase a device.
+        assert_ne!(
+            error_from(&answer(410, "<html>Gone</html>")),
+            SyncError::AccountDeleted
+        );
+        assert_ne!(
+            error_from(&answer(410, r#"{"error":{"code":"gone"}}"#)),
+            SyncError::AccountDeleted
+        );
+        assert_eq!(error_from(&answer(401, deleted)), SyncError::Unauthorized);
     }
 }
