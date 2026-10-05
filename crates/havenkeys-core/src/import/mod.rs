@@ -6,10 +6,90 @@
 //! single write does: `VaultService::stage_import` seals them, and the
 //! desktop sends them in batches the server accepts (spec 2026-09-20 §8.4).
 
+pub mod bitwarden;
+mod common;
+pub mod csv;
 pub mod onepux;
 
+use crate::error::{Error, Result};
 use crate::model::ItemInput;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+/// Most items one export may hold.
+pub const MAX_ITEMS: usize = 50_000;
+/// Largest JSON or CSV export accepted.
+pub const MAX_TEXT_EXPORT_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Where an export came from. The user picks it; the file must then be that
+/// source's export or it is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportSource {
+    /// `.1pux`
+    OnePassword,
+    /// Unencrypted `.json`
+    BitwardenJson,
+    BitwardenCsv,
+    /// Chrome, Edge, Brave and other Chromium browsers.
+    Chrome,
+    Firefox,
+    KeePassXc,
+    LastPass,
+}
+
+impl ImportSource {
+    /// Largest file accepted for this source.
+    pub fn max_bytes(self) -> u64 {
+        match self {
+            ImportSource::OnePassword => onepux::MAX_ARCHIVE_BYTES,
+            _ => MAX_TEXT_EXPORT_BYTES,
+        }
+    }
+
+    /// The file extension its export uses.
+    pub fn extension(self) -> &'static str {
+        match self {
+            ImportSource::OnePassword => "1pux",
+            ImportSource::BitwardenJson => "json",
+            _ => "csv",
+        }
+    }
+
+    /// Product name, for the file picker.
+    pub fn name(self) -> &'static str {
+        match self {
+            ImportSource::OnePassword => "1Password",
+            ImportSource::BitwardenJson | ImportSource::BitwardenCsv => "Bitwarden",
+            ImportSource::Chrome => "Chrome",
+            ImportSource::Firefox => "Firefox",
+            ImportSource::KeePassXc => "KeePassXC",
+            ImportSource::LastPass => "LastPass",
+        }
+    }
+}
+
+/// Parse result: items to store plus what was skipped while parsing.
+/// `report.imported`/`failed`/`skipped_duplicates` are filled in by the vault.
+pub struct Parsed {
+    pub items: Vec<ImportedItem>,
+    pub report: ImportReport,
+}
+
+/// Parse `bytes` as `source`'s export.
+pub fn parse(source: ImportSource, bytes: &[u8]) -> Result<Parsed> {
+    if bytes.len() as u64 > source.max_bytes() {
+        return Err(Error::InvalidInput("export file is too large"));
+    }
+    match source {
+        ImportSource::OnePassword => onepux::parse(bytes),
+        ImportSource::BitwardenJson => bitwarden::parse(bytes),
+        ImportSource::BitwardenCsv
+        | ImportSource::Chrome
+        | ImportSource::Firefox
+        | ImportSource::KeePassXc
+        | ImportSource::LastPass => csv::parse(source, bytes),
+    }
+}
 
 /// One item ready to be stored, with its original timestamps (Unix ms).
 pub struct ImportedItem {
@@ -48,6 +128,9 @@ pub struct ImportReport {
     pub attachments_skipped: usize,
     /// Old passwords from password history were left out.
     pub password_history_skipped: usize,
+    /// Passkeys in the export were left out (importing them is not
+    /// supported yet).
+    pub passkeys_skipped: usize,
     /// Website entries that were not valid http(s) addresses; kept as text in
     /// the item's notes instead of as matchable websites.
     pub urls_moved_to_notes: usize,

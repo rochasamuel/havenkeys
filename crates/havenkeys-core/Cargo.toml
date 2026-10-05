@@ -34,6 +34,8 @@ unicode-normalization = "0.1.25"
 percent-encoding = "2"
 zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 psl = "2"
+# CSV exports from other password managers (BurntSushi; MIT/Unlicense).
+csv = "1.4"
 
 [dev-dependencies]
 tempfile = "3"

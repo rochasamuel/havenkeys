@@ -16,16 +16,16 @@
 //! * Archived/deleted items, attachments and password history are skipped
 //!   and counted.
 
-use super::{ImportReport, ImportedItem};
-use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
-use crate::custom_field::{
-    clean_plain, AddressValue, FieldInput, FieldKind, FieldValueInput, SectionInput, MAX_FIELDS,
-    MAX_LABEL_CHARS, MAX_SECTIONS, MAX_TOTAL_BYTES,
+use super::common::{
+    self, clean_line, fill, format_date, non_empty, set_or_keep, str_at, validated, wipe, Extras,
+    LoginSections,
 };
+use super::{ImportReport, ImportedItem, Parsed, MAX_ITEMS};
+use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
+use crate::custom_field::{AddressValue, FieldValueInput};
 use crate::error::{Error, Result};
 use crate::model::{
-    check_password, normalize_url, ItemInput, ItemType, MatchType, SecretUpdate, UrlRule,
-    MAX_TITLE_CHARS, MAX_URLS, MAX_USERNAME_CHARS,
+    ItemInput, ItemType, MatchType, SecretUpdate, UrlRule, MAX_TITLE_CHARS, MAX_USERNAME_CHARS,
 };
 use crate::secret::SecretString;
 use crate::sso::{SignInWith, SsoProvider, MAX_ACCOUNT_CHARS};
@@ -38,16 +38,8 @@ use zeroize::{Zeroize, Zeroizing};
 pub const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
 /// Largest uncompressed `export.data` accepted (zip-bomb guard).
 pub const MAX_EXPORT_DATA_BYTES: u64 = 64 * 1024 * 1024;
-pub const MAX_ITEMS: usize = 50_000;
 
-const INVALID: Error = Error::InvalidInput("not a valid 1Password export (.1pux) file");
-
-/// Parse result: items to store plus what was skipped while parsing.
-/// `report.imported`/`failed`/`skipped_duplicates` are filled in by the vault.
-pub struct Parsed {
-    pub items: Vec<ImportedItem>,
-    pub report: ImportReport,
-}
+pub(super) const INVALID: Error = Error::InvalidInput("not a valid 1Password export (.1pux) file");
 
 pub fn parse(archive: &[u8]) -> Result<Parsed> {
     if archive.len() as u64 > MAX_ARCHIVE_BYTES {
@@ -78,20 +70,6 @@ pub fn parse(archive: &[u8]) -> Result<Parsed> {
     let result = convert(&root, attachments);
     wipe(&mut root);
     result
-}
-
-/// Best-effort wipe of every string in the parsed JSON tree.
-fn wipe(v: &mut Value) {
-    match v {
-        Value::String(s) => s.zeroize(),
-        Value::Array(a) => a.iter_mut().for_each(wipe),
-        Value::Object(o) => {
-            for (_, x) in o.iter_mut() {
-                wipe(x);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn convert(root: &Value, attachments: usize) -> Result<Parsed> {
@@ -131,18 +109,6 @@ fn convert(root: &Value, attachments: usize) -> Result<Parsed> {
     Ok(Parsed { items, report })
 }
 
-fn str_at<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
-    let mut cur = v;
-    for key in path {
-        cur = cur.get(key)?;
-    }
-    cur.as_str()
-}
-
-fn non_empty(s: Option<&str>) -> Option<&str> {
-    s.map(str::trim).filter(|s| !s.is_empty())
-}
-
 /// 1Password stores seconds; the vault stores milliseconds.
 fn timestamp_ms(item: &Value, key: &str) -> Option<i64> {
     item.get(key)?
@@ -173,170 +139,6 @@ fn category_name(uuid: &str) -> &'static str {
         "114" => "SSH key",
         "115" => "Crypto wallet",
         _ => "Item",
-    }
-}
-
-fn clean_line(s: &str, max_chars: usize) -> String {
-    s.chars()
-        .filter(|c| !c.is_control())
-        .take(max_chars)
-        .collect::<String>()
-        .trim()
-        .to_owned()
-}
-
-/// Collected free-text lines appended to notes.
-#[derive(Default)]
-struct Extras {
-    lines: Vec<String>,
-    current_section: Option<String>,
-}
-
-impl Extras {
-    fn section(&mut self, title: Option<&str>) {
-        self.current_section = non_empty(title).map(str::to_owned);
-    }
-
-    fn push(&mut self, label: Option<&str>, value: &str) {
-        if value.trim().is_empty() {
-            return;
-        }
-        if let Some(section) = self.current_section.take() {
-            if !self.lines.is_empty() {
-                self.lines.push(String::new());
-            }
-            self.lines.push(format!("[{section}]"));
-        }
-        match non_empty(label) {
-            Some(l) => self.lines.push(format!("{l}: {value}")),
-            None => self.lines.push(value.to_owned()),
-        }
-    }
-
-    fn render(&self) -> String {
-        self.lines.join("\n")
-    }
-}
-
-impl Drop for Extras {
-    fn drop(&mut self) {
-        self.lines.iter_mut().for_each(|l| l.zeroize());
-    }
-}
-
-/// A login's custom fields built from its 1Password sections and extra form
-/// fields (spec 2026-09-30-login-custom-fields §6).
-#[derive(Default)]
-struct LoginSections {
-    sections: Vec<SectionInput>,
-    count: usize,
-    /// Bytes of titles, labels and values so far, counted strictly (at least
-    /// what the vault counts) against `MAX_TOTAL_BYTES`.
-    bytes: usize,
-}
-
-impl LoginSections {
-    fn start(&mut self, title: Option<&str>) {
-        let title = non_empty(title)
-            .map(|t| clean_line(t, MAX_LABEL_CHARS))
-            .filter(|t| !t.is_empty())
-            .map(SecretString::new);
-        self.bytes += title.as_ref().map_or(0, |t| t.expose().len());
-        self.sections.push(SectionInput {
-            id: None,
-            title,
-            fields: Vec::new(),
-        });
-    }
-
-    /// Add a field to the current section; false when the login is full, so
-    /// the caller keeps the value in the notes.
-    fn push(&mut self, label: Option<&str>, value: FieldValueInput) -> bool {
-        let used = self
-            .sections
-            .iter()
-            .filter(|s| !s.fields.is_empty())
-            .count();
-        let Some(section) = self.sections.last_mut() else {
-            return false;
-        };
-        if self.count >= MAX_FIELDS || (section.fields.is_empty() && used >= MAX_SECTIONS) {
-            return false;
-        }
-        let label = non_empty(label)
-            .map(|l| clean_line(l, MAX_LABEL_CHARS))
-            .filter(|l| !l.is_empty())
-            .unwrap_or_else(|| default_label(value.kind()).to_owned());
-        let added = label.len() + value_bytes(&value);
-        if self.bytes + added > MAX_TOTAL_BYTES {
-            return false;
-        }
-        self.bytes += added;
-        section.fields.push(FieldInput {
-            id: None,
-            label: SecretString::new(label),
-            value,
-        });
-        self.count += 1;
-        true
-    }
-
-    fn finish(self) -> Option<Vec<SectionInput>> {
-        let sections: Vec<SectionInput> = self
-            .sections
-            .into_iter()
-            .filter(|s| !s.fields.is_empty())
-            .collect();
-        (!sections.is_empty()).then_some(sections)
-    }
-}
-
-fn value_bytes(value: &FieldValueInput) -> usize {
-    match value {
-        // The vault stores the normalised URL, which can be longer than what
-        // was read (a trailing `/`, a scheme), so count whichever is more.
-        FieldValueInput::Url(v) => normalize_url(v.expose())
-            .map_or(0, |n| n.len())
-            .max(v.expose().len()),
-        FieldValueInput::Text(v)
-        | FieldValueInput::Email(v)
-        | FieldValueInput::Phone(v)
-        | FieldValueInput::Date(v) => v.expose().len(),
-        FieldValueInput::Address(a) => a.formatted().expose().len(),
-        FieldValueInput::Password(SecretUpdate::Set(v))
-        | FieldValueInput::Otp(SecretUpdate::Set(v)) => v.expose().len(),
-        FieldValueInput::Password(_) | FieldValueInput::Otp(_) => 0,
-    }
-}
-
-/// `candidate` if it passes its type's checks, else `fallback` as Text if
-/// that passes, else `None` (the caller keeps the value in the notes).
-fn validated(
-    candidate: FieldValueInput,
-    fallback: impl FnOnce() -> Option<String>,
-) -> Option<FieldValueInput> {
-    let passes = match &candidate {
-        FieldValueInput::Otp(SecretUpdate::Set(t)) => parse_totp_input(t.expose()).is_ok(),
-        FieldValueInput::Password(SecretUpdate::Set(p)) => check_password(p).is_ok(),
-        other => clean_plain(other).is_ok(),
-    };
-    if passes {
-        return Some(candidate);
-    }
-    let as_text = FieldValueInput::Text(SecretString::new(fallback()?));
-    clean_plain(&as_text).is_ok().then_some(as_text)
-}
-
-fn default_label(kind: FieldKind) -> &'static str {
-    match kind {
-        FieldKind::Text => "Text",
-        FieldKind::Url => "URL",
-        FieldKind::Email => "Email",
-        FieldKind::Phone => "Phone",
-        FieldKind::Date => "Date",
-        FieldKind::Address => "Address",
-        FieldKind::Password => "Password",
-        FieldKind::Otp => "One-time password",
     }
 }
 
@@ -440,23 +242,6 @@ fn render_value(value: &Value, report: &mut ImportReport) -> Option<String> {
     text.filter(|t| !t.trim().is_empty())
 }
 
-/// Unix seconds → YYYY-MM-DD (proleptic Gregorian, UTC).
-fn format_date(secs: i64) -> String {
-    let days = secs.div_euclid(86_400);
-    // Howard Hinnant's days-from-civil inverse.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!("{y:04}-{m:02}-{d:02}")
-}
-
 /// Valid http(s) websites become URL rules; anything else (app links, bare
 /// words) is kept as text in the notes rather than dropped.
 fn collect_urls(overview: &Value, report: &mut ImportReport, extras: &mut Extras) -> Vec<UrlRule> {
@@ -467,43 +252,11 @@ fn collect_urls(overview: &Value, report: &mut ImportReport, extras: &mut Extras
     if let Some(u) = non_empty(str_at(overview, &["url"])) {
         raw.push(u);
     }
-    let mut out: Vec<UrlRule> = Vec::new();
-    for candidate in raw {
-        match normalize_url(candidate) {
-            Ok(url) if !out.iter().any(|r| r.url == url) => {
-                if out.len() < MAX_URLS {
-                    out.push(UrlRule {
-                        url,
-                        match_type: MatchType::Domain,
-                    });
-                }
-            }
-            Ok(_) => {}
-            Err(_) => {
-                report.urls_moved_to_notes += 1;
-                extras.section(None);
-                extras.push(Some("Website"), candidate);
-            }
-        }
-    }
-    out
-}
-
-/// 1Password's `creditCardType` values.
-fn brand_from_1password(value: &str) -> Option<CardBrand> {
-    Some(match value.trim().to_ascii_lowercase().as_str() {
-        "visa" | "visaelectron" | "electron" => CardBrand::Visa,
-        "mc" | "mastercard" | "master" => CardBrand::Mastercard,
-        "amex" | "americanexpress" | "american express" => CardBrand::Amex,
-        "elo" => CardBrand::Elo,
-        "hipercard" | "hiper" => CardBrand::Hipercard,
-        "diners" | "dinersclub" | "diners club" | "carteblanche" => CardBrand::Diners,
-        "discover" => CardBrand::Discover,
-        "jcb" => CardBrand::Jcb,
-        "unionpay" | "china unionpay" => CardBrand::Unionpay,
-        "maestro" => CardBrand::Maestro,
-        _ => return None,
-    })
+    common::collect_urls(
+        raw.into_iter().map(|u| (u, MatchType::Domain)),
+        report,
+        extras,
+    )
 }
 
 /// The values of a 1Password credit card that a Card holds. A field is
@@ -542,7 +295,7 @@ impl CardParts {
             return fill(&mut self.cardholder, name.map(SecretString::new));
         }
         if self.brand.is_none() && (id == "type" || value.get("creditCardType").is_some()) {
-            return fill(&mut self.brand, text().and_then(brand_from_1password));
+            return fill(&mut self.brand, text().and_then(common::brand_from_name));
         }
         let expiry_field = id == "expiry" || (id.is_empty() && title.contains("expir"));
         if self.expiry.is_none() && expiry_field {
@@ -562,21 +315,6 @@ impl CardParts {
         }
         false
     }
-}
-
-/// Put `value` in `slot` if there is one. Whether it was taken.
-fn fill<T>(slot: &mut Option<T>, value: Option<T>) -> bool {
-    match value {
-        Some(v) => {
-            *slot = Some(v);
-            true
-        }
-        None => false,
-    }
-}
-
-fn set_or_keep(value: Option<SecretString>) -> SecretUpdate {
-    value.map_or(SecretUpdate::Keep, SecretUpdate::Set)
 }
 
 /// A login's username and password from `loginFields`: the fields
@@ -1281,19 +1019,8 @@ mod tests {
         assert_eq!(parsed.items[2].input.title, "Bell");
     }
 
-    // Storing parsed items in a vault is exercised where the write path
-    // lives now (`VaultService::stage_create`/`commit_write`); import itself
-    // is rebuilt on top of staged writes once there is a server to send them
-    // to (spec 2026-09-20 §8.4, §13). Until then `import_1pux` refuses with
-    // `Error::Offline` (see `apps/desktop/src-tauri/src/import.rs`), so there
-    // is nothing left here to store `parse`'s output into.
-
-    #[test]
-    fn dates_format() {
-        assert_eq!(format_date(0), "1970-01-01");
-        assert_eq!(format_date(951_782_400), "2000-02-29");
-        assert_eq!(format_date(1_758_240_000), "2025-09-19");
-    }
+    // Storing parsed items is tested with the staged write path
+    // (`tests/writes.rs`, `tests/import_formats.rs`).
 
     #[test]
     fn errors_do_not_echo_content() {

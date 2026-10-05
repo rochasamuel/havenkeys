@@ -2684,6 +2684,7 @@ dependencies = [
  "aes-gcm",
  "argon2 0.6.0",
  "ciborium",
+ "csv",
  "data-encoding",
  "hkdf 0.13.0",
  "hmac 0.13.0",
