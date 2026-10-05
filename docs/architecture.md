@@ -28,7 +28,7 @@ havenkeys/
 │           ├── custom_field.rs login custom fields: typed sections, limits, save checks
 │           ├── totp.rs        RFC 6238 + otpauth:// parsing
 │           ├── origin.rs      URL parsing and domain matching (PSL-based)
-│           ├── import/        1Password .1pux importer (hostile-input parsing)
+│           ├── import/        importers: 1Password .1pux, Bitwarden JSON, CSVs (hostile-input parsing)
 │           ├── account.rs     account identity: email normalization for key derivation
 │           ├── sync.rs        account header attestation + applying a server pull (no network)
 │           ├── unlock_bundle.rs  Android biometric unlock bundle: layout and freshness

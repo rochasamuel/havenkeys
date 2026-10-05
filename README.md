@@ -19,7 +19,7 @@ changes need the server.
 | Native messaging (native host + desktop bridge) | Implemented ([docs/native-messaging.md](docs/native-messaging.md)) |
 | Browser extension (MV3, Chrome + Firefox) | Toolbar popup with Fill; in-page suggestions for logins, one-time codes and generated passwords (on by default, can be turned off); save/update prompts ([docs/autofill.md](docs/autofill.md)) |
 | Passkeys (WebAuthn, ES256) | Implemented and unit-tested: create, save to a login, sign in (chooser and passkey autofill), an automatic upgrade after a password fill, a field-menu hint for known passkey sites, delete from the desktop. Not yet checked against real sites in a browser ([docs/security-review.md](docs/security-review.md), Passkeys) |
-| Import | 1Password `.1pux` (logins, notes, TOTP; other item kinds become secure notes) |
+| Import | 1Password `.1pux`, Bitwarden (`.json`/`.csv`), Chrome/Edge/Brave, Firefox, KeePassXC and LastPass CSV (logins, notes, TOTP, cards; other item kinds become secure notes) |
 | Export | Not implemented |
 | Secret Key + Emergency Kit | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
 | Account server (`havenkeys-server`) | Implemented and tested against Postgres; deployed ([docs/deployment.md](docs/deployment.md)). The backup restore drill (§5) and real cross-device use are not yet done — see [docs/roadmap.md](docs/roadmap.md) §3 |
@@ -43,7 +43,7 @@ What the desktop app does today:
   comes later
 * **Cards** (holder name, number, verification number, expiry) with the
   network's logo, detected from the number; numbers stay masked until you
-  reveal them, and 1Password credit cards import as cards
+  reveal them, and 1Password and Bitwarden credit cards import as cards
 * A **HavenKeys Account** item pinned first in All items: your email,
   server, account ID and Secret Key, to read or copy when setting up
   another computer (read-only; never stored in the vault or sent to the
@@ -53,7 +53,8 @@ What the desktop app does today:
 * TOTP codes (SHA-1/256/512, 6/8 digits, `otpauth://` import)
 * Copy to clipboard from Rust with automatic clearing
 * Master password change (rewraps the vault key; items are untouched)
-* Import from 1Password (`.1pux`): Settings → Import from 1Password
+* Import from 1Password, Bitwarden, Chrome/Edge/Brave, Firefox, KeePassXC or
+  LastPass: Settings → Import
 * Browser extension connection through native messaging (opt-in: Settings →
   Browser extension)
 * Password history: a password replaced from the app or the browser stays

@@ -233,7 +233,7 @@ means a live server session, which a locked vault does not have.
 | `copy_generated_password` | no | no |
 | `get_settings`, `update_settings` | yes | no. `update_settings` keeps the stored generator policy |
 | `set_generator_options` | yes | no. Saves the generator tab's policy (encrypted settings); the extension's "Generate strong password" uses it |
-| `import_1pux` | yes (online) | no. Rust opens the native file picker; the renderer never supplies a path |
+| `import_file` | yes (online) | no. Takes only the source (a closed enum: 1Password, Bitwarden JSON/CSV, Chrome, Firefox, KeePassXC, LastPass); Rust opens the native file picker and the renderer never supplies a path |
 | `delete_import_file` | yes | no. Deletes only the file picked in the last import |
 | `device_status` | no | no (key scheme, whether a Secret Key is needed, online) |
 | `account_status` | no | no (email, server URL, account ID, last sync) |
@@ -332,24 +332,40 @@ master password is still typed only in the desktop app.
 * Other applications (clipboard managers, malware) may read the clipboard
   during this window. On Linux/X11 any client can read the selection.
 
-## 10. Importing from 1Password (`.1pux`)
+## 10. Importing from other password managers
 
-* **No path from the renderer.** `import_1pux` opens the native file picker from
+Sources: 1Password `.1pux`, Bitwarden unencrypted `.json` and `.csv`,
+Chromium browsers' and Firefox's password CSVs, KeePassXC CSV and LastPass
+CSV (spec 2026-10-05-import-formats).
+
+* **No path from the renderer.** `import_file` opens the native file picker from
   Rust (`tauri-plugin-dialog`, used only on the Rust side; the capability
   grants the UI no dialog permission). A compromised renderer cannot make the
   core read an arbitrary file.
 * **Hostile-input limits.** Archives are capped at 256 MiB and `export.data`
   at 64 MiB of actually decompressed bytes, which defeats zip bombs. Imports
   are capped at 50 000 items. Only `export.data` is read; attachments are not
-  extracted.
+  extracted. JSON and CSV exports are capped at 64 MiB.
+* **The file must match the chosen source.** A CSV whose header lacks the
+  source's required columns, or a JSON without Bitwarden's `items`, is refused
+  as a whole; a single unreadable row (wrong number of fields, not UTF-8)
+  counts as failed and the rest go on. Encrypted Bitwarden exports are
+  refused: opening them would mean reimplementing Bitwarden's key scheme.
+* **Never looser matching.** Bitwarden's per-URI match settings map to the
+  same or a stricter HavenKeys rule (host → origin, exact → exact, all others
+  → domain); every other source's websites match by domain, as typed ones do.
+* **Passkeys are not imported.** Bitwarden's JSON carries passkey private
+  keys; they are counted and dropped, never written into notes.
 * **Same validation as the UI.** Every imported item goes through the normal
   item validation. Items that fail are counted, not stored half-valid.
 * **In memory only.** The file is read into a zeroize-on-drop buffer, and the
   parsed JSON tree's strings are wiped after conversion (best effort; see §8).
+  The CSV reader's internal row buffer is not wiped (the `csv` crate offers
+  no hook); it is freed when the import ends.
   No temporary files are written.
 * **Atomic.** All items are written in one SQLite transaction.
 * **Counts only.** The import report contains counts, never item content.
-* **Plaintext export on disk.** The `.1pux` file stays where the user saved it.
+* **Plaintext export on disk.** The export file stays where the user saved it.
   The UI warns about this and offers to delete it. That is a normal file
   deletion, **not a secure wipe**: on SSDs and journaling or copy-on-write
   filesystems the data may remain recoverable, and copies in backups or cloud

@@ -333,6 +333,8 @@ exactly, and no nightly toolchain or `cargo-fuzz` is needed:
 | Item JSON from the UI | `crates/havenkeys-core/tests/fuzz.rs` |
 | Digital Asset Links files (`assetlinks.json`) | `crates/havenkeys-core/tests/fuzz.rs` |
 | 1Password `.1pux` archives and their JSON | `crates/havenkeys-core/src/import/onepux.rs` |
+| Bitwarden JSON exports | `crates/havenkeys-core/src/import/bitwarden.rs` |
+| CSV exports (Bitwarden, Chrome, Firefox, KeePassXC, LastPass) | `crates/havenkeys-core/src/import/csv.rs` |
 | Extension-side protocol validator | `packages/protocol/src/fuzz.test.ts` |
 | Extension message validators, URL stripping, field classification over random DOM | `apps/extension/src/fuzz.test.ts` |
 
