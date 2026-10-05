@@ -314,3 +314,76 @@ fn the_identity_restores_under_this_vaults_id_or_is_skipped() {
     let again = restore_into(&mut b, &file, 10);
     assert_eq!((again.identities, again.skipped_existing), (0, 1));
 }
+
+use havenkeys_core::import::{self, ImportSource};
+
+#[test]
+fn bitwarden_json_reimports_and_never_carries_passkeys() {
+    let (mut v, _) = activated_vault();
+    let mut gh = login("GitHub", "octo", "pw1", "https://github.com");
+    gh.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXP"));
+    commit_all(&mut v, vec![gh, note("Recovery", "1111 2222")]);
+    let staged = v.stage_passkey_create(passkey_req(&[1]), NOW).unwrap();
+    v.commit_write(staged.write, 50).unwrap();
+
+    let out = export::render(&v, ExportFormat::BitwardenJson, NOW).unwrap();
+    assert_eq!(out.summary.passkeys_left_out, 1);
+    let text = std::str::from_utf8(&out.bytes).unwrap();
+    assert!(text.contains("\"fido2Credentials\":[]"));
+    assert!(!text.contains("privateKey") && !text.contains("keyValue"));
+
+    let parsed = import::parse(ImportSource::BitwardenJson, &out.bytes).unwrap();
+    let (mut fresh, _) = activated_vault();
+    let staged = fresh.stage_import(parsed.items, parsed.report, NOW).unwrap();
+    assert_eq!(staged.report.failed, 0);
+    assert_eq!((staged.report.logins, staged.report.secure_notes), (2, 1));
+    let mut rev = 0;
+    for w in staged.writes {
+        rev += 1;
+        fresh.commit_write(w, rev).unwrap();
+    }
+    let github = fresh
+        .list_items()
+        .unwrap()
+        .into_iter()
+        .find(|i| i.title == "GitHub")
+        .unwrap();
+    assert!(github.has_totp);
+    assert_eq!(github.username.as_deref(), Some("octo"));
+}
+
+/// No plaintext export contains a passkey's private key in any encoding.
+#[test]
+#[ignore = "enabled in Task 7 when the CSV writer exists"]
+fn plaintext_exports_never_contain_passkey_key_material() {
+    use data_encoding::{BASE64, BASE64URL, BASE64URL_NOPAD, BASE64_NOPAD, HEXLOWER};
+    let (mut v, _) = activated_vault();
+    let staged = v.stage_passkey_create(passkey_req(&[1]), NOW).unwrap();
+    v.commit_write(staged.write, 1).unwrap();
+    // The raw key, read from the backup payload (the only place it may be).
+    let payload = export::render(&v, ExportFormat::Backup, NOW).unwrap();
+    let items: serde_json::Value = serde_json::from_slice(&payload.bytes).unwrap();
+    let key_text = items["items"][0]["details"]["passkeys"][0]["privateKey"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let raw = BASE64URL_NOPAD
+        .decode(key_text.as_bytes())
+        .or_else(|_| BASE64.decode(key_text.as_bytes()))
+        .unwrap();
+    let encodings = [
+        BASE64.encode(&raw),
+        BASE64_NOPAD.encode(&raw),
+        BASE64URL.encode(&raw),
+        BASE64URL_NOPAD.encode(&raw),
+        HEXLOWER.encode(&raw),
+    ];
+    for format in [ExportFormat::BitwardenJson, ExportFormat::Csv] {
+        let out = export::render(&v, format, NOW).unwrap();
+        assert!(!out.bytes.windows(raw.len()).any(|w| w == raw.as_slice()));
+        let text = String::from_utf8_lossy(&out.bytes);
+        for e in &encodings {
+            assert!(!text.contains(e.as_str()), "{format:?}");
+        }
+    }
+}

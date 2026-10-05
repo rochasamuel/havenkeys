@@ -314,8 +314,6 @@ pub(crate) fn format_date(secs: i64) -> String {
 
 /// `YYYY-MM-DDTHH:MM:SS.mmmZ` for Unix milliseconds, the form Bitwarden
 /// writes and `parse_utc_timestamp_ms` reads.
-// Used by the export code (later tasks of the export plan).
-#[allow(dead_code)]
 pub(crate) fn format_utc_timestamp_ms(ms: i64) -> String {
     let secs = ms.div_euclid(1000);
     let millis = ms.rem_euclid(1000);
