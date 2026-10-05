@@ -107,8 +107,8 @@ describe("ImportSection", () => {
     restoreBackup.mockResolvedValue({
       fileName: "havenkeys-export-2026-10-05.hkbackup",
       report: {
-        imported: 2, logins: 2, secureNotes: 0, cards: 0, identities: 0, convertedToNotes: 0,
-        skippedDuplicates: 0, skippedExisting: 3, skippedArchived: 0, failed: 0,
+        imported: 3, logins: 2, secureNotes: 0, cards: 0, identities: 1, convertedToNotes: 0,
+        skippedDuplicates: 0, skippedExisting: 3, skippedArchived: 0, failed: 2,
         attachmentsSkipped: 0, passwordHistorySkipped: 0, passkeysSkipped: 0,
         urlsMovedToNotes: 0, fieldsToNotes: 0, ssoUpgraded: 0,
       },
@@ -127,7 +127,26 @@ describe("ImportSection", () => {
     expect(restoreBackup).toHaveBeenCalledWith("backup passphrase");
     expect(importFile).not.toHaveBeenCalled();
     expect(host.textContent).toContain(en.import.skippedExisting(3));
+    expect(host.textContent).toContain(en.import.summary("havenkeys-export-2026-10-05.hkbackup", 2, 0, 0, 1));
+    expect(host.textContent).toContain("1 identity");
+    expect(host.textContent).toContain(en.import.restoreFailedItems(2));
+    expect(host.textContent).not.toContain(en.import.failedItems(2));
     expect(host.textContent).not.toContain(en.import.deleteExport);
     expect(pw.value).toBe("");
+  });
+
+  it("clears the backup password when another source is chosen", async () => {
+    await act(async () => root.render(<ImportSection onImported={() => undefined} />));
+    await act(async () => host.querySelector<HTMLInputElement>('input[value="havenKeysBackup"]')!.click());
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      const pw = host.querySelector<HTMLInputElement>('input[name="restore-password"]')!;
+      setter.call(pw, "backup passphrase");
+      pw.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => host.querySelector<HTMLInputElement>('input[value="chrome"]')!.click());
+    expect(host.querySelector('input[name="restore-password"]')).toBeNull();
+    await act(async () => host.querySelector<HTMLInputElement>('input[value="havenKeysBackup"]')!.click());
+    expect(host.querySelector<HTMLInputElement>('input[name="restore-password"]')!.value).toBe("");
   });
 });

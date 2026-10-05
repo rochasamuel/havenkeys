@@ -723,9 +723,10 @@ export const en = {
     deleteFailed: "Could not delete the file.",
     /** "<strong>Imported 3 items</strong> from file: 2 logins and 1 secure note." */
     imported: (n: number) => (n === 1 ? "Imported 1 item" : `Imported ${n} items`),
-    summary: (fileName: string, logins: number, notes: number, cards: number) => {
+    summary: (fileName: string, logins: number, notes: number, cards: number, identities = 0) => {
       const parts = [logins === 1 ? "1 login" : `${logins} logins`, notes === 1 ? "1 secure note" : `${notes} secure notes`];
       if (cards > 0) parts.push(cards === 1 ? "1 card" : `${cards} cards`);
+      if (identities > 0) parts.push(identities === 1 ? "1 identity" : `${identities} identities`);
       return ` from ${fileName}: ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}.`;
     },
     convertedToNotes: (n: number) =>
@@ -746,6 +747,8 @@ export const en = {
       `${n} ${n === 1 ? "passkey was" : "passkeys were"} left out (importing passkeys is not supported yet).`,
     failedItems: (n: number) =>
       `${n} ${n === 1 ? "item" : "items"} couldn’t be imported (a field was over the size limits).`,
+    restoreFailedItems: (n: number) =>
+      `${n} ${n === 1 ? "item" : "items"} couldn’t be restored (invalid or unreadable).`,
     wasDeleted: "The export file was deleted.",
     confirmDelete: (fileName: string) => `Delete ${fileName}?`,
     deleteFile: "Delete file",
@@ -778,6 +781,7 @@ export const en = {
     export: "Export…",
     exporting: "Exporting…",
     failed: "Export failed.",
+    summaryFailed: "Couldn’t count what this export would hold, so it can’t be written. Try again in a moment.",
     includes: (logins: number, notes: number, cards: number, identities: number) =>
       `${logins} ${logins === 1 ? "login" : "logins"}, ${notes} ${notes === 1 ? "secure note" : "secure notes"}, ${cards} ${cards === 1 ? "card" : "cards"}, ${identities} ${identities === 1 ? "identity" : "identities"}.`,
     passkeysLeftOut: (n: number) => `${n} ${n === 1 ? "passkey is" : "passkeys are"} not included.`,

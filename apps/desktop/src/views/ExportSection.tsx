@@ -29,6 +29,7 @@ export function ExportSection() {
   const { t } = useI18n();
   const [format, setFormat] = useState<ExportFormat>("backup");
   const [summary, setSummary] = useState<ExportSummary | null>(null);
+  const [summaryFailed, setSummaryFailed] = useState(false);
   const [understood, setUnderstood] = useState(false);
   const [master, setMaster] = useState("");
   const [backup, setBackup] = useState("");
@@ -39,10 +40,11 @@ export function ExportSection() {
   useEffect(() => {
     let live = true;
     setSummary(null);
+    setSummaryFailed(false);
     setUnderstood(false);
     api.exportSummary(format).then(
       (s) => live && setSummary(s),
-      () => undefined,
+      () => live && setSummaryFailed(true),
     );
     return () => {
       live = false;
@@ -61,7 +63,9 @@ export function ExportSection() {
 
   const isBackup = format === "backup";
   const mismatch = isBackup && again.length > 0 && backup !== again;
+  // What the file will hold is shown before it is written (spec §4).
   const ready =
+    summary !== null &&
     master.length > 0 &&
     (isBackup ? backup.length >= MIN_BACKUP_PASSWORD && backup === again : understood);
   const lines = summary ? leftOut(summary, t) : [];
@@ -112,6 +116,11 @@ export function ExportSection() {
             </ul>
           )}
         </div>
+      )}
+      {summaryFailed && (
+        <p className="group-note warn" role="alert">
+          {t.export.summaryFailed}
+        </p>
       )}
 
       {isBackup ? (

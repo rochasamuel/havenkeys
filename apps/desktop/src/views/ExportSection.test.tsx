@@ -97,4 +97,26 @@ describe("ExportSection", () => {
       expect(host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value).toBe("");
     }
   });
+
+  it("keeps Export disabled until the summary has loaded", async () => {
+    let resolve: (s: ExportSummary) => void = () => undefined;
+    exportSummary.mockReturnValue(new Promise((r) => (resolve = r)));
+    await act(async () => root.render(<ExportSection />));
+    await act(async () => type('input[name="master-password"]', "master pw"));
+    await act(async () => type('input[name="backup-password"]', "backup passphrase"));
+    await act(async () => type('input[name="backup-password-again"]', "backup passphrase"));
+    expect(exportButton().disabled).toBe(true);
+    await act(async () => resolve(summary));
+    expect(exportButton().disabled).toBe(false);
+  });
+
+  it("says so when the summary can't be loaded, and stays disabled", async () => {
+    exportSummary.mockRejectedValue(new Error("locked"));
+    await act(async () => root.render(<ExportSection />));
+    await act(async () => type('input[name="master-password"]', "master pw"));
+    await act(async () => type('input[name="backup-password"]', "backup passphrase"));
+    await act(async () => type('input[name="backup-password-again"]', "backup passphrase"));
+    expect(host.textContent).toContain(en.export.summaryFailed);
+    expect(exportButton().disabled).toBe(true);
+  });
 });

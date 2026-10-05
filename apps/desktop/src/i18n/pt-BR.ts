@@ -142,6 +142,8 @@ const invalidInput: Record<string, string> = {
   "backup file is too large": "O arquivo de backup é grande demais.",
   "wrong backup password, or the file is damaged": "Senha do backup errada, ou o arquivo está danificado.",
   "backup contains too many items": "O backup tem itens demais.",
+  "this backup can't be read by this version of HavenKeys":
+    "Este backup não pode ser lido por esta versão do HavenKeys.",
   "backup item is not valid": "Um item do backup não é válido.",
 };
 
@@ -748,9 +750,10 @@ export const ptBR: Messages = {
     fileDeleted: "Arquivo de exportação excluído.",
     deleteFailed: "Não foi possível excluir o arquivo.",
     imported: (n: number) => (n === 1 ? "1 item importado" : `${n} itens importados`),
-    summary: (fileName: string, logins: number, notes: number, cards: number) => {
+    summary: (fileName: string, logins: number, notes: number, cards: number, identities = 0) => {
       const parts = [logins === 1 ? "1 login" : `${logins} logins`, notes === 1 ? "1 nota segura" : `${notes} notas seguras`];
       if (cards > 0) parts.push(cards === 1 ? "1 cartão" : `${cards} cartões`);
+      if (identities > 0) parts.push(identities === 1 ? "1 identidade" : `${identities} identidades`);
       return ` de ${fileName}: ${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}.`;
     },
     convertedToNotes: (n: number) =>
@@ -785,6 +788,10 @@ export const ptBR: Messages = {
       n === 1
         ? "1 item não pôde ser importado (um campo passou dos limites de tamanho)."
         : `${n} itens não puderam ser importados (um campo passou dos limites de tamanho).`,
+    restoreFailedItems: (n: number) =>
+      n === 1
+        ? "1 item não pôde ser restaurado (inválido ou ilegível)."
+        : `${n} itens não puderam ser restaurados (inválidos ou ilegíveis).`,
     wasDeleted: "O arquivo de exportação foi excluído.",
     confirmDelete: (fileName: string) => `Excluir ${fileName}?`,
     deleteFile: "Excluir arquivo",
@@ -817,6 +824,7 @@ export const ptBR: Messages = {
     export: "Exportar…",
     exporting: "Exportando…",
     failed: "A exportação falhou.",
+    summaryFailed: "Não foi possível contar o que esta exportação teria, então ela não pode ser gravada. Tente de novo em instantes.",
     includes: (logins: number, notes: number, cards: number, identities: number) =>
       `${logins} ${logins === 1 ? "login" : "logins"}, ${notes} ${notes === 1 ? "nota segura" : "notas seguras"}, ${cards} ${cards === 1 ? "cartão" : "cartões"}, ${identities} ${identities === 1 ? "identidade" : "identidades"}.`,
     passkeysLeftOut: (n: number) => `${n} ${n === 1 ? "chave de acesso não é incluída" : "chaves de acesso não são incluídas"}.`,

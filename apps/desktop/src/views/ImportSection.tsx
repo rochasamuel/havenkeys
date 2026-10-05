@@ -32,7 +32,7 @@ const EXTENSION: Record<ImportChoice, string> = {
 };
 
 /** Lines describing what was left out or changed; empty when nothing was. */
-function caveats(r: ImportResult["report"], t: Messages): string[] {
+function caveats(r: ImportResult["report"], t: Messages, restored: boolean): string[] {
   const out: string[] = [];
   if (r.convertedToNotes) out.push(t.import.convertedToNotes(r.convertedToNotes));
   if (r.skippedDuplicates) out.push(t.import.skippedDuplicates(r.skippedDuplicates));
@@ -44,7 +44,7 @@ function caveats(r: ImportResult["report"], t: Messages): string[] {
   if (r.fieldsToNotes) out.push(t.import.fieldsToNotes(r.fieldsToNotes));
   if (r.ssoUpgraded) out.push(t.import.ssoUpgraded(r.ssoUpgraded));
   if (r.passkeysSkipped) out.push(t.import.passkeysSkipped(r.passkeysSkipped));
-  if (r.failed) out.push(t.import.failedItems(r.failed));
+  if (r.failed) out.push(restored ? t.import.restoreFailedItems(r.failed) : t.import.failedItems(r.failed));
   return out;
 }
 
@@ -102,7 +102,11 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
               name="import-source"
               value={s}
               checked={source === s}
-              onChange={() => setSource(s)}
+              onChange={() => {
+                setSource(s);
+                // The backup password never outlives the backup source.
+                if (s !== "havenKeysBackup") setRestorePassword("");
+              }}
               disabled={busy}
             />
             <span className="row-label-inline">{t.import.sources[s]}</span>
@@ -139,11 +143,17 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
         <div className="import-result" role="status">
           <p>
             <strong>{t.import.imported(result.report.imported)}</strong>
-            {t.import.summary(result.fileName, result.report.logins, result.report.secureNotes, result.report.cards)}
+            {t.import.summary(
+              result.fileName,
+              result.report.logins,
+              result.report.secureNotes,
+              result.report.cards,
+              result.report.identities,
+            )}
           </p>
-          {caveats(result.report, t).length > 0 && (
+          {caveats(result.report, t, restored).length > 0 && (
             <ul>
-              {caveats(result.report, t).map((c) => (
+              {caveats(result.report, t, restored).map((c) => (
                 <li key={c}>{c}</li>
               ))}
             </ul>
