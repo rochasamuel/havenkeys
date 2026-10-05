@@ -30,6 +30,9 @@ impl From<SyncError> for ClientError {
                 "signed_out",
                 "HavenKeys is signed out of this account. Unlock again to reconnect.",
             ),
+            SyncError::AccountDeleted => {
+                Self::fixed("account_deleted", "This account was deleted.")
+            }
             SyncError::RateLimited => Self::fixed(
                 "rate_limited",
                 "Too many attempts. Try again in a few minutes.",
@@ -158,6 +161,7 @@ mod tests {
             (SyncError::RateLimited, "rate_limited"),
             (SyncError::InvalidServerUrl, "invalid_server_url"),
             (SyncError::TooLarge, "sync_failed"),
+            (SyncError::AccountDeleted, "account_deleted"),
         ];
         for (err, code) in cases {
             assert_eq!(ClientError::from(err).code, code);

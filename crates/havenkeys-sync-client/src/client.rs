@@ -284,6 +284,28 @@ impl<T: Transport> SyncClient<T> {
         Ok(dto.header_revision)
     }
 
+    /// Delete the account and everything the server holds for it. The
+    /// caller erases the local copy only once this returns `Ok`.
+    pub async fn delete_account(
+        &self,
+        session: &Session,
+        current_auth_key: &AuthKey,
+        email: &str,
+    ) -> Result<()> {
+        let current = current_auth_key.to_base64();
+        let body = wire::AccountDeletionBody {
+            current_auth_key: &current,
+            email,
+        };
+        let response = self
+            .post("/v1/account/delete", Some(session), &body)
+            .await?;
+        match response.status {
+            204 | 200 => Ok(()),
+            _ => Err(error_for(response.status)),
+        }
+    }
+
     /// One page of changes after `since`. The caller keeps calling while
     /// `has_more` is true, passing the cursor it was given.
     pub async fn pull(&self, session: &Session, since: i64) -> Result<Pulled> {
@@ -595,6 +617,7 @@ fn error_for(status: u16) -> SyncError {
         401 | 403 => SyncError::Unauthorized,
         404 => SyncError::Refused("not found"),
         409 => SyncError::Conflict(Vec::new()),
+        410 => SyncError::AccountDeleted,
         413 => SyncError::Refused("too large"),
         429 => SyncError::RateLimited,
         400..=499 => SyncError::Refused("the request was refused"),
@@ -617,5 +640,16 @@ mod pairing_tests {
         ] {
             assert!(pairing_path(bad, "claim").is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod deletion_tests {
+    use super::*;
+
+    #[test]
+    fn gone_means_the_account_was_deleted() {
+        assert_eq!(error_for(410), SyncError::AccountDeleted);
+        assert_eq!(error_for(401), SyncError::Unauthorized);
     }
 }

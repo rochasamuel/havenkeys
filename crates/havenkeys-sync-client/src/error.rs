@@ -21,6 +21,9 @@ pub enum SyncError {
     /// The session is gone: expired, revoked, or never valid. The device
     /// must sign in again.
     Unauthorized,
+    /// The account behind this session was deleted (by this or another
+    /// device). The device erases its local copy.
+    AccountDeleted,
     /// Too many failed logins. Waiting is the only cure.
     RateLimited,
     /// The server refused the request and the client cannot fix it by
@@ -44,6 +47,7 @@ impl SyncError {
         match self {
             Self::Unavailable => "unavailable",
             Self::Unauthorized => "unauthorized",
+            Self::AccountDeleted => "account_deleted",
             Self::RateLimited => "rate_limited",
             Self::Refused(_) => "refused",
             Self::Conflict(_) => "conflict",
@@ -59,6 +63,7 @@ impl std::fmt::Display for SyncError {
         match self {
             Self::Unavailable => f.write_str("the server could not be reached"),
             Self::Unauthorized => f.write_str("this device is signed out"),
+            Self::AccountDeleted => f.write_str("this account was deleted"),
             Self::RateLimited => f.write_str("too many attempts; try again later"),
             Self::Refused(what) => write!(f, "the server refused the request: {what}"),
             Self::Conflict(items) => {

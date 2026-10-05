@@ -85,6 +85,13 @@ pub struct CredentialsBody<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountDeletionBody<'a> {
+    pub current_auth_key: &'a str,
+    pub email: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WriteBody {
     pub changes: Vec<ChangeDto>,
 }
