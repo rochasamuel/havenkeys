@@ -380,6 +380,28 @@ impl RekeyTicket {
     }
 }
 
+/// Snapshot for re-checking the master password before a sensitive action
+/// (an export), taken under the vault lock so Argon2id runs without it.
+pub struct PasswordCheck {
+    header: HeaderRecord,
+    account: AccountRef,
+}
+
+impl PasswordCheck {
+    /// Slow (Argon2id). `UnlockFailed` for a wrong password; no other
+    /// detail, as for unlock.
+    pub fn verify(&self, password: &SecretString, secret_key: &SecretKey) -> Result<()> {
+        if password.is_empty() || password.char_len() > MAX_MASTER_PASSWORD_CHARS {
+            return Err(Error::UnlockFailed);
+        }
+        let master = derive_master_key(password, &self.header.kdf)?;
+        let kek = derive_kek_v3(&master, secret_key, &self.account)?;
+        unwrap_vault_key(&kek, self.header.vault_id, &self.header.wrapped_vault_key)
+            .map(|_| ())
+            .map_err(|_| Error::UnlockFailed)
+    }
+}
+
 /// Snapshot for enrolling biometric unlock (see [`VaultService::begin_bundle`]),
 /// taken under the vault lock so Argon2id can run without holding it.
 pub struct BundleTicket {
@@ -1012,6 +1034,21 @@ impl VaultService {
     pub fn replace_store(&mut self, store: Store) -> Store {
         self.lock();
         std::mem::replace(&mut self.store, store)
+    }
+
+    /// See [`PasswordCheck`]. The account comes from the local store, never
+    /// from the caller.
+    pub fn begin_password_check(&self) -> Result<PasswordCheck> {
+        self.session()?;
+        let header = self.store.header()?.ok_or(Error::NoVault)?;
+        let account = self
+            .store
+            .account()?
+            .ok_or(Error::InvalidInput(
+                "this vault is not linked to an account",
+            ))?
+            .to_ref()?;
+        Ok(PasswordCheck { header, account })
     }
 
     /// Snapshot for a master-password change. The Argon2id derivations then
@@ -2071,7 +2108,7 @@ fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [
 
 /// Compare two secrets without an early exit on the first differing byte.
 /// Both sides are hashed first so the comparison always covers 32 bytes.
-fn secrets_equal(a: &SecretString, b: &SecretString) -> bool {
+pub(crate) fn secrets_equal(a: &SecretString, b: &SecretString) -> bool {
     let da: [u8; 32] = Sha256::digest(a.expose().as_bytes()).into();
     let db: [u8; 32] = Sha256::digest(b.expose().as_bytes()).into();
     da.iter()
