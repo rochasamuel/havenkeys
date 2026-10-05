@@ -2523,8 +2523,13 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 }
 
 .welcome-card .segmented-item {
-  flex: 1;
+  /* Equal thirds whatever the label; a label that still wraps (a narrow
+     window, a longer language) wraps evenly. */
+  flex: 1 1 0;
+  min-width: 0;
   padding: 7px 10px;
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
 .welcome-form {

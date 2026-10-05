@@ -360,7 +360,7 @@
     <string name="devices_revoke_named">Revoke %1$s</string>
     <string name="settings_pairing">Sign in a new device</string>
     <string name="pairing_title">Sign in a new device</string>
-    <string name="pairing_scan_sub">On the new computer, choose “Use your phone” and scan the code it shows.</string>
+    <string name="pairing_scan_sub">On the new computer, choose “Use my phone” and scan the code it shows.</string>
     <string name="pairing_camera_needed">Allow the camera to scan the new device’s code.</string>
     <string name="pairing_camera_unavailable">The camera could not be opened.</string>
     <string name="pairing_confirm_title">Sign in a new device?</string>

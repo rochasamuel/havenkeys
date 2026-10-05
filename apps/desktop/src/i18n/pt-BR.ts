@@ -178,7 +178,7 @@ export const ptBR: Messages = {
     subSignIn: "Adicione este computador a uma conta que você já tem.",
     howToSetUp: "Como configurar",
     tabInvite: "Tenho um convite",
-    tabSignIn: "Já tenho uma conta",
+    tabSignIn: "Tenho uma conta",
     invite: "Convite",
     inviteHint: "Uma linha, de quem administra o seu servidor HavenKeys. Funciona uma vez e expira em sete dias.",
     passwordHint: "Pelo menos 10 caracteres. Ninguém pode redefini-la para você — nem o servidor, nem nós.",
