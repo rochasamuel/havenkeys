@@ -359,7 +359,7 @@ offset  size  field
   item the vault's own overview and details serialisation (passkeys
   included). No compression.
 * **Size cap.** A backup may exceed the 8 MiB per-blob limit; it has its own
-  cap, `MAX_BACKUP_BLOB_LEN` = 64 MiB. `seal_backup` refuses a payload whose
+  caps, `MAX_BACKUP_BLOB_LEN` (the blob) and `MAX_BACKUP_BYTES` (the file), both 64 MiB. `seal_backup` refuses a payload whose
   file would exceed 64 MiB. It is the same AEAD construction with a different
   length cap, not a new primitive.
 * **Read order** (hostile input; each step refuses at the first failure with

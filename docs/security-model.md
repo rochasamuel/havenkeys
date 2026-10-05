@@ -391,7 +391,10 @@ Spec: `docs/superpowers/specs/2026-10-05-export-design.md`. Code:
   lock), so a stranger at an unlocked desktop, or a compromised renderer
   without the password, gets no file. A backup also needs a backup password
   (the master password's length bounds, 10 to the maximum, and it must differ
-  from the master password, compared in Rust after verification).
+  from the master password the caller typed). These rules are checked in Rust
+  before the master password is verified; the comparison involves only two
+  values the caller supplied, so it reveals nothing about the real master
+  password.
 * **The renderer never supplies a path.** Rust opens the native save and open
   dialogs; the capability grants the UI no dialog or filesystem permission.
 * **Files are private and written atomically.** Written with mode 0600 to a
