@@ -118,6 +118,7 @@ describe("message validation", () => {
     expect(parseInlineRequest({ type: "menu_pick", token: T1, itemId: GH })).not.toBeNull();
     expect(parseInlineRequest({ type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ" })).not.toBeNull();
     expect(parseInlineRequest({ type: "menu_open_help", token: T1 })).toEqual({ type: "menu_open_help", token: T1 });
+    expect(parseInlineRequest({ type: "menu_show_unlock", token: T1 })).toEqual({ type: "menu_show_unlock", token: T1 });
     expect(parseInlineRequest({ type: "save_confirm", token: T1, title: "GitHub – work" })).toEqual({
       type: "save_confirm",
       token: T1,
@@ -133,6 +134,7 @@ describe("message validation", () => {
       { type: "save_confirm", token: T1, password: "x" },
       { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: "AQ" },
       { type: "menu_open_help", token: T1, url: "https://evil.com" },
+      { type: "menu_show_unlock", token: T1, itemId: GH },
     ]) {
       expect(parseInlineRequest(bad), JSON.stringify(bad)).toBeNull();
     }
@@ -287,6 +289,28 @@ describe("suggestion menus", () => {
     expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toEqual({ ok: true, value: { state: "locked" } });
     expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
     expect(requests).toHaveLength(1);
+  });
+
+  it("a locked menu's Unlock raises the desktop and closes the menu; only for its own tab, once", async () => {
+    const { h, requests, sent } = setup((r) => {
+      if (r.type === "find_matches") throw new BridgeError("locked", "x");
+      return null;
+    });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect((await h.handleInline(2, { type: "menu_show_unlock", token: T1 })).ok).toBe(false);
+    expect(await h.handleInline(1, { type: "menu_show_unlock", token: T1 })).toEqual({ ok: true, value: null });
+    expect(requests.map((r) => r.type)).toEqual(["find_matches", "show_unlock"]);
+    expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
+    // The menu closed: a second click does nothing.
+    expect((await h.handleInline(1, { type: "menu_show_unlock", token: T1 })).ok).toBe(false);
+    expect(requests).toHaveLength(2);
+  });
+
+  it("an unlocked menu does not send show_unlock", async () => {
+    const { h, requests } = setup();
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect((await h.handleInline(1, { type: "menu_show_unlock", token: T1 })).ok).toBe(false);
+    expect(requests.some((r) => r.type === "show_unlock")).toBe(false);
   });
 
   it("A2: a menu frame cannot pick items the menu did not offer, or act for another tab", async () => {

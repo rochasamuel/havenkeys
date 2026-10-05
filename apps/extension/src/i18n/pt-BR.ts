@@ -132,6 +132,7 @@ export const ptBR: Messages = {
     pageTitle: "Sugestões do HavenKeys",
     lockedTitle: "O HavenKeys está bloqueado",
     lockedBody: "Desbloqueie o app HavenKeys para preencher.",
+    unlock: "Abrir o HavenKeys para desbloquear",
     unavailable: "Indisponível",
     couldNotFill: "Não foi possível preencher",
     fillCode: "Preencher código de verificação",

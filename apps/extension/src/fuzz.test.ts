@@ -50,6 +50,7 @@ describe("message validators", () => {
     { type: "bg_run_end" },
     { type: "popup_fill", itemId: ID },
     { type: "popup_show_unlock" },
+    { type: "menu_show_unlock", token: TOKEN },
   ];
   const atoms: unknown[] = [null, 0, -1, "", "x".repeat(5000), ID, TOKEN, [], {}, true, "https://evil.com", "__proto__"];
 

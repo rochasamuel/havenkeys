@@ -288,7 +288,8 @@ a custom field, so none can read, fill or open one. See `native-messaging.md`.
 the desktop shows its window with that login's editor open. It is in the
 `secret` rate class because it has a visible effect.
 
-`show_unlock` (the popup's "Unlock" button) also returns nothing: the
+`show_unlock` (the popup's "Unlock" button, and the Unlock icon in a locked
+field menu) also returns nothing: the
 desktop brings its window forward, on the unlock screen while locked. It is
 answered in any lock state because it carries no secret either way, and it
 is in the `secret` rate class for the same reason as `open_item`. The

@@ -160,6 +160,8 @@ export type InlineRequest =
   | { type: "menu_pick_card"; token: string; itemId: string }
   /** Open the identity in the desktop app (the menu's empty-identity row). */
   | { type: "menu_open_identity"; token: string }
+  /** Locked: bring the desktop app forward on its unlock screen (the password is typed there). */
+  | { type: "menu_show_unlock"; token: string }
   | { type: "menu_close"; token: string }
   /** The menu's content height, so wrapped rows are not clipped. `animate`: the user opened or closed a panel. */
   | { type: "menu_resize"; token: string; height: number; animate?: true }
@@ -499,6 +501,7 @@ export function parseInlineRequest(msg: unknown): InlineRequest | null {
     case "menu_state":
     case "menu_generator_options":
     case "menu_open_help":
+    case "menu_show_unlock":
     case "menu_close":
     case "save_state":
     case "save_dismiss":

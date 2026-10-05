@@ -6,7 +6,7 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityR
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
-import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon } from "./icons";
+import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -289,6 +289,28 @@ function settingsPanel(o: PasswordOptions, generate: () => Promise<void>): HTMLE
   return panel;
 }
 
+/**
+ * Locked: the message with an Unlock button that brings the desktop app
+ * forward on its unlock screen. The master password is typed there, never
+ * here; the background closes this frame so the window can be seen.
+ */
+function lockedMessage(t: string): HTMLElement {
+  const unlock = h("button", { className: "icon-btn unlock" }, unlockIcon());
+  unlock.type = "button";
+  unlock.title = msg.menu.unlock;
+  unlock.setAttribute("aria-label", msg.menu.unlock);
+  const box = h("div", { className: "message locked" }, h("div", { className: "message-text" }, h("strong", { text: msg.menu.lockedTitle }), h("span", { text: msg.menu.lockedBody })), unlock);
+  unlock.addEventListener("click", (e) => {
+    if (!e.isTrusted || !guard.armed() || unlock.disabled) return;
+    unlock.disabled = true;
+    void ask<null>({ type: "menu_show_unlock", token: t }).then((r) => {
+      unlock.disabled = false;
+      if (!r.ok) main.replaceChildren(message(msg.menu.unavailable, r.message, true));
+    });
+  });
+  return box;
+}
+
 /** A row that only informs: no button, not in the arrow-key order. */
 function hintNote(title: string, detail: string): HTMLElement {
   return h(
@@ -336,7 +358,7 @@ function showDestination(host: string): void {
 
 function render(t: string, view: MenuView): void {
   if (view.state === "locked") {
-    main.replaceChildren(message(msg.menu.lockedTitle, msg.menu.lockedBody));
+    main.replaceChildren(lockedMessage(t));
     return;
   }
   if (view.state === "cards") {
@@ -397,7 +419,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
   // The length slider and the class boxes keep their own arrow keys.
   if (document.activeElement instanceof HTMLInputElement) return;
-  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row, button.step-btn, button.gen-toggle"));
+  const rows = Array.from(main.querySelectorAll<HTMLButtonElement>("button.row, button.step-btn, button.gen-toggle, button.unlock"));
   if (rows.length === 0) return;
   const i = rows.indexOf(document.activeElement as HTMLButtonElement);
   const next = e.key === "ArrowDown" ? (i + 1) % rows.length : (i - 1 + rows.length) % rows.length;
@@ -420,7 +442,7 @@ window.addEventListener(
 );
 window.addEventListener("focus", () => {
   if (pointerFocus) return;
-  if (!main.contains(document.activeElement)) main.querySelector<HTMLButtonElement>("button.row")?.focus();
+  if (!main.contains(document.activeElement)) main.querySelector<HTMLButtonElement>("button.row, button.unlock")?.focus();
 });
 
 // ------------------------------------------------------------ size

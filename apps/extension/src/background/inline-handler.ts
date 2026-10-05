@@ -907,6 +907,19 @@ export function createInlineHandler(deps: InlineDeps) {
         deps.openTab(m.help);
         return { ok: true, value: null };
       }
+      case "menu_show_unlock": {
+        // As the popup's Unlock: no URL or item, the desktop only raises its
+        // window. The master password is typed there, never in the page.
+        const m = liveMenu(tabId, req.token);
+        if (!m || !m.locked) return { ok: false, message: t.errors.menuExpired };
+        closeMenu(tabId);
+        try {
+          await deps.client.request({ type: "show_unlock" });
+        } catch (e) {
+          return fail(e);
+        }
+        return { ok: true, value: null };
+      }
       case "menu_close":
         if (liveMenu(tabId, req.token)) closeMenu(tabId);
         return { ok: true, value: null };

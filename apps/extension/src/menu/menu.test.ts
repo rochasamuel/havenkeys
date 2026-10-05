@@ -456,6 +456,19 @@ describe("card rows", () => {
     expect(document.querySelector("button.row")).toBeNull();
     expect(document.getElementById("main")!.textContent).not.toBe("");
   });
+
+  it("offers an Unlock icon button when locked that asks only on a trusted, armed click", async () => {
+    const handlers = await setup({ ok: true, value: { state: "locked" } });
+    const unlock = document.querySelector<HTMLButtonElement>(".message.locked button.unlock")!;
+    expect(unlock.getAttribute("aria-label")).toBe("Open HavenKeys to unlock");
+    expect(unlock.querySelector("svg")).not.toBeNull();
+    const unlocks = () => asked.filter((m) => (m as { type: string }).type === "menu_show_unlock");
+    unlock.click(); // untrusted
+    expect(unlocks()).toHaveLength(0);
+    handlers.get(unlock)?.({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(unlocks()).toEqual([{ type: "menu_show_unlock", token: TOKEN }]);
+  });
 });
 
 describe("generator settings", () => {

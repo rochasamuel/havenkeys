@@ -890,3 +890,21 @@ main.sliding {
     transition: none !important;
   }
 }
+
+/* Locked: the message with the Unlock icon button at its end. */
+.message.locked {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.message.locked .icon-btn {
+  margin-right: 0;
+}

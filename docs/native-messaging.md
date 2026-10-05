@@ -148,7 +148,9 @@ item must be saved for `url`, like `fill_item`. Nothing is returned.
 
 `show_unlock` brings the desktop window forward; while the vault is locked
 that window is the unlock screen, with the password field focused. It is
-the popup's "Unlock" button. It carries no secret and returns none
+the popup's "Unlock" button and the Unlock icon in a locked field menu (the
+background sends it only for a live menu that was opened locked, then closes
+that menu). It carries no secret and returns none
 (`{"type":"show_unlock"}`), so it is answered in any lock state and never
 touches the vault; the browser-integration switch is sealed in the vault
 and cannot be read while locked. It is in the `secret` rate class because

@@ -164,6 +164,7 @@ export const en = {
     pageTitle: "HavenKeys suggestions",
     lockedTitle: "HavenKeys is locked",
     lockedBody: "Unlock the HavenKeys app to fill.",
+    unlock: "Open HavenKeys to unlock",
     unavailable: "Unavailable",
     couldNotFill: "Could not fill",
     fillCode: "Fill one-time code",
