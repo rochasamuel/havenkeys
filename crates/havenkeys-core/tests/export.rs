@@ -140,6 +140,9 @@ fn an_unreadable_item_is_counted_not_fatal() {
     v.unlock_for_account(&secret(PASSWORD), &sk, &account()).unwrap();
     let s = export::summarize(&v, ExportFormat::Csv).unwrap();
     assert_eq!((s.logins, s.unreadable), (1, 1));
+    let out = export::render(&v, ExportFormat::Csv, NOW).unwrap();
+    // Header + one row (the CSV writer ends every record with "\n").
+    assert_eq!(out.bytes.iter().filter(|&&b| b == b'\n').count(), 2);
 }
 
 use havenkeys_core::export::backup::{open_backup, seal_backup, HEADER_LEN};
@@ -354,7 +357,6 @@ fn bitwarden_json_reimports_and_never_carries_passkeys() {
 
 /// No plaintext export contains a passkey's private key in any encoding.
 #[test]
-#[ignore = "enabled in Task 7 when the CSV writer exists"]
 fn plaintext_exports_never_contain_passkey_key_material() {
     use data_encoding::{BASE64, BASE64URL, BASE64URL_NOPAD, BASE64_NOPAD, HEXLOWER};
     let (mut v, _) = activated_vault();
@@ -537,4 +539,35 @@ fn bitwarden_json_maps_every_item_kind() {
     let ifields = i["fields"].as_array().unwrap();
     assert!(ifields.iter().any(|f| f["name"] == "Home phone" && f["value"] == "555-0100"));
     assert!(ifields.iter().any(|f| f["name"] == "Blood" && f["type"] == 1));
+}
+
+#[test]
+fn csv_quotes_hostile_values_and_reimports_as_chrome() {
+    let (mut v, _) = activated_vault();
+    let mut tricky = login("Comma, \"quoted\"", "=HYPERLINK(\"x\")", "p,w\"\n=1", "https://a.example");
+    tricky.urls.push(havenkeys_core::model::UrlRule {
+        url: "https://b.example".into(),
+        match_type: havenkeys_core::model::MatchType::Domain,
+    });
+    tricky.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXP"));
+    commit_all(&mut v, vec![tricky, note("Left out", "x")]);
+
+    let out = export::render(&v, ExportFormat::Csv, NOW).unwrap();
+    assert_eq!(out.summary.items_left_out, 1);
+    let text = std::str::from_utf8(&out.bytes).unwrap();
+    assert!(text.starts_with("name,url,username,password,note,totp\n"));
+    assert!(text.contains("otpauth://totp/"));
+    assert!(text.contains("Website: https://b.example"));
+
+    let parsed = import::parse(ImportSource::Chrome, &out.bytes).unwrap();
+    let (mut fresh, _) = activated_vault();
+    let staged = fresh.stage_import(parsed.items, parsed.report, NOW).unwrap();
+    assert_eq!((staged.report.logins, staged.report.failed), (1, 0));
+    fresh.commit_write(staged.writes.into_iter().next().unwrap(), 1).unwrap();
+    let item = fresh.list_items().unwrap().pop().unwrap();
+    // The vault refuses control characters in a title, so the title carries only the comma and quotes.
+    assert_eq!(item.title, "Comma, \"quoted\"");
+    assert_eq!(item.username.as_deref(), Some("=HYPERLINK(\"x\")"));
+    let pw = fresh.reveal(&item.id, havenkeys_core::model::SecretField::Password).unwrap();
+    assert_eq!(pw.expose(), "p,w\"\n=1");
 }

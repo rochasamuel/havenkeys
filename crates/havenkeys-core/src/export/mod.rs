@@ -6,6 +6,7 @@
 
 pub mod backup;
 mod bitwarden;
+mod csv;
 mod restore;
 
 use crate::error::{Error, Result};
@@ -190,11 +191,4 @@ fn render_backup_payload(vault: &VaultService, now_ms: i64) -> Result<Rendered> 
     )
     .map_err(|_| Error::Encryption)?;
     Ok(Rendered { bytes, summary })
-}
-
-// Temporary stub, replaced in Task 7.
-mod csv {
-    pub(super) fn render(_: &crate::vault::VaultService) -> crate::error::Result<super::Rendered> {
-        Err(crate::error::Error::InvalidInput("format not available"))
-    }
 }
