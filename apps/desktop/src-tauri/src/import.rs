@@ -8,6 +8,7 @@
 
 use crate::state::{AppState, CmdError, CmdResult};
 use havenkeys_core::import::{self, ImportReport, ImportSource};
+use havenkeys_core::SecretString;
 use serde::Serialize;
 use std::io::Read;
 use tauri::{AppHandle, Manager};
@@ -122,4 +123,61 @@ pub fn delete_import_file(state: tauri::State<'_, AppState>) -> CmdResult<()> {
         .take()
         .ok_or(havenkeys_core::Error::NotFound)?;
     std::fs::remove_file(&path).map_err(|_| CmdError::file())
+}
+
+/// Restore an encrypted HavenKeys backup. Like `import_file`, Rust picks the
+/// file; items already in the vault are skipped, nothing is overwritten.
+/// The backup is meant to be kept, so no "delete the file" offer follows.
+#[tauri::command]
+pub async fn restore_backup(
+    app: AppHandle,
+    backup_password: SecretString,
+) -> CmdResult<Option<ImportResult>> {
+    {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_unlocked()?;
+        state.require_online()?;
+    }
+    let handle = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        handle
+            .dialog()
+            .file()
+            .set_title("Restore a HavenKeys backup")
+            .add_filter("HavenKeys backup", &["hkbackup"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|_| CmdError::internal())?;
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|_| CmdError::file())?;
+    let read_path = path.clone();
+    let items = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
+        let bytes = read_limited(&read_path, havenkeys_core::export::backup::MAX_BACKUP_BYTES)?;
+        Ok(havenkeys_core::export::backup::open_backup(
+            &bytes,
+            &backup_password,
+        )?)
+    })
+    .await
+    .map_err(|_| CmdError::internal())??;
+    let staged = app
+        .state::<AppState>()
+        .vault()?
+        .stage_restore(items, AppState::now_ms())?;
+    let mut report = staged.report;
+    report.imported = app
+        .state::<AppState>()
+        .client()
+        .clone()
+        .push_batches(staged.writes)
+        .await?;
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Ok(Some(ImportResult { report, file_name }))
 }

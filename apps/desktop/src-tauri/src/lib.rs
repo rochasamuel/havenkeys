@@ -12,6 +12,7 @@ mod custom_field;
 mod device_label;
 mod emergency_kit;
 mod events;
+mod export;
 mod identity;
 mod import;
 mod item_input;
@@ -329,6 +330,9 @@ pub fn run() {
             autostart::set_launch_at_login,
             import::import_file,
             import::delete_import_file,
+            import::restore_backup,
+            export::export_summary,
+            export::export_file,
             tray::set_ui_language,
             updater::update_status,
             updater::check_for_update,

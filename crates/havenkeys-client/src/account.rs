@@ -570,6 +570,21 @@ impl HavenClient {
         Ok(status)
     }
 
+    /// Re-check the master password before a sensitive action (an export).
+    /// Argon2id runs without the vault lock. `UnlockFailed` if wrong.
+    pub async fn verify_master_password(&self, password: SecretString) -> ClientResult<()> {
+        let account = self.vault_account()?;
+        let secret_key = self
+            .device()?
+            .secret_key(account.id)
+            .ok_or(havenkeys_core::Error::SecretKeyRequired)?;
+        let check = self.vault()?.begin_password_check()?;
+        spawn_blocking(move || check.verify(&password, &secret_key))
+            .await
+            .map_err(|_| ClientError::internal())??;
+        Ok(())
+    }
+
     /// Change the master password: server first, local second.
     ///
     /// The re-wrapped header goes to the server together with the current
