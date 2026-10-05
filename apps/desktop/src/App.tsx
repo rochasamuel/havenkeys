@@ -35,6 +35,7 @@ export function App() {
   // that the Secret Key was deleted. Shown until dismissed. Rust's text is
   // fixed, so the UI shows its own translation of it.
   const [removedWarning, setRemovedWarning] = useState(false);
+  const [accountDeleted, setAccountDeleted] = useState(false);
   // After signing in with the phone: the account the phone approved this
   // computer into. Another account on the same server that saw the code could
   // approve it first, so the user is told which one it is.
@@ -70,6 +71,23 @@ export function App() {
   // re-reading status shows the first-run screen (vaultExists: false).
   useEffect(() => {
     const unlisten = api.onRemoved(({ keychainWarning }) => {
+      setRemovedWarning(keychainWarning !== null);
+      setLockReason(null);
+      setShowKit(false);
+      setSignedOut(false);
+      setPairedAs(null);
+      setSession((s) => s + 1);
+      api.status().then(setStatus, () => undefined);
+      api.deviceStatus().then(setDevice, () => setDevice(null));
+    });
+    return () => void unlisten.then((f) => f());
+  }, []);
+
+  // The account was deleted, here or on another device: the same reset as a
+  // removal, plus a notice saying why the vault is gone.
+  useEffect(() => {
+    const unlisten = api.onAccountDeleted(({ keychainWarning }) => {
+      setAccountDeleted(true);
       setRemovedWarning(keychainWarning !== null);
       setLockReason(null);
       setShowKit(false);
@@ -147,6 +165,14 @@ export function App() {
   if (!status.vaultExists) {
     return (
       <div className="first-run">
+        {accountDeleted && (
+          <div className="banner" role="status">
+            <span>{t.deleteAccount.done}</span>
+            <button className="btn btn-quiet" type="button" onClick={() => setAccountDeleted(false)}>
+              {t.common.dismiss}
+            </button>
+          </div>
+        )}
         {removedWarning && (
           <div className="banner banner-warn" role="alert">
             <span>{t.app.keychainNotCleared}</span>
@@ -158,15 +184,18 @@ export function App() {
         <WelcomeScreen
           onActivated={(s) => {
             setRemovedWarning(false);
+            setAccountDeleted(false);
             setStatus(s);
             setShowKit(true);
           }}
           onSignedIn={(s) => {
             setRemovedWarning(false);
+            setAccountDeleted(false);
             setStatus(s);
           }}
           onPaired={(s) => {
             setRemovedWarning(false);
+            setAccountDeleted(false);
             setStatus(s);
             api.accountStatus().then(
               (a) => setPairedAs(a?.email ?? null),

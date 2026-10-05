@@ -50,6 +50,7 @@ export type ErrorCode =
   | "password_changed_elsewhere"
   | "invalid_kit"
   | "signed_out"
+  | "account_deleted"
   | "rate_limited"
   | "invalid_server_url"
   | "sync_failed"
@@ -111,6 +112,7 @@ const codes: Record<ErrorCode, string | null> = {
     "Your master password was changed on another device. Lock and unlock with the new password.",
   invalid_kit: "That is not a HavenKeys Emergency Kit code.",
   signed_out: "HavenKeys is signed out of this account. Unlock again to reconnect.",
+  account_deleted: "This account was deleted.",
   rate_limited: "Too many attempts. Try again in a few minutes.",
   invalid_server_url: "That server address cannot be used. It must start with https://.",
   sync_failed: null,
@@ -756,6 +758,21 @@ export const en = {
     deleteExport: "Delete the export file",
   },
 
+  deleteAccount: {
+    title: "Delete account and all data",
+    explain:
+      "This deletes your vault from the server, signs out every device, and erases this computer's copy. It cannot be undone: neither you nor the server's operator can recover it.",
+    keptNote:
+      "Copies set aside by an earlier \u201cRemove this device\u201d are kept, and so are backups you exported.",
+    backupFirst: "Make an encrypted backup first",
+    continueWithout: "Continue without a backup",
+    typeToConfirm: (email: string) => `Type ${email} to confirm`,
+    masterPassword: "Master password",
+    confirm: "Delete account",
+    failed: "The account could not be deleted.",
+    offline: "Connect to your server to delete the account.",
+    done: "Your account and its data were deleted.",
+  },
   export: {
     title: "Export",
     note: "Keep an encrypted backup, or move your data to another password manager.",

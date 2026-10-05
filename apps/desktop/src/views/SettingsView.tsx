@@ -9,6 +9,7 @@ import { ExportSection } from "./ExportSection";
 import { ImportSection } from "./ImportSection";
 import { AccountSection } from "./AccountSection";
 import { UpdatesSection } from "./UpdatesSection";
+import { DeleteAccountSection } from "./DeleteAccountSection";
 import { useI18n } from "../i18n/context";
 import { useUpdateStatus } from "../lib/hooks";
 import { errorMessage } from "../i18n/errors";
@@ -275,6 +276,7 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
       <ChangePassword />
 
       <UpdatesSection />
+      <DeleteAccountSection online={online} />
 
       <div className="settings-block">
         <h3 className="group-title">{t.settings.about}</h3>

@@ -87,7 +87,9 @@ export function ExportSection() {
 
   return (
     <div className="settings-block">
-      <h3 className="group-title">{t.export.title}</h3>
+      <h3 className="group-title" id="export">
+        {t.export.title}
+      </h3>
       <p className="group-note group-note-top">{t.export.note}</p>
       <div className="group" role="radiogroup" aria-label={t.export.formatLabel}>
         {FORMATS.map((f) => (

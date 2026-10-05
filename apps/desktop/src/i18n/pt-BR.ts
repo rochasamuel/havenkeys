@@ -59,6 +59,7 @@ const codes: Record<ErrorCode, string | null> = {
     "Sua senha mestra foi alterada em outro dispositivo. Bloqueie e desbloqueie com a nova senha.",
   invalid_kit: "Este não é um código de Kit de Emergência do HavenKeys.",
   signed_out: "O HavenKeys foi desconectado desta conta. Desbloqueie de novo para reconectar.",
+  account_deleted: "Esta conta foi excluída.",
   rate_limited: "Tentativas demais. Tente novamente em alguns minutos.",
   invalid_server_url: "Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.",
   // Two different Rust messages ("did not accept that request", "did not
@@ -799,6 +800,21 @@ export const ptBR: Messages = {
     deleteExport: "Excluir o arquivo de exportação",
   },
 
+  deleteAccount: {
+    title: "Excluir conta e todos os dados",
+    explain:
+      "Isso apaga o seu cofre do servidor, desconecta todos os dispositivos e apaga a cópia deste computador. Não dá para desfazer: nem você nem o operador do servidor conseguem recuperá-lo.",
+    keptNote:
+      "Cópias separadas por um \u201cRemover este dispositivo\u201d anterior são mantidas, assim como backups que você exportou.",
+    backupFirst: "Fazer backup criptografado antes",
+    continueWithout: "Continuar sem backup",
+    typeToConfirm: (email: string) => `Digite ${email} para confirmar`,
+    masterPassword: "Senha mestra",
+    confirm: "Excluir conta",
+    failed: "Não foi possível excluir a conta.",
+    offline: "Conecte-se ao seu servidor para excluir a conta.",
+    done: "Sua conta e os dados dela foram excluídos.",
+  },
   export: {
     title: "Exportar",
     note: "Guarde um backup criptografado ou leve seus dados para outro gerenciador de senhas.",
