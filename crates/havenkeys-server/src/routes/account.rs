@@ -125,3 +125,72 @@ pub async fn change_credentials(
     tracing::info!(account_id = %session.account_id, header_revision = next, "credentials changed");
     Ok(axum::Json(serde_json::json!({ "headerRevision": next })))
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountDeletion {
+    current_auth_key: String,
+    email: String,
+}
+
+/// Delete the caller's account and everything it owns (spec
+/// 2026-10-05-account-deletion §4.3). The session alone is not enough,
+/// exactly as for a credential change: the caller proves the current auth
+/// key, checked and rate limited like a login. The typed email only guards
+/// against deleting the wrong account by mistake.
+pub async fn delete_account(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    session: Session,
+    Json(req): Json<AccountDeletion>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    const MISMATCH: ApiError = ApiError::InvalidRequest("the email does not match this account");
+    let typed = crate::email::normalize(&req.email).map_err(|_| MISMATCH)?;
+    let current = auth::decode_auth_key(&req.current_auth_key)?;
+
+    let mut db = state.pool.get().await?;
+    let keys = rate_limit::AttemptKeys::new(session.account_id, &client_ip(&state, &headers, peer));
+    keys.check(&db).await?;
+
+    let row = db
+        .query_opt(
+            "SELECT auth_verifier, email_normalized FROM accounts
+              WHERE id = $1 AND status = 'active'",
+            &[&session.account_id],
+        )
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    let (stored, email): (Option<String>, String) = (row.get(0), row.get(1));
+    if typed != email {
+        return Err(MISMATCH);
+    }
+    let stored = stored.ok_or(ApiError::Unauthorized)?;
+    // Verified before the transaction, like login: no row lock is held
+    // through Argon2id. Compared again under the lock below.
+    if !auth::verify_auth_key(stored.clone(), current).await {
+        keys.record_failure(&db).await?;
+        tracing::info!(account_id = %session.account_id, outcome = "rejected", "account deletion");
+        return Err(ApiError::Unauthorized);
+    }
+
+    let tx = db.transaction().await?;
+    let locked: String = tx
+        .query_one(
+            "SELECT auth_verifier FROM accounts WHERE id = $1 FOR UPDATE",
+            &[&session.account_id],
+        )
+        .await?
+        .get(0);
+    if locked != stored {
+        return Err(ApiError::Conflict);
+    }
+    crate::erase::erase_account(&tx, session.account_id).await?;
+    tx.commit().await?;
+
+    // The account's counter went with the account; the address's goes too,
+    // as after a successful login.
+    keys.clear(&db).await?;
+    tracing::info!(account_id = %session.account_id, "account deleted");
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}

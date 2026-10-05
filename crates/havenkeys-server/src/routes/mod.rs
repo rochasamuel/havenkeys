@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/health", get(health::health))
         .route("/v1/accounts/activate", post(accounts::activate))
         .route("/v1/account/credentials", post(account::change_credentials))
+        .route("/v1/account/delete", post(account::delete_account))
         .route("/v1/auth/params", post(auth::params))
         .route("/v1/auth/login", post(auth::login))
         .route("/v1/auth/logout", post(auth::logout))

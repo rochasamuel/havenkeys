@@ -18,6 +18,9 @@ pub enum ApiError {
     InvalidRequest(&'static str),
     TooLarge,
     RateLimited,
+    /// The token belonged to an account that was deleted (spec
+    /// 2026-10-05-account-deletion §4.4). Only a holder of the token sees it.
+    AccountDeleted,
     Internal,
 }
 
@@ -46,6 +49,11 @@ impl ApiError {
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate_limited",
                 "Too many attempts. Try again later.",
+            ),
+            Self::AccountDeleted => (
+                StatusCode::GONE,
+                "account_deleted",
+                "This account was deleted.",
             ),
             Self::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,

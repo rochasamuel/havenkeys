@@ -164,8 +164,21 @@ impl FromRequestParts<AppState> for Session {
                     AND d.revoked_at IS NULL",
                 &[&hash],
             )
-            .await?
-            .ok_or(ApiError::Unauthorized)?;
+            .await?;
+        let Some(row) = row else {
+            // A deleted account's devices are told so, once they ask with
+            // the token they held; any other token is just unauthorized.
+            let gone = db
+                .query_opt(
+                    "SELECT 1 FROM deleted_sessions WHERE token_hash = $1 AND expires_at > now()",
+                    &[&hash],
+                )
+                .await?;
+            return Err(match gone {
+                Some(_) => ApiError::AccountDeleted,
+                None => ApiError::Unauthorized,
+            });
+        };
         let device_id: Uuid = row.get(1);
         db.execute(
             "UPDATE devices SET last_seen_at = now() WHERE id = $1",
