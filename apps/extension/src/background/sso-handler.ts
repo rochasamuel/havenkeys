@@ -142,16 +142,20 @@ export function createSsoHandler(deps: SsoDeps) {
         // the site the user signs in to is the page embedding it.
         const framed = buttonFrameProvider(frame.url);
         if (framed !== null) {
-          if (framed === req.provider && frame.frameId !== 0 && frame.topUrl !== undefined) state.click(frame.tabId, frame.topUrl, undefined, req.provider);
+          if (framed === req.provider && frame.frameId !== 0 && frame.topUrl !== undefined) state.click(frame.tabId, frame.topUrl, undefined, req.provider, true);
         } else if (!SSO_PROVIDERS[req.provider].origins.includes(frame.origin)) {
           // (A click on the provider's own pages is not signing in somewhere with it.)
           state.click(frame.tabId, frame.url, frame.topUrl, req.provider);
         }
         return {};
       }
-      case "cs_sso_account":
-        state.account(tab, frame.origin, req.account, frame.frameId === 0);
+      case "cs_sso_account": {
+        const framed = buttonFrameProvider(frame.url);
+        if (framed !== null) {
+          if (frame.frameId !== 0) state.buttonHint(frame.tabId, framed, req.account);
+        } else state.account(tab, frame.origin, req.account, frame.frameId === 0);
         return {};
+      }
       case "cs_sso_stop": {
         // Any trusted input in the run's tab, or in a popup it opened, ends it (spec §6.3).
         const owner = state.run(tab.tabId) ? tab.tabId : tab.openerTabId;

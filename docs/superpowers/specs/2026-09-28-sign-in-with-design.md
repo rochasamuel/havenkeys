@@ -146,8 +146,13 @@ draws "Sign in with Google" in an `accounts.google.com/gsi/button` iframe,
 personalized to "Continue as <name>" when signed in). A trusted click on
 that frame's button counts as a click for that provider whatever its label,
 and the background, checking the frame's URL from the browser, records the
-embedding top page as `url`. Clicks on any other page of a provider's own
-origins are ignored. (Offering and pressing such a button is out of reach:
+embedding top page as `url`. That click already is the provider's page, so
+it counts as reaching the provider: Chrome gives the popup Google then opens
+no opener tab, so neither the popup nor its closing can be tied to the site.
+The question is asked on the tab's next top-frame load (GSI posts the
+credential to the site's `login_uri`). The email a personalized button
+shows is kept as a suggestion, like a `login_hint`. Clicks on any other
+page of a provider's own origins are ignored. (Offering and pressing such a button is out of reach:
 it lives in a cross-origin frame.)
 
 ### 5.3 Learning the account (provider origins only)

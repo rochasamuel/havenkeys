@@ -83,8 +83,11 @@ export function createSsoState(now: () => number) {
   }
 
   return {
-    click(tabId: number, url: string, topUrl: string | undefined, provider: SsoProvider): void {
-      const p: PendingSso = { tabId, url, provider, account: null, hint: null, sawProvider: false, popupTabId: null, expires: now() + PENDING_TTL_MS };
+    /** `sawProvider`: the click was inside the provider's own button frame
+     * (Google's gsi/button), which already is the provider's page. Its popup
+     * gets no opener tab in Chrome, so nothing later would tell us. */
+    click(tabId: number, url: string, topUrl: string | undefined, provider: SsoProvider, sawProvider = false): void {
+      const p: PendingSso = { tabId, url, provider, account: null, hint: null, sawProvider, popupTabId: null, expires: now() + PENDING_TTL_MS };
       if (topUrl !== undefined) p.topUrl = topUrl;
       pendings.set(tabId, p);
     },
@@ -121,6 +124,12 @@ export function createSsoState(now: () => number) {
       }
       const hint = value?.trim().toLowerCase();
       if (hint && isAccount(hint)) p.hint = hint;
+    },
+    /** The account a provider's personalized button frame shows: a suggestion, like a login_hint. */
+    buttonHint(tabId: number, provider: SsoProvider, account: string): void {
+      const p = pending(tabId);
+      const hint = account.trim().toLowerCase();
+      if (p && p.provider === provider && isAccount(hint)) p.hint = hint;
     },
     account(tab: TabRef, origin: string, account: string, top: boolean): boolean {
       if (!top) return false;

@@ -181,12 +181,23 @@ describe("save", () => {
     const site = "https://financeiro.hostgator.com.br/";
     const gsi: FrameRef = { tabId: 1, frameId: 7, url: "https://accounts.google.com/gsi/button", origin: "https://accounts.google.com", topUrl: site };
     await h.handleContent(gsi, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
-    const popup = { tabId: 5, openerTabId: 1 };
-    h.tabCreated(popup);
-    h.ready(googleFrame(5), popup);
+    // The personalized button names the account: a suggestion.
+    await h.handleContent(gsi, { tabId: 1 }, { type: "cs_sso_account", account: "me@gmail.com" });
+    // Chrome gives Google's popup no opener tab: only the site's next page tells us it is back.
+    h.tabCreated({ tabId: 5 });
     h.tabRemoved(5);
+    h.ready({ tabId: 1, frameId: 0, url: "https://financeiro.hostgator.com.br/index.php", origin: "https://financeiro.hostgator.com.br" }, { tabId: 1 });
     await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
-    expect(requests.at(-1)).toEqual({ type: "check_sso", url: site, provider: "google", account: null });
+    expect(requests.at(-1)).toEqual({ type: "check_sso", url: site, provider: "google", account: "me@gmail.com" });
+  });
+  it("account text from a provider iframe that is not the clicked button frame is ignored", async () => {
+    const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    const gsi: FrameRef = { tabId: 1, frameId: 7, url: "https://accounts.google.com/gsi/button", origin: "https://accounts.google.com", topUrl: top.url };
+    await h.handleContent(gsi, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    await h.handleContent({ ...gsi, url: "https://accounts.google.com/gsi/iframe" }, { tabId: 1 }, { type: "cs_sso_account", account: "other@gmail.com" });
+    h.ready({ tabId: 1, frameId: 0, url: "https://typeform.com/home", origin: "https://typeform.com" }, { tabId: 1 });
+    await vi.waitFor(() => expect(requests.some((r) => r.type === "check_sso")).toBe(true));
+    expect(requests.at(-1)).toMatchObject({ type: "check_sso", account: null });
   });
   it("ignores a click reported by any other provider iframe, or for another provider", async () => {
     const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
