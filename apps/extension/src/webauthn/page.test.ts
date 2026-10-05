@@ -146,6 +146,29 @@ describe("page wrapper", () => {
     expect(nativeGet).not.toHaveBeenCalled();
   });
 
+  it("lets the site overwrite the credential's methods, as it can on a real one", async () => {
+    // GitHub's webauthn-json ponyfill does `credential.toJSON = ...` in strict
+    // mode; a read-only own property made that throw and registration fail.
+    const win = fresh();
+    install(win);
+    answer = () => ({
+      outcome: "credential",
+      credential: { type: "create", credentialId: CRED, clientDataJson: "e30", attestationObject: "AA", authenticatorData: "AA", publicKey: "AA", publicKeyAlgorithm: -7 },
+    });
+    const c = (await win.navigator.credentials.create({ publicKey: pk } as CredentialCreationOptions)) as unknown as Record<string, unknown> & {
+      response: Record<string, unknown>;
+    };
+    const replacement = () => "site";
+    for (const k of ["toJSON", "getClientExtensionResults"]) {
+      c[k] = replacement;
+      expect(c[k]).toBe(replacement);
+    }
+    for (const k of ["getAuthenticatorData", "getPublicKey", "getPublicKeyAlgorithm", "getTransports"]) {
+      c.response[k] = replacement;
+      expect(c.response[k]).toBe(replacement);
+    }
+  });
+
   it("drops foreign credential IDs and falls back on request", async () => {
     const win = fresh();
     install(win);

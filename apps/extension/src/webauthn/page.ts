@@ -204,16 +204,23 @@ export function install(win: Win): void {
     return new DOMErr(MESSAGES[name], name);
   }
 
+  /**
+   * A method the site may overwrite, as it can on a real credential (whose
+   * methods live on the writable prototype). GitHub's webauthn-json assigns
+   * `credential.toJSON = ...` in strict mode, which throws on a read-only one.
+   */
+  const method = (value: () => unknown): PropertyDescriptor => ({ value, writable: true, configurable: true });
+
   function credential(c: CreatedCredential | AssertedCredential): Credential {
     const response =
       c.type === "create"
         ? define(create(AttProto), {
             clientDataJSON: { value: toArrayBuffer(c.clientDataJson), enumerable: true },
             attestationObject: { value: toArrayBuffer(c.attestationObject), enumerable: true },
-            getAuthenticatorData: { value: () => toArrayBuffer(c.authenticatorData) },
-            getPublicKey: { value: () => toArrayBuffer(c.publicKey) },
-            getPublicKeyAlgorithm: { value: () => c.publicKeyAlgorithm },
-            getTransports: { value: () => ["internal"] },
+            getAuthenticatorData: method(() => toArrayBuffer(c.authenticatorData)),
+            getPublicKey: method(() => toArrayBuffer(c.publicKey)),
+            getPublicKeyAlgorithm: method(() => c.publicKeyAlgorithm),
+            getTransports: method(() => ["internal"]),
           })
         : define(create(AssProto), {
             clientDataJSON: { value: toArrayBuffer(c.clientDataJson), enumerable: true },
@@ -238,17 +245,15 @@ export function install(win: Win): void {
       type: { value: "public-key", enumerable: true },
       authenticatorAttachment: { value: "platform", enumerable: true },
       response: { value: response, enumerable: true },
-      getClientExtensionResults: { value: () => ({}) },
-      toJSON: {
-        value: () => ({
-          id: c.credentialId,
-          rawId: c.credentialId,
-          type: "public-key",
-          authenticatorAttachment: "platform",
-          clientExtensionResults: {},
-          response: responseJson,
-        }),
-      },
+      getClientExtensionResults: method(() => ({})),
+      toJSON: method(() => ({
+        id: c.credentialId,
+        rawId: c.credentialId,
+        type: "public-key",
+        authenticatorAttachment: "platform",
+        clientExtensionResults: {},
+        response: responseJson,
+      })),
     }) as Credential;
   }
 
