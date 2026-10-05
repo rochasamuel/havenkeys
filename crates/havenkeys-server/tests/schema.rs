@@ -86,6 +86,6 @@ async fn migrations_are_idempotent() {
         .await
         .unwrap()
         .get(0);
-    assert_eq!(applied, 2);
+    assert_eq!(applied, 3);
     server.cleanup().await;
 }

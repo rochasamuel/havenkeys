@@ -38,7 +38,7 @@ pub async fn run(cmd: AdminCommand, pool: &Pool) -> Result<String, String> {
             new_account(&client, &email, &server_url).await
         }
         AdminCommand::ListAccounts => list_accounts(&client).await,
-        AdminCommand::DeleteAccount { email } => delete_account(&client, &email).await,
+        AdminCommand::DeleteAccount { email } => delete_account(pool, &email).await,
     }
 }
 
@@ -103,18 +103,22 @@ async fn list_accounts(client: &Object) -> Result<String, String> {
         .join("\n"))
 }
 
-async fn delete_account(client: &Object, email: &str) -> Result<String, String> {
+async fn delete_account(pool: &Pool, email: &str) -> Result<String, String> {
     let email = crate::email::normalize(email)?;
-    let removed = client
-        .execute(
-            "DELETE FROM accounts WHERE email_normalized = $1",
+    let failed = |_| "could not delete the account".to_string();
+    let mut client = pool.get().await.map_err(|_| "no database".to_string())?;
+    let tx = client.transaction().await.map_err(failed)?;
+    let id: Uuid = tx
+        .query_opt(
+            "SELECT id FROM accounts WHERE email_normalized = $1 FOR UPDATE",
             &[&email],
         )
         .await
-        .map_err(|_| "could not delete the account".to_string())?;
-    if removed == 0 {
-        return Err("no such account".into());
-    }
+        .map_err(failed)?
+        .ok_or_else(|| "no such account".to_string())?
+        .get(0);
+    crate::erase::erase_account(&tx, id).await.map_err(failed)?;
+    tx.commit().await.map_err(failed)?;
     Ok("deleted".into())
 }
 

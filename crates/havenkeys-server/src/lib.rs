@@ -18,6 +18,7 @@ pub mod b64;
 pub mod config;
 pub mod db;
 pub mod email;
+pub mod erase;
 pub mod error;
 pub mod invite;
 pub mod json;
