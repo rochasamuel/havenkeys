@@ -151,7 +151,11 @@ it counts as reaching the provider: Chrome gives the popup Google then opens
 no opener tab, so neither the popup nor its closing can be tied to the site.
 The question is asked on the tab's next top-frame load (GSI posts the
 credential to the site's `login_uri`). The email a personalized button
-shows is kept as a suggestion, like a `login_hint`. Clicks on any other
+shows is kept as a suggestion, like a `login_hint`. Without FedCM (Firefox),
+Google covers that iframe with a transparent overlay button in the site's
+own page ("Sign in with Google. Opens in new tab"); a click on a provider
+button whose wrapper holds the provider's button frame is sent with
+`embedded: true` and counts the same way. Clicks on any other
 page of a provider's own origins are ignored. (Offering and pressing such a button is out of reach:
 it lives in a cross-origin frame.)
 

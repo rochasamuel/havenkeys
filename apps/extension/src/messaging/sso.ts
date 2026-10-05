@@ -14,8 +14,10 @@ import { MAX_TITLE_CHARS, TOKEN } from "./inline";
 export type SsoContentRequest =
   /** Top frame: these providers have a visible, qualifying button. */
   | { type: "cs_sso_buttons"; providers: SsoProvider[] }
-  /** A trusted click (dispatched by the extension) on a provider button. */
-  | { type: "cs_sso_click"; provider: SsoProvider }
+  /** A trusted click (dispatched by the extension) on a provider button.
+   * `embedded`: the button covers the provider's own button frame (Google's
+   * overlay over its gsi/button iframe), so the click is already the provider's. */
+  | { type: "cs_sso_click"; provider: SsoProvider; embedded?: true }
   /** A trusted click on the saved account's row in the provider's chooser. */
   | { type: "cs_sso_account"; account: string }
   /** The user took over (typed, clicked elsewhere) after HavenKeys pressed. */
@@ -121,9 +123,9 @@ export function parseSsoContentRequest(msg: unknown): SsoContentRequest | null {
         ? { type: "cs_sso_buttons", providers: o.providers }
         : null;
     case "cs_sso_click":
-      return keysAre(o, ["type", "provider"]) && isSsoProvider(o.provider)
-        ? { type: "cs_sso_click", provider: o.provider }
-        : null;
+      if (!isSsoProvider(o.provider)) return null;
+      if (keysAre(o, ["type", "provider"])) return { type: "cs_sso_click", provider: o.provider };
+      return keysAre(o, ["type", "provider", "embedded"]) && o.embedded === true ? { type: "cs_sso_click", provider: o.provider, embedded: true } : null;
     case "cs_sso_account":
       return keysAre(o, ["type", "account"]) && isAccount(o.account)
         ? { type: "cs_sso_account", account: o.account }

@@ -213,6 +213,27 @@ describe("the user's clicks", () => {
     expect(sent).toEqual([{ type: "cs_sso_click", provider: "github" }]);
   });
 
+  it("marks a click on Google's overlay over its button frame as embedded (Firefox)", () => {
+    // Without FedCM, Google covers its gsi/button iframe with a transparent
+    // overlay in the site's own page: the click lands there.
+    const wrap = document.createElement("div");
+    const frame = document.createElement("iframe");
+    frame.src = "https://accounts.google.com/gsi/button?type=standard&text=sign_in_with";
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "button");
+    overlay.setAttribute("aria-label", "Sign in with Google. Opens in new tab");
+    wrap.append(frame, overlay);
+    document.body.append(wrap);
+    const c = make();
+    c.onTrustedClick(overlay);
+    frame.src = "https://evil.example/gsi/button";
+    c.onTrustedClick(overlay);
+    expect(sent).toEqual([
+      { type: "cs_sso_click", provider: "google", embedded: true },
+      { type: "cs_sso_click", provider: "google" },
+    ]);
+  });
+
   it("does not report accounts off the provider's origins", () => {
     const c = make();
     const row = document.createElement("div");

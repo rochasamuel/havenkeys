@@ -199,6 +199,22 @@ describe("save", () => {
     await vi.waitFor(() => expect(requests.some((r) => r.type === "check_sso")).toBe(true));
     expect(requests.at(-1)).toMatchObject({ type: "check_sso", account: null });
   });
+  it("a click on the overlay over Google's button frame asks on the site's next page (Firefox: popup without opener)", async () => {
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google", embedded: true });
+    h.tabCreated({ tabId: 5 });
+    h.tabRemoved(5);
+    h.ready({ tabId: 1, frameId: 0, url: "https://typeform.com/index.php", origin: "https://typeform.com" }, { tabId: 1 });
+    await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
+    expect(requests.at(-1)).toEqual({ type: "check_sso", url: "https://typeform.com/login", provider: "google", account: null });
+  });
+  it("a plain click still waits for the provider's page before asking", async () => {
+    const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    h.ready({ tabId: 1, frameId: 0, url: "https://typeform.com/auth/google", origin: "https://typeform.com" }, { tabId: 1 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(requests).toEqual([]);
+  });
   it("ignores a click reported by any other provider iframe, or for another provider", async () => {
     const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
     const gsi: FrameRef = { tabId: 1, frameId: 7, url: "https://accounts.google.com/gsi/button", origin: "https://accounts.google.com", topUrl: top.url };

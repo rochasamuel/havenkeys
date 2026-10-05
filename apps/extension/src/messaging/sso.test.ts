@@ -8,6 +8,7 @@ describe("sso messages", () => {
   it("accepts exact shapes", () => {
     expect(parseSsoContentRequest({ type: "cs_sso_buttons", providers: ["google", "github"] })).toEqual({ type: "cs_sso_buttons", providers: ["google", "github"] });
     expect(parseSsoContentRequest({ type: "cs_sso_click", provider: "apple" })).not.toBeNull();
+    expect(parseSsoContentRequest({ type: "cs_sso_click", provider: "google", embedded: true })).toEqual({ type: "cs_sso_click", provider: "google", embedded: true });
     expect(parseSsoContentRequest({ type: "cs_sso_account", account: "me@gmail.com" })).not.toBeNull();
     expect(parseSsoContentRequest({ type: "cs_sso_stop" })).not.toBeNull();
     expect(parseSsoFrameRequest({ type: "sso_pick", token: T, itemId: ID })).not.toBeNull();
@@ -32,6 +33,8 @@ describe("sso messages", () => {
       { type: "cs_sso_buttons", providers: ["google", "google"] },
       { type: "cs_sso_buttons", providers: ["okta"] },
       { type: "cs_sso_click", provider: "google", extra: 1 },
+      { type: "cs_sso_click", provider: "google", embedded: false },
+      { type: "cs_sso_click", provider: "google", embedded: "yes" },
       { type: "cs_sso_account", account: "not an email" },
       { type: "cs_sso_account", account: `${"a".repeat(250)}@b.co` },
     ]) expect(parseSsoContentRequest(bad)).toBeNull();

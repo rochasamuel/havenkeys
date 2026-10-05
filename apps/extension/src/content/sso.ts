@@ -24,6 +24,16 @@ const CHOOSE_DEBOUNCE_MS = 300;
 /** An account row on a provider's chooser that is not itself a button or link. */
 const ACCOUNT_ROW = "[data-identifier], [data-email]";
 
+/**
+ * Whether `button` sits over the provider's own button frame: without FedCM
+ * (Firefox), Google covers its gsi/button iframe with a transparent overlay
+ * in the site's page, a sibling of the iframe. Only the wrapper is looked at.
+ */
+function coversButtonFrame(button: Element, provider: string): boolean {
+  const frames = Array.from(button.parentElement?.querySelectorAll("iframe") ?? []).slice(0, 4);
+  return frames.some((f) => buttonFrameProvider(f.src) === provider);
+}
+
 export function createSsoContent(deps: {
   send(msg: SsoContentRequest): Promise<unknown>;
   viewport(): { width: number; height: number };
@@ -214,7 +224,10 @@ export function createSsoContent(deps: {
       // so a bare "Google" counts (context = true).
       const framed = deps.isTop ? null : buttonFrameProvider(location.href);
       const hit = !button ? null : framed ? { provider: framed, score: SSO_MIN_SCORE } : providerOf(button, true);
-      if (hit && hit.score >= SSO_MIN_SCORE) void deps.send({ type: "cs_sso_click", provider: hit.provider });
+      if (hit && hit.score >= SSO_MIN_SCORE) {
+        const embedded = button !== null && !framed && coversButtonFrame(button, hit.provider);
+        void deps.send(embedded ? { type: "cs_sso_click", provider: hit.provider, embedded: true } : { type: "cs_sso_click", provider: hit.provider });
+      }
       if (providersForOrigin(location.origin).length > 0) {
         // Only a row-like element: a click on the page background must not
         // report whatever address happens to be in the page's text.

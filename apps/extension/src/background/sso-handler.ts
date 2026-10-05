@@ -145,7 +145,9 @@ export function createSsoHandler(deps: SsoDeps) {
           if (framed === req.provider && frame.frameId !== 0 && frame.topUrl !== undefined) state.click(frame.tabId, frame.topUrl, undefined, req.provider, true);
         } else if (!SSO_PROVIDERS[req.provider].origins.includes(frame.origin)) {
           // (A click on the provider's own pages is not signing in somewhere with it.)
-          state.click(frame.tabId, frame.url, frame.topUrl, req.provider);
+          // A click on the overlay over the provider's own button frame already
+          // is the provider's: its popup may get no opener tab to tell us later.
+          state.click(frame.tabId, frame.url, frame.topUrl, req.provider, req.embedded === true);
         }
         return {};
       }
