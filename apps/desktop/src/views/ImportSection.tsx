@@ -6,8 +6,10 @@ import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
+type ImportChoice = ImportSource | "havenKeysBackup";
+
 /** In the order the list shows them. */
-const SOURCES: ImportSource[] = [
+const SOURCES: ImportChoice[] = [
   "onePassword",
   "bitwardenJson",
   "bitwardenCsv",
@@ -15,9 +17,10 @@ const SOURCES: ImportSource[] = [
   "firefox",
   "keePassXc",
   "lastPass",
+  "havenKeysBackup",
 ];
 
-const EXTENSION: Record<ImportSource, string> = {
+const EXTENSION: Record<ImportChoice, string> = {
   onePassword: "1pux",
   bitwardenJson: "json",
   bitwardenCsv: "csv",
@@ -25,6 +28,7 @@ const EXTENSION: Record<ImportSource, string> = {
   firefox: "csv",
   keePassXc: "csv",
   lastPass: "csv",
+  havenKeysBackup: "hkbackup",
 };
 
 /** Lines describing what was left out or changed; empty when nothing was. */
@@ -32,6 +36,7 @@ function caveats(r: ImportResult["report"], t: Messages): string[] {
   const out: string[] = [];
   if (r.convertedToNotes) out.push(t.import.convertedToNotes(r.convertedToNotes));
   if (r.skippedDuplicates) out.push(t.import.skippedDuplicates(r.skippedDuplicates));
+  if (r.skippedExisting) out.push(t.import.skippedExisting(r.skippedExisting));
   if (r.skippedArchived) out.push(t.import.skippedArchived(r.skippedArchived));
   if (r.attachmentsSkipped) out.push(t.import.attachmentsSkipped(r.attachmentsSkipped));
   if (r.passwordHistorySkipped) out.push(t.import.passwordHistorySkipped(r.passwordHistorySkipped));
@@ -46,7 +51,9 @@ function caveats(r: ImportResult["report"], t: Messages): string[] {
 export function ImportSection({ onImported }: { onImported: () => void }) {
   const toast = useToast();
   const { t } = useI18n();
-  const [source, setSource] = useState<ImportSource>("onePassword");
+  const [source, setSource] = useState<ImportChoice>("onePassword");
+  const [restorePassword, setRestorePassword] = useState("");
+  const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [deleted, setDeleted] = useState(false);
@@ -55,9 +62,11 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
   async function runImport() {
     setBusy(true);
     try {
-      const r = await api.importFile(source);
+      const isRestore = source === "havenKeysBackup";
+      const r = isRestore ? await api.restoreBackup(restorePassword) : await api.importFile(source);
       if (r) {
         setResult(r);
+        setRestored(isRestore);
         setDeleted(false);
         setConfirmDelete(false);
         onImported();
@@ -65,6 +74,7 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
     } catch (e) {
       toast(errorMessage(e, t, t.import.failed), "error");
     } finally {
+      setRestorePassword("");
       setBusy(false);
     }
   }
@@ -100,8 +110,27 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
         ))}
       </div>
       <p className="group-note">{t.import.howTo[source]}</p>
+      {source === "havenKeysBackup" && (
+        <div className="group">
+          <label className="row">
+            <span className="row-label-inline">{t.import.backupPassword}</span>
+            <input
+              type="password"
+              name="restore-password"
+              autoComplete="off"
+              value={restorePassword}
+              onChange={(e) => setRestorePassword(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+        </div>
+      )}
       <div className="group-actions">
-        <button className="btn" onClick={() => void runImport()} disabled={busy}>
+        <button
+          className="btn"
+          onClick={() => void runImport()}
+          disabled={busy || (source === "havenKeysBackup" && restorePassword.length === 0)}
+        >
           {busy ? t.import.importing : t.import.choose(EXTENSION[source])}
         </button>
       </div>
@@ -119,7 +148,7 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
               ))}
             </ul>
           )}
-          {deleted ? (
+          {!restored && (deleted ? (
             <p className="muted">{t.import.wasDeleted}</p>
           ) : confirmDelete ? (
             <div className="confirm">
@@ -137,7 +166,7 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
                 {t.import.deleteExport}
               </button>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>

@@ -699,6 +699,7 @@ export const en = {
       firefox: "Firefox",
       keePassXc: "KeePassXC",
       lastPass: "LastPass",
+      havenKeysBackup: "HavenKeys backup (.hkbackup)",
     },
     howTo: {
       onePassword: "In 1Password, choose File › Export and the 1PUX format.",
@@ -711,7 +712,10 @@ export const en = {
       firefox: "In Firefox, open Passwords (about:logins), then the ⋯ menu › Export passwords.",
       keePassXc: "In KeePassXC, choose Database › Export › CSV File.",
       lastPass: "In LastPass, open Advanced Options › Export › LastPass CSV File.",
+      havenKeysBackup: "Choose a backup made from Export. Items already in your vault are left as they are.",
     },
+    backupPassword: "Backup password",
+    skippedExisting: (n: number) => `${n} ${n === 1 ? "item was" : "items were"} already in your vault and left as ${n === 1 ? "it was" : "they were"}.`,
     choose: (extension: string) => `Choose .${extension} file…`,
     importing: "Importing…",
     failed: "Import failed.",

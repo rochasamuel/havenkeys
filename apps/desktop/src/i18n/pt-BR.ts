@@ -724,6 +724,7 @@ export const ptBR: Messages = {
       firefox: "Firefox",
       keePassXc: "KeePassXC",
       lastPass: "LastPass",
+      havenKeysBackup: "Backup do HavenKeys (.hkbackup)",
     },
     howTo: {
       onePassword: "No 1Password, escolha Arquivo › Exportar e o formato 1PUX.",
@@ -736,7 +737,11 @@ export const ptBR: Messages = {
       firefox: "No Firefox, abra Senhas (about:logins) e depois o menu ⋯ › Exportar senhas.",
       keePassXc: "No KeePassXC, escolha Banco de dados › Exportar › Arquivo CSV.",
       lastPass: "No LastPass, abra Opções avançadas › Exportar › Arquivo CSV do LastPass.",
+      havenKeysBackup: "Escolha um backup feito em Exportar. Itens que já estão no seu cofre ficam como estão.",
     },
+    backupPassword: "Senha do backup",
+    skippedExisting: (n: number) =>
+      `${n} ${n === 1 ? "item já estava no seu cofre e ficou como estava" : "itens já estavam no seu cofre e ficaram como estavam"}.`,
     choose: (extension: string) => `Escolher arquivo .${extension}…`,
     importing: "Importando…",
     failed: "A importação falhou.",
