@@ -81,13 +81,19 @@ fn summary_counts_what_each_format_leaves_out() {
         }
     );
     let backup = export::summarize(&vault, ExportFormat::Backup).unwrap();
-    assert_eq!((backup.logins, backup.secure_notes, backup.items_left_out), (2, 1, 0));
+    assert_eq!(
+        (backup.logins, backup.secure_notes, backup.items_left_out),
+        (2, 1, 0)
+    );
 }
 
 #[test]
 fn the_backup_payload_holds_every_item() {
     let (mut vault, _sk) = activated_vault();
-    commit_all(&mut vault, vec![login("GitHub", "octo", "pw1", "https://github.com")]);
+    commit_all(
+        &mut vault,
+        vec![login("GitHub", "octo", "pw1", "https://github.com")],
+    );
     let rendered = export::render(&vault, ExportFormat::Backup, NOW).unwrap();
     let text = std::str::from_utf8(&rendered.bytes).unwrap();
     assert!(text.contains("\"version\":1"));
@@ -99,8 +105,14 @@ fn the_backup_payload_holds_every_item() {
 fn a_locked_vault_exports_nothing() {
     let (mut vault, _sk) = activated_vault();
     vault.lock();
-    assert!(matches!(export::render(&vault, ExportFormat::Csv, NOW), Err(Error::Locked)));
-    assert!(matches!(export::summarize(&vault, ExportFormat::Csv), Err(Error::Locked)));
+    assert!(matches!(
+        export::render(&vault, ExportFormat::Csv, NOW),
+        Err(Error::Locked)
+    ));
+    assert!(matches!(
+        export::summarize(&vault, ExportFormat::Csv),
+        Err(Error::Locked)
+    ));
 }
 
 #[test]
@@ -109,7 +121,10 @@ fn default_file_names() {
         export::default_file_name(ExportFormat::Backup, NOW),
         "havenkeys-export-2023-11-14.hkbackup"
     );
-    assert_eq!(export::default_file_name(ExportFormat::Csv, NOW), "havenkeys-export-2023-11-14.csv");
+    assert_eq!(
+        export::default_file_name(ExportFormat::Csv, NOW),
+        "havenkeys-export-2023-11-14.csv"
+    );
 }
 
 /// One login's details no longer open: export skips it, counts it in
@@ -121,23 +136,35 @@ fn an_unreadable_item_is_counted_not_fatal() {
     let path = dir.path().join("vault.db");
     let (damaged, sk) = {
         let (mut v, sk) = activated_vault_at(&path);
-        let a = v.stage_create(login("Fine", "a", "pw1", "https://a.example"), NOW).unwrap();
+        let a = v
+            .stage_create(login("Fine", "a", "pw1", "https://a.example"), NOW)
+            .unwrap();
         v.commit_write(a, 1).unwrap();
-        let b = v.stage_create(login("Damaged", "b", "pw2", "https://b.example"), NOW + 1).unwrap();
+        let b = v
+            .stage_create(login("Damaged", "b", "pw2", "https://b.example"), NOW + 1)
+            .unwrap();
         (v.commit_write(b, 2).unwrap().unwrap().id, sk)
     };
     let c = Connection::open(&path).unwrap();
     let mut blob: Vec<u8> = c
-        .query_row("SELECT details FROM items WHERE id = ?1", params![damaged.to_string()], |r| r.get(0))
+        .query_row(
+            "SELECT details FROM items WHERE id = ?1",
+            params![damaged.to_string()],
+            |r| r.get(0),
+        )
         .unwrap();
     let last = blob.len() - 1;
     blob[last] ^= 0x01;
-    c.execute("UPDATE items SET details = ?1 WHERE id = ?2", params![blob, damaged.to_string()])
-        .unwrap();
+    c.execute(
+        "UPDATE items SET details = ?1 WHERE id = ?2",
+        params![blob, damaged.to_string()],
+    )
+    .unwrap();
     drop(c);
 
     let mut v = open_file(&path);
-    v.unlock_for_account(&secret(PASSWORD), &sk, &account()).unwrap();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
     let s = export::summarize(&v, ExportFormat::Csv).unwrap();
     assert_eq!((s.logins, s.unreadable), (1, 1));
     let out = export::render(&v, ExportFormat::Csv, NOW).unwrap();
@@ -157,7 +184,10 @@ const BACKUP_PW: &str = "a separate backup passphrase";
 #[test]
 fn a_backup_opens_with_its_password_only() {
     let (mut vault, _sk) = activated_vault();
-    commit_all(&mut vault, vec![login("GitHub", "octo", "pw1", "https://github.com")]);
+    commit_all(
+        &mut vault,
+        vec![login("GitHub", "octo", "pw1", "https://github.com")],
+    );
     let file = backup_of(&vault, BACKUP_PW);
     assert_eq!(&file[..8], b"HKBACKUP");
     // Nothing readable in the file.
@@ -168,7 +198,9 @@ fn a_backup_opens_with_its_password_only() {
     assert_eq!(items[0].overview.title, "GitHub");
     assert!(matches!(
         open_backup(&file, &secret("wrong backup passphrase")),
-        Err(Error::InvalidInput("wrong backup password, or the file is damaged"))
+        Err(Error::InvalidInput(
+            "wrong backup password, or the file is damaged"
+        ))
     ));
 }
 
@@ -177,7 +209,18 @@ fn every_tampered_byte_is_refused() {
     let (vault, _sk) = activated_vault();
     let file = backup_of(&vault, BACKUP_PW);
     // Version (8), KDF algorithm (9), each KDF parameter, the salt and the blob.
-    for pos in [8, 9, 10, 14, 18, 22, 37, HEADER_LEN, HEADER_LEN + 2, file.len() - 1] {
+    for pos in [
+        8,
+        9,
+        10,
+        14,
+        18,
+        22,
+        37,
+        HEADER_LEN,
+        HEADER_LEN + 2,
+        file.len() - 1,
+    ] {
         let mut bad = file.clone();
         bad[pos] ^= 0x01;
         assert!(open_backup(&bad, &secret(BACKUP_PW)).is_err(), "byte {pos}");
@@ -189,9 +232,16 @@ fn malformed_backups_are_refused_with_a_fixed_message() {
     let (vault, _sk) = activated_vault();
     let file = backup_of(&vault, BACKUP_PW);
     let not_ours = Error::InvalidInput("not a HavenKeys backup file");
-    for bad in [&b""[..], b"HKBACKU", &file[..HEADER_LEN], b"PK\x03\x04 a zip file......................................"] {
+    for bad in [
+        &b""[..],
+        b"HKBACKU",
+        &file[..HEADER_LEN],
+        b"PK\x03\x04 a zip file......................................",
+    ] {
         assert_eq!(
-            open_backup(bad, &secret(BACKUP_PW)).unwrap_err().to_string(),
+            open_backup(bad, &secret(BACKUP_PW))
+                .unwrap_err()
+                .to_string(),
             not_ours.to_string()
         );
     }
@@ -199,7 +249,9 @@ fn malformed_backups_are_refused_with_a_fixed_message() {
     newer[8] = 2;
     assert!(matches!(
         open_backup(&newer, &secret(BACKUP_PW)),
-        Err(Error::InvalidInput("this backup was made by a newer version of HavenKeys"))
+        Err(Error::InvalidInput(
+            "this backup was made by a newer version of HavenKeys"
+        ))
     ));
     // KDF parameters outside the accepted range (memory = 1 GiB + 1 KiB).
     let mut greedy = file.clone();
@@ -217,13 +269,17 @@ fn a_payload_with_unknown_fields_is_refused() {
     // It decrypted, so the password was right: never "wrong password".
     assert!(matches!(
         open_backup(&file, &secret(BACKUP_PW)),
-        Err(Error::InvalidInput("this backup can't be read by this version of HavenKeys"))
+        Err(Error::InvalidInput(
+            "this backup can't be read by this version of HavenKeys"
+        ))
     ));
     let newer = br#"{"version":2,"exportedAt":0,"items":[]}"#;
     let file = seal_backup(newer, &secret(BACKUP_PW), &fast_kdf()).unwrap();
     assert!(matches!(
         open_backup(&file, &secret(BACKUP_PW)),
-        Err(Error::InvalidInput("this backup was made by a newer version of HavenKeys"))
+        Err(Error::InvalidInput(
+            "this backup was made by a newer version of HavenKeys"
+        ))
     ));
 }
 
@@ -239,7 +295,10 @@ fn the_size_limit_is_enforced_on_both_sides() {
         Err(Error::InvalidInput("backup file is too large"))
     ));
     assert!(matches!(
-        open_backup(&vec![0u8; MAX_BACKUP_BYTES as usize + 1], &secret(BACKUP_PW)),
+        open_backup(
+            &vec![0u8; MAX_BACKUP_BYTES as usize + 1],
+            &secret(BACKUP_PW)
+        ),
         Err(Error::InvalidInput("backup file is too large"))
     ));
 }
@@ -281,7 +340,13 @@ fn restore_into(
 #[test]
 fn a_backup_restores_into_a_new_account_with_working_passkeys() {
     let (mut a, _) = activated_vault();
-    commit_all(&mut a, vec![note("Recovery", "1111"), login("Bank", "me", "pw", "https://bank.example")]);
+    commit_all(
+        &mut a,
+        vec![
+            note("Recovery", "1111"),
+            login("Bank", "me", "pw", "https://bank.example"),
+        ],
+    );
     let staged = a.stage_passkey_create(passkey_req(&[1]), NOW).unwrap();
     let pk_item = staged.item_id;
     let cred = staged.registration.credential_id.clone();
@@ -290,33 +355,56 @@ fn a_backup_restores_into_a_new_account_with_working_passkeys() {
 
     let (mut b, _) = activated_vault();
     let report = restore_into(&mut b, &file, 0);
-    assert_eq!((report.imported, report.logins, report.secure_notes, report.failed), (3, 2, 1, 0));
+    assert_eq!(
+        (
+            report.imported,
+            report.logins,
+            report.secure_notes,
+            report.failed
+        ),
+        (3, 2, 1, 0)
+    );
     assert!(b.get_item(&pk_item).unwrap().has_passkey);
-    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32]).unwrap();
+    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32])
+        .unwrap();
 }
 
 #[test]
 fn restoring_twice_adds_nothing_and_overwrites_nothing() {
     let (mut a, _) = activated_vault();
-    commit_all(&mut a, vec![login("Bank", "me", "pw", "https://bank.example")]);
+    commit_all(
+        &mut a,
+        vec![login("Bank", "me", "pw", "https://bank.example")],
+    );
     let file = backup_of(&a, BACKUP_PW);
     let (mut b, _) = activated_vault();
     assert_eq!(restore_into(&mut b, &file, 0).imported, 1);
     // Edited after the first restore: the second must not undo it.
     let id = b.list_items().unwrap()[0].id;
-    let w = b.stage_update(&id, login("Bank", "me", "edited", "https://bank.example"), NOW + 5).unwrap();
+    let w = b
+        .stage_update(
+            &id,
+            login("Bank", "me", "edited", "https://bank.example"),
+            NOW + 5,
+        )
+        .unwrap();
     b.commit_write(w, 5).unwrap();
     let second = restore_into(&mut b, &file, 10);
     assert_eq!((second.imported, second.skipped_existing), (0, 1));
     assert_eq!(b.list_items().unwrap().len(), 1);
-    let pw = b.reveal(&id, havenkeys_core::model::SecretField::Password).unwrap();
+    let pw = b
+        .reveal(&id, havenkeys_core::model::SecretField::Password)
+        .unwrap();
     assert_eq!(pw.expose(), "edited");
 }
 
 #[test]
 fn the_identity_restores_under_this_vaults_id_or_is_skipped() {
     let (mut a, _) = activated_vault();
-    let w = a.stage_identity_if_missing("me@example.com", NOW).unwrap().unwrap();
+    let w = a
+        .stage_identity_if_missing("me@example.com", NOW)
+        .unwrap()
+        .unwrap();
     a.commit_write(w, 1).unwrap();
     let file = backup_of(&a, BACKUP_PW);
 
@@ -347,7 +435,9 @@ fn bitwarden_json_reimports_and_never_carries_passkeys() {
 
     let parsed = import::parse(ImportSource::BitwardenJson, &out.bytes).unwrap();
     let (mut fresh, _) = activated_vault();
-    let staged = fresh.stage_import(parsed.items, parsed.report, NOW).unwrap();
+    let staged = fresh
+        .stage_import(parsed.items, parsed.report, NOW)
+        .unwrap();
     assert_eq!(staged.report.failed, 0);
     assert_eq!((staged.report.logins, staged.report.secure_notes), (2, 1));
     let mut rev = 0;
@@ -416,9 +506,16 @@ fn bitwarden_json_maps_every_item_kind() {
         i
     };
     let (mut v, _) = activated_vault();
-    let field = |id, label: &str, value| FieldInput { id, label: secret(label), value };
+    let field = |id, label: &str, value| FieldInput {
+        id,
+        label: secret(label),
+        value,
+    };
     let some = |s: &str| Some(secret(s));
-    let rule = |url: &str, match_type| UrlRule { url: url.into(), match_type };
+    let rule = |url: &str, match_type| UrlRule {
+        url: url.into(),
+        match_type,
+    };
 
     // Login with three URL rules and one section of every interesting field.
     let mut gh = login("GitHub", "octo", "old-pw", "https://github.com");
@@ -432,8 +529,16 @@ fn bitwarden_json_maps_every_item_kind() {
         title: None,
         fields: vec![
             field(None, "Pet", FieldValueInput::Text(secret("rex"))),
-            field(None, "PIN", FieldValueInput::Password(SecretUpdate::Set(secret("4321")))),
-            field(None, "Old", FieldValueInput::Password(SecretUpdate::Set(secret("gone")))),
+            field(
+                None,
+                "PIN",
+                FieldValueInput::Password(SecretUpdate::Set(secret("4321"))),
+            ),
+            field(
+                None,
+                "Old",
+                FieldValueInput::Password(SecretUpdate::Set(secret("gone"))),
+            ),
             field(
                 None,
                 "Home",
@@ -446,7 +551,9 @@ fn bitwarden_json_maps_every_item_kind() {
             field(
                 None,
                 "Token",
-                FieldValueInput::Otp(SecretUpdate::Set(secret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"))),
+                FieldValueInput::Otp(SecretUpdate::Set(secret(
+                    "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+                ))),
             ),
         ],
     }]);
@@ -455,7 +562,10 @@ fn bitwarden_json_maps_every_item_kind() {
 
     // Change the password (old one goes to history) and clear one field.
     let sections = v.login_sections(&gh_id).unwrap();
-    let (sid, ids): (_, Vec<_>) = (sections[0].id, sections[0].fields.iter().map(|f| f.id).collect());
+    let (sid, ids): (_, Vec<_>) = (
+        sections[0].id,
+        sections[0].fields.iter().map(|f| f.id).collect(),
+    );
     let mut edit = login("GitHub", "octo", "new-pw", "https://github.com");
     edit.urls = vec![
         rule("https://github.com", MatchType::Domain),
@@ -467,8 +577,16 @@ fn bitwarden_json_maps_every_item_kind() {
         title: None,
         fields: vec![
             field(Some(ids[0]), "Pet", FieldValueInput::Text(secret("rex"))),
-            field(Some(ids[1]), "PIN", FieldValueInput::Password(SecretUpdate::Keep)),
-            field(Some(ids[2]), "Old", FieldValueInput::Password(SecretUpdate::Clear)),
+            field(
+                Some(ids[1]),
+                "PIN",
+                FieldValueInput::Password(SecretUpdate::Keep),
+            ),
+            field(
+                Some(ids[2]),
+                "Old",
+                FieldValueInput::Password(SecretUpdate::Clear),
+            ),
             field(
                 Some(ids[3]),
                 "Home",
@@ -478,7 +596,11 @@ fn bitwarden_json_maps_every_item_kind() {
                     ..Default::default()
                 })),
             ),
-            field(Some(ids[4]), "Token", FieldValueInput::Otp(SecretUpdate::Keep)),
+            field(
+                Some(ids[4]),
+                "Token",
+                FieldValueInput::Otp(SecretUpdate::Keep),
+            ),
         ],
     }]);
     let w = v.stage_update(&gh_id, edit, NOW + 1).unwrap();
@@ -498,7 +620,10 @@ fn bitwarden_json_maps_every_item_kind() {
     v.commit_write(w, 3).unwrap();
 
     // Identity.
-    let w = v.stage_identity_if_missing("user@example.com", NOW).unwrap().unwrap();
+    let w = v
+        .stage_identity_if_missing("user@example.com", NOW)
+        .unwrap()
+        .unwrap();
     let identity_id = w.item_id;
     v.commit_write(w, 4).unwrap();
     let mut ident = blank(ItemType::Identity, "");
@@ -509,7 +634,11 @@ fn bitwarden_json_maps_every_item_kind() {
         number: some("10"),
         cpf: some("123.456.789-00"),
         home_phone: some("555-0100"),
-        custom: vec![CustomField { label: "Blood".into(), value: "O+".into(), hidden: true }],
+        custom: vec![CustomField {
+            label: "Blood".into(),
+            value: "O+".into(),
+            hidden: true,
+        }],
         ..Default::default()
     });
     let w = v.stage_update(&identity_id, ident, NOW + 1).unwrap();
@@ -521,7 +650,12 @@ fn bitwarden_json_maps_every_item_kind() {
     let of_type = |t: u64| items.iter().find(|i| i["type"] == t).unwrap();
 
     let l = of_type(1);
-    let uris: Vec<_> = l["login"]["uris"].as_array().unwrap().iter().map(|u| u["match"].clone()).collect();
+    let uris: Vec<_> = l["login"]["uris"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| u["match"].clone())
+        .collect();
     assert_eq!(uris, [serde_json::Value::Null, 1.into(), 3.into()]);
     assert_eq!(l["login"]["password"], "new-pw");
     assert_eq!(l["passwordHistory"][0]["password"], "old-pw");
@@ -532,7 +666,10 @@ fn bitwarden_json_maps_every_item_kind() {
     assert_eq!(get("PIN").unwrap()["value"], "4321");
     assert_eq!(get("Home").unwrap()["type"], 0);
     assert_eq!(get("Token").unwrap()["type"], 1);
-    assert!(get("Token").unwrap()["value"].as_str().unwrap().starts_with("otpauth://totp/"));
+    assert!(get("Token").unwrap()["value"]
+        .as_str()
+        .unwrap()
+        .starts_with("otpauth://totp/"));
     assert!(get("Old").is_none(), "a cleared password field is skipped");
 
     let c = of_type(3);
@@ -547,14 +684,23 @@ fn bitwarden_json_maps_every_item_kind() {
     assert_eq!(i["identity"]["ssn"], "123.456.789-00");
     assert_eq!(i["identity"]["firstName"], "Samuel");
     let ifields = i["fields"].as_array().unwrap();
-    assert!(ifields.iter().any(|f| f["name"] == "Home phone" && f["value"] == "555-0100"));
-    assert!(ifields.iter().any(|f| f["name"] == "Blood" && f["type"] == 1));
+    assert!(ifields
+        .iter()
+        .any(|f| f["name"] == "Home phone" && f["value"] == "555-0100"));
+    assert!(ifields
+        .iter()
+        .any(|f| f["name"] == "Blood" && f["type"] == 1));
 }
 
 #[test]
 fn csv_quotes_hostile_values_and_reimports_as_chrome() {
     let (mut v, _) = activated_vault();
-    let mut tricky = login("Comma, \"quoted\"", "=HYPERLINK(\"x\")", "p,w\"\n=1", "https://a.example");
+    let mut tricky = login(
+        "Comma, \"quoted\"",
+        "=HYPERLINK(\"x\")",
+        "p,w\"\n=1",
+        "https://a.example",
+    );
     tricky.urls.push(havenkeys_core::model::UrlRule {
         url: "https://b.example".into(),
         match_type: havenkeys_core::model::MatchType::Domain,
@@ -571,25 +717,41 @@ fn csv_quotes_hostile_values_and_reimports_as_chrome() {
 
     let parsed = import::parse(ImportSource::Chrome, &out.bytes).unwrap();
     let (mut fresh, _) = activated_vault();
-    let staged = fresh.stage_import(parsed.items, parsed.report, NOW).unwrap();
+    let staged = fresh
+        .stage_import(parsed.items, parsed.report, NOW)
+        .unwrap();
     assert_eq!((staged.report.logins, staged.report.failed), (1, 0));
-    fresh.commit_write(staged.writes.into_iter().next().unwrap(), 1).unwrap();
+    fresh
+        .commit_write(staged.writes.into_iter().next().unwrap(), 1)
+        .unwrap();
     let item = fresh.list_items().unwrap().pop().unwrap();
     // The vault refuses control characters in a title, so the title carries only the comma and quotes.
     assert_eq!(item.title, "Comma, \"quoted\"");
     assert_eq!(item.username.as_deref(), Some("=HYPERLINK(\"x\")"));
-    let pw = fresh.reveal(&item.id, havenkeys_core::model::SecretField::Password).unwrap();
+    let pw = fresh
+        .reveal(&item.id, havenkeys_core::model::SecretField::Password)
+        .unwrap();
     assert_eq!(pw.expose(), "p,w\"\n=1");
 }
 
 // ------------------------------------------------- restore: round trip, limits
 
 fn seal_json(payload: &serde_json::Value) -> Vec<u8> {
-    seal_backup(payload.to_string().as_bytes(), &secret(BACKUP_PW), &fast_kdf()).unwrap()
+    seal_backup(
+        payload.to_string().as_bytes(),
+        &secret(BACKUP_PW),
+        &fast_kdf(),
+    )
+    .unwrap()
 }
 
 fn payload_of(vault: &VaultService) -> serde_json::Value {
-    serde_json::from_slice(&export::render(vault, ExportFormat::Backup, NOW).unwrap().bytes).unwrap()
+    serde_json::from_slice(
+        &export::render(vault, ExportFormat::Backup, NOW)
+            .unwrap()
+            .bytes,
+    )
+    .unwrap()
 }
 
 /// Custom-field section views with the (regenerated) IDs left out.
@@ -614,12 +776,18 @@ fn section_shape(vault: &VaultService, id: &uuid::Uuid) -> serde_json::Value {
 #[test]
 fn a_full_vault_round_trips_through_a_backup() {
     use havenkeys_core::card::{CardBrand, CardExpiry, CardField, CardInput};
-    use havenkeys_core::custom_field::{AddressValue, FieldInput, FieldValue, FieldValueInput, SectionInput};
+    use havenkeys_core::custom_field::{
+        AddressValue, FieldInput, FieldValue, FieldValueInput, SectionInput,
+    };
     use havenkeys_core::identity::IdentityFields;
     use havenkeys_core::model::{ItemType, SecretField, SecretUpdate};
 
     let (mut a, _) = activated_vault();
-    let field = |label: &str, value| FieldInput { id: None, label: secret(label), value };
+    let field = |label: &str, value| FieldInput {
+        id: None,
+        label: secret(label),
+        value,
+    };
     let some = |s: &str| Some(secret(s));
 
     // Login: TOTP, four kinds of custom field, then a password change.
@@ -631,8 +799,16 @@ fn a_full_vault_round_trips_through_a_backup() {
         title: some("Extra"),
         fields: vec![
             field("Pet", FieldValueInput::Text(secret("rex"))),
-            field("PIN", FieldValueInput::Password(SecretUpdate::Set(secret("4321")))),
-            field("Token", FieldValueInput::Otp(SecretUpdate::Set(secret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")))),
+            field(
+                "PIN",
+                FieldValueInput::Password(SecretUpdate::Set(secret("4321"))),
+            ),
+            field(
+                "Token",
+                FieldValueInput::Otp(SecretUpdate::Set(secret(
+                    "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+                ))),
+            ),
             field(
                 "Home",
                 FieldValueInput::Address(Box::new(AddressValue {
@@ -668,7 +844,10 @@ fn a_full_vault_round_trips_through_a_backup() {
     let card_id = a.commit_write(w, 3).unwrap().unwrap().id;
     let w = a.stage_create(note("Recovery", "1111 2222"), NOW).unwrap();
     let note_id = a.commit_write(w, 4).unwrap().unwrap().id;
-    let w = a.stage_identity_if_missing("me@example.com", NOW).unwrap().unwrap();
+    let w = a
+        .stage_identity_if_missing("me@example.com", NOW)
+        .unwrap()
+        .unwrap();
     let ident_a = w.item_id;
     a.commit_write(w, 5).unwrap();
     let mut ident = login("", "", "", "https://x.example");
@@ -693,7 +872,14 @@ fn a_full_vault_round_trips_through_a_backup() {
     let (mut b, _) = activated_vault();
     let report = restore_into(&mut b, &file, 0);
     assert_eq!(
-        (report.imported, report.logins, report.cards, report.secure_notes, report.identities, report.failed),
+        (
+            report.imported,
+            report.logins,
+            report.cards,
+            report.secure_notes,
+            report.identities,
+            report.failed
+        ),
         (5, 2, 1, 1, 1, 0)
     );
 
@@ -701,9 +887,18 @@ fn a_full_vault_round_trips_through_a_backup() {
     let reveal = |v: &VaultService, id, f| v.reveal(id, f).unwrap().expose().to_owned();
     assert_eq!(reveal(&b, &gh_id, SecretField::Password), "new-pw");
     assert_eq!(reveal(&b, &gh_id, SecretField::Notes), "login notes");
-    assert_eq!(b.get_item(&gh_id).unwrap().username.as_deref(), Some("octo"));
-    assert_eq!(b.password_history(&gh_id).unwrap(), a.password_history(&gh_id).unwrap());
-    assert_eq!(b.reveal_previous_password(&gh_id, 0).unwrap().expose(), "old-pw");
+    assert_eq!(
+        b.get_item(&gh_id).unwrap().username.as_deref(),
+        Some("octo")
+    );
+    assert_eq!(
+        b.password_history(&gh_id).unwrap(),
+        a.password_history(&gh_id).unwrap()
+    );
+    assert_eq!(
+        b.reveal_previous_password(&gh_id, 0).unwrap().expose(),
+        "old-pw"
+    );
     let t = 1_700_000_000;
     assert_eq!(
         b.totp_code(&gh_id, t).unwrap().code.expose(),
@@ -725,7 +920,12 @@ fn a_full_vault_round_trips_through_a_backup() {
     assert_eq!(secrets(&b).len(), 2);
 
     // Card.
-    for f in [CardField::CardholderName, CardField::Number, CardField::VerificationNumber, CardField::Expiry] {
+    for f in [
+        CardField::CardholderName,
+        CardField::Number,
+        CardField::VerificationNumber,
+        CardField::Expiry,
+    ] {
         assert_eq!(
             b.card_value(&card_id, f).unwrap().expose(),
             a.card_value(&card_id, f).unwrap().expose()
@@ -744,7 +944,8 @@ fn a_full_vault_round_trips_through_a_backup() {
     assert_eq!(got.cpf.as_ref().unwrap().expose(), "123.456.789-00");
 
     // The passkey still signs.
-    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32]).unwrap();
+    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32])
+        .unwrap();
 }
 
 #[test]
@@ -759,11 +960,17 @@ fn a_backup_with_too_many_items_is_refused() {
 
 #[test]
 fn an_unreadable_envelope_is_not_a_wrong_password() {
-    for payload in [&b"not json"[..], br#"{"version":1,"exportedAt":0}"#, br#"{"version":0}"#] {
+    for payload in [
+        &b"not json"[..],
+        br#"{"version":1,"exportedAt":0}"#,
+        br#"{"version":0}"#,
+    ] {
         let file = seal_backup(payload, &secret(BACKUP_PW), &fast_kdf()).unwrap();
         assert!(matches!(
             open_backup(&file, &secret(BACKUP_PW)),
-            Err(Error::InvalidInput("this backup can't be read by this version of HavenKeys"))
+            Err(Error::InvalidInput(
+                "this backup can't be read by this version of HavenKeys"
+            ))
         ));
     }
 }
@@ -772,7 +979,10 @@ fn an_unreadable_envelope_is_not_a_wrong_password() {
 #[test]
 fn an_unknown_item_type_fails_alone() {
     let (mut a, _) = activated_vault();
-    commit_all(&mut a, vec![login("Bank", "me", "pw", "https://bank.example")]);
+    commit_all(
+        &mut a,
+        vec![login("Bank", "me", "pw", "https://bank.example")],
+    );
     let mut payload = payload_of(&a);
     let mut alien = payload["items"][0].clone();
     alien["overview"]["id"] = uuid::Uuid::new_v4().to_string().into();
@@ -805,7 +1015,10 @@ fn a_hostile_backup_restores_only_its_valid_items() {
     let mut payload = payload_of(&a);
     let items = payload["items"].as_array_mut().unwrap();
     let by_title = |items: &[serde_json::Value], t: &str| {
-        items.iter().position(|i| i["overview"]["title"] == t).unwrap()
+        items
+            .iter()
+            .position(|i| i["overview"]["title"] == t)
+            .unwrap()
     };
     let m = by_title(items, "Mismatch");
     items[m]["overview"]["itemType"] = "secure_note".into();
@@ -821,10 +1034,28 @@ fn a_hostile_backup_restores_only_its_valid_items() {
 
     let (mut b, _) = activated_vault();
     let report = restore_into(&mut b, &seal_json(&payload), 0);
-    assert_eq!((report.imported, report.failed, report.skipped_existing), (2, 2, 1));
-    let mut titles: Vec<_> = b.list_items().unwrap().iter().map(|i| i.title.clone()).collect();
+    assert_eq!(
+        (report.imported, report.failed, report.skipped_existing),
+        (2, 2, 1)
+    );
+    let mut titles: Vec<_> = b
+        .list_items()
+        .unwrap()
+        .iter()
+        .map(|i| i.title.clone())
+        .collect();
     titles.sort();
     assert_eq!(titles, ["Fine", "Twice"]);
-    let twice = b.list_items().unwrap().into_iter().find(|i| i.title == "Twice").unwrap();
-    assert_eq!(b.reveal(&twice.id, havenkeys_core::model::SecretField::Password).unwrap().expose(), "pw-b");
+    let twice = b
+        .list_items()
+        .unwrap()
+        .into_iter()
+        .find(|i| i.title == "Twice")
+        .unwrap();
+    assert_eq!(
+        b.reveal(&twice.id, havenkeys_core::model::SecretField::Password)
+            .unwrap()
+            .expose(),
+        "pw-b"
+    );
 }

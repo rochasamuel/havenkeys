@@ -24,7 +24,13 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
                 return Ok(());
             };
             count(&mut summary, ExportFormat::Csv, ov, &d);
-            let ItemDetails::Login { password, totp, notes, .. } = d else {
+            let ItemDetails::Login {
+                password,
+                totp,
+                notes,
+                ..
+            } = d
+            else {
                 return Ok(());
             };
             let mut note = notes.map(|n| n.expose().to_owned()).unwrap_or_default();
@@ -49,5 +55,8 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
         })?;
         w.flush().map_err(|_| Error::Encryption)?;
     }
-    Ok(Rendered { bytes: out, summary })
+    Ok(Rendered {
+        bytes: out,
+        summary,
+    })
 }

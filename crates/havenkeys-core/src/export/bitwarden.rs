@@ -3,9 +3,9 @@
 //! always empty).
 
 use super::{count, for_each_item, ExportFormat, ExportSummary, Rendered};
+use crate::custom_field::FieldValue;
 use crate::error::{Error, Result};
 use crate::import::common::format_utc_timestamp_ms;
-use crate::custom_field::FieldValue;
 use crate::model::{ItemDetails, ItemOverview, MatchType};
 use crate::secret::SecretString;
 use crate::vault::VaultService;
@@ -111,7 +111,12 @@ struct SecureNote {
 }
 
 fn field(name: &str, value: SecretString, hidden: bool) -> Field {
-    Field { name: name.to_owned(), value, r#type: u8::from(hidden), linked_id: None }
+    Field {
+        name: name.to_owned(),
+        value,
+        r#type: u8::from(hidden),
+        linked_id: None,
+    }
 }
 
 /// Bitwarden refuses an item without a name, so an empty title gets one.
@@ -147,7 +152,15 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
         revision_date: format_utc_timestamp_ms(ov.updated_at),
     };
     match details {
-        ItemDetails::Login { password, totp, notes, password_history, sections, app_bindings, .. } => {
+        ItemDetails::Login {
+            password,
+            totp,
+            notes,
+            password_history,
+            sections,
+            app_bindings,
+            ..
+        } => {
             let mut uris: Vec<Uri> = ov
                 .urls
                 .iter()
@@ -163,21 +176,32 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
             let mut packages: Vec<&str> = app_bindings.iter().map(|b| b.package.as_str()).collect();
             packages.sort_unstable();
             packages.dedup();
-            uris.extend(packages.into_iter().map(|p| Uri { r#match: None, uri: format!("androidapp://{p}") }));
+            uris.extend(packages.into_iter().map(|p| Uri {
+                r#match: None,
+                uri: format!("androidapp://{p}"),
+            }));
             for f in sections.into_iter().flat_map(|s| s.fields) {
                 let label = f.label.expose().to_owned();
                 match f.value {
-                    FieldValue::Text(v) | FieldValue::Url(v) | FieldValue::Email(v)
-                    | FieldValue::Phone(v) | FieldValue::Date(v) => it.fields.push(field(&label, v, false)),
+                    FieldValue::Text(v)
+                    | FieldValue::Url(v)
+                    | FieldValue::Email(v)
+                    | FieldValue::Phone(v)
+                    | FieldValue::Date(v) => it.fields.push(field(&label, v, false)),
                     FieldValue::Address(a) => it.fields.push(field(&label, a.formatted(), false)),
                     FieldValue::Password(Some(p)) => it.fields.push(field(&label, p, true)),
-                    FieldValue::Otp(Some(c)) => it.fields.push(field(&label, c.to_otpauth_uri(), true)),
+                    FieldValue::Otp(Some(c)) => {
+                        it.fields.push(field(&label, c.to_otpauth_uri(), true))
+                    }
                     FieldValue::Password(None) | FieldValue::Otp(None) => {}
                 }
             }
             it.password_history = password_history
                 .into_iter()
-                .map(|h| History { last_used_date: format_utc_timestamp_ms(h.replaced_at), password: h.password })
+                .map(|h| History {
+                    last_used_date: format_utc_timestamp_ms(h.replaced_at),
+                    password: h.password,
+                })
                 .collect();
             it.notes = notes;
             it.login = Some(Login {
@@ -211,7 +235,9 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
             it.r#type = 4;
             it.notes = f.notes;
             let address1 = match (f.street, f.number) {
-                (Some(s), Some(n)) => Some(SecretString::new(format!("{} {}", s.expose(), n.expose()))),
+                (Some(s), Some(n)) => {
+                    Some(SecretString::new(format!("{} {}", s.expose(), n.expose())))
+                }
                 (s, n) => s.or(n),
             };
             let mut extra = |name: &str, v: Option<SecretString>| {
@@ -273,7 +299,10 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
         serde_json::to_writer(&mut *out, &item(ov, d)).map_err(|_| Error::Encryption)
     })?;
     out.write_all(b"]}").map_err(|_| Error::Encryption)?;
-    Ok(Rendered { bytes: out, summary })
+    Ok(Rendered {
+        bytes: out,
+        summary,
+    })
 }
 
 #[cfg(test)]
@@ -296,15 +325,28 @@ mod tests {
     #[test]
     fn an_empty_title_never_becomes_an_empty_name() {
         let identity = ItemDetails::Identity(Box::default());
-        assert_eq!(item(&overview(ItemType::Identity, ""), identity).name, "Identity");
+        assert_eq!(
+            item(&overview(ItemType::Identity, ""), identity).name,
+            "Identity"
+        );
         let card = ItemDetails::Card(Box::new(CardFields {
             brand: Some(CardBrand::Visa),
             ..Default::default()
         }));
         assert_eq!(item(&overview(ItemType::Card, " "), card).name, "Visa");
-        let note = ItemDetails::SecureNote { content: "x".into() };
-        assert_eq!(item(&overview(ItemType::SecureNote, ""), note).name, "Untitled");
-        let note = ItemDetails::SecureNote { content: "x".into() };
-        assert_eq!(item(&overview(ItemType::SecureNote, "Kept"), note).name, "Kept");
+        let note = ItemDetails::SecureNote {
+            content: "x".into(),
+        };
+        assert_eq!(
+            item(&overview(ItemType::SecureNote, ""), note).name,
+            "Untitled"
+        );
+        let note = ItemDetails::SecureNote {
+            content: "x".into(),
+        };
+        assert_eq!(
+            item(&overview(ItemType::SecureNote, "Kept"), note).name,
+            "Kept"
+        );
     }
 }
