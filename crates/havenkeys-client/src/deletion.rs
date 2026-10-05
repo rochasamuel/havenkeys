@@ -84,12 +84,19 @@ impl HavenClient {
         let Ok(text) = std::fs::read_to_string(&marker) else {
             return false;
         };
+        // Only the account the marker names, or a vault already emptied: a
+        // stale marker must never erase an account signed in since.
+        let current = self
+            .vault()
+            .ok()
+            .and_then(|v| v.account().ok().flatten())
+            .map(|a| a.account_id);
         match text.trim().parse::<Uuid>() {
-            Ok(account_id) => {
+            Ok(account_id) if current.is_none_or(|c| c == account_id) => {
                 self.wipe_local(account_id);
                 true
             }
-            Err(_) => {
+            _ => {
                 let _ = std::fs::remove_file(&marker);
                 false
             }
@@ -259,6 +266,22 @@ mod tests {
         assert!(!client.finish_pending_deletion());
         assert!(client.device().unwrap().secret_key(id).is_some());
         assert!(!marker(dir.path()).exists());
+    }
+
+    #[test]
+    fn a_stale_marker_never_erases_another_account() {
+        let dir = tempfile::tempdir().unwrap();
+        let (client, events, id) = account_vault(dir.path());
+        let other = uuid::Uuid::from_u128(99);
+        std::fs::write(marker(dir.path()), other.to_string()).unwrap();
+        assert!(!client.finish_pending_deletion());
+        assert!(client.vault().unwrap().account().unwrap().is_some());
+        assert!(client.device().unwrap().secret_key(id).is_some());
+        assert!(!marker(dir.path()).exists());
+        assert!(!events
+            .seen()
+            .iter()
+            .any(|e| e.starts_with("account_deleted")));
     }
 
     #[test]
