@@ -9,6 +9,7 @@ import { Download } from "./pages/Download";
 import { Security } from "./pages/Security";
 import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
+import { DeleteAccount } from "./pages/DeleteAccount";
 import { NotFound } from "./pages/NotFound";
 import { I18nProvider } from "./i18n/context";
 import { LOCALES, localeFromPath, prefersPortuguese } from "./i18n/locale";
@@ -19,6 +20,7 @@ const PAGES = [
   { path: "download", element: <Download /> },
   { path: "security", element: <Security /> },
   { path: "privacy", element: <Privacy /> },
+  { path: "delete-account", element: <DeleteAccount /> },
   { path: "terms", element: <Terms /> },
 ];
 

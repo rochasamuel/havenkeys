@@ -22,6 +22,7 @@ export function Footer() {
             {t.footer.github}
           </a>
           <Link to={path("/privacy")}>{t.footer.privacy}</Link>
+          <Link to={path("/delete-account")}>{t.footer.deleteAccount}</Link>
           <Link to={path("/terms")}>{t.footer.terms}</Link>
         </nav>
         <p className="footer__disclaimer">{t.common.disclaimer}</p>

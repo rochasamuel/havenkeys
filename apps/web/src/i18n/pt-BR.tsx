@@ -57,6 +57,7 @@ export const ptBR: Messages = {
     github: "GitHub",
     privacy: "Privacidade",
     terms: "Termos e licença",
+    deleteAccount: "Excluir conta",
     license: "MIT ou Apache-2.0",
     languageAria: "Idioma",
   },
@@ -571,7 +572,7 @@ export const ptBR: Messages = {
 
   privacy: {
     title: "Política de Privacidade",
-    updated: "Atualizada em 24 de setembro de 2026.",
+    updated: "Atualizada em 5 de outubro de 2026.",
     body: (
       <>
         <h2>Este site</h2>
@@ -604,8 +605,9 @@ export const ptBR: Messages = {
           login, ele também conta as tentativas que falharam por conta e por endereço de rede, e
           zera essa contagem depois de um login bem-sucedido. O{" "}
           <Ext href={`${DOCS}server-sync.md`}>projeto de sincronização com o servidor</Ext> (em
-          inglês) descreve isso em detalhes. Não operamos nenhum servidor hospedado e não temos
-          acesso ao seu.
+          inglês) descreve isso em detalhes. Os desenvolvedores também operam um servidor para outras pessoas, mantido por SAMUEL
+          DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA, que é a controladora dos dados pessoais
+          listados aqui para as contas nele. Esse servidor também não consegue decifrar cofres.
         </p>
 
         <h2>A extensão do navegador</h2>
@@ -691,16 +693,64 @@ export const ptBR: Messages = {
           aleatório do item e o horário da exclusão), para que os seus outros dispositivos saibam que
           devem removê-lo também. "Remove this device" (remover este dispositivo), no app de
           desktop, desconecta o computador e deixa a cópia local do cofre de lado; depois disso você
-          pode excluir esse arquivo. Quem opera o seu servidor pode excluir a sua conta, o que remove o seu cofre e os
-          metadados dele do servidor, embora cópias possam continuar nos backups desse servidor até
-          expirarem. Desinstalar a extensão a remove por completo, já que ela não guarda dados
+          pode excluir esse arquivo. Você pode excluir a sua conta pelo próprio app;{" "}
+          <a href="/pt-br/delete-account">Excluir a sua conta</a> diz o que é apagado e quando. Desinstalar a extensão a remove por completo, já que ela não guarda dados
           próprios.
         </p>
 
         <h2>Contato</h2>
         <p>
           Dúvidas sobre esta política podem ser enviadas como uma issue no{" "}
-          <Ext href={`${GH}/issues`}>GitHub</Ext>.
+          <Ext href={`${GH}/issues`}>GitHub</Ext>.{" "}
+          Para pedidos de privacidade, incluindo exclusão:{" "}
+          <a href="mailto:samuelsilv.rocha@gmail.com">samuelsilv.rocha@gmail.com</a>.
+        </p>
+      </>
+    ),
+  },
+
+  deleteAccount: {
+    title: "Excluir a sua conta",
+    updated: "Atualizada em 5 de outubro de 2026.",
+    body: (
+      <>
+        <h2>Pelo app</h2>
+        <p>
+          No desktop: Configurações → <strong>Excluir conta e todos os dados</strong>. No Android:
+          Configurações → Conta → <strong>Excluir conta e todos os dados</strong>. Você confirma com
+          o e-mail da conta e a sua senha mestra. Faça um backup cifrado antes se puder querer seus
+          dados depois: a exclusão não pode ser desfeita.
+        </p>
+
+        <h2>O que é apagado, e quando</h2>
+        <ul>
+          <li>
+            <strong>Imediatamente:</strong> o seu cofre cifrado e os itens, seus dispositivos e
+            sessões, seu endereço de e-mail, os parâmetros de derivação de chave e os contadores de
+            tentativas de login. A cópia no dispositivo que você usou também é apagada, e os outros
+            dispositivos apagam as deles na próxima vez que se conectarem.
+          </li>
+          <li>
+            <strong>Em até 30 dias:</strong> impressões digitais anônimas das suas sessões antigas,
+            guardadas só para que os outros dispositivos saibam que a conta não existe mais. Elas
+            não contêm e-mail, nome nem identificador da conta.
+          </li>
+          <li>
+            <strong>Em até 30 dias:</strong> cópias em backups do banco de dados e em logs do
+            servidor, que expiram sozinhas.
+          </li>
+        </ul>
+        <p>
+          Backups que você mesmo exportou, e cópias separadas num dispositivo por um "Remover este
+          dispositivo" anterior, são seus e não são tocados.
+        </p>
+
+        <h2>Perdeu o acesso à conta?</h2>
+        <p>
+          Envie um e-mail para{" "}
+          <a href="mailto:samuelsilv.rocha@gmail.com">samuelsilv.rocha@gmail.com</a> a partir do
+          endereço da conta. Confirmaremos o pedido e excluiremos a conta do mesmo jeito que o app
+          faz.
         </p>
       </>
     ),

@@ -62,6 +62,7 @@ export const en = {
     github: "GitHub",
     privacy: "Privacy",
     terms: "Terms & license",
+    deleteAccount: "Delete account",
     license: "MIT or Apache-2.0",
     languageAria: "Language",
   },
@@ -559,7 +560,7 @@ export const en = {
 
   privacy: {
     title: "Privacy Policy",
-    updated: "Last updated September 24, 2026.",
+    updated: "Last updated October 5, 2026.",
     body: (
       <>
         <h2>This website</h2>
@@ -589,8 +590,10 @@ export const en = {
           key-derivation parameters and salt, the wrapped vault key, item revisions, and the number
           and rough size of your items. To rate-limit sign-in, it also counts failed attempts per
           account and per network address, and clears them after a successful sign-in. The{" "}
-          <Ext href={`${DOCS}server-sync.md`}>server-sync design</Ext> describes this in full. We do
-          not operate a hosted server and have no access to yours.
+          <Ext href={`${DOCS}server-sync.md`}>server-sync design</Ext> describes this in full. The
+          developers also operate a server for other people, run by SAMUEL DA SILVA ROCHA
+          DESENVOLVIMENTO DE SOFTWARE LTDA, which is the controller of the personal data listed here
+          for accounts on it. That server cannot decrypt vaults either.
         </p>
 
         <h2>The browser extension</h2>
@@ -673,16 +676,63 @@ export const en = {
           the server, its encrypted content is erased and only a marker remains (the item's random
           ID and the time of deletion), so your other devices know to remove it too. "Remove this
           device" in the desktop app signs the computer out and sets its copy of the vault aside;
-          you can then delete that file. The operator of your server can delete your account, which
-          removes your vault and its metadata from the server, although copies may remain in that
-          server's backups until they expire. Uninstalling the extension removes it completely,
+          you can then delete that file. You can delete your account yourself from the app;{" "}
+          <a href="/delete-account">Delete your account</a> says what is erased and when. Uninstalling the extension removes it completely,
           since it keeps no data of its own.
         </p>
 
         <h2>Contact</h2>
         <p>
           Questions about this policy can be opened as an issue on{" "}
-          <Ext href={`${GH}/issues`}>GitHub</Ext>.
+          <Ext href={`${GH}/issues`}>GitHub</Ext>.{" "}
+          For privacy requests, including deletion:{" "}
+          <a href="mailto:samuelsilv.rocha@gmail.com">samuelsilv.rocha@gmail.com</a>.
+        </p>
+      </>
+    ),
+  },
+
+  deleteAccount: {
+    title: "Delete your account",
+    updated: "Last updated October 5, 2026.",
+    body: (
+      <>
+        <h2>From the app</h2>
+        <p>
+          On the desktop: Settings → <strong>Delete account and all data</strong>. On Android:
+          Settings → Account → <strong>Delete account and all data</strong>. You confirm with your
+          account's email and your master password. Make an encrypted backup first if you may want
+          your data later: deletion cannot be undone.
+        </p>
+
+        <h2>What is deleted, and when</h2>
+        <ul>
+          <li>
+            <strong>Immediately:</strong> your encrypted vault and items, your devices and sessions,
+            your email address, your key-derivation parameters and your failed-sign-in counters. The
+            copy on the device you used is erased too, and your other devices erase theirs the next
+            time they connect.
+          </li>
+          <li>
+            <strong>Within 30 days:</strong> anonymous fingerprints of your former sessions, kept
+            only so your other devices learn the account is gone. They contain no email, name or
+            account identifier.
+          </li>
+          <li>
+            <strong>Within 30 days:</strong> copies in database backups and server logs, which
+            expire on their own.
+          </li>
+        </ul>
+        <p>
+          Backups you exported yourself, and copies set aside on a device by an earlier "Remove
+          this device", are yours and are not touched.
+        </p>
+
+        <h2>Lost access to your account?</h2>
+        <p>
+          Email <a href="mailto:samuelsilv.rocha@gmail.com">samuelsilv.rocha@gmail.com</a> from the
+          address of the account. We will confirm the request and delete the account the same way
+          the app does.
         </p>
       </>
     ),
