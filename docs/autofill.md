@@ -650,7 +650,9 @@ signs in too.
    provider origins. Firefox opens Google's popup with no opener tab: a tab
    with none whose URL (as the browser reports it loading) is on one of the
    run's provider origins and names the run's site in its `origin`
-   parameter is tied to that run, when exactly one run matches, and counts
+   parameter, or else in its `redirect_uri` (any OAuth/OpenID provider;
+   http(s) only, exact origin, so a site whose callback is on its own auth
+   domain is not tied), is tied to that run, when exactly one run matches, and counts
    as its popup from then on (choosing, the login, and ending the run on the
    user's input). Iframes are never told to choose (the background answers
    them nothing and the content script ignores a choose outside the top

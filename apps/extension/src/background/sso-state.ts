@@ -72,20 +72,22 @@ export function createSsoState(now: () => number) {
 
   /**
    * A provider page opened without an opener tab (Firefox gives Google's
-   * popup none) names the site it signs in to in its `origin` parameter
-   * (Google's OAuth popup). Tie it to that site's pending click: exactly one
-   * pending for that provider and site, else nothing.
+   * popup none) names the site it signs in to: Google's OAuth popup in its
+   * `origin` parameter, any OAuth/OpenID provider in `redirect_uri` (where
+   * it sends the result). Tie it to that site's pending click: exactly one
+   * pending for that provider and site, else nothing. A site whose
+   * redirect_uri is on another origin (its own auth domain) is not tied.
    */
   function popupFor(tab: TabRef, url: string): void {
     if (tab.openerTabId !== undefined || runs.has(tab.tabId)) return;
     let u: URL;
-    let site: string;
     try {
       u = new URL(url);
-      site = new URL(u.searchParams.get("origin") ?? "").origin;
     } catch {
       return;
     }
+    const site = namedSite(u);
+    if (site === null) return;
     const hits = [...pendings.values()].filter((p) => {
       if (p.expires <= now() || !isProviderOrigin(p, u.origin)) return false;
       try {
@@ -109,6 +111,21 @@ export function createSsoState(now: () => number) {
       (r) => r.expires > now() && r.tabId !== tab.tabId && r.siteOrigin === site && r.providerOrigins.includes(pageOrigin),
     );
     if (hits.length === 1 && hits[0]) hits[0].popupTabId = tab.tabId;
+  }
+
+  /** The site a provider URL names: `origin`, else `redirect_uri`; an http(s) origin, or null. */
+  function namedSite(u: URL): string | null {
+    for (const name of ["origin", "redirect_uri"]) {
+      const v = u.searchParams.get(name);
+      if (!v) continue;
+      try {
+        const o = new URL(v);
+        if (o.protocol === "https:" || o.protocol === "http:") return o.origin;
+      } catch {
+        // not a URL: try the next one
+      }
+    }
+    return null;
   }
 
   const isProviderOrigin = (p: PendingSso, origin: string) => SSO_PROVIDERS[p.provider].origins.includes(origin);

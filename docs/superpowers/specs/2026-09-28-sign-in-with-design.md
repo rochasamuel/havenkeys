@@ -157,8 +157,9 @@ own page ("Sign in with Google. Opens in new tab"); a click on a provider
 button whose wrapper holds the provider's button frame is sent with
 `embedded: true` and counts the same way. A provider tab with no opener
 whose URL is on the provider's origin and names the site in its `origin`
-parameter (Google's OAuth popup: `…/o/oauth2/v2/auth?…&origin=<site>`) is
-tied to that site's pending click, when exactly one matches, so the account
+parameter (Google's OAuth popup: `…/o/oauth2/v2/auth?…&origin=<site>`), or
+else in its `redirect_uri` (any OAuth/OpenID provider), is tied to that
+site's pending click, when exactly one matches, so the account
 the user picks in it is suggested. Clicks on any other
 page of a provider's own origins are ignored. (Offering and pressing such a button is out of reach:
 it lives in a cross-origin frame.)
@@ -243,7 +244,8 @@ Password save detection is unchanged.
    finds a clear winner (`element.click()`). Otherwise the run ends and the
    balloon shows "Couldn't find the Sign in with Google button".
 4. **Choose.** A frame in the run's tab, or in a popup whose `openerTabId`
-   is the run's tab, on an origin in `providerOrigins`, is told to choose
+   is the run's tab (or, with no opener, whose URL names the run's site the
+   same way as a pending click's popup, exactly one run matching), on an origin in `providerOrigins`, is told to choose
    the account if `autoChoose` is on and `account` is set. It clicks the
    chooser row only when **exactly one** row's email equals `account`
    (case-insensitive). The run then ends.
@@ -343,7 +345,8 @@ covered by the existing parity tests.
   * TTL;
   * ends on user input;
   * an origin outside the list ends it;
-  * a popup is accepted only with the run tab's `openerTabId`;
+  * a popup is accepted only with the run tab's `openerTabId`, or with none
+    when its URL names the run's site (`origin`, else `redirect_uri`);
   * a chooser with 0, 1 or 2 matching rows;
   * a consent screen is never pressed;
   * `autoChoose` off → press only.

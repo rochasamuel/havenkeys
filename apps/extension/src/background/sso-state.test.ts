@@ -118,6 +118,23 @@ describe("runs", () => {
     expect(s.chooseFor({ tabId: 7 }, G)).toBe("me@gmail.com");
     expect(s.loginFor({ tabId: 7 }, G)?.account).toBe("me@gmail.com");
   });
+  it("ties a provider popup that names the site in redirect_uri (Microsoft, GitHub, Apple, plain OAuth)", () => {
+    const { s } = setup();
+    const MS = "https://login.microsoftonline.com";
+    s.startRun({ tabId: 1, frameId: 0, siteOrigin: "https://typeform.com", provider: "microsoft", account: "me@outlook.com", providerOrigins: [MS], autoChoose: true });
+    s.pressed(1);
+    s.hint({ tabId: 7 }, `${MS}/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=${encodeURIComponent("https://typeform.com/auth/callback")}`);
+    expect(s.chooseFor({ tabId: 7 }, MS)).toBe("me@outlook.com");
+  });
+  it("does not tie on a redirect_uri on another origin or a non-web scheme", () => {
+    const { s } = setup();
+    start(s);
+    s.pressed(1);
+    s.hint({ tabId: 7 }, `${G}/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent("https://auth.typeform.com/cb")}`);
+    s.hint({ tabId: 8 }, `${G}/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent("javascript:alert(1)")}`);
+    expect(s.chooseFor({ tabId: 7 }, G)).toBeNull();
+    expect(s.chooseFor({ tabId: 8 }, G)).toBeNull();
+  });
   it("does not tie a popup naming another site, off the provider's origin, or with an opener", () => {
     const { s } = setup();
     start(s);
