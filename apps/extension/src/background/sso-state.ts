@@ -59,9 +59,40 @@ export function createSsoState(now: () => number) {
     return p;
   }
 
-  /** The pending capture this tab belongs to: its own, or its opener's. */
+  /** The pending capture this tab belongs to: its own, its opener's, or the
+   * one whose provider popup it is (tied by `popupFor`). */
   function pendingOf(tab: TabRef): PendingSso | null {
-    return pending(tab.tabId) ?? (tab.openerTabId === undefined ? null : pending(tab.openerTabId));
+    const own = pending(tab.tabId) ?? (tab.openerTabId === undefined ? null : pending(tab.openerTabId));
+    if (own) return own;
+    for (const p of pendings.values()) if (p.popupTabId === tab.tabId && p.expires > now()) return p;
+    return null;
+  }
+
+  /**
+   * A provider page opened without an opener tab (Firefox gives Google's
+   * popup none) names the site it signs in to in its `origin` parameter
+   * (Google's OAuth popup). Tie it to that site's pending click: exactly one
+   * pending for that provider and site, else nothing.
+   */
+  function popupFor(tab: TabRef, url: string): void {
+    if (tab.openerTabId !== undefined || pendingOf(tab)) return;
+    let u: URL;
+    let site: string;
+    try {
+      u = new URL(url);
+      site = new URL(u.searchParams.get("origin") ?? "").origin;
+    } catch {
+      return;
+    }
+    const hits = [...pendings.values()].filter((p) => {
+      if (p.expires <= now() || !isProviderOrigin(p, u.origin)) return false;
+      try {
+        return new URL(p.url).origin === site;
+      } catch {
+        return false;
+      }
+    });
+    if (hits.length === 1 && hits[0]) hits[0].popupTabId = tab.tabId;
   }
 
   const isProviderOrigin = (p: PendingSso, origin: string) => SSO_PROVIDERS[p.provider].origins.includes(origin);
@@ -114,7 +145,8 @@ export function createSsoState(now: () => number) {
      * OAuth/OpenID `login_hint`, if email-shaped. Any origin: sites often
      * pass it through their own IdP first. */
     hint(tab: TabRef, url: string): void {
-      const p = pending(tab.tabId) ?? (tab.openerTabId === undefined ? null : pending(tab.openerTabId));
+      popupFor(tab, url);
+      const p = pendingOf(tab);
       if (!p) return;
       let value: string | null;
       try {

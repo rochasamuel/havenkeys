@@ -155,7 +155,11 @@ shows is kept as a suggestion, like a `login_hint`. Without FedCM (Firefox),
 Google covers that iframe with a transparent overlay button in the site's
 own page ("Sign in with Google. Opens in new tab"); a click on a provider
 button whose wrapper holds the provider's button frame is sent with
-`embedded: true` and counts the same way. Clicks on any other
+`embedded: true` and counts the same way. A provider tab with no opener
+whose URL is on the provider's origin and names the site in its `origin`
+parameter (Google's OAuth popup: `…/o/oauth2/v2/auth?…&origin=<site>`) is
+tied to that site's pending click, when exactly one matches, so the account
+the user picks in it is suggested. Clicks on any other
 page of a provider's own origins are ignored. (Offering and pressing such a button is out of reach:
 it lives in a cross-origin frame.)
 

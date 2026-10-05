@@ -208,6 +208,29 @@ describe("save", () => {
     await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
     expect(requests.at(-1)).toEqual({ type: "check_sso", url: "https://typeform.com/login", provider: "google", account: null });
   });
+  it("takes the account picked in Google's popup though the popup has no opener (Firefox), by the origin it names", async () => {
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google", embedded: true });
+    const popup = { tabId: 5 };
+    h.tabUrl(popup, "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&origin=https%3A%2F%2Ftypeform.com&display=popup");
+    h.ready(googleFrame(5), popup);
+    await h.handleContent(googleFrame(5), popup, { type: "cs_sso_account", account: "me@gmail.com" });
+    h.tabRemoved(5);
+    await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
+    expect(requests.at(-1)).toEqual({ type: "check_sso", url: "https://typeform.com/login", provider: "google", account: "me@gmail.com" });
+  });
+  it("does not tie a provider tab naming another site's origin to the pending click", async () => {
+    const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google", embedded: true });
+    const other = { tabId: 6 };
+    h.tabUrl(other, "https://accounts.google.com/o/oauth2/v2/auth?origin=https%3A%2F%2Fevil.example");
+    h.tabUrl({ tabId: 7 }, "https://evil.example/?origin=https%3A%2F%2Ftypeform.com");
+    await h.handleContent(googleFrame(6), other, { type: "cs_sso_account", account: "other@gmail.com" });
+    await h.handleContent({ ...googleFrame(7), url: "https://evil.example/", origin: "https://evil.example" }, { tabId: 7 }, { type: "cs_sso_account", account: "x@gmail.com" });
+    h.ready({ tabId: 1, frameId: 0, url: "https://typeform.com/home", origin: "https://typeform.com" }, { tabId: 1 });
+    await vi.waitFor(() => expect(requests.some((r) => r.type === "check_sso")).toBe(true));
+    expect(requests.at(-1)).toMatchObject({ type: "check_sso", account: null });
+  });
   it("a plain click still waits for the provider's page before asking", async () => {
     const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
     await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
