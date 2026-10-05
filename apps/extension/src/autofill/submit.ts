@@ -14,6 +14,11 @@ export type PressStep = "username" | "password" | "otp";
 const MAX_BUTTONS = 30;
 /** Ancestor levels searched above a form-less group for its button. */
 const MAX_SCOPE_CLIMB = 3;
+/** Past MAX_SCOPE_CLIMB, how far the climb may go on (Google's full sign-in
+ * page shares only a `<main>` 14 levels up between field and "Next"), as
+ * long as no other field comes into scope (see `scopes`). */
+const MAX_FAR_CLIMB = 16;
+const TEXT_FIELDS = 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="tel"], input[type="number"], input[type="search"]';
 export const PRESS_MIN_SCORE = 60;
 export const PRESS_MIN_MARGIN = 20;
 export const ENABLE_WAIT_MS = 1000;
@@ -24,14 +29,16 @@ const CANDIDATES = 'button, input[type="submit"], input[type="image"], [role="bu
 
 const STEP_WORDS: Record<PressStep, readonly string[]> = {
   username: ["continue", "next", "proximo", "continuar", "avancar", "seguinte"],
-  password: ["sign in", "log in", "login", "signin", "entrar", "acessar", "iniciar sesion"],
+  // Multi-step sign-ins (Google's "Next", Auth0's "Continue") use the same
+  // word for the password step as for the username step.
+  password: ["sign in", "log in", "login", "signin", "entrar", "acessar", "iniciar sesion", "next", "continue", "proximo", "continuar", "avancar", "seguinte"],
   otp: ["verify", "confirm", "submit", "verificar", "confirmar", "enviar"],
 };
 
 /** Any of these disqualifies a button: it goes somewhere else. */
 const NEGATIVE_WORDS = [
   "forgot", "reset", "create account", "sign up", "signup", "register", "cadastrar", "criar conta",
-  "cancel", "cancelar", "back", "voltar", "resend", "reenviar", "show", "mostrar", "another", "outra",
+  "cancel", "cancelar", "back", "voltar", "resend", "reenviar", "show", "mostrar", "another", "outra", "esqueceu", "esqueci",
   "passkey", "with google", "with apple", "with facebook", "with microsoft", "with github",
   "com google", "com apple", "com facebook", "com microsoft", "com github",
 ];
@@ -60,13 +67,27 @@ function score(el: HTMLElement, field: HTMLInputElement, step: PressStep): numbe
   return s;
 }
 
-/** The group's root, then (outside a form) a few ancestors: SPAs often put the button beside the fields' container. */
-function scopes(root: ParentNode): ParentNode[] {
+/**
+ * The group's root, then (outside a form) a few ancestors: SPAs often put
+ * the button beside the fields' container. Beyond MAX_SCOPE_CLIMB levels the
+ * climb continues only while the scope holds no visible field outside the
+ * group's root: one that does may be another form, with its own button.
+ */
+function scopes(root: ParentNode, env: Env): ParentNode[] {
   const out: ParentNode[] = [root];
   if (root instanceof HTMLFormElement || !(root instanceof Element)) return out;
   let node: Element | null = root.parentElement;
-  for (let i = 0; node && node !== document.body && i < MAX_SCOPE_CLIMB; i++, node = node.parentElement) out.push(node);
+  for (let i = 0; node && node !== document.body && i < MAX_FAR_CLIMB; i++, node = node.parentElement) {
+    if (i >= MAX_SCOPE_CLIMB && otherField(node, root, env)) break;
+    out.push(node);
+  }
   return out;
+}
+
+function otherField(scope: Element, root: Element, env: Env): boolean {
+  return Array.from(scope.querySelectorAll<HTMLInputElement>(TEXT_FIELDS))
+    .slice(0, MAX_BUTTONS)
+    .some((f) => !root.contains(f) && env.isVisible(f));
 }
 
 /**
@@ -81,7 +102,7 @@ function scopes(root: ParentNode): ParentNode[] {
  * that ambiguity would not be resolved by climbing further.
  */
 export function findSubmitButton(root: ParentNode, field: HTMLInputElement, step: PressStep, env: Env): HTMLElement | null {
-  for (const scope of scopes(root)) {
+  for (const scope of scopes(root, env)) {
     const buttons = Array.from(scope.querySelectorAll<HTMLElement>(CANDIDATES))
       .slice(0, MAX_BUTTONS)
       .filter((b) => env.isVisible(b));

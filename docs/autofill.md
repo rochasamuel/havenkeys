@@ -454,7 +454,11 @@ the filled group's own root (its `<form>`, or the container `groupRoot`
 picked). For a form-less group, when no candidate in a scope reaches score
 60 (or the scope has no visible candidate), the search continues to the next
 ancestor, up to 3 of them, looking for a button beside the fields' own
-container, which is common in SPAs. It stops and refuses (no press) on a
+container, which is common in SPAs. Past those 3 it may go on, up to 16
+levels in all, while each new scope holds no visible text-like field
+outside the group's root (another field may belong to another form, with
+its own button). Google's full sign-in page (served to Firefox) shares only
+a `<main>` 14 levels up between the field and "Avançar". It stops and refuses (no press) on a
 tie: a scope whose best candidate reaches 60 but beats the runner-up by less
 than 20 ends the search there, rather than looking further up. A group
 inside a `<form>` is searched only within that form.
@@ -462,10 +466,10 @@ inside a `<form>` is searched only within that form.
 | Signal | Score |
 |---|---|
 | The submit button of the filled field's own form (`type=submit`, or `button` with no type, inside `field.form`) | +60 |
-| Label fits the step. `username`: continue, next, proximo, continuar, avancar, seguinte. `password`: sign in, log in, login, signin, entrar, acessar, iniciar sesion. `otp`: verify, confirm, submit, verificar, confirmar, enviar | +50 |
+| Label fits the step. `username`: continue, next, proximo, continuar, avancar, seguinte. `password`: sign in, log in, login, signin, entrar, acessar, iniciar sesion, and the username step's words (Google's "Next", Auth0's "Continue"). `otp`: verify, confirm, submit, verificar, confirmar, enviar | +50 |
 | Any existing submit word | +20 |
 | After the last filled field in document order | +10 |
-| Negative words: forgot, reset, create account, sign up, register, cadastrar, cancel, cancelar, back, voltar, resend, reenviar, show, mostrar, another, outra, passkey, "with google/apple/facebook/microsoft/github", "com google/apple/…" | disqualifies |
+| Negative words: forgot, esqueceu, esqueci, reset, create account, sign up, register, cadastrar, cancel, cancelar, back, voltar, resend, reenviar, show, mostrar, another, outra, passkey, "with google/apple/facebook/microsoft/github", "com google/apple/…" | disqualifies |
 
 **Ambiguity rule:** press only if the best candidate scores at least 60 and
 beats the runner-up by at least 20 in that same scope. Otherwise the fields

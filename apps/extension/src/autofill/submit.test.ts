@@ -70,6 +70,31 @@ describe("findSubmitButton", () => {
     expect(findSubmitButton($("#root"), $("[name=p]"), "password", env)?.id).toBe("go");
   });
 
+  it("Google (Firefox): finds Avançar far from a form-less field, not Esqueceu o e-mail? / Criar conta", () => {
+    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
+    document.body.innerHTML = `<main>${deep(`<section><div id="root">${deep('<input id="identifierId" type="text" autocomplete="username">', 4)}</div></section>`, 5)}
+      ${deep('<button type="button">Esqueceu o e-mail?</button>', 3)}
+      ${deep('<div id="identifierNext"><button id="next" type="button"><span>Avançar</span></button></div>', 3)}
+      ${deep('<button type="button">Criar conta</button>', 3)}</main>`;
+    expect(findSubmitButton($("#root"), $("#identifierId"), "username", env)?.id).toBe("next");
+  });
+
+  it("Google (Firefox): Avançar on the password step too, not Esqueceu a senha?", () => {
+    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
+    document.body.innerHTML = `<main>${deep(`<section><div id="root">${deep('<input id="pw" type="password" name="Passwd" autocomplete="current-password">', 4)}
+      <input type="checkbox" id="show"><label for="show">Mostrar senha</label></div></section>`, 5)}
+      ${deep('<div id="passwordNext"><button id="next" type="button"><span>Avançar</span></button></div>', 3)}
+      ${deep('<button type="button">Esqueceu a senha?</button>', 3)}</main>`;
+    expect(findSubmitButton($("#root"), $("#pw"), "password", env)?.id).toBe("next");
+  });
+
+  it("does not climb far into a scope holding another field (another form's button)", () => {
+    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
+    document.body.innerHTML = `<main>${deep(`<div id="root"><input id="u" type="text" autocomplete="username"></div>`, 6)}
+      ${deep('<input type="email" name="newsletter"><button id="sub">Continuar</button>', 2)}</main>`;
+    expect(findSubmitButton($("#root"), $("#u"), "username", env)).toBeNull();
+  });
+
   it("scores an input[type=submit] by its value", () => {
     document.body.innerHTML = `<form><input name="otp"><input type="submit" id="v" value="Verify"></form>`;
     expect(findSubmitButton($("form"), $("[name=otp]"), "otp", env)?.id).toBe("v");
