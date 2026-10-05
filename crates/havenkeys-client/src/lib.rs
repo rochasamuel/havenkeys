@@ -10,6 +10,7 @@
 mod account;
 mod bundle;
 mod client;
+mod deletion;
 pub mod device;
 mod error;
 mod events;

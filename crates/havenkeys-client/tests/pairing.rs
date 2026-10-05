@@ -109,6 +109,7 @@ impl havenkeys_client::ClientEvents for Quiet {
     fn synced(&self, _: havenkeys_core::sync::SyncReport) {}
     fn items_changed(&self) {}
     fn removed(&self, _: bool) {}
+    fn account_deleted(&self, _: bool) {}
 }
 
 fn client_in(dir: &std::path::Path) -> Arc<HavenClient> {

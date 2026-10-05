@@ -37,6 +37,14 @@ impl HavenClient {
                     self.events.signed_out();
                 }
             }
+            SyncError::AccountDeleted => {
+                // The account is gone: nothing on this device is useful any
+                // more, and there is nobody left to ask first.
+                let account = self.vault().ok().and_then(|v| v.account().ok().flatten());
+                if let Some(account) = account {
+                    self.wipe_local(account.account_id);
+                }
+            }
             SyncError::Unavailable => self.mark_unreachable(),
             _ => {}
         }

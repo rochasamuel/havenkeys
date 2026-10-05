@@ -126,7 +126,7 @@ impl HavenClient {
 }
 
 /// Normalized comparison, so case and surrounding spaces do not matter.
-fn confirms(typed: &str, email: &str) -> bool {
+pub(crate) fn confirms(typed: &str, email: &str) -> bool {
     match (NormalizedEmail::parse(typed), NormalizedEmail::parse(email)) {
         (Ok(a), Ok(b)) => a.as_str() == b.as_str(),
         _ => false,

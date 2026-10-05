@@ -131,6 +131,12 @@ impl ClientEvents for Probe {
     fn synced(&self, _: SyncReport) {}
     fn items_changed(&self) {}
     fn removed(&self, _: bool) {}
+    fn account_deleted(&self, keychain_cleared: bool) {
+        self.seen
+            .lock()
+            .unwrap()
+            .push(format!("account_deleted:{keychain_cleared}"));
+    }
 }
 
 fn device(dir: &std::path::Path) -> (Arc<HavenClient>, Arc<Probe>) {
@@ -263,5 +269,76 @@ async fn two_devices_share_one_vault_through_the_client() {
         .collect();
     assert_eq!(unlocked, vec!["unlocked:held=true"; 2]);
 
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_other_device_wipes_itself() {
+    let server = Server::start().await;
+    let invite = server.invite("bye@example.com").await;
+    let dir_a = tempfile::tempdir().unwrap();
+    let (a, probe_a) = device(dir_a.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+
+    let account_id = a.account_status().unwrap().unwrap().account_id;
+    let secret_key = a.device().unwrap().secret_key_text(account_id).unwrap();
+    let dir_b = tempfile::tempdir().unwrap();
+    let (b, probe_b) = device(dir_b.path());
+    b.sign_in(
+        server.base.clone(),
+        "bye@example.com".into(),
+        SecretString::from(PASSWORD),
+        Some(secret_key),
+    )
+    .await
+    .unwrap();
+
+    a.delete_account("bye@example.com".into(), SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    assert!(probe_a
+        .seen
+        .lock()
+        .unwrap()
+        .contains(&"account_deleted:true".to_string()));
+    assert!(a.vault().unwrap().account().unwrap().is_none());
+
+    let err = b.sync_now().await.unwrap_err();
+    assert_eq!(err.code, "account_deleted");
+    assert!(probe_b
+        .seen
+        .lock()
+        .unwrap()
+        .contains(&"account_deleted:true".to_string()));
+    assert!(b.vault().unwrap().account().unwrap().is_none());
+    assert!(b.device().unwrap().secret_key_text(account_id).is_none());
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wrong_password_deletes_nothing() {
+    let server = Server::start().await;
+    let invite = server.invite("typo@example.com").await;
+    let dir = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+
+    let err = a
+        .delete_account(
+            "typo@example.com".into(),
+            SecretString::from("not the password"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, havenkeys_core::Error::UnlockFailed.code());
+    assert!(a.is_online(), "a typo must not sign the device out");
+    assert!(a.vault().unwrap().account().unwrap().is_some());
+    a.sync_now().await.unwrap();
     server.cleanup().await;
 }

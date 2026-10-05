@@ -20,4 +20,7 @@ pub trait ClientEvents: Send + Sync {
     /// This device left its account; `keychain_cleared` is false when the
     /// Secret Key may still be in the platform store.
     fn removed(&self, keychain_cleared: bool);
+    /// The account no longer exists (deleted here or on another device) and
+    /// this device erased its copy; `keychain_cleared` as for `removed`.
+    fn account_deleted(&self, keychain_cleared: bool);
 }
