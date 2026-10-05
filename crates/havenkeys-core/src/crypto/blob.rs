@@ -29,6 +29,10 @@ pub const MIN_BLOB_LEN: usize = HEADER_LEN + TAG_LEN;
 /// Upper bound for a single blob. Secure notes are capped well below this.
 pub const MAX_BLOB_LEN: usize = 8 * 1024 * 1024;
 
+/// Upper bound for an encrypted backup (`Purpose::Backup`) — the whole
+/// vault in one blob, so larger than any item's.
+pub const MAX_BACKUP_BLOB_LEN: usize = 64 * 1024 * 1024;
+
 const AAD_PREFIX: &[u8] = b"havenkeys\0";
 
 /// What a blob is used for. Part of the associated data.
@@ -46,6 +50,8 @@ pub enum Purpose {
     AssetLinks,
     /// This device's item uses and recent searches (never synced).
     Activity,
+    /// An encrypted export file (spec 2026-10-05-export).
+    Backup,
 }
 
 impl Purpose {
@@ -59,7 +65,20 @@ impl Purpose {
             Purpose::DeviceSettings => b"device-settings",
             Purpose::AssetLinks => b"asset-links",
             Purpose::Activity => b"activity",
+            Purpose::Backup => b"backup",
         }
+    }
+
+    fn max_len(self) -> usize {
+        match self {
+            Purpose::Backup => MAX_BACKUP_BLOB_LEN,
+            _ => MAX_BLOB_LEN,
+        }
+    }
+
+    /// Purposes whose context carries a hash of another value.
+    fn needs_binding(self) -> bool {
+        matches!(self, Purpose::ItemDetails | Purpose::Backup)
     }
 
     fn needs_item_id(self) -> bool {
@@ -107,9 +126,19 @@ impl BlobContext {
         }
     }
 
+    /// An encrypted backup, bound to the file header written before it (KDF
+    /// parameters, salt, version), so none of them can be changed.
+    pub fn backup(header: &[u8]) -> Self {
+        use sha2::{Digest, Sha256};
+        Self {
+            bound_to: Some(Sha256::digest(header).into()),
+            ..Self::vault(Purpose::Backup, Uuid::nil())
+        }
+    }
+
     fn aad(&self, version: u8, algorithm: u8) -> Result<Vec<u8>> {
         if self.purpose.needs_item_id() != self.item_id.is_some()
-            || (self.purpose == Purpose::ItemDetails) != self.bound_to.is_some()
+            || self.purpose.needs_binding() != self.bound_to.is_some()
         {
             return Err(Error::InvalidInput("blob context"));
         }
@@ -123,9 +152,13 @@ impl BlobContext {
         if let Some(item_id) = self.item_id {
             aad.extend_from_slice(item_id.as_bytes());
         }
-        if let Some(overview) = self.bound_to {
-            aad.extend_from_slice(b"overview\0");
-            aad.extend_from_slice(&overview);
+        if let Some(bound) = self.bound_to {
+            aad.extend_from_slice(if self.purpose == Purpose::Backup {
+                b"header\0"
+            } else {
+                b"overview\0"
+            });
+            aad.extend_from_slice(&bound);
         }
         Ok(aad)
     }
@@ -142,7 +175,11 @@ pub struct ParsedBlob<'a> {
 
 /// Structural parse. Rejects unknown versions/algorithms and bad lengths.
 pub fn parse(blob: &[u8]) -> Result<ParsedBlob<'_>> {
-    if blob.len() < MIN_BLOB_LEN || blob.len() > MAX_BLOB_LEN {
+    parse_capped(blob, MAX_BLOB_LEN)
+}
+
+fn parse_capped(blob: &[u8], max: usize) -> Result<ParsedBlob<'_>> {
+    if blob.len() < MIN_BLOB_LEN || blob.len() > max {
         return Err(Error::Corrupted);
     }
     let version = blob[0];
@@ -163,7 +200,7 @@ pub fn parse(blob: &[u8]) -> Result<ParsedBlob<'_>> {
 
 /// Encrypt `plaintext` under `key` with a fresh random nonce.
 pub fn seal(key: &Key256, ctx: &BlobContext, plaintext: &[u8]) -> Result<Vec<u8>> {
-    if plaintext.len() > MAX_BLOB_LEN - MIN_BLOB_LEN {
+    if plaintext.len() > ctx.purpose.max_len() - MIN_BLOB_LEN {
         return Err(Error::InvalidInput("item too large"));
     }
     let aad = ctx.aad(BLOB_V1, ALG_AES_256_GCM)?;
@@ -196,7 +233,7 @@ fn seal_with_aad(key: &Key256, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> 
 
 /// Authenticate and decrypt. Any failure returns an error and no plaintext.
 pub fn open(key: &Key256, ctx: &BlobContext, blob: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
-    let parsed = parse(blob)?;
+    let parsed = parse_capped(blob, ctx.purpose.max_len())?;
     let aad = ctx.aad(parsed.version, parsed.algorithm)?;
     let cipher = Aes256Gcm::new_from_slice(key.as_bytes()).map_err(|_| Error::Decryption)?;
     let nonce = Nonce::from(*parsed.nonce);
@@ -397,6 +434,34 @@ mod tests {
         old_aad.truncate(old_aad.len() - b"overview\0".len() - 32);
         let old = seal_with_aad(&k, &old_aad, b"x").unwrap();
         assert!(open(&k, &BlobContext::item_details(vault, item, b"ov"), &old).is_err());
+    }
+
+    #[test]
+    fn backup_blobs_are_bound_to_their_header_and_may_exceed_8_mb() {
+        let k = key();
+        let big = vec![0x42u8; MAX_BLOB_LEN + 1024];
+        let sealed = seal(&k, &BlobContext::backup(b"header-a"), &big).unwrap();
+        assert_eq!(
+            open(&k, &BlobContext::backup(b"header-a"), &sealed)
+                .unwrap()
+                .len(),
+            big.len()
+        );
+        assert!(open(&k, &BlobContext::backup(b"header-b"), &sealed).is_err());
+        // The same bytes are refused for any other purpose (8 MB cap and AAD).
+        assert!(open(
+            &k,
+            &BlobContext::vault(Purpose::Settings, Uuid::nil()),
+            &sealed
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn backup_blobs_have_a_cap() {
+        let k = key();
+        let too_big = vec![0u8; MAX_BACKUP_BLOB_LEN];
+        assert!(seal(&k, &BlobContext::backup(b"h"), &too_big).is_err());
     }
 
     #[test]

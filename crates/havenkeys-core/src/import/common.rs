@@ -307,15 +307,32 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 }
 
 /// Unix seconds → YYYY-MM-DD (UTC).
-pub(super) fn format_date(secs: i64) -> String {
+pub(crate) fn format_date(secs: i64) -> String {
     let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
     format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// `YYYY-MM-DDTHH:MM:SS.mmmZ` for Unix milliseconds, the form Bitwarden
+/// writes and `parse_utc_timestamp_ms` reads.
+// Used by the export code (later tasks of the export plan).
+#[allow(dead_code)]
+pub(crate) fn format_utc_timestamp_ms(ms: i64) -> String {
+    let secs = ms.div_euclid(1000);
+    let millis = ms.rem_euclid(1000);
+    let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
+    let day = secs.rem_euclid(86_400);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{millis:03}Z",
+        day / 3600,
+        (day % 3600) / 60,
+        day % 60
+    )
 }
 
 /// A UTC timestamp written as `YYYY-MM-DDTHH:MM:SS[.fff]Z` (what Bitwarden
 /// and KeePassXC export) → Unix ms. Anything else, or a date before 1970,
 /// is `None`: the item then gets the import time.
-pub(super) fn parse_utc_timestamp_ms(s: &str) -> Option<i64> {
+pub(crate) fn parse_utc_timestamp_ms(s: &str) -> Option<i64> {
     let s = s.trim();
     let b = s.as_bytes();
     if b.len() < 20 || !s.is_ascii() {
@@ -361,12 +378,29 @@ pub(super) fn parse_utc_timestamp_ms(s: &str) -> Option<i64> {
     };
     let days = days_from_civil(y, mo, d);
     let total = days * 86_400_000 + (h * 3600 + mi * 60 + sec) * 1000 + ms;
-    (total > 0).then_some(total)
+    (total >= 0).then_some(total)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn utc_timestamp_round_trips() {
+        for ms in [
+            0_i64,
+            1_700_000_000_123,
+            951_782_400_000, /* 2000-02-29 */
+        ] {
+            let text = format_utc_timestamp_ms(ms);
+            assert_eq!(text.len(), 24);
+            assert_eq!(parse_utc_timestamp_ms(&text), Some(ms));
+        }
+        assert_eq!(
+            format_utc_timestamp_ms(1_700_000_000_123),
+            "2023-11-14T22:13:20.123Z"
+        );
+    }
 
     #[test]
     fn dates_format() {

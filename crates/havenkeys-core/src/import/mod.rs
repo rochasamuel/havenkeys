@@ -7,7 +7,7 @@
 //! desktop sends them in batches the server accepts (spec 2026-09-20 §8.4).
 
 pub mod bitwarden;
-mod common;
+pub(crate) mod common;
 pub mod csv;
 pub mod onepux;
 
@@ -120,6 +120,11 @@ pub struct ImportReport {
     /// Already present in the vault before the import (same title, username and
     /// websites for logins; same title and content for notes).
     pub skipped_duplicates: usize,
+    /// Restore only: items whose ID is already in the vault (and the
+    /// backup's Identity when the vault has one). Never overwritten.
+    pub skipped_existing: usize,
+    /// Restore only: the Identity, when it was restored.
+    pub identities: usize,
     /// Archived or deleted in the source.
     pub skipped_archived: usize,
     /// Items that could not be imported (e.g. a field over the size limits).

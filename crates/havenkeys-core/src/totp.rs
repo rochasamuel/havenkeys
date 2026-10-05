@@ -52,6 +52,35 @@ impl fmt::Debug for TotpConfig {
 }
 
 impl TotpConfig {
+    /// The setup as an `otpauth://totp/` URI (Key Uri Format), for plaintext
+    /// exports. Holds the secret: callers treat it like a password.
+    pub fn to_otpauth_uri(&self) -> SecretString {
+        use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+        let enc = |s: &str| utf8_percent_encode(s, NON_ALPHANUMERIC).to_string();
+        let label = match (&self.issuer, &self.account) {
+            (Some(i), Some(a)) => format!("{}:{}", enc(i), enc(a)),
+            (None, Some(a)) => enc(a),
+            (Some(i), None) => enc(i),
+            (None, None) => String::new(),
+        };
+        let algorithm = match self.algorithm {
+            TotpAlgorithm::Sha1 => "SHA1",
+            TotpAlgorithm::Sha256 => "SHA256",
+            TotpAlgorithm::Sha512 => "SHA512",
+        };
+        let mut uri = format!(
+            "otpauth://totp/{label}?secret={}&algorithm={algorithm}&digits={}&period={}",
+            self.secret.expose(),
+            self.digits,
+            self.period
+        );
+        if let Some(issuer) = &self.issuer {
+            uri.push_str("&issuer=");
+            uri.push_str(&enc(issuer));
+        }
+        SecretString::new(uri)
+    }
+
     pub fn validate(&self) -> Result<()> {
         if !(self.digits == 6 || self.digits == 8) {
             return Err(Error::InvalidInput("TOTP digits must be 6 or 8"));
@@ -348,5 +377,29 @@ mod tests {
         assert!(!format!("{c:?}").contains("JBSWY3DP"));
         let code = generate(&c, 1000).unwrap();
         assert!(!format!("{code:?}").contains(code.code.expose()));
+    }
+
+    #[test]
+    fn otpauth_uri_round_trips() {
+        let cfg = parse_totp_input(
+            "otpauth://totp/ACME%20Co:jane%40example.com?secret=JBSWY3DPEHPK3PXP&algorithm=SHA256&digits=8&period=60&issuer=ACME%20Co",
+        )
+        .unwrap();
+        let back = parse_totp_input(cfg.to_otpauth_uri().expose()).unwrap();
+        assert_eq!(back.secret.expose(), cfg.secret.expose());
+        assert_eq!(back.algorithm, TotpAlgorithm::Sha256);
+        assert_eq!((back.digits, back.period), (8, 60));
+        assert_eq!(back.issuer.as_deref(), Some("ACME Co"));
+        assert_eq!(back.account.as_deref(), Some("jane@example.com"));
+    }
+
+    #[test]
+    fn otpauth_uri_without_label() {
+        let cfg = parse_totp_input("JBSWY3DPEHPK3PXP").unwrap();
+        let uri = cfg.to_otpauth_uri();
+        assert!(uri.expose().starts_with("otpauth://totp/"));
+        let back = parse_totp_input(uri.expose()).unwrap();
+        assert_eq!(back.secret.expose(), "JBSWY3DPEHPK3PXP");
+        assert_eq!((back.digits, back.period), (6, 30));
     }
 }
