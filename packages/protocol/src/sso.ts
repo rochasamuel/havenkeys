@@ -26,3 +26,26 @@ export function isSsoProvider(v: unknown): v is SsoProvider {
 export function providersForOrigin(origin: string): SsoProvider[] {
   return SSO_PROVIDER_IDS.filter((p) => SSO_PROVIDERS[p].origins.includes(origin));
 }
+
+/**
+ * Provider pages a site embeds as its "Sign in with" button. Google draws
+ * the button in an `accounts.google.com/gsi/button` iframe (signed in to
+ * Google, it reads "Continue as <name>" with no "Google" in it), so the
+ * user's click happens there, not in the site's page. Exact origin + path.
+ */
+const BUTTON_FRAMES: Readonly<Partial<Record<SsoProvider, readonly string[]>>> = {
+  google: ["https://accounts.google.com/gsi/button"],
+};
+
+/** The provider whose embedded button frame `url` is, or null. */
+export function buttonFrameProvider(url: string): SsoProvider | null {
+  let page: string;
+  try {
+    const u = new URL(url);
+    page = u.origin + u.pathname;
+  } catch {
+    return null;
+  }
+  for (const p of SSO_PROVIDER_IDS) if (BUTTON_FRAMES[p]?.includes(page)) return p;
+  return null;
+}

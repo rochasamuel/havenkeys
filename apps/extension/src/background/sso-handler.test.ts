@@ -176,6 +176,28 @@ describe("save", () => {
     await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
     expect(requests.at(-1)).toEqual({ type: "check_sso", url: "https://typeform.com/login", provider: "google", account: null });
   });
+  it("a click in Google's own button iframe saves for the page that embeds it", async () => {
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    const site = "https://financeiro.hostgator.com.br/";
+    const gsi: FrameRef = { tabId: 1, frameId: 7, url: "https://accounts.google.com/gsi/button", origin: "https://accounts.google.com", topUrl: site };
+    await h.handleContent(gsi, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    const popup = { tabId: 5, openerTabId: 1 };
+    h.tabCreated(popup);
+    h.ready(googleFrame(5), popup);
+    h.tabRemoved(5);
+    await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
+    expect(requests.at(-1)).toEqual({ type: "check_sso", url: site, provider: "google", account: null });
+  });
+  it("ignores a click reported by any other provider iframe, or for another provider", async () => {
+    const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    const gsi: FrameRef = { tabId: 1, frameId: 7, url: "https://accounts.google.com/gsi/button", origin: "https://accounts.google.com", topUrl: top.url };
+    await h.handleContent({ ...gsi, url: "https://accounts.google.com/gsi/iframe" }, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });
+    await h.handleContent(gsi, { tabId: 1 }, { type: "cs_sso_click", provider: "github" });
+    h.tabCreated({ tabId: 5, openerTabId: 1 });
+    h.tabRemoved(5);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(requests).toEqual([]);
+  });
   it("offers the vault's accounts, preselecting the login_hint the site sent", async () => {
     const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: ["me@gmail.com", "work@x.com"] } });
     await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_click", provider: "google" });

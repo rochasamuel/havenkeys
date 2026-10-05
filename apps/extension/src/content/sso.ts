@@ -8,7 +8,7 @@
 // observation for SCAN_WINDOW_MS after load or a URL change. Page strings
 // are only compared to fixed lists; nothing is logged or stored.
 
-import { providersForOrigin } from "@havenkeys/protocol";
+import { buttonFrameProvider, providersForOrigin } from "@havenkeys/protocol";
 import { defaultEnv } from "../autofill/group";
 import { findLoginGroup } from "../autofill/page";
 import { anotherAccountButton, chooserRow, emailIn, findProviderButtons, isConsentScreen, providerButton, providerOf, SSO_CANDIDATES, SSO_MIN_SCORE } from "../autofill/sso";
@@ -209,8 +209,11 @@ export function createSsoContent(deps: {
     watchPage,
     onTrustedClick(target: Element): void {
       const button = target.closest(SSO_CANDIDATES);
-      // The user chose this element, so a bare "Google" counts (context = true).
-      const hit = button ? providerOf(button, true) : null;
+      // Inside a provider's embedded button frame, the frame says which
+      // provider, whatever the label. Elsewhere the user chose this element,
+      // so a bare "Google" counts (context = true).
+      const framed = deps.isTop ? null : buttonFrameProvider(location.href);
+      const hit = !button ? null : framed ? { provider: framed, score: SSO_MIN_SCORE } : providerOf(button, true);
       if (hit && hit.score >= SSO_MIN_SCORE) void deps.send({ type: "cs_sso_click", provider: hit.provider });
       if (providersForOrigin(location.origin).length > 0) {
         // Only a row-like element: a click on the page background must not

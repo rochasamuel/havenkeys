@@ -141,6 +141,15 @@ PendingSso { tabId, url, topUrl, provider, account: null, expires: now + 5 min }
 
 One per tab; a new click replaces it. Scripted clicks are ignored.
 
+A site may embed the provider's own button frame (Google Identity Services
+draws "Sign in with Google" in an `accounts.google.com/gsi/button` iframe,
+personalized to "Continue as <name>" when signed in). A trusted click on
+that frame's button counts as a click for that provider whatever its label,
+and the background, checking the frame's URL from the browser, records the
+embedding top page as `url`. Clicks on any other page of a provider's own
+origins are ignored. (Offering and pressing such a button is out of reach:
+it lives in a cross-origin frame.)
+
 ### 5.3 Learning the account (provider origins only)
 
 While a tab (or a popup it opened, `openerTabId`) has a `PendingSso`, a

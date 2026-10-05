@@ -81,6 +81,38 @@ describe("learning the account", () => {
   });
 });
 
+describe("the provider's own button, embedded in a site", () => {
+  // Google draws "Sign in with Google" in an accounts.google.com/gsi/button
+  // iframe; signed in to Google, it reads "Fazer login como <name>" with no
+  // "Google" in it.
+  const personalized = () => {
+    const b = document.createElement("div");
+    b.setAttribute("role", "button");
+    const name = document.createElement("div");
+    name.textContent = "Fazer login como Samuel";
+    const email = document.createElement("div");
+    email.textContent = "me@gmail.com";
+    b.append(name, email);
+    document.body.append(b);
+    return name;
+  };
+
+  it("reports a click in the button frame as a Google click, whatever its label", () => {
+    history.replaceState(null, "", "/gsi/button?type=standard&text=sign_in_with");
+    make(false).onTrustedClick(personalized());
+    expect(sent).toContainEqual({ type: "cs_sso_click", provider: "google" });
+  });
+
+  it("only in that frame: not on other provider pages, and not as a top page", () => {
+    history.replaceState(null, "", "/gsi/iframe");
+    make(false).onTrustedClick(personalized());
+    content?.teardown();
+    history.replaceState(null, "", "/gsi/button");
+    make(true).onTrustedClick(personalized());
+    expect(sent.filter((m) => m.type === "cs_sso_click")).toEqual([]);
+  });
+});
+
 describe("choosing the saved account", () => {
   it("clicks the row once it appears", async () => {
     const c = make();

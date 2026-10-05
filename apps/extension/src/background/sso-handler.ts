@@ -15,7 +15,7 @@
 // * Save prompts hold no secret. Everything is dropped on lock.
 
 import type { Match, Request, RequestType, ResultFor, SsoProvider } from "@havenkeys/protocol";
-import { SSO_PROVIDERS } from "@havenkeys/protocol";
+import { buttonFrameProvider, SSO_PROVIDERS } from "@havenkeys/protocol";
 import { t } from "../i18n";
 import type { FillPayload, InlineReply } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
@@ -137,9 +137,18 @@ export function createSsoHandler(deps: SsoDeps) {
     switch (req.type) {
       case "cs_sso_buttons":
         return offer(frame, req.providers);
-      case "cs_sso_click":
-        state.click(frame.tabId, frame.url, frame.topUrl, req.provider);
+      case "cs_sso_click": {
+        // A provider's button frame embedded in a site (Google's gsi/button):
+        // the site the user signs in to is the page embedding it.
+        const framed = buttonFrameProvider(frame.url);
+        if (framed !== null) {
+          if (framed === req.provider && frame.frameId !== 0 && frame.topUrl !== undefined) state.click(frame.tabId, frame.topUrl, undefined, req.provider);
+        } else if (!SSO_PROVIDERS[req.provider].origins.includes(frame.origin)) {
+          // (A click on the provider's own pages is not signing in somewhere with it.)
+          state.click(frame.tabId, frame.url, frame.topUrl, req.provider);
+        }
         return {};
+      }
       case "cs_sso_account":
         state.account(tab, frame.origin, req.account, frame.frameId === 0);
         return {};
