@@ -323,6 +323,55 @@ save of an item re-encrypts with a fresh nonce. NIST SP 800-38D bounds random
 orders of magnitude fewer, and the data key changes whenever a new vault is
 created. A test asserts no nonce repeats across a large sample.
 
+## Backup file (`.hkbackup`)
+
+Spec: `docs/superpowers/specs/2026-10-05-export-design.md`. Code:
+`crates/havenkeys-core/src/export/backup.rs`.
+
+A backup is a file the user can keep anywhere. It is sealed under a backup
+password the user chooses, not under the vault key.
+
+```text
+offset  size  field
+0       8     magic  "HKBACKUP"
+8       1     format version (1)
+9       1     KDF algorithm (1 = Argon2id v1.3)
+10      4     memory KiB      (u32 LE)
+14      4     iterations      (u32 LE)
+18      4     parallelism     (u32 LE)
+22      16    salt (random)
+38      n     EncryptedBlob (the blob format above: version, algorithm,
+              nonce, ciphertext, tag)
+```
+
+* **Key.** `Argon2id(backup password, salt, params)` gives the AES-256-GCM
+  key, with fresh parameters from `KdfParams::generate()` (today 128 MiB, 4
+  iterations, 4 lanes). The backup password is **not** combined with the
+  Secret Key, by design: the point of a backup is to restore without the
+  account. Its strength is therefore the backup password's strength alone.
+* **Associated data.** `Purpose::Backup` (label `backup`):
+  prefix ‖ version ‖ algorithm ‖ `backup\0` ‖ nil vault ID ‖ `header\0` ‖
+  SHA-256(the 38 header bytes). The header is authenticated, so lowering the
+  KDF cost or changing the version breaks decryption. A backup belongs to no
+  vault, so the vault ID is nil, and a blob of another purpose cannot be
+  opened as a backup (or the reverse).
+* **Payload.** JSON `{ "version": 1, "exportedAt", "items": [...] }`, each
+  item the vault's own overview and details serialisation (passkeys
+  included). No compression.
+* **Size cap.** A backup may exceed the 8 MiB per-blob limit; it has its own
+  cap, `MAX_BACKUP_BLOB_LEN` = 64 MiB. `seal_backup` refuses a payload whose
+  file would exceed 64 MiB. It is the same AEAD construction with a different
+  length cap, not a new primitive.
+* **Read order** (hostile input; each step refuses at the first failure with
+  a fixed message that never echoes content): 1. size and magic; 2. format
+  version; 3. KDF algorithm and the parameter bounds (a file cannot ask for
+  100 GB of memory); 4. derive the key and open (a wrong password and a
+  damaged file give one message, "wrong backup password, or the file is
+  damaged", because they cannot be told apart); 5. payload version; 6. parse
+  into closed structs (unknown fields refused); 7. at most 50 000 items.
+  Restoring then rebuilds every item through the normal validation
+  (`security-model.md` §10a).
+
 ## Password generator
 
 Characters are drawn from the selected classes using `rand`'s `Uniform`

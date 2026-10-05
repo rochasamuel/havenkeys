@@ -70,6 +70,14 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > ciphertext and issues the desktop's session. The master password is not
 > typed for that first sign-in; every later unlock needs it as usual.
 
+> Amended on 2026-10-05 by
+> `docs/superpowers/specs/2026-10-05-export-design.md`: the desktop can
+> export the vault. Plaintext exports (Bitwarden JSON, CSV) follow §38 and
+> never contain passkey private keys. An encrypted HavenKeys backup, sealed
+> under a backup password the user chooses (Argon2id + the vault's AEAD),
+> carries every item including passkeys, and restoring it needs that
+> password. Every export asks for the master password again.
+
 ---
 
 # 1. Core philosophy

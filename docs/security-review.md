@@ -3170,3 +3170,41 @@ desktop's vitest suite; Android's `:app:testGithubDebugUnitTest`.
 New dependencies for this feature: `hpke` 0.14.1 (RustCrypto family, the
 envelope) and `maxminddb` 0.32.0 (the optional location database); both
 pass `cargo deny`.
+
+## Export and encrypted backup (2026-10-05)
+
+Spec: `docs/superpowers/specs/2026-10-05-export-design.md`.
+
+### EX1. Plaintext exports on disk (Medium, accepted)
+**Component:** Export (`havenkeys-core/src/export/`, desktop `export.rs`).
+**Scenario:** the user saves a Bitwarden JSON or CSV export into a folder
+that is synced to cloud storage, or leaves it in Downloads. Anything that can
+read the file reads every password. A crash between creating the temporary
+file and renaming it leaves a hidden `.part` file with the same content.
+**Mitigation:** an encrypted backup is the recommended default; a plaintext
+export needs an "I understand" confirmation and a warning; the master
+password is re-checked in Rust for every export; files are written 0600 via a
+temporary file and rename; plaintext exports never contain passkey private
+keys; the renderer never supplies the path.
+**Remaining:** we cannot delete the file for the user or stop other apps,
+sync clients or backups reading it, and a crash can leave a `.part` file.
+
+### EX2. Other export limitations (Low, accepted)
+* **Zeroisation is best effort.** `Zeroizing<Vec<u8>>` wipes only the final
+  buffer; reallocations during JSON/CSV serialisation and the `csv` writer's
+  internal buffer may leave plaintext in freed memory.
+* **Guessing through `export_file`.** A caller with the renderer can test
+  master-password guesses at one Argon2id run each while the vault is
+  unlocked; the cost equals an unlock and is not otherwise rate-limited.
+* **Lock during a backup.** If the vault locks while a backup is being sealed
+  (Argon2id), the file is still written, since it was rendered before the lock.
+* **Backup strength.** A backup is protected only by its backup password
+  (no Secret Key); a weak one is guessable offline at Argon2id cost.
+
+### EX3. Hostile backup files (Info, mitigated)
+**Component:** `export/restore.rs`, `export/backup.rs`.
+**Mitigation:** 64 MiB cap, authenticated KDF parameters with bounds, one
+error message for wrong password and damage, closed structs, 50 000 items
+at most, every item rebuilt through normal validation (passkeys, history and
+app bindings re-checked), no overwrites.
+**Remaining:** none known.

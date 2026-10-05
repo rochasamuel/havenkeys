@@ -134,6 +134,16 @@ the master password and the Secret Key from your Emergency Kit, or the
 phone: scan the new desktop's QR code from Settings → "Sign in a new device"
 and tap Allow (see [docs/security-model.md](docs/security-model.md) §23).
 
+## Export and backup
+
+Settings → Export writes an encrypted backup (`.hkbackup`) by default, and
+that is the recommended choice. It is sealed under a backup password you
+choose (Argon2id and AES-256-GCM), holds every item including passkeys, and
+is restored from Import → "HavenKeys backup" with that password. For
+leaving HavenKeys, Bitwarden JSON and CSV are also offered; these are
+plaintext, never contain passkeys, and you are responsible for the file once
+it is written. Every export asks for your master password again.
+
 ## How it protects your data
 
 * Everything about an item is encrypted with AES-256-GCM, including its title,

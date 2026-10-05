@@ -203,7 +203,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 57 of them, which is the whole
+Every command the renderer can call — all 64 of them, which is the whole
 surface. `build.rs` declares this list, `lib.rs` registers it, the capability
 file grants exactly it, and `src/lib/commands.test.ts` fails if they (or the
 commands `api.ts` calls) ever disagree. "Online"
@@ -234,6 +234,9 @@ means a live server session, which a locked vault does not have.
 | `get_settings`, `update_settings` | yes | no. `update_settings` keeps the stored generator policy |
 | `set_generator_options` | yes | no. Saves the generator tab's policy (encrypted settings); the extension's "Generate strong password" uses it |
 | `import_file` | yes (online) | no. Takes only the source (a closed enum: 1Password, Bitwarden JSON/CSV, Chrome, Firefox, KeePassXC, LastPass); Rust opens the native file picker and the renderer never supplies a path |
+| `restore_backup` | yes (online) | no. Takes only the backup password; Rust opens the native file picker and the renderer never supplies a path. Returns counts only |
+| `export_summary` | yes | no. Counts only (logins, notes, cards, identity, passkeys) |
+| `export_file` | yes | no. Takes the format (closed enum), the master password to re-check and, for a backup, the backup password; Rust opens the native save dialog and writes the file. Returns counts only |
 | `delete_import_file` | yes | no. Deletes only the file picked in the last import |
 | `device_status` | no | no (key scheme, whether a Secret Key is needed, online) |
 | `account_status` | no | no (email, server URL, account ID, last sync) |
@@ -374,6 +377,58 @@ CSV (spec 2026-10-05-import-formats).
   locally and pushed in batches of at most 500, each atomic on the server.
   What the vault ends up with is what the server accepted, and that is the
   number the report shows.
+
+## 10a. Export, backup and restore
+
+Spec: `docs/superpowers/specs/2026-10-05-export-design.md`. Code:
+`crates/havenkeys-core/src/export/` and `apps/desktop/src-tauri/src/export.rs`.
+
+* **Formats.** An encrypted HavenKeys backup (`.hkbackup`, `crypto.md`),
+  Bitwarden JSON and CSV. Plaintext exports **never contain passkey private
+  keys**; only the encrypted backup carries passkeys.
+* **The master password is re-checked on every export.** `export_file`
+  verifies it in Rust (`PasswordCheck`, an Argon2id run outside the vault
+  lock), so a stranger at an unlocked desktop, or a compromised renderer
+  without the password, gets no file. A backup also needs a backup password
+  (the master password's length bounds, 10 to the maximum, and it must differ
+  from the master password, compared in Rust after verification).
+* **The renderer never supplies a path.** Rust opens the native save and open
+  dialogs; the capability grants the UI no dialog or filesystem permission.
+* **Files are private and written atomically.** Written with mode 0600 to a
+  temporary file `.<name>.<pid>.part` in the chosen folder, then renamed
+  over the destination.
+* **Restore** needs an unlocked, online vault. A backup is hostile input
+  (`crypto.md` read order). Every item is rebuilt through the same
+  validation as one typed by the user, and passkeys, password history and
+  app bindings are re-checked (passkey count, credential ID length, user
+  handle, normalised relying-party ID, P-256 key). Restore never overwrites
+  an existing item; the identity is written under this vault's identity ID.
+  Items are sealed and pushed like any other write.
+* **Export works offline** (it reads the local replica); restore needs the
+  server because changes are written there.
+* **Nothing is logged and the extension cannot export.** Errors are fixed
+  strings; the summary and the restore report hold counts only; the browser
+  bridge has no export command.
+* **Memory.** Plaintext is rendered into a `Zeroizing<Vec<u8>>`, which wipes
+  only the final buffer. Reallocations while serialising the JSON or CSV, and
+  the `csv` writer's internal buffer, may leave copies in freed memory.
+  Zeroisation of export plaintext is best effort (see §8).
+
+Known limitations of export:
+
+* **The plaintext file is the user's responsibility once written.** We warn
+  and require an explicit "I understand"; we do not delete it, and we cannot
+  stop other apps, cloud sync or backups from reading or copying it.
+* **A crash between creating the temporary file and the rename** leaves a
+  hidden 0600 `.part` file with plaintext in the chosen folder.
+* **Password guessing through `export_file`.** A caller with the renderer
+  can test master-password guesses at one Argon2id run per guess while the
+  vault is unlocked. That is the cost of an unlock, and it is not otherwise
+  rate-limited.
+* **Locking while a backup is sealed.** The backup is rendered before the
+  Argon2id step, so if the vault locks during it the file is still written.
+* **A backup is only as strong as its backup password**, which is not
+  combined with the Secret Key.
 
 ## 11. Logging
 

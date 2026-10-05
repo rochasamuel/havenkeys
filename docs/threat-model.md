@@ -237,6 +237,26 @@ window is hidden in the tray); lock on quit; lock when the OS session locks
 (Windows, Linux with logind); lock on system suspend (detected by
 wall-clock vs monotonic clock divergence).
 
+### T7b — Export and backup
+* **Unattended unlocked desktop.** Every export asks for the master password
+  again, checked in Rust, so walking up to an unlocked screen does not
+  produce a file of every password.
+* **Stolen backup.** Sealed with Argon2id (128 MiB, 4 iterations at the
+  default) and AES-256-GCM under the backup password; no Secret Key is mixed
+  in, so the backup password's strength is all that protects it. The KDF
+  parameters are authenticated, so they cannot be rewritten to make
+  guessing cheaper.
+* **Crafted backup.** Size, version, KDF bounds, closed structs and an item
+  cap are checked before anything is restored; every item then goes through
+  the normal validation, passkeys are re-checked, and nothing existing is
+  overwritten. Restored URL rules are trusted as much as an import the user
+  chose.
+* **Plaintext export left on disk.** Explicit confirmation, a warning, mode
+  0600, no passkeys, and an encrypted backup as the default. We do not delete
+  the file; keeping it safe is the user's responsibility.
+* **Compromised renderer.** It cannot choose the path and cannot export
+  without the master password.
+
 ### T8 — Passkeys
 HavenKeys acts as a WebAuthn authenticator for websites
 (`docs/superpowers/specs/2026-09-23-passkeys-design.md`). The private key is
@@ -794,6 +814,9 @@ because:
   does not exist yet — so it remains on disk under the same T1 protection
   (master password and Secret Key) indefinitely, with no prompt to clean it
   up later.
+* **A plaintext export file after it is written** (Bitwarden JSON, CSV):
+  other applications, cloud sync folders and backups may read or copy it,
+  and a crash while writing can leave a hidden `.part` file. See T7b.
 * **Side channels** beyond what the underlying audited libraries protect
   against (RustCrypto `aes-gcm` uses constant-time implementations when AES-NI
   is available).
