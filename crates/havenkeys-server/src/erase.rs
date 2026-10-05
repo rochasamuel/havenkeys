@@ -3,9 +3,11 @@
 //!
 //! The in-app route and the admin CLI both come here, so a deletion asked
 //! for by email leaves exactly what one made in the app leaves: nothing but
-//! anonymous session-token hashes that expire in [`TOMBSTONE_DAYS`].
+//! anonymous session-token and device-id hashes that expire in
+//! [`TOMBSTONE_DAYS`].
 
-use deadpool_postgres::{Object, Transaction};
+use deadpool_postgres::{GenericClient, Object, Transaction};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 /// How long the other devices of a deleted account can still learn of it.
@@ -32,6 +34,15 @@ pub async fn erase_account(
         .iter()
         .map(|r| r.get(0))
         .collect();
+    for device in &devices {
+        tx.execute(
+            "INSERT INTO deleted_devices (device_hash, expires_at)
+             VALUES ($1, now() + make_interval(days => $2))
+             ON CONFLICT (device_hash) DO NOTHING",
+            &[&device_hash(*device), &TOMBSTONE_DAYS],
+        )
+        .await?;
+    }
     tx.execute(
         "DELETE FROM login_attempts WHERE key = $1",
         &[&format!("acct:{account_id}")],
@@ -50,11 +61,37 @@ pub async fn erase_account(
     Ok(())
 }
 
+/// The stored form of a device id: a device id is random, and only its
+/// holder (and the account it belonged to) ever saw it.
+fn device_hash(device: Uuid) -> Vec<u8> {
+    Sha256::digest(device.as_bytes()).to_vec()
+}
+
+/// Was this device part of an account deleted in the last
+/// [`TOMBSTONE_DAYS`]? Asked when its sign-in fails.
+pub async fn was_deleted_device(
+    db: &impl GenericClient,
+    device: Uuid,
+) -> Result<bool, tokio_postgres::Error> {
+    Ok(db
+        .query_opt(
+            "SELECT 1 FROM deleted_devices WHERE device_hash = $1 AND expires_at > now()",
+            &[&device_hash(device)],
+        )
+        .await?
+        .is_some())
+}
+
 /// Delete expired tombstones. Returns how many went.
 pub async fn sweep_tombstones(db: &Object) -> Result<u64, tokio_postgres::Error> {
-    db.execute(
-        "DELETE FROM deleted_sessions WHERE expires_at <= now()",
-        &[],
-    )
-    .await
+    let sessions = db
+        .execute(
+            "DELETE FROM deleted_sessions WHERE expires_at <= now()",
+            &[],
+        )
+        .await?;
+    let devices = db
+        .execute("DELETE FROM deleted_devices WHERE expires_at <= now()", &[])
+        .await?;
+    Ok(sessions + devices)
 }

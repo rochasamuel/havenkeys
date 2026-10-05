@@ -6,3 +6,11 @@ CREATE TABLE deleted_sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX deleted_sessions_by_expiry ON deleted_sessions (expires_at);
+
+-- The deleted account's device ids, hashed, for devices that were locked at
+-- the time: a locked device holds no token and signs in again instead.
+CREATE TABLE deleted_devices (
+  device_hash BYTEA PRIMARY KEY CHECK (octet_length(device_hash) = 32),
+  expires_at  TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX deleted_devices_by_expiry ON deleted_devices (expires_at);

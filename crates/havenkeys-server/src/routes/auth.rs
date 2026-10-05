@@ -149,6 +149,11 @@ pub async fn login(
     if !ok {
         keys.record_failure(&db).await?;
         tracing::info!(account_id = %account_id, outcome = "rejected", "login");
+        // A device that was locked when its account was deleted holds no
+        // token; it learns of the deletion here, by its own random id.
+        if !known && crate::erase::was_deleted_device(&db, req.device_id).await? {
+            return Err(ApiError::AccountDeleted);
+        }
         return Err(ApiError::Unauthorized);
     }
 

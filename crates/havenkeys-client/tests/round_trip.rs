@@ -342,3 +342,48 @@ async fn a_wrong_password_deletes_nothing() {
     a.sync_now().await.unwrap();
     server.cleanup().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_device_locked_during_the_deletion_wipes_itself_on_unlock() {
+    let server = Server::start().await;
+    let invite = server.invite("pocket@example.com").await;
+    let dir_a = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir_a.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+    let account_id = a.account_status().unwrap().unwrap().account_id;
+    let secret_key = a.device().unwrap().secret_key_text(account_id).unwrap();
+
+    let dir_b = tempfile::tempdir().unwrap();
+    let (b, probe_b) = device(dir_b.path());
+    b.sign_in(
+        server.base.clone(),
+        "pocket@example.com".into(),
+        SecretString::from(PASSWORD),
+        Some(secret_key),
+    )
+    .await
+    .unwrap();
+    b.lock("user");
+
+    a.delete_account("pocket@example.com".into(), SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+
+    // The vault opens offline from the replica; signing in then learns of
+    // the deletion and erases it.
+    let _ = b.unlock(SecretString::from(PASSWORD), None).await;
+    let deleted = || {
+        probe_b
+            .seen
+            .lock()
+            .unwrap()
+            .contains(&"account_deleted:true".to_string())
+    };
+    until(deleted).await;
+    assert!(b.vault().unwrap().account().unwrap().is_none());
+    assert!(b.device().unwrap().secret_key_text(account_id).is_none());
+    server.cleanup().await;
+}

@@ -13,7 +13,7 @@ async fn traces_of(server: &TestServer, needles: &[String]) -> Vec<String> {
         .query(
             "SELECT table_name::text, column_name::text FROM information_schema.columns
               WHERE table_schema = 'public'
-                AND table_name NOT IN ('schema_migrations', 'deleted_sessions')
+                AND table_name NOT IN ('schema_migrations', 'deleted_sessions', 'deleted_devices')
                 AND data_type IN ('text', 'uuid', 'character varying')",
             &[],
         )
@@ -291,5 +291,35 @@ async fn the_route_leaves_no_trace_either() {
         "route@example.com".to_string(),
     ];
     assert_eq!(traces_of(&server, &needles).await, Vec::<String>::new());
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_device_of_a_deleted_account_signing_in_again_gets_410() {
+    let server = TestServer::start().await;
+    let (account, phone) = signed_in(&server, "locked@example.com").await;
+    let laptop = login(&server, &account, "Laptop").await;
+    assert_eq!(
+        delete(&server, &phone, &account.auth_key, "locked@example.com").await,
+        204
+    );
+    // The laptop was locked: it holds no token and signs in again.
+    let sign_in = |device_id: Uuid| {
+        server.post("/v1/auth/login").json(&serde_json::json!({
+            "email": "locked@example.com",
+            "authKey": data_encoding::BASE64.encode(&account.auth_key),
+            "deviceId": device_id,
+            "deviceName": "Laptop",
+        }))
+    };
+    let res = sign_in(laptop.device_id).send().await.unwrap();
+    assert_eq!(res.status(), 410);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "account_deleted");
+    assert_eq!(
+        sign_in(Uuid::new_v4()).send().await.unwrap().status(),
+        401,
+        "a device that never belonged to it learns nothing"
+    );
     server.cleanup().await;
 }
