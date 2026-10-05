@@ -77,6 +77,15 @@ fn u32_at(b: &[u8], at: usize) -> u32 {
 /// Encrypt a payload from `render(.., Backup, ..)` under `password`.
 /// Slow (Argon2id): call without holding the vault lock.
 pub fn seal_backup(payload: &[u8], password: &SecretString, kdf: &KdfParams) -> Result<Vec<u8>> {
+    // Refuse before the slow KDF: a file open_backup would refuse as too large
+    // could never be restored.
+    if HEADER_LEN
+        .saturating_add(blob::MIN_BLOB_LEN)
+        .saturating_add(payload.len())
+        > MAX_BACKUP_BYTES as usize
+    {
+        return Err(Error::InvalidInput("backup file is too large"));
+    }
     let header = header(kdf);
     let key = derive_master_key(password, kdf)?;
     let sealed = blob::seal(&key, &BlobContext::backup(&header), payload)?;

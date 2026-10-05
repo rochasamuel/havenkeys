@@ -219,3 +219,20 @@ fn a_payload_with_unknown_fields_is_refused() {
         Err(Error::InvalidInput("this backup was made by a newer version of HavenKeys"))
     ));
 }
+
+#[test]
+fn the_size_limit_is_enforced_on_both_sides() {
+    use havenkeys_core::crypto::blob::MIN_BLOB_LEN;
+    use havenkeys_core::export::backup::MAX_BACKUP_BYTES;
+    let largest = MAX_BACKUP_BYTES as usize - HEADER_LEN - MIN_BLOB_LEN;
+    let file = seal_backup(&vec![b'x'; largest], &secret(BACKUP_PW), &fast_kdf()).unwrap();
+    assert!(file.len() as u64 <= MAX_BACKUP_BYTES);
+    assert!(matches!(
+        seal_backup(&vec![b'x'; largest + 1], &secret(BACKUP_PW), &fast_kdf()),
+        Err(Error::InvalidInput("backup file is too large"))
+    ));
+    assert!(matches!(
+        open_backup(&vec![0u8; MAX_BACKUP_BYTES as usize + 1], &secret(BACKUP_PW)),
+        Err(Error::InvalidInput("backup file is too large"))
+    ));
+}
