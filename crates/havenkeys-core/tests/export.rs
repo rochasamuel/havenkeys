@@ -236,3 +236,81 @@ fn the_size_limit_is_enforced_on_both_sides() {
         Err(Error::InvalidInput("backup file is too large"))
     ));
 }
+
+use havenkeys_core::passkey::PasskeyCreate;
+
+const GH: &str = "https://github.com/login";
+
+fn passkey_req(handle: &[u8]) -> PasskeyCreate<'_> {
+    PasskeyCreate {
+        rp_id: "github.com",
+        page_url: GH,
+        top_url: None,
+        challenge: &[7; 32],
+        user_handle: handle,
+        user_name: "octo",
+        display_name: None,
+        item_id: None,
+        conditional: false,
+    }
+}
+
+/// Stage-and-commit every restore write; returns the report.
+fn restore_into(
+    vault: &mut VaultService,
+    file: &[u8],
+    base: i64,
+) -> havenkeys_core::import::ImportReport {
+    let items = open_backup(file, &secret(BACKUP_PW)).unwrap();
+    let staged = vault.stage_restore(items, NOW).unwrap();
+    let mut rev = base;
+    for w in staged.writes {
+        rev += 1;
+        vault.commit_write(w, rev).unwrap();
+    }
+    staged.report
+}
+
+#[test]
+fn a_backup_restores_into_a_new_account_with_working_passkeys() {
+    let (mut a, _) = activated_vault();
+    commit_all(&mut a, vec![note("Recovery", "1111"), login("Bank", "me", "pw", "https://bank.example")]);
+    let staged = a.stage_passkey_create(passkey_req(&[1]), NOW).unwrap();
+    let pk_item = staged.item_id;
+    let cred = staged.registration.credential_id.clone();
+    a.commit_write(staged.write, 100).unwrap();
+    let file = backup_of(&a, BACKUP_PW);
+
+    let (mut b, _) = activated_vault();
+    let report = restore_into(&mut b, &file, 0);
+    assert_eq!((report.imported, report.logins, report.secure_notes, report.failed), (3, 2, 1, 0));
+    assert!(b.get_item(&pk_item).unwrap().has_passkey);
+    b.passkey_assert(&pk_item, &cred, "github.com", GH, None, &[3; 32]).unwrap();
+}
+
+#[test]
+fn restoring_twice_adds_nothing_and_overwrites_nothing() {
+    let (mut a, _) = activated_vault();
+    commit_all(&mut a, vec![login("Bank", "me", "pw", "https://bank.example")]);
+    let file = backup_of(&a, BACKUP_PW);
+    let (mut b, _) = activated_vault();
+    assert_eq!(restore_into(&mut b, &file, 0).imported, 1);
+    let second = restore_into(&mut b, &file, 10);
+    assert_eq!((second.imported, second.skipped_existing), (0, 1));
+    assert_eq!(b.list_items().unwrap().len(), 1);
+}
+
+#[test]
+fn the_identity_restores_under_this_vaults_id_or_is_skipped() {
+    let (mut a, _) = activated_vault();
+    let w = a.stage_identity_if_missing("me@example.com", NOW).unwrap().unwrap();
+    a.commit_write(w, 1).unwrap();
+    let file = backup_of(&a, BACKUP_PW);
+
+    let (mut b, _) = activated_vault();
+    let report = restore_into(&mut b, &file, 0);
+    assert_eq!(report.identities, 1);
+    assert!(b.get_item(&b.identity_item_id().unwrap()).is_ok());
+    let again = restore_into(&mut b, &file, 10);
+    assert_eq!((again.identities, again.skipped_existing), (0, 1));
+}

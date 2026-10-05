@@ -5,6 +5,7 @@
 //! errors are fixed strings; summaries are counts only.
 
 pub mod backup;
+mod restore;
 
 use crate::error::{Error, Result};
 use crate::import::common::format_date;

@@ -36,7 +36,7 @@ fn secure_context(url: &Url) -> bool {
 
 /// Lowercase, punycode, no trailing dot, no port. `None` for anything that is
 /// not a plain domain or IP address.
-fn normalize_rp_id(raw: &str) -> Option<String> {
+pub(crate) fn normalize_rp_id(raw: &str) -> Option<String> {
     if raw.is_empty() || raw.len() > MAX_RP_ID_BYTES || raw.ends_with('.') {
         return None;
     }

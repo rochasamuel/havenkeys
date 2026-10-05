@@ -22,6 +22,7 @@ mod vault;
 mod webauthn;
 
 pub use app::{AppCreateQuery, AppPasskeyCreate};
+pub(crate) use rp::normalize_rp_id;
 pub use rp::{
     android_app_origin, app_rp_id, authorize_rp, authorize_rp_for_app, RpContext, MAX_RP_ID_BYTES,
 };
