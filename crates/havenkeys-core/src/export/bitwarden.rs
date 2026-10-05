@@ -149,6 +149,7 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
                 })
                 .collect();
             let mut packages: Vec<&str> = app_bindings.iter().map(|b| b.package.as_str()).collect();
+            packages.sort_unstable();
             packages.dedup();
             uris.extend(packages.into_iter().map(|p| Uri { r#match: None, uri: format!("androidapp://{p}") }));
             for f in sections.into_iter().flat_map(|s| s.fields) {

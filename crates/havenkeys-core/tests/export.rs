@@ -387,3 +387,154 @@ fn plaintext_exports_never_contain_passkey_key_material() {
         }
     }
 }
+
+#[test]
+fn bitwarden_json_maps_every_item_kind() {
+    use havenkeys_core::card::{CardBrand, CardExpiry, CardInput};
+    use havenkeys_core::custom_field::{AddressValue, FieldInput, FieldValueInput, SectionInput};
+    use havenkeys_core::identity::{CustomField, IdentityFields};
+    use havenkeys_core::model::{ItemType, MatchType, SecretUpdate, UrlRule};
+
+    let blank = |item_type, title: &str| {
+        let mut i = login(title, "", "", "");
+        i.item_type = item_type;
+        i.username = None;
+        i.urls = vec![];
+        i.password = SecretUpdate::Keep;
+        i
+    };
+    let (mut v, _) = activated_vault();
+    let field = |id, label: &str, value| FieldInput { id, label: secret(label), value };
+    let some = |s: &str| Some(secret(s));
+    let rule = |url: &str, match_type| UrlRule { url: url.into(), match_type };
+
+    // Login with three URL rules and one section of every interesting field.
+    let mut gh = login("GitHub", "octo", "old-pw", "https://github.com");
+    gh.urls = vec![
+        rule("https://github.com", MatchType::Domain),
+        rule("https://gist.github.com", MatchType::Origin),
+        rule("https://github.com/login", MatchType::Exact),
+    ];
+    gh.sections = Some(vec![SectionInput {
+        id: None,
+        title: None,
+        fields: vec![
+            field(None, "Pet", FieldValueInput::Text(secret("rex"))),
+            field(None, "PIN", FieldValueInput::Password(SecretUpdate::Set(secret("4321")))),
+            field(None, "Old", FieldValueInput::Password(SecretUpdate::Set(secret("gone")))),
+            field(
+                None,
+                "Home",
+                FieldValueInput::Address(Box::new(AddressValue {
+                    street: some("Rua A"),
+                    number: some("5"),
+                    ..Default::default()
+                })),
+            ),
+            field(
+                None,
+                "Token",
+                FieldValueInput::Otp(SecretUpdate::Set(secret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"))),
+            ),
+        ],
+    }]);
+    let w = v.stage_create(gh, NOW).unwrap();
+    let gh_id = v.commit_write(w, 1).unwrap().unwrap().id;
+
+    // Change the password (old one goes to history) and clear one field.
+    let sections = v.login_sections(&gh_id).unwrap();
+    let (sid, ids): (_, Vec<_>) = (sections[0].id, sections[0].fields.iter().map(|f| f.id).collect());
+    let mut edit = login("GitHub", "octo", "new-pw", "https://github.com");
+    edit.urls = vec![
+        rule("https://github.com", MatchType::Domain),
+        rule("https://gist.github.com", MatchType::Origin),
+        rule("https://github.com/login", MatchType::Exact),
+    ];
+    edit.sections = Some(vec![SectionInput {
+        id: Some(sid),
+        title: None,
+        fields: vec![
+            field(Some(ids[0]), "Pet", FieldValueInput::Text(secret("rex"))),
+            field(Some(ids[1]), "PIN", FieldValueInput::Password(SecretUpdate::Keep)),
+            field(Some(ids[2]), "Old", FieldValueInput::Password(SecretUpdate::Clear)),
+            field(
+                Some(ids[3]),
+                "Home",
+                FieldValueInput::Address(Box::new(AddressValue {
+                    street: some("Rua A"),
+                    number: some("5"),
+                    ..Default::default()
+                })),
+            ),
+            field(Some(ids[4]), "Token", FieldValueInput::Otp(SecretUpdate::Keep)),
+        ],
+    }]);
+    let w = v.stage_update(&gh_id, edit, NOW + 1).unwrap();
+    v.commit_write(w, 2).unwrap();
+
+    // Card.
+    let mut card = blank(ItemType::Card, "Visa");
+    card.card = Some(CardInput {
+        cardholder_name: some("S Rocha"),
+        brand: Some(CardBrand::Amex),
+        number: SecretUpdate::Set(secret("378282246310005")),
+        verification_number: SecretUpdate::Set(secret("1234")),
+        expiry: Some(CardExpiry::new(2030, 3).unwrap()),
+        notes: None,
+    });
+    let w = v.stage_create(card, NOW).unwrap();
+    v.commit_write(w, 3).unwrap();
+
+    // Identity.
+    let w = v.stage_identity_if_missing("user@example.com", NOW).unwrap().unwrap();
+    let identity_id = w.item_id;
+    v.commit_write(w, 4).unwrap();
+    let mut ident = blank(ItemType::Identity, "");
+    ident.identity = Some(IdentityFields {
+        first_name: some("Samuel"),
+        last_name: some("Rocha"),
+        street: some("Quadra 2"),
+        number: some("10"),
+        cpf: some("123.456.789-00"),
+        home_phone: some("555-0100"),
+        custom: vec![CustomField { label: "Blood".into(), value: "O+".into(), hidden: true }],
+        ..Default::default()
+    });
+    let w = v.stage_update(&identity_id, ident, NOW + 1).unwrap();
+    v.commit_write(w, 5).unwrap();
+
+    let out = export::render(&v, ExportFormat::BitwardenJson, NOW).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    let items = json["items"].as_array().unwrap();
+    let of_type = |t: u64| items.iter().find(|i| i["type"] == t).unwrap();
+
+    let l = of_type(1);
+    let uris: Vec<_> = l["login"]["uris"].as_array().unwrap().iter().map(|u| u["match"].clone()).collect();
+    assert_eq!(uris, [serde_json::Value::Null, 1.into(), 3.into()]);
+    assert_eq!(l["login"]["password"], "new-pw");
+    assert_eq!(l["passwordHistory"][0]["password"], "old-pw");
+    let fields = l["fields"].as_array().unwrap();
+    let get = |n: &str| fields.iter().find(|f| f["name"] == n);
+    assert_eq!(get("Pet").unwrap()["type"], 0);
+    assert_eq!(get("PIN").unwrap()["type"], 1);
+    assert_eq!(get("PIN").unwrap()["value"], "4321");
+    assert_eq!(get("Home").unwrap()["type"], 0);
+    assert_eq!(get("Token").unwrap()["type"], 1);
+    assert!(get("Token").unwrap()["value"].as_str().unwrap().starts_with("otpauth://totp/"));
+    assert!(get("Old").is_none(), "a cleared password field is skipped");
+
+    let c = of_type(3);
+    assert_eq!(c["card"]["brand"], "American Express");
+    assert_eq!(c["card"]["number"], "378282246310005");
+    assert_eq!(c["card"]["code"], "1234");
+    assert_eq!(c["card"]["expMonth"], "3");
+    assert_eq!(c["card"]["expYear"], "2030");
+
+    let i = of_type(4);
+    assert_eq!(i["identity"]["address1"], "Quadra 2 10");
+    assert_eq!(i["identity"]["ssn"], "123.456.789-00");
+    assert_eq!(i["identity"]["firstName"], "Samuel");
+    let ifields = i["fields"].as_array().unwrap();
+    assert!(ifields.iter().any(|f| f["name"] == "Home phone" && f["value"] == "555-0100"));
+    assert!(ifields.iter().any(|f| f["name"] == "Blood" && f["type"] == 1));
+}
