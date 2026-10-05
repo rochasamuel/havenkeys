@@ -43,6 +43,8 @@ class SettingsScreenTest {
     private val accounts = FakeAccountRepository()
     private val done = mutableListOf<String>()
 
+    private var verified = true
+
     private fun show(online: Boolean = true, enrolled: Boolean = false) {
         val vm = SettingsViewModel(settings, accounts, FakeVaultRepository(), biometricEnrolled = { enrolled })
         val actions = SettingsActions(
@@ -51,6 +53,10 @@ class SettingsScreenTest {
             enrollBiometric = { password ->
                 done += "enroll:$password"
                 Outcome.Ok(Unit)
+            },
+            verifyUser = { _ ->
+                done += "verify"
+                verified
             },
         )
         val navigation = SettingsNavigation(
@@ -163,6 +169,42 @@ class SettingsScreenTest {
             rule.waitForIdle()
         }
         assertEquals(3, accounts.calls.count { it.startsWith("removeDevice") })
+    }
+
+    @Test
+    fun deletingTheAccountExplainsThenAsksForEmailAndPassword() {
+        show()
+        row("Delete account and all data").performClick()
+        rule.onNodeWithText(
+            "This deletes your vault from the server, signs out every device, and erases this phone’s copy. " +
+                "Neither you nor the server’s operator can recover it. To keep a copy, export an encrypted backup " +
+                "from the desktop first.",
+        ).assertExists()
+        dialogButton("Delete anyway").performClick()
+        val delete = dialogButton("Delete account")
+        delete.assertIsNotEnabled()
+        val fields = rule.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))
+        fields[0].performTextInput("user@example.com")
+        delete.assertIsNotEnabled()
+        fields[1].performTextInput("pw")
+        delete.performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("verify"), done.filter { it == "verify" })
+        assertEquals(listOf("deleteAccount:user@example.com"), accounts.calls.filter { it.startsWith("delete") })
+    }
+
+    @Test
+    fun aFailedCheckThatItIsTheUserDeletesNothing() {
+        verified = false
+        show()
+        row("Delete account and all data").performClick()
+        dialogButton("Delete anyway").performClick()
+        val fields = rule.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))
+        fields[0].performTextInput("user@example.com")
+        fields[1].performTextInput("pw")
+        dialogButton("Delete account").performClick()
+        rule.waitForIdle()
+        assertTrue(accounts.calls.none { it.startsWith("delete") })
     }
 
     @Test

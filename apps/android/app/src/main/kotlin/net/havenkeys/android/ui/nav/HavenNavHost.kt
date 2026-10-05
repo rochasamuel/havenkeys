@@ -169,9 +169,12 @@ private fun NavHostController.replaceAll(route: String) =
 /** Onboarding and unlock, outside the shell. */
 private fun NavGraphBuilder.entryScreens(nav: Nav, root: RootViewModel, scope: CoroutineScope) {
     composable(Routes.ONBOARDING) {
+        val accountDeleted by nav.services.events.accountDeleted.collectAsStateWithLifecycle()
         OnboardingScreen(
             viewModel = viewModel { OnboardingViewModel(nav.services.accounts) },
             onDone = { scope.launch { nav.controller.replaceAll(routeOf(root.current())) } },
+            accountDeleted = accountDeleted,
+            onAccountDeletedSeen = nav.services.events::accountDeletedSeen,
         )
     }
     composable(Routes.UNLOCK) {

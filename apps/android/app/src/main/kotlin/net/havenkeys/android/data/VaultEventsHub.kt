@@ -34,6 +34,11 @@ class VaultEventsHub : VaultEvents {
     private val _online = MutableStateFlow(false)
     val online: StateFlow<Boolean> = _online
 
+    private val _accountDeleted = MutableStateFlow(false)
+
+    /** The account was deleted: onboarding says so once, then calls [accountDeletedSeen]. */
+    val accountDeleted: StateFlow<Boolean> = _accountDeleted
+
     override fun locked(reason: String) {
         _unlocked.value = false
         _online.value = false
@@ -61,5 +66,18 @@ class VaultEventsHub : VaultEvents {
     override fun removed() {
         _unlocked.value = false
         _events.tryEmit(VaultEvent.Removed)
+    }
+
+    /**
+     * The phone's copy is already erased, exactly as after a removal, so every
+     * listener wipes and the Keystore keys go on the same [VaultEvent.Removed].
+     */
+    override fun accountDeleted() {
+        _accountDeleted.value = true
+        removed()
+    }
+
+    fun accountDeletedSeen() {
+        _accountDeleted.value = false
     }
 }

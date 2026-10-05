@@ -21,6 +21,9 @@ interface AccountRepository {
     suspend fun signOut(): Outcome<Unit>
     suspend fun removeDevice(confirmation: String): Outcome<Unit>
 
+    /** Rust checks the email and the master password; the password goes straight to Rust. */
+    suspend fun deleteAccount(confirmation: String, masterPassword: String): Outcome<Unit>
+
     /** A `havenkeys://pair/v1` link in [frame], or null; the frame's pixels are wiped after. */
     suspend fun scanPairing(frame: LumaFrame): Outcome<String?>
     suspend fun pairingRequest(link: String): Outcome<PairingRequestView>
@@ -56,4 +59,6 @@ class RustAccountRepository(private val vault: MobileVault) : AccountRepository 
     override suspend fun revoke(id: String) = rust { vault.revokeDevice(id) }
     override suspend fun signOut() = rust { vault.signOut() }
     override suspend fun removeDevice(confirmation: String) = rust { vault.removeDevice(confirmation) }
+    override suspend fun deleteAccount(confirmation: String, masterPassword: String) =
+        rust { vault.deleteAccount(confirmation, masterPassword) }
 }

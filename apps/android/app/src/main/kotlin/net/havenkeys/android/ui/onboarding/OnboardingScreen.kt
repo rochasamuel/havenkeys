@@ -69,7 +69,13 @@ private const val MIN_PASSWORD_LENGTH = 10
  * their step is left. Only the server and email (not secrets) are saved.
  */
 @Composable
-fun OnboardingScreen(viewModel: OnboardingViewModel, onDone: () -> Unit, modifier: Modifier = Modifier) {
+fun OnboardingScreen(
+    viewModel: OnboardingViewModel,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+    accountDeleted: Boolean = false,
+    onAccountDeletedSeen: () -> Unit = {},
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val mode = state.mode
     LaunchedEffect(state.done) { if (state.done) onDone() }
@@ -80,7 +86,14 @@ fun OnboardingScreen(viewModel: OnboardingViewModel, onDone: () -> Unit, modifie
     ) { _ ->
         val content = Modifier.fillMaxSize()
         when (mode) {
-            OnboardingUiState.Mode.CHOOSE -> ChooseStep(viewModel::choose, content)
+            OnboardingUiState.Mode.CHOOSE -> ChooseStep(
+                { mode ->
+                    onAccountDeletedSeen()
+                    viewModel.choose(mode)
+                },
+                content,
+                accountDeleted,
+            )
             OnboardingUiState.Mode.SCAN -> ScanStep(state.errorCode, viewModel::onFrame, viewModel::back, content)
             OnboardingUiState.Mode.TYPE -> TypeStep(state, viewModel::signIn, content)
             OnboardingUiState.Mode.INVITE -> InviteStep(state, viewModel::activate, content)
@@ -111,8 +124,11 @@ private fun OnboardingBar(showBack: Boolean, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ChooseStep(onChoose: (OnboardingUiState.Mode) -> Unit, modifier: Modifier) {
+private fun ChooseStep(onChoose: (OnboardingUiState.Mode) -> Unit, modifier: Modifier, accountDeleted: Boolean) {
     FormColumn(modifier) {
+        if (accountDeleted) {
+            HavenText(stringResource(R.string.onboarding_account_deleted), color = HavenTheme.colors.textStrong)
+        }
         HavenText(
             stringResource(R.string.onboarding_how),
             style = HavenTheme.type.titleSmall,

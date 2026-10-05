@@ -24,4 +24,16 @@ class VaultEventsHubTest {
         hub.locked("bundle_refused")
         assertEquals(VaultEvent.Locked("bundle_refused"), hub.events.first())
     }
+
+    @Test
+    fun aDeletedAccountWipesLikeARemovalAndIsRemembered() = runTest {
+        val hub = VaultEventsHub()
+        hub.unlocked()
+        hub.accountDeleted()
+        assertFalse(hub.unlocked.value)
+        assertTrue(hub.accountDeleted.value)
+        assertEquals(VaultEvent.Removed, hub.events.first())
+        hub.accountDeletedSeen()
+        assertFalse(hub.accountDeleted.value)
+    }
 }

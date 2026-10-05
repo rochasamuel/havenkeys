@@ -376,4 +376,14 @@
     <string name="error_pairing_other_server">This code is for another server.</string>
     <string name="error_pairing_failed">The sign-in could not be completed. Ask for a new code.</string>
     <string name="devices_approved_by">Approved by %1$s</string>
+    <string name="settings_delete_title">Delete account and all data</string>
+    <string name="settings_delete_note">Deletes your vault from the server, every device and this phone’s copy. Cannot be undone.</string>
+    <string name="settings_delete_explain">This deletes your vault from the server, signs out every device, and erases this phone’s copy. Neither you nor the server’s operator can recover it. To keep a copy, export an encrypted backup from the desktop first.</string>
+    <string name="settings_delete_anyway">Delete anyway</string>
+    <string name="settings_delete_confirm">Delete account</string>
+    <string name="settings_delete_password">Master password</string>
+    <string name="settings_delete_verify_title">Confirm it’s you</string>
+    <string name="settings_delete_failed">The account could not be deleted.</string>
+    <string name="onboarding_account_deleted">This account was deleted. Its data is gone from the server and this phone.</string>
+    <string name="error_account_deleted">This account was deleted.</string>
 </resources>

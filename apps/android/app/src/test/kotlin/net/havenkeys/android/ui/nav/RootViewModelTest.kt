@@ -67,6 +67,14 @@ class RootViewModelTest {
     }
 
     @Test
+    fun deletingTheAccountSignalsOnboarding() = runTest {
+        val events = VaultEventsHub()
+        val vm = RootViewModel(FakeVaultRepository(), events)
+        events.accountDeleted()
+        assertEquals(Start.ONBOARDING, vm.lockedSignal.first())
+    }
+
+    @Test
     fun otherEventsSignalNothing() = runTest {
         val events = VaultEventsHub()
         val vm = RootViewModel(FakeVaultRepository(), events)

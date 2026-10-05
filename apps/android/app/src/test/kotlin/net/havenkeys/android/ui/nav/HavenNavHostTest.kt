@@ -78,7 +78,7 @@ class HavenNavHostTest {
                 },
             )
         },
-        settingsActions = { SettingsActions(false, {}, { Outcome.Ok(Unit) }) },
+        settingsActions = { SettingsActions(false, {}, { Outcome.Ok(Unit) }, { true }) },
         canVerifyUser = { true },
         verifyUser = { _, _ -> true },
     )

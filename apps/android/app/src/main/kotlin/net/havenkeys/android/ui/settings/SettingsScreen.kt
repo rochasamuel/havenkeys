@@ -54,6 +54,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val verifyTitle = stringResource(R.string.settings_delete_verify_title)
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var choosing by remember { mutableStateOf<SettingsChoice?>(null) }
     val open = remember { SettingsOpen(choose = { choosing = it }, dialog = { dialog = it }) }
@@ -79,11 +80,13 @@ fun SettingsScreen(
     }
     SettingsDialogs(
         dialog = dialog,
-        state = state,
         viewModel = viewModel,
         onClose = { dialog = null },
         // The composition's scope: main thread, as BiometricPrompt requires.
         onPassword = { password -> scope.launch { viewModel.biometricChanged(actions.enrollBiometric(password)) } },
+        onDeleteAccount = { email, password ->
+            scope.launch { if (actions.verifyUser(verifyTitle)) viewModel.deleteAccount(email, password) }
+        },
     )
 }
 
@@ -200,6 +203,20 @@ private fun AccountGroup(email: String?, online: Boolean, navigation: SettingsNa
                 )
                 HavenText(
                     offline ?: stringResource(R.string.settings_remove_note),
+                    style = HavenTheme.type.rowSubtitle,
+                    color = HavenTheme.colors.muted,
+                )
+            }
+        }
+        row {
+            GroupRow(onClick = { if (online) open.dialog(SettingsDialog.DELETE_ACCOUNT) }) {
+                HavenText(
+                    stringResource(R.string.settings_delete_title),
+                    style = HavenTheme.type.value,
+                    color = HavenTheme.colors.danger,
+                )
+                HavenText(
+                    offline ?: stringResource(R.string.settings_delete_note),
                     style = HavenTheme.type.rowSubtitle,
                     color = HavenTheme.colors.muted,
                 )

@@ -297,6 +297,12 @@ class FakeAccountRepository : AccountRepository {
         calls += "removeDevice:$confirmation"
         return done
     }
+
+    /** The password is never recorded. */
+    override suspend fun deleteAccount(confirmation: String, masterPassword: String): Outcome<Unit> {
+        calls += "deleteAccount:$confirmation"
+        return done
+    }
 }
 
 class FakeSettingsRepository : SettingsRepository {

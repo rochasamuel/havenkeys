@@ -364,4 +364,14 @@
     <string name="error_pairing_other_server">Este código é de outro servidor.</string>
     <string name="error_pairing_failed">Não foi possível concluir a entrada. Peça um novo código.</string>
     <string name="devices_approved_by">Aprovado por %1$s</string>
+    <string name="settings_delete_title">Excluir conta e todos os dados</string>
+    <string name="settings_delete_note">Apaga o seu cofre do servidor, de todos os dispositivos e deste celular. Não dá para desfazer.</string>
+    <string name="settings_delete_explain">Isso apaga o seu cofre do servidor, desconecta todos os dispositivos e apaga a cópia deste celular. Nem você nem o operador do servidor conseguem recuperá-lo. Para guardar uma cópia, exporte um backup criptografado pelo desktop antes.</string>
+    <string name="settings_delete_anyway">Excluir mesmo assim</string>
+    <string name="settings_delete_confirm">Excluir conta</string>
+    <string name="settings_delete_password">Senha mestra</string>
+    <string name="settings_delete_verify_title">Confirme que é você</string>
+    <string name="settings_delete_failed">Não foi possível excluir a conta.</string>
+    <string name="onboarding_account_deleted">Esta conta foi excluída. Os dados dela não estão mais no servidor nem neste celular.</string>
+    <string name="error_account_deleted">Esta conta foi excluída.</string>
 </resources>

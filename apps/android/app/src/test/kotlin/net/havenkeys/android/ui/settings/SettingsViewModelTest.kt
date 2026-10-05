@@ -113,6 +113,21 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun deleteAccountPassesTheConfirmationAndCountsFailures() = runTest {
+        val vm = vm()
+        accounts.done = Outcome.Failed("unlock_failed")
+        vm.deleteAccount("user@example.com", "wrong")
+        assertEquals(listOf("deleteAccount:user@example.com"), accounts.calls)
+        assertEquals("unlock_failed", vm.state.value.deleteErrorCode)
+        assertEquals(1, vm.state.value.deleteFailures)
+        assertFalse(vm.state.value.deleting)
+        accounts.done = Outcome.Ok(Unit)
+        vm.deleteAccount("user@example.com", "right")
+        assertNull(vm.state.value.deleteErrorCode)
+        assertEquals(1, vm.state.value.deleteFailures)
+    }
+
+    @Test
     fun aCancelledEnrollmentShowsNothingAndReadsOff() = runTest {
         enrolled = true
         val vm = vm()

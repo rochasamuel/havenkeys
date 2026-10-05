@@ -24,8 +24,13 @@ data class SettingsUiState(
     val removeErrorCode: String? = null,
     /** How many removals have failed: the dialog re-arms its confirm on each (an error message could repeat). */
     val removeFailures: Int = 0,
+    val deleting: Boolean = false,
+    val deleteErrorCode: String? = null,
+    /** As [removeFailures], for "Delete account". */
+    val deleteFailures: Int = 0,
 )
 
+@Suppress("TooManyFunctions") // one setter per setting, plus the account actions
 class SettingsViewModel(
     private val settings: SettingsRepository,
     private val accounts: AccountRepository,
@@ -101,8 +106,26 @@ class SettingsViewModel(
         }
     }
 
-    fun clearRemoveError() {
-        _state.update { it.copy(removeErrorCode = null) }
+    /** Rust checks [confirmation] and [masterPassword]; neither is kept here. */
+    fun deleteAccount(confirmation: String, masterPassword: String) {
+        if (_state.value.deleting) return
+        _state.update { it.copy(deleting = true, deleteErrorCode = null) }
+        viewModelScope.launch {
+            val r = accounts.deleteAccount(confirmation, masterPassword)
+            val code = (r as? Outcome.Failed)?.code
+            _state.update {
+                it.copy(
+                    deleting = false,
+                    deleteErrorCode = code,
+                    deleteFailures = if (code != null) it.deleteFailures + 1 else it.deleteFailures,
+                )
+            }
+        }
+    }
+
+    /** A closed removal or deletion dialog forgets its error. */
+    fun clearAccountErrors() {
+        _state.update { it.copy(removeErrorCode = null, deleteErrorCode = null) }
     }
 
     companion object {

@@ -13,6 +13,11 @@ class SettingsActions(
     val forgetBiometric: () -> Unit,
     /** Called on the main thread (BiometricPrompt requires it); the password goes straight to Rust. */
     val enrollBiometric: suspend (password: String) -> Outcome<Unit>,
+    /**
+     * Biometrics or the screen lock before deleting the account; true when the
+     * phone has neither (the master password is still required). Main thread.
+     */
+    val verifyUser: suspend (title: String) -> Boolean,
 )
 
 /** The real actions: the container's biometric gate and keys, a prompt on [activity]. */
@@ -23,5 +28,9 @@ fun rememberSettingsActions(container: AppContainer, activity: FragmentActivity)
             biometricAvailable = container.biometricGate.available(activity),
             forgetBiometric = container::forgetBiometricUnlock,
             enrollBiometric = { password -> enrollBiometrics(activity, container, password) },
+            verifyUser = { title ->
+                !container.biometricGate.canVerifyUser(activity) ||
+                    container.biometricGate.verifyUser(activity, title, "")
+            },
         )
     }
