@@ -59,6 +59,13 @@ What a format cannot carry is counted, never silently dropped: the export
 report lists e.g. "12 passkeys, 3 cards, 1 identity not included". The
 counts are shown in the confirmation **before** the file is written.
 
+Exception (revised during review): HavenKeys-only metadata — a login's
+"Sign in with" provider, its automatic sign-in switch, the certificate
+hashes of its Android app bindings (and, in CSV, the app bindings
+themselves) — has no place in the plaintext formats. It is not carried by
+Bitwarden JSON or CSV and is not counted in the summary. The encrypted
+backup carries all of it.
+
 CSV columns: `name,url,username,password,note,totp`. Chrome reads the first
 five and ignores `totp`; Bitwarden, KeePassXC and our own importer read
 it. A login with several URLs gets the first one in `url` and the rest in
@@ -115,11 +122,15 @@ content:
    min/max bounds stop a backup from asking for 100 GB of memory).
 4. Derive, open. Any AEAD failure → "Wrong backup password, or the file
    is damaged." (one message: the two cannot be told apart).
-5. Decrypted payload ≤ 64 MB, parsed with `serde_json` into the closed
-   structs (`deny_unknown_fields` on the envelope), ≤ `MAX_ITEMS` items.
-6. Every item goes through `build_item` validation in `stage_import`; an
-   item that fails counts in `failed`. Passkeys are checked like a created
-   one (key parses, RP ID valid).
+5. Decrypted payload ≤ 64 MB, its envelope parsed with `serde_json` into a
+   closed struct (`deny_unknown_fields`), ≤ `MAX_ITEMS` items. From here on
+   the AEAD has authenticated the bytes, so a failure is never "wrong
+   password": an envelope that does not parse (or an older payload version)
+   gives "this backup can't be read by this version of HavenKeys".
+6. Each item is parsed on its own (revised during review), then goes
+   through `build_item` validation in `stage_restore`; an item that does
+   not parse or fails validation counts in `failed` and the rest restores.
+   Passkeys are checked like a created one (key parses, RP ID valid).
 
 ## 6. Core (`crates/havenkeys-core/src/export/`)
 
@@ -147,11 +158,32 @@ content:
 * Plaintext is built in `Zeroizing` buffers; the decrypted item list is
   dropped as soon as the file bytes exist. `Debug` stays redacted.
 
+**As built** (plan "Refinements", and the final review): restore does not go
+through `ImportSource`/`stage_import`. `open_backup` returns the parsed items
+and a count of unreadable ones; `VaultService::stage_restore` rebuilds each
+item with `build_item` and re-attaches the checked passkeys, password history
+and app bindings; a non-Identity item under this vault's identity ID counts
+as failed. `HavenClient::restore_backup` (`havenkeys-client/src/restore.rs`)
+pulls first, stages, and sends. **Tombstones:** the server keeps
+`(revision, deleted)` for every deleted item while the replica drops the
+row, so an item deleted since the backup is staged as new
+(`baseRevision = null`) and the server refuses its batch with a 409 naming
+it. For each conflicting item the client fetches the server's row: if it is
+a tombstone at revision `r`, the item is resent with `baseRevision = r`,
+which the server accepts only while the row is still that tombstone, and so
+revives it; if it is live (another device wrote it after the pull) it is
+counted in `skipped_existing` and never overwritten. The batch is resent
+without the live items, so one conflict never sinks the rest. An item is
+revived at most once; a second conflict means it is live.
+
 ### 6.1 Re-authentication
 
 `Vault::verify_master_password(password, secret_key) -> Result<()>`:
 derives the KEK from the local header's KDF params and unwraps the vault
-key; success only if it unwraps and equals the session key. Slow
+key; success when the vault key unwraps (AEAD-authenticated) under the
+local header. There is no separate comparison with the session key
+(revised while building: the unwrap already proves the password and Secret
+Key are this vault's). Slow
 (Argon2id), so the desktop takes a ticket (header copy) under the lock and
 derives outside it, like `BundleTicket`. Wrong password → `UnlockFailed`.
 Not rate-limited beyond Argon2id's cost (same as unlock).
@@ -169,9 +201,10 @@ Not rate-limited beyond Argon2id's cost (same as unlock).
   created with mode 0600 on Unix (write to a temp file in the same
   directory, then rename); returns the file name and counts. `None` if
   the dialog is cancelled. The renderer never supplies a path.
-* Restore goes through `import_file(HavenKeysBackup, backup_password)`:
-  requires unlocked and online, picker filtered on `.hkbackup`, then
-  `read_backup` → `stage_import` (keep IDs) → `push_batches`. No "delete
+* Restore is its own command, `restore_backup(backup_password)` (revised
+  while planning): requires unlocked and online, picker filtered on
+  `.hkbackup`, then `open_backup` → `HavenClient::restore_backup` (pull →
+  `stage_restore` → send with per-item tombstone handling, §6). No "delete
   the file" offer — the backup is encrypted and meant to be kept.
 
 Passwords arrive as `SecretString` in the command arguments and are never
@@ -200,8 +233,11 @@ success, failure and unmount.
 ### 7.3 Backup password rules
 
 Checked in Rust: same length bounds as the master password (10 to the
-existing maximum); must differ from the master password (compared in Rust
-after verification, constant-time). The two fields must match (UI only).
+existing maximum); must differ from the master password (constant-time).
+These checks run **before** the master password is verified (revised while
+building): they compare only values the caller supplied, so they reveal
+nothing about the real master password, and a bad backup password fails
+without an Argon2id run. The two fields must match (UI only).
 
 ## 8. Security analysis
 

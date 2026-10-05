@@ -3204,7 +3204,23 @@ sync clients or backups reading it, and a crash can leave a `.part` file.
 ### EX3. Hostile backup files (Info, mitigated)
 **Component:** `export/restore.rs`, `export/backup.rs`.
 **Mitigation:** 64 MiB cap, authenticated KDF parameters with bounds, one
-error message for wrong password and damage, closed structs, 50 000 items
-at most, every item rebuilt through normal validation (passkeys, history and
-app bindings re-checked), no overwrites.
-**Remaining:** none known.
+error message for wrong password and damage (and a distinct one for a
+payload that decrypts but this version cannot read), closed structs, 50 000
+items at most, every item parsed and rebuilt on its own through normal
+validation (passkeys, history and app bindings re-checked; a bad item fails
+alone), no overwrites, no non-Identity item under the identity ID.
+**Remaining:**
+* The file's timestamps (`createdAt`, `updatedAt`, password-history dates)
+  and URL rules are trusted as the user's own data: a crafted backup the user
+  chooses to restore can carry URL rules that make its logins match other
+  sites, exactly as an import can.
+* Items deleted since the backup are revived from their server tombstone
+  (`havenkeys-client/src/restore.rs`): restoring an old backup brings back
+  everything deleted since, by design. An item another device writes between
+  the pull and the push is skipped, never overwritten; one revived and then
+  written elsewhere before the resend is also skipped.
+* Schema evolution: the payload carries `version`; a newer one is refused as
+  "made by a newer version", and an item whose shape this version does not
+  know (a new item type, say) counts as failed. `PAYLOAD_VERSION` must be
+  bumped whenever the serialised model changes incompatibly (`crypto.md`);
+  nothing enforces that automatically.

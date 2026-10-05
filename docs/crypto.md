@@ -357,7 +357,13 @@ offset  size  field
   opened as a backup (or the reverse).
 * **Payload.** JSON `{ "version": 1, "exportedAt", "items": [...] }`, each
   item the vault's own overview and details serialisation (passkeys
-  included). No compression.
+  included). No compression. Because the items are the vault model's own
+  serialisation, **`PAYLOAD_VERSION` (`export/backup.rs`) must be bumped
+  whenever that model changes incompatibly** (a field renamed or removed, a
+  type changed): an older HavenKeys then refuses the file as "made by a
+  newer version" instead of failing item by item. Adding an optional field
+  or a new item type is compatible: an older version counts an item it
+  cannot read as failed and restores the rest.
 * **Size cap.** A backup may exceed the 8 MiB per-blob limit; it has its own
   caps, `MAX_BACKUP_BLOB_LEN` (the blob) and `MAX_BACKUP_BYTES` (the file), both 64 MiB. `seal_backup` refuses a payload whose
   file would exceed 64 MiB. It is the same AEAD construction with a different
@@ -368,9 +374,13 @@ offset  size  field
   100 GB of memory); 4. derive the key and open (a wrong password and a
   damaged file give one message, "wrong backup password, or the file is
   damaged", because they cannot be told apart); 5. payload version; 6. parse
-  into closed structs (unknown fields refused); 7. at most 50 000 items.
-  Restoring then rebuilds every item through the normal validation
-  (`security-model.md` §10a).
+  the envelope into a closed struct (unknown fields refused), with the items
+  left as raw JSON; 7. at most 50 000 items; 8. parse each item on its own,
+  counting the ones that fail. A failure after step 4 can no longer be a
+  wrong password (the AEAD authenticated the bytes), so an unreadable
+  envelope or an older payload version says "this backup can't be read by
+  this version of HavenKeys". Restoring then rebuilds every item through
+  the normal validation (`security-model.md` §10a).
 
 ## Password generator
 

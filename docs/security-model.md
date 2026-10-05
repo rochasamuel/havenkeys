@@ -388,8 +388,11 @@ Spec: `docs/superpowers/specs/2026-10-05-export-design.md`. Code:
   keys**; only the encrypted backup carries passkeys.
 * **The master password is re-checked on every export.** `export_file`
   verifies it in Rust (`PasswordCheck`, an Argon2id run outside the vault
-  lock), so a stranger at an unlocked desktop, or a compromised renderer
-  without the password, gets no file. A backup also needs a backup password
+  lock), so a stranger at an unlocked desktop gets no file. That walk-up
+  case is what the re-check protects against. It is not a defence against a
+  compromised renderer: while the vault is unlocked, such a renderer can
+  already read items one by one through the existing reveal commands; the
+  re-check only denies it the whole vault as one file. A backup also needs a backup password
   (the master password's length bounds, 10 to the maximum, and it must differ
   from the master password the caller typed). These rules are checked in Rust
   before the master password is verified; the comparison involves only two
@@ -404,9 +407,20 @@ Spec: `docs/superpowers/specs/2026-10-05-export-design.md`. Code:
   (`crypto.md` read order). Every item is rebuilt through the same
   validation as one typed by the user, and passkeys, password history and
   app bindings are re-checked (passkey count, credential ID length, user
-  handle, normalised relying-party ID, P-256 key). Restore never overwrites
-  an existing item; the identity is written under this vault's identity ID.
-  Items are sealed and pushed like any other write.
+  handle, normalised relying-party ID, P-256 key). Items are parsed one by
+  one after the file decrypts, so an item this version cannot read counts as
+  failed and the rest restores; a payload whose envelope cannot be read says
+  so ("can't be read by this version") rather than "wrong password". Restore
+  never overwrites an existing item; the identity is written under this
+  vault's identity ID, and no other item may take that ID. Items are sealed
+  and pushed like any other write, after a pull. The server keeps a
+  tombstone for each deleted item, so an item deleted since the backup is
+  refused as "new"; the client (`havenkeys-client/src/restore.rs`) then asks
+  the server for that row and, only if it is still a tombstone, resends the
+  item with the tombstone's revision as its base, which revives it. A
+  conflict with a live item (written by another device after the pull) is
+  counted as already present and left alone, and the rest of the batch is
+  resent.
 * **Export works offline** (it reads the local replica); restore needs the
   server because changes are written there.
 * **Nothing is logged and the extension cannot export.** Errors are fixed
