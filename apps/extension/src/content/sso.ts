@@ -12,7 +12,6 @@ import { buttonFrameProvider, providersForOrigin } from "@havenkeys/protocol";
 import { defaultEnv } from "../autofill/group";
 import { findLoginGroup } from "../autofill/page";
 import { anotherAccountButton, chooserRow, emailIn, findProviderButtons, isConsentScreen, providerButton, providerOf, SSO_CANDIDATES, SSO_MIN_SCORE } from "../autofill/sso";
-import { hasChallenge } from "../autofill/submit";
 import { TOKEN } from "../messaging/inline";
 import type { BackgroundToSso, SsoContentRequest, SsoPressReply, SsoReady } from "../messaging/sso";
 import { InlineFrame, ssoBox } from "./frames";
@@ -255,9 +254,13 @@ export function createSsoContent(deps: {
           return undefined;
         case "bg_sso_press": {
           if (!deps.isTop || m.origin !== location.origin) return { pressed: false };
-          const env = defaultEnv();
-          const button = providerButton(document, m.provider, env);
-          if (!button || hasChallenge(document, env)) return { pressed: false };
+          // A CAPTCHA on the page does not stop this press: it guards the
+          // site's own password form (HostGator's sits in the same <form> as
+          // Google's button), and the button only opens the provider's own
+          // sign-in, which runs its own checks. The provider login steps
+          // still stop on a challenge (autofill/submit.ts).
+          const button = providerButton(document, m.provider, defaultEnv());
+          if (!button) return { pressed: false };
           pressed = true;
           button.click();
           return { pressed: true };

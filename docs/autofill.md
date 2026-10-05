@@ -632,10 +632,13 @@ signs in too.
    content script refuses unless it is still the top frame and still on that
    exact origin, then looks for a **clear winner** among that provider's own
    candidates — the best score beats the runner-up by at least 20 points, as
-   `submit.ts` requires for automatic sign-in — and clicks it. No winner, or
-   a challenge (reCAPTCHA/hCaptcha/Turnstile) on the page: nothing is
-   pressed, and the balloon shows "Couldn't find the Sign in with `<Provider>`
-   button". Only the top frame ever presses: in a field menu inside an
+   `submit.ts` requires for automatic sign-in — and clicks it. No winner:
+   nothing is pressed, and the balloon shows "Couldn't find the Sign in with
+   `<Provider>` button". A challenge (reCAPTCHA/hCaptcha/Turnstile) on the
+   page does not stop this press: it guards the site's own password form
+   (HostGator's reCAPTCHA sits in the same `<form>` as Google's button), and
+   the button only opens the provider's own sign-in, which runs its own
+   checks. The provider login steps (step 4) still stop on a challenge. Only the top frame ever presses: in a field menu inside an
    iframe, an SSO login with no password starts no run and the pick answers
    "Couldn't find the Sign in with `<Provider>` button"; one that also has a
    password is filled there as usual.

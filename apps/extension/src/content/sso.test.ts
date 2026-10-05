@@ -265,14 +265,16 @@ describe("pressing after a pick", () => {
     expect(sent).toEqual([]);
   });
 
-  it("does not press with a visible challenge on the page", () => {
-    const b = button("Continue with Google");
+  it("presses with the site's password-form CAPTCHA on the page (HostGator)", () => {
+    const b = button("Sign in with Google");
     const click = vi.spyOn(b, "click");
-    const captcha = document.createElement("iframe");
-    captcha.src = "https://challenges.cloudflare.com/turnstile";
+    const captcha = document.createElement("div");
+    captcha.className = "g-recaptcha";
+    captcha.setAttribute("data-sitekey", "k");
+    captcha.textContent = "I'm not a robot";
     document.body.append(captcha);
-    expect(make().handleBackground({ type: "bg_sso_press", provider: "google", origin: location.origin })).toEqual({ pressed: false });
-    expect(click).not.toHaveBeenCalled();
+    expect(make().handleBackground({ type: "bg_sso_press", provider: "google", origin: location.origin })).toEqual({ pressed: true });
+    expect(click).toHaveBeenCalledOnce();
   });
 
   it("does not press when the button is ambiguous", () => {
