@@ -26,6 +26,9 @@ import type {
   CardRevealField,
   CardView,
   IdentityView,
+  ExportFormat,
+  ExportResult,
+  ExportSummary,
   ImportResult,
   ImportSource,
   ItemInput,
@@ -120,6 +123,12 @@ export const api = {
   importFile: (source: ImportSource) => call<ImportResult | null>("import_file", { source }),
   /** Deletes the file chosen in the last import (the UI never sends a path). */
   deleteImportFile: () => call<void>("delete_import_file"),
+  exportSummary: (format: ExportFormat) => call<ExportSummary>("export_summary", { format }),
+  /** Rust opens the save dialog; `null` when it was cancelled. */
+  exportFile: (format: ExportFormat, masterPassword: string, backupPassword: string | null) =>
+    call<ExportResult | null>("export_file", { format, masterPassword, backupPassword }),
+  /** Rust opens the file picker; `null` when it was cancelled. */
+  restoreBackup: (backupPassword: string) => call<ImportResult | null>("restore_backup", { backupPassword }),
 
   deviceStatus: () => call<DeviceStatus>("device_status"),
   emergencyKit: () => call<EmergencyKit>("get_emergency_kit"),

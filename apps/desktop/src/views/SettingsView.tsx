@@ -5,6 +5,7 @@ import { applyTheme } from "../lib/theme";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
+import { ExportSection } from "./ExportSection";
 import { ImportSection } from "./ImportSection";
 import { AccountSection } from "./AccountSection";
 import { UpdatesSection } from "./UpdatesSection";
@@ -268,6 +269,8 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
       <AccountSection online={online} />
 
       <ImportSection onImported={onImported} />
+
+      <ExportSection />
 
       <ChangePassword />
 

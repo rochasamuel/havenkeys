@@ -749,6 +749,42 @@ export const en = {
     deleteExport: "Delete the export file",
   },
 
+  export: {
+    title: "Export",
+    note: "Keep an encrypted backup, or move your data to another password manager.",
+    formatLabel: "Export as",
+    formats: {
+      backup: "HavenKeys backup (encrypted, recommended)",
+      bitwardenJson: "Bitwarden (.json)",
+      csv: "CSV (logins only)",
+    },
+    formatHelp: {
+      backup: "Everything, passkeys included, locked with a backup password you choose. Restore it from Import on any HavenKeys.",
+      bitwardenJson: "For Bitwarden, Proton Pass, KeePassXC or 1Password. Passkeys are never included.",
+      csv: "For browsers and other managers. Only logins; passkeys are never included.",
+    },
+    plaintextWarning:
+      "Export contains all passwords in plaintext. Anyone who gets this file can read every password. Delete it once you’ve imported it elsewhere, and don’t open it in a spreadsheet.",
+    understand: "I understand",
+    backupPassword: "Backup password",
+    backupPasswordAgain: "Backup password again",
+    backupHint: "Use a long passphrase (the generator can make one). If you lose it, the backup can’t be opened.",
+    mismatch: "The backup passwords don’t match.",
+    masterPassword: "Master password",
+    export: "Export…",
+    exporting: "Exporting…",
+    failed: "Export failed.",
+    includes: (logins: number, notes: number, cards: number, identities: number) =>
+      `${logins} ${logins === 1 ? "login" : "logins"}, ${notes} ${notes === 1 ? "secure note" : "secure notes"}, ${cards} ${cards === 1 ? "card" : "cards"}, ${identities} ${identities === 1 ? "identity" : "identities"}.`,
+    passkeysLeftOut: (n: number) => `${n} ${n === 1 ? "passkey is" : "passkeys are"} not included.`,
+    historyLeftOut: (n: number) => `${n} old ${n === 1 ? "password" : "passwords"} from password history ${n === 1 ? "is" : "are"} not included.`,
+    fieldsLeftOut: (n: number) => `${n} custom ${n === 1 ? "field is" : "fields are"} not included.`,
+    itemsLeftOut: (n: number) => `${n} ${n === 1 ? "item that isn’t a login is" : "items that aren’t logins are"} not included.`,
+    unreadable: (n: number) => `${n} ${n === 1 ? "item can’t be read and is" : "items can’t be read and are"} not included.`,
+    done: (n: number, fileName: string) => `Exported ${n} ${n === 1 ? "item" : "items"} to ${fileName}.`,
+    deleteReminder: "This file isn’t encrypted. Delete it once you’re done with it.",
+  },
+
   updates: {
     available: (version: string) => `HavenKeys ${version} is available.`,
     whatsNew: "What’s new",

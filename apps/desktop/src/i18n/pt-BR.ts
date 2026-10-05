@@ -133,6 +133,16 @@ const invalidInput: Record<string, string> = {
   "not a valid LastPass export file": "Não é um arquivo CSV do LastPass válido.",
   "export file is too large": "O arquivo de exportação é grande demais.",
   "export contains too many items": "A exportação tem itens demais.",
+  "backup password must be at least 10 characters": "A senha do backup precisa ter pelo menos 10 caracteres.",
+  "backup password is too long": "A senha do backup é longa demais.",
+  "backup password must differ from the master password": "A senha do backup precisa ser diferente da senha mestra.",
+  "a backup needs a backup password": "O backup precisa de uma senha de backup.",
+  "not a HavenKeys backup file": "Não é um arquivo de backup do HavenKeys.",
+  "this backup was made by a newer version of HavenKeys": "Este backup foi feito por uma versão mais nova do HavenKeys.",
+  "backup file is too large": "O arquivo de backup é grande demais.",
+  "wrong backup password, or the file is damaged": "Senha do backup errada, ou o arquivo está danificado.",
+  "backup contains too many items": "O backup tem itens demais.",
+  "backup item is not valid": "Um item do backup não é válido.",
 };
 
 export const ptBR: Messages = {
@@ -775,6 +785,42 @@ export const ptBR: Messages = {
     deleteFile: "Excluir arquivo",
     keepFile: "Manter",
     deleteExport: "Excluir o arquivo de exportação",
+  },
+
+  export: {
+    title: "Exportar",
+    note: "Guarde um backup criptografado ou leve seus dados para outro gerenciador de senhas.",
+    formatLabel: "Exportar como",
+    formats: {
+      backup: "Backup do HavenKeys (criptografado, recomendado)",
+      bitwardenJson: "Bitwarden (.json)",
+      csv: "CSV (só logins)",
+    },
+    formatHelp: {
+      backup: "Tudo, inclusive as chaves de acesso, protegido por uma senha de backup que você escolhe. Restaure em Importar, em qualquer HavenKeys.",
+      bitwardenJson: "Para Bitwarden, Proton Pass, KeePassXC ou 1Password. Chaves de acesso nunca são incluídas.",
+      csv: "Para navegadores e outros gerenciadores. Só logins; chaves de acesso nunca são incluídas.",
+    },
+    plaintextWarning:
+      "A exportação contém todas as senhas sem criptografia. Quem tiver este arquivo lê todas elas. Apague-o depois de importar em outro lugar e não o abra numa planilha.",
+    understand: "Eu entendo",
+    backupPassword: "Senha do backup",
+    backupPasswordAgain: "Senha do backup de novo",
+    backupHint: "Use uma frase longa (o gerador cria uma). Se você a perder, o backup não poderá ser aberto.",
+    mismatch: "As senhas do backup não são iguais.",
+    masterPassword: "Senha mestra",
+    export: "Exportar…",
+    exporting: "Exportando…",
+    failed: "A exportação falhou.",
+    includes: (logins: number, notes: number, cards: number, identities: number) =>
+      `${logins} ${logins === 1 ? "login" : "logins"}, ${notes} ${notes === 1 ? "nota segura" : "notas seguras"}, ${cards} ${cards === 1 ? "cartão" : "cartões"}, ${identities} ${identities === 1 ? "identidade" : "identidades"}.`,
+    passkeysLeftOut: (n: number) => `${n} ${n === 1 ? "chave de acesso não é incluída" : "chaves de acesso não são incluídas"}.`,
+    historyLeftOut: (n: number) => `${n} ${n === 1 ? "senha antiga do histórico não é incluída" : "senhas antigas do histórico não são incluídas"}.`,
+    fieldsLeftOut: (n: number) => `${n} ${n === 1 ? "campo personalizado não é incluído" : "campos personalizados não são incluídos"}.`,
+    itemsLeftOut: (n: number) => `${n} ${n === 1 ? "item que não é login não é incluído" : "itens que não são logins não são incluídos"}.`,
+    unreadable: (n: number) => `${n} ${n === 1 ? "item não pode ser lido e não é incluído" : "itens não podem ser lidos e não são incluídos"}.`,
+    done: (n: number, fileName: string) => `${n} ${n === 1 ? "item exportado" : "itens exportados"} para ${fileName}.`,
+    deleteReminder: "Este arquivo não é criptografado. Apague-o quando terminar.",
   },
 
   updates: {

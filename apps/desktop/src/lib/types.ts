@@ -291,6 +291,8 @@ export interface ImportReport {
   fieldsToNotes: number;
   ssoUpgraded: number;
   passkeysSkipped: number;
+  skippedExisting: number;
+  identities: number;
 }
 
 /** Where an export came from; Rust refuses a file that isn't that source's. */
@@ -302,6 +304,25 @@ export type ImportSource =
   | "firefox"
   | "keePassXc"
   | "lastPass";
+
+export type ExportFormat = "backup" | "bitwardenJson" | "csv";
+
+export interface ExportSummary {
+  logins: number;
+  secureNotes: number;
+  cards: number;
+  identities: number;
+  passkeysLeftOut: number;
+  passwordHistoryLeftOut: number;
+  customFieldsLeftOut: number;
+  itemsLeftOut: number;
+  unreadable: number;
+}
+
+export interface ExportResult {
+  fileName: string;
+  summary: ExportSummary;
+}
 
 export interface ImportResult {
   report: ImportReport;

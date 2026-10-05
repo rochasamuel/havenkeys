@@ -85,6 +85,8 @@ describe("ImportSection", () => {
         fieldsToNotes: 0,
         ssoUpgraded: 0,
         passkeysSkipped: 3,
+        skippedExisting: 0,
+        identities: 0,
       },
     });
     const onImported = vi.fn();
