@@ -476,6 +476,17 @@ beats the runner-up by at least 20 in that same scope. Otherwise the fields
 stay filled and the user presses, exactly like today's behaviour, and the
 run ends.
 
+**Settling:** when no button wins right after the fill, the search is
+retried every 150 ms for up to 1.5 s while the filled field stays on the
+page, under the same rules (and never with a challenge on the page). A
+continuation fills the next step as soon as its field shows, often while
+the page is still swapping views: Google's password view shows its field
+before its "Next", and the email view's own "Next" may still be on screen
+(a tie). The run is claimed before this wait, so the user's click or key
+ends it. With Google's image CAPTCHA shown, its text field is another
+visible field in scope, so the climb stops before "Next" and nothing is
+pressed.
+
 Once a button is chosen: wait for it to become enabled (re-checked every
 100 ms, up to 1 s — many sites enable a submit button only once the input
 validates; still disabled after 1 s → no press, run ends); re-check the stop

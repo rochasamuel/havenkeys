@@ -24,6 +24,9 @@ export const PRESS_MIN_MARGIN = 20;
 export const ENABLE_WAIT_MS = 1000;
 export const ENABLE_POLL_MS = 100;
 export const OTP_SETTLE_MS = 500;
+/** How long findSubmitButton is retried after a fill while the page settles. */
+export const BUTTON_WAIT_MS = 1500;
+export const BUTTON_POLL_MS = 150;
 
 const CANDIDATES = 'button, input[type="submit"], input[type="image"], [role="button"]';
 
@@ -116,6 +119,39 @@ export function findSubmitButton(root: ParentNode, field: HTMLInputElement, step
   return null;
 }
 
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * findSubmitButton, retried every BUTTON_POLL_MS for up to BUTTON_WAIT_MS
+ * while the filled field stays on the page. A continuation fills the next
+ * step as soon as its field shows, often while the page is still swapping
+ * views: Google's password view appears before its "Avançar" is rendered,
+ * and the email view's own "Avançar" may still be on screen (a tie). Each
+ * retry applies the same rules; nothing is pressed here. Null on timeout,
+ * a challenge, cancellation, or when the field leaves the page.
+ */
+export async function waitForSubmitButton(o: {
+  root: ParentNode;
+  field: HTMLInputElement;
+  step: PressStep;
+  env: () => Env;
+  doc?: Document;
+  sleep?: (ms: number) => Promise<void>;
+  cancelled?: () => boolean;
+}): Promise<HTMLElement | null> {
+  const sleep = o.sleep ?? realSleep;
+  const doc = o.doc ?? document;
+  for (let waited = 0; ; waited += BUTTON_POLL_MS) {
+    if (o.cancelled?.() || !o.field.isConnected) return null;
+    const env = o.env();
+    if (hasChallenge(doc, env)) return null;
+    const button = findSubmitButton(o.root, o.field, o.step, env);
+    if (button) return button;
+    if (waited >= BUTTON_WAIT_MS) return null;
+    await sleep(BUTTON_POLL_MS);
+  }
+}
+
 function isChallengeFrame(src: string, base: string): boolean {
   let u: URL;
   try {
@@ -153,8 +189,6 @@ export function hasChallenge(doc: Document, env: Env): boolean {
 function isDisabled(b: HTMLElement): boolean {
   return b.matches(":disabled") || b.getAttribute("aria-disabled") === "true";
 }
-
-const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
  * Press `button` once, when it is usable:

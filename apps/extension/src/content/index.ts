@@ -35,7 +35,7 @@ import { cardFieldsForFill, cardGroupFor, findCardGroup } from "../autofill/card
 import { cardRolesToFill, fillCard, readCardSubmission } from "../autofill/card-fill";
 import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
-import { findSubmitButton, hasChallenge, pressWhenReady, type PressStep } from "../autofill/submit";
+import { findSubmitButton, hasChallenge, pressWhenReady, waitForSubmitButton, type PressStep } from "../autofill/submit";
 import { findIdentityGroup, identityGroupFor } from "../autofill/identity";
 import { fillIdentity, rolesToFill } from "../autofill/identity-fill";
 import { hasAny, normalize, PAY_WORDS, SUBMIT_WORDS } from "../autofill/text";
@@ -474,37 +474,65 @@ function start(): void {
     return user && valueSource(user) === "vault" ? { step: "username", last: user } : null;
   }
 
-  /** Press after a fill, then watch for the next step. Returns the step being pressed, or null. */
-  function pressAfterFill(group: ReturnType<typeof groupFor>["group"], kind: "login" | "otp", totp: boolean): PressStep | null {
+  /**
+   * Press after a fill, then watch for the next step. Returns the step being
+   * pressed, or null when no button clearly wins (the fields stay filled for
+   * the user). When none does yet, a promise of that: the page may still be
+   * settling (waitForSubmitButton).
+   */
+  function pressAfterFill(
+    group: ReturnType<typeof groupFor>["group"],
+    kind: "login" | "otp",
+    totp: boolean,
+  ): PressStep | null | Promise<PressStep | null> {
     const done = filledStep(group, kind);
     if (!done) return null;
     const env = defaultEnv();
-    const button = findSubmitButton(group.root, done.last, done.step, env);
-    if (!button || hasChallenge(document, env)) return null;
+    if (hasChallenge(document, env)) return null;
     const next: NextStep | null = done.step === "username" ? "password" : done.step === "password" && totp ? "otp" : null;
+    // Claim the run before any wait, so the user's input while the page
+    // settles ends it (the pointerdown/keydown listeners check runActive).
     cancelWatch();
     runActive = true;
     runSeq++;
     const mine = runSeq;
-    void pressWhenReady({ button, field: done.last, step: done.step, env, cancelled: () => mine !== runSeq })
-      .then((outcome) => {
-        // A later event (user takeover, bg_run_end, a new pick) already ended
-        // this run or started another one: do not act on this stale press.
-        if (mine !== runSeq) return;
-        if (outcome === "gave_up") return endLocalRun(true);
-        if (next) startWatch(next, done.last);
-        else endLocalRun(false);
-      })
-      .catch(() => {
-        // The press threw: stop this run.
-        if (mine === runSeq) endLocalRun(true);
-      });
-    return done.step;
+    const cancelled = () => mine !== runSeq;
+
+    const press = (button: HTMLElement): PressStep => {
+      void pressWhenReady({ button, field: done.last, step: done.step, env: defaultEnv(), cancelled })
+        .then((outcome) => {
+          // A later event (user takeover, bg_run_end, a new pick) already ended
+          // this run or started another one: do not act on this stale press.
+          if (cancelled()) return;
+          if (outcome === "gave_up") return endLocalRun(true);
+          if (next) startWatch(next, done.last);
+          else endLocalRun(false);
+        })
+        .catch(() => {
+          // The press threw: stop this run.
+          if (!cancelled()) endLocalRun(true);
+        });
+      return done.step;
+    };
+
+    const now = findSubmitButton(group.root, done.last, done.step, env);
+    if (now) return press(now);
+    return waitForSubmitButton({ root: group.root, field: done.last, step: done.step, env: defaultEnv, cancelled }).then((button) => {
+      if (cancelled()) return null;
+      if (button) return press(button);
+      endLocalRun(false); // the reply's null pressing ends the background's side
+      return null;
+    });
+  }
+
+  /** `filled`, with the step pressAfterFill reports (now, or once it settles). */
+  function withPress(filled: number, pressing: ReturnType<typeof pressAfterFill>): FillReply | Promise<FillReply> {
+    return pressing instanceof Promise ? pressing.then((p) => ({ filled, pressing: p })) : { filled, pressing };
   }
 
   // ------------------------------------------------------------ fills
 
-  function handleFill(m: Extract<BackgroundToContent, { type: "bg_fill" }>): FillReply {
+  function handleFill(m: Extract<BackgroundToContent, { type: "bg_fill" }>): FillReply | Promise<FillReply> {
     const none: FillReply = { filled: 0, pressing: null };
     // A sandboxed document (CSP `sandbox`) keeps its URL but runs with an
     // opaque origin: page script there is not the site and must get nothing.
@@ -549,11 +577,11 @@ function start(): void {
     switch (m.fill.kind) {
       case "login": {
         const filled = fillLogin(group, m.fill, env);
-        return { filled, pressing: filled > 0 && m.submit ? pressAfterFill(group, "login", m.totp) : null };
+        return filled > 0 && m.submit ? withPress(filled, pressAfterFill(group, "login", m.totp)) : { filled, pressing: null };
       }
       case "otp": {
         const filled = fillOtp(group, m.fill.code, env);
-        return { filled, pressing: filled > 0 && m.submit ? pressAfterFill(group, "otp", m.totp) : null };
+        return filled > 0 && m.submit ? withPress(filled, pressAfterFill(group, "otp", m.totp)) : { filled, pressing: null };
       }
       case "generated": {
         const n = fillNewPassword(group, m.fill.password, env);
@@ -743,9 +771,16 @@ function start(): void {
     const m = parseBackgroundMessage(raw);
     if (!m) return false;
     switch (m.type) {
-      case "bg_fill":
-        sendResponse(handleFill(m));
-        return false;
+      case "bg_fill": {
+        const r = handleFill(m);
+        if (!(r instanceof Promise)) {
+          sendResponse(r);
+          return false;
+        }
+        // Waiting up to BUTTON_WAIT_MS for the page's button: reply later.
+        void r.then(sendResponse, () => sendResponse({ filled: 0, pressing: null }));
+        return true;
+      }
       case "bg_identity_roles": {
         if (window.top !== window) sendResponse({ roles: [] });
         else {

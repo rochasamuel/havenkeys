@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Env } from "./group";
-import { findSubmitButton, hasChallenge, pressWhenReady } from "./submit";
+import { groupRoot, type Env } from "./group";
+import { BUTTON_WAIT_MS, findSubmitButton, hasChallenge, pressWhenReady, waitForSubmitButton } from "./submit";
 
 function visible(el: HTMLElement): boolean {
   for (let n: HTMLElement | null = el; n; n = n.parentElement) {
@@ -14,6 +14,7 @@ function visible(el: HTMLElement): boolean {
 const env: Env = { isVisible: visible, path: "/" };
 const $ = <T extends Element = HTMLInputElement>(sel: string) => document.querySelector(sel) as unknown as T;
 const noSleep = async () => undefined;
+const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
 
 beforeEach(() => (document.body.innerHTML = ""));
 
@@ -71,7 +72,6 @@ describe("findSubmitButton", () => {
   });
 
   it("Google (Firefox): finds Avançar far from a form-less field, not Esqueceu o e-mail? / Criar conta", () => {
-    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
     document.body.innerHTML = `<main>${deep(`<section><div id="root">${deep('<input id="identifierId" type="text" autocomplete="username">', 4)}</div></section>`, 5)}
       ${deep('<button type="button">Esqueceu o e-mail?</button>', 3)}
       ${deep('<div id="identifierNext"><button id="next" type="button"><span>Avançar</span></button></div>', 3)}
@@ -80,7 +80,6 @@ describe("findSubmitButton", () => {
   });
 
   it("Google (Firefox): Avançar on the password step too, not Esqueceu a senha?", () => {
-    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
     document.body.innerHTML = `<main>${deep(`<section><div id="root">${deep('<input id="pw" type="password" name="Passwd" autocomplete="current-password">', 4)}
       <input type="checkbox" id="show"><label for="show">Mostrar senha</label></div></section>`, 5)}
       ${deep('<div id="passwordNext"><button id="next" type="button"><span>Avançar</span></button></div>', 3)}
@@ -88,8 +87,41 @@ describe("findSubmitButton", () => {
     expect(findSubmitButton($("#root"), $("#pw"), "password", env)?.id).toBe("next");
   });
 
+  // The structure of Google's OAuth password page (Firefox), values left out.
+  const googlePassword = (captcha: string) => `<main>
+    <div><h1 id="headingText"><span>Hi</span></h1><div data-email="me@example.com">me@example.com</div></div>
+    <div><div><div><div><span>
+      <section><div>To continue, first verify it's you</div></section>
+      <section aria-hidden="true" style="display:none">Too many failed attempts</section>
+      <section><header aria-hidden="true"></header><div><div>
+        <input type="email" name="identifier" style="display:none" tabindex="-1" aria-hidden="true" id="hiddenEmail">
+        <div class="sWKwnd">${deep('<div id="password">' + deep('<input id="pw" type="password" name="Passwd" autocomplete="current-password webauthn">', 3) + "</div>", 4)}
+          <div id="c7"></div>
+          <div>${deep('<input type="checkbox" aria-labelledby="sel"><div id="sel">Show password</div>', 4)}</div>
+        </div>
+        <input type="hidden" name="TrustDevice">
+        <div ${captcha}><img id="captchaimg"><div id="playCaptchaButton"><button type="button" aria-label="Listen and type the numbers you hear"></button></div>
+          <div>${deep('<input type="text" name="ca" id="ca" autocomplete="off">', 4)}</div></div>
+      </div></div></section>
+      <input type="hidden" id="identifierId">
+    </span></div><div><div></div></div></div></div></div>
+    <div><div><div><div id="passwordNext"><div><button id="next" type="button"><span>Next</span></button></div></div>
+      <div><div><button type="button"><span>Try another way</span></button></div></div></div></div>
+      <div aria-hidden="true"><div><button aria-label="Scroll down" type="button"></button></div></div></div></main>`;
+
+  it("Google OAuth password page: presses Next from the field's own group", () => {
+    document.body.innerHTML = googlePassword('style="display:none"');
+    const pw = $("#pw");
+    expect(findSubmitButton(groupRoot(pw), pw, "password", env)?.id).toBe("next");
+  });
+
+  it("Google OAuth password page with its image CAPTCHA shown: no press", () => {
+    document.body.innerHTML = googlePassword("");
+    const pw = $("#pw");
+    expect(findSubmitButton(groupRoot(pw), pw, "password", env)).toBeNull();
+  });
+
   it("does not climb far into a scope holding another field (another form's button)", () => {
-    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
     document.body.innerHTML = `<main>${deep(`<div id="root"><input id="u" type="text" autocomplete="username"></div>`, 6)}
       ${deep('<input type="email" name="newsletter"><button id="sub">Continuar</button>', 2)}</main>`;
     expect(findSubmitButton($("#root"), $("#u"), "username", env)).toBeNull();
@@ -126,6 +158,59 @@ describe("hasChallenge", () => {
       document.body.innerHTML = html;
       expect(hasChallenge(document, env), html).toBe(false);
     }
+  });
+});
+
+describe("waitForSubmitButton", () => {
+
+  it("Google: finds Avançar once the outgoing email view's own Avançar is gone", async () => {
+    document.body.innerHTML = `<main>
+      <div id="old">${deep('<div id="identifierNext"><button id="old-next" type="button">Avançar</button></div>', 3)}</div>
+      ${deep(`<div id="root">${deep('<input id="pw" type="password" name="Passwd" autocomplete="current-password">', 4)}</div>`, 5)}
+      ${deep('<div id="passwordNext"><button id="next" type="button">Avançar</button></div>', 3)}</main>`;
+    // Both views on screen: a tie, no button.
+    expect(findSubmitButton($("#root"), $("#pw"), "password", env)).toBeNull();
+    let polls = 0;
+    const sleep = async () => {
+      if (++polls === 2) $("#old").remove();
+    };
+    const b = await waitForSubmitButton({ root: $("#root"), field: $("#pw"), step: "password", env: () => env, sleep });
+    expect(b?.id).toBe("next");
+  });
+
+  it("finds a button rendered after the field", async () => {
+    document.body.innerHTML = `<main>${deep(`<div id="root">${deep('<input id="pw" type="password">', 4)}</div>`, 5)}<div id="footer"></div></main>`;
+    const sleep = async () => {
+      $("#footer").innerHTML = '<button id="next" type="button">Avançar</button>';
+    };
+    const b = await waitForSubmitButton({ root: $("#root"), field: $("#pw"), step: "password", env: () => env, sleep });
+    expect(b?.id).toBe("next");
+  });
+
+  it("gives up after BUTTON_WAIT_MS", async () => {
+    document.body.innerHTML = `<div id="root"><input id="pw" type="password"></div>`;
+    let slept = 0;
+    const sleep = async (ms: number) => void (slept += ms);
+    expect(await waitForSubmitButton({ root: $("#root"), field: $("#pw"), step: "password", env: () => env, sleep })).toBeNull();
+    expect(slept).toBe(BUTTON_WAIT_MS);
+  });
+
+  it("stops when cancelled or when the field leaves the page", async () => {
+    document.body.innerHTML = `<div id="root"><input id="pw" type="password"></div><div id="footer"></div>`;
+    let cancel = false;
+    const sleep = async () => {
+      cancel = true;
+      $("#footer").innerHTML = '<button type="button">Sign in</button>';
+    };
+    expect(await waitForSubmitButton({ root: $("#root"), field: $("#pw"), step: "password", env: () => env, sleep, cancelled: () => cancel })).toBeNull();
+
+    document.body.innerHTML = `<div id="root"><input id="pw" type="password"></div><div id="footer"></div>`;
+    const field = $("#pw");
+    const gone = async () => {
+      field.remove();
+      $("#footer").innerHTML = '<button type="button">Sign in</button>';
+    };
+    expect(await waitForSubmitButton({ root: $("#root"), field, step: "password", env: () => env, sleep: gone })).toBeNull();
   });
 });
 

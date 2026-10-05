@@ -7,7 +7,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markUserEdit } from "../autofill/fill";
-import { OTP_SETTLE_MS } from "../autofill/submit";
+import { BUTTON_WAIT_MS, OTP_SETTLE_MS } from "../autofill/submit";
 import { SCAN_DEBOUNCE_MS } from "./sso";
 
 /**
@@ -77,10 +77,16 @@ beforeEach(() => {
     <button type="submit">Sign in</button></form>`;
 });
 
+/** The listener's reply: as is when sent at once, a promise of it when the listener replies later (returns true). */
 function deliver(msg: unknown, sender: { id?: string; tab?: unknown } = { id: "ext" }): unknown {
   let out: unknown;
-  listener?.(msg, sender, (r) => (out = r));
-  return out;
+  let resolve: (r: unknown) => void = () => undefined;
+  const later = new Promise<unknown>((r) => (resolve = r));
+  const async = listener?.(msg, sender, (r) => {
+    out = r;
+    resolve(r);
+  });
+  return async === true ? later : out;
 }
 
 const field = (n: string) => document.querySelector<HTMLInputElement>(`[name="${n}"]`) as HTMLInputElement;
@@ -288,9 +294,28 @@ describe("automatic sign-in", () => {
 
     document.body.innerHTML = `<div><input name="user" type="email" autocomplete="username"><input name="pw" type="password">
       <button>Log in</button><button>Sign in</button></div>`;
-    expect(deliver(autoFill())).toEqual({ filled: 2, pressing: null });
-    await vi.advanceTimersByTimeAsync(2000);
+    const tie = deliver(autoFill());
+    await vi.advanceTimersByTimeAsync(BUTTON_WAIT_MS + 500);
+    expect(await tie).toEqual({ filled: 2, pressing: null });
     expect(submitted).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("waits for a button the page renders after the fill (Google's password view), then presses it", async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<main><div><input name="pw" type="password" autocomplete="current-password"></div><div id="footer"></div></main>`;
+    const reply = deliver({ ...autoFill(), fill: { kind: "login", username: null, password: "pw-from-vault" } });
+    expect(reply).toBeInstanceOf(Promise);
+    const next = document.createElement("button");
+    next.type = "button";
+    next.textContent = "Next";
+    const click = vi.fn();
+    next.addEventListener("click", click);
+    await vi.advanceTimersByTimeAsync(300);
+    document.getElementById("footer")?.append(next);
+    await vi.advanceTimersByTimeAsync(BUTTON_WAIT_MS);
+    expect(await reply).toEqual({ filled: 1, pressing: "password" });
+    expect(click).toHaveBeenCalledOnce();
     vi.useRealTimers();
   });
 
