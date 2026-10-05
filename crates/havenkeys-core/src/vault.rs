@@ -606,6 +606,12 @@ impl std::fmt::Debug for StagedWrite {
 }
 
 impl StagedWrite {
+    /// The type of the item this write stores; `None` for a deletion (or a
+    /// test write built from raw bytes).
+    pub fn item_type(&self) -> Option<ItemType> {
+        self.plain.as_ref().map(|o| o.item_type)
+    }
+
     /// Builds a [`StagedWrite`] directly from raw blobs, bypassing the
     /// normal staging path (which seals `overview`/`details` under the
     /// unlocked vault's session and records `plain` for the in-memory

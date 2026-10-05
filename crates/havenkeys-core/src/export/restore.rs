@@ -4,7 +4,7 @@
 //! cannot carry — passkeys, password history, app bindings — is checked
 //! here before it is put back.
 
-use super::backup::BackupItem;
+use super::backup::{BackupItem, OpenedBackup};
 use crate::app_target::valid_package;
 use crate::card::CardInput;
 use crate::custom_field::{FieldInput, FieldSection, FieldValue, FieldValueInput, SectionInput};
@@ -45,12 +45,14 @@ fn sections_input(sections: Vec<FieldSection>) -> Vec<SectionInput> {
                         FieldValue::Phone(v) => FieldValueInput::Phone(v),
                         FieldValue::Date(v) => FieldValueInput::Date(v),
                         FieldValue::Address(a) => FieldValueInput::Address(a),
-                        FieldValue::Password(p) => {
-                            FieldValueInput::Password(p.map_or(SecretUpdate::Clear, SecretUpdate::Set))
-                        }
-                        FieldValue::Otp(c) => FieldValueInput::Otp(
-                            c.map_or(SecretUpdate::Clear, |c| SecretUpdate::Set(c.to_otpauth_uri())),
+                        FieldValue::Password(p) => FieldValueInput::Password(
+                            p.map_or(SecretUpdate::Clear, SecretUpdate::Set),
                         ),
+                        FieldValue::Otp(c) => {
+                            FieldValueInput::Otp(c.map_or(SecretUpdate::Clear, |c| {
+                                SecretUpdate::Set(c.to_otpauth_uri())
+                            }))
+                        }
                     },
                 })
                 .collect(),
@@ -88,10 +90,14 @@ fn check_history(history: &[PreviousPassword]) -> Result<()> {
 
 fn check_bindings(bindings: &[AppBinding]) -> Result<()> {
     let hex_ok = |s: &str| {
-        s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        s.len() == 64
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     };
     if bindings.len() > MAX_APP_BINDINGS
-        || !bindings.iter().all(|b| valid_package(&b.package) && hex_ok(&b.cert_sha256))
+        || !bindings
+            .iter()
+            .all(|b| valid_package(&b.package) && hex_ok(&b.cert_sha256))
     {
         return Err(BAD);
     }
@@ -100,7 +106,10 @@ fn check_bindings(bindings: &[AppBinding]) -> Result<()> {
 
 /// Rebuild one backup item as if it were typed in, under `id`.
 fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetails)> {
-    let BackupItem { overview: ov, details } = item;
+    let BackupItem {
+        overview: ov,
+        details,
+    } = item;
     if details.item_type() != ov.item_type {
         return Err(BAD);
     }
@@ -158,7 +167,12 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
     let (mut overview, mut details) = build_item(id, input, None, ov.created_at, ov.updated_at)?;
     if let (
         Some((history, keys, bindings)),
-        ItemDetails::Login { password_history, passkeys, app_bindings, .. },
+        ItemDetails::Login {
+            password_history,
+            passkeys,
+            app_bindings,
+            ..
+        },
     ) = (extra, &mut details)
     {
         overview.has_passkey = !keys.is_empty();
@@ -169,19 +183,56 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
     Ok((overview, details))
 }
 
+impl ImportReport {
+    /// A staged restore write the server refused because a live item already
+    /// holds its ID (another device wrote it after this one pulled): it moves
+    /// from its type's count to `skipped_existing`.
+    pub fn restore_found_existing(&mut self, item_type: Option<ItemType>) {
+        let count = match item_type {
+            Some(ItemType::Login) => Some(&mut self.logins),
+            Some(ItemType::SecureNote) => Some(&mut self.secure_notes),
+            Some(ItemType::Card) => Some(&mut self.cards),
+            Some(ItemType::Identity) => Some(&mut self.identities),
+            None => None,
+        };
+        if let Some(count) = count {
+            *count = count.saturating_sub(1);
+        }
+        self.skipped_existing += 1;
+        self.imported = self.imported.saturating_sub(1);
+    }
+}
+
 impl VaultService {
     /// Seal every backup item not already here (spec 2026-10-05-export §6).
     /// Items keep their IDs; the Identity takes this vault's identity ID.
-    /// Nothing is ever overwritten. Sent and committed like `stage_import`.
-    pub fn stage_restore(&self, items: Vec<BackupItem>, _now_ms: i64) -> Result<StagedImport> {
+    /// Nothing is ever overwritten. Items the file held but this version
+    /// could not read count as `failed`.
+    ///
+    /// Every write is staged as new (`base_revision = None`). An item deleted
+    /// since the backup was made still has a tombstone on the server, which
+    /// refuses such a write; the client resolves that per item when it sends
+    /// these (`HavenClient::push_restore`), so pull first: "already here" is
+    /// only as fresh as the replica.
+    pub fn stage_restore(&self, backup: OpenedBackup, _now_ms: i64) -> Result<StagedImport> {
         let session = self.session()?;
         let identity_id = session.identity_id;
-        let mut report = ImportReport::default();
+        let mut report = ImportReport {
+            failed: backup.unreadable,
+            ..ImportReport::default()
+        };
         let mut writes = Vec::new();
         let mut seen = std::collections::HashSet::new();
-        for item in items {
+        for item in backup.items {
             let id = match item.overview.item_type {
                 ItemType::Identity => identity_id,
+                // Only the Identity may live under the identity ID: anything
+                // else there would squat the slot the account's Identity
+                // is created in.
+                _ if item.overview.id == identity_id => {
+                    report.failed += 1;
+                    continue;
+                }
                 _ => item.overview.id,
             };
             if session.overviews.contains_key(&id) || !seen.insert(id) {
@@ -239,5 +290,35 @@ mod tests {
             .map(|_| passkey("github.com", good_key.clone()))
             .collect();
         assert!(check_passkeys(&too_many).is_err());
+    }
+
+    /// A non-Identity item under this vault's identity ID would squat the
+    /// slot the account's Identity lives in: it fails, the rest restores.
+    #[test]
+    fn nothing_but_the_identity_may_take_the_identity_id() {
+        use crate::model::{ItemInput, ItemType};
+        let vault = crate::local::tests::unlocked_vault();
+        let identity_id = vault.session().unwrap().identity_id;
+        let note = |id| {
+            let input = ItemInput {
+                content: SecretUpdate::Set("body".into()),
+                ..ItemInput::blank(ItemType::SecureNote, "Note".into())
+            };
+            let (overview, details) = build_item(id, input, None, 1, 1).unwrap();
+            BackupItem { overview, details }
+        };
+        let other = uuid::Uuid::new_v4();
+        let staged = vault
+            .stage_restore(
+                OpenedBackup {
+                    items: vec![note(identity_id), note(other)],
+                    unreadable: 0,
+                },
+                1,
+            )
+            .unwrap();
+        assert_eq!((staged.report.imported, staged.report.failed), (1, 1));
+        assert_eq!(staged.writes.len(), 1);
+        assert_eq!(staged.writes[0].item_id, other);
     }
 }

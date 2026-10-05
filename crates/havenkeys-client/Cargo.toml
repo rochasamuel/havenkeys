@@ -34,3 +34,5 @@ deadpool-postgres = "0.14"
 # Integration tests need the key-store fakes, which `cfg(test)` does not
 # expose to them.
 havenkeys-client = { path = ".", features = ["testing"] }
+# ItemInput::blank_for_tests, for the restore tests.
+havenkeys-core = { path = "../havenkeys-core", features = ["test-util"] }

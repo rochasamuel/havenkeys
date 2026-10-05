@@ -17,6 +17,7 @@ pub mod key_store;
 pub mod kit;
 mod pairing;
 mod removal;
+mod restore;
 #[cfg(test)]
 mod stub_server;
 mod sync;

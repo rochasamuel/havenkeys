@@ -24,12 +24,33 @@ impl std::fmt::Debug for BackupItem {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+/// The payload envelope as read back. Items stay raw JSON here and are
+/// parsed one by one, so a single item this version cannot read is counted
+/// as failed instead of sinking the whole restore.
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct Payload {
-    pub version: u32,
-    pub exported_at: i64,
+struct Payload {
+    version: u32,
+    #[allow(dead_code)]
+    exported_at: i64,
+    items: Vec<serde_json::Value>,
+}
+
+/// What `open_backup` read: the items that parsed, and how many did not.
+pub struct OpenedBackup {
     pub items: Vec<BackupItem>,
+    /// Items present in the file that this version cannot read; counted as
+    /// `failed` by the restore.
+    pub unreadable: usize,
+}
+
+impl std::fmt::Debug for OpenedBackup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenedBackup")
+            .field("items", &self.items.len())
+            .field("unreadable", &self.unreadable)
+            .finish()
+    }
 }
 
 /// Serialize borrowed items without cloning their secrets.
@@ -57,6 +78,10 @@ pub const MAX_BACKUP_BYTES: u64 = crate::import::MAX_TEXT_EXPORT_BYTES;
 const NOT_A_BACKUP: Error = Error::InvalidInput("not a HavenKeys backup file");
 const NEWER: Error = Error::InvalidInput("this backup was made by a newer version of HavenKeys");
 const WRONG_PASSWORD: Error = Error::InvalidInput("wrong backup password, or the file is damaged");
+/// The file decrypted, so the password was right and the bytes are what was
+/// sealed; this version just cannot read what is inside.
+const UNREADABLE: Error =
+    Error::InvalidInput("this backup can't be read by this version of HavenKeys");
 
 fn header(kdf: &KdfParams) -> [u8; HEADER_LEN] {
     let mut h = [0u8; HEADER_LEN];
@@ -97,7 +122,7 @@ pub fn seal_backup(payload: &[u8], password: &SecretString, kdf: &KdfParams) -> 
 
 /// Read a backup file: hostile input, checked in the order of spec §5.1.
 /// Slow (Argon2id).
-pub fn open_backup(file: &[u8], password: &SecretString) -> Result<Vec<BackupItem>> {
+pub fn open_backup(file: &[u8], password: &SecretString) -> Result<OpenedBackup> {
     if file.len() as u64 > MAX_BACKUP_BYTES {
         return Err(Error::InvalidInput("backup file is too large"));
     }
@@ -105,7 +130,11 @@ pub fn open_backup(file: &[u8], password: &SecretString) -> Result<Vec<BackupIte
         return Err(NOT_A_BACKUP);
     }
     if file[8] != FILE_VERSION {
-        return Err(if file[8] > FILE_VERSION { NEWER } else { NOT_A_BACKUP });
+        return Err(if file[8] > FILE_VERSION {
+            NEWER
+        } else {
+            NOT_A_BACKUP
+        });
     }
     if file[9] != KDF_ARGON2ID {
         return Err(NOT_A_BACKUP);
@@ -123,18 +152,35 @@ pub fn open_backup(file: &[u8], password: &SecretString) -> Result<Vec<BackupIte
     let (head, body) = file.split_at(HEADER_LEN);
     let key = derive_master_key(password, &kdf)?;
     let plain = blob::open(&key, &BlobContext::backup(head), body).map_err(|_| WRONG_PASSWORD)?;
-    // Version first, so a newer payload says so instead of "damaged".
+    // From here on the AEAD has authenticated the bytes: a failure is a
+    // format this version does not understand, never a wrong password.
+    // Version first, so a newer payload says so.
     #[derive(serde::Deserialize)]
     struct Version {
         version: u32,
     }
-    let v: Version = serde_json::from_slice(&plain).map_err(|_| WRONG_PASSWORD)?;
+    let v: Version = serde_json::from_slice(&plain).map_err(|_| UNREADABLE)?;
     if v.version != PAYLOAD_VERSION {
-        return Err(if v.version > PAYLOAD_VERSION { NEWER } else { WRONG_PASSWORD });
+        return Err(if v.version > PAYLOAD_VERSION {
+            NEWER
+        } else {
+            UNREADABLE
+        });
     }
-    let payload: Payload = serde_json::from_slice(&plain).map_err(|_| WRONG_PASSWORD)?;
+    let payload: Payload = serde_json::from_slice(&plain).map_err(|_| UNREADABLE)?;
+    if payload.version != PAYLOAD_VERSION {
+        return Err(UNREADABLE);
+    }
     if payload.items.len() > MAX_ITEMS {
         return Err(Error::InvalidInput("backup contains too many items"));
     }
-    Ok(payload.items)
+    let mut items = Vec::with_capacity(payload.items.len());
+    let mut unreadable = 0;
+    for raw in payload.items {
+        match serde_json::from_value::<BackupItem>(raw) {
+            Ok(item) => items.push(item),
+            Err(_) => unreadable += 1,
+        }
+    }
+    Ok(OpenedBackup { items, unreadable })
 }

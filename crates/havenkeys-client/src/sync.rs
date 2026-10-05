@@ -255,7 +255,7 @@ impl HavenClient {
     }
 }
 
-fn revision_for(applied: &[(Uuid, i64)], item_id: Uuid) -> ClientResult<i64> {
+pub(crate) fn revision_for(applied: &[(Uuid, i64)], item_id: Uuid) -> ClientResult<i64> {
     applied
         .iter()
         .find(|(id, _)| *id == item_id)

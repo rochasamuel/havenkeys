@@ -155,7 +155,7 @@ pub async fn restore_backup(
     };
     let path = picked.into_path().map_err(|_| CmdError::file())?;
     let read_path = path.clone();
-    let items = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
+    let opened = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
         let bytes = read_limited(&read_path, havenkeys_core::export::backup::MAX_BACKUP_BYTES)?;
         Ok(havenkeys_core::export::backup::open_backup(
             &bytes,
@@ -164,16 +164,13 @@ pub async fn restore_backup(
     })
     .await
     .map_err(|_| CmdError::internal())??;
-    let staged = app
-        .state::<AppState>()
-        .vault()?
-        .stage_restore(items, AppState::now_ms())?;
-    let mut report = staged.report;
-    report.imported = app
+    // Pulls first, then sends; an item deleted since the backup comes back,
+    // a live one is never overwritten (havenkeys-client `restore`).
+    let report = app
         .state::<AppState>()
         .client()
         .clone()
-        .push_batches(staged.writes)
+        .restore_backup(opened)
         .await?;
     let file_name = path
         .file_name()
