@@ -66,6 +66,21 @@ impl MobileVault {
         let client = self.client.clone();
         Ok(self.block_on(client.remove_device(confirmation))?)
     }
+
+    /// Deletes the account on the server, then this phone's copy (vault
+    /// file and Secret Key file); the app deletes its Keystore keys on the
+    /// `account_deleted` event.
+    pub fn delete_account(
+        &self,
+        confirmation: String,
+        master_password: String,
+    ) -> MobileResult<()> {
+        let client = self.client.clone();
+        Ok(self.block_on(client.delete_account(
+            confirmation,
+            havenkeys_core::SecretString::new(master_password),
+        ))?)
+    }
 }
 
 impl MobileVault {

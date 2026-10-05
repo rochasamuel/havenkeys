@@ -670,13 +670,16 @@ internal interface UniffiCallbackInterfaceVaultEventsMethod4 : com.sun.jna.Callb
 internal interface UniffiCallbackInterfaceVaultEventsMethod5 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceVaultEventsMethod6 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceKeystoreCipherMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`plaintext`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceKeystoreCipherMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`sealed`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "locked", "unlocked", "connectivity", "signedOut", "itemsChanged", "removed")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "locked", "unlocked", "connectivity", "signedOut", "itemsChanged", "removed", "accountDeleted")
 internal open class UniffiVTableCallbackInterfaceVaultEvents(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -686,6 +689,7 @@ internal open class UniffiVTableCallbackInterfaceVaultEvents(
     @JvmField internal var `signedOut`: UniffiCallbackInterfaceVaultEventsMethod3? = null,
     @JvmField internal var `itemsChanged`: UniffiCallbackInterfaceVaultEventsMethod4? = null,
     @JvmField internal var `removed`: UniffiCallbackInterfaceVaultEventsMethod5? = null,
+    @JvmField internal var `accountDeleted`: UniffiCallbackInterfaceVaultEventsMethod6? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -696,7 +700,8 @@ internal open class UniffiVTableCallbackInterfaceVaultEvents(
         `signedOut`: UniffiCallbackInterfaceVaultEventsMethod3? = null,
         `itemsChanged`: UniffiCallbackInterfaceVaultEventsMethod4? = null,
         `removed`: UniffiCallbackInterfaceVaultEventsMethod5? = null,
-    ): UniffiVTableCallbackInterfaceVaultEvents(`uniffiFree`,`uniffiClone`,`locked`,`unlocked`,`connectivity`,`signedOut`,`itemsChanged`,`removed`,), Structure.ByValue
+        `accountDeleted`: UniffiCallbackInterfaceVaultEventsMethod6? = null,
+    ): UniffiVTableCallbackInterfaceVaultEvents(`uniffiFree`,`uniffiClone`,`locked`,`unlocked`,`connectivity`,`signedOut`,`itemsChanged`,`removed`,`accountDeleted`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceVaultEvents) {
         `uniffiFree` = other.`uniffiFree`
@@ -707,6 +712,7 @@ internal open class UniffiVTableCallbackInterfaceVaultEvents(
         `signedOut` = other.`signedOut`
         `itemsChanged` = other.`itemsChanged`
         `removed` = other.`removed`
+        `accountDeleted` = other.`accountDeleted`
     }
 
 }
@@ -771,9 +777,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_removed(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_account_deleted(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_keystorecipher_seal(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_keystorecipher_open(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_delete_account(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_devices(
     ): Int
@@ -941,6 +951,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_vaultevents_removed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_vaultevents_account_deleted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_havenkeys_mobile_fn_clone_keystorecipher(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_havenkeys_mobile_fn_free_keystorecipher(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -957,6 +969,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_constructor_mobilevault_new(`config`: RustBuffer.ByValue,`events`: Long,`cipher`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_delete_account(`ptr`: Long,`confirmation`: RustBuffer.ByValue,`masterPassword`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_devices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_remove_device(`ptr`: Long,`confirmation`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1223,10 +1237,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_vaultevents_removed() and 0xFFFF) != 45847) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_vaultevents_account_deleted() and 0xFFFF) != 12606) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_keystorecipher_seal() and 0xFFFF) != 9986) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_keystorecipher_open() and 0xFFFF) != 4294) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_delete_account() and 0xFFFF) != 50945) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_devices() and 0xFFFF) != 31665) {
@@ -2225,6 +2245,13 @@ public object FfiConverterTypeKeystoreCipher: FfiConverter<KeystoreCipher, Long>
 
 public interface MobileVaultInterface {
     
+    /**
+     * Deletes the account on the server, then this phone's copy (vault
+     * file and Secret Key file); the app deletes its Keystore keys on the
+     * `account_deleted` event.
+     */
+    fun `deleteAccount`(`confirmation`: kotlin.String, `masterPassword`: kotlin.String)
+    
     fun `devices`(): List<DeviceInfo>
     
     /**
@@ -2592,6 +2619,26 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
             UniffiLib.uniffi_havenkeys_mobile_fn_clone_mobilevault(handle, status)
         }
     }
+
+    
+    /**
+     * Deletes the account on the server, then this phone's copy (vault
+     * file and Secret Key file); the app deletes its Keystore keys on the
+     * `account_deleted` event.
+     */
+    @Throws(MobileException::class)override fun `deleteAccount`(`confirmation`: kotlin.String, `masterPassword`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_delete_account(
+        it,
+        
+        FfiConverterString.lower(`confirmation`),
+        FfiConverterString.lower(`masterPassword`),_status)
+}
+    }
+    
+    
 
     
     @Throws(MobileException::class)override fun `devices`(): List<DeviceInfo> {
@@ -3792,6 +3839,12 @@ public interface VaultEvents {
     
     fun `removed`()
     
+    /**
+     * The account was deleted (here or on another device) and this phone's
+     * copy erased. The app deletes its Keystore keys, as for `removed`.
+     */
+    fun `accountDeleted`()
+    
     companion object
 }
 
@@ -3971,6 +4024,22 @@ open class VaultEventsImpl: Disposable, AutoCloseable, VaultEvents
     
 
     
+    /**
+     * The account was deleted (here or on another device) and this phone's
+     * copy erased. The app deletes its Keystore keys, as for `removed`.
+     */override fun `accountDeleted`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_vaultevents_account_deleted(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
 
     
 
@@ -4056,6 +4125,17 @@ internal object uniffiCallbackInterfaceVaultEvents {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
+    internal object `accountDeleted`: UniffiCallbackInterfaceVaultEventsMethod6 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeVaultEvents.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`accountDeleted`(
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
 
     internal object uniffiFree: UniffiCallbackInterfaceFree {
         override fun callback(handle: Long) {
@@ -4078,6 +4158,7 @@ internal object uniffiCallbackInterfaceVaultEvents {
         `signedOut`,
         `itemsChanged`,
         `removed`,
+        `accountDeleted`,
     )
 
     // Registers the foreign callback with the Rust side.

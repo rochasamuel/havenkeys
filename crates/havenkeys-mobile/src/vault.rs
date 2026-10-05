@@ -126,6 +126,8 @@ impl MobileVault {
                 vault_path: path,
             },
         );
+        // A wipe of a deleted account that a previous run did not finish.
+        client.finish_pending_deletion();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("havenkeys")
@@ -242,6 +244,9 @@ pub(crate) mod tests {
         fn removed(&self) {
             self.0.lock().unwrap().push("removed".into())
         }
+        fn account_deleted(&self) {
+            self.0.lock().unwrap().push("account_deleted".into())
+        }
     }
 
     /// Stands in for the Keystore: XOR, so the file is not the plaintext.
@@ -281,6 +286,38 @@ pub(crate) mod tests {
         let (vault, seen) = mobile(dir);
         havenkeys_client::testing::seed_account_vault(&vault.client, PASSWORD);
         (vault, seen)
+    }
+
+    #[test]
+    fn a_deletion_cut_short_is_finished_when_the_app_starts() {
+        let dir = tempfile::tempdir().unwrap();
+        let account_id = {
+            let (vault, _) = unlocked(dir.path());
+            let id = vault
+                .client
+                .vault()
+                .unwrap()
+                .account()
+                .unwrap()
+                .unwrap()
+                .account_id;
+            vault.client.lock("user");
+            id
+        };
+        std::fs::write(
+            dir.path().join("vault.sqlite3.pending-deletion"),
+            account_id.to_string(),
+        )
+        .unwrap();
+        let (vault, seen) = mobile(dir.path());
+        assert!(vault.client.vault().unwrap().account().unwrap().is_none());
+        for _ in 0..200 {
+            if seen.has("account_deleted") {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("the app was never told");
     }
 
     pub(crate) fn code(e: crate::MobileError) -> String {

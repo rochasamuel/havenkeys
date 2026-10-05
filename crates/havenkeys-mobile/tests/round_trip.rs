@@ -21,6 +21,7 @@ impl VaultEvents for Quiet {
     fn signed_out(&self) {}
     fn items_changed(&self) {}
     fn removed(&self) {}
+    fn account_deleted(&self) {}
 }
 
 struct Xor;
@@ -384,6 +385,7 @@ impl havenkeys_client::ClientEvents for QuietClient {
     fn synced(&self, _: havenkeys_core::sync::SyncReport) {}
     fn items_changed(&self) {}
     fn removed(&self, _: bool) {}
+    fn account_deleted(&self, _: bool) {}
 }
 
 /// A bare desktop client with no vault, as the sign-in screen has.
@@ -435,4 +437,12 @@ fn the_phone_approves_a_new_desktop_once() {
     assert_eq!(code(again), "pairing_gone");
 
     rt.block_on(server.cleanup());
+}
+
+#[test]
+fn a_phone_without_an_open_vault_cannot_delete_the_account() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = phone(dir.path());
+    let err = v.delete_account(EMAIL.into(), PASSWORD.into()).unwrap_err();
+    assert_eq!(code(err), "locked");
 }
