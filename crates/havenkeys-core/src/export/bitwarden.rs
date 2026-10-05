@@ -114,6 +114,18 @@ fn field(name: &str, value: SecretString, hidden: bool) -> Field {
     Field { name: name.to_owned(), value, r#type: u8::from(hidden), linked_id: None }
 }
 
+/// Bitwarden refuses an item without a name, so an empty title gets one.
+fn name(ov: &ItemOverview, details: &ItemDetails) -> String {
+    if !ov.title.trim().is_empty() {
+        return ov.title.clone();
+    }
+    match details {
+        ItemDetails::Identity(_) => "Identity".to_owned(),
+        ItemDetails::Card(f) => f.effective_brand().display_name().to_owned(),
+        _ => "Untitled".to_owned(),
+    }
+}
+
 fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
     let mut it = Item {
         id: ov.id,
@@ -121,7 +133,7 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
         folder_id: None,
         r#type: 1,
         reprompt: 0,
-        name: ov.title.clone(),
+        name: name(ov, &details),
         notes: None,
         favorite: false,
         fields: Vec::new(),
@@ -262,4 +274,37 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
     })?;
     out.write_all(b"]}").map_err(|_| Error::Encryption)?;
     Ok(Rendered { bytes: out, summary })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::card::{CardBrand, CardFields};
+    use crate::model::ItemType;
+
+    fn overview(item_type: ItemType, title: &str) -> ItemOverview {
+        let input = crate::model::ItemInput {
+            content: crate::model::SecretUpdate::Set("x".into()),
+            ..crate::model::ItemInput::blank(ItemType::SecureNote, "t".into())
+        };
+        let (mut ov, _) = crate::vault::build_item(uuid::Uuid::nil(), input, None, 0, 0).unwrap();
+        ov.item_type = item_type;
+        ov.title = title.to_owned();
+        ov
+    }
+
+    #[test]
+    fn an_empty_title_never_becomes_an_empty_name() {
+        let identity = ItemDetails::Identity(Box::default());
+        assert_eq!(item(&overview(ItemType::Identity, ""), identity).name, "Identity");
+        let card = ItemDetails::Card(Box::new(CardFields {
+            brand: Some(CardBrand::Visa),
+            ..Default::default()
+        }));
+        assert_eq!(item(&overview(ItemType::Card, " "), card).name, "Visa");
+        let note = ItemDetails::SecureNote { content: "x".into() };
+        assert_eq!(item(&overview(ItemType::SecureNote, ""), note).name, "Untitled");
+        let note = ItemDetails::SecureNote { content: "x".into() };
+        assert_eq!(item(&overview(ItemType::SecureNote, "Kept"), note).name, "Kept");
+    }
 }
