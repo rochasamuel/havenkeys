@@ -445,3 +445,19 @@ fn fuzz_asset_links_parser() {
         }
     }
 }
+
+#[test]
+fn fuzz_backup_file() {
+    use havenkeys_core::export::backup::{open_backup, seal_backup};
+    let pw = secret("fuzzing backup passphrase");
+    let valid = seal_backup(br#"{"version":1,"exportedAt":0,"items":[]}"#, &pw, &fast_kdf()).unwrap();
+    let mut rng = Rng::new(0xbac_c0de);
+    // Each open runs Argon2id at the cheapest cost; keep the count modest.
+    for _ in 0..200 {
+        let input = if rng.below(4) == 0 { rng.bytes(128) } else { mutate(&mut rng, &valid) };
+        // Must never panic; a mutated file must never open.
+        if input != valid {
+            assert!(open_backup(&input, &pw).is_err());
+        }
+    }
+}

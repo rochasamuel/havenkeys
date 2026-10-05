@@ -141,3 +141,81 @@ fn an_unreadable_item_is_counted_not_fatal() {
     let s = export::summarize(&v, ExportFormat::Csv).unwrap();
     assert_eq!((s.logins, s.unreadable), (1, 1));
 }
+
+use havenkeys_core::export::backup::{open_backup, seal_backup, HEADER_LEN};
+
+fn backup_of(vault: &VaultService, password: &str) -> Vec<u8> {
+    let payload = export::render(vault, ExportFormat::Backup, NOW).unwrap();
+    seal_backup(&payload.bytes, &secret(password), &fast_kdf()).unwrap()
+}
+
+const BACKUP_PW: &str = "a separate backup passphrase";
+
+#[test]
+fn a_backup_opens_with_its_password_only() {
+    let (mut vault, _sk) = activated_vault();
+    commit_all(&mut vault, vec![login("GitHub", "octo", "pw1", "https://github.com")]);
+    let file = backup_of(&vault, BACKUP_PW);
+    assert_eq!(&file[..8], b"HKBACKUP");
+    // Nothing readable in the file.
+    assert!(!file.windows(3).any(|w| w == b"pw1"));
+    assert!(!file.windows(6).any(|w| w == b"GitHub"));
+    let items = open_backup(&file, &secret(BACKUP_PW)).unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].overview.title, "GitHub");
+    assert!(matches!(
+        open_backup(&file, &secret("wrong backup passphrase")),
+        Err(Error::InvalidInput("wrong backup password, or the file is damaged"))
+    ));
+}
+
+#[test]
+fn every_tampered_byte_is_refused() {
+    let (vault, _sk) = activated_vault();
+    let file = backup_of(&vault, BACKUP_PW);
+    // Version (8), KDF algorithm (9), each KDF parameter, the salt and the blob.
+    for pos in [8, 9, 10, 14, 18, 22, 37, HEADER_LEN, HEADER_LEN + 2, file.len() - 1] {
+        let mut bad = file.clone();
+        bad[pos] ^= 0x01;
+        assert!(open_backup(&bad, &secret(BACKUP_PW)).is_err(), "byte {pos}");
+    }
+}
+
+#[test]
+fn malformed_backups_are_refused_with_a_fixed_message() {
+    let (vault, _sk) = activated_vault();
+    let file = backup_of(&vault, BACKUP_PW);
+    let not_ours = Error::InvalidInput("not a HavenKeys backup file");
+    for bad in [&b""[..], b"HKBACKU", &file[..HEADER_LEN], b"PK\x03\x04 a zip file......................................"] {
+        assert_eq!(
+            open_backup(bad, &secret(BACKUP_PW)).unwrap_err().to_string(),
+            not_ours.to_string()
+        );
+    }
+    let mut newer = file.clone();
+    newer[8] = 2;
+    assert!(matches!(
+        open_backup(&newer, &secret(BACKUP_PW)),
+        Err(Error::InvalidInput("this backup was made by a newer version of HavenKeys"))
+    ));
+    // KDF parameters outside the accepted range (memory = 1 GiB + 1 KiB).
+    let mut greedy = file.clone();
+    greedy[10..14].copy_from_slice(&(1024 * 1024 + 1u32).to_le_bytes());
+    assert!(matches!(
+        open_backup(&greedy, &secret(BACKUP_PW)),
+        Err(Error::InvalidInput("not a HavenKeys backup file"))
+    ));
+}
+
+#[test]
+fn a_payload_with_unknown_fields_is_refused() {
+    let payload = br#"{"version":1,"exportedAt":0,"items":[],"extra":true}"#;
+    let file = seal_backup(payload, &secret(BACKUP_PW), &fast_kdf()).unwrap();
+    assert!(open_backup(&file, &secret(BACKUP_PW)).is_err());
+    let newer = br#"{"version":2,"exportedAt":0,"items":[]}"#;
+    let file = seal_backup(newer, &secret(BACKUP_PW), &fast_kdf()).unwrap();
+    assert!(matches!(
+        open_backup(&file, &secret(BACKUP_PW)),
+        Err(Error::InvalidInput("this backup was made by a newer version of HavenKeys"))
+    ));
+}
