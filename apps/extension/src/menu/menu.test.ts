@@ -112,6 +112,30 @@ describe("field menu copy and size", () => {
     expect(row.querySelector(".user")?.classList.contains("copy")).toBe(true);
   });
 
+  it("names each code's account, so logins with the same title can be told apart", async () => {
+    replies = [
+      {
+        ok: true,
+        value: {
+          state: "ready",
+          kind: "otp",
+          site: "github.com",
+          items: [
+            { id: ITEM, title: "GitHub", username: "octo", provider: null },
+            { id: "22222222-2222-4222-8222-222222222222", title: "GitHub", username: null, provider: null },
+          ],
+          passkeys: [],
+          hint: null,
+        },
+      },
+    ];
+    await load();
+    const users = [...document.querySelectorAll("button.row .user")];
+    expect(users.map((u) => u.textContent)).toEqual(["octo · one-time code", "Fill one-time code"]);
+    // The username is user data and truncates; our own copy wraps.
+    expect(users.map((u) => u.classList.contains("copy"))).toEqual([false, true]);
+  });
+
   it("reports the height its rows need so the frame can grow for wrapped rows", async () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       const height = this.tagName === "HEADER" ? 34 : this.classList.contains("row") ? 64 : 0;

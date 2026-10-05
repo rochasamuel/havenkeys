@@ -78,8 +78,10 @@ function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButt
       detail: item.username === null,
     });
   }
-  const detail = kind === "otp" ? msg.menu.fillCode : (item.username ?? msg.common.noUsername);
-  const copy = { title: false, detail: kind === "otp" || item.username === null };
+  // A code row names its account too: logins often share a title.
+  const detail =
+    item.username === null ? (kind === "otp" ? msg.menu.fillCode : msg.common.noUsername) : kind === "otp" ? msg.menu.codeRow(item.username) : item.username;
+  const copy = { title: false, detail: item.username === null };
   return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy);
 }
 

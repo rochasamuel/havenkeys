@@ -135,6 +135,7 @@ export const ptBR: Messages = {
     unavailable: "Indisponível",
     couldNotFill: "Não foi possível preencher",
     fillCode: "Preencher código de verificação",
+    codeRow: (account: string) => `${account} · código de verificação`,
     generateTitle: "Gerar senha forte",
     generateBody: "Preenche os campos de nova senha",
     generateSettings: "Configurações da senha",

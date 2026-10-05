@@ -167,6 +167,7 @@ export const en = {
     unavailable: "Unavailable",
     couldNotFill: "Could not fill",
     fillCode: "Fill one-time code",
+    codeRow: (account: string) => `${account} · one-time code`,
     generateTitle: "Generate strong password",
     generateBody: "Fills the new password fields",
     generateSettings: "Password settings",
