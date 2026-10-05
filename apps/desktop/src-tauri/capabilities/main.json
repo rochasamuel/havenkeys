@@ -31,6 +31,7 @@
     "allow-list-devices",
     "allow-revoke-device",
     "allow-remove-device",
+    "allow-delete-account",
     "allow-sync-now",
     "allow-resync-vault",
     "allow-get-emergency-kit",

@@ -24,6 +24,7 @@ const COMMANDS: &[&str] = &[
     "list_devices",
     "revoke_device",
     "remove_device",
+    "delete_account",
     "get_emergency_kit",
     "reveal_account_secret_key",
     "copy_account_field",

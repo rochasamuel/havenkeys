@@ -12,6 +12,12 @@ use tauri::{AppHandle, Emitter, Manager};
 /// the first-run screen. Carries `Removed`.
 pub const REMOVED_EVENT: &str = "vault://removed";
 
+/// The account was deleted (here or on another device) and this computer's
+/// copy erased: the UI returns to first run and says why. Carries `Removed`.
+pub const ACCOUNT_DELETED_EVENT: &str = "vault://account-deleted";
+
+const KEYCHAIN_NOT_CLEARED_DELETED: &str = "The account was deleted, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry \u{201c}app.havenkeys\u{201d} yourself.";
+
 const KEYCHAIN_NOT_CLEARED: &str = "This computer was removed, but HavenKeys could not delete the Secret Key from the system keychain. Delete the entry \u{201c}app.havenkeys\u{201d} yourself.";
 
 #[derive(Clone, Serialize)]
@@ -70,5 +76,12 @@ impl ClientEvents for DesktopEvents {
             keychain_warning: (!keychain_cleared).then_some(KEYCHAIN_NOT_CLEARED),
         };
         let _ = self.app.emit(REMOVED_EVENT, payload);
+    }
+
+    fn account_deleted(&self, keychain_cleared: bool) {
+        let payload = Removed {
+            keychain_warning: (!keychain_cleared).then_some(KEYCHAIN_NOT_CLEARED_DELETED),
+        };
+        let _ = self.app.emit(ACCOUNT_DELETED_EVENT, payload);
     }
 }

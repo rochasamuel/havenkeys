@@ -230,6 +230,8 @@ pub fn run() {
                     vault_path: path.clone(),
                 },
             );
+            // A wipe of a deleted account that a previous run did not finish.
+            client.finish_pending_deletion();
             let bridge = browser_bridge(app.handle(), vault.clone());
             app.manage(AppState::new(client, vault, bridge.clone()));
             migrate_secret_key_in_background(app.handle().clone());
@@ -296,6 +298,7 @@ pub fn run() {
             account::list_devices,
             account::revoke_device,
             removal::remove_device,
+            removal::delete_account,
             emergency_kit::get_emergency_kit,
             account::reveal_account_secret_key,
             account::copy_account_field,

@@ -176,6 +176,9 @@ export const api = {
   revokeDevice: (id: string) => call<void>("revoke_device", { id }),
   /** Remove this computer from the account; the vault stays on the server. */
   removeDevice: (confirmation: string) => call<void>("remove_device", { confirmation }),
+  /** Delete the account on the server and this computer's copy. Irreversible. */
+  deleteAccount: (confirmation: string, masterPassword: string) =>
+    call<void>("delete_account", { confirmation, masterPassword }),
   syncNow: () => call<SyncReport>("sync_now"),
   /** Re-download the whole vault. For a replica suspected to be stale. */
   resync: () => call<SyncReport>("resync_vault"),
@@ -220,6 +223,11 @@ export const api = {
    */
   onRemoved: (handler: (removed: { keychainWarning: string | null }) => void): Promise<UnlistenFn> =>
     listen<{ keychainWarning: string | null }>("vault://removed", (e) =>
+      handler({ keychainWarning: e.payload?.keychainWarning ?? null }),
+    ),
+  /** The account was deleted (here or elsewhere); this computer's copy is erased. */
+  onAccountDeleted: (handler: (removed: { keychainWarning: string | null }) => void): Promise<UnlistenFn> =>
+    listen<{ keychainWarning: string | null }>("vault://account-deleted", (e) =>
       handler({ keychainWarning: e.payload?.keychainWarning ?? null }),
     ),
   onUpdateStatus: (handler: (status: UpdateStatus) => void): Promise<UnlistenFn> =>
