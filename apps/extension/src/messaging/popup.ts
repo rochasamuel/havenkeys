@@ -8,6 +8,11 @@ import type { CardRowView } from "./inline";
 
 export type PopupRequest =
   | { type: "popup_state" }
+  /**
+   * The saved cards the active tab can take. Asked after the popup has drawn
+   * its logins, because finding card fields waits on the page's frames.
+   */
+  | { type: "popup_cards" }
   | { type: "popup_lock" }
   | { type: "popup_totp"; itemId: string }
   /** Fill this login into the active tab's login form. */
@@ -38,10 +43,11 @@ export type PopupState =
   | { kind: "no_vault" }
   | { kind: "locked" }
   | { kind: "disabled" }
-  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null; cards?: undefined; cardsOrigin?: undefined }
-  /** With cards, the origin they were listed for (the fill request must name it). */
-  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null; cards: CardRowView[]; cardsOrigin: string }
+  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null }
   | { kind: "error"; message: string };
+
+/** Reply to `popup_cards`: null = none to offer, else the cards and the origin they were listed for (the fill request must name it). */
+export type CardsView = { cards: CardRowView[]; origin: string } | null;
 
 export interface TotpView {
   code: string;
@@ -73,6 +79,7 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
   const keys = Object.keys(o);
   switch (o.type) {
     case "popup_state":
+    case "popup_cards":
     case "popup_lock":
     case "popup_show_unlock":
       return keys.length === 1 ? { type: o.type } : null;

@@ -38,6 +38,7 @@ describe("parsePopupRequest", () => {
     expect(parsePopupRequest({ type: "popup_fill", itemId: ID })).toEqual({ type: "popup_fill", itemId: ID });
     expect(parsePopupRequest({ type: "popup_fill_totp", itemId: ID })).toEqual({ type: "popup_fill_totp", itemId: ID });
     expect(parsePopupRequest({ type: "popup_state" })).toEqual({ type: "popup_state" });
+    expect(parsePopupRequest({ type: "popup_cards" })).toEqual({ type: "popup_cards" });
     expect(parsePopupRequest({ type: "popup_lock" })).toEqual({ type: "popup_lock" });
     expect(parsePopupRequest({ type: "popup_totp", itemId: ID })).toEqual({ type: "popup_totp", itemId: ID });
     expect(parsePopupRequest({ type: "popup_open_item", itemId: ID })).toEqual({ type: "popup_open_item", itemId: ID });
@@ -48,6 +49,7 @@ describe("parsePopupRequest", () => {
       null,
       [],
       { type: "popup_state", url: "https://evil.com" },
+      { type: "popup_cards", url: "https://evil.com" },
       { type: "popup_totp", itemId: ID, url: "https://github.com" },
       { type: "popup_totp", itemId: "x" },
       { type: "fill_item", itemId: ID, url: "https://github.com" },
@@ -367,6 +369,7 @@ describe("popup cards", () => {
   function handler(url: string, scan: boolean, filled = 2) {
     const requests: Request[] = [];
     const fills: Array<[number, string, string]> = [];
+    const scans = { n: 0 };
     const client = {
       request: async (r: Request) => {
         requests.push(r);
@@ -385,22 +388,31 @@ describe("popup cards", () => {
       },
     };
     const h = createPopupHandler(client as never, async () => ({ id: 9, url }), async () => 0, undefined, undefined, {
-      scan: async () => scan,
+      scan: async () => (scans.n++, scan),
       fill: async (tabId, topUrl, itemId) => {
         fills.push([tabId, topUrl, itemId]);
         return filled;
       },
     });
-    return { h, requests, fills };
+    return { h, requests, fills, scans };
   }
 
   it("lists cards only on https pages with card fields", async () => {
-    expect(await handler("https://shop.com/checkout", true).h.handle({ type: "popup_state" })).toMatchObject({
-      value: { kind: "unlocked", cards: [{ id: VISA, last4: "1111", expiry: "04/33", expired: false }], cardsOrigin: "https://shop.com" },
+    expect(await handler("https://shop.com/checkout", true).h.handle({ type: "popup_cards" })).toEqual({
+      ok: true,
+      value: { cards: [{ id: VISA, title: "Visa", brand: "visa", last4: "1111", expiry: "04/33", expired: false }], origin: "https://shop.com" },
     });
-    expect((await handler("https://shop.com/", false).h.handle({ type: "popup_state" })).ok).toBe(true);
-    expect(await handler("https://shop.com/", false).h.handle({ type: "popup_state" })).not.toMatchObject({ value: { cards: expect.anything() } });
-    expect(await handler("http://shop.com/", true).h.handle({ type: "popup_state" })).not.toMatchObject({ value: { cards: expect.anything() } });
+    expect(await handler("https://shop.com/", false).h.handle({ type: "popup_cards" })).toEqual({ ok: true, value: null });
+    const insecure = handler("http://shop.com/", true);
+    expect(await insecure.h.handle({ type: "popup_cards" })).toEqual({ ok: true, value: null });
+    expect(insecure.requests).toEqual([]);
+  });
+
+  it("draws the logins without looking for cards", async () => {
+    const { h, requests, scans } = handler("https://shop.com/checkout", true);
+    expect(await h.handle({ type: "popup_state" })).toEqual({ ok: true, value: { kind: "unlocked", site: "shop.com", matches: [], identity: null } });
+    expect(scans.n).toBe(0);
+    expect(requests.map((x) => x.type)).toEqual(["status", "find_matches", "find_identity"]);
   });
 
   it("fills an offered card into the tab, and reports no card form", async () => {

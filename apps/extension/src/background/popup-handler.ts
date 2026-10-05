@@ -2,8 +2,8 @@
 // so it can be tested with a fake client.
 
 import { DOCUMENT_ROLES, type IdentityRole } from "@havenkeys/protocol";
-import type { CardRowView, FillPayload } from "../messaging/inline";
-import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
+import type { FillPayload } from "../messaging/inline";
+import type { CardsView, IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { BridgeError, type NativeClient } from "../messaging/native";
 import { displayHost, pageUrlForRequest } from "../shared/url";
 import { t } from "../i18n";
@@ -111,42 +111,45 @@ export function createPopupHandler(
       const status = await client.request({ type: "status" });
       if (!status.vaultExists) return { kind: "no_vault" };
       if (status.state !== "unlocked") return { kind: "locked" };
-      const tab = await activeTab();
-      const url = pageUrlForRequest(tab?.url);
+      const url = pageUrlForRequest(await activeTabUrl());
       if (!url) return { kind: "unlocked", site: null, matches: [], identity: null };
-      const found = await client.request({ type: "find_matches", url });
-      let identity: { title: string } | null = null;
-      try {
-        const s = await client.request({ type: "find_identity", url });
-        if (s.roles.length > 0) identity = { title: s.title };
-      } catch {
-        identity = null;
-      }
-      let cardList: CardRowView[] | undefined;
-      if (cards && tab && url.startsWith("https:")) {
-        try {
-          const foundCards = await client.request({ type: "find_cards", url });
-          if (foundCards.cards.length > 0 && (await cards.scan(tab.id))) cardList = cardRows(foundCards.cards, Date.now());
-        } catch {
-          cardList = undefined;
-        }
-      }
-      return {
-        kind: "unlocked",
-        site: displayHost(url),
-        matches: found.matches,
-        identity,
-        ...(cardList ? { cards: cardList, cardsOrigin: new URL(url).origin } : {}),
-      };
+      // Both at once: the popup waits for the slower of the two, not their sum.
+      const [found, identity] = await Promise.all([
+        client.request({ type: "find_matches", url }),
+        client
+          .request({ type: "find_identity", url })
+          .then((s) => (s.roles.length > 0 ? { title: s.title } : null))
+          .catch(() => null),
+      ]);
+      return { kind: "unlocked", site: displayHost(url), matches: found.matches, identity };
     } catch (e) {
       return stateForError(e);
     }
   }
 
-  async function handle(req: PopupRequest): Promise<PopupReply<PopupState | TotpView | IdentityFillReply>> {
+  /**
+   * Cards for the active tab, on https pages whose frames have card fields.
+   * Apart from `state()` so the scan's wait never holds back the logins.
+   */
+  async function cardsView(): Promise<CardsView> {
+    const tab = await activeTab();
+    const url = pageUrlForRequest(tab?.url);
+    if (!cards || !tab || !url?.startsWith("https:")) return null;
+    try {
+      const found = await client.request({ type: "find_cards", url });
+      if (found.cards.length === 0 || !(await cards.scan(tab.id))) return null;
+      return { cards: cardRows(found.cards, Date.now()), origin: new URL(url).origin };
+    } catch {
+      return null;
+    }
+  }
+
+  async function handle(req: PopupRequest): Promise<PopupReply<PopupState | CardsView | TotpView | IdentityFillReply>> {
     switch (req.type) {
       case "popup_state":
         return { ok: true, value: await state() };
+      case "popup_cards":
+        return { ok: true, value: await cardsView() };
       case "popup_lock":
         try {
           await client.request({ type: "lock" });

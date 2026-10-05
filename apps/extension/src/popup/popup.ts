@@ -6,7 +6,7 @@
 // parsed as HTML.
 
 import { SSO_PROVIDERS, type IdentityRole, type Match, type SsoProvider } from "@havenkeys/protocol";
-import type { IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
+import type { CardsView, IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
 import { cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
@@ -294,15 +294,26 @@ function render(state: PopupState): void {
       if (state.identity) {
         parts.push(h("div", { className: "section-title", text: t.popup.identityTitle }), h("ul", { className: "list" }, identityRow(state.identity.title)));
       }
-      if (state.cards && state.cards.length > 0) {
-        const origin = state.cardsOrigin;
-        parts.push(h("div", { className: "section-title", text: t.popup.cardsTitle }), h("ul", { className: "list" }, ...state.cards.map((c) => cardRow(c, origin))));
-      }
+      // Cards arrive after the logins are drawn (see loadCards).
+      const cardSlot = h("div");
+      if (state.site) parts.push(cardSlot);
       main.replaceChildren(...parts);
+      if (state.site) void loadCards(cardSlot);
       void offerSuggestions();
       return;
     }
   }
+}
+
+/**
+ * The cards section, asked once the logins are on screen: finding the
+ * page's card fields waits on its frames, and the logins should not.
+ */
+async function loadCards(slot: HTMLElement): Promise<void> {
+  const r = await send<CardsView>({ type: "popup_cards" });
+  if (!r.ok || r.value === null || r.value.cards.length === 0 || !slot.isConnected) return;
+  const { cards, origin } = r.value;
+  slot.replaceChildren(h("div", { className: "section-title", text: t.popup.cardsTitle }), h("ul", { className: "list" }, ...cards.map((c) => cardRow(c, origin))));
 }
 
 /**

@@ -142,3 +142,18 @@ describe("popup unlock", () => {
     expect(document.querySelector("input")).toBeNull();
   });
 });
+
+describe("popup cards", () => {
+  it("draws the logins first, then the cards above the in-page offer", async () => {
+    const VISA = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+    let answer: (v: unknown) => void = () => undefined;
+    replies.popup_cards = () => new Promise((r) => (answer = r));
+    (globalThis as { chrome: { permissions: unknown } }).chrome.permissions = { contains: async () => false, request: async () => true };
+    await load();
+    expect(document.querySelector(".item.card")).toBeNull();
+    answer({ ok: true, value: { cards: [{ id: VISA, title: "Visa", brand: "visa", last4: "1111", expiry: "04/33", expired: false }], origin: "https://shop.com" } });
+    await vi.waitFor(() => expect(document.querySelector(".item.card")).not.toBeNull());
+    const order = Array.from(document.querySelectorAll(".item.identity, .item.card, .notice.offer")).map((e) => e.className);
+    expect(order).toEqual(["item identity", "item card", "notice offer"]);
+  });
+});
