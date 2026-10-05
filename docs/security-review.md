@@ -3224,3 +3224,33 @@ alone), no overwrites, no non-Identity item under the identity ID.
   know (a new item type, say) counts as failed. `PAYLOAD_VERSION` must be
   bumped whenever the serialised model changes incompatibly (`crypto.md`);
   nothing enforces that automatically.
+
+# Security Review: Account deletion (LGPD)
+
+Spec: `docs/superpowers/specs/2026-10-05-account-deletion-design.md`.
+
+### AD1. Deleting the account with a stolen session (Info, mitigated)
+**Component:** `havenkeys-server/src/routes/account.rs`.
+**Attack:** a stolen bearer token is used to erase the owner's account.
+**Mitigation:** the route also requires the current auth key, verified and
+rate limited like a login, and compared again under a row lock.
+**Remaining:** someone with the master password, the Secret Key and a session
+can delete the account; that is the account owner by definition.
+
+### AD2. A server that tells devices to wipe themselves (Info, accepted)
+**Component:** `havenkeys-client/src/deletion.rs`, `sync.rs::failed`.
+**Attack:** a malicious server answers `410 account_deleted` so every device
+erases its replica.
+**Mitigation:** none needed beyond what exists: the server already holds and
+can delete the only other copy. The deletion flow offers an encrypted backup
+first; set-aside vault files are never touched.
+**Remaining:** a user without a backup who relies on the local replica as a
+copy of a server they do not trust loses it.
+
+### AD3. Residual personal data after deletion (Info, documented)
+**Component:** server and devices.
+**Remaining:** Postgres backups and platform logs until their retention
+(≤ 30 days, an operational promise, not enforced by code); IP-keyed
+`login_attempts` rows; anonymous `deleted_sessions` hashes for 30 days; a
+device offline for more than 30 days keeps its encrypted copy and shows as
+signed out.

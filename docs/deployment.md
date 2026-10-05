@@ -255,6 +255,14 @@ The mitigation is backups and the user noticing, not cryptography.
   and the device UUID. Never a token, an auth key, an invite, an email, a
   blob or a header. `crates/havenkeys-server/tests/no_logging.rs` enforces it;
   if you add a log line, run that test.
+* **Account deletion.** Users delete their own account from the app.
+  `havenkeys-server admin delete-account --email …` does exactly the same
+  (same function, same tombstones) for someone who lost access; confirm the
+  request came from the account's address first. The server sweeps expired
+  tombstones (`deleted_sessions`) once at start and then daily. The privacy
+  policy promises that database backups and platform logs holding a deleted
+  account expire within 30 days: keep the Postgres backup and log retention
+  at or below that.
 * **Rate limiting** blocks a login after five failures, escalating 1 → 5 → 30
   minutes, counted per account and per address. The counters live in
   `login_attempts` and a successful login clears them. To unblock someone

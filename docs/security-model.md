@@ -447,6 +447,23 @@ Known limitations of export:
 * **A backup is only as strong as its backup password**, which is not
   combined with the Secret Key.
 
+## 10b. Deleting the account
+
+Settings → "Delete account and all data" (desktop and Android) needs the
+vault unlocked and online, the account's email typed, and the master
+password (Android also asks for biometrics or the screen lock). Rust checks
+the password locally, then proves the auth key to the server, which erases
+the account in one transaction (`docs/server-sync.md` §7a). Only after the
+server's `204` does the device erase its vault file, the Secret Key and its
+device id; the account's other devices do the same when they next connect
+and get `410`.
+
+Not erased: database backups and server logs until they expire (≤ 30 days
+promised), anonymous session-token hashes for 30 days, IP-keyed rate-limit
+rows, vault files set aside by an earlier "Remove this device", backups the
+user exported, and the copy on a device that stays offline for more than
+30 days (it shows as signed out).
+
 ## 11. Logging
 
 Neither the core crate nor the Tauri shell logs anything. The lock reason

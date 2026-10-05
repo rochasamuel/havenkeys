@@ -794,6 +794,23 @@ because:
   the phone seals to that camera-delivered key or seal one of its own to
   the desktop, and cannot make a phone approve without the user's tap.
 
+### Account deletion
+
+* **A stolen session token** cannot delete the account: the route also
+  needs the current auth key, rate limited like a login.
+* **A malicious or compromised server** can answer `410 account_deleted`
+  and make the account's devices erase their local replica. It gains
+  nothing it does not already have: it holds the vault ciphertext and can
+  delete it anyway. The deletion flow offers an encrypted backup first, and
+  that backup is the user's protection against losing the server.
+* **Probing whether an account existed** through `410` needs the session
+  token; any other token gets `401`, and `auth/params` keeps its uniform
+  answer.
+* **Residual data** (not erased by deletion): database backups and platform
+  logs until their retention ends (the privacy policy promises ≤ 30 days);
+  IP-keyed rate-limit rows; vault files set aside by an earlier "Remove this
+  device"; backups the user exported.
+
 ## 4. Out of scope (not defended)
 
 * **Malware running as the same OS user while the vault is unlocked.** It can

@@ -101,8 +101,9 @@ read-only replica, so unlocking, searching, revealing, TOTP and autofill all
 work offline. Changes require the server, which is the single writer.
 
 The backend is part of the product: a small server the user runs themselves
-(`havenkeys-server`), which stores ciphertext it cannot open. It is not a
-hosted service and there is no vendor account.
+(`havenkeys-server`), which stores ciphertext it cannot open. Anyone may run
+it; the author also runs one for other people. There is no vendor account
+beyond an account on that server.
 
 > Amended on 2026-09-20 by
 > `docs/superpowers/specs/2026-09-20-server-authoritative-vault-design.md`
@@ -114,6 +115,14 @@ hosted service and there is no vendor account.
 > desktop app may contact GitHub Releases to check for and download signed
 > updates. Nothing is installed without the user's click; the automatic
 > check can be turned off in Settings → Updates.
+
+> Amended on 2026-10-05 by
+> `docs/superpowers/specs/2026-10-05-account-deletion-design.md`: the author
+> also operates a hosted `havenkeys-server` for other people, as controller
+> under the LGPD. A user can delete their account from the desktop or
+> Android app: the server erases everything it holds about the account in
+> one transaction, keeping only anonymous session-token hashes for 30 days so
+> the user's other devices learn of the deletion and wipe their local copy.
 
 Do not introduce:
 

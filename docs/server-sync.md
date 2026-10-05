@@ -330,6 +330,35 @@ header.
   login attempts per account and per client address in `login_attempts` for
   rate limiting, cleared on a successful login (`docs/deployment.md` §6).
 
+## 7a. Deleting the account
+
+`POST /v1/account/delete` (spec `2026-10-05-account-deletion-design.md`)
+takes `{ currentAuthKey, email }` with the session. The session alone is not
+enough: the current auth key is verified and rate limited exactly like a
+login or a credential change, so a stolen token cannot delete the account.
+The email is a typo guard; it must equal the account's (`400` otherwise).
+
+`erase::erase_account` runs in one transaction, and the admin CLI's
+`delete-account` uses the same function:
+
+1. copy the account's live session-token hashes into `deleted_sessions`,
+   expiring in 30 days (no account id, email or device id is stored there);
+2. delete the account's `acct:<uuid>` rate-limit row;
+3. delete pairings linked to the account or to one of its device ids;
+4. delete the account; the cascade removes the vault, items, devices and
+   sessions.
+
+A request whose token is not a live session but is in `deleted_sessions`
+gets `410 account_deleted` instead of `401`. The client maps it to
+`SyncError::AccountDeleted` and erases its local copy (vault file and
+SQLite sidecars, Secret Key, device id) behind a `<vault>.pending-deletion`
+marker, so a wipe cut short finishes at the next start. The deleting device
+checks the master password locally first and erases its copy only after the
+server answers `204`. A daily task in the server deletes expired tombstones.
+
+A device whose session expired before it reconnected, or that stays offline
+for more than 30 days, sees only the ordinary signed-out state.
+
 ## 8. For a future mobile app
 
 Unchanged in intent from the superseded document: scan the Emergency Kit QR
