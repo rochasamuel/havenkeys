@@ -1786,7 +1786,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 |---|---|---|---|---|
 | CR1 / SV-1 | A hostile server can splice an old item overview (URL rules) with a newer details blob (password), or vice versa, so the current secret reaches an origin the item no longer names | Medium | Core sync / server | Fixed |
 | CR2 | A corrupt or missing settings blob silently falls back to `auto_sign_in`/`auto_passkey_upgrade` = on | Low | Core vault | **Fixed** |
-| CR3 | A crafted `.1pux` with millions of ZIP central-directory entries costs ~7× its size in memory before any size check runs | Low | Core import | Open (planned) |
+| CR3 | A crafted `.1pux` with millions of ZIP central-directory entries costs ~7× its size in memory before any size check runs | Low | Core import | **Fixed** |
 | BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Fixed in code, not yet verified on Windows |
 | BR-2 | The per-item password-change rate-limit budget is spent even when the write is denied or fails | Low | Bridge | **Fixed** |
 | EX-01 | Popup Fill writes credentials into a CSP-sandboxed (opaque-origin) document on the login's own origin | Medium | Extension (popup) | **Fixed** |
@@ -1825,7 +1825,8 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 **Evidence:** CONFIRMED — a probe corrupts the settings row, unlocks again, and observes `auto_sign_in=true auto_passkey_upgrade=true` with `damaged_items: 0`.
 **Suggested fix:** on a settings blob that exists but fails to open or validate, fall back to the most restrictive values and surface a `damaged_settings` flag; keep `Settings::default()` only for the genuine "no row yet" case.
 
-#### CR3. Unbounded ZIP central-directory parsing in `.1pux` import (Low, open)
+#### CR3. Unbounded ZIP central-directory parsing in `.1pux` import (Low, fixed)
+**Status:** fixed (2026-10-06). Before `ZipArchive::new`, `declared_entries` reads every end-of-central-directory candidate in the archive's last 64 KiB, and the ZIP64 record each one points to, and the import refuses an archive declaring more than 10,000 entries (`MAX_ARCHIVE_ENTRIES`). Taking the largest count means a fake record in the ZIP comment cannot hide the real one. Tests: `rejects_too_many_entries`, `counts_zip64_and_every_candidate_record` (`import/onepux.rs`).
 **Attack scenario:** a crafted `.1pux` (an in-scope hostile input) is a ZIP64 archive with an empty export and a million empty `files/*` entries. `ZipArchive::new` builds per-entry metadata for the whole central directory before any HavenKeys size or count check runs, costing about 7× the archive's size in memory — enough to exhaust memory on a small machine well inside the existing 256 MiB archive cap.
 **Evidence:** CONFIRMED — a 98 MB / 1,000,000-entry crafted `.1pux` parsed at 717 MB peak RSS in 933 ms; extrapolated to the 256 MiB cap, roughly 1.8 GB.
 **Suggested fix:** read the end-of-central-directory record (or use the zip crate's own entry-count limit) before calling `ZipArchive::new`; refuse more than about 10,000 entries.

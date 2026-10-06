@@ -133,6 +133,7 @@ const invalidInput: Record<string, string> = {
   "not a valid KeePassXC export file": "Não é um arquivo CSV do KeePassXC válido.",
   "not a valid LastPass export file": "Não é um arquivo CSV do LastPass válido.",
   "export file is too large": "O arquivo de exportação é grande demais.",
+  "export file has too many files": "O arquivo de exportação tem arquivos demais.",
   "export contains too many items": "A exportação tem itens demais.",
   "backup password must be at least 10 characters": "A senha do backup precisa ter pelo menos 10 caracteres.",
   "backup password is too long": "A senha do backup é longa demais.",

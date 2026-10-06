@@ -39,11 +39,20 @@ pub const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
 /// Largest uncompressed `export.data` accepted (zip-bomb guard).
 pub const MAX_EXPORT_DATA_BYTES: u64 = 64 * 1024 * 1024;
 
+/// Most entries (files) a `.1pux` may list. The ZIP reader builds metadata
+/// for every entry before anything else can be checked, about 7× the
+/// archive's size in memory for a crafted one (CR3); real exports have
+/// `export.data`, `export.attributes` and one file per attachment.
+pub const MAX_ARCHIVE_ENTRIES: u64 = 10_000;
+
 pub(super) const INVALID: Error = Error::InvalidInput("not a valid 1Password export (.1pux) file");
 
 pub fn parse(archive: &[u8]) -> Result<Parsed> {
     if archive.len() as u64 > MAX_ARCHIVE_BYTES {
         return Err(Error::InvalidInput("export file is too large"));
+    }
+    if declared_entries(archive) > MAX_ARCHIVE_ENTRIES {
+        return Err(Error::InvalidInput("export file has too many files"));
     }
     let mut zip = zip::ZipArchive::new(Cursor::new(archive)).map_err(|_| INVALID)?;
 
@@ -70,6 +79,52 @@ pub fn parse(archive: &[u8]) -> Result<Parsed> {
     let result = convert(&root, attachments);
     wipe(&mut root);
     result
+}
+
+/// The largest entry count any end-of-central-directory record in
+/// `archive` declares, read before the ZIP reader parses the directory.
+/// Every candidate in the last 64 KiB is counted (a fake record in the
+/// archive comment cannot hide the real one), and a ZIP64 record each
+/// one points to as well. 0 when there is none; the ZIP reader then
+/// refuses the archive itself.
+fn declared_entries(archive: &[u8]) -> u64 {
+    const EOCD: [u8; 4] = [0x50, 0x4b, 0x05, 0x06];
+    const LOCATOR: [u8; 4] = [0x50, 0x4b, 0x06, 0x07];
+    const EOCD64: [u8; 4] = [0x50, 0x4b, 0x06, 0x06];
+    let u16_at = |at: usize| -> Option<u64> {
+        archive
+            .get(at..at + 2)
+            .map(|b| u64::from(u16::from_le_bytes([b[0], b[1]])))
+    };
+    let u64_at = |at: usize| -> Option<u64> {
+        let b: [u8; 8] = archive.get(at..at + 8)?.try_into().ok()?;
+        Some(u64::from_le_bytes(b))
+    };
+    // EOCD is 22 bytes plus a comment of at most 65,535.
+    let start = archive.len().saturating_sub(22 + 65_535);
+    let mut most = 0;
+    for at in start..archive.len().saturating_sub(21) {
+        if archive[at..at + 4] != EOCD {
+            continue;
+        }
+        let this_disk = u16_at(at + 8).unwrap_or(0);
+        let total = u16_at(at + 10).unwrap_or(0);
+        most = most.max(this_disk).max(total);
+        // ZIP64: a locator just before the EOCD names the ZIP64 record.
+        if let Some(loc) = at.checked_sub(20) {
+            if archive[loc..loc + 4] == LOCATOR {
+                let record = u64_at(loc + 8)
+                    .and_then(|o| usize::try_from(o).ok())
+                    .filter(|&o| archive.get(o..o + 4) == Some(&EOCD64[..]));
+                if let Some(r) = record {
+                    let this_disk = u64_at(r + 24).unwrap_or(0);
+                    let total = u64_at(r + 32).unwrap_or(0);
+                    most = most.max(this_disk).max(total);
+                }
+            }
+        }
+    }
+    most
 }
 
 fn convert(root: &Value, attachments: usize) -> Result<Parsed> {
@@ -987,6 +1042,48 @@ mod tests {
                 None => assert!(item.input.sign_in_with.is_none()),
             }
         }
+    }
+
+    /// CR3: an archive listing more entries than any real export is refused
+    /// before the ZIP reader builds its directory.
+    #[test]
+    fn rejects_too_many_entries() {
+        let small = make_1pux(&sample(), 3);
+        assert_eq!(declared_entries(&small), 5);
+        assert!(parse(&small).is_ok());
+
+        let many = make_1pux(&sample(), MAX_ARCHIVE_ENTRIES as usize);
+        assert_eq!(
+            parse(&many).err(),
+            Some(Error::InvalidInput("export file has too many files"))
+        );
+    }
+
+    /// CR3: the ZIP64 count is read too, and a fake record in the comment
+    /// does not hide the real one.
+    #[test]
+    fn counts_zip64_and_every_candidate_record() {
+        // ZIP64 record at 0 claiming 2^40 entries, its locator, then an EOCD
+        // saying "see ZIP64" (0xFFFF).
+        let mut a = Vec::new();
+        a.extend_from_slice(&[0x50, 0x4b, 0x06, 0x06]);
+        a.extend_from_slice(&[0; 20]);
+        a.extend_from_slice(&(1u64 << 40).to_le_bytes()); // this disk
+        a.extend_from_slice(&(1u64 << 40).to_le_bytes()); // total
+        a.extend_from_slice(&[0; 16]);
+        a.extend_from_slice(&[0x50, 0x4b, 0x06, 0x07, 0, 0, 0, 0]);
+        a.extend_from_slice(&0u64.to_le_bytes());
+        a.extend_from_slice(&[1, 0, 0, 0]);
+        a.extend_from_slice(&[0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0]);
+        a.extend_from_slice(&[0xff, 0xff, 0xff, 0xff]);
+        a.extend_from_slice(&[0xff; 8]);
+        // A comment holding a fake EOCD that claims one entry.
+        let fake = [0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        a.extend_from_slice(&(fake.len() as u16).to_le_bytes());
+        a.extend_from_slice(&fake);
+        assert_eq!(declared_entries(&a), 1 << 40);
+        assert!(parse(&a).is_err());
+        assert_eq!(declared_entries(b"short"), 0);
     }
 
     #[test]
