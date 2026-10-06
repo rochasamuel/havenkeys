@@ -622,6 +622,7 @@ export const ptBR: Messages = {
     theme: "Tema",
     themes: { dark: "Escuro", light: "Claro", system: "Sistema" },
     security: "Segurança",
+    data: "Seus dados",
     autoLock: "Bloquear automaticamente",
     autoLockAfter: (minutes: number) => (minutes === 60 ? "Após 1 hora" : `Após ${minutes} minutos`),
     never: "Nunca",
@@ -722,16 +723,17 @@ export const ptBR: Messages = {
   import: {
     title: "Importar",
     note: "Traga seus logins de outro gerenciador de senhas ou navegador. A exportação contém todas as suas senhas sem criptografia, então exclua o arquivo quando a importação terminar.",
+    overview: "Do 1Password, Bitwarden, LastPass, KeePassXC, de um navegador ou de um backup do HavenKeys.",
     sourceLabel: "Importar de",
     sources: {
       onePassword: "1Password",
-      bitwardenJson: "Bitwarden (.json)",
-      bitwardenCsv: "Bitwarden (.csv)",
+      bitwardenJson: "Bitwarden",
+      bitwardenCsv: "Bitwarden",
       chrome: "Chrome, Edge ou Brave",
       firefox: "Firefox",
       keePassXc: "KeePassXC",
       lastPass: "LastPass",
-      havenKeysBackup: "Backup do HavenKeys (.hkbackup)",
+      havenKeysBackup: "Backup do HavenKeys",
     },
     howTo: {
       onePassword: "No 1Password, escolha Arquivo › Exportar e o formato 1PUX.",
@@ -810,6 +812,7 @@ export const ptBR: Messages = {
       "Isso apaga o seu cofre do servidor, desconecta todos os dispositivos e apaga a cópia deste computador. Não dá para desfazer: nem você nem o operador do servidor conseguem recuperá-lo.",
     keptNote:
       "Cópias separadas por um \u201cRemover este dispositivo\u201d anterior são mantidas, assim como backups que você exportou.",
+    start: "Excluir…",
     backupFirst: "Fazer backup criptografado antes",
     continueWithout: "Continuar sem backup",
     typeToConfirm: (email: string) => `Digite ${email} para confirmar`,
@@ -824,14 +827,16 @@ export const ptBR: Messages = {
     note: "Guarde um backup criptografado ou leve seus dados para outro gerenciador de senhas.",
     formatLabel: "Exportar como",
     formats: {
-      backup: "Backup do HavenKeys (criptografado, recomendado)",
-      bitwardenJson: "Bitwarden (.json)",
-      csv: "CSV (só logins)",
+      backup: "Backup do HavenKeys",
+      bitwardenJson: "Bitwarden",
+      csv: "CSV",
     },
+    recommended: "Recomendado",
+    contains: "Este arquivo vai conter",
     formatHelp: {
-      backup: "Tudo, inclusive as chaves de acesso, protegido por uma senha de backup que você escolhe. Restaure em Importar, em qualquer HavenKeys.",
+      backup: "Criptografado com uma senha de backup que você escolhe. Inclui tudo, até as chaves de acesso; restaure em Importar, em qualquer HavenKeys.",
       bitwardenJson: "Para Bitwarden, Proton Pass, KeePassXC ou 1Password. Chaves de acesso nunca são incluídas.",
-      csv: "Para navegadores e outros gerenciadores. Só logins; chaves de acesso nunca são incluídas.",
+      csv: "Só logins, para navegadores e outros gerenciadores. Chaves de acesso nunca são incluídas.",
     },
     plaintextWarning:
       "A exportação contém todas as senhas sem criptografia. Quem tiver este arquivo lê todas elas. Apague-o depois de importar em outro lugar e não o abra numa planilha.",

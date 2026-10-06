@@ -251,6 +251,17 @@ function baseResponses() {
       },
     },
     delete_import_file: null,
+    export_summary: {
+      logins: 301,
+      secureNotes: 7,
+      cards: 8,
+      identities: 1,
+      passkeysLeftOut: 3,
+      passwordHistoryLeftOut: 0,
+      customFieldsLeftOut: 0,
+      itemsLeftOut: 0,
+      unreadable: 0,
+    },
     lock_vault: null,
   };
 }
@@ -802,6 +813,8 @@ export const desktopScenarios = [
       await page.click(".device-row:nth-child(2) .btn");
       await page.click(".kit-teaser .btn");
       await page.waitForTimeout(150);
+      await page.click("#import .disclosure-head button");
+      await page.waitForTimeout(150);
       const blocks = page.locator(".settings-block");
       const count = await blocks.count();
       for (let i = 0; i < count; i++) {
@@ -817,9 +830,40 @@ export const desktopScenarios = [
       await pw.nth(0).fill("old");
       await pw.nth(1).fill("new password");
       await pw.nth(2).fill("different");
-      await page.fill(".danger-zone input", "x");
     },
-    shots: [".device-list", ".kit", ".kit-actions", ".import-result", "[role=\"radiogroup\"]", "form.settings-block", ".danger-zone"],
+    shots: [".device-list", ".kit", ".kit-actions", ".import-result", "[role=\"radiogroup\"]", "form.settings-block"],
+  },
+  {
+    // Your data, open: Import, Export as a plaintext CSV, and the start of
+    // account deletion.
+    name: "settings-data",
+    respond: {},
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await page.click("#import .disclosure-head button");
+      await page.click("#export .disclosure-head button");
+      await page.waitForTimeout(150);
+      await page.click('#export input[value="csv"]');
+      await page.click(".btn-quiet-danger");
+      await page.waitForTimeout(350);
+    },
+    shots: ["#import", "#export", ".danger-zone >> nth=-1"],
+  },
+  {
+    // Export as an encrypted backup, with backup passwords that don't match.
+    name: "settings-export-backup",
+    respond: {},
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await page.click("#export .disclosure-head button");
+      await page.waitForTimeout(150);
+      await page.fill('input[name="backup-password"]', "a long backup passphrase");
+      await page.fill('input[name="backup-password-again"]', "different");
+      await page.waitForTimeout(350);
+    },
+    shots: ["#export"],
   },
   {
     name: "settings-offline",

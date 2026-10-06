@@ -5,6 +5,7 @@ import { applyTheme } from "../lib/theme";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
 import { useToast } from "../components/Toast";
+import { Disclosure } from "../components/Disclosure";
 import { ExportSection } from "./ExportSection";
 import { ImportSection } from "./ImportSection";
 import { AccountSection } from "./AccountSection";
@@ -269,9 +270,15 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
 
       <AccountSection online={online} />
 
-      <ImportSection onImported={onImported} />
-
-      <ExportSection />
+      <div className="settings-block">
+        <h3 className="group-title">{t.settings.data}</h3>
+        <Disclosure id="import" title={t.import.title} summary={t.import.overview}>
+          <ImportSection onImported={onImported} />
+        </Disclosure>
+        <Disclosure id="export" title={t.export.title} summary={t.export.note}>
+          <ExportSection />
+        </Disclosure>
+      </div>
 
       <ChangePassword />
 

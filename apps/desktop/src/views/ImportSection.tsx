@@ -92,11 +92,10 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
 
   return (
     <div className="settings-block">
-      <h3 className="group-title">{t.import.title}</h3>
       <p className="group-note group-note-top">{t.import.note}</p>
       <div className="group" role="radiogroup" aria-label={t.import.sourceLabel}>
         {SOURCES.map((s) => (
-          <label key={s} className="row">
+          <label key={s} className="row choice-row">
             <input
               type="radio"
               name="import-source"
@@ -109,14 +108,17 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
               }}
               disabled={busy}
             />
-            <span className="row-label-inline">{t.import.sources[s]}</span>
+            <span className="choice-text">
+              <span className="choice-title">{t.import.sources[s]}</span>
+              {source === s && <span className="choice-desc">{t.import.howTo[s]}</span>}
+            </span>
+            <span className="choice-ext">.{EXTENSION[s]}</span>
           </label>
         ))}
       </div>
-      <p className="group-note">{t.import.howTo[source]}</p>
       {source === "havenKeysBackup" && (
         <div className="group">
-          <label className="row">
+          <label className="row row-input">
             <span className="row-label-inline">{t.import.backupPassword}</span>
             <input
               type="password"
@@ -131,7 +133,7 @@ export function ImportSection({ onImported }: { onImported: () => void }) {
       )}
       <div className="group-actions">
         <button
-          className="btn"
+          className="btn btn-primary"
           onClick={() => void runImport()}
           disabled={busy || (source === "havenKeysBackup" && restorePassword.length === 0)}
         >

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { ExportFormat, ExportResult, ExportSummary } from "../lib/types";
+import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
 const FORMATS: ExportFormat[] = ["backup", "bitwardenJson", "csv"];
+const EXTENSION: Record<ExportFormat, string> = { backup: "hkbackup", bitwardenJson: "json", csv: "csv" };
 const MIN_BACKUP_PASSWORD = 10;
 
 function leftOut(s: ExportSummary, t: Messages): string[] {
@@ -87,13 +89,9 @@ export function ExportSection() {
 
   return (
     <div className="settings-block">
-      <h3 className="group-title" id="export">
-        {t.export.title}
-      </h3>
-      <p className="group-note group-note-top">{t.export.note}</p>
       <div className="group" role="radiogroup" aria-label={t.export.formatLabel}>
         {FORMATS.map((f) => (
-          <label key={f} className="row">
+          <label key={f} className="row choice-row">
             <input
               type="radio"
               name="export-format"
@@ -102,16 +100,30 @@ export function ExportSection() {
               onChange={() => setFormat(f)}
               disabled={busy}
             />
-            <span className="row-label-inline">{t.export.formats[f]}</span>
+            <span className="choice-text">
+              <span className="choice-title">
+                {t.export.formats[f]}
+                {f === "backup" && <span className="pill">{t.export.recommended}</span>}
+              </span>
+              <span className="choice-desc">{t.export.formatHelp[f]}</span>
+            </span>
+            <span className="choice-ext">.{EXTENSION[f]}</span>
           </label>
         ))}
       </div>
-      <p className="group-note">{t.export.formatHelp[format]}</p>
+
       {summary && (
-        <div className="group-note">
-          <p>{t.export.includes(summary.logins, summary.secureNotes, summary.cards, summary.identities)}</p>
+        <div className="group">
+          <div className="row">
+            <div className="row-main">
+              <div className="row-label">{t.export.contains}</div>
+              <div className="row-value">
+                {t.export.includes(summary.logins, summary.secureNotes, summary.cards, summary.identities)}
+              </div>
+            </div>
+          </div>
           {lines.length > 0 && (
-            <ul>
+            <ul className="group-note left-out">
               {lines.map((line) => (
                 <li key={line}>{line}</li>
               ))}
@@ -120,27 +132,46 @@ export function ExportSection() {
         </div>
       )}
       {summaryFailed && (
-        <p className="group-note warn" role="alert">
+        <p className="form-error" role="alert">
           {t.export.summaryFailed}
         </p>
       )}
 
       {isBackup ? (
-        <div className="group">
-          <label className="row">
-            <span className="row-label-inline">{t.export.backupPassword}</span>
-            <input type="password" name="backup-password" autoComplete="new-password" value={backup} onChange={(e) => setBackup(e.target.value)} disabled={busy} />
-          </label>
-          <label className="row">
-            <span className="row-label-inline">{t.export.backupPasswordAgain}</span>
-            <input type="password" name="backup-password-again" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} disabled={busy} />
-          </label>
-          <p className="group-note">{mismatch ? t.export.mismatch : t.export.backupHint}</p>
-        </div>
+        <>
+          <div className="group">
+            <label className="row row-input">
+              <span className="row-label-inline">{t.export.backupPassword}</span>
+              <input type="password" name="backup-password" autoComplete="new-password" value={backup} onChange={(e) => setBackup(e.target.value)} disabled={busy} />
+            </label>
+            <label className="row row-input">
+              <span className="row-label-inline">{t.export.backupPasswordAgain}</span>
+              <input
+                type="password"
+                name="backup-password-again"
+                autoComplete="new-password"
+                aria-invalid={mismatch || undefined}
+                value={again}
+                onChange={(e) => setAgain(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+          </div>
+          {mismatch ? (
+            <p className="form-error" role="alert">
+              {t.export.mismatch}
+            </p>
+          ) : (
+            <p className="group-note">{t.export.backupHint}</p>
+          )}
+        </>
       ) : (
-        <div className="group-note warn" role="alert">
-          <p>{t.export.plaintextWarning}</p>
-          <label className="row">
+        <div className="group danger-zone">
+          <div className="group-note warning-note" role="alert">
+            <Icon name="alert" size={18} />
+            <p>{t.export.plaintextWarning}</p>
+          </div>
+          <label className="row check-row">
             <input type="checkbox" name="understand" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} disabled={busy} />
             <span className="row-label-inline">{t.export.understand}</span>
           </label>
@@ -148,13 +179,13 @@ export function ExportSection() {
       )}
 
       <div className="group">
-        <label className="row">
+        <label className="row row-input">
           <span className="row-label-inline">{t.export.masterPassword}</span>
           <input type="password" name="master-password" autoComplete="current-password" value={master} onChange={(e) => setMaster(e.target.value)} disabled={busy} />
         </label>
       </div>
       <div className="group-actions">
-        <button className={isBackup ? "btn" : "btn btn-danger"} onClick={() => void runExport()} disabled={busy || !ready}>
+        <button className={isBackup ? "btn btn-primary" : "btn btn-danger"} onClick={() => void runExport()} disabled={busy || !ready}>
           {busy ? t.export.exporting : t.export.export}
         </button>
       </div>

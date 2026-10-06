@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { openSection } from "../components/Disclosure";
 import { api } from "../lib/api";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -56,30 +57,35 @@ export function DeleteAccountSection({ online }: { online: boolean }) {
   return (
     <div className="settings-block">
       <h3 className="group-title">{t.deleteAccount.title}</h3>
-      <div className="group danger-zone">
-        <p className="group-note group-note-top">{online ? t.deleteAccount.explain : t.deleteAccount.offline}</p>
-        {step === "closed" && (
-          <div className="group-actions">
-            <button className="btn btn-danger" disabled={!online} onClick={() => setStep("explain")}>
-              {t.deleteAccount.title}
+      <div className={step === "closed" ? "group" : "group danger-zone"}>
+        <div className="row">
+          <p className="row-text">{online ? t.deleteAccount.explain : t.deleteAccount.offline}</p>
+          {step === "closed" && (
+            <button className="btn btn-small btn-quiet-danger" disabled={!online} onClick={() => setStep("explain")}>
+              {t.deleteAccount.start}
             </button>
-          </div>
-        )}
+          )}
+        </div>
         {step === "explain" && (
           <>
-            <p className="group-note">{t.deleteAccount.keptNote}</p>
+            <div className="row">
+              <p className="row-text muted">{t.deleteAccount.keptNote}</p>
+            </div>
             <div className="group-actions">
-              <button
-                className="btn btn-primary"
-                onClick={() => document.getElementById("export")?.scrollIntoView({ behavior: "smooth" })}
-              >
-                {t.deleteAccount.backupFirst}
+              <button className="btn" onClick={close}>
+                {t.common.cancel}
               </button>
               <button className="btn" onClick={() => setStep("confirm")}>
                 {t.deleteAccount.continueWithout}
               </button>
-              <button className="btn" onClick={close}>
-                {t.common.cancel}
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  openSection("export");
+                  requestAnimationFrame(() => document.getElementById("export")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }}
+              >
+                {t.deleteAccount.backupFirst}
               </button>
             </div>
           </>
@@ -87,7 +93,7 @@ export function DeleteAccountSection({ online }: { online: boolean }) {
         {step === "confirm" && (
           <>
             <label className="row row-input">
-              <span>{t.deleteAccount.typeToConfirm(email)}</span>
+              <span className="row-label-inline">{t.deleteAccount.typeToConfirm(email)}</span>
               <input
                 name="confirm-email"
                 value={typed}
@@ -98,7 +104,7 @@ export function DeleteAccountSection({ online }: { online: boolean }) {
               />
             </label>
             <label className="row row-input">
-              <span>{t.deleteAccount.masterPassword}</span>
+              <span className="row-label-inline">{t.deleteAccount.masterPassword}</span>
               <input
                 type="password"
                 name="master-password"
@@ -108,12 +114,10 @@ export function DeleteAccountSection({ online }: { online: boolean }) {
                 onChange={(e) => setMaster(e.target.value)}
               />
             </label>
-            {error && (
-              <p className="form-error" role="alert">
-                {error}
-              </p>
-            )}
             <div className="group-actions">
+              <button className="btn" disabled={busy} onClick={close}>
+                {t.common.cancel}
+              </button>
               <button
                 className="btn btn-danger"
                 disabled={!matches || !master || busy || !online}
@@ -121,13 +125,15 @@ export function DeleteAccountSection({ online }: { online: boolean }) {
               >
                 {t.deleteAccount.confirm}
               </button>
-              <button className="btn" disabled={busy} onClick={close}>
-                {t.common.cancel}
-              </button>
             </div>
           </>
         )}
       </div>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

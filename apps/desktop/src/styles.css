@@ -1335,7 +1335,7 @@ input::-ms-clear {
   color: var(--muted);
 }
 
-.settings-block:first-of-type > .group-title {
+.settings-block:first-child > .group-title {
   margin-top: 4px;
 }
 
@@ -1367,7 +1367,200 @@ input::-ms-clear {
 }
 
 .group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
+}
+
+/* Buttons that belong to a group sit in its last row, right-aligned. */
+.group > .group-actions {
+  justify-content: flex-end;
+  margin: 0;
+  padding: 12px 12px 12px 16px;
+  border-top: 1px solid var(--group-line);
+}
+
+/* A row that is a sentence rather than a label and value. */
+.row-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.row-text.muted {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------- choices */
+
+.choice-row {
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.choice-row:hover {
+  background: var(--hover);
+}
+
+.choice-row:has(input:checked) {
+  background: var(--sel);
+}
+
+.choice-row:has(input:disabled) {
+  cursor: default;
+}
+
+.choice-text {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.choice-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.choice-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  animation: rise var(--t-med) var(--ease) both;
+}
+
+.choice-ext {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.check-row {
+  cursor: pointer;
+}
+
+.check-row input,
+.row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brass);
+}
+
+/* The plaintext-export warning: the group's border and the icon carry the
+   alarm; the words stay readable. */
+.group > .warning-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.warning-note svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--danger);
+}
+
+.warning-note p {
+  margin: 0;
+}
+
+.group > .warning-note + .row {
+  border-top: 1px solid var(--group-line);
+}
+
+.group > .left-out {
+  margin: 0;
+  padding: 0 12px 12px 16px;
+  list-style: none;
+}
+
+.group > .left-out li + li {
+  margin-top: 2px;
+}
+
+/* ------------------------------------------------------- disclosures */
+
+.disclosure + .disclosure {
+  margin-top: 10px;
+}
+
+.disclosure-head {
+  margin: 0;
+}
+
+.disclosure-head button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px 10px 16px;
+  border: 1px solid var(--group-line);
+  border-radius: 12px;
+  background: var(--group);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.disclosure-head button:hover {
+  background: var(--hover);
+}
+
+.disclosure-head button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--pane), 0 0 0 4px rgba(201, 164, 92, 0.6);
+}
+
+.disclosure-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.disclosure-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.disclosure-summary {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.disclosure-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform var(--t-med) var(--ease);
+}
+
+.disclosure.open .disclosure-chevron {
+  transform: rotate(90deg);
+}
+
+.disclosure-body {
+  padding: 14px 0 6px;
+  animation: rise var(--t-med) var(--ease) both;
+}
+
+.disclosure-body > .settings-block {
+  margin-bottom: 0;
 }
 
 .row {

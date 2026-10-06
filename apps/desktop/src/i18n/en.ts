@@ -597,6 +597,7 @@ export const en = {
     theme: "Theme",
     themes: { dark: "Dark", light: "Light", system: "System" },
     security: "Security",
+    data: "Your data",
     autoLock: "Lock automatically",
     autoLockAfter: (minutes: number) => (minutes === 60 ? "After 1 hour" : `After ${minutes} minutes`),
     never: "Never",
@@ -696,16 +697,17 @@ export const en = {
   import: {
     title: "Import",
     note: "Bring your logins over from another password manager or browser. Exports contain all of your passwords unencrypted, so delete the file once the import is done.",
+    overview: "From 1Password, Bitwarden, LastPass, KeePassXC, a browser or a HavenKeys backup.",
     sourceLabel: "Import from",
     sources: {
       onePassword: "1Password",
-      bitwardenJson: "Bitwarden (.json)",
-      bitwardenCsv: "Bitwarden (.csv)",
+      bitwardenJson: "Bitwarden",
+      bitwardenCsv: "Bitwarden",
       chrome: "Chrome, Edge or Brave",
       firefox: "Firefox",
       keePassXc: "KeePassXC",
       lastPass: "LastPass",
-      havenKeysBackup: "HavenKeys backup (.hkbackup)",
+      havenKeysBackup: "HavenKeys backup",
     },
     howTo: {
       onePassword: "In 1Password, choose File › Export and the 1PUX format.",
@@ -768,6 +770,7 @@ export const en = {
       "This deletes your vault from the server, signs out every device, and erases this computer's copy. It cannot be undone: neither you nor the server's operator can recover it.",
     keptNote:
       "Copies set aside by an earlier \u201cRemove this device\u201d are kept, and so are backups you exported.",
+    start: "Delete…",
     backupFirst: "Make an encrypted backup first",
     continueWithout: "Continue without a backup",
     typeToConfirm: (email: string) => `Type ${email} to confirm`,
@@ -782,14 +785,16 @@ export const en = {
     note: "Keep an encrypted backup, or move your data to another password manager.",
     formatLabel: "Export as",
     formats: {
-      backup: "HavenKeys backup (encrypted, recommended)",
-      bitwardenJson: "Bitwarden (.json)",
-      csv: "CSV (logins only)",
+      backup: "HavenKeys backup",
+      bitwardenJson: "Bitwarden",
+      csv: "CSV",
     },
+    recommended: "Recommended",
+    contains: "This file will contain",
     formatHelp: {
-      backup: "Everything, passkeys included, locked with a backup password you choose. Restore it from Import on any HavenKeys.",
+      backup: "Encrypted with a backup password you choose. Holds everything, passkeys included; restore it from Import on any HavenKeys.",
       bitwardenJson: "For Bitwarden, Proton Pass, KeePassXC or 1Password. Passkeys are never included.",
-      csv: "For browsers and other managers. Only logins; passkeys are never included.",
+      csv: "Logins only, for browsers and other managers. Passkeys are never included.",
     },
     plaintextWarning:
       "Export contains all passwords in plaintext. Anyone who gets this file can read every password. Delete it once you’ve imported it elsewhere, and don’t open it in a spreadsheet.",

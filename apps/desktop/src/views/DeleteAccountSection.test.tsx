@@ -46,7 +46,7 @@ function button(label: string): HTMLButtonElement {
 
 async function openConfirm() {
   await act(async () => root.render(<DeleteAccountSection online />));
-  await act(async () => button(en.deleteAccount.title).click());
+  await act(async () => button(en.deleteAccount.start).click());
   await act(async () => button(en.deleteAccount.continueWithout).click());
 }
 
@@ -81,6 +81,6 @@ describe("DeleteAccountSection", () => {
 
   it("cannot start while offline", async () => {
     await act(async () => root.render(<DeleteAccountSection online={false} />));
-    expect(button(en.deleteAccount.title).disabled).toBe(true);
+    expect(button(en.deleteAccount.start).disabled).toBe(true);
   });
 });
