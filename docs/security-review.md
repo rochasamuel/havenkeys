@@ -1798,7 +1798,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | DT3 | On Windows, the vault file and the keychain-stored Secret Key both roam with the user profile by default | Low | Desktop (storage) | Open (planned) |
 | DT4 | Linux screen-lock detection disables itself for the rest of the run after three transient probe failures | Low | Desktop (oslock) | Open (planned) |
 | DT5 | NSIS pre-install hook ran `taskkill` without a path (binary planting from the installer's folder) | Low | Desktop (Windows installer) | **Fixed** |
-| DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | Open (planned) |
+| DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | **Fixed** |
 | SV-2 | Pull pages are limited by row count, not bytes; an ordinary vault can permanently exceed the client's 17 MiB cap and sync stops for good | Medium | Server / sync client | Fixed (server: `a_vault_of_big_items_pulls_in_pages_under_the_cap`, `a_fetch_of_big_items_names_what_did_not_fit`; client re-asks `unanswered`) |
 | SV-3 | Any account holder can exhaust the server's memory and disk (no byte bound on pull/fetch, no per-account quota) | Low | Server | Partly fixed: byte-budgeted paging and per-request memory; per-account quota still open (planned) |
 | SV-4 | Unauthenticated login is an Argon2id amplifier that can starve the DB connection pool (no wait timeout) | Low | Server (auth) | Open (planned) |
@@ -1888,7 +1888,8 @@ After the F1 fix, a script that already knows the user's typed password can stil
 #### DT5. NSIS pre-install `taskkill` without a path (Low, **fixed**)
 The hook originally ran `nsExec::Exec 'taskkill /F /IM havenkeys-native-host.exe'`, an unqualified program name that `CreateProcess` resolves by searching the running executable's own directory first — typically `Downloads` for a manual install, where a drive-by-planted `taskkill.exe` could then run as the user. `apps/desktop/src-tauri/windows/hooks.nsh` now calls `"$SYSDIR\taskkill.exe"` explicitly, closing the planting path. Automatic updates were never affected: the updater downloads into a fresh random temp directory.
 
-#### DT6. Unreadable `device.json` silently replaced (Info, open)
+#### DT6. Unreadable `device.json` silently replaced (Info, fixed)
+**Status:** fixed (2026-10-06). A `device.json` that does not parse is renamed to `device.json.unreadable` before a new one is written; one that exists but cannot be read (anything but NotFound) is never written in that run, and a file-stored Secret Key then fails to save instead of replacing it. Tests: `an_unparsable_device_json_is_moved_aside`, `an_unreadable_device_json_is_never_overwritten` (`crates/havenkeys-client/src/device.rs`).
 **Scenario:** `Device::load` treats both a read error and any parse failure (including an unknown field on a downgrade, since the type is `deny_unknown_fields`) as "absent," and immediately overwrites it with a new UUID and `file_key: None` — discarding the only copy of a file-stored Secret Key on machines where the keychain wasn't available, and creating a new device identity on the server. Availability only, not confidentiality.
 **Suggested fix:** don't overwrite on a read error; move the file aside (rather than replace it) on a parse error.
 

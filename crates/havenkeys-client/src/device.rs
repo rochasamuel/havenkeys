@@ -67,6 +67,10 @@ pub struct Device {
     store: TimedKeyStore,
     /// Whether a key the store refused may be kept in `device.json`.
     file_fallback: bool,
+    /// `device.json` exists but could not be read (permissions, I/O): it is
+    /// never overwritten in this run, since it may hold the only copy of a
+    /// file-stored Secret Key (DT6).
+    read_failed: bool,
 }
 
 fn parses(s: &SecretString) -> bool {
@@ -75,21 +79,36 @@ fn parses(s: &SecretString) -> bool {
 
 impl Device {
     /// Load `device.json` from `dir`, creating it with a new device ID if it
-    /// is missing. An unreadable file is replaced: losing it only means the
-    /// Secret Key must be entered again from the Emergency Kit, if it was
-    /// not in the keychain. Reads nothing from the keychain yet.
+    /// is missing. A file that does not parse is moved aside to
+    /// `device.json.unreadable` (never deleted: it may hold the only copy of
+    /// a file-stored Secret Key) and a new one is written. A file that
+    /// exists but cannot be read is left alone, and this run never writes
+    /// it. Reads nothing from the keychain yet.
     pub fn load(dir: &Path, store: Box<dyn KeyStore>) -> Self {
         Self::load_with(dir, TimedKeyStore::new(store))
     }
 
     fn load_with(dir: &Path, store: TimedKeyStore) -> Self {
         let path = dir.join(FILE);
-        let parsed = std::fs::read(&path)
-            .ok()
-            .map(Zeroizing::new)
-            .and_then(|b| serde_json::from_slice::<OnDisk>(&b).ok());
+        let mut read_failed = false;
+        let parsed = match std::fs::read(&path).map(Zeroizing::new) {
+            Ok(b) => match serde_json::from_slice::<OnDisk>(&b) {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    // Keep what was there; if it cannot be moved aside,
+                    // do not write over it either.
+                    let aside = path.with_extension("json.unreadable");
+                    read_failed = std::fs::rename(&path, aside).is_err();
+                    None
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(_) => {
+                read_failed = true;
+                None
+            }
+        };
         let (id, file_key) = match parsed {
-            // A value that does not parse is treated as absent.
             Some(d) => (
                 d.device_id,
                 d.secret_key.map(SecretString::new).filter(parses),
@@ -103,6 +122,7 @@ impl Device {
             cached: None,
             store,
             file_fallback: true,
+            read_failed,
         };
         let _ = device.save();
         device
@@ -239,6 +259,9 @@ impl Device {
 
     /// Write atomically with owner-only permissions.
     fn save(&mut self) -> std::io::Result<()> {
+        if self.read_failed {
+            return Err(std::io::Error::other("device.json could not be read"));
+        }
         let data = OnDisk {
             device_id: self.id,
             secret_key: self.file_key.as_ref().map(|s| s.expose().to_owned()),
@@ -304,6 +327,36 @@ mod tests {
 
     fn key() -> SecretKey {
         SecretKey::generate().unwrap()
+    }
+
+    /// DT6: a device.json that does not parse is moved aside, not lost.
+    #[test]
+    fn an_unparsable_device_json_is_moved_aside() {
+        let dir = tempfile::tempdir().unwrap();
+        let junk = "{\"deviceId\": \"not a uuid\", \"secretKey\": \"A3-KEEP-ME\"}";
+        std::fs::write(dir.path().join("device.json"), junk).unwrap();
+        let d = Device::load(dir.path(), Box::new(FailingKeyStore));
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("device.json.unreadable")).unwrap(),
+            junk
+        );
+        assert!(file_text(dir.path()).contains(&d.id.to_string()));
+    }
+
+    /// DT6: a device.json that exists but cannot be read is never written.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_device_json_is_never_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("device.json");
+        // A directory in its place: reading fails with something other
+        // than NotFound, whatever user runs the test.
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(path.join("marker"), "x").unwrap();
+        let mut d = Device::load(dir.path(), Box::new(FailingKeyStore));
+        assert!(path.is_dir(), "left alone");
+        assert!(d.set_secret_key(ACCOUNT, &key()).is_err());
+        assert!(path.join("marker").exists());
     }
 
     fn file_text(dir: &Path) -> String {
