@@ -349,6 +349,8 @@ export const ptBR: Messages = {
     passkeyWarning: " As chaves de acesso dele também serão excluídas, e você pode perder o acesso a esses sites.",
     signInWith: "Entrar com",
     openProviderLogin: (provider: string) => `Abrir o login do ${provider}`,
+    noProviderLogin: (provider: string) => `Nenhum login do ${provider} salvo para esta conta`,
+    severalProviderLogins: (provider: string) => `Vários logins do ${provider} salvos correspondem a esta conta`,
   },
 
   editor: {

@@ -1406,6 +1406,11 @@ input::-ms-clear {
   gap: 16px;
 }
 
+.sso-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+}
 .sso-value {
   display: inline-flex;
   align-items: center;

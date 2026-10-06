@@ -325,6 +325,8 @@ export const en = {
     passkeyWarning: " Its passkeys go with it, and you may lose access to those sites.",
     signInWith: "Sign in with",
     openProviderLogin: (provider: string) => `Open the ${provider} login`,
+    noProviderLogin: (provider: string) => `No saved ${provider} login for this account`,
+    severalProviderLogins: (provider: string) => `Several saved ${provider} logins match this account`,
   },
 
   editor: {
