@@ -149,7 +149,15 @@ fn build_pool(url: &str) -> Result<Pool, DbError> {
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
-    cfg.pool = Some(deadpool_postgres::PoolConfig::new(10));
+    // A request waits at most this long for a connection, then gets 503,
+    // instead of queueing behind a flood until its client gives up (SV-4).
+    let mut pool_cfg = deadpool_postgres::PoolConfig::new(10);
+    pool_cfg.timeouts = deadpool_postgres::Timeouts {
+        wait: Some(Duration::from_secs(5)),
+        create: Some(Duration::from_secs(10)),
+        recycle: Some(Duration::from_secs(5)),
+    };
+    cfg.pool = Some(pool_cfg);
 
     let wants_tls = !matches!(pg.get_ssl_mode(), tokio_postgres::config::SslMode::Disable);
     let pool = if wants_tls {

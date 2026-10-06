@@ -1837,7 +1837,7 @@ the stored Secret Key).
 
 | Route | Auth | Limits | Returns |
 |---|---|---|---|
-| `POST /v1/pairings` | none | At most 10 pairings per IP in 10 minutes and 3 pending per IP; over that, `429`. Unknown fields refused; device name cleaned to 64 characters; `claimHash` exactly 32 bytes base64url; no public key (a `publicKey` field is refused as unknown) | `{pairingId, expiresAt}` (expiry 120 s) |
+| `POST /v1/pairings` | none | At most 10 pairings per IP in 10 minutes and 3 pending per IP; over that, `429`. Body at most 1 KiB. Unknown fields refused; device name cleaned to 64 characters, without bidi or zero-width characters; `claimHash` exactly 32 bytes base64url; no public key (a `publicKey` field is refused as unknown) | `{pairingId, expiresAt}` (expiry 120 s) |
 | `GET /v1/pairings/{id}` | session | Id must be 22 base64url characters (else 404) | `{deviceName, ip, location, createdAt, expiresAt}`; binds the pairing to the caller's account |
 | `POST /v1/pairings/{id}/approve` | session | Envelope at most 4096 bytes (`MAX_PAIRING_ENVELOPE_BYTES`), standard base64 in JSON | `204`. In one transaction: registers the device (`register_device`, so the 64-device cap and revoked-device rules apply; a revoked or other-account device id, or the approver's own, is `400`, never `401`, so the phone is not signed out), sets `devices.approved_by`, stores the envelope. No session yet |
 | `POST /v1/pairings/{id}/deny` | session | as above | `204` |

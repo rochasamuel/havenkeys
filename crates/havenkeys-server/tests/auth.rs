@@ -324,6 +324,20 @@ async fn repeated_failures_block_the_account_and_success_clears_the_counter() {
     server.cleanup().await;
 }
 
+/// SV-4: a burst of parallel wrong logins cannot all pass the check before
+/// any is counted; at most the threshold get a key check.
+#[tokio::test]
+async fn a_parallel_burst_gets_at_most_five_key_checks() {
+    let server = support::TestServer::start().await;
+    support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let t = || try_login(&server, "user@example.com", [1u8; 32]);
+    let (a, b, c, d, e, f, g, h) = tokio::join!(t(), t(), t(), t(), t(), t(), t(), t());
+    let statuses = [a, b, c, d, e, f, g, h];
+    assert_eq!(statuses.iter().filter(|&&s| s == 401).count(), 5, "{statuses:?}");
+    assert_eq!(statuses.iter().filter(|&&s| s == 429).count(), 3, "{statuses:?}");
+    server.cleanup().await;
+}
+
 #[tokio::test]
 async fn an_expired_missing_or_logged_out_token_is_refused() {
     let server = support::TestServer::start().await;

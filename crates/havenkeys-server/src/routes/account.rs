@@ -52,7 +52,7 @@ pub async fn change_credentials(
 
     let mut db = state.pool.get().await?;
     let keys = rate_limit::AttemptKeys::new(session.account_id, &client_ip(&state, &headers, peer));
-    keys.check(&db).await?;
+    keys.charge(&mut db).await?;
 
     // Verified before the transaction, like login: Argon2id takes tens of
     // milliseconds and no row lock should be held through it. The verifier is
@@ -65,11 +65,11 @@ pub async fn change_credentials(
         .await?
         .and_then(|r| r.get::<_, Option<String>>(0))
         .ok_or(ApiError::Unauthorized)?;
-    if !auth::verify_auth_key(stored.clone(), current).await {
-        keys.record_failure(&db).await?;
+    if !auth::verify_auth_key(stored.clone(), current).await? {
         tracing::info!(account_id = %session.account_id, outcome = "rejected", "credential change");
         return Err(ApiError::Unauthorized);
     }
+    keys.clear(&db).await?;
     let verifier = auth::hash_auth_key(new).await?;
 
     let tx = db.transaction().await?;
@@ -121,7 +121,6 @@ pub async fn change_credentials(
     .await?;
     tx.commit().await?;
 
-    keys.clear(&db).await?;
     tracing::info!(account_id = %session.account_id, header_revision = next, "credentials changed");
     Ok(axum::Json(serde_json::json!({ "headerRevision": next })))
 }
@@ -151,7 +150,7 @@ pub async fn delete_account(
 
     let mut db = state.pool.get().await?;
     let keys = rate_limit::AttemptKeys::new(session.account_id, &client_ip(&state, &headers, peer));
-    keys.check(&db).await?;
+    keys.charge(&mut db).await?;
 
     let row = db
         .query_opt(
@@ -168,11 +167,11 @@ pub async fn delete_account(
     let stored = stored.ok_or(ApiError::Unauthorized)?;
     // Verified before the transaction, like login: no row lock is held
     // through Argon2id. Compared again under the lock below.
-    if !auth::verify_auth_key(stored.clone(), current).await {
-        keys.record_failure(&db).await?;
+    if !auth::verify_auth_key(stored.clone(), current).await? {
         tracing::info!(account_id = %session.account_id, outcome = "rejected", "account deletion");
         return Err(ApiError::Unauthorized);
     }
+    keys.clear(&db).await?;
 
     let tx = db.transaction().await?;
     let locked: String = tx
@@ -188,9 +187,6 @@ pub async fn delete_account(
     crate::erase::erase_account(&tx, session.account_id).await?;
     tx.commit().await?;
 
-    // The account's counter went with the account; the address's goes too,
-    // as after a successful login.
-    keys.clear(&db).await?;
     tracing::info!(account_id = %session.account_id, "account deleted");
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

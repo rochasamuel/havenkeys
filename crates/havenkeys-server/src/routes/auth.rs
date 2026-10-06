@@ -120,7 +120,7 @@ pub async fn login(
         crate::email::normalize(&req.email).unwrap_or_else(|_| req.email.trim().to_string());
     let auth_key = auth::decode_auth_key(&req.auth_key)?;
     let device_name = clean_device_name(&req.device_name)?;
-    let db = state.pool.get().await?;
+    let mut db = state.pool.get().await?;
 
     let row = db
         .query_opt(
@@ -136,18 +136,21 @@ pub async fn login(
         .map(|r| r.get::<_, Uuid>(0))
         .unwrap_or_else(|| decoy_account(&state.server_secret, &email));
     let keys = rate_limit::AttemptKeys::new(account_id, &client_ip(&state, &headers, peer));
-    keys.check(&db).await?;
+    keys.charge(&mut db).await?;
 
     let verifier = row
         .as_ref()
         .and_then(|r| r.get::<_, Option<String>>(1))
         .unwrap_or_else(|| auth::dummy_verifier().to_string());
     let known = row.is_some();
+    // The connection goes back to the pool for the Argon2id run, so a flood
+    // of logins cannot hold every connection while it hashes (SV-4).
+    drop(db);
     // Always verify, so the response time does not depend on whether the
     // account exists.
-    let ok = auth::verify_auth_key(verifier, auth_key).await && known;
+    let ok = auth::verify_auth_key(verifier, auth_key).await? && known;
+    let db = state.pool.get().await?;
     if !ok {
-        keys.record_failure(&db).await?;
         tracing::info!(account_id = %account_id, outcome = "rejected", "login");
         // A device that was locked when its account was deleted holds no
         // token; it learns of the deletion here, by its own random id.
@@ -166,6 +169,7 @@ pub async fn login(
         .ok_or(ApiError::Unauthorized)?
         .get(0);
 
+    keys.clear(&db).await?;
     register_device(&db, account_id, req.device_id, &device_name).await?;
     db.execute(
         "DELETE FROM sessions WHERE device_id = $1",
@@ -174,7 +178,6 @@ pub async fn login(
     .await?;
     let (token, expires) = auth::issue_token(&db, account_id, req.device_id).await?;
 
-    keys.clear(&db).await?;
     tracing::info!(account_id = %account_id, device_id = %req.device_id, outcome = "accepted", "login");
     Ok(axum::Json(serde_json::json!({
         "token": token.as_str(),

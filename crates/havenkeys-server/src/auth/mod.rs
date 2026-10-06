@@ -73,14 +73,37 @@ pub async fn hash_auth_key(auth_key: Zeroizing<Vec<u8>>) -> Result<String, ApiEr
     .map_err(|_| ApiError::Internal)?
 }
 
-/// Verify an auth key against a stored PHC string.
-pub async fn verify_auth_key(stored: String, auth_key: Zeroizing<Vec<u8>>) -> bool {
-    tokio::task::spawn_blocking(move || match PasswordHash::new(&stored) {
+/// How long a key check waits for a free slot before the request is
+/// answered "busy".
+const VERIFY_QUEUE_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Key checks running at once: one per core, between 2 and 8. Each holds
+/// `VERIFIER_MEMORY_KIB` and a blocking thread, so a flood of logins for
+/// random emails cannot take every thread and all the memory (SV-4).
+fn verify_slots() -> &'static tokio::sync::Semaphore {
+    static SLOTS: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    SLOTS.get_or_init(|| {
+        let cores = std::thread::available_parallelism().map_or(2, |n| n.get());
+        tokio::sync::Semaphore::new(cores.clamp(2, 8))
+    })
+}
+
+/// Verify an auth key against a stored PHC string. `Unavailable` when no
+/// slot frees up in time.
+pub async fn verify_auth_key(
+    stored: String,
+    auth_key: Zeroizing<Vec<u8>>,
+) -> Result<bool, ApiError> {
+    let _slot = tokio::time::timeout(VERIFY_QUEUE_WAIT, verify_slots().acquire())
+        .await
+        .map_err(|_| ApiError::Unavailable)?
+        .map_err(|_| ApiError::Internal)?;
+    Ok(tokio::task::spawn_blocking(move || match PasswordHash::new(&stored) {
         Ok(parsed) => hasher().verify_password(&auth_key, &parsed).is_ok(),
         Err(_) => false,
     })
     .await
-    .unwrap_or(false)
+    .unwrap_or(false))
 }
 
 /// A verifier for an account that does not exist, so login spends the same
@@ -203,8 +226,11 @@ mod tests {
         let key = Zeroizing::new(vec![3u8; AUTH_KEY_LEN]);
         let stored = hash_auth_key(key.clone()).await.unwrap();
         assert!(stored.starts_with("$argon2id$"));
-        assert!(verify_auth_key(stored.clone(), key).await);
-        assert!(!verify_auth_key(stored, Zeroizing::new(vec![4u8; AUTH_KEY_LEN])).await);
+        assert_eq!(verify_auth_key(stored.clone(), key).await, Ok(true));
+        assert_eq!(
+            verify_auth_key(stored, Zeroizing::new(vec![4u8; AUTH_KEY_LEN])).await,
+            Ok(false)
+        );
     }
 
     #[test]
@@ -217,8 +243,9 @@ mod tests {
 
     #[tokio::test]
     async fn the_dummy_verifier_never_accepts_a_real_key() {
-        assert!(
-            !verify_auth_key(dummy_verifier().to_string(), Zeroizing::new(vec![9u8; 32])).await
+        assert_eq!(
+            verify_auth_key(dummy_verifier().to_string(), Zeroizing::new(vec![9u8; 32])).await,
+            Ok(false)
         );
     }
 }

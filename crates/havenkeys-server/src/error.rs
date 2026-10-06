@@ -21,6 +21,9 @@ pub enum ApiError {
     /// The token belonged to an account that was deleted (spec
     /// 2026-10-05-account-deletion §4.4). Only a holder of the token sees it.
     AccountDeleted,
+    /// Every database connection or every key-check slot stayed busy for the
+    /// whole wait (SV-4). Nothing happened; the client may retry.
+    Unavailable,
     Internal,
 }
 
@@ -55,6 +58,11 @@ impl ApiError {
                 "account_deleted",
                 "This account was deleted.",
             ),
+            Self::Unavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "unavailable",
+                "The server is busy. Try again shortly.",
+            ),
             Self::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal",
@@ -86,7 +94,11 @@ impl From<tokio_postgres::Error> for ApiError {
 }
 
 impl From<deadpool_postgres::PoolError> for ApiError {
-    fn from(_: deadpool_postgres::PoolError) -> Self {
+    fn from(err: deadpool_postgres::PoolError) -> Self {
+        if let deadpool_postgres::PoolError::Timeout(_) = err {
+            tracing::warn!(kind = "pool_timeout", "database busy");
+            return Self::Unavailable;
+        }
         tracing::error!(kind = "pool", "database error");
         Self::Internal
     }
