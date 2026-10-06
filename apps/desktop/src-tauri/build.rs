@@ -9,6 +9,8 @@ const COMMANDS: &[&str] = &[
     "record_activity",
     "list_items",
     "get_item",
+    "sso_accounts",
+    "provider_login",
     "reveal_secret",
     "password_history",
     "list_passkeys",

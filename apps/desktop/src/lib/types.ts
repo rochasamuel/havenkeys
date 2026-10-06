@@ -27,6 +27,16 @@ export interface SignInWith {
   account: string | null;
 }
 
+/** A saved login for a provider's own sign-in page (Rust `SsoAccount`). No secrets. */
+export interface SsoAccount {
+  id: string;
+  title: string;
+  username: string;
+}
+
+/** Which login a "Sign in with" login's provider login is (Rust `ProviderLogin`). */
+export type ProviderLogin = { kind: "one"; id: string } | { kind: "none" } | { kind: "several" };
+
 export type CardBrand =
   | "visa"
   | "mastercard"

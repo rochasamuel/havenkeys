@@ -283,6 +283,8 @@ pub fn run() {
             commands::record_activity,
             commands::list_items,
             commands::get_item,
+            commands::sso_accounts,
+            commands::provider_login,
             commands::reveal_secret,
             commands::password_history,
             commands::list_passkeys,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sso-accounts"
+description = "Enables the sso_accounts command without any pre-configured scope."
+commands.allow = ["sso_accounts"]
+
+[[permission]]
+identifier = "deny-sso-accounts"
+description = "Denies the sso_accounts command without any pre-configured scope."
+commands.deny = ["sso_accounts"]

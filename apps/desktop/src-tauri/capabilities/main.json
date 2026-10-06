@@ -16,6 +16,8 @@
     "allow-record-activity",
     "allow-list-items",
     "allow-get-item",
+    "allow-sso-accounts",
+    "allow-provider-login",
     "allow-reveal-secret",
     "allow-password-history",
     "allow-list-passkeys",

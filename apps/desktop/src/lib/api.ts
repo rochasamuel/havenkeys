@@ -41,6 +41,9 @@ import type {
   TotpCode,
   UpdateStatus,
   VaultStatus,
+  ProviderLogin,
+  SsoAccount,
+  SsoProvider,
 } from "./types";
 
 export class ApiError extends Error {
@@ -92,6 +95,10 @@ export const api = {
   listItems: (query?: string) =>
     call<ItemOverview[]>("list_items", { query: query?.trim() ? query : null }),
   getItem: (id: string) => call<ItemOverview>("get_item", { id }),
+  /** The vault's logins for a provider's sign-in page, for the editor's picker. */
+  ssoAccounts: (provider: SsoProvider) => call<SsoAccount[]>("sso_accounts", { provider }),
+  /** The provider login a "Sign in with" login links to, decided in Rust. */
+  providerLogin: (id: string) => call<ProviderLogin>("provider_login", { id }),
   reveal: (id: string, field: SecretField) => call<string>("reveal_secret", { id, field }),
   /** When each previous password was replaced (Unix ms, newest first). */
   passwordHistory: (id: string) => call<number[]>("password_history", { id }),

@@ -15,8 +15,9 @@ use crate::scan_slot::ScannedTotp;
 use crate::state::{AppState, CmdError, CmdResult};
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
 use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings};
+use havenkeys_core::sso::SsoProvider;
 use havenkeys_core::totp::TotpCode;
-use havenkeys_core::vault::{StagedWrite, VaultService, VaultStatus};
+use havenkeys_core::vault::{ProviderLogin, SsoAccount, StagedWrite, VaultService, VaultStatus};
 use havenkeys_core::SecretString;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -118,6 +119,20 @@ pub fn get_item(state: State<'_, AppState>, id: Uuid) -> CmdResult<ItemOverview>
     // No `touch()`, for the same reason as `list_items`: a refresh driven by
     // sync or by the extension must not count as user activity.
     Ok(state.vault()?.get_item(&id)?)
+}
+
+#[tauri::command]
+pub fn sso_accounts(
+    state: State<'_, AppState>,
+    provider: SsoProvider,
+) -> CmdResult<Vec<SsoAccount>> {
+    // Read-only, no secrets; no `touch()`, like `get_item`.
+    Ok(state.vault()?.sso_accounts(provider)?)
+}
+
+#[tauri::command]
+pub fn provider_login(state: State<'_, AppState>, id: Uuid) -> CmdResult<ProviderLogin> {
+    Ok(state.vault()?.provider_login(&id)?)
 }
 
 #[tauri::command]
