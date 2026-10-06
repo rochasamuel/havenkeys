@@ -994,13 +994,18 @@ input::-ms-clear {
   color: var(--muted);
 }
 
-.sso-picker {
+.sso-row {
   position: relative;
+}
+
+.sso-picker {
   flex: 1;
   min-width: 0;
 }
 
 .sso-trigger {
+  position: relative;
+  padding-right: 30px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1010,13 +1015,14 @@ input::-ms-clear {
 }
 
 .sso-trigger .select-chevron {
-  margin-left: auto;
+  top: 50%;
+  margin-top: -7px;
 }
 
 .sso-menu {
-  left: 0;
-  right: auto;
-  width: min(360px, 100%);
+  left: 8px;
+  right: 8px;
+  min-width: 0;
   max-height: 340px;
   overflow-y: auto;
   transform-origin: top left;
@@ -1025,6 +1031,21 @@ input::-ms-clear {
 .sso-search {
   width: 100%;
   margin-bottom: 4px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--field);
+}
+
+.sso-picker [data-truncate] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group.sso-group {
+  overflow: visible;
 }
 
 .sso-option {

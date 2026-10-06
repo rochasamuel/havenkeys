@@ -20,29 +20,33 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
   const [active, setActive] = useState(0);
   const [accounts, setAccounts] = useState<Accounts | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const loading = useRef(false);
   const rows = useMemo(() => pickerRows(accounts ?? {}, query), [accounts, query]);
 
-  // Loaded once per editor, on first open.
+  // Loaded once per editor, on first open. The in-flight batch is kept, so
+  // closing and reopening before it resolves does not start another.
   useEffect(() => {
-    if (!open || accounts) return;
-    let live = true;
+    if (!open || accounts || loading.current) return;
+    loading.current = true;
     void Promise.allSettled(PROVIDER_ORDER.map((p) => api.ssoAccounts(p))).then((results) => {
-      if (!live) return;
       const out: Accounts = {};
       results.forEach((r, i) => {
         if (r.status === "fulfilled") out[PROVIDER_ORDER[i] as SsoProvider] = r.value;
       });
       setAccounts(out);
     });
-    return () => {
-      live = false;
-    };
   }, [open, accounts]);
 
   useEffect(() => {
     if (!open) return;
+    document.getElementById(`sso-option-${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [open, active]);
+
+  useEffect(() => {
+    if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      if (wrap.current && !wrap.current.contains(e.target as Node)) close();
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
@@ -57,12 +61,13 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
   function pick(row: PickerRow) {
     onChange(applyRow(row, value));
     close();
+    triggerRef.current?.focus();
   }
 
   function onKey(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((a) => Math.min(a + 1, rows.length - 1));
+      setActive((a) => Math.max(0, Math.min(a + 1, rows.length - 1)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, 0));
@@ -73,13 +78,23 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
     } else if (e.key === "Escape") {
       e.preventDefault();
       close();
+      triggerRef.current?.focus();
+    } else if (e.key === "Tab") {
+      close();
     }
   }
 
   const rowId = (i: number) => `sso-option-${i}`;
   return (
-    <div className="sso-picker" ref={wrap}>
+    <div
+      className="sso-picker"
+      ref={wrap}
+      onBlur={(e) => {
+        if (open && !e.currentTarget.contains(e.relatedTarget as Node | null)) close();
+      }}
+    >
       <button
+        ref={triggerRef}
         type="button"
         className="sso-trigger edit-input"
         aria-haspopup="listbox"
@@ -102,6 +117,9 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
         <div className="menu sso-menu">
           <input
             type="search"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
             className="edit-input sso-search"
             value={query}
             placeholder={t.editor.providerSearch}

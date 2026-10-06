@@ -197,7 +197,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
         </div>
       </header>
 
-      <div className="group">
+      <div className={itemType === "login" ? "group sso-group" : "group"}>
         <label className="row edit-row">
           <span className="edit-label">{t.editor.title}</span>
           <input
@@ -213,7 +213,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
 
         {itemType === "login" && (
           <>
-            <div className="row edit-row">
+            <div className="row edit-row sso-row">
               <span className="edit-label">{t.editor.signInWith}</span>
               <SsoPicker
                 value={signIn}

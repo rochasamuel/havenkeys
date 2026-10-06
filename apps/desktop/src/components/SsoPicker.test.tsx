@@ -96,4 +96,32 @@ describe("SsoPicker", () => {
       expect.arrayContaining(["Apple", "Discord", "Facebook", "GitHub", "GitLab", "Google", "LinkedIn", "Microsoft", "X"]),
     );
   });
+  it("is a combobox; focus returns to the trigger after pick and Escape", async () => {
+    await act(async () => root.render(<SsoPicker value={value} onChange={onChange} />));
+    await act(async () => trigger().click());
+    expect(search().getAttribute("role")).toBe("combobox");
+    await act(async () => key("Escape"));
+    expect(document.activeElement).toBe(trigger());
+    await act(async () => trigger().click());
+    await act(async () => options()[0]!.click());
+    expect(document.activeElement).toBe(trigger());
+  });
+  it("ArrowDown with no rows then Enter does nothing", async () => {
+    await act(async () => root.render(<SsoPicker value={value} onChange={onChange} />));
+    await act(async () => trigger().click());
+    await act(async () => type("zzz"));
+    await act(async () => key("ArrowDown"));
+    await act(async () => key("Enter"));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+  it("reopening while the first load is pending does not load again", async () => {
+    let release: (a: SsoAccount[]) => void = () => {};
+    ssoAccounts.mockReset().mockImplementation(() => new Promise<SsoAccount[]>((r) => (release = r)));
+    await act(async () => root.render(<SsoPicker value={value} onChange={onChange} />));
+    await act(async () => trigger().click());
+    await act(async () => key("Escape"));
+    await act(async () => trigger().click());
+    expect(ssoAccounts.mock.calls.length).toBeLessThanOrEqual(9);
+    await act(async () => release([]));
+  });
 });

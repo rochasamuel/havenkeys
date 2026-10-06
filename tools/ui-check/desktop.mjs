@@ -198,6 +198,8 @@ function baseResponses() {
     copy_card_field: { clearAfterSeconds: 30 },
     check_card_number: { brand: "mastercard", checkDigitOk: false },
     login_fields: [],
+    sso_accounts: [],
+    provider_login: { kind: "none" },
     reveal_login_field: "a deploy key passphrase that is rather long",
     login_field_totp: { code: "77104523", period: 30, secondsRemaining: 4 },
     copy_login_field: { clearAfterSeconds: 30 },
@@ -621,6 +623,41 @@ export const desktopScenarios = [
     shots: [".editor .group-title >> nth=0", ".edit-area"],
   },
   {
+    name: "editor-sso-picker",
+    respond: {
+      sso_accounts: {
+        byProvider: {
+          google: [{ id: "g1", title: "google.com", username: "samuelsilv.rocha@gmail.com" }],
+          github: [
+            { id: "gh1", title: "Github", username: "rochasamuel" },
+            { id: "gh2", title: "GitHub work account with a very long title", username: "a-really-long-username.that-keeps-going-and-going@corporate-example-domain.com" },
+          ],
+        },
+      },
+    },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.click(".sso-trigger");
+      await page.waitForTimeout(300);
+    },
+    shots: [".edit-area"],
+  },
+  {
+    name: "detail-login-sso-none",
+    respond: {
+      list_items: items.map((i, n) => (n === 0 ? { ...i, signInWith: { provider: "google", account: "me@gmail.com" } } : i)),
+      provider_login: { kind: "none" },
+    },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(300);
+    },
+    shots: [".item"],
+  },
+  {
     name: "editor-login-changing",
     respond: {},
     async act(page) {
@@ -847,6 +884,8 @@ export function tauriStub(setup) {
       const r = window.__hkRespond[cmd];
       if (r && typeof r === "object" && "reject" in r) throw r.reject;
       if (r === undefined) throw { code: "internal", message: `ui-check: no canned answer for ${cmd}` };
+      // `{ byProvider: { google: [...] } }` answers per `provider` argument.
+      if (r && typeof r === "object" && "byProvider" in r) return JSON.parse(JSON.stringify(r.byProvider[args.provider] ?? []));
       return JSON.parse(JSON.stringify(r));
     },
   };
