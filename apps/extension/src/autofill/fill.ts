@@ -6,7 +6,7 @@
 // field in the group the user chose: never into attributes, never into
 // hidden fields, never anywhere else in the DOM.
 
-import { fieldsOf, isFillable, type Env, type LoginGroup } from "./group";
+import { fieldsOf, isStrictlyFillable, type Env, type LoginGroup } from "./group";
 
 /**
  * Where each field's current value came from, as far as we know:
@@ -47,9 +47,13 @@ export function typedByUser(el: HTMLInputElement, key: (v: string) => string): b
 
 const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
-/** Fill one field. Returns false (and writes nothing) if it is not fillable. */
+/**
+ * Fill one field. Returns false (and writes nothing) if it is not fillable.
+ * A password-type field must also pass the strict visibility check: off the
+ * page, nearly transparent or clipped away, it gets nothing (EX-02).
+ */
 export function setValue(el: HTMLInputElement, value: string, env: Env, fromVault = true): boolean {
-  if (!isFillable(el, env)) return false;
+  if (!isStrictlyFillable(el, env)) return false;
   el.focus({ preventScroll: true });
   if (nativeValueSetter) nativeValueSetter.call(el, value);
   else el.value = value;

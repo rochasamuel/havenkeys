@@ -359,6 +359,22 @@ describe("login groups", () => {
 });
 
 describe("filling", () => {
+  it("EX-02: a password field that fails the strict visibility check gets nothing", () => {
+    page(`<form><input name="user" type="email"><input name="pw" type="password" id="pw"></form>`);
+    const strict: Env = { ...env(), strictVisible: (el) => el.id !== "pw" };
+    const { group } = groupFor($('[name="pw"]'), env());
+    expect(fillLogin(group, { username: "octo", password: "pw-1" }, strict)).toBe(1);
+    expect($('[name="user"]').value).toBe("octo");
+    expect($('[name="pw"]').value).toBe("");
+
+    page(`<form><input name="email" type="email"><input name="n1" type="password" autocomplete="new-password" id="pw">
+      <input name="n2" type="password" autocomplete="new-password"></form>`);
+    const signup = groupFor($('[name="n1"]'), env()).group;
+    expect(fillNewPassword(signup, "gen-1", strict)).toBe(1);
+    expect($('[name="n1"]').value).toBe("");
+    expect($('[name="n2"]').value).toBe("gen-1");
+  });
+
   it("fills username and password with framework-visible events", () => {
     page(`<form><input name="user" type="email"><input name="pw" type="password"></form>`);
     const events: string[] = [];

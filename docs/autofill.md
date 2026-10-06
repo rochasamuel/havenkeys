@@ -152,7 +152,14 @@ An input is considered only if it is not disabled, not read-only, not of a
 non-text type (hidden, checkbox, date, and so on), and **visible**: rendered
 with a size of at least 4×4 px, and not hidden by `display`, `visibility`,
 `opacity` or `content-visibility` (`checkVisibility`). Hidden "honeypot"
-fields that harvest filled credentials are never classified or filled.
+fields hidden that way are never classified or filled. A password-type
+field must also pass the stricter check identity and card fields use
+(`autofill/visibility.ts`): not off the page, not below 10% combined
+opacity, not clipped or cut off by an `overflow: hidden` ancestor. A field
+covered by another element still counts as visible (see the security
+model's limitations). Automatic sign-in never presses a button whose
+`formaction`, or whose form's `action`, sends to another origin; the
+fields stay filled and the user presses.
 
 ### Signals
 

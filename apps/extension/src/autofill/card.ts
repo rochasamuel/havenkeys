@@ -30,7 +30,7 @@ export interface CardGroup {
 /** Visible, enabled, editable. The identity's stricter visibility applies: cards are not site-bound either. */
 export function isCardFillable(el: CardElement, env: Env): boolean {
   if (el.disabled) return false;
-  if (!(env.identityVisible ? env.identityVisible(el) : env.isVisible(el))) return false;
+  if (!(env.strictVisible ? env.strictVisible(el) : env.isVisible(el))) return false;
   if (el instanceof HTMLSelectElement) return true;
   return !el.readOnly && TEXT_TYPES.has(el.type.toLowerCase());
 }

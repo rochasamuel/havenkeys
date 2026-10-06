@@ -114,9 +114,30 @@ export function findSubmitButton(root: ParentNode, field: HTMLInputElement, step
     const [best, second] = ranked;
     if (!best || best.s < PRESS_MIN_SCORE) continue;
     if (second && best.s - second.s < PRESS_MIN_MARGIN) return null;
+    // The user presses a button that sends the form to another origin, never
+    // HavenKeys (EX-02).
+    if (submitsElsewhere(best.b, field)) return null;
     return best.b;
   }
   return null;
+}
+
+/**
+ * Does pressing `button` send the form somewhere other than this page's
+ * origin? Its `formaction`, else its form's `action` (the button's own form,
+ * or the field's). A URL that does not parse counts as elsewhere.
+ */
+export function submitsElsewhere(button: HTMLElement, field: HTMLInputElement, origin = location.origin): boolean {
+  const form = isSubmitter(button) ? button.form : (button.closest("form") ?? field.form);
+  const raw = isSubmitter(button) && button.hasAttribute("formaction") ? button.getAttribute("formaction") : form?.getAttribute("action");
+  if (raw === null || raw === undefined || raw.trim() === "") return false;
+  try {
+    const u = new URL(raw, document.baseURI);
+    // `javascript:` sends nothing; the page's own handler takes the submit.
+    return u.protocol !== "javascript:" && u.origin !== origin;
+  } catch {
+    return true;
+  }
 }
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

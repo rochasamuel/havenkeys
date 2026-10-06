@@ -60,18 +60,18 @@ export interface Env {
   /** Is the element rendered and visible to the user? */
   isVisible(el: HTMLElement): boolean;
   /**
-   * Stricter check for identity fields, which have no site binding: also
-   * refuses off-page, near-transparent, clipped and collapsed-overflow
-   * fields (autofill/visibility.ts). Identity code falls back to isVisible
-   * when absent (tests that do not exercise layout).
+   * Stricter check for fields that take a password, a card or identity
+   * values: also refuses off-page, near-transparent, clipped and
+   * collapsed-overflow fields (autofill/visibility.ts). Falls back to
+   * isVisible when absent (tests that do not exercise layout).
    */
-  identityVisible?(el: HTMLElement): boolean;
+  strictVisible?(el: HTMLElement): boolean;
   /** Page path, used as intent evidence (`/signup`, `/login`). */
   path: string;
 }
 
 export function defaultEnv(): Env {
-  return { isVisible: isRendered, identityVisible: (el) => isRendered(el) && isIdentityVisible(el), path: location.pathname };
+  return { isVisible: isRendered, strictVisible: (el) => isRendered(el) && isIdentityVisible(el), path: location.pathname };
 }
 
 /** Visible and usable: rendered with a size, not hidden by CSS. */
@@ -87,6 +87,11 @@ export function isRendered(el: HTMLElement): boolean {
 
 export function isFillable(el: HTMLInputElement, env: Env): boolean {
   return !el.disabled && !el.readOnly && !IGNORED_TYPES.has(el.type) && env.isVisible(el);
+}
+
+/** isVisible, and for a password-type field the strict check too (EX-02). */
+export function isStrictlyFillable(el: HTMLInputElement, env: Env): boolean {
+  return isFillable(el, env) && (el.type !== "password" || (env.strictVisible ?? env.isVisible)(el));
 }
 
 /** Text of the elements referenced by `aria-labelledby`, bounded. */

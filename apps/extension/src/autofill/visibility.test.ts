@@ -126,7 +126,7 @@ describe("isIdentityVisible", () => {
 });
 
 describe("identity groups use the strict check", () => {
-  const env: Env = { isVisible: () => true, identityVisible: (el) => isIdentityVisible(el, layout), path: "/" };
+  const env: Env = { isVisible: () => true, strictVisible: (el) => isIdentityVisible(el, layout), path: "/" };
 
   it("does not classify, and does not fill, an off-page field", () => {
     boxes.set($("#b"), { ...FIELD_BOX, left: -9999 });

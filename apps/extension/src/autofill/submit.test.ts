@@ -19,6 +19,20 @@ const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".
 beforeEach(() => (document.body.innerHTML = ""));
 
 describe("findSubmitButton", () => {
+  it("EX-02: never picks a button that sends the form to another origin", () => {
+    const form = (action: string) =>
+      `<form action="${action}"><input name="u"><input name="p" type="password"><button type="submit" id="go">Sign in</button></form>`;
+    document.body.innerHTML = form("https://evil.example/collect");
+    expect(findSubmitButton($("form"), $("[name=p]"), "password", env)).toBeNull();
+    for (const ok of ["/session", "", "javascript:void(0)", `${location.origin}/login`]) {
+      document.body.innerHTML = form(ok);
+      expect(findSubmitButton($("form"), $("[name=p]"), "password", env)?.id, ok).toBe("go");
+    }
+    document.body.innerHTML = `<form action="/session"><input name="u"><input name="p" type="password">
+      <button type="submit" id="go" formaction="https://evil.example/">Sign in</button></form>`;
+    expect(findSubmitButton($("form"), $("[name=p]"), "password", env)).toBeNull();
+  });
+
   it("gov.br: Continuar on the CPF step, Entrar (not Cancelar / Esqueci minha senha) on the password step", () => {
     document.body.innerHTML = `<form><input id="accountId" name="accountId" autocomplete="new-password" type="tel" inputmode="numeric" placeholder="Digite seu CPF">
       <div class="button-panel"><button id="enter-account-id" type="submit" name="operation" value="enter-account-id">Continuar</button></div></form>`;

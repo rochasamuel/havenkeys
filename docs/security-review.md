@@ -353,7 +353,9 @@ login into this site's form.
   content script are accepted only from the background worker, and with
   exact shapes.
 * Only visible, enabled, non-read-only fields in the chosen group are
-  filled. Hidden honeypot fields are never touched. Secrets never appear in
+  filled. Hidden honeypot fields are never touched (corrected 2026-10-06:
+  this held only for `display`/`visibility`/`opacity: 0`/sub-4px fields; see
+  EX-02 for off-page, clipped and covered ones). Secrets never appear in
   attributes or markup (`autofill.test.ts` checks the serialized DOM).
 * Classification of a field on a page with 5,000 inputs examines at most 60,
   and the page is never scanned up front (attack 7).
@@ -1790,7 +1792,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Fixed in code, not yet verified on Windows |
 | BR-2 | The per-item password-change rate-limit budget is spent even when the write is denied or fails | Low | Bridge | **Fixed** |
 | EX-01 | Popup Fill writes credentials into a CSP-sandboxed (opaque-origin) document on the login's own origin | Medium | Extension (popup) | **Fixed** |
-| EX-02 | "Visible" field detection admits off-screen/clipped/covered/near-transparent inputs; fill and auto-submit ignore a cross-origin form `action` | Low | Extension (autofill) | Open (planned) |
+| EX-02 | "Visible" field detection admits off-screen/clipped/covered/near-transparent inputs; fill and auto-submit ignore a cross-origin form `action` | Low | Extension (autofill) | **Fixed** (covered fields accepted) |
 | EX-03 | Menu/save tokens live in the iframe `src`, so a page can re-frame `menu.html#token`/`save.html#token` itself; the frames.ts tamper guards are moot and Firefox relies on the arming delay alone | Low | Extension (menu) | **Fixed** |
 | EX-04 | Save-prompt oracle on a page-planted username, after the password is already known to the attacker | Info | Extension | Accepted (residual of F1) |
 | DT1 | A server session can be installed after the vault locks; a locked vault then stays "online" and account commands still work | Low | Desktop (sync) | **Fixed** |
@@ -1850,7 +1852,8 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 **Suggested fix:** in `handleFill` (and the passkey bridge, as defence in depth), refuse unless `self.origin === location.origin`; or probe with `executeScript({func: () => self.origin})` before injecting from the popup path. Correct `docs/native-messaging.md:343`'s unqualified "a sandboxed frame (origin null) is ignored."
 **Update, 2026-10-02:** fixed. `handleFill` returns `{ filled: 0, pressing: null }` and the passkey bridge answers `fallback` (sending nothing to the background) when `self.origin !== location.origin`. Tests: `refuses_a_popup_fill_into_an_opaque_origin_document` (`content/content.test.ts`) and `falls back without asking the background in an opaque-origin document` (`webauthn/bridge.test.ts`). `docs/native-messaging.md` now states the rule. Verified in Chromium 145 (a content script sees `self.origin` `"null"` in a CSP-sandboxed document); Firefox not yet checked.
 
-#### EX-02. Visible-field heuristic and missing form-action check (Low, open)
+#### EX-02. Visible-field heuristic and missing form-action check (Low, fixed; covered fields accepted)
+**Status:** fixed (2026-10-06), except for covered fields. `setValue` now requires a password-type field to pass the strict visibility check identity and card fields already used (`isStrictlyFillable`): not off the page, combined opacity at least 0.1, not clipped or cut off by an overflow-hidden ancestor. `findSubmitButton` returns no button when the winner's `formaction`, or its form's `action`, resolves to another origin (`submitsElsewhere`; `javascript:` and empty actions count as the page's own), so the fields stay filled and the user presses. **Accepted:** a field covered by another element still counts as visible. Hit testing would refuse forms whose floating labels sit over their inputs (security model, "Known limitations of the visibility check"). The fill still needs the user's pick, on a site the login is saved for. Tests: `EX-02: a password field that fails the strict visibility check gets nothing` (`autofill.test.ts`), `EX-02: never picks a button that sends the form to another origin` (`submit.test.ts`).
 **Attack scenario:** with only HTML/CSS injection on the credential's origin (no script needed), an attacker places a genuine `<input type=password>` off-screen, clipped, covered, or shrunk to 4×4px at near-zero opacity, alongside a visible-looking form whose `action` points at an attacker-controlled origin. `isRendered`/`isFillable` treat all of these as fillable, so the password lands in a field the user never saw; if auto sign-in is on (the default), the extension also auto-presses the submit button, posting the password cross-origin.
 **Evidence:** CONFIRMED — `scratchpad/ex/t3.mjs` bundles the real `group.ts`/`fill.ts`/`submit.ts` and shows off-screen, clipped and covered fields all get filled (only `opacity:0` and smaller are excluded).
 **Suggested fix:** require viewport intersection and an `elementFromPoint` hit-test in `isRendered`; never fill a password field other than one that is itself hit-testable; do not auto-press (and consider not filling at all without a warning) when the form/button's `action`/`formaction` resolves to a different origin than the frame. Correct the Phase 5 "Verified properties" claim that hidden honeypot fields are never touched — that only holds for `opacity:0`/`display:none`/`visibility:hidden`/sub-4px fields.

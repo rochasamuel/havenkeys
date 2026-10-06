@@ -1,9 +1,12 @@
-// Stricter visibility for identity fields (final review finding 1).
+// Stricter visibility for identity, card and password fields (final review
+// finding 1, security review EX-02).
 //
 // An identity fill has no site binding, so a page could otherwise place
 // phone, address or birth-date inputs where the user cannot see them and
-// collect the values with one click. `isRendered` (group.ts) is enough for
-// logins, which Rust binds to the site; identity fields must also pass this.
+// collect the values with one click. A login is bound to the site in Rust,
+// but HTML injection on that site could still put a real password field
+// off-screen or clip it away and let the fill land there; password-type
+// fields (setValue in fill.ts) must pass this too.
 //
 // Checked on top of isRendered (group.ts defaultEnv combines the two), all
 // bounded (MAX_ANCESTORS elements, no page-wide work):
