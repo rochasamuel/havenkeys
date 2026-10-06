@@ -9,7 +9,8 @@ describe("decideOpen", () => {
   it("opens when nothing is being edited", () => {
     expect(decideOpen({ kind: "empty" }, false, A)).toBe("open");
     expect(decideOpen({ kind: "view", id: B }, false, A)).toBe("open");
-    expect(decideOpen({ kind: "view", id: A }, false, A)).toBe("open");
+    expect(decideOpen({ kind: "view", id: A }, false, A)).toBe("already");
+    expect(decideOpen({ kind: "view", id: A }, false, A, false)).toBe("reveal");
   });
   it("does nothing when that item's editor is already open", () => {
     expect(decideOpen({ kind: "edit", id: A }, false, A)).toBe("already");

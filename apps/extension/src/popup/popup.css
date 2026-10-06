@@ -195,6 +195,7 @@ main {
 }
 
 .item {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -241,8 +242,8 @@ main {
   cursor: pointer;
 }
 
-/* Hover or keyboard focus swaps the initial (or provider mark) for a pencil. */
-.avatar-edit-icon {
+/* Hover or keyboard focus swaps the initial (or provider mark) for an eye. */
+.avatar-open-icon {
   display: none;
   width: 17px;
   height: 17px;
@@ -265,8 +266,8 @@ main {
   display: none;
 }
 
-.avatar:hover .avatar-edit-icon,
-.avatar:focus-visible .avatar-edit-icon {
+.avatar:hover .avatar-open-icon,
+.avatar:focus-visible .avatar-open-icon {
   display: block;
 }
 
@@ -306,6 +307,65 @@ main {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/*
+ * A row's Fill and Code wait for hover (or keyboard focus inside the row),
+ * laid over the right of the row so the title and username keep the full
+ * width. Behind them the row blurs, fading in from the left. Opacity is set
+ * on the buttons and the blur layer, never on .actions itself: an ancestor
+ * below full opacity would cut the blur off from the text behind it.
+ */
+.item > .actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  height: 32px;
+  padding-left: 44px;
+  pointer-events: none;
+}
+
+.item > .actions::before {
+  content: "";
+  position: absolute;
+  inset: -8px -8px -8px 0;
+  border-radius: 0 9px 9px 0;
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--hover) 75%, transparent) 44px);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 44px);
+  mask-image: linear-gradient(to right, transparent, #000 44px);
+  opacity: 0;
+  transition: opacity 160ms;
+}
+
+.item > .actions > * {
+  position: relative;
+  opacity: 0;
+  transform: translateX(4px);
+  transition:
+    opacity 160ms,
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* The buttons take clicks; the blur around them lets the row take hover. */
+.item:hover > .actions > *,
+.item:focus-within > .actions > * {
+  pointer-events: auto;
+}
+
+.item:hover > .actions::before,
+.item:focus-within > .actions::before,
+.item:hover > .actions > *,
+.item:focus-within > .actions > * {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item > .actions > * {
+    transform: none;
+  }
 }
 
 .btn {

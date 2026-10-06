@@ -99,11 +99,11 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     return () => void unlisten.then((f) => f());
   }, [refresh]);
 
-  const openForEdit = useCallback((id: string) => {
+  const openFromExtension = useCallback((id: string) => {
     setPendingOpen(null);
     setSection("login");
     setQuery("");
-    setPane({ kind: "edit", id });
+    setPane({ kind: "view", id });
   }, []);
 
   // Read by the onOpenItem listener below, which subscribes once and must
@@ -116,7 +116,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const sectionRef = useRef(section);
   sectionRef.current = section;
 
-  // "Edit in HavenKeys" from the browser extension's popup. Subscribes once
+  // "Open in HavenKeys" from the browser extension's popup. Subscribes once
   // (stable deps): re-subscribing on every pane/editorDirty change would
   // leave a window, between the async unlisten and the new listen, with a
   // stale-closure listener or briefly no listener at all.
@@ -133,7 +133,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
         case "already":
           return;
         case "reveal":
-          // The editor for this item is already open, just hidden behind
+          // This item is already shown, just hidden behind
           // Settings/Generator: bring it back without touching its state.
           setSection("login");
           return;
@@ -141,7 +141,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
           setPendingOpen(id);
           return;
         case "open":
-          openForEdit(id);
+          openFromExtension(id);
       }
     }).then((f) => {
       if (cancelled) f();
@@ -151,7 +151,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       cancelled = true;
       unlisten?.();
     };
-  }, [openForEdit]);
+  }, [openFromExtension]);
 
   // The discard-changes banner only makes sense while an edit/new pane is
   // showing; if the user saves or cancels instead of choosing the banner's
@@ -400,7 +400,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                 <button className="btn btn-small" onClick={() => setPendingOpen(null)}>
                   {t.vault.keepEditing}
                 </button>
-                <button className="btn btn-small btn-danger" onClick={() => openForEdit(pendingOpen)}>
+                <button className="btn btn-small btn-danger" onClick={() => openFromExtension(pendingOpen)}>
                   {t.vault.discard}
                 </button>
               </div>

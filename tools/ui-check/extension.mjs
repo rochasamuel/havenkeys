@@ -100,6 +100,18 @@ export const extensionScenarios = [
     replies: () => ({ popup_state: ok({ kind: "unlocked", site: "github.com", matches, identity: null }) }),
   },
   {
+    // Fill and Code show only on hover, over a blur that fades in from the left.
+    name: "popup-unlocked-hover",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "github.com", matches, identity: null }) }),
+    async act(page) {
+      await page.hover("li.item:nth-child(1) .title", { position: { x: 4, y: 4 } });
+      await page.waitForTimeout(300);
+    },
+  },
+  {
     name: "popup-unlocked-code-and-error",
     page: "popup.html",
     frame: { kind: "popup" },
@@ -110,7 +122,10 @@ export const extensionScenarios = [
       popup_fill: err(x.integrationDisabled),
     }),
     async act(page) {
+      // Fill and Code show on hover: point at the row first.
+      await page.hover("li.item:nth-child(1) .title", { position: { x: 4, y: 4 } });
       await page.click("li.item:nth-child(1) .actions span .btn");
+      await page.hover("li.item:nth-child(2) .title", { position: { x: 4, y: 4 } });
       await page.click("li.item:nth-child(2) .actions .btn");
     },
   },
@@ -160,6 +175,7 @@ export const extensionScenarios = [
       popup_fill_identity: ok({ confirm: ["cpf", "rg"], origin: "https://shop.example.com" }),
     }),
     async act(page) {
+      await page.hover(".item.identity .title", { position: { x: 4, y: 4 } });
       await page.click(".item.identity .btn");
     },
   },

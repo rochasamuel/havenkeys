@@ -74,15 +74,15 @@ function smallButton(text: string, title: string): HTMLButtonElement {
 
 const SVG = "http://www.w3.org/2000/svg";
 
-const PENCIL = "M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10v3zM14 8l3 3";
+const EYE = "M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.25a2.75 2.75 0 1 0 0 5.5 2.75 2.75 0 0 0 0-5.5z";
 
 /**
  * The row's initial (or, for a "sign in with" login, its provider mark),
- * which turns into a pencil on hover or keyboard focus: clicking it opens
+ * which turns into an eye on hover or keyboard focus: clicking it shows
  * the login in the desktop app. The icon is built with createElementNS,
  * never parsed from markup.
  */
-function editAvatar(initial: string, label: string, provider: SsoProvider | null): HTMLButtonElement {
+function openAvatar(initial: string, label: string, provider: SsoProvider | null): HTMLButtonElement {
   const mark = provider ? providerIcon(provider, 16) : h("span", { className: "avatar-initial", text: initial });
   const b = h("button", { className: "avatar" }, mark);
   b.type = "button";
@@ -91,9 +91,9 @@ function editAvatar(initial: string, label: string, provider: SsoProvider | null
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("avatar-edit-icon");
+  svg.classList.add("avatar-open-icon");
   const path = document.createElementNS(SVG, "path");
-  path.setAttribute("d", PENCIL);
+  path.setAttribute("d", EYE);
   svg.append(path);
   b.append(svg);
   return b;
@@ -192,12 +192,12 @@ function matchRow(m: Match): HTMLElement {
   const status = h("div", { className: "row-status" });
   // The initial (or provider mark) opens this login in the desktop app.
   // Closes the popup on success, like a fill, since focus moves to the app.
-  const edit = editAvatar(initial, t.popup.edit, m.provider);
-  edit.addEventListener("click", () => void fillFromPopup(edit, { type: "popup_open_item", itemId: m.id }, status));
+  const open = openAvatar(initial, t.popup.open, m.provider);
+  open.addEventListener("click", () => void fillFromPopup(open, { type: "popup_open_item", itemId: m.id }, status));
   const row = h(
     "li",
     { className: "item" },
-    edit,
+    open,
     h("div", { className: "who" }, truncates(h("div", { className: "title", text: m.title })), userLine(m)),
   );
   const actions = h("div", { className: "actions" });

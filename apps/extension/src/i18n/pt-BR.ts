@@ -24,7 +24,7 @@ export const ptBR: Messages = {
     code: "Código",
     codeTitle: "Mostrar o código de verificação",
     fillCodeTitle: "Preencher a página com este código",
-    edit: "Editar no HavenKeys",
+    open: "Abrir no HavenKeys",
     identityTitle: "Identidade",
     identityDetail: "Nome, endereço e contatos",
     fillIdentityTitle: "Preencher sua identidade no formulário desta página",
