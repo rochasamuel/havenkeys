@@ -7,6 +7,7 @@ say() { printf '%s\n' "$*"; }
 die() { printf 'setup: %s\n' "$*" >&2; exit 1; }
 
 command -v docker >/dev/null 2>&1 || die "Docker is not installed. See https://docs.docker.com/engine/install/"
+command -v curl >/dev/null 2>&1 || die "curl is not installed; install it and run this again."
 docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is missing (the 'docker compose' command)."
 for f in compose.yaml Caddyfile backup.sh; do [ -f "$f" ] || die "$f is missing; download the whole bundle."; done
 
@@ -30,6 +31,9 @@ if [ ! -f .env ]; then
 	esac
 	printf 'Email for certificate notices: '
 	read -r email
+	case "$email" in
+	*[[:space:]\"\'\$\#\\]*) die "the email contains characters that are not allowed." ;;
+	esac
 	case "$email" in *@*.*) ;; *) die "\"$email\" is not an email address." ;; esac
 	secret=$(random_b64 32)
 	dbpass=$(random_b64 24 | tr -d '/+=')
