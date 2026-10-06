@@ -26,7 +26,8 @@ const NAMES: Record<SsoProvider, readonly string[]> = {
   apple: ["apple"],
   facebook: ["facebook"],
   discord: ["discord"],
-  x: ["twitter", "x"],
+  // "x" alone is not a name: it joins this list with the joiner-only rule (Task 2).
+  x: ["twitter"],
   linkedin: ["linkedin", "linked in"],
   gitlab: ["gitlab", "git lab"],
 };

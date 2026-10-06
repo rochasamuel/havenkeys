@@ -54,17 +54,18 @@ impl SsoProvider {
         }
     }
 
-    // Origins checked against each provider's developer docs (2026-10-05):
-    // x.com: /i/oauth2/authorize (OAuth 2.0 authorize)
-    // api.x.com: /oauth/authorize (OAuth 1.0a)
-    // www.facebook.com: /v25.0/dialog/oauth
-    // discord.com: /oauth2/authorize
-    // www.linkedin.com: /oauth/v2/authorization
-    // gitlab.com: /oauth/authorize
-    // Removed: twitter.com and api.twitter.com (not in the docs checked;
-    // twitter.com hosts redirect to x.com before any page loads) and
-    // m.facebook.com (not in the docs checked).
     /// Exact origins (scheme + host, no port, no trailing slash).
+    ///
+    /// Checked against each provider's developer docs (2026-10-05):
+    /// x.com: /i/oauth2/authorize (OAuth 2.0 authorize)
+    /// api.x.com: /oauth/authorize (OAuth 1.0a)
+    /// www.facebook.com: /v25.0/dialog/oauth
+    /// discord.com: /oauth2/authorize
+    /// www.linkedin.com: /oauth/v2/authorization
+    /// gitlab.com: /oauth/authorize
+    /// Removed: twitter.com and api.twitter.com (not in the docs checked;
+    /// twitter.com hosts redirect to x.com before any page loads) and
+    /// m.facebook.com (not in the docs checked).
     pub fn origins(self) -> &'static [&'static str] {
         match self {
             Self::Google => &["https://accounts.google.com"],
