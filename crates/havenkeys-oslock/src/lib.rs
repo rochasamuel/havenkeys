@@ -9,7 +9,8 @@
 //! * **Linux:** logind's `LockedHint` for this session, read with
 //!   `loginctl`. GNOME, KDE and other logind-aware lockers set it. Without
 //!   systemd-logind (some minimal setups, WSL) the probe reports "unknown"
-//!   and switches itself off.
+//!   and switches itself off. Once it has answered, failures only pause it
+//!   (30 s, doubling to 5 minutes), never for good.
 //! * **Other platforms:** always unknown.
 //!
 //! "Unknown" never locks the vault; idle and suspend locking still apply.

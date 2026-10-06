@@ -1796,7 +1796,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | DT1 | A server session can be installed after the vault locks; a locked vault then stays "online" and account commands still work | Low | Desktop (sync) | **Fixed** |
 | DT2 | Extension-driven `open_item` resets the auto-lock idle timer | Low | Desktop (bridge hook) | **Fixed** |
 | DT3 | On Windows, the vault file and the keychain-stored Secret Key both roam with the user profile by default | Low | Desktop (storage) | Open (planned) |
-| DT4 | Linux screen-lock detection disables itself for the rest of the run after three transient probe failures | Low | Desktop (oslock) | Open (planned) |
+| DT4 | Linux screen-lock detection disables itself for the rest of the run after three transient probe failures | Low | Desktop (oslock) | **Fixed** |
 | DT5 | NSIS pre-install hook ran `taskkill` without a path (binary planting from the installer's folder) | Low | Desktop (Windows installer) | **Fixed** |
 | DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | **Fixed** |
 | SV-2 | Pull pages are limited by row count, not bytes; an ordinary vault can permanently exceed the client's 17 MiB cap and sync stops for good | Medium | Server / sync client | Fixed (server: `a_vault_of_big_items_pulls_in_pages_under_the_cap`, `a_fetch_of_big_items_names_what_did_not_fit`; client re-asks `unanswered`) |
@@ -1882,7 +1882,8 @@ After the F1 fix, a script that already knows the user's typed password can stil
 **Evidence:** LIKELY, from the vendored `tauri` and `windows-native-keyring-store` sources plus `lib.rs:59-72`/`secret_store.rs:233-237`; not verified on a real roaming profile.
 **Suggested fix:** use `%LOCALAPPDATA%` (`dirs::data_local_dir()`) for the vault and `device.json`; create the keychain entry with `persistence: Local`. At minimum, document the limitation next to S20.
 
-#### DT4. Linux screen-lock detection disables itself permanently after transient failures (Low, open)
+#### DT4. Linux screen-lock detection disables itself permanently after transient failures (Low, fixed)
+**Status:** fixed (2026-10-06). A probe that has answered before now only pauses after three failures in a row: 30 s, doubling up to 5 minutes, back to normal at the next answer. A probe that never answered (no logind) still switches off. There is no Settings indicator yet. Tests: `failures_pause_a_probe_that_worked_and_it_comes_back`, `a_probe_that_never_worked_switches_off` (`havenkeys-oslock/src/linux.rs`).
 **Attack scenario:** three consecutive `loginctl` probe failures (a 2 s timeout under load, a D-Bus/logind restart, resume from suspend) permanently set the probe to "unknown" for the rest of the run, silently disabling screen-lock-triggered vault locking until restart, with nothing shown anywhere. A local attacker who can load the machine, or ordinary system hiccups, can trigger it.
 **Evidence:** LIKELY, code read.
 **Suggested fix:** back off and retry instead of disabling permanently; show a Settings indicator when screen-lock detection is unavailable.
