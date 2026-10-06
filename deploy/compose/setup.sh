@@ -52,7 +52,10 @@ if [ ! -f .env ]; then
 else
 	say "Using the existing .env."
 fi
+
+# Dumps are readable by their owner (you); keep other users out of the folder.
 mkdir -p backups
+chmod 700 backups
 
 domain=$(sed -n 's/^HAVENKEYS_DOMAIN=//p' .env)
 [ -n "$domain" ] || die ".env has no HAVENKEYS_DOMAIN."

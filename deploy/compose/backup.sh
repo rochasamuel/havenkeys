@@ -4,7 +4,6 @@
 #   havenkeys-backup loop   one dump every day at 03:00 (container TZ)
 # Dumps: /backups/havenkeys-YYYY-MM-DD.dump (pg_dump custom format).
 set -eu
-umask 077
 
 dump() {
 	out="/backups/havenkeys-$(date +%F).dump"
