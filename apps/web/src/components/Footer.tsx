@@ -18,6 +18,8 @@ export function Footer() {
         <nav className="footer__links" aria-label={t.footer.aria}>
           <Link to={path("/download")}>{t.footer.download}</Link>
           <Link to={path("/security")}>{t.footer.security}</Link>
+          <Link to={path("/self-host")}>{t.footer.selfHost}</Link>
+          <Link to={path("/developers")}>{t.footer.developers}</Link>
           <a href="https://github.com/rochasamuel/havenkeys" target="_blank" rel="noreferrer">
             {t.footer.github}
           </a>

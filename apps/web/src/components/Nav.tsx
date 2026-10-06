@@ -15,13 +15,13 @@ export function Nav() {
           <span>HavenKeys</span>
         </Link>
         <nav className="nav__links" aria-label={t.nav.mainAria}>
-          <a href={`${home}#journey`} className="nav__hide-sm">
-            {t.nav.howItWorks}
-          </a>
-          <a href={`${home}#browser`} className="nav__hide-sm">
-            {t.nav.browser}
-          </a>
           <NavLink to={path("/security")}>{t.nav.security}</NavLink>
+          <NavLink to={path("/self-host")} className="nav__hide-sm">
+            {t.nav.selfHost}
+          </NavLink>
+          <NavLink to={path("/developers")} className="nav__hide-sm">
+            {t.nav.developers}
+          </NavLink>
           <a
             href="https://github.com/rochasamuel/havenkeys"
             target="_blank"

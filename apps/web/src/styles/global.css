@@ -2488,3 +2488,75 @@ main > .download:last-child {
     transform: none;
   }
 }
+
+/* Home and Security cards */
+.cards {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  max-width: 1080px;
+}
+
+.card {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+}
+
+.card svg {
+  color: var(--brass-hi);
+}
+
+.card h3 {
+  margin: 12px 0 6px;
+  font-size: 1.12rem;
+  color: var(--text-strong);
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted-hi);
+}
+
+/* Three steps */
+.steps {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  max-width: 1080px;
+}
+
+.step {
+  position: relative;
+  padding: 24px;
+  border-top: 2px solid var(--brass-line);
+}
+
+.step__n {
+  font-family: var(--serif);
+  font-size: 2rem;
+  color: var(--brass);
+}
+
+.step h3 {
+  margin: 8px 0 6px;
+  color: var(--text-strong);
+}
+
+.step p {
+  margin: 0;
+  color: var(--muted-hi);
+}
+
+/* Security: what it can't do */
+.security-plain .plain-list {
+  max-width: 760px;
+  margin: 0 auto;
+}

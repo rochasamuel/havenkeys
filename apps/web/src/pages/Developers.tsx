@@ -3,9 +3,8 @@ import { EmergencyKit } from "../components/EmergencyKit";
 import { Icon } from "../components/Icon";
 import { Journey } from "../components/journey/Journey";
 import { useI18n } from "../i18n/context";
+import { CHROME_STORE, FIREFOX_STORE } from "../lib/links";
 
-const CHROME_STORE = "https://chromewebstore.google.com/detail/havenkeys/fmmfkakdkkcfpdnfmbngnlelbfaogafo";
-const FIREFOX_STORE = "https://addons.mozilla.org/firefox/addon/havenkeys/";
 const DOC = "https://github.com/rochasamuel/havenkeys/blob/main/docs/";
 
 export function Developers() {

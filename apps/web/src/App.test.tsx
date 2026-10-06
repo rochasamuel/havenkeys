@@ -20,6 +20,20 @@ describe("routes", () => {
     expect(text(html("/developers"))).not.toContain(text(en.notFound.title));
     expect(text(html("/pt-br/developers"))).not.toContain(text(ptBR.notFound.title));
   });
+  it("shows the technical content on Developers and the plain copy on Home and Security", () => {
+    expect(text(html("/developers"))).toContain(text(en.developers.heroTitle));
+    expect(text(html("/pt-br/developers"))).toContain(text(ptBR.developers.heroTitle));
+    expect(text(html("/security"))).toContain(text(en.security.heroTitle));
+    expect(text(html("/"))).toContain(text(en.home.trustTitle));
+  });
+  it("keeps the old Home anchors", () => {
+    const home = html("/");
+    expect(home).toContain('id="journey"');
+    expect(home).toContain('id="browser"');
+  });
+  it("offers the invite on Home", () => {
+    expect(html("/")).toContain("mailto:invite@havenkeys.net?subject=HavenKeys%20invite%20request");
+  });
   it("still renders every existing page", () => {
     for (const p of ["/", "/download", "/security", "/privacy", "/terms", "/delete-account"]) {
       expect(text(html(p)), p).not.toContain(text(en.notFound.title));

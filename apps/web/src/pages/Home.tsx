@@ -2,20 +2,15 @@ import { Link } from "react-router-dom";
 import popup from "../assets/shots/popup.png";
 import menuLogins from "../assets/shots/menu-logins.png";
 import desktopVault from "../assets/shots/desktop-vault.png";
-import { BrowserShowcase } from "../components/browser/BrowserShowcase";
-import { EmergencyKit } from "../components/EmergencyKit";
 import { Guilloche } from "../components/Guilloche";
 import { Icon } from "../components/Icon";
-import { Journey } from "../components/journey/Journey";
 import { useI18n } from "../i18n/context";
-
-const GITHUB = "https://github.com/rochasamuel/havenkeys";
-const CHROME_STORE = "https://chromewebstore.google.com/detail/havenkeys/fmmfkakdkkcfpdnfmbngnlelbfaogafo";
-const FIREFOX_STORE = "https://addons.mozilla.org/firefox/addon/havenkeys/";
+import { CHROME_STORE, FIREFOX_STORE, GITHUB, inviteHref } from "../lib/links";
 
 export function Home() {
   const { t, path } = useI18n();
   const h = t.home;
+  const invite = inviteHref(t.common.inviteSubject);
   return (
     <>
       <section className="hero">
@@ -28,9 +23,8 @@ export function Home() {
               <Icon name="download" />
               {t.common.downloadCta}
             </Link>
-            <a href="#journey" className="btn btn--ghost btn--lg">
-              {h.seeHow}
-              <Icon name="arrowDown" />
+            <a href={invite} className="btn btn--ghost btn--lg">
+              {t.common.requestInvite}
             </a>
           </div>
           <p className="hero__meta">{h.heroMeta}</p>
@@ -51,107 +45,56 @@ export function Home() {
         </div>
       </section>
 
-      <section className="section intro" id="journey">
+      <section className="section" id="browser">
         <div className="section__head">
-          <h2>{h.journeyTitle}</h2>
-          <p>{h.journeyLede}</p>
+          <h2>{h.cardsTitle}</h2>
+          <p>{h.cardsLede}</p>
         </div>
-        <Journey />
-      </section>
-
-      <section className="section browser-section" id="browser">
-        <div className="section__head">
-          <h2>{h.browserTitle}</h2>
-          <p>{h.browserLede}</p>
-        </div>
-        <BrowserShowcase />
-        <div className="hero__actions">
-          <a className="btn btn--ghost" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
-            <Icon name="external" size={15} />
-            {t.common.addToChrome}
-          </a>
-          <a className="btn btn--ghost" href={FIREFOX_STORE} target="_blank" rel="noopener noreferrer">
-            <Icon name="external" size={15} />
-            {t.common.addToFirefox}
-          </a>
-        </div>
-        <h3 className="browser-section__extra-title">{h.extensionListTitle}</h3>
-        <dl className="features browser-section__extra">
-          {h.extensionFeatures.map((f) => (
-            <div key={f.term}>
-              <dt>{f.term}</dt>
-              <dd>{f.text}</dd>
-            </div>
+        <ul className="cards">
+          {h.cards.map((c) => (
+            <li key={c.title} className="card">
+              <Icon name={c.icon} size={22} />
+              <h3>{c.title}</h3>
+              <p>{c.text}</p>
+            </li>
           ))}
-        </dl>
+        </ul>
       </section>
 
-      <section className="section desktop-section">
-        <div className="desktop-section__grid">
-          <div className="section__head section__head--left">
-            <h2>{h.desktopTitle}</h2>
-            <p>{h.desktopLede}</p>
-          </div>
-          <dl className="features">
-            {h.features.map((f) => (
-              <div key={f.term}>
-                <dt>{f.term}</dt>
-                <dd>{f.text}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-
-      <section className="paper">
-        <div className="paper__inner">
-          <div className="paper__copy">
-            <h2>{h.paperTitle}</h2>
-            <p>{h.paperP1}</p>
-            <p>{h.paperP2}</p>
-            <p className="paper__warn">
-              <Icon name="lock" size={16} />
-              {h.paperWarn}
-            </p>
-          </div>
-          <EmergencyKit />
-        </div>
-      </section>
-
-      <section className="section ledger-section">
+      <section className="section trust" id="journey">
         <div className="section__head">
-          <h2>{h.ledgerTitle}</h2>
-          <p>{h.ledgerLede}</p>
+          <h2>{h.trustTitle}</h2>
+          <p>{h.trustBody}</p>
+          <Link to={path("/developers")} className="text-link">
+            {h.trustLink} <Icon name="arrowRight" size={15} />
+          </Link>
         </div>
-        <div className="ledger">
-          <div className="ledger__col ledger__col--yes">
-            <h3>{h.defendsTitle}</h3>
-            <ul>
-              {h.defends.map((d) => (
-                <li key={d}>
-                  <Icon name="check" size={16} />
-                  <span>{d}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="ledger__col ledger__col--no">
-            <h3>{h.doesntTitle}</h3>
-            <ul>
-              {h.doesnt.map((d) => (
-                <li key={d}>
-                  <Icon name="cross" size={16} />
-                  <span>{d}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+      </section>
+
+      <section className="section">
+        <div className="section__head">
+          <h2>{h.stepsTitle}</h2>
         </div>
-        <div className="ledger__foot">
-          <p className="disclaimer">{t.common.disclaimer}</p>
-          <Link to={path("/security")} className="btn btn--ghost">
-            {h.securityOverview}
-            <Icon name="arrowRight" />
+        <ol className="steps">
+          {h.steps.map((s, i) => (
+            <li key={s.title} className="step">
+              <span className="step__n" aria-hidden="true">
+                {i + 1}
+              </span>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="section selfhost-teaser">
+        <div className="section__head">
+          <h2>{h.selfHostTitle}</h2>
+          <p>{h.selfHostBody}</p>
+          <Link to={path("/self-host")} className="btn btn--ghost">
+            <Icon name="server" size={16} />
+            {h.selfHostCta}
           </Link>
         </div>
       </section>
@@ -165,6 +108,9 @@ export function Home() {
             <Icon name="download" />
             {t.common.downloadCta}
           </Link>
+          <a href={invite} className="btn btn--ghost btn--lg">
+            {t.common.requestInvite}
+          </a>
           <a className="btn btn--ghost btn--lg" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
             <Icon name="external" size={15} />
             {t.common.addToChrome}
