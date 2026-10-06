@@ -13,6 +13,19 @@ describe("providerLogin", () => {
     const other = item("other", { username: "you@gmail.com", urls: [{ url: "https://accounts.google.com/", matchType: "domain" }] });
     expect(providerLogin([typeform, other, google], typeform)?.id).toBe("google");
   });
+  it("finds Google and GitHub logins saved from their sign-in pages", () => {
+    const google = item("google", {
+      username: "me@gmail.com",
+      urls: [{ url: "https://accounts.google.com/signin/v2/challenge/pwd?hl=pt-BR&cid=3", matchType: "exact" }],
+    });
+    const github = item("github", {
+      username: "rochasamuel",
+      urls: [{ url: "https://github.com/session", matchType: "domain" }],
+    });
+    const viaGitHub = item("vercel", { signInWith: { provider: "github", account: "rochasamuel" } });
+    expect(providerLogin([typeform, google, github], typeform)?.id).toBe("google");
+    expect(providerLogin([viaGitHub, google, github], viaGitHub)?.id).toBe("github");
+  });
   it("never matches look-alike hosts or a missing account", () => {
     const evil = item("evil", { username: "me@gmail.com", urls: [{ url: "https://google.com.evil.com/", matchType: "domain" }] });
     expect(providerLogin([typeform, evil], typeform)).toBeNull();

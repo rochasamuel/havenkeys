@@ -50,6 +50,9 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   const [section, setSection] = useState<Section>("all");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemOverview[]>([]);
+  // Every item, whatever the search: an open item and the login a "Sign in
+  // with" row links to must not vanish because they don't match the query.
+  const [allItems, setAllItems] = useState<ItemOverview[]>([]);
   const [pane, setPane] = useState<Pane>({ kind: "empty" });
   const [unreadable, setUnreadable] = useState(unreadableItems);
   const [busyResync, setBusyResync] = useState(false);
@@ -72,7 +75,10 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
 
   const refresh = useCallback(async () => {
     try {
-      setItems(await api.listItems(query));
+      const searching = query.trim() !== "";
+      const [found, all] = await Promise.all([api.listItems(query), searching ? api.listItems() : null]);
+      setItems(found);
+      setAllItems(all ?? found);
     } catch (e) {
       if (e instanceof ApiError && e.code !== "locked") toast(errorMessage(e, t), "error");
     }
@@ -204,7 +210,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   );
 
   const selectedId = pane.kind === "view" || pane.kind === "edit" ? pane.id : null;
-  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const selected = allItems.find((i) => i.id === selectedId) ?? null;
   const isToolSection = section === "generator" || section === "settings";
 
   async function lock() {
@@ -232,7 +238,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
     }
   }
 
-  const identity = identityId ? (items.find((i) => i.id === identityId) ?? null) : null;
+  const identity = identityId ? (allItems.find((i) => i.id === identityId) ?? null) : null;
 
   // The Identity entry, not All items, is the current place while it is open.
   const identitySelected = !isToolSection && identity !== null && selectedId === identity.id;
@@ -458,7 +464,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               <ItemDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
-                items={items}
+                items={allItems}
                 readOnly={readOnly}
                 onEdit={() => setPane({ kind: "edit", id: selected.id })}
                 onDelete={() => void onDelete(selected)}
