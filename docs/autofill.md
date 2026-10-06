@@ -555,10 +555,10 @@ forms and SPA steps, not a step on a page the site navigates to.
 * **Heuristics can pick no button.** When no candidate clearly wins, the
   fields are filled and the user presses, exactly like today's behaviour.
 
-## Sign in with Google, Microsoft, GitHub, Apple
+## Sign in with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab)
 
 Some logins are never used with a password: the site is always reached
-through "Sign in with Google" (or Microsoft, GitHub, Apple). HavenKeys can
+through "Sign in with Google" (or Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab). HavenKeys can
 remember which provider and account a login uses (`sign_in_with` on the
 item), offer it on the site's own sign-in page, and — after one click —
 press the site's button, pick the saved account (or "Use another account")
@@ -569,6 +569,25 @@ ever fills the provider's **own** saved login, on the provider's **own**
 origin, for the account the user already picked. Providers, their exact
 origins, and the wire messages are in `native-messaging.md` §"Sign in with";
 the security properties are in `security-model.md` and `threat-model.md`.
+
+| Provider | Exact origins a run may act on |
+|---|---|
+| Apple | `https://appleid.apple.com` |
+| Discord | `https://discord.com` |
+| Facebook | `https://www.facebook.com` |
+| GitHub | `https://github.com` |
+| GitLab | `https://gitlab.com` |
+| Google | `https://accounts.google.com` |
+| LinkedIn | `https://www.linkedin.com` |
+| Microsoft | `https://login.microsoftonline.com`, `https://login.live.com` |
+| X | `https://x.com`, `https://api.x.com` |
+
+The authority is `crates/havenkeys-core/src/sso.rs`; the extension keeps a
+mirror for save detection only, and a parity test keeps the two equal.
+
+X is recognized only when the label has a sign-in verb ("sign in", "log in",
+"continue", "entrar", ...) and ends in a joiner followed by X ("with X",
+"using X", "via X", "com X"), never as a bare "X" (usually a close button). Share and follow buttons are ignored.
 
 Code: `apps/extension/src/autofill/sso.ts` (pure field detection, shared by
 the balloon scan, the press and the chooser), `content/sso.ts` (per-page

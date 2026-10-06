@@ -203,7 +203,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 64 of them, which is the whole
+Every command the renderer can call — all 67 of them, which is the whole
 surface. `build.rs` declares this list, `lib.rs` registers it, the capability
 file grants exactly it, and `src/lib/commands.test.ts` fails if they (or the
 commands `api.ts` calls) ever disagree. "Online"
@@ -219,6 +219,8 @@ means a live server session, which a locked vault does not have.
 | `list_items` (optional search query) | yes | no (title, username, URLs, flags) |
 | `get_item` | yes | no (secret fields reported only as *present/absent*) |
 | `reveal_secret` | yes | one field: password, login notes, or note body. Never the TOTP secret |
+| `sso_accounts` | yes | no (id, title, username of the provider's logins, at most 50) |
+| `provider_login` | yes | no (one id, or none/several) |
 | `password_history` | yes | no, timestamps only |
 | `reveal_previous_password` | yes | one superseded password, on an explicit click |
 | `list_passkeys` | yes | no: relying-party ID, account name, credential ID and creation time. Never the private key |
@@ -814,9 +816,9 @@ See `autofill.md`, Automatic sign-in, for the full flow. In summary:
   explicit user interaction") as the automatic passkey upgrade. See
   `security-review.md` AS1 and AS2, and `threat-model.md` T9.
 
-## 17. Sign in with Google, Microsoft, GitHub, Apple
+## 17. Sign in with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab)
 
-See `autofill.md`, "Sign in with Google, Microsoft, GitHub, Apple", and
+See `autofill.md`, "Sign in with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab)", and
 `native-messaging.md` §"Sign in with" for the full flow and wire messages.
 In summary:
 
@@ -844,6 +846,15 @@ In summary:
   `cs_sso_login` is honoured once per run, and the fill still runs through
   the same automatic-sign-in stop conditions (a visible CAPTCHA, the user's
   own input, an unrecognized step) as an ordinary same-site pick.
+* **Which login is a provider's is decided in Rust.** `sso_accounts` (editor
+  picker) and `provider_login` (detail link) use the same rule as a run and as
+  `check_sso`: logins matched by `find_matches` to the provider's fixed
+  origins, whose username equals the saved account. Both return ids, titles
+  and usernames only.
+* **Compatibility.** An app older than this change cannot decode a login whose
+  provider is Facebook, Discord, X, LinkedIn or GitLab and reports it as
+  unreadable until updated; desktop, extension and Android are released
+  together.
 * **The extension gains no secret it could not already request.**
   `fill_item` for a login saved for the provider's own origin, asked from
   that origin, was always allowed; what changes is that no click on the

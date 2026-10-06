@@ -135,7 +135,7 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `fill_card` | `itemId` (UUID), `topUrl`, `frames` (1-8 of `{ url, roles }`; each frame 1-8 known roles, no duplicates) | yes | secret |
 | `save_card` | `url`, `topUrl`?, `number`, `verificationNumber`?, `expiry`? (`MM/YY`), `cardholderName`?, `title`? | yes | secret; a server write |
 | `start_sso` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
-| `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"`), `account` (string or null) | yes | secret |
+| `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"` \| `"facebook"` \| `"discord"` \| `"x"` \| `"linkedin"` \| `"gitlab"`), `account` (string or null) | yes | secret |
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
 | `show_unlock` | none | no | secret |
 
@@ -565,7 +565,7 @@ switches (`autofill.md` §"Sign in with", "Login";
 
 The extension side — how a provider button is recognized, how the balloon and
 the run work, and the save-detection flow — is in `autofill.md` §"Sign in
-with Google, Microsoft, GitHub, Apple".
+with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab)".
 
 ## 8. Known limitations
 
