@@ -452,6 +452,10 @@ p {
   margin-top: 22px;
 }
 
+.section__head > .btn {
+  margin-top: 28px;
+}
+
 /* ------------------------------------------------------------- journey */
 
 .journey {
@@ -2518,15 +2522,25 @@ main > .download:last-child {
   color: var(--muted-hi);
 }
 
-/* Three steps */
+/* Getting-started steps */
 .steps {
   list-style: none;
   margin: 0 auto;
   padding: 0;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   max-width: 1080px;
+}
+/* Three per row, the rest centred under them; one per row on phones. */
+.steps > .step {
+  flex: 0 1 calc((100% - 36px) / 3);
+}
+@media (max-width: 720px) {
+  .steps > .step {
+    flex-basis: 100%;
+  }
 }
 
 .step {

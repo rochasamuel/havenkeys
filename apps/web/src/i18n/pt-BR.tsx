@@ -97,11 +97,13 @@ export const ptBR: Messages = {
       "Seu cofre é trancado no seu dispositivo com duas coisas que só você tem: sua senha mestra e uma Secret Key que o HavenKeys cria para você. O que chega ao servidor já vai trancado, então quem o opera — nós incluídos — não consegue ler nenhuma senha.",
     trustLink: "Como funciona, em detalhes",
 
-    stepsTitle: "Comece em três passos.",
+    stepsTitle: "Comece em cinco passos.",
     steps: [
-      { title: "Instale o HavenKeys", text: "Baixe o app para Windows, macOS, Linux ou Android, e a extensão para Chrome ou Firefox." },
+      { title: "Instale o app", text: "Baixe o HavenKeys para Windows, macOS, Linux ou Android." },
       { title: "Tenha sua conta", text: "Peça um convite para o nosso servidor, ou rode o seu." },
       { title: "Imprima seu Emergency Kit", text: "Ele guarda sua Secret Key. Deixe-o em lugar seguro: é com ele que você entra num dispositivo novo." },
+      { title: "Traga suas senhas", text: "Importe do seu gerenciador antigo, ou adicione aos poucos: o HavenKeys oferece para salvar as novas." },
+      { title: "Adicione a extensão e clique", text: "Instale no Chrome ou no Firefox. Numa página de login, clique no campo e escolha seu login." },
     ],
 
     selfHostTitle: "Prefere seu próprio servidor?",

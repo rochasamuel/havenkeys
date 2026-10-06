@@ -103,11 +103,13 @@ export const en = {
       "Your vault is locked on your device with two things only you have: your master password and a Secret Key HavenKeys creates for you. What reaches the server is already locked, so the people who run it — us included — can’t read a single password.",
     trustLink: "How it works, in detail",
 
-    stepsTitle: "Start in three steps.",
+    stepsTitle: "Start in five steps.",
     steps: [
-      { title: "Install HavenKeys", text: "Get the app for Windows, macOS, Linux or Android, and the extension for Chrome or Firefox." },
+      { title: "Install the app", text: "Get HavenKeys for Windows, macOS, Linux or Android." },
       { title: "Get your account", text: "Request an invite to our server, or run your own." },
       { title: "Print your Emergency Kit", text: "It holds your Secret Key. Keep it somewhere safe: it’s how you get back in on a new device." },
+      { title: "Bring your passwords", text: "Import them from your old password manager, or add them as you go: HavenKeys offers to save new ones." },
+      { title: "Add the extension, then click", text: "Install it in Chrome or Firefox. On a sign-in page, click the field and pick your login." },
     ],
 
     selfHostTitle: "Prefer your own server?",
