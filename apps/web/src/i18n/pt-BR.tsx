@@ -106,7 +106,7 @@ export const ptBR: Messages = {
 
     selfHostTitle: "Prefere seu próprio servidor?",
     selfHostBody:
-      "Rode o HavenKeys num pequeno servidor seu ou no Railway. A instalação leva poucos comandos, e os backups diários já vêm incluídos.",
+      "Rode o HavenKeys num pequeno servidor seu ou no Railway. A instalação leva poucos comandos, e a instalação com Docker inclui backups diários.",
     selfHostCta: "Rode seu próprio servidor",
 
     closerTitle: (
@@ -154,7 +154,8 @@ export const ptBR: Messages = {
         body: [
           <>
             O HavenKeys sincroniza pelo <code>havenkeys-server</code>, um servidor pequeno que você
-            mesmo roda. Não há conta em fornecedor nem empresa no meio guardando o seu cofre.
+            mesmo roda, ou o nosso, se você tiver um convite. Quem o roda guarda só dados
+            trancados que não consegue abrir.
           </>,
           "O servidor é o único lugar onde as alterações são gravadas. Cada computador mantém sua própria cópia cifrada, então desbloqueio, busca, códigos de uso único e preenchimento continuam funcionando offline.",
         ],
@@ -194,7 +195,7 @@ export const ptBR: Messages = {
       notes: ["AES-256-GCM", "nonce novo de 96 bits a cada gravação", "vinculado ao cofre, ao item e à função"],
     },
     store: {
-      where: "no hardware que você escolher",
+      where: "num servidor seu ou nosso",
       blobsAria: "O que o servidor guarda",
       cantOpen: "Não abre títulos, usuários, sites, senhas, códigos nem notas",
       doesSee: "Vê o seu e-mail, quantos itens existem, o tamanho deles e quando mudaram",
@@ -436,7 +437,7 @@ export const ptBR: Messages = {
       },
       {
         name: "Seu servidor",
-        where: "No hardware que você escolher",
+        where: "Um servidor seu ou nosso",
         holds: "Dados cifrados, além do seu e-mail e da quantidade, tamanho e data dos itens",
         limit: "Não tem chave para nada disso. Pode apagar dados, então mantenha backups.",
       },
@@ -515,6 +516,8 @@ export const ptBR: Messages = {
         body: "O que apareceu ao revisar este código contra o próprio modelo de ameaças, incluindo o que ainda está aberto.",
       },
       { title: "Auto-hospedagem", file: "self-hosting.md", body: "Rode seu próprio servidor com Docker ou Railway." },
+      { title: "Arquitetura", file: "architecture.md", body: "Como o app de desktop, a extensão e o núcleo em Rust se encaixam." },
+      { title: "Mensagens nativas", file: "native-messaging.md", body: "O protocolo entre a extensão e o app de desktop, e como ele é validado." },
       { title: "Referência de implantação", file: "deployment.md", body: "Variáveis, Railway, backups." },
     ],
 
@@ -535,7 +538,7 @@ export const ptBR: Messages = {
     protectsTitle: "O que ele protege",
     protects: [
       { title: "Seu cofre, onde quer que esteja", text: "Senhas, notas, códigos e passkeys são trancados no seu dispositivo antes de serem salvos ou enviados. O servidor guarda uma cópia que ele não tem como abrir." },
-      { title: "Um servidor roubado", text: "Quem copiar os dados do servidor ainda precisa da sua senha mestra e da sua Secret Key, que nunca sai dos seus dispositivos." },
+      { title: "Um servidor roubado", text: "Quem copiar os dados do servidor ainda precisa da sua senha mestra e da sua Secret Key, que nunca chegam ao servidor de um jeito que alguém consiga ler (a Secret Key também fica no seu Emergency Kit)." },
       { title: "Sites falsos", text: "A extensão só oferece um login no site para o qual ele foi salvo, e só preenche depois do seu clique. Endereços parecidos não valem." },
       { title: "Vazamentos acidentais", text: "Senhas nunca aparecem em logs, notificações ou títulos de janela, e senhas copiadas são apagadas da área de transferência." },
     ],
@@ -639,7 +642,7 @@ export const ptBR: Messages = {
 
   privacy: {
     title: "Política de Privacidade",
-    updated: "Atualizada em 5 de outubro de 2026.",
+    updated: "Atualizada em 6 de outubro de 2026.",
     body: (
       <>
         <h2>Este site</h2>
@@ -651,11 +654,15 @@ export const ptBR: Messages = {
           saber qual é a versão mais recente diretamente do seu navegador, então o GitHub também vê
           essa requisição. Se você escolher um idioma no seletor, o site guarda essa escolha no
           armazenamento local do seu navegador; ela nunca é enviada a lugar nenhum. Não há
-          publicidade nem nenhum outro script de terceiros.
+          publicidade nem nenhum outro script de terceiros no site. O único outro terceiro
+          envolvido é o ImprovMX, e só para e-mails de convite (veja abaixo).
         </p>
         <p>
-          Se você escrever para invite@havenkeys.net, o operador recebe seu e-mail e sua mensagem,
-          usa-os apenas para responder e enviar o convite, e os apaga quando você pedir.
+          Se você escrever para invite@havenkeys.net, o ImprovMX, um serviço de encaminhamento de
+          e-mail, encaminha a sua mensagem para a caixa de entrada de SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA,
+          que recebe seu e-mail e sua mensagem. Nós os usamos apenas para responder e enviar o
+          convite, e os apagamos quando você pedir. O ImprovMX trata a mensagem em trânsito, sob a
+          política de privacidade dele.
         </p>
 
         <h2>O app de desktop e a extensão do navegador</h2>
@@ -833,7 +840,7 @@ export const ptBR: Messages = {
 
   terms: {
     title: "Termos de Serviço",
-    updated: "Atualizados em 23 de setembro de 2026.",
+    updated: "Atualizados em 6 de outubro de 2026.",
     body: (
       <>
         <h2>Licença</h2>
@@ -870,8 +877,8 @@ export const ptBR: Messages = {
 
         <h2>Nosso servidor e o seu</h2>
         <p>
-          O autor opera um <code>havenkeys-server</code> para as pessoas que convida, na base do melhor
-          esforço: não há assinatura, acordo de nível de serviço nem obrigação de suporte, e o serviço pode
+          SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA (“nós”) opera um <code>havenkeys-server</code> para as pessoas que
+          convidamos, na base do melhor esforço: não há assinatura, acordo de nível de serviço nem obrigação de suporte, e o serviço pode
           mudar ou acabar mediante aviso. Qualquer pessoa pode, em vez disso, rodar o próprio servidor;
           baixar o software não cria conta nenhuma conosco.
         </p>
@@ -884,7 +891,7 @@ export const ptBR: Messages = {
     lede: "Guarde seu cofre trancado num servidor que você controla. Você precisa de um domínio, um pequeno servidor e alguns minutos.",
     needTitle: "O que você precisa",
     needs: [
-      "Um pequeno servidor Linux com Docker — cerca de US$5 por mês, ou um computador em casa sempre ligado.",
+      "Um pequeno servidor Linux com Docker, Docker Compose v2 e curl — cerca de US$5 por mês, ou um computador em casa sempre ligado.",
       "Um domínio ou subdomínio que você possa apontar para ele, como cofre.exemplo.com.",
       "Ou, no lugar dos dois: uma conta no Railway.",
     ],
@@ -892,8 +899,8 @@ export const ptBR: Messages = {
     steps: [
       { title: "Aponte seu domínio para o servidor", text: "Crie um registro A do seu domínio com o IP do servidor, e libere as portas 80 e 443.", code: "" },
       { title: "Baixe o pacote", text: "Seis arquivos pequenos: os serviços, o HTTPS, os backups e o script de instalação.", code: "mkdir havenkeys && cd havenkeys\nfor f in compose.yaml Caddyfile .env.example setup.sh restore.sh backup.sh; do\n  curl -fsSLO \"https://raw.githubusercontent.com/rochasamuel/havenkeys/main/deploy/compose/$f\"\ndone\nchmod +x setup.sh restore.sh backup.sh" },
-      { title: "Rode a instalação", text: "Ele pede seu domínio e e-mail, cria os segredos e sobe tudo com HTTPS.", code: "./setup.sh" },
-      { title: "Crie sua conta", text: "Ele mostra um convite uma única vez. Cole-o no app HavenKeys do seu computador.", code: "docker compose exec server havenkeys-server admin new-account \\\n  --email voce@exemplo.com --server-url https://cofre.exemplo.com" },
+      { title: "Rode a instalação", text: "O script pede seu domínio e e-mail, cria os segredos e sobe tudo com HTTPS.", code: "./setup.sh" },
+      { title: "Crie sua conta", text: "O comando mostra um convite uma única vez. Cole-o no app HavenKeys do seu computador.", code: "docker compose exec server havenkeys-server admin new-account \\\n  --email voce@exemplo.com --server-url https://cofre.exemplo.com" },
     ],
     railwayTitle: "Ou publique no Railway",
     railwayBody: "Sem servidor para cuidar: o Railway roda o HavenKeys e o banco de dados para você, por cerca de US$5 por mês.",

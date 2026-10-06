@@ -112,7 +112,7 @@ export const en = {
 
     selfHostTitle: "Prefer your own server?",
     selfHostBody:
-      "Run HavenKeys on a small server of your own or on Railway. Setup takes a few commands, and nightly backups are included.",
+      "Run HavenKeys on a small server of your own or on Railway. Setup takes a few commands, and the Docker setup includes nightly backups.",
     selfHostCta: "Run your own server",
 
     closerTitle: (
@@ -159,8 +159,8 @@ export const en = {
         ),
         body: [
           <>
-            HavenKeys syncs through <code>havenkeys-server</code>, a small server you run yourself.
-            There’s no vendor account and no company in the middle holding your vault.
+            HavenKeys syncs through <code>havenkeys-server</code>, a small server you run yourself,
+            or ours if you have an invite. Whoever runs it holds only locked data it can’t open.
           </>,
           "The server is the one place changes are written. Every computer keeps its own encrypted copy, so unlocking, search, one-time codes and autofill keep working offline.",
         ],
@@ -200,7 +200,7 @@ export const en = {
       notes: ["AES-256-GCM", "fresh 96-bit nonce every save", "bound to its vault, item and role"],
     },
     store: {
-      where: "on hardware you choose",
+      where: "on a server you run, or ours",
       blobsAria: "What the server stores",
       cantOpen: "Can’t open titles, usernames, websites, passwords, codes or notes",
       doesSee: "Does see your email, how many items, their sizes and when they changed",
@@ -429,7 +429,7 @@ export const en = {
       },
       {
         name: "Your server",
-        where: "Hardware you choose",
+        where: "A server you run, or ours",
         holds: "Ciphertext, plus your email and item counts, sizes and times",
         limit: "No key to any of it. It can delete data, so keep backups.",
       },
@@ -508,6 +508,8 @@ export const en = {
         body: "Findings from reviewing this code against its own threat model, open ones included.",
       },
       { title: "Self-hosting", file: "self-hosting.md", body: "Run your own server with Docker or Railway." },
+      { title: "Architecture", file: "architecture.md", body: "How the desktop app, the extension and the Rust core fit together." },
+      { title: "Native messaging", file: "native-messaging.md", body: "The protocol between the extension and the desktop app, and how it is validated." },
       { title: "Deployment reference", file: "deployment.md", body: "Environment, Railway, backups." },
     ],
 
@@ -528,7 +530,7 @@ export const en = {
     protectsTitle: "What it protects",
     protects: [
       { title: "Your vault, wherever it’s stored", text: "Passwords, notes, codes and passkeys are locked on your device before they’re saved or sent. The server keeps a copy it has no key for." },
-      { title: "A stolen server", text: "Someone who copies the server’s data still needs your master password and your Secret Key, which never leaves your devices." },
+      { title: "A stolen server", text: "Someone who copies the server’s data still needs your master password and your Secret Key, which never reach the server in a form anyone can read (your Secret Key also lives on your Emergency Kit)." },
       { title: "Fake websites", text: "The extension offers a login only on the site it was saved for, and fills only after you click. Look-alike addresses don’t match." },
       { title: "Accidental leaks", text: "Passwords never show up in logs, notifications or window titles, and copied passwords are cleared from the clipboard." },
     ],
@@ -632,7 +634,7 @@ export const en = {
 
   privacy: {
     title: "Privacy Policy",
-    updated: "Last updated October 5, 2026.",
+    updated: "Last updated October 6, 2026.",
     body: (
       <>
         <h2>This website</h2>
@@ -643,11 +645,15 @@ export const en = {
           The Download page asks GitHub's public API for the latest release directly from your
           browser, so GitHub also sees that request. If you pick a language with the switcher, the
           site remembers that choice in your browser's local storage; it is never sent anywhere.
-          There is no advertising and no other third-party script.
+          There is no advertising and no other third-party script on the site. The only other
+          third party involved is ImprovMX, and only for invite emails (see below).
         </p>
         <p>
-          If you email invite@havenkeys.net, the operator receives your email address and message,
-          uses them only to answer you and send an invite, and deletes them when you ask.
+          If you email invite@havenkeys.net, ImprovMX, an email-forwarding service, forwards your
+          message to the mailbox of SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA, which
+          receives your email address and message. We use them only to answer you and send an
+          invite, and delete them when you ask. ImprovMX handles the message in transit under its
+          own privacy policy.
         </p>
 
         <h2>The desktop app and browser extension</h2>
@@ -819,7 +825,7 @@ export const en = {
 
   terms: {
     title: "Terms of Service",
-    updated: "Last updated September 23, 2026.",
+    updated: "Last updated October 6, 2026.",
     body: (
       <>
         <h2>License</h2>
@@ -857,8 +863,8 @@ export const en = {
 
         <h2>Our server and yours</h2>
         <p>
-          The author runs a <code>havenkeys-server</code> for the people they invite, on a best-effort
-          basis: there is no subscription, no service-level agreement and no support obligation, and
+          SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA (“we”) runs a <code>havenkeys-server</code> for the people we
+          invite, on a best-effort basis: there is no subscription, no service-level agreement and no support obligation, and
           the service may change or end with notice. Anyone can instead run their own server;
           downloading the software creates no account with us.
         </p>
@@ -871,7 +877,7 @@ export const en = {
     lede: "Keep your locked vault on a server you control. You need a domain, a small server and a few minutes.",
     needTitle: "What you need",
     needs: [
-      "A small Linux server with Docker — about US$5 a month, or a computer at home that’s always on.",
+      "A small Linux server with Docker, Docker Compose v2 and curl — about US$5 a month, or a computer at home that’s always on.",
       "A domain or subdomain you can point at it, like vault.example.com.",
       "Or, instead of both: a Railway account.",
     ],
