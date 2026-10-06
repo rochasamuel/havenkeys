@@ -13,9 +13,10 @@ Android apps sync through it. The server does see routing metadata
 
 * A Linux server with Docker ([install guide](https://docs.docker.com/engine/install/)),
   Docker Compose v2 and `curl`. Your user must be able to run Docker (be in
-  the `docker` group, or use `sudo`).
+  the `docker` group, or use `sudo`). Membership of the `docker` group is
+  equivalent to root access on that machine, so add only users you trust.
 * 1 GB of RAM is
-  enough. Most providers charge about US$5/month at most. An always-on
+  enough. Most providers charge about US$5 a month. An always-on
   computer at home also works if it is reachable from the internet.
 * A domain or subdomain you control, such as `vault.example.com`.
 
@@ -52,7 +53,9 @@ Run every `docker compose` command in this guide from inside the
 
 First wait until your domain resolves to the server. If your DNS provider
 proxies traffic (for example Cloudflare's orange cloud), set the record to
-DNS-only so the certificate can be issued.
+DNS-only and leave it that way permanently, not just while the certificate
+is issued. The bundle trusts the address Caddy reports for each client,
+and a proxy in front would break that (see Security notes).
 
 ```sh
 ./setup.sh
@@ -70,8 +73,9 @@ and two random secrets: `SERVER_SECRET` and the database password. If
 folder, starts everything, and waits up to two minutes for
 `https://<your domain>/v1/health` to answer.
 
-**Back up `.env` somewhere safe, away from this server.** Without
-`SERVER_SECRET` and the database password you cannot restore a backup.
+**Back up `.env` somewhere safe, away from this server.** With it you can
+rebuild the same server quickly. Database dumps do not need it: they restore
+into a fresh install with its own new secrets.
 
 Success looks like this:
 
@@ -147,17 +151,17 @@ Copy the backups to another machine. From the `havenkeys` folder, for example:
 rsync -a backups/ user@other-host:havenkeys-backups/
 ```
 
-**Restore drill.** A backup you have never restored is a guess. Do this on
-a second machine or a separate folder, never on your live server:
+**Restore drill.** A backup you have never restored is a guess. Do the drill
+on a second machine only. A separate folder on the same host is the same
+Compose project (`name: havenkeys`), so setting up or restoring there would
+hit your live database.
 
-1. Download the bundle there (step 2).
-2. Copy your saved `.env` into it. Restoring needs the original
-   `SERVER_SECRET` and database password, which is why `.env` must be backed up.
-3. Run `./setup.sh`. For a drill, use a test subdomain. Without DNS the
-   HTTPS check will fail; that is fine for a drill, and you can run
-   `docker compose up -d` instead.
-4. Copy a dump into its `backups/` folder.
-5. Restore it:
+1. On the second machine, download the bundle (step 2).
+2. Run a fresh `./setup.sh` with a test subdomain, for example
+   `drill.example.com`, pointed at that machine. You do not need your live
+   `.env`: a dump restores into an install with new secrets.
+3. Copy a dump into its `backups/` folder.
+4. Restore it:
 
    ```sh
    ./restore.sh backups/havenkeys-YYYY-MM-DD.dump
@@ -165,11 +169,11 @@ a second machine or a separate folder, never on your live server:
 
    It asks you to type `yes`, stops the server, restores the dump, and
    starts the server again.
-6. Check the result: run
-   `docker compose exec server havenkeys-server admin list-accounts`, or
-   point a HavenKeys app at the test server and check your items.
+5. Check the result: run
+   `docker compose exec server havenkeys-server admin list-accounts`, and
+   point a HavenKeys app at the test address to check your items.
 
-**Warning: running `restore.sh` on your live server replaces all its data.**
+**Never run `restore.sh` on your live server unless you mean to replace its data.**
 If a restore fails, the script says the server is stopped; fix the problem
 and run `docker compose start server`.
 
@@ -220,8 +224,10 @@ again with `new-account`. Deleting an account that holds data erases that data.
 
 * HTTPS only. The apps refuse plain `http`.
 * `HAVENKEYS_TRUST_FORWARDED_FOR=1` is set because Caddy is the only peer
-  and adds the client address. Read the `X-Forwarded-For` caveat in
-  [deployment.md](deployment.md) section 2.
+  and it replaces `X-Forwarded-For` with the real client address (it ignores
+  incoming values from untrusted peers), so the server can trust it. Do not
+  add `trusted_proxies` to the Caddyfile or put a CDN proxy in front without
+  reading [deployment.md](deployment.md) section 2 first.
 * Keep the host's operating system and Docker up to date.
 * Never expose Postgres to the internet. The bundle does not publish its
   port.
