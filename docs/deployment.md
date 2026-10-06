@@ -2,6 +2,8 @@
 
 > This software has not undergone an independent security audit.
 
+> Setting up your own server for the first time? Start with [self-hosting.md](self-hosting.md); this document is the reference.
+
 The server is the authority for a vault's contents: the local SQLite on each
 device is a replica that follows it, including deletions
 (`docs/server-sync.md`, design §9). **A tested backup is therefore a
