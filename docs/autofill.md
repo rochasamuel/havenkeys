@@ -555,11 +555,11 @@ forms and SPA steps, not a step on a page the site navigates to.
 * **Heuristics can pick no button.** When no candidate clearly wins, the
   fields are filled and the user presses, exactly like today's behaviour.
 
-## Sign in with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab)
+## Sign in with a provider (nine providers)
 
 Some logins are never used with a password: the site is always reached
-through "Sign in with Google" (or Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedIn, GitLab). HavenKeys can
-remember which provider and account a login uses (`sign_in_with` on the
+through "Sign in with Google" (or Microsoft, GitHub, Apple, Facebook,
+Discord, X, LinkedIn, GitLab). HavenKeys can remember which provider and account a login uses (`sign_in_with` on the
 item), offer it on the site's own sign-in page, and — after one click —
 press the site's button, pick the saved account (or "Use another account")
 on the provider's own chooser, and, if the account is not already signed in
@@ -587,7 +587,18 @@ mirror for save detection only, and a parity test keeps the two equal.
 
 X is recognized only when the label has a sign-in verb ("sign in", "log in",
 "continue", "entrar", ...) and ends in a joiner followed by X ("with X",
-"using X", "via X", "com X"), never as a bare "X" (usually a close button). Share and follow buttons are ignored.
+"using X", "via X", "com X"), never as a bare "X" (usually a close button).
+The test runs on each label source on its own (text, aria-label, title, image
+alt). Share and follow buttons are ignored.
+
+A bare provider name ("LinkedIn", "Facebook", "Twitter") on a link to
+another origin, unless the path looks like OAuth (contains "oauth" or
+"authorize"), is treated as a footer or social-profile link and ignored.
+Same-origin links ("/auth/facebook"), buttons and direct OAuth links keep
+their scoring, and so do joined labels ("Sign in with LinkedIn").
+
+An X login saved for `twitter.com` is not offered on `x.com`: add
+`https://x.com` to that login's websites.
 
 Code: `apps/extension/src/autofill/sso.ts` (pure field detection, shared by
 the balloon scan, the press and the chooser), `content/sso.ts` (per-page

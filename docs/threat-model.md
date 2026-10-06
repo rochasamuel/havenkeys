@@ -486,7 +486,7 @@ redirect host on its own.
   *Mitigation:* Settings → Updates can turn the automatic check off; nothing
   is sent unless the user checks or updates by hand.
 
-### T11 — Sign in with Google, Microsoft, GitHub, Apple
+### T11 — Sign in with a provider (nine providers)
 After the user picks a "Sign in with" login, HavenKeys may press that site's
 provider button, click the saved account (or "Use another account") in the
 provider's own chooser, and, if the account is not already signed in there,
@@ -494,6 +494,11 @@ sign it in with the vault's own login for that provider and account —
 username, password and TOTP if it has one
 (`docs/superpowers/specs/2026-09-28-sign-in-with-design.md`,
 `docs/superpowers/specs/2026-09-29-sign-in-with-provider-login-design.md`).
+The providers are Google, Microsoft, GitHub, Apple, Facebook, Discord, X,
+LinkedIn and GitLab. A hostile page cannot widen this by styling: X counts
+only after a sign-in verb and a joiner ("Continue with X"), and a bare
+provider name on a link to another origin (a footer or social profile) is
+not recognised as a provider button.
 This amends rule #6 for one more bounded case, alongside T9 and the automatic
 passkey upgrade (T8). Details in `autofill.md` §"Sign in with", the wire
 messages in `native-messaging.md` §"Sign in with", the mechanism in

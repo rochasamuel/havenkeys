@@ -853,8 +853,10 @@ In summary:
   and usernames only.
 * **Compatibility.** An app older than this change cannot decode a login whose
   provider is Facebook, Discord, X, LinkedIn or GitLab and reports it as
-  unreadable until updated; desktop, extension and Android are released
-  together.
+  unreadable until updated. The extension ships through the browser stores
+  separately from the desktop app: an older extension rejects a
+  `find_matches` response that contains a new provider, so its menu shows
+  nothing on that site until the extension is updated.
 * **The extension gains no secret it could not already request.**
   `fill_item` for a login saved for the provider's own origin, asked from
   that origin, was always allowed; what changes is that no click on the

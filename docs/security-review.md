@@ -3254,3 +3254,55 @@ copy of a server they do not trust loses it.
 `login_attempts` rows; anonymous `deleted_sessions` hashes for 30 days; a
 device offline for more than 30 days keeps its encrypted copy and shows as
 signed out.
+
+# Security Review: Sign in with nine providers (2026-10-05)
+
+Facebook, Discord, X, LinkedIn and GitLab join Google, Microsoft, GitHub and
+Apple. Branch `feat/sso-picker`.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| SP1 | Info | Rust `sso.rs`, extension | New run origins | Accepted |
+| SP2 | Info | Tauri / core | `sso_accounts` and `provider_login` | Accepted |
+| SP3 | Low | Extension `autofill/sso.ts` | Recognition rules for X and footer links | Mitigated |
+| SP4 | High (functional) | Extension `messaging/sso.ts` | Provider list capped at 4 | **Fixed** |
+
+### SP1. New run origins (Info, accepted)
+**Component:** `crates/havenkeys-core/src/sso.rs`, `packages/protocol/src/sso.ts`.
+**Change:** a run may now act on `https://www.facebook.com`,
+`https://discord.com`, `https://x.com`, `https://api.x.com`,
+`https://www.linkedin.com` and `https://gitlab.com`, with the same bounds as
+the existing four (SSO6): Rust-listed origins, top frame of the run's tab or
+its opener, 2-minute expiry, one matching provider login, Rust's own origin
+check on `fill_item`/`get_totp`.
+**Remaining:** a login saved with a wrong website for one of these origins is
+fillable there like any other; the origin list is the trust anchor.
+
+### SP2. Two read-only commands (Info, accepted)
+**Component:** `sso_accounts`, `provider_login` (Tauri commands and core).
+**Change:** the editor picker and the detail row ask Rust which of the
+vault's own logins serve a provider. They return ids, titles and usernames
+only, never a password, TOTP secret or note, and refuse when locked. The
+result is capped (`MAX_SSO_PICKER_ACCOUNTS`).
+
+### SP3. Recognition rules (Low, mitigated)
+**Component:** `apps/extension/src/autofill/sso.ts`.
+**Attack:** a page labels a link or button so the extension offers, or a
+click on it leads to, a sign-in run it should not: "X" is a close glyph, and
+footer social links ("LinkedIn") are bare provider names.
+**Mitigation:** X counts only when one label source (text, aria-label, title,
+image alt) has a sign-in verb and ends in "<joiner> x"; a bare name on an
+`<a>` to another origin whose path lacks "oauth"/"authorize" scores 0.
+Joined labels and same-origin or OAuth links are unchanged. Nothing is
+pressed without the user's pick.
+**Remaining:** heuristic; a page can still label a button "Continue with
+Google" and lead somewhere else, as before (SSO3).
+
+### SP4. A page with five or more provider buttons got no offer (fixed in review)
+**Component:** `apps/extension/src/messaging/sso.ts` (`isProviderList`).
+**Finding:** the content-to-background message accepted at most 4 providers,
+so with nine providers a page with five or more recognised buttons made the
+whole message invalid and no provider was offered.
+**Fix:** the bound is `SSO_PROVIDER_IDS.length`; the per-provider origin bound
+in `start_sso` is derived from the table too (`MAX_PROVIDER_ORIGINS`).
+Tests accept 5 and 9 providers and reject 10, duplicates and unknown names.
