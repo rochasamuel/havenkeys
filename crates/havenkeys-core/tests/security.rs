@@ -1250,10 +1250,13 @@ fn sso_accounts_are_capped() {
             .unwrap();
         v.commit_write(staged, 10 + i as i64).unwrap();
     }
-    assert_eq!(
-        v.sso_accounts(SsoProvider::Google).unwrap().len(),
-        havenkeys_core::vault::MAX_SSO_PICKER_ACCOUNTS
-    );
+    let kept = v.sso_accounts(SsoProvider::Google).unwrap();
+    assert_eq!(kept.len(), havenkeys_core::vault::MAX_SSO_PICKER_ACCOUNTS);
+    let titles: Vec<String> = kept.iter().map(|a| a.title.clone()).collect();
+    let want: Vec<String> = (0..havenkeys_core::vault::MAX_SSO_PICKER_ACCOUNTS)
+        .map(|i| format!("G{i:03}"))
+        .collect();
+    assert_eq!(titles, want);
 }
 
 #[test]
