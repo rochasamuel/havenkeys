@@ -2,6 +2,8 @@
 # Restore a backup into the database. Replaces everything currently stored.
 #   ./restore.sh backups/havenkeys-2026-10-06.dump
 set -eu
+# Compose reads COMPOSE_PROJECT_NAME from the environment (tests use it); this
+# script never sets a project name itself.
 # Resolve the dump path before changing directory.
 case "${1:-}" in
 /* | "") dump=${1:-} ;;

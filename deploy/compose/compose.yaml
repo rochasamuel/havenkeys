@@ -9,8 +9,10 @@ services:
     environment:
       DATABASE_URL: "postgres://havenkeys:${POSTGRES_PASSWORD:?run ./setup.sh first}@db:5432/havenkeys?sslmode=disable"
       SERVER_SECRET: "${SERVER_SECRET:?run ./setup.sh first}"
-      # Caddy is the only peer and appends the client address. Read the
-      # X-Forwarded-For caveat in docs/deployment.md §2.
+      # Caddy is the only peer and replaces X-Forwarded-For with the real
+      # client address (it ignores incoming values from untrusted peers), so
+      # trusting it is safe here. Do not add trusted_proxies or put a CDN
+      # proxy in front without reading docs/deployment.md §2.
       HAVENKEYS_TRUST_FORWARDED_FOR: "1"
       PORT: "8080"
     depends_on:
