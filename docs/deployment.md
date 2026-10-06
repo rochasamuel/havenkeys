@@ -241,6 +241,12 @@ psql "$RESTORE_URL" -c "SELECT count(*) FROM items WHERE deleted_at IS NULL;"
    unlocks and the items are there. Only that proves the ciphertext, the
    header and the KDF parameters all survived — the row counts do not.
 
+Restoring over a live server sets every vault's revision back. A device
+that had pulled past it sees the server's cursor below its own, pulls the
+whole vault again from 0, and drops the items the server no longer has
+(security review SV-5). Nothing needs doing on the devices; changes made
+after the backup are gone everywhere.
+
 Keep the dump somewhere the server cannot reach. A server that is compromised
 should not be able to destroy its own backups.
 

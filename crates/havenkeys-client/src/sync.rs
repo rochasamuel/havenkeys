@@ -161,6 +161,15 @@ impl HavenClient {
             .account()?
             .map(|a| a.server_cursor)
             .unwrap_or(0);
+        // A pull from 0 sees every item the server has; what it does not
+        // mention is then dropped (SV-5).
+        let mut from_zero = cursor == 0;
+        let mut seen = std::collections::HashSet::new();
+        let mut held = if from_zero {
+            self.vault()?.replica_item_ids()?
+        } else {
+            Vec::new()
+        };
         loop {
             let pulled = server
                 .pull(&session, cursor)
@@ -168,6 +177,27 @@ impl HavenClient {
                 .map_err(|e| self.failed(e))?;
             let has_more = pulled.has_more;
             let next = pulled.cursor;
+            if next < cursor {
+                // The server is behind what this device already pulled: it
+                // was restored from a backup. Start again from 0, once, so
+                // items it no longer has are dropped instead of kept as
+                // ghosts. A server that goes backwards again is refused.
+                if from_zero {
+                    return Err(ClientError::internal());
+                }
+                {
+                    let mut vault = self.vault()?;
+                    vault.reset_sync_cursor(now_ms())?;
+                    held = vault.replica_item_ids()?;
+                }
+                cursor = 0;
+                from_zero = true;
+                seen.clear();
+                continue;
+            }
+            if from_zero {
+                seen.extend(pulled.changes.iter().map(|c| c.item_id));
+            }
             let page = self
                 .vault()?
                 .apply_remote_changes(next, pulled.changes, now_ms())?;
@@ -179,6 +209,12 @@ impl HavenClient {
             // A server claiming there is more while handing out the same
             // cursor would spin this loop forever.
             if !has_more || next <= cursor {
+                if from_zero && !has_more {
+                    let dropped = self
+                        .vault()?
+                        .drop_items_the_server_lacks(&held, &seen, now_ms())?;
+                    report.deleted += dropped.deleted;
+                }
                 break;
             }
             cursor = next;

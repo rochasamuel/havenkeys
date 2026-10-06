@@ -473,6 +473,45 @@ impl VaultService {
         self.store.reset_cursor(now_ms)
     }
 
+    /// The items this replica holds, taken when a pull from cursor 0 starts,
+    /// for `drop_items_the_server_lacks`.
+    pub fn replica_item_ids(&self) -> Result<Vec<Uuid>> {
+        self.require_account()?;
+        self.store.item_ids()
+    }
+
+    /// After a pull that started at cursor 0 and finished without failing:
+    /// the server sent every item it has (tombstones included), so an item of
+    /// `held` (what the replica held when that pull started) the server did
+    /// not mention is not on the server. That happens after the server is
+    /// restored from a backup older than this replica (SV-5); such items are
+    /// dropped like a deletion. An item written here during the pull is not
+    /// in `held` and is kept.
+    pub fn drop_items_the_server_lacks(
+        &mut self,
+        held: &[Uuid],
+        seen: &std::collections::HashSet<Uuid>,
+        now_ms: i64,
+    ) -> Result<SyncReport> {
+        self.require_account()?;
+        let missing: Vec<RemoteChange> = held
+            .iter()
+            .copied()
+            .filter(|id| !seen.contains(id))
+            .map(|item_id| RemoteChange {
+                item_id,
+                revision: 0,
+                overview: None,
+                details: None,
+                deleted: true,
+            })
+            .collect();
+        if missing.is_empty() {
+            return Ok(SyncReport::default());
+        }
+        self.apply_changes(missing, None, now_ms)
+    }
+
     /// IDs of items pulled from the server that did not decrypt, in case the
     /// desktop app wants to show or retry them.
     pub fn unreadable_item_ids(&self) -> Result<Vec<Uuid>> {

@@ -177,6 +177,12 @@ hit your live database.
 If a restore fails, the script says the server is stopped; fix the problem
 and run `docker compose start server`.
 
+If you do restore over a live server, devices that had synced past the
+backup notice at their next sync that the server went back in time. Each
+one downloads the whole vault again and drops what the server no longer
+has: changes made after the backup are lost on every device, as they are on
+the server.
+
 ## Upgrading
 
 Take a backup first (see above). Then:

@@ -388,3 +388,61 @@ async fn a_device_locked_during_the_deletion_wipes_itself_on_unlock() {
     assert!(b.device().unwrap().secret_key_text(account_id).is_none());
     server.cleanup().await;
 }
+
+/// SV-5: after the server is restored from an older backup, a device that
+/// was ahead pulls the whole vault again and drops what the server no longer
+/// has, instead of keeping it as a ghost.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restored_server_drops_items_it_no_longer_has() {
+    let server = Server::start().await;
+    let invite = server.invite("restore@example.com").await;
+    let dir = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+    let now = havenkeys_client::now_ms;
+    let staged = a.vault().unwrap().stage_create(login("Kept"), now()).unwrap();
+    a.push(staged).await.unwrap();
+    a.sync_now().await.unwrap();
+
+    let db = server.pool.get().await.unwrap();
+    let snapshot: i64 = db
+        .query_one("SELECT revision FROM vaults", &[])
+        .await
+        .unwrap()
+        .get(0);
+    let staged = a.vault().unwrap().stage_create(login("Ghost"), now()).unwrap();
+    a.push(staged).await.unwrap();
+    a.sync_now().await.unwrap();
+
+    // The operator restores the backup taken at `snapshot`.
+    db.execute("DELETE FROM items WHERE revision > $1", &[&snapshot])
+        .await
+        .unwrap();
+    db.execute("UPDATE vaults SET revision = $1", &[&snapshot])
+        .await
+        .unwrap();
+
+    let report = a.sync_now().await.unwrap();
+    assert_eq!(report.deleted, 1);
+    let titles = |c: &HavenClient| -> Vec<String> {
+        c.vault()
+            .unwrap()
+            .list_items()
+            .unwrap()
+            .into_iter()
+            .map(|o| o.title.clone())
+            .collect()
+    };
+    assert!(titles(&a).contains(&"Kept".to_string()));
+    assert!(!titles(&a).contains(&"Ghost".to_string()));
+
+    // Writing works again, at revisions the device had seen before.
+    let staged = a.vault().unwrap().stage_create(login("After"), now()).unwrap();
+    a.push(staged).await.unwrap();
+    a.sync_now().await.unwrap();
+    assert!(titles(&a).contains(&"After".to_string()));
+    server.cleanup().await;
+}

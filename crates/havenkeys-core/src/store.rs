@@ -450,6 +450,19 @@ impl Store {
         Ok(())
     }
 
+    /// Every item stored here.
+    pub fn item_ids(&self) -> Result<Vec<Uuid>> {
+        let mut stmt = self.conn.prepare("SELECT id FROM items")?;
+        let ids = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .map(|r| {
+                r.map_err(Error::from)
+                    .and_then(|s| Uuid::parse_str(&s).map_err(|_| Error::Corrupted))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ids)
+    }
+
     /// The server revision this device last stored for an item.
     pub fn item_revision(&self, id: &Uuid) -> Result<Option<i64>> {
         Ok(self
