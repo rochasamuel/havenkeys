@@ -141,7 +141,10 @@ pub fn reveal_secret(
     id: Uuid,
     field: SecretField,
 ) -> CmdResult<SecretString> {
-    state.touch();
+    // No `touch()`: the editor loads secrets when it opens, and an opening
+    // the browser extension asks for (`open_item`) is not the user at this
+    // machine (DT2). A click on reveal already counts through
+    // `record_activity`.
     Ok(state.vault()?.reveal(&id, field)?)
 }
 
@@ -420,7 +423,7 @@ pub fn copy_generated_password(
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> CmdResult<Settings> {
-    state.touch();
+    // No `touch()`: read whenever a view opens (DT2, see `reveal_secret`).
     Ok(state.vault()?.settings()?)
 }
 

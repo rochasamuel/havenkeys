@@ -123,7 +123,7 @@ fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
                 .map_err(sync::bridge_error)
         },
     );
-    // "Edit in HavenKeys" from the extension popup. The bridge has
+    // "Open in HavenKeys" from the extension popup. The bridge has
     // already checked the item is saved for the page the popup was
     // opened on; this only raises the window and tells the UI.
     let open_handle = app.clone();

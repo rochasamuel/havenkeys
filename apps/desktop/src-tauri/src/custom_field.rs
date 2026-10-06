@@ -16,7 +16,8 @@ use uuid::Uuid;
 
 #[tauri::command]
 pub fn login_fields(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<SectionView>> {
-    state.touch();
+    // No `touch()`: loaded whenever a login is shown, including one the
+    // browser extension opened (DT2, see `commands::reveal_secret`).
     Ok(custom_field::views(state.vault()?.login_sections(&id)?))
 }
 
