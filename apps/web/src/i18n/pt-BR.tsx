@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
+import { inviteHref } from "../lib/links";
 import type { Messages } from "./en";
 
 /*
@@ -588,14 +589,18 @@ export const ptBR: Messages = {
     beforeTitle: "Antes de instalar",
     steps: [
       {
-        title: "Você vai precisar de um servidor",
+        title: "Tenha sua conta",
         body: (
           <>
-            O HavenKeys guarda o seu cofre em um <code>havenkeys-server</code>. Rode o seu seguindo o{" "}
-            <Ext href={`${DOCS}deployment.md`}>guia de implantação</Ext> (em inglês), ou peça um
-            convite a alguém que já roda um. Configure backups antes de guardar qualquer coisa
-            importante.
+            O HavenKeys guarda seu cofre trancado num servidor. Peça um convite para o nosso, ou{" "}
+            <Link to="/pt-br/self-host">rode seu próprio servidor</Link>. Depois imprima seu Emergency Kit:
+            é com ele que você entra num dispositivo novo.
           </>
+        ),
+        actions: (
+          <a className="btn btn--ghost btn--sm" href={inviteHref("Pedido de convite HavenKeys")}>
+            Pedir um convite
+          </a>
         ),
       },
       {
@@ -647,6 +652,10 @@ export const ptBR: Messages = {
           essa requisição. Se você escolher um idioma no seletor, o site guarda essa escolha no
           armazenamento local do seu navegador; ela nunca é enviada a lugar nenhum. Não há
           publicidade nem nenhum outro script de terceiros.
+        </p>
+        <p>
+          Se você escrever para invite@havenkeys.net, o operador recebe seu e-mail e sua mensagem,
+          usa-os apenas para responder e enviar o convite, e os apaga quando você pedir.
         </p>
 
         <h2>O app de desktop e a extensão do navegador</h2>
@@ -854,17 +863,48 @@ export const ptBR: Messages = {
           Se você roda o <code>havenkeys-server</code>, é o único responsável pela implantação,
           pela disponibilidade e pelos backups dele. O servidor é a cópia oficial do seu cofre;
           perdê-lo sem um backup testado significa perder os seus dados. Leia o{" "}
+          <Ext href={`${DOCS}self-hosting.md`}>guia de hospedagem própria</Ext> e o{" "}
           <Ext href={`${DOCS}deployment.md`}>guia de implantação</Ext> (em inglês), principalmente a
           seção sobre backups, antes de guardar qualquer coisa que você não pode perder.
         </p>
 
-        <h2>Sem serviço, sem conta</h2>
+        <h2>Nosso servidor e o seu</h2>
         <p>
-          Não operamos uma versão hospedada do HavenKeys e não mantemos contas em seu nome. Baixar
-          este software não implica assinatura, SLA nem obrigação de suporte.
+          O autor opera um <code>havenkeys-server</code> para as pessoas que convida, na base do melhor
+          esforço: não há assinatura, acordo de nível de serviço nem obrigação de suporte, e o serviço pode
+          mudar ou acabar mediante aviso. Qualquer pessoa pode, em vez disso, rodar o próprio servidor;
+          baixar o software não cria conta nenhuma conosco.
         </p>
       </>
     ),
+  },
+
+  selfHost: {
+    title: "Rode seu próprio servidor HavenKeys",
+    lede: "Guarde seu cofre trancado num servidor que você controla. Você precisa de um domínio, um pequeno servidor e alguns minutos.",
+    needTitle: "O que você precisa",
+    needs: [
+      "Um pequeno servidor Linux com Docker — cerca de US$5 por mês, ou um computador em casa sempre ligado.",
+      "Um domínio ou subdomínio que você possa apontar para ele, como cofre.exemplo.com.",
+      "Ou, no lugar dos dois: uma conta no Railway.",
+    ],
+    stepsTitle: "Quatro passos com Docker",
+    steps: [
+      { title: "Aponte seu domínio para o servidor", text: "Crie um registro A do seu domínio com o IP do servidor, e libere as portas 80 e 443.", code: "" },
+      { title: "Baixe o pacote", text: "Seis arquivos pequenos: os serviços, o HTTPS, os backups e o script de instalação.", code: "mkdir havenkeys && cd havenkeys\nfor f in compose.yaml Caddyfile .env.example setup.sh restore.sh backup.sh; do\n  curl -fsSLO \"https://raw.githubusercontent.com/rochasamuel/havenkeys/main/deploy/compose/$f\"\ndone\nchmod +x setup.sh restore.sh backup.sh" },
+      { title: "Rode a instalação", text: "Ele pede seu domínio e e-mail, cria os segredos e sobe tudo com HTTPS.", code: "./setup.sh" },
+      { title: "Crie sua conta", text: "Ele mostra um convite uma única vez. Cole-o no app HavenKeys do seu computador.", code: "docker compose exec server havenkeys-server admin new-account \\\n  --email voce@exemplo.com --server-url https://cofre.exemplo.com" },
+    ],
+    railwayTitle: "Ou publique no Railway",
+    railwayBody: "Sem servidor para cuidar: o Railway roda o HavenKeys e o banco de dados para você, por cerca de US$5 por mês.",
+    railwayCta: "Publicar no Railway",
+    railwaySoon: "O modelo de um clique para o Railway chega em breve. Até lá, o guia tem os passos para o Railway.",
+    backupsTitle: "Backups inclusos",
+    backupsBody: "O pacote salva uma cópia do banco de dados toda noite e guarda os últimos 14 dias numa pasta de backups. Copie essa pasta para outro lugar com frequência, e teste uma restauração uma vez para saber que funciona.",
+    chargeTitle: "A responsabilidade é sua",
+    chargeBody: "Quando você roda o servidor, mantê-lo no ar e com backup é com você. O HavenKeys não recupera um cofre de um servidor perdido sem backup.",
+    guideCta: "Ler o guia completo",
+    inviteInstead: "Prefere não rodar um servidor? Peça um convite para o nosso.",
   },
 
   notFound: {

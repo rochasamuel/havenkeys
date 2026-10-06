@@ -35,7 +35,7 @@ describe("routes", () => {
     expect(html("/")).toContain("mailto:invite@havenkeys.net?subject=HavenKeys%20invite%20request");
   });
   it("still renders every existing page", () => {
-    for (const p of ["/", "/download", "/security", "/privacy", "/terms", "/delete-account"]) {
+    for (const p of ["/", "/download", "/security", "/self-host", "/privacy", "/terms", "/delete-account"]) {
       expect(text(html(p)), p).not.toContain(text(en.notFound.title));
       expect(text(html(`/pt-br${p === "/" ? "" : p}`)), p).not.toContain(text(ptBR.notFound.title));
     }

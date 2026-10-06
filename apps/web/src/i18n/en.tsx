@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
+import { inviteHref } from "../lib/links";
 import type { IconName } from "../components/Icon";
 
 /*
@@ -581,13 +582,18 @@ export const en = {
     beforeTitle: "Before you install",
     steps: [
       {
-        title: "You’ll need a server",
+        title: "Get an account",
         body: (
           <>
-            HavenKeys stores your vault on a <code>havenkeys-server</code>. Run your own with the{" "}
-            <Ext href={`${DOCS}deployment.md`}>deployment guide</Ext>, or get an invite from someone
-            who runs one. Set up backups before you store anything real.
+            HavenKeys keeps your locked vault on a server. Request an invite to ours, or{" "}
+            <Link to="/self-host">run your own server</Link>. Then print your Emergency Kit: it’s how you
+            sign in on a new device.
           </>
+        ),
+        actions: (
+          <a className="btn btn--ghost btn--sm" href={inviteHref("HavenKeys invite request")}>
+            Request an invite
+          </a>
         ),
       },
       {
@@ -638,6 +644,10 @@ export const en = {
           browser, so GitHub also sees that request. If you pick a language with the switcher, the
           site remembers that choice in your browser's local storage; it is never sent anywhere.
           There is no advertising and no other third-party script.
+        </p>
+        <p>
+          If you email invite@havenkeys.net, the operator receives your email address and message,
+          uses them only to answer you and send an invite, and deletes them when you ask.
         </p>
 
         <h2>The desktop app and browser extension</h2>
@@ -840,18 +850,48 @@ export const en = {
           If you run <code>havenkeys-server</code> yourself, you are solely responsible for its
           deployment, its uptime, and its backups. The server is the authoritative copy of your
           vault; losing it without a tested backup means losing your data. See{" "}
+          <Ext href={`${DOCS}self-hosting.md`}>the self-hosting guide</Ext> and{" "}
           <Ext href={`${DOCS}deployment.md`}>the deployment guide</Ext>, particularly its section on
           backups, before storing anything you can't afford to lose.
         </p>
 
-        <h2>No service, no account</h2>
+        <h2>Our server and yours</h2>
         <p>
-          We do not operate a hosted version of HavenKeys and do not maintain accounts on your
-          behalf. There is no subscription, no SLA, and no support obligation implied by
-          downloading this software.
+          The author runs a <code>havenkeys-server</code> for the people they invite, on a best-effort
+          basis: there is no subscription, no service-level agreement and no support obligation, and
+          the service may change or end with notice. Anyone can instead run their own server;
+          downloading the software creates no account with us.
         </p>
       </>
     ),
+  },
+
+  selfHost: {
+    title: "Run your own HavenKeys server",
+    lede: "Keep your locked vault on a server you control. You need a domain, a small server and a few minutes.",
+    needTitle: "What you need",
+    needs: [
+      "A small Linux server with Docker — about US$5 a month, or a computer at home that’s always on.",
+      "A domain or subdomain you can point at it, like vault.example.com.",
+      "Or, instead of both: a Railway account.",
+    ],
+    stepsTitle: "Four steps with Docker",
+    steps: [
+      { title: "Point your domain at the server", text: "Add an A record for your domain with the server’s IP address, and open ports 80 and 443.", code: "" },
+      { title: "Download the bundle", text: "Six small files: the services, HTTPS, backups and the setup script.", code: "mkdir havenkeys && cd havenkeys\nfor f in compose.yaml Caddyfile .env.example setup.sh restore.sh backup.sh; do\n  curl -fsSLO \"https://raw.githubusercontent.com/rochasamuel/havenkeys/main/deploy/compose/$f\"\ndone\nchmod +x setup.sh restore.sh backup.sh" },
+      { title: "Run the setup", text: "It asks for your domain and email, creates the secrets, and starts everything with HTTPS.", code: "./setup.sh" },
+      { title: "Create your account", text: "It prints an invite once. Paste it into the HavenKeys app on your computer.", code: "docker compose exec server havenkeys-server admin new-account \\\n  --email you@example.com --server-url https://vault.example.com" },
+    ],
+    railwayTitle: "Or deploy on Railway",
+    railwayBody: "No server to look after: Railway runs HavenKeys and its database for you, for about US$5 a month.",
+    railwayCta: "Deploy on Railway",
+    railwaySoon: "The one-click Railway template is coming soon. Until then, the guide has the Railway steps.",
+    backupsTitle: "Backups are included",
+    backupsBody: "The bundle saves a copy of the database every night and keeps the last 14 days in a backups folder. Copy that folder somewhere else regularly, and try a restore once so you know it works.",
+    chargeTitle: "You’re in charge",
+    chargeBody: "When you run the server, keeping it online and backed up is up to you. HavenKeys can’t recover a vault from a server that was lost without a backup.",
+    guideCta: "Read the full guide",
+    inviteInstead: "Rather not run a server? Request an invite to ours.",
   },
 
   notFound: {

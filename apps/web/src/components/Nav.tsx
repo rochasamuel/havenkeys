@@ -1,5 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
 import { useI18n } from "../i18n/context";
+import { GITHUB } from "../lib/links";
 import { Icon } from "./Icon";
 import { LanguageToggle } from "./LanguageSwitch";
 import { Mark } from "./Mark";
@@ -23,7 +24,7 @@ export function Nav() {
             {t.nav.developers}
           </NavLink>
           <a
-            href="https://github.com/rochasamuel/havenkeys"
+            href={GITHUB}
             target="_blank"
             rel="noreferrer"
             className="nav__icon"

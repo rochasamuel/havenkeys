@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useI18n } from "../i18n/context";
+import { GITHUB } from "../lib/links";
 import { LanguageList } from "./LanguageSwitch";
 import { Mark } from "./Mark";
 
@@ -20,7 +21,7 @@ export function Footer() {
           <Link to={path("/security")}>{t.footer.security}</Link>
           <Link to={path("/self-host")}>{t.footer.selfHost}</Link>
           <Link to={path("/developers")}>{t.footer.developers}</Link>
-          <a href="https://github.com/rochasamuel/havenkeys" target="_blank" rel="noreferrer">
+          <a href={GITHUB} target="_blank" rel="noreferrer">
             {t.footer.github}
           </a>
           <Link to={path("/privacy")}>{t.footer.privacy}</Link>

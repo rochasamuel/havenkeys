@@ -2560,3 +2560,13 @@ main > .download:last-child {
   max-width: 760px;
   margin: 0 auto;
 }
+
+/* ------------------------------------------------------------ self-host */
+
+.selfhost__steps { list-style: none; margin: 0 auto; padding: 0; max-width: 820px; display: grid; gap: 28px; }
+.selfhost__steps > li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; }
+.selfhost__steps h3 { margin: 4px 0 6px; color: var(--text-strong); }
+.selfhost__steps p { margin: 0 0 10px; color: var(--muted-hi); }
+.code { margin: 0; padding: 14px 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--ink); font-family: "JetBrains Mono", monospace; font-size: 0.86rem; line-height: 1.55; color: var(--text); white-space: pre; }
+.plain-list--ok svg { color: var(--ok); }
+.selfhost .plain-list { max-width: 820px; margin: 0 auto; }

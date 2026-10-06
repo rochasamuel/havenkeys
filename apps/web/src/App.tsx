@@ -7,6 +7,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 import { Home } from "./pages/Home";
 import { Download } from "./pages/Download";
 import { Developers } from "./pages/Developers";
+import { SelfHost } from "./pages/SelfHost";
 import { Security } from "./pages/Security";
 import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
@@ -20,6 +21,7 @@ const PAGES = [
   { path: "", element: <Home /> },
   { path: "download", element: <Download /> },
   { path: "security", element: <Security /> },
+  { path: "self-host", element: <SelfHost /> },
   { path: "developers", element: <Developers /> },
   { path: "privacy", element: <Privacy /> },
   { path: "delete-account", element: <DeleteAccount /> },
