@@ -341,6 +341,243 @@ export const en = {
     caption: "Illustration. The key shown is made up.",
   },
 
+  developers: {
+    heroTitle: "How HavenKeys works, end to end.",
+    heroLede:
+      "HavenKeys is small on purpose. The cryptography comes from established Rust libraries, the rules are written down, and the attacks it claims to stop are tests in the code. Here’s the whole design in one page.",
+
+    journeyTitle: "Follow one password home.",
+    journeyLede:
+      "HavenKeys is a password manager with careful autofill, one-time codes and a vault that works offline. What sets it apart is what happens to a password between the moment you type it and the moment it’s filled. Here’s that trip, one step at a time.",
+
+    browserTitle: "Autofill that waits for your click.",
+    browserLede:
+      "The extension for Chrome and Firefox reads the form the way you do, offers what’s saved for that site, and does nothing until you choose. These are the real menus.",
+    extensionListTitle: "Also in the extension",
+    extensionFeatures: [
+      {
+        term: "Passkeys",
+        text: "Sign in with a saved passkey from the field menu, and save new ones. After you sign in with a password on a site that supports passkeys, HavenKeys can add a passkey for you (you can turn this off).",
+      },
+      {
+        term: "Automatic sign-in",
+        text: "After you pick a login, HavenKeys can press the sign-in button and fill the next step and the one-time code, on the same site, within two minutes. Nothing happens without your pick. Off per login or for the whole vault.",
+      },
+      { term: "Edit in HavenKeys", text: "From the popup, open a login in the desktop app to change it." },
+    ],
+
+    desktopTitle: "A vault that lives on your desk.",
+    desktopLede:
+      "The desktop app holds the keys. It sits in the tray, locks itself when you step away, and does all the cryptography in its Rust core. The interface never sees a key, and a password reaches the screen only when you reveal it.",
+    features: [
+      { term: "Logins", text: "Usernames, passwords, websites with match rules, one-time codes and notes." },
+      { term: "Secure notes", text: "Recovery codes, passphrases, anything that isn’t a login. Encrypted whole." },
+      {
+        term: "Passkeys",
+        text: "Create passkeys and sign in with them. The private key is made and used only in the Rust core; the site’s identity is checked there too.",
+      },
+      { term: "One-time codes", text: "SHA-1, SHA-256 or SHA-512, six or eight digits. Paste an otpauth:// link once." },
+      {
+        term: "Scan a QR code",
+        text: "Set up a one-time code by scanning the QR code from the clipboard or the screen. The secret stays in Rust until you save.",
+      },
+      { term: "Password generator", text: "Length and character sets are up to you. Random from the OS, with no bias." },
+      { term: "Search", text: "Titles, usernames and websites, searched in memory. No plaintext index on disk." },
+      { term: "Password history", text: "The last five passwords of every login, even ones changed from the browser." },
+      { term: "Import and export", text: "Bring passwords from 1Password, Bitwarden, LastPass, KeePassXC, Chrome or Firefox. Export a Bitwarden file, a CSV, or an encrypted HavenKeys backup." },
+      {
+        term: "Auto-lock",
+        text: "After 5 to 60 minutes idle, on sleep and on quit. On Windows and Linux, when your session locks too.",
+      },
+      {
+        term: "Secret Key in the keychain",
+        text: "Stored in your system’s keychain (Windows Credential Manager, macOS Keychain, Secret Service on Linux).",
+      },
+      {
+        term: "Opens at login",
+        text: "Optionally starts with your computer, locked, in the tray, so the extension can reach it.",
+      },
+      {
+        term: "Updates itself",
+        text: "Checks for signed updates and installs only when you click Update. You can turn the check off.",
+      },
+      {
+        term: "English and Portuguese",
+        text: "The app follows your system language, or the one you pick in Settings. The extension follows your browser’s language.",
+      },
+    ],
+
+    paperTitle: "Two secrets. One of them lives on paper.",
+    paperP1:
+      "Your master password is the one you remember. Your Secret Key is 128 random bits made on your device when you set up. It’s stored on each of your computers and printed on your Emergency Kit, and it never goes to the server.",
+    paperP2:
+      "So a stolen copy of the server’s database isn’t a password-guessing exercise. Without the Secret Key, an attacker has to guess both.",
+    paperWarn:
+      "There’s no account recovery. Lose the kit and every device that holds the key, and the vault is gone. That’s the price of nobody else being able to open it.",
+
+    ledgerTitle: "What it defends. What it doesn’t.",
+    ledgerLede:
+      "Security software earns trust by being specific. This is the short version of the threat model, limitations included.",
+    defendsTitle: "Designed to stop",
+    defends: [
+      "Someone with a copy of the server’s database or a backup. Without your Secret Key they’d also have to guess 128 random bits.",
+      "A server operator reading your vault. It stores ciphertext and has no key for it.",
+      "Pages that fake forms, hide fields, frame other sites or synthesize clicks to trigger a fill.",
+      "Look-alike domains. Matching uses the public suffix list, so fernway.example.evil.com is a different site.",
+      "Secrets leaking into logs, error messages, URLs, notifications or window titles.",
+    ],
+    doesntTitle: "Not defended",
+    doesnt: [
+      "Malware running as you while the vault is unlocked. No local password manager can stop that.",
+      "A server that deletes your data. It’s the single writer, so tested backups are part of running one.",
+      "A weak master password on a device that’s been copied whole, Secret Key included.",
+      "It has not had an independent audit, and the installers aren’t code-signed yet.",
+    ],
+
+    chainTitle: "One chain of keys, no shortcuts.",
+    chainLede:
+      "Your master password is never used to encrypt anything directly. It feeds a memory-hard function, is combined with a random Secret Key, and unwraps a vault key that was random from the start. Changing your master password rewraps that key. None of your items change.",
+    chainLink: "Full cryptography design",
+    hierarchy: [
+      { name: "Master password", detail: "Never stored. Only ever fed to Argon2id.", tone: "input" },
+      { name: "Argon2id", detail: "128 MiB, 4 passes, 4 lanes, a random 16-byte salt.", tone: "op" },
+      { name: "Master key", detail: "32 bytes, in memory only.", tone: "key" },
+      { name: "HKDF-SHA-256", detail: "Mixes in your 128-bit Secret Key, bound to your account and email.", tone: "op" },
+      {
+        name: "Key-encryption key",
+        detail: "Unwraps the vault key. A sibling key signs you in to the server and unwraps nothing.",
+        tone: "key",
+      },
+      { name: "Vault key", detail: "256 random bits from the OS. Stored only wrapped.", tone: "key" },
+      { name: "Data key", detail: "Derived per vault. Lives in memory while unlocked.", tone: "key" },
+      { name: "Your items", detail: "AES-256-GCM, fresh nonce per save, bound to vault, item and role.", tone: "out" },
+    ],
+
+    zonesTitle: "Five places, five levels of trust.",
+    zonesLede:
+      "Each part of HavenKeys gets only what its job needs. The line that matters most runs between the Rust core and everything else: it decides, and nothing else can decide for it.",
+    zoneGets: "Gets",
+    zoneLimits: "Limits",
+    zones: [
+      {
+        name: "Rust core",
+        where: "Inside the desktop app",
+        holds: "Keys, decryption, the origin check for every fill",
+        limit: "Trusted. It’s the part you’re trusting.",
+      },
+      {
+        name: "Desktop interface",
+        where: "The app’s window",
+        holds: "One revealed field at a time",
+        limit: "No keys, no crypto, no file or network access, a strict CSP",
+      },
+      {
+        name: "Browser extension",
+        where: "Chrome or Firefox",
+        holds: "Titles and usernames for this site; a password when you pick one",
+        limit: "Every request is re-checked in Rust. It never sees the vault key.",
+      },
+      {
+        name: "Web pages",
+        where: "Everywhere you browse",
+        holds: "Nothing, until you pick a login for that page",
+        limit: "Treated as hostile. They can’t message the extension at all.",
+      },
+      {
+        name: "Your server",
+        where: "Hardware you choose",
+        holds: "Ciphertext, plus your email and item counts, sizes and times",
+        limit: "No key to any of it. It can delete data, so keep backups.",
+      },
+    ],
+
+    permTitle: "An extension that asks for less.",
+    permLede:
+      "Offers to save logins and passkeys need the extension on the sites you visit, so it asks for that at install. It asks for nothing else, never reads pages you don’t interact with, and the desktop app decides which logins each site may use. You can take site access back in your browser at any time.",
+    notRequested: "Not requested:",
+    permHead: ["Permission", "Why"],
+    always: "Always",
+    permissions: [
+      { name: "nativeMessaging", optional: false, why: "The extension’s only route to the desktop app." },
+      {
+        name: "activeTab",
+        optional: false,
+        why: "Read the address of the tab you clicked the toolbar button on, and fill it. Only that tab.",
+      },
+      {
+        name: "scripting",
+        optional: false,
+        why: "Put the fill script into that tab, and register it on the sites the extension has access to.",
+      },
+      {
+        name: "https://*/*, http://*/*",
+        optional: false,
+        why: "Offers to save logins, passkeys and in-page suggestions. You can take it back in your browser’s extension settings.",
+      },
+      {
+        name: "storage",
+        optional: false,
+        why: "One setting: whether logins are suggested under login fields. Nothing else.",
+      },
+    ],
+    optionalTag: "Optional, off by default",
+
+    attacksTitle: "Twelve attacks, written as tests.",
+    attacksLede:
+      "Each one is a regression test in the Rust or extension test suite, so a change that reopens it fails the tests.",
+    attacksHead: ["Attempt", "Result"],
+    attacks: [
+      ["A page on evil.com asks for the github.com login", "Denied"],
+      ["The extension asks for an item by ID on the wrong site", "Denied, and looks the same as “not saved here”"],
+      ["A password is requested while the vault is locked", "Denied"],
+      ["Ciphertext is modified", "Fails authentication, no plaintext"],
+      ["A malformed native message arrives", "Rejected, no crash"],
+      ["An oversized native message arrives", "Rejected by the size limit"],
+      ["A page creates thousands of inputs", "No significant slowdown"],
+      ["An encrypted blob is swapped between items or roles", "Fails authentication"],
+      ["A vault with an unknown format version", "Refused safely"],
+      ["A github.com login frame embedded in evil.com", "Denied: the top page must match too"],
+      ["A page synthesizes clicks or keys to trigger a fill", "Ignored"],
+      ["The frame navigates away before the fill lands", "Refused"],
+    ] as Array<[string, string]>,
+
+    scopeTitle: "What it won’t protect you from.",
+    scopeLede:
+      "No local password manager can promise everything. These are the limits, stated up front rather than discovered later.",
+    outOfScope: [
+      "Malware running as you while the vault is unlocked: it can read memory, log keys or ask the desktop app for logins as the extension does.",
+      "Kernel or root compromise, hardware attacks, cold-boot and DMA attacks.",
+      "Memory forensics after lock. Keys are zeroed where the code controls them, but copies can survive in places it doesn’t.",
+      "Rollback of the vault file, and a server that replays an item’s older password.",
+      "A weak master password, and clipboard managers reading a copied password before it clears.",
+    ],
+
+    readingTitle: "Read the source documents.",
+    readingLede: "Everything above is a summary. These are the documents it summarizes.",
+    reading: [
+      { title: "Threat model", file: "threat-model.md", body: "What HavenKeys defends against, and what it explicitly doesn’t." },
+      { title: "Security model", file: "security-model.md", body: "How each defense is enforced, permission by permission." },
+      { title: "Cryptography", file: "crypto.md", body: "The key hierarchy, the blob format, and the exact parameters." },
+      {
+        title: "Security review",
+        file: "security-review.md",
+        body: "Findings from reviewing this code against its own threat model, open ones included.",
+      },
+      { title: "Self-hosting", file: "self-hosting.md", body: "Run your own server with Docker or Railway." },
+      { title: "Deployment reference", file: "deployment.md", body: "Environment, Railway, backups." },
+    ],
+
+    buildTitle: "Build it yourself",
+    buildBody: (
+      <>
+        HavenKeys is open source under MIT or Apache-2.0. The{" "}
+        <Ext href={`${DOCS}development.md`}>development guide</Ext> covers building the desktop app,
+        the extension, Android and the server; <Ext href={`${DOCS}self-hosting.md`}>self-hosting.md</Ext>{" "}
+        covers running your own server.
+      </>
+    ),
+  },
+
   security: {
     heroTitle: "Security you can read end to end.",
     heroLede:

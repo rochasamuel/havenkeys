@@ -344,6 +344,260 @@ export const ptBR: Messages = {
     caption: "Ilustração. A chave mostrada é inventada.",
   },
 
+  developers: {
+    heroTitle: "Como o HavenKeys funciona, de ponta a ponta.",
+    heroLede:
+      "O HavenKeys é pequeno de propósito. A criptografia vem de bibliotecas Rust consolidadas, as regras estão por escrito e os ataques que ele diz impedir são testes no código. Aqui está o projeto inteiro em uma página.",
+
+    journeyTitle: "Acompanhe uma senha até em casa.",
+    journeyLede:
+      "O HavenKeys é um gerenciador de senhas com preenchimento automático cuidadoso, códigos de uso único e um cofre que funciona offline. O que o diferencia é o que acontece com uma senha entre o momento em que você a digita e o momento em que ela é preenchida. Este é o caminho, passo a passo.",
+
+    browserTitle: "Preenchimento que espera o seu clique.",
+    browserLede:
+      "A extensão para Chrome e Firefox lê o formulário como você lê, oferece o que está salvo para aquele site e não faz nada até você escolher. Estes são os menus de verdade.",
+    extensionListTitle: "Também na extensão",
+    extensionFeatures: [
+      {
+        term: "Passkeys",
+        text: "Entre com uma passkey salva pelo menu do campo, e salve novas. Depois que você entra com uma senha em um site que aceita passkeys, o HavenKeys pode criar uma passkey para você (dá para desligar isso).",
+      },
+      {
+        term: "Entrada automática",
+        text: "Depois que você escolhe um login, o HavenKeys pode clicar no botão de entrar e preencher a etapa seguinte e o código de uso único, no mesmo site, em até dois minutos. Nada acontece sem a sua escolha. Dá para desligar por login ou para o cofre inteiro.",
+      },
+      { term: "Editar no HavenKeys", text: "Pelo popup, abra um login no app de desktop para alterá-lo." },
+    ],
+
+    desktopTitle: "Um cofre que mora na sua mesa.",
+    desktopLede:
+      "O app de desktop guarda as chaves. Ele fica na bandeja do sistema, se tranca quando você se afasta e faz toda a criptografia no seu núcleo em Rust. A interface nunca vê uma chave, e uma senha só aparece na tela quando você a revela.",
+    features: [
+      { term: "Logins", text: "Usuários, senhas, sites com regras de correspondência, códigos de uso único e notas." },
+      { term: "Notas seguras", text: "Códigos de recuperação, frases-senha, tudo que não é login. Cifradas por inteiro." },
+      {
+        term: "Passkeys",
+        text: "Crie passkeys e entre com elas. A chave privada é criada e usada só no núcleo em Rust; a identidade do site também é conferida lá.",
+      },
+      {
+        term: "Códigos de uso único",
+        text: "SHA-1, SHA-256 ou SHA-512, seis ou oito dígitos. Cole um link otpauth:// uma única vez.",
+      },
+      {
+        term: "Ler um QR code",
+        text: "Configure um código de uso único lendo o QR code da área de transferência ou da tela. O segredo fica no Rust até você salvar.",
+      },
+      {
+        term: "Gerador de senhas",
+        text: "Você escolhe o tamanho e os tipos de caractere. Aleatoriedade do sistema operacional, sem viés.",
+      },
+      { term: "Busca", text: "Títulos, usuários e sites, buscados na memória. Nenhum índice em texto puro no disco." },
+      {
+        term: "Histórico de senhas",
+        text: "As cinco últimas senhas de cada login, inclusive as trocadas pelo navegador.",
+      },
+      { term: "Importar e exportar", text: "Traga senhas do 1Password, Bitwarden, LastPass, KeePassXC, Chrome ou Firefox. Exporte um arquivo do Bitwarden, um CSV ou um backup criptografado do HavenKeys." },
+      {
+        term: "Bloqueio automático",
+        text: "Após 5 a 60 minutos parado, ao suspender e ao sair. No Windows e no Linux, também quando a sessão é bloqueada.",
+      },
+      {
+        term: "Secret Key no chaveiro do sistema",
+        text: "Guardada no chaveiro do seu sistema (Windows Credential Manager, macOS Keychain, Secret Service no Linux).",
+      },
+      {
+        term: "Abre ao ligar o computador",
+        text: "Opcionalmente inicia junto com o computador, bloqueado, na bandeja do sistema, para que a extensão consiga alcançá-lo.",
+      },
+      {
+        term: "Se atualiza sozinho",
+        text: "Verifica se há atualizações assinadas e instala só quando você clica em Atualizar. Dá para desligar a verificação.",
+      },
+      {
+        term: "Português e inglês",
+        text: "O app segue o idioma do sistema, ou o que você escolher nas Configurações. A extensão segue o idioma do navegador.",
+      },
+    ],
+
+    paperTitle: "Dois segredos. Um deles mora no papel.",
+    paperP1:
+      "A senha mestra é a que você lembra. A Secret Key são 128 bits aleatórios criados no seu dispositivo durante a configuração. Ela fica guardada em cada um dos seus computadores e impressa no seu Emergency Kit, e nunca vai para o servidor.",
+    paperP2:
+      "Assim, uma cópia roubada do banco de dados do servidor não vira um exercício de adivinhar senhas. Sem a Secret Key, o atacante precisa adivinhar as duas.",
+    paperWarn:
+      "Não existe recuperação de conta. Se você perder o kit e todos os dispositivos que guardam a chave, o cofre se perde. Esse é o preço de ninguém mais conseguir abri-lo.",
+
+    ledgerTitle: "Do que ele protege. Do que não protege.",
+    ledgerLede:
+      "Software de segurança conquista confiança sendo específico. Esta é a versão curta do modelo de ameaças, com as limitações incluídas.",
+    defendsTitle: "Feito para impedir",
+    defends: [
+      "Alguém com uma cópia do banco de dados do servidor ou de um backup. Sem a sua Secret Key, ainda teria que adivinhar 128 bits aleatórios.",
+      "Quem opera o servidor lendo o seu cofre. Ele guarda dados cifrados e não tem a chave deles.",
+      "Páginas que falsificam formulários, escondem campos, embutem outros sites ou simulam cliques para disparar um preenchimento.",
+      "Domínios parecidos. A correspondência usa a Public Suffix List, então fernway.example.evil.com é outro site.",
+      "Segredos vazando em logs, mensagens de erro, URLs, notificações ou títulos de janela.",
+    ],
+    doesntTitle: "Não protege",
+    doesnt: [
+      "Malware rodando com o seu usuário enquanto o cofre está desbloqueado. Nenhum gerenciador de senhas local consegue impedir isso.",
+      "Um servidor que apaga os seus dados. Ele é o único que escreve, então backups testados fazem parte de mantê-lo.",
+      "Uma senha mestra fraca em um dispositivo copiado por inteiro, com a Secret Key junto.",
+      "Ele não passou por auditoria independente, e os instaladores ainda não são assinados.",
+    ],
+
+    chainTitle: "Uma cadeia de chaves, sem atalhos.",
+    chainLede:
+      "A senha mestra nunca é usada para cifrar nada diretamente. Ela alimenta uma função que exige muita memória, é combinada com uma Secret Key aleatória e abre uma chave do cofre que foi aleatória desde o início. Trocar a senha mestra só recifra essa chave. Nenhum dos seus itens muda.",
+    chainLink: "Projeto criptográfico completo",
+    hierarchy: [
+      { name: "Senha mestra", detail: "Nunca é guardada. Só serve de entrada para o Argon2id.", tone: "input" },
+      { name: "Argon2id", detail: "128 MiB, 4 passadas, 4 faixas, um salt aleatório de 16 bytes.", tone: "op" },
+      { name: "Chave mestra", detail: "32 bytes, só na memória.", tone: "key" },
+      {
+        name: "HKDF-SHA-256",
+        detail: "Mistura a sua Secret Key de 128 bits, vinculada à sua conta e ao seu e-mail.",
+        tone: "op",
+      },
+      {
+        name: "Chave de cifragem de chaves",
+        detail: "Abre a chave do cofre. Uma chave irmã faz o login no servidor e não abre nada.",
+        tone: "key",
+      },
+      { name: "Chave do cofre", detail: "256 bits aleatórios do sistema. Guardada só cifrada.", tone: "key" },
+      { name: "Chave de dados", detail: "Derivada por cofre. Fica na memória enquanto ele está aberto.", tone: "key" },
+      {
+        name: "Seus itens",
+        detail: "AES-256-GCM, nonce novo a cada gravação, vinculado ao cofre, ao item e à função.",
+        tone: "out",
+      },
+    ],
+
+    zonesTitle: "Cinco lugares, cinco níveis de confiança.",
+    zonesLede:
+      "Cada parte do HavenKeys recebe só o que o seu trabalho exige. A fronteira que mais importa separa o núcleo em Rust de todo o resto: ele decide, e nada mais pode decidir por ele.",
+    zoneGets: "Recebe",
+    zoneLimits: "Limites",
+    zones: [
+      {
+        name: "Núcleo em Rust",
+        where: "Dentro do app de desktop",
+        holds: "Chaves, decifragem e a verificação de origem de cada preenchimento",
+        limit: "Confiável. É a parte em que você está confiando.",
+      },
+      {
+        name: "Interface do desktop",
+        where: "A janela do app",
+        holds: "Um campo revelado por vez",
+        limit: "Sem chaves, sem criptografia, sem acesso a arquivos ou rede, com CSP rígida",
+      },
+      {
+        name: "Extensão do navegador",
+        where: "Chrome ou Firefox",
+        holds: "Títulos e usuários deste site; uma senha quando você escolhe um login",
+        limit: "Cada pedido é conferido de novo em Rust. Ela nunca vê a chave do cofre.",
+      },
+      {
+        name: "Páginas da web",
+        where: "Em todo lugar que você navega",
+        holds: "Nada, até você escolher um login para aquela página",
+        limit: "Tratadas como hostis. Não conseguem nem mandar mensagem para a extensão.",
+      },
+      {
+        name: "Seu servidor",
+        where: "No hardware que você escolher",
+        holds: "Dados cifrados, além do seu e-mail e da quantidade, tamanho e data dos itens",
+        limit: "Não tem chave para nada disso. Pode apagar dados, então mantenha backups.",
+      },
+    ],
+
+    permTitle: "Uma extensão que pede menos.",
+    permLede:
+      "Oferecer salvar logins e usar chaves de acesso exige que a extensão rode nos sites que você visita, então ela pede isso na instalação. Ela não pede mais nada, não lê páginas com as quais você não interage, e o app de desktop decide quais logins cada site pode usar. Você pode retirar o acesso aos sites no navegador a qualquer momento.",
+    notRequested: "Não solicitadas:",
+    permHead: ["Permissão", "Por quê"],
+    always: "Sempre",
+    permissions: [
+      { name: "nativeMessaging", optional: false, why: "O único caminho da extensão até o app de desktop." },
+      {
+        name: "activeTab",
+        optional: false,
+        why: "Ler o endereço da aba em que você clicou no botão da barra de ferramentas e preenchê-la. Só essa aba.",
+      },
+      {
+        name: "scripting",
+        optional: false,
+        why: "Colocar o script de preenchimento nessa aba e registrá-lo nos sites a que a extensão tem acesso.",
+      },
+      {
+        name: "https://*/*, http://*/*",
+        optional: false,
+        why: "Ofertas para salvar logins, chaves de acesso e sugestões na página. Você pode retirá-la nas configurações de extensões do navegador.",
+      },
+      {
+        name: "storage",
+        optional: false,
+        why: "Uma configuração: se os logins aparecem abaixo dos campos de login. Mais nada.",
+      },
+    ],
+    optionalTag: "Opcional, desligada por padrão",
+
+    attacksTitle: "Doze ataques, escritos como testes.",
+    attacksLede:
+      "Cada um é um teste de regressão na suíte de testes do Rust ou da extensão, então uma mudança que o reabra faz os testes falharem.",
+    attacksHead: ["Tentativa", "Resultado"],
+    attacks: [
+      ["Uma página em evil.com pede o login de github.com", "Negado"],
+      ["A extensão pede um item pelo ID no site errado", "Negado, e parece igual a “não salvo aqui”"],
+      ["Uma senha é pedida com o cofre trancado", "Negado"],
+      ["O texto cifrado é modificado", "Falha na autenticação, nenhum texto puro"],
+      ["Chega uma mensagem nativa malformada", "Rejeitada, sem travar"],
+      ["Chega uma mensagem nativa grande demais", "Rejeitada pelo limite de tamanho"],
+      ["Uma página cria milhares de campos", "Sem lentidão significativa"],
+      ["Um bloco cifrado é trocado entre itens ou funções", "Falha na autenticação"],
+      ["Um cofre com versão de formato desconhecida", "Recusado com segurança"],
+      ["Um quadro de login de github.com embutido em evil.com", "Negado: a página principal também precisa bater"],
+      ["Uma página simula cliques ou teclas para disparar um preenchimento", "Ignorado"],
+      ["O quadro navega para outro lugar antes do preenchimento chegar", "Recusado"],
+    ],
+
+    scopeTitle: "Do que ele não vai proteger você.",
+    scopeLede:
+      "Nenhum gerenciador de senhas local consegue prometer tudo. Estes são os limites, ditos logo de cara em vez de descobertos depois.",
+    outOfScope: [
+      "Malware rodando com o seu usuário enquanto o cofre está desbloqueado: ele pode ler a memória, registrar teclas ou pedir logins ao app de desktop como a extensão faz.",
+      "Comprometimento do kernel ou do root, ataques de hardware, ataques de cold boot e DMA.",
+      "Perícia de memória depois do bloqueio. As chaves são zeradas onde o código tem controle, mas cópias podem sobrar em lugares que ele não controla.",
+      "Reversão do arquivo do cofre, e um servidor que reenvia uma senha antiga de um item.",
+      "Uma senha mestra fraca, e gerenciadores de área de transferência lendo uma senha copiada antes de ela ser apagada.",
+    ],
+
+    readingTitle: "Leia os documentos originais.",
+    readingLede: "Tudo acima é um resumo. Estes são os documentos que ele resume, em inglês.",
+    reading: [
+      { title: "Modelo de ameaças", file: "threat-model.md", body: "Do que o HavenKeys protege, e do que explicitamente não protege." },
+      { title: "Modelo de segurança", file: "security-model.md", body: "Como cada defesa é aplicada, permissão por permissão." },
+      { title: "Criptografia", file: "crypto.md", body: "A hierarquia de chaves, o formato dos blocos e os parâmetros exatos." },
+      {
+        title: "Revisão de segurança",
+        file: "security-review.md",
+        body: "O que apareceu ao revisar este código contra o próprio modelo de ameaças, incluindo o que ainda está aberto.",
+      },
+      { title: "Auto-hospedagem", file: "self-hosting.md", body: "Rode seu próprio servidor com Docker ou Railway." },
+      { title: "Referência de implantação", file: "deployment.md", body: "Variáveis, Railway, backups." },
+    ],
+
+    buildTitle: "Compile você mesmo",
+    buildBody: (
+      <>
+        O HavenKeys é código aberto, sob MIT ou Apache-2.0. O{" "}
+        <Ext href={`${DOCS}development.md`}>guia de desenvolvimento</Ext> explica como compilar o app
+        de desktop, a extensão, o Android e o servidor; o{" "}
+        <Ext href={`${DOCS}self-hosting.md`}>self-hosting.md</Ext> explica como rodar seu próprio servidor.
+      </>
+    ),
+  },
+
   security: {
     heroTitle: "Segurança que você pode ler de ponta a ponta.",
     heroLede:
