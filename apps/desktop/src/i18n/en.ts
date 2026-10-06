@@ -340,6 +340,8 @@ export const en = {
     signInWith: "Sign in with",
     providerNone: "Nothing (password only)",
     providerPick: "How you sign in",
+    providerSearch: "Search providers and logins",
+    noMatches: "No matches",
     account: "Account",
     accountPlaceholder: "Email used there (optional)",
     alsoPassword: "Also has a password",

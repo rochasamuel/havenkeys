@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, SignInWith, SsoProvider, UrlRule } from "../lib/types";
+import type { ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, SignInWith, UrlRule } from "../lib/types";
 import { EMPTY, KEEP, toUpdate, type SecretEdit } from "../lib/secretEdit";
 import { fromViews, sectionsInput, type EditSection } from "../lib/customFields";
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
-import { PROVIDER_NAMES, PROVIDER_ORDER, shouldCollapse } from "../lib/sso";
+import { shouldCollapse } from "../lib/sso";
 import { Icon } from "../components/Icon";
+import { SsoPicker } from "../components/SsoPicker";
 import { Switch } from "../components/Switch";
 import { TotpEdit } from "../components/TotpEdit";
 import { useI18n } from "../i18n/context";
@@ -214,24 +215,14 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
           <>
             <div className="row edit-row">
               <span className="edit-label">{t.editor.signInWith}</span>
-              <span className="select-wrap">
-                <select
-                  value={signIn?.provider ?? ""}
-                  aria-label={t.editor.providerPick}
-                  onChange={(e) => {
-                    const p = e.target.value as SsoProvider | "";
-                    setSignIn(p ? { provider: p, account: signIn?.account ?? null } : null);
-                    if (!p) setPasswordOpen(true);
-                    else if (shouldCollapse(username, password, existing?.hasPassword ?? false)) setPasswordOpen(false);
-                  }}
-                >
-                  <option value="">{t.editor.providerNone}</option>
-                  {PROVIDER_ORDER.map((p) => (
-                    <option key={p} value={p}>{PROVIDER_NAMES[p]}</option>
-                  ))}
-                </select>
-                <Icon name="chevronDown" size={14} className="select-chevron" />
-              </span>
+              <SsoPicker
+                value={signIn}
+                onChange={(next) => {
+                  setSignIn(next);
+                  if (!next) setPasswordOpen(true);
+                  else if (shouldCollapse(username, password, existing?.hasPassword ?? false)) setPasswordOpen(false);
+                }}
+              />
             </div>
             {signIn && (
               <label className="row edit-row">

@@ -364,6 +364,8 @@ export const ptBR: Messages = {
     signInWith: "Entrar com",
     providerNone: "Nada (só senha)",
     providerPick: "Como você entra",
+    providerSearch: "Buscar provedores e logins",
+    noMatches: "Nada encontrado",
     account: "Conta",
     accountPlaceholder: "E-mail usado lá (opcional)",
     alsoPassword: "Também tem senha",
