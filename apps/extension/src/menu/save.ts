@@ -5,7 +5,7 @@
 
 import { MAX_TITLE_CHARS, SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type CardSaveView, type InlineRequest, type SaveView } from "../messaging/inline";
 import { applyDocumentLang, t } from "../i18n";
-import { ask, createClickGuard, tokenFromHash } from "./common";
+import { ask, createClickGuard, receiveToken } from "./common";
 import { cardBrandIcon } from "./icons";
 
 const question = document.getElementById("question") as HTMLElement;
@@ -16,7 +16,8 @@ const titleLabel = document.getElementById("title-label") as HTMLElement;
 const titleInput = document.getElementById("title") as HTMLInputElement;
 const confirmBtn = document.getElementById("confirm") as HTMLButtonElement;
 const dismissBtn = document.getElementById("dismiss") as HTMLButtonElement;
-const token = tokenFromHash();
+/** Set once the content script posts it (`receiveToken`). */
+let token: string | null = null;
 const card = document.querySelector(".card") as HTMLElement;
 const guard = createClickGuard(card);
 
@@ -135,6 +136,7 @@ new MutationObserver(scheduleSize).observe(card, { childList: true, subtree: tru
 void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
+  token = await receiveToken();
   if (!token) return;
   const r = await ask<SaveView | CardSaveView>({ type: "save_state", token });
   if (!r.ok) return fail(r.message);

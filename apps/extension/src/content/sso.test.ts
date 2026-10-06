@@ -5,6 +5,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseSsoContentRequest, type SsoContentRequest } from "../messaging/sso";
+import { frameToken } from "./frames";
 import { createSsoContent, SCAN_DEBOUNCE_MS, SCAN_WINDOW_MS } from "./sso";
 
 const TOKEN = "0123456789abcdef0123456789abcdef";
@@ -76,7 +77,8 @@ describe("scanning for provider buttons", () => {
     await vi.advanceTimersByTimeAsync(SCAN_DEBOUNCE_MS);
     expect(sent).toEqual([{ type: "cs_sso_buttons", providers: ["google"] }]);
     const [frame] = ssoFrames();
-    expect(frame?.src).toContain(`sso.html#${TOKEN}`);
+    expect(frame?.src).toMatch(/sso\.html$/);
+    expect(frame && frameToken(frame)).toBe(TOKEN);
     expect(frame?.title).toBe("Sign in with HavenKeys");
   });
 

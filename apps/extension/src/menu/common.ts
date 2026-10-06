@@ -2,15 +2,38 @@
 // embedded in web pages).
 
 import type { InlineReply, InlineRequest } from "../messaging/inline";
-import { TOKEN } from "../messaging/inline";
+import { TOKEN, TOKEN_MESSAGE } from "../messaging/inline";
 import type { SsoFrameRequest } from "../messaging/sso";
 import type { PkRequest } from "../webauthn/messages";
 import { t } from "../i18n";
 
-/** The session token from our own URL fragment, or null. */
-export function tokenFromHash(): string | null {
-  const fragment = location.hash.slice(1);
-  return TOKEN.test(fragment) ? fragment : null;
+/** How long a frame waits for its token before showing nothing. */
+const TOKEN_WAIT_MS = 5000;
+
+/**
+ * The session token the content script posts once this frame has loaded
+ * (EX-03), or null. Only a message from the embedding window counts, and
+ * only the first well-formed one. The page is that window too, so it could
+ * post a token first, but it knows no live one: that only breaks its own
+ * menu.
+ */
+export function receiveToken(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const done = (token: string | null): void => {
+      removeEventListener("message", onMessage);
+      clearTimeout(timer);
+      resolve(token);
+    };
+    const onMessage = (e: MessageEvent): void => {
+      if (e.source !== window.parent) return;
+      const d: unknown = e.data;
+      if (typeof d !== "object" || d === null) return;
+      const { type, token } = d as { type?: unknown; token?: unknown };
+      if (type === TOKEN_MESSAGE && typeof token === "string" && TOKEN.test(token)) done(token);
+    };
+    addEventListener("message", onMessage);
+    const timer = setTimeout(() => done(null), TOKEN_WAIT_MS);
+  });
 }
 
 export async function ask<T>(req: InlineRequest | PkRequest | SsoFrameRequest): Promise<InlineReply<T>> {

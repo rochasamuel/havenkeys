@@ -5,13 +5,14 @@
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityRole, type PasswordOptions } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
-import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
+import { ask, createClickGuard, h, monogram, receiveToken, userData } from "./common";
 import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
 const card = document.querySelector(".card") as HTMLElement;
-const token = tokenFromHash();
+/** Set once the content script posts it (`receiveToken`). */
+let token: string | null = null;
 const guard = createClickGuard(card);
 
 applyDocumentLang();
@@ -505,6 +506,7 @@ new MutationObserver(() => {
 void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
+  token = await receiveToken();
   if (!token) return;
   const r = await ask<MenuView>({ type: "menu_state", token });
   if (!r.ok) {

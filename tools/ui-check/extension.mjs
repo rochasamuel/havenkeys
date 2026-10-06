@@ -664,7 +664,7 @@ export function chromeStub(setup) {
 export async function renderExtension(page, baseUrl, scenario, locale) {
   const text = TEXT[locale];
   const f = scenario.frame;
-  const hash = f.kind === "popup" || f.kind === "tab" ? "" : `#${TOKEN}`;
+  const framed = f.kind !== "popup" && f.kind !== "tab";
   let width;
   let height;
   if (f.kind === "popup") [width, height] = [320, 600];
@@ -674,7 +674,10 @@ export async function renderExtension(page, baseUrl, scenario, locale) {
   else [width, height] = [f.width, f.height];
   await page.setViewportSize({ width, height });
   await page.addInitScript(chromeStub, { locale, replies: scenario.replies(text), granted: scenario.granted ?? 0 });
-  await page.goto(`${baseUrl}/ext/${scenario.page}${hash}`);
+  await page.goto(`${baseUrl}/ext/${scenario.page}`);
+  // A framed page gets its token the way the content script gives it: a
+  // message from the embedding window (here the page is its own parent).
+  if (framed) await page.evaluate((token) => postMessage({ type: "hk_token", token }, "*"), TOKEN);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(150);
   if (scenario.act) {

@@ -306,16 +306,21 @@ and several wrapped rows, or a one-line question and a longer wrapped error)
 and bound to the live session's token; anything else is dropped and the
 frame keeps its estimated size.
 
-The token is **not** a secret the page cannot see. It is passed in the menu
-frame's URL fragment, and the frame is attached to the page's own
-`documentElement`, so page script can read it off the iframe's `src` and can
-instantiate `menu.html` itself (it is a web-accessible resource on every
-http(s) origin, with no `use_dynamic_url`). What the token does is scope a
-pick to one tab, one frame and one offer set; what stops it becoming a
-credential leak is that the fill is addressed to the frame the user focused
-and the core re-checks the item against that frame's origin in Rust. The
-residual risk is a misdirected fill or save prompt on the page's *own*
-origin, driven by a click the user meant for something else. See Limitations.
+The token is kept from the page (since 2026-10-06, security review EX-03).
+The frame's URL is the bare extension page; once it has loaded, the content
+script posts the token to the frame's window with the extension's base URL
+as the target origin, and the frame takes only the first well-formed token
+message from its embedding window (`receiveToken`). Page script can still
+instantiate `menu.html` itself (a web-accessible resource on every http(s)
+origin, with no `use_dynamic_url`), but such a frame never gets a live
+token, so its clicks do nothing. Page script can also post a token-shaped
+message to our frame first; that only breaks its own menu. What the token
+does is scope a pick to one tab, one frame and one offer set; the fill is
+still addressed to the frame the user focused and the core re-checks the
+item against that frame's origin in Rust. The save prompt, passkey card and
+sign-in-with balloon get their tokens the same way, so a pending save's
+token handed to the next page's content script (`cs_ready`) is never
+visible to that page either. See Limitations.
 
 ## Toolbar popup (no host permission)
 
@@ -1042,12 +1047,11 @@ rendered with `textContent` only, as untrusted third-party text.
 ### Sessions
 
 The background keeps one passkey session per tab, bound to the random token
-in the card's URL fragment and to the tab, frame, `documentId` (Chromium)
+the card receives by `postMessage` (not in its URL; see the menu) and to the tab, frame, `documentId` (Chromium)
 and origin of the frame that asked. Picks are accepted only for passkeys or
 logins the session offered, one at a time. A new request in the same tab
-ends the previous one with `AbortError`. The token is visible to the page
-(as for the menu); what it cannot do is change which origin the desktop
-checks. While one `get()`/`create()` lookup is in flight for a tab, another
+ends the previous one with `AbortError`. Even a page that guessed the
+token could not change which origin the desktop checks. While one `get()`/`create()` lookup is in flight for a tab, another
 from the same tab falls back to the browser at once, so a page that fires
 requests in a loop cannot use up the desktop's shared lookup budget.
 

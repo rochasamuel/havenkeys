@@ -9,6 +9,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { markUserEdit } from "../autofill/fill";
 import { BUTTON_WAIT_MS, OTP_SETTLE_MS } from "../autofill/submit";
 import { SCAN_DEBOUNCE_MS } from "./sso";
+import { frameToken } from "./frames";
+
+/** Our frame holding `token`, if one is in the page. */
+function frameWith(token: string): HTMLIFrameElement | null {
+  return Array.from(document.querySelectorAll("iframe")).find((f) => frameToken(f) === token) ?? null;
+}
 
 /**
  * jsdom runs every test as the top frame. A test sets `childAncestry` to
@@ -648,10 +654,10 @@ describe("card fields", () => {
     try {
       const reply = deliver(host("d".repeat(32), 7, "https://js.stripe.com/v3/card.html", 2));
       expect(reply).toEqual({ ok: true });
-      expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).not.toBeNull();
+      expect(frameWith("d".repeat(32))).not.toBeNull();
       expect(deliver(host("e".repeat(32), 9, "https://js.stripe.com/v3/card.html"))).toEqual({ ok: false });
       deliver({ type: "bg_close_menu", token: "d".repeat(32) });
-      expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).toBeNull();
+      expect(frameWith("d".repeat(32))).toBeNull();
     } finally {
       delete runtime().getFrameId;
     }
@@ -660,16 +666,16 @@ describe("card fields", () => {
   it("without getFrameId (Chromium), hosts over the one iframe whose src is the frame's URL", () => {
     set(`<iframe id="stripe" src="https://js.stripe.com/v3/card.html#frame"></iframe><iframe src="https://other.example/"></iframe>`);
     expect(deliver(host("d".repeat(32), 7, "https://js.stripe.com/v3/card.html"))).toEqual({ ok: true });
-    expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).not.toBeNull();
+    expect(frameWith("d".repeat(32))).not.toBeNull();
     deliver({ type: "bg_close_menu", token: "d".repeat(32) });
-    expect(document.querySelector(`iframe[src$="#${"d".repeat(32)}"]`)).toBeNull();
+    expect(frameWith("d".repeat(32))).toBeNull();
 
     // Same path twice: the exact full URL picks one; a URL matching neither exactly finds none.
     set(`<iframe src="https://js.stripe.com/v3/card.html"></iframe><iframe src="https://js.stripe.com/v3/card.html?b"></iframe>`);
     expect(deliver(host("e".repeat(32), 7, "https://js.stripe.com/v3/card.html?b"))).toEqual({ ok: true });
     deliver({ type: "bg_close_menu", token: "e".repeat(32) });
     expect(deliver(host("f".repeat(32), 7, "https://js.stripe.com/v3/card.html?c"))).toEqual({ ok: false });
-    expect(document.querySelector(`iframe[src$="#${"f".repeat(32)}"]`)).toBeNull();
+    expect(frameWith("f".repeat(32))).toBeNull();
   });
 
   describe("in a processor subframe", () => {
@@ -735,9 +741,9 @@ describe("card fields", () => {
     await new Promise((r) => setTimeout(r, 10));
     openReply = undefined;
     expect(sent).toContainEqual({ type: "cs_open_menu", kind: "card", cardRoles: ["number", "expiryMonth", "expiryYear", "verificationNumber"] });
-    expect(document.querySelector(`iframe[src$="#${token}"]`)).not.toBeNull();
+    expect(frameWith(token)).not.toBeNull();
     deliver({ type: "bg_close_menu", token });
-    expect(document.querySelector(`iframe[src$="#${token}"]`)).toBeNull();
+    expect(frameWith(token)).toBeNull();
   });
 
   it("offers to save a masked number the user typed, and not one a page script wrote", async () => {

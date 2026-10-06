@@ -13,6 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureClicks } from "./click-capture.test-helper";
+import { postToken } from "./token.test-helper";
 
 const TOKEN = "c".repeat(32);
 const ID1 = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -37,7 +38,6 @@ function page(): void {
   main.append(heading);
   card.append(header, main);
   document.body.append(card);
-  location.hash = TOKEN;
 }
 
 beforeEach(() => {
@@ -64,6 +64,7 @@ async function openPrompt(view: object, advanceMs = 1000): Promise<void> {
   replies = [{ ok: true, value: view }];
   vi.resetModules();
   await import("./sso");
+  postToken(TOKEN);
   await vi.advanceTimersByTimeAsync(advanceMs);
 }
 
@@ -176,6 +177,7 @@ describe("sso save view", () => {
 
   it("builds the save request from the token, the account field and the title (add only)", async () => {
     const { saveRequest } = await import("./sso");
+    postToken(TOKEN);
     expect(saveRequest(TOKEN, "me@example.com", "GitHub")).toEqual({ type: "sso_save", token: TOKEN, account: "me@example.com", title: "GitHub" });
     expect(saveRequest(TOKEN, "", null)).toEqual({ type: "sso_save", token: TOKEN, account: "", title: null });
   });

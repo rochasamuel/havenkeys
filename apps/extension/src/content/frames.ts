@@ -9,9 +9,14 @@
 //   or removes it;
 // * the menu page itself ignores clicks until it has been visible for a
 //   moment, and on Chromium only while IntersectionObserver v2 reports it
-//   unobscured (see menu.ts).
+//   unobscured (see menu.ts);
+// * the frame's session token is posted to it after it loads, for the
+//   extension's origin only, never put in its URL: the page can read an
+//   iframe's src, and with the token could show the same page in a frame
+//   of its own that none of the above watches (EX-03).
 
 import { t } from "../i18n";
+import { TOKEN_MESSAGE } from "../messaging/inline";
 
 const Z_TOP = "2147483647";
 
@@ -49,6 +54,17 @@ export interface Box {
   height: number;
 }
 
+/**
+ * Each frame's token, kept in the content script's own world: the page can
+ * neither read this map nor the frame's URL for it.
+ */
+const frameTokens = new WeakMap<Element, string>();
+
+/** The token `el` was given, if it is one of our frames. */
+export function frameToken(el: Element): string | undefined {
+  return frameTokens.get(el);
+}
+
 export class InlineFrame {
   readonly token: string;
   readonly el: HTMLIFrameElement;
@@ -58,7 +74,14 @@ export class InlineFrame {
   constructor(page: "menu.html" | "save.html" | "passkey.html" | "sso.html", token: string, box: Box, onGone: () => void) {
     this.token = token;
     const el = document.createElement("iframe");
-    el.src = `${chrome.runtime.getURL(page)}#${token}`;
+    el.src = chrome.runtime.getURL(page);
+    frameTokens.set(el, token);
+    // The extension's base URL as the target: the browser delivers the
+    // message only if the frame still shows one of our pages. (Not
+    // `new URL(…).origin`, which the URL standard makes "null" for an
+    // extension scheme.)
+    const target = chrome.runtime.getURL("");
+    el.addEventListener("load", () => el.contentWindow?.postMessage({ type: TOKEN_MESSAGE, token }, target), { once: true });
     el.title =
       page === "menu.html"
         ? t.menu.pageTitle

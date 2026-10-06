@@ -250,6 +250,15 @@ export type InlineReply<T> = { ok: true; value: T } | { ok: false; message: stri
 
 /** 128-bit random token, hex. */
 export const TOKEN = /^[0-9a-f]{32}$/;
+
+/**
+ * The message that hands a menu, save, passkey or sign-in-with frame its
+ * session token. Posted by the content script to the frame's window, for
+ * the extension's origin only, once the frame has loaded: the token never
+ * appears in the frame's URL, where the page could read it and frame the
+ * same page itself (security review EX-03).
+ */
+export const TOKEN_MESSAGE = "hk_token";
 export const MAX_USERNAME_CHARS = 512;
 export const MAX_PASSWORD_CHARS = 4096;
 /** Rows the menu shows before its list scrolls. */

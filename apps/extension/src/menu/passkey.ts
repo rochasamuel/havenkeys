@@ -5,7 +5,7 @@
 import type { PasskeyCandidate } from "@havenkeys/protocol";
 import { PASSKEY_MAX_HEIGHT, PASSKEY_MIN_HEIGHT, type PasskeyRow, type PkView } from "../webauthn/messages";
 import { applyDocumentLang, t as msg } from "../i18n";
-import { ask, createClickGuard, h, monogram, tokenFromHash, userData } from "./common";
+import { ask, createClickGuard, h, monogram, receiveToken, userData } from "./common";
 
 const question = document.getElementById("question") as HTMLElement;
 const detail = document.getElementById("detail") as HTMLElement;
@@ -14,7 +14,8 @@ const main = document.getElementById("main") as HTMLElement;
 const cancelBtn = document.getElementById("cancel") as HTMLButtonElement;
 const fallbackBtn = document.getElementById("fallback") as HTMLButtonElement;
 const confirmBtn = document.getElementById("confirm") as HTMLButtonElement;
-const token = tokenFromHash();
+/** Set once the content script posts it (`receiveToken`). */
+let token: string | null = null;
 const card = document.querySelector(".card") as HTMLElement;
 const guard = createClickGuard(card);
 
@@ -257,6 +258,7 @@ new MutationObserver(scheduleSize).observe(card, { childList: true, subtree: tru
 void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
+  token = await receiveToken();
   if (!token) return;
   const r = await ask<PkView>({ type: "pk_state", token });
   if (r?.ok) render(token, r.value);

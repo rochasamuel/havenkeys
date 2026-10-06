@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureClicks } from "./click-capture.test-helper";
+import { postToken } from "./token.test-helper";
 
 const TOKEN = "a".repeat(32);
 const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -24,12 +25,12 @@ function page(): void {
   main.id = "main";
   card.append(header, main);
   document.body.append(card);
-  location.hash = TOKEN;
 }
 
 async function load(): Promise<void> {
   vi.resetModules();
   await import("./menu");
+  postToken(TOKEN);
   await vi.advanceTimersByTimeAsync(0);
 }
 

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, NOTICE_MS, PING_INTERVAL_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
+import { frameToken } from "../content/frames";
+
+/** Our frame holding `token`, if one is in the page. */
+function frameWith(token: string): HTMLIFrameElement | null {
+  return Array.from(document.querySelectorAll("iframe")).find((f) => frameToken(f) === token) ?? null;
+}
 
 type Listener = (msg: unknown, sender: { id?: string; tab?: unknown }) => boolean | void;
 const sent: unknown[] = [];
@@ -94,7 +100,8 @@ describe("isolated bridge", () => {
     request({ kind: "get", id: ID, options: get });
     await flush();
     const frame = document.querySelector("iframe");
-    expect(frame?.src).toBe(`chrome-extension://ext/passkey.html#${TOKEN}`);
+    expect(frame?.src).toBe("chrome-extension://ext/passkey.html");
+    expect(frame && frameToken(frame)).toBe(TOKEN);
     onMessage?.({ type: "bg_wa_result", token: TOKEN, outcome: { outcome: "error", name: "NotAllowedError" } }, { id: "ext" });
     expect(responses).toEqual([{ id: ID, outcome: "error", name: "NotAllowedError" }]);
     expect(document.querySelector("iframe")).toBeNull();
@@ -316,7 +323,7 @@ describe("automatic passkey upgrade", () => {
     request({ kind: "create", id, options: { ...create, conditional: true } });
     await vi.advanceTimersByTimeAsync(0);
     expect(responses.find((r) => r.id === id)).toMatchObject({ outcome: "credential", credential: { credentialId: savedCredential.credentialId } });
-    const frame = () => document.querySelector(`iframe[src$="#${token}"]`);
+    const frame = () => frameWith(token);
     expect(frame()?.getAttribute("src")).toContain("passkey.html");
     // No session: nothing to ping or cancel.
     expect(sent.filter((m) => (m as { type: string }).type !== "wa_create")).toEqual([]);
@@ -329,11 +336,11 @@ describe("automatic passkey upgrade", () => {
     reply = (m) => ((m as { type: string }).type === "wa_create" ? { ok: true, token, ui: "saved", credential: savedCredential } : undefined);
     request({ kind: "create", id: hex(905), options: { ...create, conditional: true } });
     await flush();
-    const frame = document.querySelector(`iframe[src$="#${token}"]`) as HTMLIFrameElement;
+    const frame = frameWith(token) as HTMLIFrameElement;
     expect(frame).not.toBeNull();
     frame.setAttribute("style", "display:none");
     await flush();
-    expect(document.querySelector(`iframe[src$="#${token}"]`)).toBeNull();
+    expect(frameWith(token)).toBeNull();
   });
 
   it("shows no notice when the page cancelled during a silent save", async () => {
@@ -345,7 +352,7 @@ describe("automatic passkey upgrade", () => {
     request({ kind: "cancel", id });
     answer({ ok: true, token: hex(903), ui: "saved", credential: savedCredential });
     await flush();
-    expect(document.querySelector(`iframe[src$="#${hex(903)}"]`)).toBeNull();
+    expect(frameWith(hex(903))).toBeNull();
     expect(responses.some((r) => r.id === id)).toBe(false);
   });
 });

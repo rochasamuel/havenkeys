@@ -8,14 +8,15 @@ import { MAX_ACCOUNT_CHARS, SSO_PROVIDERS, type SsoProvider } from "@havenkeys/p
 import { MAX_TITLE_CHARS } from "../messaging/inline";
 import { SSO_MAX_HEIGHT, SSO_MIN_HEIGHT, type SsoFrameRequest, type SsoRowView, type SsoView } from "../messaging/sso";
 import { applyDocumentLang, t } from "../i18n";
-import { ask, createClickGuard, h, tokenFromHash, userData } from "./common";
+import { ask, createClickGuard, h, receiveToken, userData } from "./common";
 import { providerIcon } from "./icons";
 
 const heading = document.getElementById("heading") as HTMLElement;
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
 const closeBtn = document.getElementById("close") as HTMLButtonElement;
-const token = tokenFromHash();
+/** Set once the content script posts it (`receiveToken`). */
+let token: string | null = null;
 const card = document.querySelector(".card") as HTMLElement;
 const guard = createClickGuard(card);
 
@@ -218,6 +219,7 @@ new MutationObserver(scheduleSize).observe(card, { childList: true, subtree: tru
 void document.fonts?.ready.then(scheduleSize);
 
 async function init(): Promise<void> {
+  token = await receiveToken();
   if (!token) return;
   const r = await ask<SsoView>({ type: "sso_state", token });
   if (r.ok) render(r.value, token);

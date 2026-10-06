@@ -4,6 +4,7 @@
 // (a restarting worker answers nothing at all) and the "already saved" state.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { postToken } from "./token.test-helper";
 
 const TOKEN = "a".repeat(32);
 const ITEM = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -31,12 +32,12 @@ function page(): void {
   }
   document.body.append(card);
   (document.getElementById("confirm") as HTMLButtonElement).hidden = true;
-  location.hash = TOKEN;
 }
 
 async function load(): Promise<void> {
   vi.resetModules();
   await import("./passkey");
+  postToken(TOKEN);
   await vi.advanceTimersByTimeAsync(0);
 }
 

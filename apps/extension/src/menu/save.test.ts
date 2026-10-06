@@ -4,6 +4,7 @@
 // content needs (long errors wrap to several lines) so the frame can grow.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { postToken } from "./token.test-helper";
 
 const TOKEN = "b".repeat(32);
 let replies: unknown[] = [];
@@ -43,7 +44,6 @@ function page(): void {
   prompt.append(text, actions);
   card.append(header, prompt);
   document.body.append(card);
-  location.hash = TOKEN;
 }
 
 beforeEach(() => {
@@ -70,6 +70,7 @@ async function openPrompt(view: object): Promise<void> {
   replies = [{ ok: true, value: view }];
   vi.resetModules();
   await import("./save");
+  postToken(TOKEN);
   await vi.advanceTimersByTimeAsync(1000); // past the click guard
 }
 
@@ -94,6 +95,7 @@ describe("save prompt name", () => {
 
   it("the confirm carries the name only for a new login", async () => {
     const { confirmRequest } = await import("./save");
+    postToken(TOKEN);
     expect(confirmRequest(TOKEN, "GitHub – work")).toEqual({ type: "save_confirm", token: TOKEN, title: "GitHub – work" });
     expect(confirmRequest(TOKEN, null)).toEqual({ type: "save_confirm", token: TOKEN });
   });
@@ -116,6 +118,7 @@ describe("save prompt size", () => {
     replies = [{ ok: false, message: "A long error that wraps over several lines in the prompt." }];
     vi.resetModules();
     await import("./save");
+    postToken(TOKEN);
     await vi.advanceTimersByTimeAsync(50);
     expect(asked).toContainEqual({ type: "save_resize", token: TOKEN, height: 34 + 150 });
   });
