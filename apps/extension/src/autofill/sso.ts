@@ -26,15 +26,22 @@ const NAMES: Record<SsoProvider, readonly string[]> = {
   apple: ["apple"],
   facebook: ["facebook"],
   discord: ["discord"],
-  // "x" alone is not a name: it joins this list with the joiner-only rule (Task 2).
-  x: ["twitter"],
+  x: ["twitter", "x"],
   linkedin: ["linkedin", "linked in"],
   gitlab: ["gitlab", "git lab"],
 };
+/**
+ * Names that are also common words or glyphs ("X" closes dialogs). They
+ * count only at the end of a sign-in label, right after a joiner:
+ * "Sign in with X", "Continuar com o X". Never bare, never from a link alone.
+ */
+const JOINER_ONLY: ReadonlySet<string> = new Set(["x"]);
+const SIGN_IN_VERBS = ["sign in", "sign up", "log in", "login", "continue", "entrar", "continuar", "acessar", "cadastrar", "cadastre se"];
 const JOINERS = ["with", "using", "via", "com", "com a", "com o", "pelo", "pela"];
 const NEGATIVE = [
   "drive", "docs", "play", "store", "maps", "calendar", "repository", "repo", "star", "fork", "sponsor",
   "download", "app store", "teams", "office", "outlook", "music", "pay", "wallet", "podcasts", "tv",
+  "share", "follow", "compartilhar", "seguir",
 ];
 // Phrases safe to recognise as consent at the *start* of a label, at any
 // length: verbs (or verb + object) no one is named after, so a long
@@ -121,7 +128,9 @@ export function providerOf(el: Element, context: boolean): { provider: SsoProvid
   for (const [p, names] of Object.entries(NAMES) as [SsoProvider, readonly string[]][]) {
     for (const name of names) {
       if (!hasPhrase(text, name)) continue;
-      let s = JOINERS.some((j) => hasPhrase(text, `${j} ${name}`)) ? 80 : text === name || text === `${name} account` ? 40 : 0;
+      const joined = JOINERS.some((j) => hasPhrase(text, `${j} ${name}`));
+      if (JOINER_ONLY.has(name) && !(hasAny(text, SIGN_IN_VERBS) && JOINERS.some((j) => text.endsWith(` ${j} ${name}`)))) continue;
+      let s = joined ? 80 : text === name || text === `${name} account` ? 40 : 0;
       if (s === 40 && context) s += 20;
       if (linked === p) s += 30;
       if (s > 0 && (!best || s > best.score)) best = { provider: p, score: s };

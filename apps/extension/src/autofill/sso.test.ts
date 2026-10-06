@@ -18,6 +18,38 @@ describe("provider buttons", () => {
       <button><img alt="Apple"> Continuar com Apple</button>`);
     expect([...findProviderButtons(root, env).keys()].sort()).toEqual(["apple", "github", "google", "microsoft"]);
   });
+  it("recognises the new providers", () => {
+    const root = page(`
+      <button>Continue with Facebook</button>
+      <button>Log in with Discord</button>
+      <button>Entrar com o LinkedIn</button>
+      <a href="https://gitlab.com/oauth/authorize?client_id=x">Sign in with GitLab</a>
+      <button>Sign in with X</button>`);
+    expect([...findProviderButtons(root, env).keys()].sort()).toEqual(["discord", "facebook", "gitlab", "linkedin", "x"]);
+    expect(findProviderButtons(page(`<button>Continuar com o X</button>`), env).has("x")).toBe(true);
+    expect(findProviderButtons(page(`<button>Sign in with Twitter</button>`), env).has("x")).toBe(true);
+  });
+  it("never takes a bare X for the X provider", () => {
+    for (const html of [
+      `<input type="email"><button>X</button><button>Google</button>`,
+      `<input type="email"><button aria-label="X"></button>`,
+      `<input type="email"><button>×</button>`,
+      `<input type="email"><a href="https://x.com/acme">X</a><button>GitHub</button>`,
+      `<input type="email"><button>acme.com X</button>`,
+      `<input type="email"><button>Help with x</button>`,
+    ]) {
+      expect(findProviderButtons(page(html), env).has("x"), html).toBe(false);
+    }
+  });
+  it("ignores share and follow buttons", () => {
+    const root = page(`
+      <input type="email">
+      <button>Share on Facebook</button>
+      <a href="https://x.com/acme">Follow us on X</a>
+      <button>Compartilhar no LinkedIn</button>
+      <button>Seguir no Discord</button>`);
+    expect(findProviderButtons(root, env).size).toBe(0);
+  });
   it("accepts a bare name only with context", () => {
     expect(findProviderButtons(page(`<button>Google</button>`), env).size).toBe(0);
     expect(findProviderButtons(page(`<button>Google</button><button>GitHub</button>`), env).size).toBe(2);
