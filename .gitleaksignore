@@ -1,5 +1,19 @@
-# Reviewed false positives from `gitleaks git` (2026-09-23).
+# Reviewed false positives from `gitleaks git`. Fingerprints are commit:file:rule:line,
+# so a rewritten history needs them refreshed (last reviewed 2026-10-06).
+#
 # Fixed dummy token used by the extension's message-validator fuzz test.
+5afebe392dcab5d2d5d09405f49c88addb51eb20:apps/extension/src/fuzz.test.ts:generic-api-key:35
 d1e7f558ab914a9d8976598eee00eb7d780fa14c:apps/extension/src/fuzz.test.ts:generic-api-key:35
 # RSA *public* key (SubjectPublicKeyInfo) once used to pin the extension ID; removed later ("drop the manifest key Chrome Web Store rejects").
+1e7f20188696e8c764e421aa217d853da3bca443:apps/extension/manifest/chrome.json:generic-api-key:5
 660ca285cb662f44c9ae9ff9d2eeb3783284fab3:apps/extension/manifest/chrome.json:generic-api-key:5
+# RFC 4226/6238 test secret ("12345678901234567890" in base32) in a TOTP scan test.
+af3a7c51f87e1e07492119782220a27a9e326263:apps/desktop/src-tauri/src/item_input.rs:generic-api-key:192
+# Made-up Secret Keys in the UI layout check's stubbed desktop answers.
+913c6d5f9a7d40226fc3e773bf0202e33c12ae5b:tools/ui-check/desktop.mjs:generic-api-key:123
+d9839685f549e8ba45fc55788887d54c8e2c80fd:tools/ui-check/desktop.mjs:generic-api-key:79
+# Fixed dummy session token in tests and the UI layout check.
+283fff67666227621adf63cee4e5207c3fa0569a:apps/extension/src/content/sso.test.ts:generic-api-key:10
+d9839685f549e8ba45fc55788887d54c8e2c80fd:tools/ui-check/extension.mjs:generic-api-key:5
+# Made-up Secret Key in the website's illustrated walkthrough.
+5af3628118fe30c0162ef2d479625eec3c30e852:apps/web/src/components/journey/Scenes.tsx:generic-api-key:10

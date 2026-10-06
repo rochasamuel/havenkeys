@@ -1808,7 +1808,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | SV-8 | `admin new-account --server-url` accepts `http://localhost.evil.com` by prefix match | Info | Server (admin CLI) | Accepted (client fails closed regardless) |
 | SC1 | Signing secrets were exposed to the entire `cargo build`/`tauri build` process, not just the sign step | Medium | CI (release workflow) | **Mitigated** |
 | SC2 | The main release build did not pin `cargo build` to `--locked` | Low | CI (release workflow) | **Fixed** |
-| SC3 | No automated secret scanning in CI | Info | CI | Open (planned) |
+| SC3 | No automated secret scanning in CI | Info | CI | **Fixed** |
 
 ### Details
 
@@ -1932,7 +1932,8 @@ The release workflow previously ran `tauri-action` (which compiles the entire `h
 #### SC2. Main release build not pinned to `--locked` (Low, **fixed**)
 Both the compile step and the packaging/signing step now pass `-- --locked`, matching the discipline `scripts/build-native-host-sidecar.mjs` already had for the sidecar build, so a `Cargo.lock` desynced from `Cargo.toml` at tag time fails the build instead of silently re-resolving dependencies.
 
-#### SC3. No automated secret scanning in CI (Info, open)
+#### SC3. No automated secret scanning in CI (Info, fixed)
+**Status:** fixed (2026-10-06). `.github/workflows/secret-scan.yml` runs `gitleaks git` over the full history on every push and pull request with a read-only token and no persisted checkout credentials. gitleaks is pinned to 8.30.1, and its archive is checked against the published SHA-256 before it runs. The six new findings of the 2026-10-06 scan were reviewed (a TOTP RFC test secret and made-up Secret Keys and tokens in tests, the UI check and the website) and added to `.gitleaksignore` with the two from 2026-09-23. Not yet seen running on GitHub.
 `gitleaks` has been run manually against the full repository history at least once (2026-09-23, two reviewed and confirmed-benign findings), but nothing runs it on push or PR, so a future accidental secret commit would only be caught if someone remembers to run it by hand.
 **Suggested fix:** add a lightweight `gitleaks`/`trufflehog` step to a PR-triggered workflow with `permissions: contents: read` only.
 
