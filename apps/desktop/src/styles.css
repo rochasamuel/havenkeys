@@ -1003,7 +1003,7 @@ input::-ms-clear {
   min-width: 0;
 }
 
-.sso-trigger {
+.edit-input.sso-trigger {
   position: relative;
   padding-right: 30px;
   display: flex;

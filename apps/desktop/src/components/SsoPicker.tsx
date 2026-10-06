@@ -105,11 +105,11 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
         {value ? (
           <>
             <ProviderIcon provider={value.provider} />
-            <span>{PROVIDER_NAMES[value.provider]}</span>
+            <span data-truncate="">{PROVIDER_NAMES[value.provider]}</span>
             {value.account && <span className="muted" data-truncate="">· {value.account}</span>}
           </>
         ) : (
-          <span className="muted">{t.editor.providerNone}</span>
+          <span className="muted" data-truncate="">{t.editor.providerNone}</span>
         )}
         <Icon name="chevronDown" size={14} className="select-chevron" />
       </button>
