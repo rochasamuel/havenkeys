@@ -29,6 +29,24 @@ describe("provider buttons", () => {
     expect(findProviderButtons(page(`<button>Continuar com o X</button>`), env).has("x")).toBe(true);
     expect(findProviderButtons(page(`<button>Sign in with Twitter</button>`), env).has("x")).toBe(true);
   });
+  it("takes X from the joiner in any one label source", () => {
+    expect(findProviderButtons(page(`<button><img alt="X logo"> Continue with X</button>`), env).has("x")).toBe(true);
+    expect(findProviderButtons(page(`<button title="Sign in with X"><img alt="X logo"></button>`), env).has("x")).toBe(true);
+    expect(findProviderButtons(page(`<input type="email"><button><img alt="Help with x"> X</button>`), env).has("x")).toBe(false);
+  });
+  it("ignores footer and social profile links", () => {
+    for (const html of [
+      `<input type="password"><a href="https://www.linkedin.com/company/acme" aria-label="LinkedIn"></a>`,
+      `<input type="password"><a href="https://facebook.com/acme">Facebook</a>`,
+      `<input type="password"><a href="https://x.com/acme">Twitter</a>`,
+      `<input type="password"><a href="https://github.com/acme">GitHub</a>`,
+    ]) expect(findProviderButtons(page(html), env).size).toBe(0);
+  });
+  it("keeps same-origin and OAuth links", () => {
+    expect(findProviderButtons(page(`<input type="password"><a href="/auth/facebook" aria-label="Facebook"></a>`), env).has("facebook")).toBe(true);
+    expect(findProviderButtons(page(`<input type="password"><a href="https://www.facebook.com/v19.0/dialog/oauth?client_id=1">Facebook</a>`), env).has("facebook")).toBe(true);
+    expect(findProviderButtons(page(`<input type="password"><a href="https://github.com/acme">Sign in with GitHub</a>`), env).has("github")).toBe(true);
+  });
   it("never takes a bare X for the X provider", () => {
     for (const html of [
       `<input type="email"><button>X</button><button>Google</button>`,

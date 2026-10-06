@@ -19,6 +19,9 @@ export const SSO_PROVIDERS: Readonly<Record<SsoProvider, { name: string; origins
 
 export const SSO_PROVIDER_IDS = Object.keys(SSO_PROVIDERS) as readonly SsoProvider[];
 
+/** Most origins any one provider has (start_sso carries one provider's origins). */
+export const MAX_PROVIDER_ORIGINS = Math.max(...SSO_PROVIDER_IDS.map((p) => SSO_PROVIDERS[p].origins.length));
+
 export const MAX_ACCOUNT_CHARS = 254;
 /** Most vault accounts a check_sso result may offer (Rust: MAX_PROVIDER_ACCOUNTS). */
 export const MAX_PROVIDER_ACCOUNTS = 10;

@@ -93,6 +93,30 @@ function label(el: Element): string {
   return normalize(`${own} ${attr("aria-label")} ${attr("title")} ${img}`, MAX_HINT_CHARS * 3);
 }
 
+/** The label's sources, each normalized on its own (own text, aria-label, title, img alt). */
+function labelSources(el: Element): string[] {
+  const attr = (n: string) => (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
+  const own = el instanceof HTMLInputElement ? el.value.slice(0, MAX_HINT_CHARS) : textOf(el).slice(0, MAX_HINT_CHARS);
+  const img = el.querySelector("img[alt]")?.getAttribute("alt")?.slice(0, 60) ?? "";
+  return [own, attr("aria-label"), attr("title"), img].map((t) => normalize(t, MAX_HINT_CHARS));
+}
+
+/**
+ * A link to another origin that is not an OAuth/authorize URL: a footer or
+ * social-profile link ("LinkedIn" -> linkedin.com/company/acme), not a sign-in.
+ */
+function isForeignProfileLink(el: Element): boolean {
+  const href = el instanceof HTMLAnchorElement ? el.getAttribute("href") : null;
+  if (!href) return false;
+  try {
+    const u = new URL(href, document.baseURI);
+    if (u.origin === new URL(document.baseURI).origin) return false;
+    return !/oauth|authorize/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
 /** Is `t` (a normalized label) a consent/permissions button? Never pressed. */
 function isConsentLabel(t: string): boolean {
   return CONSENT_PREFIXES.some((p) => t.startsWith(p)) || (t.length <= MAX_CONSENT_LABEL_CHARS && hasAny(t, CONSENT_WORDS));
@@ -124,13 +148,15 @@ export function providerOf(el: Element, context: boolean): { provider: SsoProvid
   const text = label(el);
   if (!text || text.length > MAX_LABEL_CHARS || hasAny(text, NEGATIVE)) return null;
   const linked = hrefProvider(el);
+  const sources = labelSources(el);
+  const foreign = isForeignProfileLink(el);
   let best: { provider: SsoProvider; score: number } | null = null;
   for (const [p, names] of Object.entries(NAMES) as [SsoProvider, readonly string[]][]) {
     for (const name of names) {
       if (!hasPhrase(text, name)) continue;
       const joined = JOINERS.some((j) => hasPhrase(text, `${j} ${name}`));
-      if (JOINER_ONLY.has(name) && !(hasAny(text, SIGN_IN_VERBS) && JOINERS.some((j) => text.endsWith(` ${j} ${name}`)))) continue;
-      let s = joined ? 80 : text === name || text === `${name} account` ? 40 : 0;
+      if (JOINER_ONLY.has(name) && !sources.some((src) => hasAny(src, SIGN_IN_VERBS) && JOINERS.some((j) => src.endsWith(` ${j} ${name}`)))) continue;
+      let s = joined ? 80 : foreign ? 0 : text === name || text === `${name} account` ? 40 : 0;
       if (s === 40 && context) s += 20;
       if (linked === p) s += 30;
       if (s > 0 && (!best || s > best.score)) best = { provider: p, score: s };

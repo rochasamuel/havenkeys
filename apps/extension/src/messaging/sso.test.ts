@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SSO_PROVIDER_IDS } from "@havenkeys/protocol";
 import { isAccount, parsePressReply, parseSsoBackgroundMessage, parseSsoContentRequest, parseSsoFrameRequest, parseSsoReady } from "./sso";
 
 const T = "0123456789abcdef0123456789abcdef";
@@ -26,6 +27,14 @@ describe("sso messages", () => {
       origin: "https://accounts.google.com",
     });
     expect(parseSsoReady({ kind: "choose", account: "me@gmail.com" })).toEqual({ kind: "choose", account: "me@gmail.com" });
+  });
+  it("accepts 5 and every provider at once, never more", () => {
+    for (const n of [5, SSO_PROVIDER_IDS.length]) {
+      const providers = SSO_PROVIDER_IDS.slice(0, n);
+      expect(parseSsoContentRequest({ type: "cs_sso_buttons", providers })).toEqual({ type: "cs_sso_buttons", providers });
+    }
+    expect(parseSsoContentRequest({ type: "cs_sso_buttons", providers: [...SSO_PROVIDER_IDS, "google"] })).toBeNull();
+    expect(parseSsoContentRequest({ type: "cs_sso_buttons", providers: [...SSO_PROVIDER_IDS.slice(0, 5), "okta"] })).toBeNull();
   });
   it("rejects everything else", () => {
     for (const bad of [

@@ -6,7 +6,7 @@
 // background acts on it; the origin a request is valid for always comes
 // from the browser's sender data, never from the message.
 
-import { isSsoProvider, isUuid, MAX_ACCOUNT_CHARS, type SsoProvider } from "@havenkeys/protocol";
+import { isSsoProvider, isUuid, MAX_ACCOUNT_CHARS, SSO_PROVIDER_IDS, type SsoProvider } from "@havenkeys/protocol";
 import { MAX_TITLE_CHARS, TOKEN } from "./inline";
 
 // ---------------------------------------------------------------- content → background
@@ -97,7 +97,7 @@ export function isAccount(v: unknown): v is string {
 }
 
 function isProviderList(v: unknown): v is SsoProvider[] {
-  return Array.isArray(v) && v.length >= 1 && v.length <= 4 && v.every(isSsoProvider) && new Set(v).size === v.length;
+  return Array.isArray(v) && v.length >= 1 && v.length <= SSO_PROVIDER_IDS.length && v.every(isSsoProvider) && new Set(v).size === v.length;
 }
 
 /**

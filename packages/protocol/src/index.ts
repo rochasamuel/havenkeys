@@ -9,7 +9,7 @@ export * from "./sso";
 export * from "./identity";
 export * from "./card";
 
-import { isSsoProvider, MAX_ACCOUNT_CHARS, MAX_PROVIDER_ACCOUNTS, type SsoProvider } from "./sso";
+import { isSsoProvider, MAX_ACCOUNT_CHARS, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, type SsoProvider } from "./sso";
 import { isCardBrand, isCardRole, MAX_CARD_FRAMES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, type CardFrameRequest, type CardMatch, type CardRole, type CardValue } from "./card";
 import { isIdentityRole, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, type IdentityRole, type IdentityValue } from "./identity";
 
@@ -482,7 +482,7 @@ function parseResult(v: unknown): Result | null {
       if (!hasExactKeys(v, ["type", "provider", "account", "providerOrigins", "autoChoose"])) return null;
       const { provider, account, providerOrigins, autoChoose } = v;
       if (!isSsoProvider(provider) || !isNullableStr(account) || !isBool(autoChoose)) return null;
-      if (!Array.isArray(providerOrigins) || providerOrigins.length === 0 || providerOrigins.length > 4) return null;
+      if (!Array.isArray(providerOrigins) || providerOrigins.length === 0 || providerOrigins.length > MAX_PROVIDER_ORIGINS) return null;
       const origins: string[] = [];
       for (const o of providerOrigins) {
         if (!isStr(o) || o.length > MAX_URL_BYTES) return null;

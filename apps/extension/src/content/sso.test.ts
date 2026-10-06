@@ -4,7 +4,7 @@
 // origin). Provider-origin behaviour is in sso-provider.test.ts.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SsoContentRequest } from "../messaging/sso";
+import { parseSsoContentRequest, type SsoContentRequest } from "../messaging/sso";
 import { createSsoContent, SCAN_DEBOUNCE_MS, SCAN_WINDOW_MS } from "./sso";
 
 const TOKEN = "0123456789abcdef0123456789abcdef";
@@ -61,6 +61,14 @@ afterEach(() => {
 });
 
 describe("scanning for provider buttons", () => {
+  it("sends five recognised providers in a message the background accepts", async () => {
+    for (const n of ["Google", "GitHub", "Facebook", "Discord", "LinkedIn"]) button(`Continue with ${n}`);
+    make().watchPage();
+    await vi.advanceTimersByTimeAsync(SCAN_DEBOUNCE_MS);
+    expect(buttonsSent()).toHaveLength(1);
+    expect((buttonsSent()[0] as { providers: string[] }).providers).toHaveLength(5);
+    expect(parseSsoContentRequest(buttonsSent()[0])).not.toBeNull();
+  });
   it("offers the providers found, and shows the balloon the background allows", async () => {
     button("Continue with Google");
     reply = { ok: true, token: TOKEN };
