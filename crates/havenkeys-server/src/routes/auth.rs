@@ -248,10 +248,14 @@ pub(crate) async fn register_device(
 }
 
 /// A label the user chose. Control characters would end up in the device list
-/// and in logs, so they are refused rather than stripped.
+/// and in logs, so they are refused rather than stripped. Invisible format
+/// characters (bidi overrides, zero-width) are dropped: they could make the
+/// name read as something else on the phone's confirmation (PA4), and an
+/// emoji's joiner in a computer's name must not stop it signing in.
 pub(crate) fn clean_device_name(raw: &str) -> Result<String, ApiError> {
     const BAD: ApiError = ApiError::InvalidRequest("deviceName is not valid");
-    let name = raw.trim();
+    let visible = without_format_chars(raw);
+    let name = visible.trim();
     if name.is_empty() || name.chars().count() > MAX_DEVICE_NAME_CHARS {
         return Err(BAD);
     }
@@ -259,6 +263,15 @@ pub(crate) fn clean_device_name(raw: &str) -> Result<String, ApiError> {
         return Err(BAD);
     }
     Ok(name.to_string())
+}
+
+/// `s` without Unicode format characters (category Cf: bidi controls,
+/// zero-width spaces and joiners, the BOM, tag characters).
+pub(crate) fn without_format_chars(s: &str) -> String {
+    use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+    s.chars()
+        .filter(|c| c.general_category() != GeneralCategory::Format)
+        .collect()
 }
 
 /// The address a rate-limit counter is keyed by. `X-Forwarded-For` is

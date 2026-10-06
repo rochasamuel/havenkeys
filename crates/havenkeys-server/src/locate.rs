@@ -53,13 +53,18 @@ impl Locator {
 }
 
 /// "City, CC", or "CC". Text from the database is checked like any input:
-/// a value with control characters or of absurd length is dropped.
+/// a city with control characters or of absurd length is dropped, format
+/// characters (bidi, zero-width) are removed from it (PA4), and the country
+/// must be two ASCII letters.
 fn label(city: Option<&str>, country: Option<&str>) -> Option<String> {
     let clean = |s: &str| {
+        let s = crate::routes::auth::without_format_chars(s);
+        let s = s.trim();
         (!s.is_empty() && s.chars().count() <= 64 && !s.chars().any(char::is_control))
             .then(|| s.to_string())
     };
-    let country = clean(country?)?;
+    let country = country.filter(|c| c.len() == 2 && c.bytes().all(|b| b.is_ascii_alphabetic()))?;
+    let country = country.to_ascii_uppercase();
     match city.and_then(clean) {
         Some(city) => Some(format!("{city}, {country}")),
         None => Some(country),
@@ -85,5 +90,18 @@ mod tests {
         assert_eq!(label(None, Some("BR")).as_deref(), Some("BR"));
         assert_eq!(label(Some("Nowhere"), None), None);
         assert_eq!(label(Some("A\u{7}"), Some("BR")).as_deref(), Some("BR"));
+    }
+
+    /// PA4: no bidi or zero-width characters, and a real country code.
+    #[test]
+    fn the_label_drops_format_characters_and_odd_country_codes() {
+        assert_eq!(
+            label(Some("Lis\u{202E}bon\u{200B}"), Some("pt")).as_deref(),
+            Some("Lisbon, PT")
+        );
+        assert_eq!(label(Some("\u{200B}"), Some("BR")).as_deref(), Some("BR"));
+        assert_eq!(label(None, Some("BRA")), None);
+        assert_eq!(label(None, Some("B\u{202E}")), None);
+        assert_eq!(label(None, Some("1A")), None);
     }
 }

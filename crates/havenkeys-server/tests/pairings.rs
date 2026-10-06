@@ -291,6 +291,54 @@ async fn one_address_may_hold_three_pending_and_create_ten_per_window() {
     server.cleanup().await;
 }
 
+/// PA5: parallel creates from one address cannot all pass the count before
+/// any of them inserts.
+#[tokio::test]
+async fn parallel_creates_from_one_address_respect_the_pending_cap() {
+    let server = TestServer::start().await;
+    let send = || async {
+        server
+            .post("/v1/pairings")
+            .json(&create_body(Uuid::new_v4()))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16()
+    };
+    let (a, b, c, d, e, f) = tokio::join!(send(), send(), send(), send(), send(), send());
+    let statuses = [a, b, c, d, e, f];
+    assert_eq!(statuses.iter().filter(|&&s| s == 200).count(), 3, "{statuses:?}");
+    let rows: i64 = server
+        .db()
+        .await
+        .query_one("SELECT count(*) FROM pairings", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(rows, 3);
+    server.cleanup().await;
+}
+
+/// PA6: anonymous pairing routes take small bodies only.
+#[tokio::test]
+async fn anonymous_pairing_requests_have_a_small_body_limit() {
+    let server = TestServer::start().await;
+    let mut big = create_body(Uuid::new_v4());
+    big["deviceName"] = json!("x".repeat(2000));
+    let res = server.post("/v1/pairings").json(&big).send().await.unwrap();
+    assert_eq!(res.status(), 413);
+    let id = create(&server, Uuid::new_v4()).await;
+    let res = server
+        .post(&format!("/v1/pairings/{id}/claim"))
+        .json(&json!({ "claimSecret": "A".repeat(2000) }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 413);
+    server.cleanup().await;
+}
+
 #[tokio::test]
 async fn malformed_requests_are_refused() {
     let server = TestServer::start().await;

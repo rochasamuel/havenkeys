@@ -2954,9 +2954,9 @@ internal review, not an independent audit.
 | PA1 | Medium | whole feature | A deceived user who scans an attacker's code and taps Allow gives the attacker's device the vault | Accepted, documented |
 | PA2 | Critical (fixed) | server, `pairing.rs` | A malicious server could seal its own envelope to the desktop's public key; it is no longer sent the key. It can still lie about name and location | Fixed |
 | PA3 | Low | `pairings` table | A plaintext `token` waited in the row until claimed; the session is now issued at claim. Removal of rows stays lazy | Fixed (token); accepted (lazy removal) |
-| PA4 | Low | `locate.rs`, `create`, confirmation sheet | Requester-chosen name and GeoIP label can carry bidi/zero-width characters; country code unchecked | Open |
-| PA5 | Low | `create` | Rate-limit count and insert are not atomic | Open |
-| PA6 | Low | `/v1/pairings*` | No per-route body limit on unauthenticated routes | Open |
+| PA4 | Low | `locate.rs`, `create`, confirmation sheet | Requester-chosen name and GeoIP label can carry bidi/zero-width characters; country code unchecked | **Fixed** |
+| PA5 | Low | `create` | Rate-limit count and insert are not atomic | **Fixed** |
+| PA6 | Low | `/v1/pairings*` | No per-route body limit on unauthenticated routes | **Fixed** |
 | PA7 | Low | `approve`, `claim` | An unused session from a failed finish, or an approved-but-never-claimed device (no session), stays until expiry or revoke | Accepted |
 | PA8 | Info | Android deny | A failed deny call is ignored | Accepted |
 | PA9 | Low | `VaultService` session | The core session now holds the vault key while unlocked | Accepted |
@@ -3027,7 +3027,9 @@ its envelope (ciphertext the server cannot open) until the next
 `POST /v1/pairings` by anyone; the claim refuses it after 10 minutes. A
 periodic task would close it.
 
-### PA4. Bidi and zero-width characters in what the phone shows (Low, open)
+### PA4. Bidi and zero-width characters in what the phone shows (Low, fixed)
+**Status:** fixed (2026-10-06). The server drops Unicode format characters (category Cf: bidi controls, zero-width spaces and joiners) from every device name (`clean_device_name`, so sign-in too) and from the GeoIP city, and keeps a country code only when it is two ASCII letters. They are dropped rather than refused so a computer name with an emoji joiner still signs in. The client drops them again from what a pairing confirmation shows (`shown_text` in the sync client), since a hostile server is in scope. Tests: `invisible_format_characters_are_dropped_from_a_device_name` (`tests/auth.rs`), `the_label_drops_format_characters_and_odd_country_codes` (`locate.rs`), `shown_text_drops_bidi_and_zero_width_characters`.
+
 **Component:** `clean_device_name`, `locate.rs::label`, the Android sheet.
 **Scenario:** the unauthenticated requester chooses `deviceName`; it may
 contain Unicode bidirectional or zero-width characters that reorder or
@@ -3042,7 +3044,9 @@ biometrics.
 (`Cf`) and bidi characters in the name and label and requiring two ASCII
 letters for the country code.
 
-### PA5. Create rate limit is not atomic (Low, open)
+### PA5. Create rate limit is not atomic (Low, fixed)
+**Status:** fixed (2026-10-06). `create` runs the count and the insert in one transaction under `pg_advisory_xact_lock` on the address. Test: `parallel_creates_from_one_address_respect_the_pending_cap` (fails without the lock).
+
 **Component:** `routes/pairings.rs::create`.
 **Scenario:** the per-IP count and the insert are separate statements, so
 parallel creates from one IP can pass the check together and exceed the 10
@@ -3053,7 +3057,9 @@ minutes.
 **Remaining:** a small, bounded flood of rows from one source. A
 transaction with an advisory lock per IP would close it.
 
-### PA6. No per-route body limit on unauthenticated routes (Low, open)
+### PA6. No per-route body limit on unauthenticated routes (Low, fixed)
+**Status:** fixed (2026-10-06). `POST /v1/pairings` and `/v1/pairings/{id}/claim` take bodies of at most 1 KiB, and `auth/params` and `auth/login` at most 4 KiB, inside the router-wide 16 MiB. Test: `anonymous_pairing_requests_have_a_small_body_limit`.
+
 **Component:** `POST /v1/pairings`, `POST /v1/pairings/{id}/claim`.
 **Scenario:** an anonymous caller sends bodies up to the server's global
 limit.

@@ -1,9 +1,11 @@
 //! Router assembly and the state every handler shares.
 
-use crate::limits::MAX_BODY_BYTES;
+use crate::limits::{
+    MAX_ANONYMOUS_AUTH_BODY_BYTES, MAX_ANONYMOUS_PAIRING_BODY_BYTES, MAX_BODY_BYTES,
+};
 use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, Method, Request};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, MethodRouter};
 use axum::Router;
 use deadpool_postgres::Pool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -38,6 +40,14 @@ pub struct AppState {
     pub locator: Option<std::sync::Arc<crate::locate::Locator>>,
 }
 
+/// A route anyone may call, without a session: its own, much smaller body
+/// limit, inside the router-wide one (PA6).
+fn small(route: MethodRouter<AppState>, max: usize) -> MethodRouter<AppState> {
+    route
+        .layer::<_, std::convert::Infallible>(RequestBodyLimitLayer::new(max))
+        .layer(DefaultBodyLimit::max(max))
+}
+
 pub fn router(state: AppState) -> Router {
     let cors = state.cors_origin.clone().and_then(build_cors);
     let router = Router::new()
@@ -45,8 +55,14 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/accounts/activate", post(accounts::activate))
         .route("/v1/account/credentials", post(account::change_credentials))
         .route("/v1/account/delete", post(account::delete_account))
-        .route("/v1/auth/params", post(auth::params))
-        .route("/v1/auth/login", post(auth::login))
+        .route(
+            "/v1/auth/params",
+            small(post(auth::params), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
+        .route(
+            "/v1/auth/login",
+            small(post(auth::login), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
         .route("/v1/auth/logout", post(auth::logout))
         .route("/v1/vault/header", get(vault::get_header))
         .route("/v1/sync", get(sync::pull))
@@ -54,11 +70,17 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/items/fetch", post(items::fetch))
         .route("/v1/devices", get(devices::list))
         .route("/v1/devices/{id}", delete(devices::revoke))
-        .route("/v1/pairings", post(pairings::create))
+        .route(
+            "/v1/pairings",
+            small(post(pairings::create), MAX_ANONYMOUS_PAIRING_BODY_BYTES),
+        )
         .route("/v1/pairings/{id}", get(pairings::details))
         .route("/v1/pairings/{id}/approve", post(pairings::approve))
         .route("/v1/pairings/{id}/deny", post(pairings::deny))
-        .route("/v1/pairings/{id}/claim", post(pairings::claim))
+        .route(
+            "/v1/pairings/{id}/claim",
+            small(post(pairings::claim), MAX_ANONYMOUS_PAIRING_BODY_BYTES),
+        )
         // Checked before the body is read, so an oversized request never
         // reaches serde and never allocates. Both layers are needed: the
         // tower layer stops a declared oversize immediately, and axum's own

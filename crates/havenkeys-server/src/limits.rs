@@ -47,5 +47,14 @@ pub const PAIRINGS_PER_IP: i64 = 10;
 /// Pairings one address may have waiting at once.
 pub const PENDING_PAIRINGS_PER_IP: i64 = 3;
 
+/// The largest body an anonymous pairing request (create, claim) may have.
+/// Each carries a few short fields; this bounds what an unauthenticated
+/// caller can make the server read and parse (PA6).
+pub const MAX_ANONYMOUS_PAIRING_BODY_BYTES: usize = 1024;
+
+/// The largest body of the other unauthenticated requests (`auth/params`,
+/// `auth/login`), which carry an email, a key and a device name.
+pub const MAX_ANONYMOUS_AUTH_BODY_BYTES: usize = 4096;
+
 /// The largest envelope an approving device may send.
 pub const MAX_PAIRING_ENVELOPE_BYTES: usize = 4096;

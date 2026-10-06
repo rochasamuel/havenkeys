@@ -39,6 +39,9 @@ rand = "0.8"
 subtle = "2"
 data-encoding = "2"
 unicode-normalization = "0.1"
+# Already in the tree (postgres-protocol); for dropping bidi and zero-width
+# characters from names shown on a security confirmation (PA4).
+unicode-properties = { version = "0.1", default-features = false, features = ["general-category"] }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 tracing = "0.1"
 maxminddb = "0.32"   # ISC; local IP → city lookups, no network

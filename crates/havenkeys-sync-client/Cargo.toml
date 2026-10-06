@@ -25,6 +25,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 data-encoding = "2"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 url = "2"
+# Drops bidi and zero-width characters from what a pairing confirmation
+# shows (PA4); the server is not trusted to have done it.
+unicode-properties = { version = "0.1", default-features = false, features = ["general-category"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
 rustls-platform-verifier = { version = "0.7", optional = true }
 

@@ -437,7 +437,7 @@ async fn a_second_login_on_the_same_device_replaces_its_session() {
 async fn a_device_name_that_is_empty_overlong_or_control_laden_is_refused() {
     let server = support::TestServer::start().await;
     let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    for name in ["", "   ", &"x".repeat(65), "Desk\u{0007}top"] {
+    for name in ["", "   ", &"x".repeat(65), "Desk\u{0007}top", "\u{200B}\u{202E}"] {
         let res = server
             .post("/v1/auth/login")
             .json(&serde_json::json!({
@@ -451,6 +451,36 @@ async fn a_device_name_that_is_empty_overlong_or_control_laden_is_refused() {
             .unwrap();
         assert_eq!(res.status(), 400, "accepted device name {name:?}");
     }
+    server.cleanup().await;
+}
+
+/// PA4: bidi and zero-width characters never reach the device list (or the
+/// phone's confirmation); the rest of the name is kept.
+#[tokio::test]
+async fn invisible_format_characters_are_dropped_from_a_device_name() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let device = Uuid::new_v4();
+    let res = server
+        .post("/v1/auth/login")
+        .json(&serde_json::json!({
+            "email": account.email,
+            "authKey": BASE64.encode(&account.auth_key),
+            "deviceId": device,
+            "deviceName": "Desk\u{202E}pot\u{200B} – Linux",
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let name: String = server
+        .db()
+        .await
+        .query_one("SELECT name FROM devices WHERE id = $1", &[&device])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(name, "Deskpot – Linux");
     server.cleanup().await;
 }
 

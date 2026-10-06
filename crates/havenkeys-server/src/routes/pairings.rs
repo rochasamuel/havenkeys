@@ -79,7 +79,12 @@ pub async fn create(
     let device_name = clean_device_name(&req.device_name)?;
     let claim_hash = fixed32(&req.claim_hash, "claimHash is not valid")?;
     let ip = client_ip(&state, &headers, peer);
-    let db = state.pool.get().await?;
+    let mut db = state.pool.get().await?;
+    // Count and insert under one lock per address, so parallel creates from
+    // one address cannot all pass the check before any of them inserts (PA5).
+    let db = db.transaction().await?;
+    db.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", &[&ip])
+        .await?;
 
     // No periodic task: old rows go here, whatever their state.
     db.execute(
@@ -122,6 +127,7 @@ pub async fn create(
         )
         .await?;
     let expires: chrono::DateTime<chrono::Utc> = row.get(0);
+    db.commit().await?;
     tracing::info!(outcome = "created", "pairing");
     Ok(axum::Json(serde_json::json!({
         "pairingId": id,

@@ -481,7 +481,7 @@ impl<T: Transport> SyncClient<T> {
     ) -> Result<PairingDetails> {
         let path = pairing_path(pairing_id, "")?;
         let dto: wire::PairingDetailsDto = expect_ok(self.get(&path, Some(session)).await?)?;
-        let short = |s: &str| s.chars().count() <= 64;
+        let short = |s: &str| s.chars().count() <= 64 && !s.chars().any(char::is_control);
         if !short(&dto.device_name)
             || !short(&dto.ip)
             || !dto.location.as_deref().is_none_or(short)
@@ -491,9 +491,9 @@ impl<T: Transport> SyncClient<T> {
             return Err(SyncError::Protocol("pairing"));
         }
         Ok(PairingDetails {
-            device_name: dto.device_name,
-            ip: dto.ip,
-            location: dto.location,
+            device_name: shown_text(&dto.device_name),
+            ip: shown_text(&dto.ip),
+            location: dto.location.as_deref().map(shown_text),
             created_at: dto.created_at,
             expires_at: dto.expires_at,
         })
@@ -646,9 +646,25 @@ fn error_for(status: u16) -> SyncError {
     }
 }
 
+/// Server text for a security confirmation, without Unicode format
+/// characters (bidi controls, zero-width spaces and joiners), which could
+/// make it read as something else (PA4).
+fn shown_text(s: &str) -> String {
+    use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+    s.chars()
+        .filter(|c| c.general_category() != GeneralCategory::Format)
+        .collect()
+}
+
 #[cfg(test)]
 mod pairing_tests {
     use super::*;
+
+    #[test]
+    fn shown_text_drops_bidi_and_zero_width_characters() {
+        assert_eq!(shown_text("Desk\u{202E}pot\u{200B}\u{2066}"), "Deskpot");
+        assert_eq!(shown_text("São Paulo, BR"), "São Paulo, BR");
+    }
 
     #[test]
     fn a_pairing_id_that_could_change_the_path_is_refused_before_sending() {
