@@ -10,9 +10,9 @@ export const SSO_PROVIDERS: Readonly<Record<SsoProvider, { name: string; origins
   microsoft: { name: "Microsoft", origins: ["https://login.microsoftonline.com", "https://login.live.com"] },
   github: { name: "GitHub", origins: ["https://github.com"] },
   apple: { name: "Apple", origins: ["https://appleid.apple.com"] },
-  facebook: { name: "Facebook", origins: ["https://www.facebook.com", "https://m.facebook.com"] },
+  facebook: { name: "Facebook", origins: ["https://www.facebook.com"] },
   discord: { name: "Discord", origins: ["https://discord.com"] },
-  x: { name: "X", origins: ["https://x.com", "https://twitter.com", "https://api.x.com", "https://api.twitter.com"] },
+  x: { name: "X", origins: ["https://x.com", "https://api.x.com"] },
   linkedin: { name: "LinkedIn", origins: ["https://www.linkedin.com"] },
   gitlab: { name: "GitLab", origins: ["https://gitlab.com"] },
 };

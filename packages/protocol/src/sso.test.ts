@@ -8,7 +8,8 @@ describe("sso providers", () => {
     for (const p of ["X", "twitter", "okta", "", "__proto__", 1, null]) expect(isSsoProvider(p)).toBe(false);
   });
   it("maps exact origins only", () => {
-    expect(providersForOrigin("https://twitter.com")).toEqual(["x"]);
+    expect(providersForOrigin("https://x.com")).toEqual(["x"]);
+    expect(providersForOrigin("https://twitter.com")).toEqual([]);
     expect(providersForOrigin("https://www.facebook.com")).toEqual(["facebook"]);
     expect(providersForOrigin("https://facebook.com")).toEqual([]);
     expect(providersForOrigin("https://gitlab.com.evil.com")).toEqual([]);

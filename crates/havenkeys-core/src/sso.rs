@@ -57,13 +57,13 @@ impl SsoProvider {
     // Origins checked against each provider's developer docs (2026-10-05):
     // x.com: /i/oauth2/authorize (OAuth 2.0 authorize)
     // api.x.com: /oauth/authorize (OAuth 1.0a)
-    // twitter.com, api.twitter.com: legacy hosts of the same flows, kept as
-    //   the docs did not show them retired (not confirmed in the docs)
-    // www.facebook.com: /v25.0/dialog/oauth (m.facebook.com: mobile login page,
-    //   not in the docs)
+    // www.facebook.com: /v25.0/dialog/oauth
     // discord.com: /oauth2/authorize
     // www.linkedin.com: /oauth/v2/authorization
     // gitlab.com: /oauth/authorize
+    // Removed: twitter.com and api.twitter.com (not in the docs checked;
+    // twitter.com hosts redirect to x.com before any page loads) and
+    // m.facebook.com (not in the docs checked).
     /// Exact origins (scheme + host, no port, no trailing slash).
     pub fn origins(self) -> &'static [&'static str] {
         match self {
@@ -74,14 +74,9 @@ impl SsoProvider {
             ],
             Self::Github => &["https://github.com"],
             Self::Apple => &["https://appleid.apple.com"],
-            Self::Facebook => &["https://www.facebook.com", "https://m.facebook.com"],
+            Self::Facebook => &["https://www.facebook.com"],
             Self::Discord => &["https://discord.com"],
-            Self::X => &[
-                "https://x.com",
-                "https://twitter.com",
-                "https://api.x.com",
-                "https://api.twitter.com",
-            ],
+            Self::X => &["https://x.com", "https://api.x.com"],
             Self::Linkedin => &["https://www.linkedin.com"],
             Self::Gitlab => &["https://gitlab.com"],
         }
@@ -175,7 +170,9 @@ mod tests {
         assert!(SsoProvider::Discord.allows_origin("https://discord.com"));
         assert!(!SsoProvider::Discord.allows_origin("https://evildiscord.com"));
         assert!(SsoProvider::X.allows_origin("https://x.com"));
-        assert!(SsoProvider::X.allows_origin("https://twitter.com"));
+        assert!(SsoProvider::X.allows_origin("https://api.x.com"));
+        assert!(!SsoProvider::X.allows_origin("https://twitter.com"));
+        assert!(!SsoProvider::Facebook.allows_origin("https://m.facebook.com"));
         assert!(!SsoProvider::X.allows_origin("https://x.com.evil.com"));
         assert!(SsoProvider::Linkedin.allows_origin("https://www.linkedin.com"));
         assert!(!SsoProvider::Linkedin.allows_origin("https://linkedin.com.evil.com"));
