@@ -22,21 +22,30 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
   const wrap = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const loading = useRef(false);
+  const loaded = useRef(new Set<SsoProvider>());
   const rows = useMemo(() => pickerRows(accounts ?? {}, query), [accounts, query]);
 
-  // Loaded once per editor, on first open. The in-flight batch is kept, so
-  // closing and reopening before it resolves does not start another.
+  // Loaded on open. Providers whose call succeeded are kept for the editor's
+  // lifetime; failed ones (locked, offline) are retried on the next open.
+  // One batch is in flight at a time, so reopening before it resolves does
+  // not start another.
   useEffect(() => {
-    if (!open || accounts || loading.current) return;
+    if (!open || loading.current) return;
+    const missing = PROVIDER_ORDER.filter((p) => !loaded.current.has(p));
+    if (missing.length === 0) return;
     loading.current = true;
-    void Promise.allSettled(PROVIDER_ORDER.map((p) => api.ssoAccounts(p))).then((results) => {
+    void Promise.allSettled(missing.map((p) => api.ssoAccounts(p))).then((results) => {
       const out: Accounts = {};
       results.forEach((r, i) => {
-        if (r.status === "fulfilled") out[PROVIDER_ORDER[i] as SsoProvider] = r.value;
+        if (r.status !== "fulfilled") return;
+        const p = missing[i] as SsoProvider;
+        out[p] = r.value;
+        loaded.current.add(p);
       });
-      setAccounts(out);
+      loading.current = false;
+      setAccounts((cur) => ({ ...(cur ?? {}), ...out }));
     });
-  }, [open, accounts]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

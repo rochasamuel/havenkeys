@@ -38,7 +38,7 @@ describe("SsoRow", () => {
   it("opens the one provider login", async () => {
     providerLogin.mockResolvedValue({ kind: "one", id: "google" });
     const onOpen = vi.fn();
-    await act(async () => root.render(<SsoRow item={vercel} onOpen={onOpen} />));
+    await act(async () => root.render(<SsoRow revision={0} item={vercel} onOpen={onOpen} />));
     expect(providerLogin).toHaveBeenCalledWith("vercel");
     const open = host.querySelector<HTMLButtonElement>(`button[aria-label="${en.detail.openProviderLogin("Google")}"]`)!;
     await act(async () => open.click());
@@ -47,23 +47,34 @@ describe("SsoRow", () => {
   });
   it("says when no saved login matches", async () => {
     providerLogin.mockResolvedValue({ kind: "none" });
-    await act(async () => root.render(<SsoRow item={vercel} onOpen={() => {}} />));
+    await act(async () => root.render(<SsoRow revision={0} item={vercel} onOpen={() => {}} />));
     expect(host.textContent).toContain(en.detail.noProviderLogin("Google"));
     expect(host.querySelector("button")).toBeNull();
   });
   it("says when several saved logins match", async () => {
     providerLogin.mockResolvedValue({ kind: "several" });
-    await act(async () => root.render(<SsoRow item={vercel} onOpen={() => {}} />));
+    await act(async () => root.render(<SsoRow revision={0} item={vercel} onOpen={() => {}} />));
     expect(host.textContent).toContain(en.detail.severalProviderLogins("Google"));
   });
   it("shows no note for a provider without an account, or on an error", async () => {
     providerLogin.mockResolvedValue({ kind: "none" });
     const bare = { ...vercel, signInWith: { provider: "github" as const, account: null } };
-    await act(async () => root.render(<SsoRow item={bare} onOpen={() => {}} />));
+    await act(async () => root.render(<SsoRow revision={0} item={bare} onOpen={() => {}} />));
     expect(host.textContent).toContain("GitHub");
     expect(host.textContent).not.toContain(en.detail.noProviderLogin("GitHub"));
     providerLogin.mockRejectedValue(new Error("locked"));
-    await act(async () => root.render(<SsoRow item={{ ...vercel, id: "other" }} onOpen={() => {}} />));
+    await act(async () => root.render(<SsoRow revision={0} item={{ ...vercel, id: "other" }} onOpen={() => {}} />));
     expect(host.textContent).not.toContain(en.detail.noProviderLogin("Google"));
+  });
+  it("asks again when the vault's items change", async () => {
+    providerLogin.mockResolvedValue({ kind: "none" });
+    await act(async () => root.render(<SsoRow revision={0} item={vercel} onOpen={() => {}} />));
+    expect(providerLogin).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain(en.detail.noProviderLogin("Google"));
+    providerLogin.mockResolvedValue({ kind: "one", id: "google" });
+    await act(async () => root.render(<SsoRow revision={1} item={vercel} onOpen={() => {}} />));
+    expect(providerLogin).toHaveBeenCalledTimes(2);
+    expect(host.textContent).not.toContain(en.detail.noProviderLogin("Google"));
+    expect(host.querySelector(`button[aria-label="${en.detail.openProviderLogin("Google")}"]`)).not.toBeNull();
   });
 });

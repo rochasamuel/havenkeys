@@ -9,7 +9,8 @@ import { useI18n } from "../i18n/context";
 import { Field, IconButton } from "./Field";
 import { ProviderIcon } from "./ProviderIcon";
 
-export function SsoRow({ item, onOpen }: { item: ItemOverview; onOpen: (id: string) => void }) {
+/** `revision` changes whenever the vault's items were reloaded, so the link follows other items. */
+export function SsoRow({ item, revision, onOpen }: { item: ItemOverview; revision: number; onOpen: (id: string) => void }) {
   const { t } = useI18n();
   const [link, setLink] = useState<ProviderLogin | null>(null);
   const sso = item.signInWith;
@@ -18,13 +19,17 @@ export function SsoRow({ item, onOpen }: { item: ItemOverview; onOpen: (id: stri
     let live = true;
     setLink(null);
     api.providerLogin(item.id).then(
-      (l) => live && setLink(l),
-      () => live && setLink(null),
+      (l) => {
+        if (live) setLink(l);
+      },
+      () => {
+        if (live) setLink(null);
+      },
     );
     return () => {
       live = false;
     };
-  }, [item.id, item.updatedAt]);
+  }, [item.id, item.updatedAt, revision]);
 
   if (!sso) return null;
   const name = PROVIDER_NAMES[sso.provider];

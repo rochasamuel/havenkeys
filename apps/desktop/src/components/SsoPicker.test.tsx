@@ -47,6 +47,18 @@ function type(v: string) {
 const key = (k: string) => search().dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
 
 describe("SsoPicker", () => {
+  it("does not cache a failed load: the next open retries the failed providers", async () => {
+    ssoAccounts.mockReset().mockRejectedValue(new Error("locked"));
+    await act(async () => root.render(<SsoPicker value={value} onChange={onChange} />));
+    await act(async () => trigger().click());
+    expect(options().some((o) => o.textContent?.includes("samuelsilv.rocha@gmail.com"))).toBe(false);
+    expect(options().length).toBeGreaterThan(0);
+    await act(async () => trigger().click());
+    ssoAccounts.mockReset().mockImplementation(async (p) => (p === "google" ? [g1] : []));
+    await act(async () => trigger().click());
+    expect(ssoAccounts).toHaveBeenCalledTimes(9);
+    expect(options().some((o) => o.textContent?.includes("samuelsilv.rocha@gmail.com"))).toBe(true);
+  });
   it("lists providers with their saved logins and copies the picked login's username", async () => {
     await act(async () => root.render(<SsoPicker value={value} onChange={onChange} />));
     expect(trigger().textContent).toContain(en.editor.providerNone);

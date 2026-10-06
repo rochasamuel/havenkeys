@@ -784,7 +784,7 @@ export const ptBR: Messages = {
     fieldsToNotes: (n: number) =>
       n === 1 ? "1 campo acima do limite de um login ficou nas notas dele." : `${n} campos acima do limite de um login ficaram nas notas deles.`,
     ssoUpgraded: (n: number) =>
-      `${n} ${n === 1 ? "login que já estava no cofre agora entra" : "logins que já estavam no cofre agora entram"} com Google, Microsoft, GitHub ou Apple.`,
+      `${n} ${n === 1 ? "login que já estava no cofre agora entra" : "logins que já estavam no cofre agora entram"} com um provedor, como Google ou GitHub.`,
     passkeysSkipped: (n: number) =>
       n === 1
         ? "1 passkey ficou de fora (importar passkeys ainda não é suportado)."

@@ -50,6 +50,8 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   const [section, setSection] = useState<Section>("all");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemOverview[]>([]);
+  /** Bumped each time the items are reloaded; lets a detail row follow other items. */
+  const [revision, setRevision] = useState(0);
   // Every item, whatever the search: an open item and the login a "Sign in
   // with" row links to must not vanish because they don't match the query.
   const [allItems, setAllItems] = useState<ItemOverview[]>([]);
@@ -78,6 +80,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
       const searching = query.trim() !== "";
       const [found, all] = await Promise.all([api.listItems(query), searching ? api.listItems() : null]);
       setItems(found);
+      setRevision((r) => r + 1);
       setAllItems(all ?? found);
     } catch (e) {
       if (e instanceof ApiError && e.code !== "locked") toast(errorMessage(e, t), "error");
@@ -427,6 +430,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               <IdentityDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
+                revision={revision}
                 readOnly={readOnly}
                 onEdit={() => setPane({ kind: "edit", id: selected.id })}
               />
@@ -464,6 +468,7 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
               <ItemDetail
                 key={selected.id + selected.updatedAt}
                 item={selected}
+                revision={revision}
                 readOnly={readOnly}
                 onEdit={() => setPane({ kind: "edit", id: selected.id })}
                 onDelete={() => void onDelete(selected)}

@@ -748,7 +748,7 @@ export const en = {
     fieldsToNotes: (n: number) =>
       n === 1 ? "1 field over a login's limit was kept in its notes." : `${n} fields over a login's limit were kept in their notes.`,
     ssoUpgraded: (n: number) =>
-      `${n} ${n === 1 ? "login already in your vault now signs" : "logins already in your vault now sign"} in with Google, Microsoft, GitHub or Apple.`,
+      `${n} ${n === 1 ? "login already in your vault now signs" : "logins already in your vault now sign"} in with a provider such as Google or GitHub.`,
     passkeysSkipped: (n: number) =>
       `${n} ${n === 1 ? "passkey was" : "passkeys were"} left out (importing passkeys is not supported yet).`,
     failedItems: (n: number) =>

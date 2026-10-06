@@ -14,6 +14,8 @@ import { CustomSections } from "./CustomSections";
 
 interface Props {
   item: ItemOverview;
+  /** Bumped when the vault reloads its items (see SsoRow). */
+  revision: number;
   /** Offline: editing or deleting would fail, so the controls are disabled up front. */
   readOnly: boolean;
   onEdit: () => void;
@@ -164,7 +166,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
   );
 }
 
-export function ItemDetail({ item, readOnly, onEdit, onDelete, onOpen }: Props) {
+export function ItemDetail({ item, revision, readOnly, onEdit, onDelete, onOpen }: Props) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const copy = useCopy(item.id);
@@ -213,7 +215,7 @@ export function ItemDetail({ item, readOnly, onEdit, onDelete, onOpen }: Props) 
       {item.itemType === "login" && (
         <>
           <div className="group">
-            {item.signInWith && <SsoRow item={item} onOpen={onOpen} />}
+            {item.signInWith && <SsoRow item={item} revision={revision} onOpen={onOpen} />}
 
             {item.username && (
               <Field
