@@ -9,6 +9,8 @@ export interface VaultStatus {
   damagedItems: number;
   /** Items from the server that could not be opened; retried on every sync. */
   unreadableItems: number;
+  /** The saved settings did not open, so automatic behaviors are off until settings are saved again. */
+  damagedSettings: boolean;
 }
 
 export type ItemType = "login" | "secure_note" | "identity" | "card";

@@ -31,6 +31,7 @@ type Pane =
 
 interface Props {
   damagedItems: number;
+  damagedSettings: boolean;
   unreadableItems: number;
   /** Offline: writes would fail, so the mutating controls are disabled up front. */
   readOnly: boolean;
@@ -44,7 +45,7 @@ const sections: Array<{ id: Section; label: (t: Messages) => string; icon: IconN
   { id: "card", label: (t) => t.card.nav, icon: "card" },
 ];
 
-export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }: Props) {
+export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, readOnly, onLock }: Props) {
   const toast = useToast();
   const { t } = useI18n();
   const [section, setSection] = useState<Section>("all");
@@ -184,6 +185,9 @@ export function VaultScreen({ damagedItems, unreadableItems, readOnly, onLock }:
   useEffect(() => {
     if (damagedItems > 0) toast(t.vault.damaged(damagedItems), "error");
   }, [damagedItems, toast]);
+  useEffect(() => {
+    if (damagedSettings) toast(t.vault.damagedSettings, "error");
+  }, [damagedSettings, toast]);
 
   async function redownload() {
     setBusyResync(true);

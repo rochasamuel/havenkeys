@@ -167,6 +167,54 @@ fn tampered_overview_marks_item_damaged_without_blocking_vault() {
     assert_eq!(v.get_item(&bad).err(), Some(Error::NotFound));
 }
 
+/// CR2: a settings row that does not open never falls back to the defaults
+/// (which turn automatic sign-in and passkey upgrade on).
+#[test]
+fn tampered_settings_fall_back_to_restrictive_values() {
+    let (_d, path) = file_vault();
+    let sk = {
+        let (mut v, sk) = activated_vault_at(&path);
+        v.update_settings(Settings {
+            browser_integration: true,
+            ..Settings::default()
+        })
+        .unwrap();
+        sk
+    };
+    let c = Connection::open(&path).unwrap();
+    c.execute(
+        "UPDATE settings SET blob = X'0101000000000000000000000000000000000000000000000000000000' WHERE id = 1",
+        [],
+    )
+    .unwrap();
+    drop(c);
+    let mut v = open_file(&path);
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    assert_eq!(v.settings().unwrap(), Settings::restrictive());
+    let s = v.settings().unwrap();
+    assert!(!s.auto_sign_in && !s.auto_passkey_upgrade && !s.browser_integration);
+    assert!(v.status().unwrap().damaged_settings);
+
+    // Saving settings again clears the flag.
+    v.update_settings(Settings::default()).unwrap();
+    assert!(!v.status().unwrap().damaged_settings);
+}
+
+#[test]
+fn missing_settings_row_is_damaged_too() {
+    let (_d, path) = file_vault();
+    let sk = activated_vault_at(&path).1;
+    let c = Connection::open(&path).unwrap();
+    c.execute("DELETE FROM settings", []).unwrap();
+    drop(c);
+    let mut v = open_file(&path);
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    assert_eq!(v.settings().unwrap(), Settings::restrictive());
+    assert!(v.status().unwrap().damaged_settings);
+}
+
 /// A8: blobs cannot be swapped between items (AAD binds item ID).
 #[test]
 fn swapped_blobs_are_rejected() {

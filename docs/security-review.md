@@ -1785,7 +1785,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | ID | Title | Severity | Component | Status |
 |---|---|---|---|---|
 | CR1 / SV-1 | A hostile server can splice an old item overview (URL rules) with a newer details blob (password), or vice versa, so the current secret reaches an origin the item no longer names | Medium | Core sync / server | Fixed |
-| CR2 | A corrupt or missing settings blob silently falls back to `auto_sign_in`/`auto_passkey_upgrade` = on | Low | Core vault | Open (planned) |
+| CR2 | A corrupt or missing settings blob silently falls back to `auto_sign_in`/`auto_passkey_upgrade` = on | Low | Core vault | **Fixed** |
 | CR3 | A crafted `.1pux` with millions of ZIP central-directory entries costs ~7× its size in memory before any size check runs | Low | Core import | Open (planned) |
 | BR-1 | Windows pipe squatting: the recorded impact on P10 understates that typed and generated passwords reach the squatter | Medium | Protocol (Windows) | Fixed in code, not yet verified on Windows |
 | BR-2 | The per-item password-change rate-limit budget is spent even when the write is denied or fails | Low | Bridge | Open (planned) |
@@ -1819,7 +1819,8 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 **Suggested fix:** bind the two blobs of one write together — a random per-write id, or `SHA-256` of one blob, carried in both plaintexts (or both AADs) and checked in `check_item_bytes` — plus the per-item monotonic revision floor already proposed for plain replay (`docs/server-sync.md` §7, `docs/threat-model.md` T1b).
 **KNOWN?** Item replay in general is already documented and accepted (#9, S5, T1b); the cross-revision *splice* and its confidentiality effect (rather than just integrity/availability) were not recorded before this scan.
 
-#### CR2. Settings fallback to "on" when the settings blob is missing or won't open (Low, open)
+#### CR2. Settings fallback to "on" when the settings blob is missing or won't open (Low, fixed)
+**Status:** fixed (2026-10-06). `open_session` uses `Settings::restrictive()` (automatic sign-in, automatic passkey upgrade and browser integration all off) when the settings row is missing or does not open or validate, and `VaultStatus.damagedSettings` reports it; the desktop shows a warning, and saving settings clears the flag. A missing row counts as damaged because the header and the settings row are always written in one transaction. Tests: `tampered_settings_fall_back_to_restrictive_values`, `missing_settings_row_is_damaged_too` (`crates/havenkeys-core/tests/security.rs`).
 **Attack scenario:** someone who can write `vault.sqlite3` but has no keys (a tampered or restored backup, or another local account with file access) corrupts or deletes the `settings` row. `open_session` discards the failure and silently falls back to `Settings::default()`, which is `auto_sign_in = true` and `auto_passkey_upgrade = true` — switching a user who had turned both off back to automatic behavior, with nothing shown in `status()` or `damaged_items`.
 **Evidence:** CONFIRMED — a probe corrupts the settings row, unlocks again, and observes `auto_sign_in=true auto_passkey_upgrade=true` with `damaged_items: 0`.
 **Suggested fix:** on a settings blob that exists but fails to open or validate, fall back to the most restrictive values and surface a `damaged_settings` flag; keep `Settings::default()` only for the genuine "no row yet" case.

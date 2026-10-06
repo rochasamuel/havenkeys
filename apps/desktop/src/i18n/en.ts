@@ -248,6 +248,8 @@ export const en = {
     lockNow: "Lock now",
     damaged: (n: number) =>
       n === 1 ? "1 item could not be decrypted and is hidden." : `${n} items could not be decrypted and are hidden.`,
+    damagedSettings:
+      "Your settings could not be read, so automatic sign-in, passkey upgrade and the browser extension are off. Review them in Settings.",
     unreadable: (n: number) =>
       n === 1 ? "1 item couldn't be read from the server." : `${n} items couldn't be read from the server.`,
     redownload: "Re-download",

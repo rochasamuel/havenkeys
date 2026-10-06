@@ -273,6 +273,8 @@ export const ptBR: Messages = {
       n === 1
         ? "1 item não pôde ser descriptografado e está oculto."
         : `${n} itens não puderam ser descriptografados e estão ocultos.`,
+    damagedSettings:
+      "Não foi possível ler suas configurações, então o login automático, a atualização para passkey e a extensão do navegador estão desligados. Revise-os em Configurações.",
     unreadable: (n: number) =>
       n === 1 ? "1 item não pôde ser lido do servidor." : `${n} itens não puderam ser lidos do servidor.`,
     redownload: "Baixar de novo",

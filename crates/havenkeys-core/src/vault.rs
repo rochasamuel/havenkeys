@@ -67,6 +67,9 @@ pub struct VaultStatus {
     /// Items pulled from the server that did not decrypt, recorded for
     /// retry (0 normally). 0 when there is no vault.
     pub unreadable_items: usize,
+    /// The saved settings did not decrypt or validate at unlock, so the
+    /// session runs on `Settings::restrictive()` until they are saved again.
+    pub damaged_settings: bool,
 }
 
 pub(crate) struct Session {
@@ -81,6 +84,7 @@ pub(crate) struct Session {
     pub(crate) overviews: HashMap<Uuid, ItemOverview>,
     pub(crate) settings: Settings,
     pub(crate) damaged_items: usize,
+    pub(crate) damaged_settings: bool,
     pub(crate) recent_fills: Vec<RecentFill>,
 }
 
@@ -722,6 +726,7 @@ impl VaultService {
             vault_exists: self.store.header()?.is_some(),
             damaged_items: self.session.as_ref().map_or(0, |s| s.damaged_items),
             unreadable_items: self.store.unreadable_count().unwrap_or(0),
+            damaged_settings: self.session.as_ref().is_some_and(|s| s.damaged_settings),
         })
     }
 
@@ -822,6 +827,7 @@ impl VaultService {
             overviews: HashMap::new(),
             settings,
             damaged_items: 0,
+            damaged_settings: false,
             recent_fills: Vec::new(),
             vault_key: prepared.vault_key,
         });
@@ -908,17 +914,21 @@ impl VaultService {
     fn open_session(&self, vault_id: Uuid, vault_key: &Key256) -> Result<Session> {
         let data_key = derive_data_key(vault_key)?;
 
-        let settings = match self.store.settings_blob()? {
-            Some(b) => open_json::<Settings>(
+        // The settings row is written with the header, so a missing row is
+        // as damaged as one that does not open or validate. Either way the
+        // session gets the restrictive settings, flagged, never the defaults
+        // (which turn automatic sign-in and passkey upgrade on).
+        let opened = self.store.settings_blob()?.and_then(|b| {
+            open_json::<Settings>(
                 &data_key,
                 &BlobContext::vault(Purpose::Settings, vault_id),
                 &b,
             )
             .ok()
             .filter(|s| s.validate().is_ok())
-            .unwrap_or_default(),
-            None => Settings::default(),
-        };
+        });
+        let damaged_settings = opened.is_none();
+        let settings = opened.unwrap_or_else(Settings::restrictive);
 
         let mut overviews = HashMap::new();
         let mut damaged_items = 0;
@@ -945,6 +955,7 @@ impl VaultService {
             overviews,
             settings,
             damaged_items,
+            damaged_settings,
             recent_fills: Vec::new(),
             vault_key: Key256::from_bytes(*vault_key.as_bytes()),
         })
@@ -1208,7 +1219,9 @@ impl VaultService {
             &settings,
         )?;
         self.store.write_settings(&blob)?;
-        self.session_mut()?.settings = settings;
+        let session = self.session_mut()?;
+        session.settings = settings;
+        session.damaged_settings = false;
         Ok(())
     }
 

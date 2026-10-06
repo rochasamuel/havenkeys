@@ -390,6 +390,18 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// What a session uses when a saved settings blob exists but does not
+    /// open or validate: every automatic behavior and the extension off,
+    /// so a damaged or tampered row can never switch them back on.
+    pub fn restrictive() -> Self {
+        Self {
+            browser_integration: false,
+            auto_passkey_upgrade: false,
+            auto_sign_in: false,
+            ..Self::default()
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         if !AUTO_LOCK_CHOICES.contains(&self.auto_lock_minutes) {
             return Err(Error::InvalidInput("unsupported auto-lock interval"));
