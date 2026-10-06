@@ -29,7 +29,7 @@ are accepted limitations, documented below and in `threat-model.md`.
 | 11 | Low | All | Secrets can't be reliably wiped from WebView/IPC/serde buffers; no `mlock` | Accepted, documented |
 | 12 | Low | Tauri | Unlock attempts are not rate-limited beyond Argon2id cost | Accepted |
 | 13 | Info | Deps | 7 unmaintained/unsound advisories through Tauri's GTK stack | Accepted, tracked in `deny.toml` |
-| 14 | Info | Tauri | CSP, capabilities and tray behaviour need a manual runtime check on the real app | Open |
+| 14 | Info | Tauri | CSP, capabilities and tray behaviour need a manual runtime check on the real app | Functionally verified in daily use on macOS and Windows (2026-10-06); no dedicated CSP or capability probe was run |
 | 15 | Low | Import | The plaintext `.1pux` export stays on disk unless the user deletes it; deletion is not a secure wipe | Accepted, warned in UI, documented |
 | 16 | Info | Import | Imported plaintext passes through `serde_json::Value`; wiped after conversion, but intermediate copies may remain | Accepted, documented |
 
@@ -286,7 +286,7 @@ desktop's history commands.
 | F10 | Info | Extension | A pending save holds the submitted password in worker memory (JS strings cannot be wiped) | Accepted: at most 3 min, dropped on confirm, dismiss and lock |
 | F11 | Info | Core | "Exact page" rules compare paths, which a page can change within its own origin (`pushState`) | Accepted: same-origin only |
 | F12 | Info | Extension | Heuristics can misclassify fields (wrong menu, missed form) | Accepted: cannot cross origins; the security checks do not depend on classification |
-| F13 | Info | All | Not yet exercised in a real browser | Open: see "Verification pending" |
+| F13 | Info | All | Not yet exercised in a real browser | Functionally verified in daily use in Firefox and Chrome (2026-10-06); the attack scenarios were not replayed |
 
 ## Details
 
@@ -503,7 +503,7 @@ server/desktop account surface reviewed below.
 | S22 | Info | Desktop | "Remove this device" requires an unlocked vault, so it is not reachable when the vault fails to open at startup | Accepted, known gap |
 | S23 | Low | Server | A device whose online unlock fallback logs in but then fails locally (for example a header that fails to verify) leaves a server session live until it expires (24 h) | Accepted |
 | S24 | Info | Deployment | The desktop and server must be upgraded together: `PUT /v1/vault/header` is gone, so an old desktop cannot publish a header to a new server. The local store also moved from schema 4 to 5 with no migration, so an existing `vault.sqlite3` does not open in the new desktop; each desktop signs in again from its Emergency Kit. An account whose password was changed with the old build has a stale server verifier (S14) that no admin command can reset | Accepted, operational; upgrade steps below and in `deployment.md` §6.1 |
-| S25 | Info | Verification | The Windows and macOS keychain backends (`windows_native_keyring_store`, `apple_native_keyring_store`) were not compiled or tested in this environment (Linux only); verify on Windows and macOS before relying on them | Open, not yet verified on Windows/macOS |
+| S25 | Info | Verification | The Windows and macOS keychain backends (`windows_native_keyring_store`, `apple_native_keyring_store`) were not compiled or tested in this environment (Linux only); verify on Windows and macOS before relying on them | Functionally verified (2026-10-06): the owner signs in and unlocks daily on Windows and macOS with the keychain |
 | S26 | Low | Desktop | A sync already in flight when "Remove this device" runs, followed at once by a sign-in to another account, could apply the old account's pulled data to the new vault | Accepted, not fixed (unlikely: needs a pull to straddle removal *and* a completed sign-in) |
 | S27 | Low | Desktop | A master-password change whose response was lost used to report failure although the server may have applied it, and took the device offline so the next sync could not adopt the new header | **Fixed** (the device asks the server's current KDF parameters: new → committed as a success; old → reported as offline; no answer → `password_change_unknown`, "use the new one if the current stops working"; the session is kept) |
 | S28 | Low | Desktop | "Remove this device" ignored a failed keychain delete, leaving the Secret Key behind (design §6.3), and revoked the device on the server before setting the file aside | **Fixed** (a busy or failing keychain is waited for and retried once; if the entry still cannot be deleted, removal completes and the user is told to delete `app.havenkeys` by hand; the revocation now follows the rename) |
@@ -1797,7 +1797,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | EX-04 | Save-prompt oracle on a page-planted username, after the password is already known to the attacker | Info | Extension | Accepted (residual of F1) |
 | DT1 | A server session can be installed after the vault locks; a locked vault then stays "online" and account commands still work | Low | Desktop (sync) | **Fixed** |
 | DT2 | Extension-driven `open_item` resets the auto-lock idle timer | Low | Desktop (bridge hook) | **Fixed** |
-| DT3 | On Windows, the vault file and the keychain-stored Secret Key both roam with the user profile by default | Low | Desktop (storage) | Open (planned) |
+| DT3 | On Windows, the vault file and the keychain-stored Secret Key both roam with the user profile by default | Low | Desktop (storage) | Accepted, documented: affects only domain-joined machines with roaming profiles |
 | DT4 | Linux screen-lock detection disables itself for the rest of the run after three transient probe failures | Low | Desktop (oslock) | **Fixed** |
 | DT5 | NSIS pre-install hook ran `taskkill` without a path (binary planting from the installer's folder) | Low | Desktop (Windows installer) | **Fixed** |
 | DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | **Fixed** |
@@ -1881,7 +1881,8 @@ After the F1 fix, a script that already knows the user's typed password can stil
 **Evidence:** LIKELY, by code trace; same class as the already-fixed #1 (TOTP polling kept the vault unlocked).
 **Suggested fix:** stop `get_settings` and the editor's automatic note load from calling `touch()`; rely on `record_activity` for genuine interaction.
 
-#### DT3. Vault and Secret Key roam with the Windows profile (Low, open)
+#### DT3. Vault and Secret Key roam with the Windows profile (Low, accepted)
+**Status:** accepted and documented (2026-10-06). Moving the vault and `device.json` to `%LOCALAPPDATA%`, and the keychain entry to `persistence: Local`, would relocate every existing Windows install. That needs a migration that has to be built and tested on Windows. The exposure is limited to domain-joined machines with roaming profiles, where the vault file and the Secret Key would be copied to the same profile server. Users on such a machine should treat that server as holding both. Revisit with a Windows test machine.
 **Attack scenario:** on a domain-joined machine with roaming profiles, `app_data_dir()` resolves to `%APPDATA%` (roaming), and the keychain store defaults to `CRED_PERSIST_ENTERPRISE`, so both the encrypted vault file and the Secret Key (in Credential Manager, or in `device.json` on the file-store fallback) are copied to the profile server at every logoff — undermining the Secret Key's stated purpose of protecting copies that leave the device.
 **Evidence:** LIKELY, from the vendored `tauri` and `windows-native-keyring-store` sources plus `lib.rs:59-72`/`secret_store.rs:233-237`; not verified on a real roaming profile.
 **Suggested fix:** use `%LOCALAPPDATA%` (`dirs::data_local_dir()`) for the vault and `device.json`; create the keychain entry with `persistence: Local`. At minimum, document the limitation next to S20.
@@ -2180,7 +2181,7 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | # | Severity | Component | Finding | Status |
 |---|---|---|---|---|
 | AN1 | Low | App (`AppContainer`, `HavenApp.appScope`) | App-wide event collectors have no exception handler: a Keystore `ProviderException` while deleting a key, or a `ClipboardManager` failure while clearing, ends the process | **Fixed** (`4beb735`) |
-| AN2 | Info | Whole app | Nothing has run on a device or emulator: instrumented `KeystoreTest`, the QR scanner, BiometricPrompt, the navigation lock wipe, `FLAG_SECURE`, the clipboard flags, the `AutofillService` end to end, `getCallingPackage()` in the fill activities, package visibility | Open: manual checklist |
+| AN2 | Info | Whole app | Nothing has run on a device or emulator: instrumented `KeystoreTest`, the QR scanner, BiometricPrompt, the navigation lock wipe, `FLAG_SECURE`, the clipboard flags, the `AutofillService` end to end, `getCallingPackage()` in the fill activities, package visibility | Functionally verified in daily use on the owner's phone (2026-10-06); instrumented tests and attack scenarios not run on a device |
 | AN3 | Low | Autofill (gated rows) | With "Confirm before filling" on and the vault unlocked, the app being filled can fire its rows' IntentSenders without a tap, and swap the item ID and mode they carry, and HavenKeys answers without showing anything | Accepted, documented (Rust returns only that caller's matched logins) |
 | AN4 | Info | CI | `.github/workflows/android.yml` has never run on GitHub | Open |
 | AN5 | Low | Network / Digital Asset Links | User-installed CAs are trusted; whoever holds one can intercept the server connection and forge `assetlinks.json`, so a malicious app named after a site can be offered that site's logins | Accepted, documented |
@@ -2213,7 +2214,7 @@ services (AN19). AN1, AN6, AN9 and AN20–AN24 were fixed in the same wave.
 | AN33 | Info | Autofill save | A save request is lost if the vault locks before the user submits | Accepted (user sees "HavenKeys locked before saving.") |
 | AN34 | Info | Autofill save (`SaveForm`) | On Android 9 a username-first sign-in has no `FLAG_DELAY_SAVE`: the password step saves without the username unless that screen has one | Accepted |
 | AN35 | Info | Editor keyboards | `IME_FLAG_NO_PERSONALIZED_LEARNING` is a request: a keyboard may ignore it and learn or log what is typed | Accepted (Android limitation) |
-| AN36 | Info | Editor, Autofill save | Nothing in M2 has run on a device or emulator; the Android M2 checklist is open | Open |
+| AN36 | Info | Editor, Autofill save | Nothing in M2 has run on a device or emulator; the Android M2 checklist is open | Functionally verified in daily use on the owner's phone (2026-10-06); instrumented tests and attack scenarios not run on a device |
 
 ## Details
 
@@ -2709,13 +2710,13 @@ on the website and back.
 | AN41 | Info | `passkey_json.rs` | `clientDataJSON` in a browser response is a placeholder | Accepted |
 | AN42 | Low | credential activities, service | An unexpected exception ends the request as a generic error | Accepted |
 | AN43 | Low | `credential_password` | The password path asks no user verification when unlocked | Accepted |
-| AN44 | Info | all of M3 | Not run on a device | Open |
+| AN44 | Info | all of M3 | Not run on a device | Functionally verified in daily use on the owner's phone (2026-10-06); instrumented tests and attack scenarios not run on a device |
 | AN45 | Low | `WalletPlanner`, `WalletDatasets` | Card values in the autofill framework | Accepted |
 | AN46 | Info | `AutofillAuthActivity`, `WalletConfirmation` | Gated card and identity rows confirm in HavenKeys | Mitigated |
 | AN47 | Low | `StructureParser`, `CardFormFinder` | Frames depend on what the browser reports | Accepted |
 | AN48 | Info | `StructureParser.isEmpty` | Emptiness is read from the structure | Accepted |
 | AN49 | Info | `CardSaveReader`, `autofill_save_card` | Saving cards | Accepted |
-| AN50 | Info | all of M4 | Not run on a device | Open |
+| AN50 | Info | all of M4 | Not run on a device | Functionally verified in daily use on the owner's phone (2026-10-06); instrumented tests and attack scenarios not run on a device |
 
 ### AN37. User verification is enforced in Kotlin only (Medium, accepted)
 **Component:** `CredentialGetActivity`, `PasskeyCreateActivity`,
@@ -2973,7 +2974,7 @@ internal review, not an independent audit.
 | PA10 | Info | `pairing.rs` | Envelope and payload parsers | Mitigated |
 | PA11 | Info | logging | Secret logging | Mitigated |
 | PA12 | Info | `claim` | Atomic single-use claim and 10-minute cut-off | Mitigated |
-| PA13 | Info | Android | Not run on a device | Open |
+| PA13 | Info | Android | Not run on a device | Functionally verified in daily use on the owner's phone (2026-10-06); instrumented tests and attack scenarios not run on a device |
 | PA14 | Low | whole feature | Another account on the same server that sees the code can approve it first with its own vault | Accepted, mitigated in the UI |
 | PA15 | Medium (fixed) | `approve`, phone client | A code naming a revoked or other-account device id answered `401`, which signed the phone out | Fixed |
 
