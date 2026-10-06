@@ -167,11 +167,11 @@ impl HavenClient {
             .map_err(|_| ClientError::pairing_failed())?;
         let revision = paired.prepared.header_revision() as i64;
         let record = new_account_record(&paired.account, pending.server_url.clone(), revision);
-        self.create_vault(paired.prepared, &record)?;
+        let epoch = self.create_vault(paired.prepared, &record)?;
         self.device()?
             .set_secret_key(paired.account.id, &paired.secret_key)
             .map_err(|_| ClientError::file())?;
-        self.go_online_after_sign_in(session)
+        self.go_online_after_sign_in(session, epoch)
     }
 
     /// The phone: parse a scanned code and ask the server about it.

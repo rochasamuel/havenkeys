@@ -56,15 +56,16 @@ impl HavenClient {
     /// A failure here is not an unlock failure: the vault stays open and
     /// readable, offline.
     pub async fn connect(&self, auth_key: AuthKey) -> ClientResult<()> {
-        let (email, account_id, device_id, server) = {
+        let (email, account_id, device_id, server, epoch) = {
             let vault = self.vault()?;
             if !vault.is_unlocked() {
                 return Err(havenkeys_core::Error::Locked.into());
             }
             let account = vault.account()?.ok_or(havenkeys_core::Error::NoVault)?;
+            let epoch = vault.epoch();
             drop(vault);
             let server = self.server_for(&account.server_url)?;
-            (account.email, account.account_id, self.device_id()?, server)
+            (account.email, account.account_id, self.device_id()?, server, epoch)
         };
 
         let session = server
@@ -87,10 +88,11 @@ impl HavenClient {
         drop(auth_key);
 
         // A lock that landed while signing in wins: the session is dropped
-        // unused rather than left on a locked vault.
+        // unused rather than left on a locked vault, or on a later unlock
+        // that started its own sign-in (DT1).
         {
             let vault = self.vault()?;
-            if !vault.is_unlocked() {
+            if !vault.is_unlocked() || vault.epoch() != epoch {
                 return Err(havenkeys_core::Error::Locked.into());
             }
             self.set_online(session);
@@ -289,7 +291,11 @@ mod tests {
 
     /// Give `client` an unlocked account vault pointing at `server_url`, and
     /// return the auth key `connect` signs in with.
-    fn open_account_vault(client: &HavenClient, server_url: &str) -> AuthKey {
+    /// `open_account_vault`, also returning what unlocks it again.
+    fn open_account_vault_with_key(
+        client: &HavenClient,
+        server_url: &str,
+    ) -> (AuthKey, havenkeys_core::crypto::secret_key::SecretKey, AccountRef) {
         let account = AccountRef::new(
             Uuid::from_u128(1),
             NormalizedEmail::parse("user@example.com").unwrap(),
@@ -317,7 +323,11 @@ mod tests {
                 },
             )
             .unwrap();
-        made.auth_key
+        (made.auth_key, made.secret_key, account)
+    }
+
+    fn open_account_vault(client: &HavenClient, server_url: &str) -> AuthKey {
+        open_account_vault_with_key(client, server_url).0
     }
 
     #[tokio::test]
@@ -356,6 +366,45 @@ mod tests {
         // after the login can catch this lock.
         server.login_entered.notified().await;
         client.lock("auto");
+        server.release_login.notify_one();
+
+        let err = connecting.await.unwrap().unwrap_err();
+        assert_eq!(err.code, "locked");
+        assert!(!client.is_online());
+        assert!(!events.seen().iter().any(|e| e == "online:true"));
+    }
+
+    /// DT1: a lock and a new unlock while a slow login is pending: that
+    /// first login's session is still dropped.
+    #[tokio::test]
+    async fn a_lock_and_unlock_during_login_drops_the_first_session() {
+        let server = StubServer::start(StubAccount {
+            account_id: Uuid::from_u128(1),
+            vault_id: Uuid::from_u128(2),
+            kdf: KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap(),
+            header: Vec::new(),
+            header_revision: 0,
+        })
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let (client, events) = client_in(dir.path());
+        let (auth_key, secret_key, account) = open_account_vault_with_key(&client, &server.url);
+
+        let connecting = tokio::spawn({
+            let client = client.clone();
+            async move { client.connect(auth_key).await }
+        });
+        server.login_entered.notified().await;
+        client.lock("auto");
+        client
+            .vault()
+            .unwrap()
+            .unlock_for_account(
+                &SecretString::from("correct horse battery staple"),
+                &secret_key,
+                &account,
+            )
+            .unwrap();
         server.release_login.notify_one();
 
         let err = connecting.await.unwrap().unwrap_err();

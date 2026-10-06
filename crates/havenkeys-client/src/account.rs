@@ -279,11 +279,11 @@ impl HavenClient {
         let header_revision = prepared.header_revision() as i64;
 
         let record = new_account_record(&account, server_url, header_revision);
-        self.create_vault(prepared, &record)?;
+        let epoch = self.create_vault(prepared, &record)?;
         self.device()?
             .set_secret_key(account.id, &secret_key)
             .map_err(|_| ClientError::file())?;
-        self.go_online_after_sign_in(session)
+        self.go_online_after_sign_in(session, epoch)
     }
 
     /// The new vault exists and is open: go online with `session` and catch
@@ -291,13 +291,17 @@ impl HavenClient {
     /// (a prompt), long enough for the new vault to auto-lock. As in
     /// `connect`, a lock wins: the session is dropped unused and the locked
     /// status is reported.
+    ///
+    /// `epoch` is the one `create_vault` returned: a lock in between wins
+    /// even if the vault was unlocked again since (DT1).
     pub(crate) fn go_online_after_sign_in(
         self: &Arc<Self>,
         session: Session,
+        epoch: u64,
     ) -> ClientResult<VaultStatus> {
         let (status, online) = {
             let vault = self.vault()?;
-            let online = vault.is_unlocked();
+            let online = vault.is_unlocked() && vault.epoch() == epoch;
             if online {
                 self.set_online(session);
             }
@@ -318,16 +322,17 @@ impl HavenClient {
     }
 
     /// Store the new vault, which opens unlocked, and start its auto-lock.
+    /// Returns the vault's epoch once open, for `go_online_after_sign_in`.
     pub(crate) fn create_vault(
         &self,
         prepared: PreparedVault,
         record: &AccountRecord,
-    ) -> ClientResult<()> {
+    ) -> ClientResult<u64> {
         let mut vault = self.vault()?;
         vault.create_account_vault(prepared, record)?;
         let minutes = vault.settings()?.auto_lock_minutes;
         self.events.unlocked(minutes);
-        Ok(())
+        Ok(vault.epoch())
     }
 
     /// The account this vault belongs to, from the local store (never from
@@ -685,6 +690,8 @@ impl HavenClient {
     }
 
     pub async fn list_devices(&self) -> ClientResult<Vec<DeviceEntry>> {
+        // A locked vault has no session to use (DT1), even if one is held.
+        self.require_unlocked()?;
         let (session, server) = (self.session()?, self.server()?);
         let devices = server.devices(&session).await?;
         Ok(devices
@@ -702,6 +709,7 @@ impl HavenClient {
 
     /// Cut a device off. Revoking this one signs it out immediately.
     pub async fn revoke_device(&self, id: Uuid) -> ClientResult<()> {
+        self.require_unlocked()?;
         let (session, server) = (self.session()?, self.server()?);
         server.revoke_device(&session, id).await?;
         if id == self.device_id()? {
