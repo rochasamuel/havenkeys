@@ -1,0 +1,9 @@
+# HTTPS for your HavenKeys server. Caddy gets and renews the certificate.
+{
+	email {$ACME_EMAIL}
+}
+
+{$HAVENKEYS_DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy server:8080
+}
