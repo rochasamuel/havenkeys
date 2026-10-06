@@ -5,7 +5,7 @@ mod common;
 use common::*;
 use havenkeys_core::model::{ItemInput, ItemType, SecretField, SecretUpdate, Settings};
 use havenkeys_core::sso::SsoProvider;
-use havenkeys_core::vault::{SaveAction, SaveTarget, VaultState};
+use havenkeys_core::vault::{ProviderLogin, SaveAction, SaveTarget, VaultState};
 use havenkeys_core::Error;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
@@ -1173,6 +1173,153 @@ fn provider_accounts_are_the_usernames_the_vault_matches_to_the_provider() {
         v.provider_accounts(SsoProvider::Google).err(),
         Some(Error::Locked)
     );
+}
+
+#[test]
+fn sso_accounts_are_the_logins_the_vault_matches_to_the_provider() {
+    let (mut v, _) = sso_vault();
+    for (rev, input) in (7..).zip([
+        login("Google", " Me@Gmail.com ", "pw", "google.com"),
+        login(
+            "Google (work)",
+            "srocha@callix.com.br",
+            "pw",
+            "https://accounts.google.com",
+        ),
+        login("Google, no username", "", "pw", "google.com"),
+        login("Look-alike", "evil@x.com", "pw", "google.com.evil.com"),
+        login("Discord", "samuel", "pw", "discord.com"),
+    ]) {
+        let staged = v.stage_create(input, NOW).unwrap();
+        v.commit_write(staged, rev).unwrap();
+    }
+    let google = v.sso_accounts(SsoProvider::Google).unwrap();
+    let shown: Vec<(&str, &str)> = google
+        .iter()
+        .map(|a| (a.title.as_str(), a.username.as_str()))
+        .collect();
+    // Sorted by title; username trimmed but its case kept; no empty username,
+    // no look-alike, no Typeform "Sign in with" login (saved for typeform.com).
+    assert_eq!(
+        shown,
+        [
+            ("Google", "Me@Gmail.com"),
+            ("Google (work)", "srocha@callix.com.br")
+        ]
+    );
+    assert_eq!(v.sso_accounts(SsoProvider::Discord).unwrap().len(), 1);
+    assert!(v.sso_accounts(SsoProvider::Gitlab).unwrap().is_empty());
+    // The save prompt's account list is built on the same rule.
+    assert_eq!(
+        v.provider_accounts(SsoProvider::Google).unwrap(),
+        vec!["me@gmail.com".to_owned(), "srocha@callix.com.br".to_owned()]
+    );
+    // Never a secret, never the username in Debug output.
+    let json = serde_json::to_string(&google[0]).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let mut keys: Vec<&str> = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort();
+    assert_eq!(keys, ["id", "title", "username"]);
+    assert!(!format!("{:?}", google[0]).contains("Gmail"));
+    v.lock();
+    assert_eq!(
+        v.sso_accounts(SsoProvider::Google).err(),
+        Some(Error::Locked)
+    );
+}
+
+#[test]
+fn sso_accounts_are_capped() {
+    let (mut v, _) = sso_vault();
+    for i in 0..(havenkeys_core::vault::MAX_SSO_PICKER_ACCOUNTS + 5) {
+        let staged = v
+            .stage_create(
+                login(
+                    &format!("G{i:03}"),
+                    &format!("u{i}@gmail.com"),
+                    "pw",
+                    "google.com",
+                ),
+                NOW,
+            )
+            .unwrap();
+        v.commit_write(staged, 10 + i as i64).unwrap();
+    }
+    assert_eq!(
+        v.sso_accounts(SsoProvider::Google).unwrap().len(),
+        havenkeys_core::vault::MAX_SSO_PICKER_ACCOUNTS
+    );
+}
+
+#[test]
+fn provider_login_is_the_one_login_a_run_would_use() {
+    let (mut v, typeform) = sso_vault(); // Typeform signs in with Google as me@gmail.com
+    assert_eq!(v.provider_login(&typeform).unwrap(), ProviderLogin::None);
+
+    let staged = v
+        .stage_create(login("Google", " ME@gmail.com ", "pw", "google.com"), NOW)
+        .unwrap();
+    let google = v.commit_write(staged, 7).unwrap().unwrap().id;
+    assert_eq!(
+        v.provider_login(&typeform).unwrap(),
+        ProviderLogin::One(google)
+    );
+
+    let staged = v
+        .stage_create(
+            login(
+                "Google 2",
+                "me@gmail.com",
+                "pw",
+                "https://accounts.google.com",
+            ),
+            NOW,
+        )
+        .unwrap();
+    let second = v.commit_write(staged, 8).unwrap().unwrap().id;
+    assert_eq!(v.provider_login(&typeform).unwrap(), ProviderLogin::Several);
+
+    // Deleting the extra one makes the link unambiguous again; deleting the
+    // last leaves no link.
+    let staged = v.stage_delete(&second).unwrap();
+    v.commit_write(staged, 9).unwrap();
+    assert_eq!(
+        v.provider_login(&typeform).unwrap(),
+        ProviderLogin::One(google)
+    );
+    let staged = v.stage_delete(&google).unwrap();
+    v.commit_write(staged, 10).unwrap();
+    assert_eq!(v.provider_login(&typeform).unwrap(), ProviderLogin::None);
+
+    // A login without "Sign in with" has no provider login.
+    let plain = plain_login(&mut v);
+    assert_eq!(v.provider_login(&plain).unwrap(), ProviderLogin::None);
+    assert_eq!(
+        v.provider_login(&Uuid::new_v4()).err(),
+        Some(Error::NotFound)
+    );
+    assert_eq!(
+        serde_json::to_string(&ProviderLogin::One(typeform)).unwrap(),
+        format!(r#"{{"kind":"one","id":"{typeform}"}}"#)
+    );
+    assert_eq!(
+        serde_json::to_string(&ProviderLogin::Several).unwrap(),
+        r#"{"kind":"several"}"#
+    );
+    v.lock();
+    assert_eq!(v.provider_login(&typeform).err(), Some(Error::Locked));
+}
+
+fn plain_login(v: &mut havenkeys_core::vault::VaultService) -> Uuid {
+    let staged = v
+        .stage_create(login("Plain", "plain", "pw", "plain.example"), NOW)
+        .unwrap();
+    v.commit_write(staged, 50).unwrap().unwrap().id
 }
 
 #[test]

@@ -45,6 +45,8 @@ pub const UPGRADE_WINDOW_MS: i64 = 5 * 60_000;
 pub const MAX_RECENT_FILLS: usize = 16;
 /// How many provider accounts the "Sign in with" save prompt is offered.
 pub const MAX_PROVIDER_ACCOUNTS: usize = 10;
+/// Most saved logins the editor's "Sign in with" picker lists per provider.
+pub const MAX_SSO_PICKER_ACCOUNTS: usize = 50;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -183,6 +185,32 @@ pub enum SaveTarget<'a> {
     New { title: Option<&'a str> },
     /// Replace this login's password. Its title and username stay.
     Update(&'a Uuid),
+}
+
+/// A login the vault holds for a provider's own sign-in page. No secrets.
+#[derive(Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SsoAccount {
+    pub id: Uuid,
+    pub title: String,
+    pub username: String,
+}
+
+impl std::fmt::Debug for SsoAccount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SsoAccount")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Result of [`VaultService::provider_login`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
+pub enum ProviderLogin {
+    One(Uuid),
+    None,
+    Several,
 }
 
 /// Result of [`VaultService::check_login`].
@@ -1451,22 +1479,81 @@ impl VaultService {
         })
     }
 
-    /// The accounts the vault holds for `provider`: the usernames of logins
-    /// whose URL rules match the provider's own sign-in page, trimmed,
-    /// lowercased, deduplicated and sorted, at most
-    /// [`MAX_PROVIDER_ACCOUNTS`]. The save prompt offers them instead of a
-    /// blank field. No secrets; the same rules decide which login a
-    /// provider page is filled with.
-    pub fn provider_accounts(&self, provider: SsoProvider) -> Result<Vec<String>> {
-        let mut out = std::collections::BTreeSet::new();
+    /// Every login whose URL rules match one of the provider's own sign-in
+    /// origins and that has a username: what a run may fill there. Ordered
+    /// by title, then username. No secrets.
+    fn provider_logins(&self, provider: SsoProvider) -> Result<Vec<SsoAccount>> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
         for origin in provider.origins() {
             for s in self.find_matches(&format!("{origin}/"), None)? {
-                if let Some(u) = normalize_username(s.username.as_deref()) {
-                    out.insert(u);
+                let Some(username) = s
+                    .username
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+                else {
+                    continue;
+                };
+                if seen.insert(s.id) {
+                    out.push(SsoAccount {
+                        id: s.id,
+                        title: s.title.clone(),
+                        username: username.to_owned(),
+                    });
                 }
             }
         }
+        out.sort_by_cached_key(|a| (a.title.to_lowercase(), a.username.to_lowercase(), a.id));
+        Ok(out)
+    }
+
+    /// The editor's "Sign in with" picker: [`Self::provider_logins`], at
+    /// most [`MAX_SSO_PICKER_ACCOUNTS`].
+    pub fn sso_accounts(&self, provider: SsoProvider) -> Result<Vec<SsoAccount>> {
+        let mut out = self.provider_logins(provider)?;
+        out.truncate(MAX_SSO_PICKER_ACCOUNTS);
+        Ok(out)
+    }
+
+    /// The accounts the vault holds for `provider`: the usernames of
+    /// [`Self::provider_logins`], trimmed, lowercased, deduplicated and
+    /// sorted, at most [`MAX_PROVIDER_ACCOUNTS`]. The save prompt offers them
+    /// instead of a blank field.
+    pub fn provider_accounts(&self, provider: SsoProvider) -> Result<Vec<String>> {
+        let out: std::collections::BTreeSet<String> = self
+            .provider_logins(provider)?
+            .iter()
+            .filter_map(|a| normalize_username(Some(&a.username)))
+            .collect();
         Ok(out.into_iter().take(MAX_PROVIDER_ACCOUNTS).collect())
+    }
+
+    /// The provider login a "Sign in with" login's run would fill: the one
+    /// login of [`Self::provider_logins`] whose username equals the saved
+    /// account (trimmed, case-insensitive), other than the item itself.
+    pub fn provider_login(&self, id: &Uuid) -> Result<ProviderLogin> {
+        let item = self.get_item(id)?;
+        let Some(sso) = item.sign_in_with.as_ref() else {
+            return Ok(ProviderLogin::None);
+        };
+        let Some(want) = normalize_username(sso.account.as_deref()) else {
+            return Ok(ProviderLogin::None);
+        };
+        let hits: Vec<Uuid> = self
+            .provider_logins(sso.provider)?
+            .into_iter()
+            .filter(|a| {
+                a.id != *id
+                    && normalize_username(Some(&a.username)).as_deref() == Some(want.as_str())
+            })
+            .map(|a| a.id)
+            .collect();
+        Ok(match hits.as_slice() {
+            [one] => ProviderLogin::One(*one),
+            [] => ProviderLogin::None,
+            _ => ProviderLogin::Several,
+        })
     }
 
     /// Seal a "Sign in with" login the user confirmed in the save prompt.
