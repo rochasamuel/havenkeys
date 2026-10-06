@@ -8,7 +8,8 @@
 //   pnpm ui:check                 build both apps, then check
 //   pnpm ui:check --no-build      reuse the existing builds
 //   pnpm ui:check --only=menu     scenarios whose name contains "menu"
-//   pnpm ui:check --app=desktop   one app (extension | desktop)
+//   pnpm ui:check --app=desktop   one app (extension | desktop | web)
+//   pnpm ui:check --app=web       the website
 
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
@@ -18,12 +19,14 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { overflowCheck } from "./check.mjs";
 import { extensionScenarios, renderExtension } from "./extension.mjs";
+import { webPages, webSizes, webPath } from "./web.mjs";
 import { desktopScenarios, desktopSetup, scrollTo, tauriStub } from "./desktop.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT = join(root, "ui-check-output");
 const EXT_DIST = join(root, "apps/extension/dist/chrome");
 const DESK_DIST = join(root, "apps/desktop/dist");
+const WEB_DIST = join(root, "apps/web/dist");
 
 const args = process.argv.slice(2);
 const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
@@ -48,8 +51,9 @@ function run(cmd, cmdArgs) {
 }
 
 if (build) {
-  if (appFilter !== "desktop") run("pnpm", ["--filter", "@havenkeys/extension", "build"]);
-  if (appFilter !== "extension") run("pnpm", ["--filter", "@havenkeys/desktop", "exec", "vite", "build", "--logLevel", "warn"]);
+  if (!appFilter || appFilter === "extension") run("pnpm", ["--filter", "@havenkeys/extension", "build"]);
+  if (!appFilter || appFilter === "desktop") run("pnpm", ["--filter", "@havenkeys/desktop", "exec", "vite", "build", "--logLevel", "warn"]);
+  if (!appFilter || appFilter === "web") run("pnpm", ["--filter", "@havenkeys/web", "exec", "vite", "build", "--logLevel", "warn"]);
 }
 
 // ---------------------------------------------------------------- static server
@@ -91,6 +95,29 @@ const server = createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
+const webServer = createServer(async (req, res) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  let file = normalize(join(WEB_DIST, decodeURIComponent(url.pathname)));
+  if (!file.startsWith(WEB_DIST)) {
+    res.writeHead(403).end();
+    return;
+  }
+  try {
+    if (!(await stat(file)).isFile()) throw new Error("dir");
+  } catch {
+    // Missing files (e.g. the host's /_vercel analytics script) are 404s, not the app shell.
+    if (extname(file)) {
+      res.writeHead(404).end();
+      return;
+    }
+    file = join(WEB_DIST, "index.html");
+  }
+  res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
+  res.end(await readFile(file));
+});
+await new Promise((resolve) => webServer.listen(0, "127.0.0.1", resolve));
+const webUrl = `http://127.0.0.1:${webServer.address().port}`;
+
 // ---------------------------------------------------------------- run
 
 // A full run starts clean; a filtered one only replaces its own screenshots.
@@ -123,7 +150,7 @@ async function newPage(locale, theme) {
   return { context, page };
 }
 
-if (appFilter !== "desktop") {
+if (!appFilter || appFilter === "extension") {
   for (const scenario of extensionScenarios) {
     if (only && !scenario.name.includes(only)) continue;
     for (const locale of LOCALES) {
@@ -140,7 +167,7 @@ if (appFilter !== "desktop") {
   }
 }
 
-if (appFilter !== "extension") {
+if (!appFilter || appFilter === "desktop") {
   for (const scenario of desktopScenarios) {
     if (only && !scenario.name.includes(only)) continue;
     for (const locale of LOCALES) {
@@ -184,8 +211,37 @@ if (appFilter !== "extension") {
   }
 }
 
+if (!appFilter || appFilter === "web") {
+  for (const page of webPages) {
+    const name = page === "/" ? "home" : page.slice(1);
+    if (only && !name.includes(only)) continue;
+    for (const locale of LOCALES) {
+      for (const size of webSizes) {
+        const { context, page: tab } = await newPage(locale, "dark");
+        const label = `web/${locale}/${size.name}/${name}`;
+        tab.__label = label;
+        await tab.setViewportSize({ width: size.width, height: size.height });
+        // Pin the language so the homepage does not redirect.
+        await tab.addInitScript((l) => localStorage.setItem("hk-locale", l), locale);
+        await tab.goto(`${webUrl}${webPath(page, locale)}`);
+        await tab.evaluate(() => document.fonts.ready);
+        await tab.addStyleTag({ content: STILL });
+        await tab.waitForTimeout(250);
+        const found = await tab.evaluate(overflowCheck);
+        for (const f of found) failures.push({ label, ...f });
+        const file = join(OUT, "web", locale, size.name, `${name}.png`);
+        await mkdir(dirname(file), { recursive: true });
+        await tab.screenshot({ path: file, fullPage: true });
+        shots++;
+        await context.close();
+      }
+    }
+  }
+}
+
 await browser.close();
 server.close();
+webServer.close();
 
 console.log(`ui-check: ${shots} screenshots in ${OUT}`);
 if (failures.length > 0) {
