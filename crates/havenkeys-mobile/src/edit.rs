@@ -843,7 +843,7 @@ mod tests {
                 }],
                 password: SecretUpdate::Set(SecretString::from("hunter2hunter2")),
                 sign_in_with: Some(SignInWith {
-                    provider: SsoProvider::Google,
+                    provider: SsoProvider::Discord,
                     account: Some("ana@example.com".into()),
                 }),
                 sections: Some(vec![SectionInput {
@@ -907,6 +907,10 @@ mod tests {
         assert_eq!(
             o.sign_in_with.as_ref().unwrap().account.as_deref(),
             Some("ana@example.com")
+        );
+        assert_eq!(
+            o.sign_in_with.as_ref().unwrap().provider,
+            SsoProvider::Discord
         );
         let view = v.item_view(id.to_string()).unwrap();
         let custom: Vec<_> = view

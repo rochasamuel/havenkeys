@@ -39,6 +39,11 @@ pub(crate) fn wire_provider(p: CoreProvider) -> WireProvider {
         CoreProvider::Microsoft => WireProvider::Microsoft,
         CoreProvider::Github => WireProvider::Github,
         CoreProvider::Apple => WireProvider::Apple,
+        CoreProvider::Facebook => WireProvider::Facebook,
+        CoreProvider::Discord => WireProvider::Discord,
+        CoreProvider::X => WireProvider::X,
+        CoreProvider::Linkedin => WireProvider::Linkedin,
+        CoreProvider::Gitlab => WireProvider::Gitlab,
     }
 }
 
@@ -110,6 +115,11 @@ pub(crate) fn core_provider(p: WireProvider) -> CoreProvider {
         WireProvider::Microsoft => CoreProvider::Microsoft,
         WireProvider::Github => CoreProvider::Github,
         WireProvider::Apple => CoreProvider::Apple,
+        WireProvider::Facebook => CoreProvider::Facebook,
+        WireProvider::Discord => CoreProvider::Discord,
+        WireProvider::X => CoreProvider::X,
+        WireProvider::Linkedin => CoreProvider::Linkedin,
+        WireProvider::Gitlab => CoreProvider::Gitlab,
     }
 }
 

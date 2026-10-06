@@ -19,10 +19,26 @@ pub enum SsoProvider {
     Microsoft,
     Github,
     Apple,
+    Facebook,
+    Discord,
+    X,
+    Linkedin,
+    Gitlab,
 }
 
 impl SsoProvider {
-    pub const ALL: [SsoProvider; 4] = [Self::Google, Self::Microsoft, Self::Github, Self::Apple];
+    /// Alphabetical by display name: the order the desktop lists them in.
+    pub const ALL: [SsoProvider; 9] = [
+        Self::Apple,
+        Self::Discord,
+        Self::Facebook,
+        Self::Github,
+        Self::Gitlab,
+        Self::Google,
+        Self::Linkedin,
+        Self::Microsoft,
+        Self::X,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -30,9 +46,24 @@ impl SsoProvider {
             Self::Microsoft => "Microsoft",
             Self::Github => "GitHub",
             Self::Apple => "Apple",
+            Self::Facebook => "Facebook",
+            Self::Discord => "Discord",
+            Self::X => "X",
+            Self::Linkedin => "LinkedIn",
+            Self::Gitlab => "GitLab",
         }
     }
 
+    // Origins checked against each provider's developer docs (2026-10-05):
+    // x.com: /i/oauth2/authorize (OAuth 2.0 authorize)
+    // api.x.com: /oauth/authorize (OAuth 1.0a)
+    // twitter.com, api.twitter.com: legacy hosts of the same flows, kept as
+    //   the docs did not show them retired (not confirmed in the docs)
+    // www.facebook.com: /v25.0/dialog/oauth (m.facebook.com: mobile login page,
+    //   not in the docs)
+    // discord.com: /oauth2/authorize
+    // www.linkedin.com: /oauth/v2/authorization
+    // gitlab.com: /oauth/authorize
     /// Exact origins (scheme + host, no port, no trailing slash).
     pub fn origins(self) -> &'static [&'static str] {
         match self {
@@ -43,6 +74,16 @@ impl SsoProvider {
             ],
             Self::Github => &["https://github.com"],
             Self::Apple => &["https://appleid.apple.com"],
+            Self::Facebook => &["https://www.facebook.com", "https://m.facebook.com"],
+            Self::Discord => &["https://discord.com"],
+            Self::X => &[
+                "https://x.com",
+                "https://twitter.com",
+                "https://api.x.com",
+                "https://api.twitter.com",
+            ],
+            Self::Linkedin => &["https://www.linkedin.com"],
+            Self::Gitlab => &["https://gitlab.com"],
         }
     }
 
@@ -51,9 +92,13 @@ impl SsoProvider {
         self.origins().contains(&origin)
     }
 
-    /// A provider named in an export (`"Google"`, `"github"`), case-insensitive.
+    /// A provider named in an export (`"Google"`, `"github"`, `"Twitter"`),
+    /// case-insensitive.
     pub fn from_name(name: &str) -> Option<Self> {
         let n = name.trim();
+        if n.eq_ignore_ascii_case("twitter") {
+            return Some(Self::X);
+        }
         Self::ALL
             .into_iter()
             .find(|p| p.name().eq_ignore_ascii_case(n))
@@ -109,6 +154,54 @@ pub(crate) fn clean_sign_in_with(value: Option<SignInWith>) -> Result<Option<Sig
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_providers_wire_names_and_origins() {
+        for (p, wire, name) in [
+            (SsoProvider::Facebook, "facebook", "Facebook"),
+            (SsoProvider::Discord, "discord", "Discord"),
+            (SsoProvider::X, "x", "X"),
+            (SsoProvider::Linkedin, "linkedin", "LinkedIn"),
+            (SsoProvider::Gitlab, "gitlab", "GitLab"),
+        ] {
+            assert_eq!(serde_json::to_string(&p).unwrap(), format!("\"{wire}\""));
+            assert_eq!(p.name(), name);
+            assert_eq!(SsoProvider::from_name(name), Some(p));
+        }
+        assert!(SsoProvider::Facebook.allows_origin("https://www.facebook.com"));
+        assert!(!SsoProvider::Facebook.allows_origin("https://facebook.com"));
+        assert!(!SsoProvider::Facebook.allows_origin("http://www.facebook.com"));
+        assert!(!SsoProvider::Facebook.allows_origin("https://www.facebook.com.evil.com"));
+        assert!(SsoProvider::Discord.allows_origin("https://discord.com"));
+        assert!(!SsoProvider::Discord.allows_origin("https://evildiscord.com"));
+        assert!(SsoProvider::X.allows_origin("https://x.com"));
+        assert!(SsoProvider::X.allows_origin("https://twitter.com"));
+        assert!(!SsoProvider::X.allows_origin("https://x.com.evil.com"));
+        assert!(SsoProvider::Linkedin.allows_origin("https://www.linkedin.com"));
+        assert!(!SsoProvider::Linkedin.allows_origin("https://linkedin.com.evil.com"));
+        assert!(SsoProvider::Gitlab.allows_origin("https://gitlab.com"));
+        assert!(!SsoProvider::Gitlab.allows_origin("https://gitlab.example.com"));
+        assert_eq!(SsoProvider::from_name(" twitter "), Some(SsoProvider::X));
+    }
+
+    #[test]
+    fn all_is_alphabetical_by_name() {
+        let names: Vec<&str> = SsoProvider::ALL.iter().map(|p| p.name()).collect();
+        assert_eq!(
+            names,
+            [
+                "Apple",
+                "Discord",
+                "Facebook",
+                "GitHub",
+                "GitLab",
+                "Google",
+                "LinkedIn",
+                "Microsoft",
+                "X"
+            ]
+        );
+    }
 
     #[test]
     fn provider_wire_names_and_origins() {

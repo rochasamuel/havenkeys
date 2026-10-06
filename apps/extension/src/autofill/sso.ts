@@ -24,6 +24,11 @@ const NAMES: Record<SsoProvider, readonly string[]> = {
   microsoft: ["microsoft"],
   github: ["github", "git hub"],
   apple: ["apple"],
+  facebook: ["facebook"],
+  discord: ["discord"],
+  x: ["twitter", "x"],
+  linkedin: ["linkedin", "linked in"],
+  gitlab: ["gitlab", "git lab"],
 };
 const JOINERS = ["with", "using", "via", "com", "com a", "com o", "pelo", "pela"];
 const NEGATIVE = [

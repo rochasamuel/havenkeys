@@ -3,13 +3,18 @@
 // this table only to recognise provider pages while saving; a sign-in run
 // continues only into the origins the desktop returns with start_sso.
 
-export type SsoProvider = "google" | "microsoft" | "github" | "apple";
+export type SsoProvider = "google" | "microsoft" | "github" | "apple" | "facebook" | "discord" | "x" | "linkedin" | "gitlab";
 
 export const SSO_PROVIDERS: Readonly<Record<SsoProvider, { name: string; origins: readonly string[] }>> = {
   google: { name: "Google", origins: ["https://accounts.google.com"] },
   microsoft: { name: "Microsoft", origins: ["https://login.microsoftonline.com", "https://login.live.com"] },
   github: { name: "GitHub", origins: ["https://github.com"] },
   apple: { name: "Apple", origins: ["https://appleid.apple.com"] },
+  facebook: { name: "Facebook", origins: ["https://www.facebook.com", "https://m.facebook.com"] },
+  discord: { name: "Discord", origins: ["https://discord.com"] },
+  x: { name: "X", origins: ["https://x.com", "https://twitter.com", "https://api.x.com", "https://api.twitter.com"] },
+  linkedin: { name: "LinkedIn", origins: ["https://www.linkedin.com"] },
+  gitlab: { name: "GitLab", origins: ["https://gitlab.com"] },
 };
 
 export const SSO_PROVIDER_IDS = Object.keys(SSO_PROVIDERS) as readonly SsoProvider[];

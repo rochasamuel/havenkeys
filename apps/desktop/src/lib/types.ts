@@ -19,7 +19,7 @@ export interface UrlRule {
   matchType: MatchType;
 }
 
-export type SsoProvider = "google" | "microsoft" | "github" | "apple";
+export type SsoProvider = "google" | "microsoft" | "github" | "apple" | "facebook" | "discord" | "x" | "linkedin" | "gitlab";
 
 /** How a login signs in on the provider's own page, in place of a password there. */
 export interface SignInWith {

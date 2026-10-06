@@ -1036,6 +1036,11 @@ pub enum SsoProvider {
     Microsoft,
     Github,
     Apple,
+    Facebook,
+    Discord,
+    X,
+    Linkedin,
+    Gitlab,
 }
 
 /// One suggestion. No secrets.

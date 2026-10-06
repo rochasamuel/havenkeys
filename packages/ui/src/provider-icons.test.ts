@@ -3,7 +3,7 @@ import { PROVIDER_ICONS } from "./provider-icons";
 
 describe("provider icons", () => {
   it("has one icon per provider, paths only", () => {
-    expect(Object.keys(PROVIDER_ICONS).sort()).toEqual(["apple", "github", "google", "microsoft"]);
+    expect(Object.keys(PROVIDER_ICONS).sort()).toEqual(["apple", "discord", "facebook", "github", "gitlab", "google", "linkedin", "microsoft", "x"]);
     for (const icon of Object.values(PROVIDER_ICONS)) {
       expect(icon.viewBox).toMatch(/^0 0 \d+ \d+$/);
       for (const s of icon.shapes) {

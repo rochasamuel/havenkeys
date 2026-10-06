@@ -4,8 +4,19 @@
 import type { SecretEdit } from "./secretEdit";
 import type { ItemOverview, SignInWith, SsoProvider } from "./types";
 
-export const PROVIDER_ORDER: SsoProvider[] = ["google", "microsoft", "github", "apple"];
-export const PROVIDER_NAMES: Record<SsoProvider, string> = { google: "Google", microsoft: "Microsoft", github: "GitHub", apple: "Apple" };
+/** Alphabetical by name, as havenkeys-core's `SsoProvider::ALL`. */
+export const PROVIDER_ORDER: SsoProvider[] = ["apple", "discord", "facebook", "github", "gitlab", "google", "linkedin", "microsoft", "x"];
+export const PROVIDER_NAMES: Record<SsoProvider, string> = {
+  apple: "Apple",
+  discord: "Discord",
+  facebook: "Facebook",
+  github: "GitHub",
+  gitlab: "GitLab",
+  google: "Google",
+  linkedin: "LinkedIn",
+  microsoft: "Microsoft",
+  x: "X",
+};
 
 /** Sites where the provider's own login would be saved. Display only. */
 const PROVIDER_DOMAINS: Record<SsoProvider, string[]> = {
@@ -13,6 +24,11 @@ const PROVIDER_DOMAINS: Record<SsoProvider, string[]> = {
   microsoft: ["microsoft.com", "microsoftonline.com", "live.com"],
   github: ["github.com"],
   apple: ["apple.com"],
+  facebook: ["facebook.com"],
+  discord: ["discord.com"],
+  x: ["x.com", "twitter.com"],
+  linkedin: ["linkedin.com"],
+  gitlab: ["gitlab.com"],
 };
 
 function hostOf(url: string): string | null {
