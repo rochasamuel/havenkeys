@@ -10,7 +10,33 @@ Vercel Analytics.
 pnpm --filter @havenkeys/web dev      # http://localhost:5173
 pnpm --filter @havenkeys/web build    # typecheck + production build
 pnpm --filter @havenkeys/web test     # vitest
+pnpm ui:check --app=web               # the site in both languages, at phone and desktop widths
 ```
+
+## Pages
+
+Each page exists in English (`/…`) and Portuguese (`/pt-br/…`); the routes are
+declared once in `apps/web/src/App.tsx`.
+
+| Route | Page |
+| --- | --- |
+| `/` | Home: what HavenKeys is, written for everyday users |
+| `/download` | Download: an account step first, then desktop, Android and the browser extension |
+| `/security` | Security: what is protected and what is not, in plain language |
+| `/self-host` | Self-host: run `havenkeys-server` yourself (Compose bundle, Railway) |
+| `/developers` | Developers: the technical material (architecture, crypto, protocol) |
+| `/privacy`, `/terms`, `/delete-account` | Legal pages |
+
+* **Request an invite.** The hosted server is invite-only. The buttons open a
+  `mailto:` to `invite@havenkeys.net` (`INVITE_EMAIL` in `src/lib/links.ts`),
+  which ImprovMX forwards to the owner's inbox.
+* **Railway button.** `RAILWAY_TEMPLATE_URL` in `apps/web/src/lib/links.ts` is
+  empty until the Railway template is published (`deploy/railway/README.md`).
+  Setting it to the template's URL turns the "Deploy on Railway" button on.
+* **Self-hosting docs.** `docs/self-hosting.md` and `deploy/compose/` back the
+  Self-host page.
+* **Visual check.** `pnpm ui:check --app=web` renders the pages in both
+  languages at phone and desktop widths (add `--no-build` to reuse a build).
 
 ## Languages
 
