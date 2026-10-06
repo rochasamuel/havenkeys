@@ -61,6 +61,7 @@ impl Server {
             trust_forwarded_for: false,
             cors_origin: None,
             locator: None,
+            max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

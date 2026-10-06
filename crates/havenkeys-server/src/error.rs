@@ -17,6 +17,8 @@ pub enum ApiError {
     Conflict,
     InvalidRequest(&'static str),
     TooLarge,
+    /// The write would take the vault past `MAX_VAULT_BYTES` (SV-3).
+    VaultFull,
     RateLimited,
     /// The token belonged to an account that was deleted (spec
     /// 2026-10-05-account-deletion §4.4). Only a holder of the token sees it.
@@ -47,6 +49,11 @@ impl ApiError {
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "too_large",
                 "Request is too large.",
+            ),
+            Self::VaultFull => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "vault_full",
+                "This vault has reached its storage limit.",
             ),
             Self::RateLimited => (
                 StatusCode::TOO_MANY_REQUESTS,

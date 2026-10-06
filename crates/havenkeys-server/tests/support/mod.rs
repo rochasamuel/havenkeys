@@ -22,6 +22,11 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn start() -> Self {
+        Self::start_with_vault_limit(havenkeys_server::limits::MAX_VAULT_BYTES).await
+    }
+
+    /// A server whose vaults may hold at most `max_vault_bytes` of blobs.
+    pub async fn start_with_vault_limit(max_vault_bytes: i64) -> Self {
         let admin_url =
             std::env::var("HAVENKEYS_TEST_DATABASE_URL").unwrap_or_else(|_| DEFAULT_URL.into());
         let db_name = format!("hk_test_{}", Uuid::new_v4().simple());
@@ -37,6 +42,7 @@ impl TestServer {
             trust_forwarded_for: false,
             cors_origin: None,
             locator: None,
+            max_vault_bytes,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

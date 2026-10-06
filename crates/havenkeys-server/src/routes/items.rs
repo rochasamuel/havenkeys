@@ -120,8 +120,14 @@ pub async fn write(
         .await?
         .get(0);
 
+    let before = vault_bytes(&tx, session.vault_id).await?;
     for change in &req.changes {
         apply_change(&tx, session.vault_id, change, revision).await?;
+    }
+    // Under the vault row lock, so concurrent batches cannot both fit.
+    let after = vault_bytes(&tx, session.vault_id).await?;
+    if after > state.max_vault_bytes && after > before {
+        return Err(ApiError::VaultFull);
     }
     tx.commit().await?;
 
@@ -287,3 +293,21 @@ pub async fn fetch(
         serde_json::json!({ "changes": changes, "unanswered": unanswered }),
     ))
 }
+
+/// The bytes of every blob the vault holds. `octet_length` reads a stored
+/// value's size from its header, without loading the value.
+async fn vault_bytes(
+    tx: &deadpool_postgres::Transaction<'_>,
+    vault_id: uuid::Uuid,
+) -> Result<i64, ApiError> {
+    Ok(tx
+        .query_one(
+            "SELECT (coalesce(sum(octet_length(overview)), 0)
+                   + coalesce(sum(octet_length(details)), 0))::bigint
+               FROM items WHERE vault_id = $1",
+            &[&vault_id],
+        )
+        .await?
+        .get(0))
+}
+

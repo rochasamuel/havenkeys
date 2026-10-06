@@ -14,6 +14,12 @@ pub const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 /// applies when parsing one.
 pub const MAX_HEADER_BYTES: usize = 64 * 1024;
 
+/// All of one vault's item blobs together (overviews and details; a deleted
+/// item keeps none). Far above any real vault; it stops
+/// one account filling the server's disk (SV-3). A write that would leave a
+/// vault above it is refused unless it makes the vault smaller.
+pub const MAX_VAULT_BYTES: i64 = 256 * 1024 * 1024;
+
 /// Item changes in one write batch.
 pub const MAX_CHANGES_PER_BATCH: usize = 500;
 

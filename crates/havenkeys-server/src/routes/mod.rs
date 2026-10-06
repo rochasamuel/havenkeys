@@ -38,6 +38,9 @@ pub struct AppState {
     /// Turns a client address into a coarse place name for the pairing
     /// prompt; none when no location database is configured.
     pub locator: Option<std::sync::Arc<crate::locate::Locator>>,
+    /// The most blob bytes one vault may hold: `limits::MAX_VAULT_BYTES`,
+    /// smaller in tests.
+    pub max_vault_bytes: i64,
 }
 
 /// A route anyone may call, without a session: its own, much smaller body

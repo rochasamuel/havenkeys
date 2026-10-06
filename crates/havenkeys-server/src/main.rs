@@ -86,6 +86,7 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
             },
             None => None,
         },
+        max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
     };
     // Expired tombstones of deleted accounts (spec 2026-10-05-account-deletion
     // §4.5): once at start, then daily. A failure is logged by kind and the

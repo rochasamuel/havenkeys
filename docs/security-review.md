@@ -1802,7 +1802,7 @@ No Critical or High findings. Five Medium findings, one of which was found indep
 | DT5 | NSIS pre-install hook ran `taskkill` without a path (binary planting from the installer's folder) | Low | Desktop (Windows installer) | **Fixed** |
 | DT6 | An unreadable `device.json` is silently replaced, discarding a file-stored Secret Key and the device ID | Info | Desktop (device store) | **Fixed** |
 | SV-2 | Pull pages are limited by row count, not bytes; an ordinary vault can permanently exceed the client's 17 MiB cap and sync stops for good | Medium | Server / sync client | Fixed (server: `a_vault_of_big_items_pulls_in_pages_under_the_cap`, `a_fetch_of_big_items_names_what_did_not_fit`; client re-asks `unanswered`) |
-| SV-3 | Any account holder can exhaust the server's memory and disk (no byte bound on pull/fetch, no per-account quota) | Low | Server | Partly fixed: byte-budgeted paging and per-request memory; per-account quota still open (planned) |
+| SV-3 | Any account holder can exhaust the server's memory and disk (no byte bound on pull/fetch, no per-account quota) | Low | Server | **Fixed** |
 | SV-4 | Unauthenticated login is an Argon2id amplifier that can starve the DB connection pool (no wait timeout) | Low | Server (auth) | **Fixed** |
 | SV-5 | Restoring a server backup leaves every replica silently out of step (cursor ahead, ghost items, permanent conflicts) | Low | Server / sync | Open (planned) |
 | SV-6 | The sync client honours system/environment proxies, contrary to its manifest comment | Info | Sync client | Accepted (same-user precondition) |
@@ -1907,7 +1907,8 @@ The hook originally ran `nsExec::Exec 'taskkill /F /IM havenkeys-native-host.exe
 **Fix:** `/v1/sync` and `/v1/items/fetch` cut answers at 12 MiB (whole revisions, at least one), reading blob sizes first and blobs only for rows that go out; fetch names `unanswered` items. Tests: `a_vault_of_big_items_pulls_in_pages_under_the_cap`, `a_fetch_of_big_items_names_what_did_not_fit`, and the `page_len` unit tests.
 **KNOWN?** No — S9 (above) covers per-field limits on pulled items, not page size; `transport.rs`'s comment calling 17 MiB "the largest answer the protocol can legitimately produce" is not accurate given the measurements above.
 
-#### SV-3. No byte bound or per-account quota on pull/fetch (Low, partly fixed)
+#### SV-3. No byte bound or per-account quota on pull/fetch (Low, fixed)
+**Status:** fixed (2026-10-06). The write transaction now sums the vault's blob sizes before and after the batch, under the vault row lock (`octet_length` reads sizes without loading blobs). It refuses with `413 vault_full` a batch that leaves the vault above 256 MiB (`MAX_VAULT_BYTES`) and larger than before, so a vault at its limit can still shrink. Test: `a_vault_stops_growing_at_its_limit_but_can_still_shrink` (`tests/limits.rs`). The number of accounts a server holds is still the operator's to bound (invites).
 **Attack scenario:** any account holder writes about 100 items with ~6 MiB blobs each (each write within the 16 MiB body cap), then calls `/v1/sync?since=0`; the server materializes the whole page (up to 1001 rows) into memory before building JSON — several GB for one request — OOM-killing the container and every account hosted on it.
 **Fixed:** paging and the server's memory use per request (see SV-2). **Still open:** the per-account storage cap enforced in the write transaction (planned).
 
