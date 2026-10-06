@@ -1225,29 +1225,50 @@ fn a2_save_login_cannot_touch_other_sites() {
 /// is refused for lack of a server session (spec 2026-09-20 §8.4).
 #[test]
 fn password_updates_are_limited_per_item() {
-    let f = fixture();
+    let f = online_fixture();
     let url = "https://github.com/";
-    assert!(save(&f, url, None, "one", Some(f.github))["result"].is_null());
+    assert!(error_code(&save(&f, url, None, "one", Some(f.github))).is_none());
     assert_eq!(
         error_code(&save(&f, url, None, "two", Some(f.github))),
         Some("rate_limited")
     );
-    assert_eq!(fill(&f, f.github, url)["result"]["password"], "gh-password");
+    assert_eq!(fill(&f, f.github, url)["result"]["password"], "one");
     // Adding new logins is not affected by the per-item limit.
-    assert!(save(&f, "https://new.example/", None, "x", None)["result"].is_null());
+    assert!(error_code(&save(&f, "https://new.example/", None, "x", None)).is_none());
+}
+
+/// BR-2: a change that fails (no server) or is denied (wrong site) gives
+/// the item's budget back, so the user's retry still goes through.
+#[test]
+fn failed_or_denied_password_updates_do_not_spend_the_item_budget() {
+    let offline = fixture();
+    let url = "https://github.com/";
+    for _ in 0..3 {
+        assert_eq!(
+            error_code(&save(&offline, url, None, "one", Some(offline.github))),
+            Some("offline")
+        );
+    }
+
+    let f = online_fixture();
+    for _ in 0..3 {
+        assert!(error_code(&save(&f, "https://evil.com/", None, "x", Some(f.github))).is_some());
+    }
+    assert!(error_code(&save(&f, url, None, "one", Some(f.github))).is_none());
+    assert_eq!(
+        error_code(&save(&f, url, None, "two", Some(f.github))),
+        Some("rate_limited")
+    );
 }
 
 /// `save_sso` shares `save_login`'s per-item cooldown (server.rs checks both
 /// request kinds under the same `allow_item_update` branch): a second
 /// `save_sso` for the same item inside the interval is rate-limited, and so
 /// is a `save_login` for that same item afterward, whichever request made
-/// the first change. Same offline fixture as
-/// `password_updates_are_limited_per_item`: the limiter runs before the
-/// core, so it still engages even though every save is refused for lack of
-/// a server session.
+/// the first change.
 #[test]
 fn save_sso_shares_the_per_item_limiter() {
-    let f = fixture();
+    let f = online_fixture();
     let url = "https://typeform.com/";
     let save_sso = |account: &str| {
         call(
@@ -1255,7 +1276,7 @@ fn save_sso_shares_the_per_item_limiter() {
             serde_json::json!({"type": "save_sso", "url": url, "provider": "google", "account": account, "itemId": f.typeform}),
         )
     };
-    assert!(save_sso("one@gmail.com")["result"].is_null());
+    assert!(error_code(&save_sso("one@gmail.com")).is_none());
     assert_eq!(error_code(&save_sso("two@gmail.com")), Some("rate_limited"));
     // A save_login for the same item right after still hits the cooldown
     // save_sso just started.

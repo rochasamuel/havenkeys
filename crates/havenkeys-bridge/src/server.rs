@@ -163,7 +163,17 @@ impl Bridge {
             (self.inner.on_lock)();
             return Ok(ResultBody::Lock {});
         }
-        self.check_rate_limits(req)?;
+        let reserved = self.check_rate_limits(req)?;
+        let result = self.handle_limited(req);
+        // BR-2: a password change that was denied or failed does not spend
+        // the item's budget, so a retry after an outage still goes through.
+        if let (Err(_), Some((item, at))) = (&result, reserved) {
+            guard(&self.inner.limiter).release_item_update(item, at);
+        }
+        result
+    }
+
+    fn handle_limited(&self, req: &Request) -> Result<ResultBody, ErrorCode> {
         // Answered in any lock state and without the vault: it carries no
         // secret and returns none. The browser-integration switch is sealed
         // in the vault, so it cannot be read while locked; the rate limit
@@ -188,15 +198,17 @@ impl Bridge {
         result
     }
 
-    /// Spend `req`'s rate-limit tokens, or refuse it.
-    fn check_rate_limits(&self, req: &Request) -> Result<(), ErrorCode> {
+    /// Spend `req`'s rate-limit tokens, or refuse it. A password change also
+    /// reserves its item's budget, returned so a failure can give it back.
+    fn check_rate_limits(&self, req: &Request) -> Result<Option<(Uuid, Instant)>, ErrorCode> {
         if let Some(class) = request_class(req) {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
                 return Err(ErrorCode::RateLimited);
             }
         }
-        // Password changes from the browser: one per item per interval.
-        // Checked before the core, so probing unknown IDs also spends it.
+        // Password changes from the browser: one per item per interval,
+        // reserved before the core runs (so concurrent saves cannot both
+        // pass) and given back by `handle` if the change does not happen.
         if let Request::SaveLogin {
             item_id: Some(id), ..
         }
@@ -204,11 +216,13 @@ impl Bridge {
             item_id: Some(id), ..
         } = req
         {
-            if !guard(&self.inner.limiter).allow_item_update(*id, Instant::now()) {
+            let now = Instant::now();
+            if !guard(&self.inner.limiter).allow_item_update(*id, now) {
                 return Err(ErrorCode::RateLimited);
             }
+            return Ok(Some((*id, now)));
         }
-        Ok(())
+        Ok(None)
     }
 
     /// Run the open-item hook, without holding its mutex while it runs.

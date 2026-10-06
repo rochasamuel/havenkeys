@@ -87,7 +87,9 @@ impl RateLimiter {
         }
     }
 
-    /// May the browser change `item`'s password now? Records the change if so.
+    /// May the browser change `item`'s password now? Reserves the change if
+    /// so; a change that is then denied or fails gives it back with
+    /// `release_item_update`.
     pub fn allow_item_update(&mut self, item: Uuid, now: Instant) -> bool {
         self.updates
             .retain(|_, t| now.saturating_duration_since(*t) < ITEM_UPDATE_INTERVAL);
@@ -96,6 +98,14 @@ impl RateLimiter {
         }
         self.updates.insert(item, now);
         true
+    }
+
+    /// Give back the reservation `allow_item_update(item, at)` made, when
+    /// that change did not happen. A later reservation is left alone.
+    pub fn release_item_update(&mut self, item: Uuid, at: Instant) {
+        if self.updates.get(&item) == Some(&at) {
+            self.updates.remove(&item);
+        }
     }
 }
 
@@ -126,6 +136,20 @@ mod tests {
         assert!(!rl.allow_item_update(a, t0 + Duration::from_secs(60)));
         assert!(rl.allow_item_update(b, t0), "per item");
         assert!(rl.allow_item_update(a, t0 + ITEM_UPDATE_INTERVAL));
+    }
+
+    #[test]
+    fn a_released_update_can_be_retried() {
+        let mut rl = RateLimiter::default();
+        let a = Uuid::new_v4();
+        let t0 = Instant::now();
+        assert!(rl.allow_item_update(a, t0));
+        rl.release_item_update(a, t0);
+        let t1 = t0 + Duration::from_secs(1);
+        assert!(rl.allow_item_update(a, t1));
+        // A stale release does not drop the newer reservation.
+        rl.release_item_update(a, t0);
+        assert!(!rl.allow_item_update(a, t1 + Duration::from_secs(1)));
     }
 
     #[test]
