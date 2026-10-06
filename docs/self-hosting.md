@@ -4,13 +4,17 @@
 
 HavenKeys keeps your encrypted vault on a server you control. The server
 only stores ciphertext and cannot read your passwords. Your desktop and
-Android apps sync through it. This guide gets one running.
+Android apps sync through it. The server does see routing metadata
+(accounts, device names, timing); see [server-sync.md](server-sync.md). This guide gets one running.
 
 ## What you need
 
 **Option A: your own server with Docker.**
 
-* A Linux server with Docker, Docker Compose v2 and `curl`. 1 GB of RAM is
+* A Linux server with Docker ([install guide](https://docs.docker.com/engine/install/)),
+  Docker Compose v2 and `curl`. Your user must be able to run Docker (be in
+  the `docker` group, or use `sudo`).
+* 1 GB of RAM is
   enough. Most providers charge about US$5/month at most. An always-on
   computer at home also works if it is reachable from the internet.
 * A domain or subdomain you control, such as `vault.example.com`.
@@ -41,7 +45,14 @@ done
 chmod +x setup.sh restore.sh backup.sh
 ```
 
+Run every `docker compose` command in this guide from inside the
+`havenkeys` folder.
+
 ### 3. Run the setup
+
+First wait until your domain resolves to the server. If your DNS provider
+proxies traffic (for example Cloudflare's orange cloud), set the record to
+DNS-only so the certificate can be issued.
 
 ```sh
 ./setup.sh
@@ -130,22 +141,37 @@ Take a backup right now:
 docker compose exec backup havenkeys-backup now
 ```
 
-Copy the backups to another machine. For example:
+Copy the backups to another machine. From the `havenkeys` folder, for example:
 
 ```sh
-rsync -a havenkeys/backups/ user@other-host:havenkeys-backups/
+rsync -a backups/ user@other-host:havenkeys-backups/
 ```
 
-**Restore drill.** On a test copy of the bundle (not your live server), run:
+**Restore drill.** A backup you have never restored is a guess. Do this on
+a second machine or a separate folder, never on your live server:
 
-```sh
-./restore.sh backups/havenkeys-YYYY-MM-DD.dump
-```
+1. Download the bundle there (step 2).
+2. Copy your saved `.env` into it. Restoring needs the original
+   `SERVER_SECRET` and database password, which is why `.env` must be backed up.
+3. Run `./setup.sh`. For a drill, use a test subdomain. Without DNS the
+   HTTPS check will fail; that is fine for a drill, and you can run
+   `docker compose up -d` instead.
+4. Copy a dump into its `backups/` folder.
+5. Restore it:
 
-It asks you to type `yes`, stops the server, restores the dump, and starts
-the server again. Then open an app against that copy and check your items.
-If the restore fails, the script tells you the server is stopped; fix the
-problem and run `docker compose start server`.
+   ```sh
+   ./restore.sh backups/havenkeys-YYYY-MM-DD.dump
+   ```
+
+   It asks you to type `yes`, stops the server, restores the dump, and
+   starts the server again.
+6. Check the result: run
+   `docker compose exec server havenkeys-server admin list-accounts`, or
+   point a HavenKeys app at the test server and check your items.
+
+**Warning: running `restore.sh` on your live server replaces all its data.**
+If a restore fails, the script says the server is stopped; fix the problem
+and run `docker compose start server`.
 
 ## Upgrading
 
@@ -155,9 +181,9 @@ Take a backup first (see above). Then:
 docker compose pull && docker compose up -d
 ```
 
-Database migrations run when the server starts. To choose when to upgrade,
-set `HAVENKEYS_VERSION=0.17.0` (or another release) in `.env` instead of
-`latest`.
+Database migrations run when the server starts. Setup wrote
+`HAVENKEYS_VERSION=latest` in `.env`. To choose when to upgrade, change it
+to a release such as `0.17.0`.
 
 ## Troubleshooting
 
@@ -181,9 +207,14 @@ If it says "waiting for the database", the `db` service is not healthy:
 docker compose logs db
 ```
 
-**I lost the invite.** Run `delete-account` for that email and create the
-account again with `new-account`. Only do this if the invite was never
-used: deleting an account that holds data erases that data.
+**I lost the invite.** First check whether the account was ever activated:
+
+```sh
+docker compose exec server havenkeys-server admin list-accounts
+```
+
+If it never was, run `delete-account` for that email and create the account
+again with `new-account`. Deleting an account that holds data erases that data.
 
 ## Security notes
 
