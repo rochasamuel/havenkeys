@@ -2657,7 +2657,7 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-bridge"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "havenkeys-core",
  "havenkeys-protocol",
@@ -2692,7 +2692,7 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aes-gcm",
  "argon2 0.6.0",
@@ -2723,7 +2723,7 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-desktop"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "apple-native-keyring-store",
  "arboard",
@@ -2788,7 +2788,7 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-native-host"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "havenkeys-bridge",
  "havenkeys-core",
@@ -2803,14 +2803,14 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-oslock"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "havenkeys-protocol"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "interprocess",
  "rustix 1.1.5",
@@ -2825,7 +2825,7 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-server"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "argon2 0.5.3",
  "axum",
@@ -2858,7 +2858,7 @@ dependencies = [
 
 [[package]]
 name = "havenkeys-sync-client"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "axum",
  "data-encoding",
