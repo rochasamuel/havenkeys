@@ -30,6 +30,7 @@ fn suggestion(o: &ItemOverview, strength: MatchStrength) -> Suggestion {
         strength,
         account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
         provider: o.sign_in_with.as_ref().map(|s| s.provider),
+        tags: o.tags.clone(),
     }
 }
 

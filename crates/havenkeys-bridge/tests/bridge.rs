@@ -99,13 +99,16 @@ fn build_fixture(writer: Option<()>) -> Fixture {
     .unwrap();
     let staged = v
         .stage_create(
-            item(
-                "GitHub",
-                "octo",
-                "gh-password",
-                "https://github.com",
-                Some("JBSWY3DPEHPK3PXP"),
-            ),
+            ItemInput {
+                tags: Some(vec!["Staging".into()]),
+                ..item(
+                    "GitHub",
+                    "octo",
+                    "gh-password",
+                    "https://github.com",
+                    Some("JBSWY3DPEHPK3PXP"),
+                )
+            },
             NOW,
         )
         .unwrap();
@@ -266,6 +269,17 @@ fn totp(f: &Fixture, id: Uuid, url: &str) -> serde_json::Value {
 
 fn find(f: &Fixture, url: &str) -> serde_json::Value {
     call(f, serde_json::json!({"type": "find_matches", "url": url}))
+}
+
+// A tagged login's suggestion carries its tags; nothing else about it changes.
+#[test]
+fn suggestions_carry_the_logins_tags() {
+    let f = fixture();
+    let m = find(&f, "https://github.com/login");
+    let matches = m["result"]["matches"].as_array().unwrap();
+    assert_eq!(matches[0]["tags"], serde_json::json!(["staging"]));
+    let m = find(&f, "https://bank.example/");
+    assert_eq!(m["result"]["matches"][0]["tags"], serde_json::json!([]));
 }
 
 #[test]

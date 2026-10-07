@@ -149,6 +149,7 @@ pub fn dispatch(
                     has_totp: s.has_totp,
                     strength: strength(s.strength),
                     provider: s.provider.map(wire_provider),
+                    tags: s.tags,
                 })
                 .collect();
             Ok(Dispatched::Done(ResultBody::FindMatches { matches }))

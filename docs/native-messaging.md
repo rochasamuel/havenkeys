@@ -249,12 +249,15 @@ update one, or do nothing, among the logins already saved for that page.
 `Match.provider` (`find_matches`'s result) is `null` for an ordinary login and
 the provider name for a "Sign in with" login; for such an item, `username`
 carries its account when the item has no username of its own.
+`Match.tags`: the login's tags (≤ 20, each ≤ 128 bytes); required. Desktop and
+extension must be the same release: both sides reject a `Match` with an
+unexpected or missing key.
 
 **Responses** answer one request ID and carry exactly one of `result` or
 `error`:
 
 ```json
-{"v":1,"id":7,"result":{"type":"find_matches","matches":[{"id":"…","title":"GitHub","username":"octo","hasTotp":true,"strength":"same_host","provider":null}]}}
+{"v":1,"id":7,"result":{"type":"find_matches","matches":[{"id":"…","title":"GitHub","username":"octo","hasTotp":true,"strength":"same_host","provider":null,"tags":["staging"]}]}}
 {"v":1,"id":8,"result":{"type":"fill_item","username":"octo","password":"…","autoSubmit":true}}
 {"v":1,"id":9,"result":{"type":"get_totp","code":"123456","period":30,"secondsRemaining":12,"autoSubmit":true}}
 {"v":1,"id":11,"result":{"type":"generate_password","password":"…"}}

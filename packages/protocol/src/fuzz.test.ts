@@ -19,7 +19,7 @@ const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
 const SEEDS: unknown[] = [
   { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true } },
-  { v: 1, id: 2, result: { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: null }] } },
+  { v: 1, id: 2, result: { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: null, tags: [] }] } },
   { v: 1, id: 3, result: { type: "fill_item", username: "u", password: "p", autoSubmit: false } },
   { v: 1, id: 4, result: { type: "get_totp", code: "123456", period: 30, secondsRemaining: 3, autoSubmit: false } },
   { v: 1, id: 5, result: { type: "check_login", action: "update", itemId: ID } },

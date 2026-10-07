@@ -16,6 +16,8 @@ import { isIdentityRole, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, type Iden
 export const PROTOCOL_VERSION = 1;
 export const MAX_URL_BYTES = 4096;
 export const MAX_MATCHES = 50;
+export const MAX_MATCH_TAGS = 20;
+export const MAX_MATCH_TAG_BYTES = 4 * 32;
 /** Byte limits for check_login/save_login (see the Rust protocol crate). */
 export const MAX_SECRET_BYTES = 4 * 4096;
 export const MAX_USERNAME_BYTES = 4 * 512;
@@ -154,6 +156,8 @@ export interface Match {
   hasTotp: boolean;
   strength: MatchStrength;
   provider: SsoProvider | null;
+  /** The login's tags, to tell logins for one site apart. */
+  tags: string[];
 }
 
 /** A passkey offered for a page. Never contains a key. */
@@ -390,12 +394,14 @@ const STRENGTHS: readonly MatchStrength[] = ["exact_url", "same_host", "same_sit
 const SAVE_ACTIONS: readonly SaveAction[] = ["add", "update", "unchanged"];
 
 function parseMatch(v: unknown): Match | null {
-  if (!isObj(v) || !hasExactKeys(v, ["id", "title", "username", "hasTotp", "strength", "provider"])) return null;
-  const { id, title, username, hasTotp, strength, provider } = v;
+  if (!isObj(v) || !hasExactKeys(v, ["id", "title", "username", "hasTotp", "strength", "provider", "tags"])) return null;
+  const { id, title, username, hasTotp, strength, provider, tags } = v;
   if (!isStr(id) || !UUID.test(id) || !isStr(title) || !isNullableStr(username) || !isBool(hasTotp)) return null;
   if (!STRENGTHS.includes(strength as MatchStrength)) return null;
   if (provider !== null && !isSsoProvider(provider)) return null;
-  return { id, title, username, hasTotp, strength: strength as MatchStrength, provider };
+  if (!Array.isArray(tags) || tags.length > MAX_MATCH_TAGS) return null;
+  if (!tags.every((t) => isStr(t) && utf8Length(t) <= MAX_MATCH_TAG_BYTES)) return null;
+  return { id, title, username, hasTotp, strength: strength as MatchStrength, provider, tags: [...tags] as string[] };
 }
 
 function parseResult(v: unknown): Result | null {

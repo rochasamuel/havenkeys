@@ -6,10 +6,10 @@ use crate::secret::WireSecret;
 use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CARD_CODE_BYTES, MAX_CARD_FRAMES,
     MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, MAX_CHALLENGE_BYTES,
-    MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES,
-    MAX_PASSWORD_LENGTH, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES,
-    MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES,
-    MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
+    MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES, MAX_MATCH_TAGS,
+    MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS,
+    MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES,
+    MAX_USER_HANDLE_BYTES, MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -761,7 +761,13 @@ impl Response {
             return false;
         }
         match &self.result {
-            Some(ResultBody::FindMatches { matches }) => matches.len() <= MAX_MATCHES,
+            Some(ResultBody::FindMatches { matches }) => {
+                matches.len() <= MAX_MATCHES
+                    && matches.iter().all(|m| {
+                        m.tags.len() <= MAX_MATCH_TAGS
+                            && m.tags.iter().all(|t| t.len() <= MAX_MATCH_TAG_BYTES)
+                    })
+            }
             Some(ResultBody::GeneratorOptions { options }) => options.is_valid(),
             Some(ResultBody::CheckLogin { action, item_id }) => {
                 (*action == SaveAction::Update) == item_id.is_some()
@@ -1054,6 +1060,8 @@ pub struct Match {
     pub strength: MatchStrength,
     #[serde(deserialize_with = "required")]
     pub provider: Option<SsoProvider>,
+    /// The login's tags, to tell several logins for one site apart. Never secret.
+    pub tags: Vec<String>,
 }
 
 impl fmt::Debug for Match {

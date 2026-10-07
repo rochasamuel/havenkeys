@@ -348,6 +348,7 @@ fn too_many_matches_rejected() {
         has_totp: false,
         strength: MatchStrength::SameHost,
         provider: None,
+        tags: vec![],
     };
     let r = Response::ok(
         1,
@@ -607,7 +608,7 @@ fn sso_results_validate() {
     let empty = r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"add","itemId":null,"accounts":[""]}}"#;
     assert!(Outgoing::parse(empty.as_bytes()).is_none());
     let m = format!(
-        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github"}}]}}}}"#
+        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github","tags":[]}}]}}}}"#
     );
     assert!(Outgoing::parse(m.as_bytes()).is_some());
     // `provider` is required, like `account`: a Match missing the key (not
@@ -829,4 +830,43 @@ fn card_values_and_requests_never_debug_print() {
     assert!(!format!("{v:?}").contains("4111"));
     let env = parse(r#"{"v":1,"id":1,"request":{"type":"save_card","url":"https://shop.com/","number":"4111111111111111"}}"#).unwrap();
     assert!(!format!("{env:?}").contains("4111"));
+}
+
+fn one_match(tags: Vec<String>) -> Vec<u8> {
+    use std::ops::Deref;
+    let m = Match {
+        id: Uuid::nil(),
+        title: "t".into(),
+        username: None,
+        has_totp: false,
+        strength: MatchStrength::SameHost,
+        provider: None,
+        tags,
+    };
+    Outgoing::from(Response::ok(
+        1,
+        ResultBody::FindMatches { matches: vec![m] },
+    ))
+    .to_bytes()
+    .unwrap()
+    .deref()
+    .clone()
+}
+
+#[test]
+fn match_tags_within_limits_parse() {
+    let bytes = one_match(vec!["staging".into(), "work".into()]);
+    assert!(Outgoing::parse(&bytes).is_some());
+}
+
+#[test]
+fn too_many_or_too_long_match_tags_rejected() {
+    assert!(Outgoing::parse(&one_match((0..21).map(|i| i.to_string()).collect())).is_none());
+    assert!(Outgoing::parse(&one_match(vec!["x".repeat(4 * 32 + 1)])).is_none());
+}
+
+#[test]
+fn a_match_without_tags_is_rejected() {
+    let raw = r#"{"v":1,"id":1,"result":{"type":"find_matches","matches":[{"id":"00000000-0000-0000-0000-000000000000","title":"t","username":null,"hasTotp":false,"strength":"same_host","provider":null}]}}"#;
+    assert!(Outgoing::parse(raw.as_bytes()).is_none());
 }

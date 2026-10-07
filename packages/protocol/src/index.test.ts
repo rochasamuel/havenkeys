@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { b64urlLength, envelope, MAX_MATCHES, parseIncoming, providersForOrigin } from "./index";
 
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
-const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null };
+const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] };
 
 describe("parseIncoming", () => {
   it("accepts every valid message shape", () => {
@@ -179,8 +179,23 @@ describe("sign in with", () => {
       id: 1,
       result: { type: "check_sso", action: "add", itemId: null, accounts: ["me@gmail.com"] },
     });
-    const m = { id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: "github" };
+    const m = { id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: "github", tags: [] };
     expect(parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m] } })?.kind).toBe("result");
+  });
+  it("parses Match.tags within limits and rejects the rest", () => {
+    const match = (tags: unknown) => ({
+      id: ID, title: "t", username: null,
+      hasTotp: false, strength: "same_host", provider: null, tags,
+    });
+    const res = (m: unknown) => parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m] } });
+    expect(res(match(["staging", "work"]))).not.toBeNull();
+    expect(res(match([]))).not.toBeNull();
+    expect(res(match(Array.from({ length: 21 }, (_, i) => String(i))))).toBeNull();
+    expect(res(match(["x".repeat(129)]))).toBeNull();
+    expect(res(match([1]))).toBeNull();
+    expect(res(match("staging"))).toBeNull();
+    const { tags: _drop, ...noTags } = match([]);
+    expect(res(noTags)).toBeNull();
   });
   it("rejects wrong shapes", () => {
     const bad = [

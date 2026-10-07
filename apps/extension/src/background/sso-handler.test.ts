@@ -7,7 +7,7 @@ import type { FrameRef } from "./inline-handler";
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const top: FrameRef = { tabId: 1, frameId: 0, url: "https://typeform.com/login", origin: "https://typeform.com" };
 const googleFrame = (tabId = 1): FrameRef => ({ tabId, frameId: 0, url: "https://accounts.google.com/o/oauth2/v2", origin: "https://accounts.google.com" });
-const match = { id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google" } as const;
+const match = { id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google", tags: [] } as const;
 
 const START_SSO = { type: "start_sso", provider: "google", account: "me@gmail.com", providerOrigins: ["https://accounts.google.com"], autoChoose: true };
 const tokenOf = (s: { msg: { type: string } } | undefined) => (s!.msg as unknown as { token: string }).token;
@@ -421,7 +421,7 @@ describe("stop", () => {
 });
 
 describe("completing the provider login", () => {
-  const google = (over: object = {}) => ({ id: "9c9e6679-7425-40de-944b-e07fc1f90ae7", title: "Google", username: "Me@Gmail.com", hasTotp: true, strength: "same_host", provider: null, ...over });
+  const google = (over: object = {}) => ({ id: "9c9e6679-7425-40de-944b-e07fc1f90ae7", title: "Google", username: "Me@Gmail.com", hasTotp: true, strength: "same_host", provider: null, tags: [], ...over });
 
   async function toLogin(answers: Record<string, unknown>) {
     const env = setup({ start_sso: START_SSO, ...answers });

@@ -61,6 +61,10 @@ pub const MAX_PROVIDER_ACCOUNTS: usize = 10;
 
 /// `find_matches` never returns more suggestions than this.
 pub const MAX_MATCHES: usize = 50;
+/// Tags on one suggestion (core `tags::MAX_TAGS`).
+pub const MAX_MATCH_TAGS: usize = 20;
+/// One tag, in bytes: 32 characters of up to 4 bytes (core `tags::MAX_TAG_CHARS`).
+pub const MAX_MATCH_TAG_BYTES: usize = 4 * 32;
 /// Generated password length bounds (the core generator's own).
 pub const MIN_PASSWORD_LENGTH: u32 = 8;
 pub const MAX_PASSWORD_LENGTH: u32 = 128;

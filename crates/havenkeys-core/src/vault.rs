@@ -175,6 +175,8 @@ pub struct Suggestion {
     /// The account of a "Sign in with" login (never a secret).
     pub account: Option<String>,
     pub provider: Option<SsoProvider>,
+    /// The login's tags (never secret).
+    pub tags: Vec<String>,
 }
 
 impl std::fmt::Debug for Suggestion {
@@ -1371,6 +1373,7 @@ impl VaultService {
                     strength,
                     account: o.sign_in_with.as_ref().and_then(|s| s.account.clone()),
                     provider: o.sign_in_with.as_ref().map(|s| s.provider),
+                    tags: o.tags.clone(),
                 })
             })
             .collect();
