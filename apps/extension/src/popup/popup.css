@@ -307,6 +307,8 @@ main {
 /* With tags the line is a flex row: the username first, the tags shrink first. */
 .user.with-tags {
   display: flex;
+  min-width: 0;
+  overflow: hidden;
   gap: 4px;
 }
 

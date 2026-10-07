@@ -89,13 +89,13 @@ function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButt
     return row(providerIcon(item.provider), item.title, msg.menu.ssoRow(name, item.username), () => pick({ type: "menu_pick", token: t, itemId: item.id }), {
       title: false,
       detail: item.username === null,
-    }, item.tags);
+    }, kind === "login" ? item.tags : []);
   }
   // A code row names its account too: logins often share a title.
   const detail =
     item.username === null ? (kind === "otp" ? msg.menu.fillCode : msg.common.noUsername) : kind === "otp" ? msg.menu.codeRow(item.username) : item.username;
   const copy = { title: false, detail: item.username === null };
-  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy, item.tags);
+  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy, kind === "login" ? item.tags : []);
 }
 
 function documentList(roles: readonly IdentityRole[]): string {

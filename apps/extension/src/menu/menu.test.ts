@@ -597,4 +597,12 @@ describe("field menu tags", () => {
     await load();
     expect(document.querySelector("button.row .tags")).toBeNull();
   });
+
+  it("shows no tags on a one-time-code row", async () => {
+    const r = ready(["staging"]);
+    (r.value as { kind: string }).kind = "otp";
+    replies = [r];
+    await load();
+    expect(document.querySelector("button.row .tags")).toBeNull();
+  });
 });

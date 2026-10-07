@@ -180,5 +180,16 @@ describe("popup tags", () => {
     expect(document.querySelector(".item .who .user")!.textContent).toBe("admin@acme.example.com");
     expect(document.querySelector(".tags")).toBeNull();
   });
-});
 
+  it("shows the no-username copy with the tags", async () => {
+    replies.popup_state = async () => ({
+      ok: true,
+      value: { kind: "unlocked", site: "acme.example.com", matches: [{ ...match(["staging"]), username: null }], identity: null },
+    });
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelector(".item .who")).not.toBeNull());
+    expect(document.querySelector(".user-name")!.textContent).toBe("No username");
+    expect(document.querySelector(".tags")!.textContent).toBe("\u00b7 staging");
+  });
+});
