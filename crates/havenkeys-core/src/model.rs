@@ -151,7 +151,11 @@ pub enum ItemDetails {
         app_bindings: Vec<AppBinding>,
         /// Vault health checks the user dismissed for this login (spec
         /// 2026-10-07-vault-health §4.8). Carried over by every edit.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[serde(
+            default,
+            skip_serializing_if = "Vec::is_empty",
+            deserialize_with = "crate::health::known_checks"
+        )]
         health_ignored: Vec<crate::health::HealthCheck>,
     },
     SecureNote {
@@ -710,13 +714,53 @@ mod tests {
             health_ignored: Vec::new(),
         })
         .unwrap();
-        assert!(!json.contains("passkeys") && !json.contains("appBindings"));
+        assert!(!json.contains("passkeys"));
+        assert!(!json.contains("app_bindings") && !json.contains("health_ignored"));
         let ov: ItemOverview = serde_json::from_str(
             r#"{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","itemType":"login","title":"t",
                 "hasPassword":true,"hasTotp":false,"hasNotes":false,"createdAt":1,"updatedAt":1}"#,
         )
         .unwrap();
         assert!(!ov.has_passkey);
+    }
+
+    /// A newer app may add a check kind; an older one keeps the kinds it
+    /// knows and still opens the login.
+    #[test]
+    fn unknown_dismissed_checks_are_dropped_not_fatal() {
+        use crate::health::HealthCheck;
+        let d: ItemDetails = serde_json::from_str(
+            r#"{"type":"login","password":"pw","health_ignored":["weak","leaked",7,"two_factor"]}"#,
+        )
+        .unwrap();
+        let ItemDetails::Login {
+            password,
+            health_ignored,
+            ..
+        } = d
+        else {
+            panic!("wrong type")
+        };
+        assert_eq!(password.unwrap().expose(), "pw");
+        assert_eq!(
+            health_ignored,
+            vec![HealthCheck::Weak, HealthCheck::TwoFactor]
+        );
+        let d: ItemDetails =
+            serde_json::from_str(r#"{"type":"login","health_ignored":["weak","leaked"]}"#).unwrap();
+        let ItemDetails::Login { health_ignored, .. } = &d else {
+            panic!("wrong type")
+        };
+        assert_eq!(health_ignored, &vec![HealthCheck::Weak]);
+        // Serialization is unchanged.
+        assert!(serde_json::to_string(&d)
+            .unwrap()
+            .contains(r#""health_ignored":["weak"]"#));
+        // Not a list at all is still an error (a corrupted item).
+        assert!(
+            serde_json::from_str::<ItemDetails>(r#"{"type":"login","health_ignored":"weak"}"#)
+                .is_err()
+        );
     }
 
     #[test]

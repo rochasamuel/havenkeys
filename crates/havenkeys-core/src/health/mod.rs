@@ -33,6 +33,30 @@ pub enum HealthCheck {
     Duplicate,
 }
 
+/// Reads a login's dismissed checks, keeping the kinds this build knows and
+/// dropping the rest, so a check added by a newer app never stops an older
+/// one from opening the login. (Dropped kinds are lost on the next edit
+/// from this device; that only brings the newer check back.)
+pub(crate) fn known_checks<'de, D>(d: D) -> Result<Vec<HealthCheck>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Lenient {
+        Known(HealthCheck),
+        Other(serde::de::IgnoredAny),
+    }
+    let all = Vec::<Lenient>::deserialize(d)?;
+    Ok(all
+        .into_iter()
+        .filter_map(|c| match c {
+            Lenient::Known(c) => Some(c),
+            Lenient::Other(_) => None,
+        })
+        .collect())
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthCounts {
