@@ -10,7 +10,11 @@ pub const MAX_TAG_CHARS: usize = 32;
 /// One tag as stored: trimmed, inner whitespace collapsed, lowercase.
 /// Errors are fixed strings; the input is never echoed.
 pub fn normalize_one(raw: &str) -> Result<String> {
-    let tag = raw.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let tag = raw
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
     if tag.is_empty() {
         return Err(Error::InvalidInput("Tag is empty."));
     }
@@ -18,7 +22,9 @@ pub fn normalize_one(raw: &str) -> Result<String> {
         return Err(Error::InvalidInput("Tag is too long."));
     }
     if tag.chars().any(|c| c.is_control() || c == ',') {
-        return Err(Error::InvalidInput("Tag contains a character that is not allowed."));
+        return Err(Error::InvalidInput(
+            "Tag contains a character that is not allowed.",
+        ));
     }
     Ok(tag)
 }
@@ -26,7 +32,10 @@ pub fn normalize_one(raw: &str) -> Result<String> {
 /// An item's whole tag set: each normalised, deduplicated, sorted, at most
 /// [`MAX_TAGS`].
 pub fn normalize(raw: &[String]) -> Result<Vec<String>> {
-    let mut tags = raw.iter().map(|t| normalize_one(t)).collect::<Result<Vec<_>>>()?;
+    let mut tags = raw
+        .iter()
+        .map(|t| normalize_one(t))
+        .collect::<Result<Vec<_>>>()?;
     tags.sort();
     tags.dedup();
     if tags.len() > MAX_TAGS {
@@ -45,7 +54,10 @@ mod tests {
 
     #[test]
     fn trims_collapses_and_lowercases() {
-        assert_eq!(n(&["  Staging  ", "Dev   Team"]).unwrap(), vec!["dev team", "staging"]);
+        assert_eq!(
+            n(&["  Staging  ", "Dev   Team"]).unwrap(),
+            vec!["dev team", "staging"]
+        );
     }
 
     #[test]
@@ -65,12 +77,20 @@ mod tests {
 
     #[test]
     fn refuses_empty_long_comma_and_control() {
-        assert!(matches!(n(&["   "]), Err(Error::InvalidInput("Tag is empty."))));
-        assert!(matches!(n(&[&"a".repeat(33)]), Err(Error::InvalidInput("Tag is too long."))));
+        assert!(matches!(
+            n(&["   "]),
+            Err(Error::InvalidInput("Tag is empty."))
+        ));
+        assert!(matches!(
+            n(&[&"a".repeat(33)]),
+            Err(Error::InvalidInput("Tag is too long."))
+        ));
         assert!(n(&[&"é".repeat(32)]).is_ok(), "32 chars, not bytes");
         assert!(matches!(
             n(&["a,b"]),
-            Err(Error::InvalidInput("Tag contains a character that is not allowed."))
+            Err(Error::InvalidInput(
+                "Tag contains a character that is not allowed."
+            ))
         ));
         assert!(n(&["a\u{0}b"]).is_err());
         // Newlines and tabs are whitespace: collapsed like spaces.
@@ -86,7 +106,10 @@ mod tests {
         assert_eq!(normalize(&dupes).unwrap().len(), 20);
         let mut over = twenty;
         over.push("t20".into());
-        assert!(matches!(normalize(&over), Err(Error::InvalidInput("Too many tags."))));
+        assert!(matches!(
+            normalize(&over),
+            Err(Error::InvalidInput("Too many tags."))
+        ));
     }
 
     #[test]

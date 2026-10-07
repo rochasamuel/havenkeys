@@ -15,10 +15,15 @@ fn tagged(tags: &[&str]) -> havenkeys_core::model::ItemInput {
 #[test]
 fn tags_are_normalised_and_stored() {
     let (mut vault, _sk) = activated_vault();
-    let staged = vault.stage_create(tagged(&[" Work ", "staging", "WORK"]), NOW).unwrap();
+    let staged = vault
+        .stage_create(tagged(&[" Work ", "staging", "WORK"]), NOW)
+        .unwrap();
     let ov = vault.commit_write(staged, 1).unwrap().unwrap();
     assert_eq!(ov.tags, vec!["staging", "work"]);
-    assert_eq!(vault.get_item(&ov.id).unwrap().tags, vec!["staging", "work"]);
+    assert_eq!(
+        vault.get_item(&ov.id).unwrap().tags,
+        vec!["staging", "work"]
+    );
 }
 
 #[test]
@@ -35,7 +40,9 @@ fn an_update_without_tags_keeps_them() {
     vault.commit_write(staged, 1).unwrap();
 
     // e.g. the extension updating the password: it sends no tags.
-    let staged = vault.stage_update(&id, login("GitHub", "me", "pw2", "github.com"), NOW + 1).unwrap();
+    let staged = vault
+        .stage_update(&id, login("GitHub", "me", "pw2", "github.com"), NOW + 1)
+        .unwrap();
     vault.commit_write(staged, 2).unwrap();
     assert_eq!(vault.get_item(&id).unwrap().tags, vec!["prod"]);
 
@@ -52,7 +59,9 @@ fn search_matches_tags() {
     let (mut vault, _sk) = activated_vault();
     let staged = vault.stage_create(tagged(&["staging"]), NOW).unwrap();
     vault.commit_write(staged, 1).unwrap();
-    let staged = vault.stage_create(login("GitLab", "me", "pw", "gitlab.com"), NOW).unwrap();
+    let staged = vault
+        .stage_create(login("GitLab", "me", "pw", "gitlab.com"), NOW)
+        .unwrap();
     vault.commit_write(staged, 2).unwrap();
 
     let found = vault.search("stag").unwrap();
@@ -82,12 +91,16 @@ fn unknown_overview_fields_survive_a_round_trip() {
 #[test]
 fn an_update_keeps_unknown_overview_fields() {
     let (mut vault, _sk) = activated_vault();
-    let staged = vault.stage_create(login("GitHub", "me", "pw", "github.com"), NOW).unwrap();
+    let staged = vault
+        .stage_create(login("GitHub", "me", "pw", "github.com"), NOW)
+        .unwrap();
     let id = staged.item_id;
     vault.commit_write(staged, 1).unwrap();
     vault.insert_extra_for_tests(&id, "fromTheFuture", serde_json::json!(true));
 
-    let staged = vault.stage_update(&id, login("GitHub", "me", "pw2", "github.com"), NOW + 1).unwrap();
+    let staged = vault
+        .stage_update(&id, login("GitHub", "me", "pw2", "github.com"), NOW + 1)
+        .unwrap();
     vault.commit_write(staged, 2).unwrap();
     assert_eq!(vault.get_item(&id).unwrap().extra["fromTheFuture"], true);
 }
