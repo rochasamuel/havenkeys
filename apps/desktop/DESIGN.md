@@ -398,6 +398,7 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 ### Chips
 - **Pill:** 999px, brass-soft ground, brass-ink text, 11px 600: device and state markers.
 - **Match chip:** outlined pill (line-strong), 11.5px muted: how a URL matches ("Whole site").
+- **Tag chip:** the match chip's outline and size; in the editor it carries a 16px × to remove it; in the detail it is a button that selects the tag in the sidebar. Never brass-filled, never mono, no colour per tag.
 
 ### Cards / Containers
 - **Inset group:** 12px radius, group ground, 1px group-line border, rows inside separated by group-line hairlines; overflow clipped so row highlights meet the corners.
@@ -410,9 +411,12 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 - **Form fields (welcome, settings):** 36 to 40px, 9px radius, field ground; focus as above with a 3px halo.
 - **Switch:** 38 x 22 track, line-strong off, brass on; white thumb that stretches while pressed.
 - **Segmented:** field track, 9px radius; selected segment raised with a hairline and a small shadow.
+- **Tags row (editor):** one editor row labelled Tags: the item's tag chips, then a bare "Add tag" input (Row Is the Field). Typing lists matching vault tags with counts, plus "Create “…”", in the row's own flow (raised ground, 11px radius) because the group clips anything floating. No suggestion is active until an arrow key picks one, so Enter adds what was typed; comma and leaving the field add too; Backspace in an empty field removes the last chip. At 20 tags the input gives way to a muted "20 tags is the limit."
 
 ### Navigation
 The sidebar: brand row with the mark at 22px, a translucent search field (brass halo on focus), sentence-case section headings, 32px nav rows at 7px radius with muted icons and tabular counts. The current row takes the brass wash with bright text and a brass-hi icon. The footer always shows sync state (cloud icon, green or ember) and a lock button with its shortcut (Ctrl L / ⌘L); the lock icon tilts on hover.
+
+A **Tags** section, when any item has a tag, lists each tag A–Z as a nav row with a tag glyph and count; it is a filter like the categories. Selecting one makes it the current row and the list head's title; the section disappears when no item has a tag, and a selected tag that disappears falls back to All items.
 
 ### Toast
 A glass pill centred 22px above the bottom: blurred dark ground in both themes, bright text, a green check or ember alert, lift shadow; rises in and falls away.
@@ -428,6 +432,7 @@ The shield-and-keyhole mark at 72px over the slowly turning guilloche rosette (b
 - **In-page menu:** a 10px card on pane with a line-strong border; 34px head (mark, name, site right-aligned); 46px rows at 8px radius whose hover and keyboard focus take the brass wash, focus adding an inset 1.5px brass ring. Rows slide in 3px with a 30ms stagger.
 - **Save prompt:** the same card at 340 x 138, question in 13.5px 600, detail line, secondary and brass primary buttons right-aligned.
 - **Options page:** a 640px column on the pane with a radial raise: 48px mark, serif 30px h1, and the Settings grammar (group titles, 12px groups of rows, status dots).
+- **Tags on suggestions:** tags follow the username on the same line after a middot, 10.5px and fainter than the username; at most two, then +N; they shrink before the username does. Text, not pills, and only on login rows. Row and frame heights do not change.
 - **Fonts:** the three families ship inside the extension package as Latin woff2 subsets (`src/fonts/fonts.css`), loaded from the extension's own origin.
 
 ### Named Rules

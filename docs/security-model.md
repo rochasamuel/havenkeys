@@ -87,8 +87,11 @@ A device's name is the computer's hostname or the phone's name with its
 platform ("DESKTOP-SAMS (Windows)", "Sam's Pixel (Android)"), so the device
 list tells the user's devices apart; it is sent again at every sign-in.
 
-Everything else — item type, title, username, URLs, timestamps, passwords, TOTP
-configuration, notes, passkeys, and settings — is encrypted. Passkeys add no
+Everything else — item type, title, username, URLs, tags, timestamps,
+passwords, TOTP configuration, notes, passkeys, and settings — is encrypted.
+Tags live inside the sealed item overview with the title and username; the
+extension receives only the tags of logins already matched to the page's
+origin (`Match.tags`), never the vault's tag list. Passkeys add no
 plaintext: the relying-party ID, account name, credential ID, user handle
 and private key are inside the item's encrypted details, and the only new
 overview field, `has_passkey`, is inside the encrypted overview.
@@ -216,7 +219,7 @@ means a live server session, which a locked vault does not have.
 | `lock_vault` | no | no |
 | `change_master_password` | yes (online) | no |
 | `record_activity` | no | no. The only intended way the idle timer is reset |
-| `list_items` (optional search query) | yes | no (title, username, URLs, flags) |
+| `list_items` (optional search query) | yes | no (title, username, URLs, tags, flags) |
 | `get_item` | yes | no (secret fields reported only as *present/absent*) |
 | `reveal_secret` | yes | one field: password, login notes, or note body. Never the TOTP secret |
 | `sso_accounts` | yes | no (id, title, username of the provider's logins, at most 50) |

@@ -311,9 +311,15 @@ Each item is two ciphertexts:
 This satisfies "avoid repeatedly decrypting the whole vault" and "decrypt notes
 only when necessary" without a plaintext index.
 
+Tags (free-form labels, normalised to lowercase, at most 20 per item) are
+part of the overview. Rust has no tag list: desktop and Android compute the
+tags in use, their counts and the tag filter from the overviews they already
+hold, as they do for categories. Saves that do not send tags
+(`ItemInput.tags = None`) keep the stored ones.
+
 ## Search
 
-In-memory, over decrypted overviews (title, username, URL hosts),
+In-memory, over decrypted overviews (title, username, URL hosts, tags),
 case-insensitive substring match. Secure-note bodies and login notes are not
 searched (they live in details blobs). There is no persistent index.
 
@@ -400,3 +406,11 @@ Lock ordering in the desktop process: `vault` → `lock_manager`; the bridge
 takes its own small mutexes (rate limiter, connection list) either before
 the vault or with nothing else held, and calls the lock hook with nothing
 held.
+
+## Known limitations
+
+* **Tags (0.22):** an item edited by a HavenKeys version from before tags
+  loses its tags, because that version rebuilds the overview without them.
+  From 0.22 on, overview fields a version does not know are kept on edit.
+  Desktop and extension must be updated together: each rejects the other's
+  suggestions if `Match` has an unexpected or missing field.

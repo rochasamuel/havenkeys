@@ -1,6 +1,35 @@
 # Item tags — design
 
-Date: 2026-10-07. Status: approved in conversation.
+Date: 2026-10-07. Status: approved in conversation; revised after
+implementation (see "Revisions from planning and implementation" below).
+
+> **Revisions from planning and implementation** (plan
+> `docs/superpowers/plans/2026-10-07-item-tags.md`, "Deviations from the
+> spec"):
+>
+> 1. `ItemInput.tags` is `Option<Vec<String>>`: `None` keeps the stored tags,
+>    `Some` replaces them (the `sections` pattern). Save paths that do not
+>    know about tags (extension save-login, Android direct saves, imports
+>    matching an existing login) send `None` and keep them. On Android only
+>    the editor draft sends tags.
+> 2. No Rust `list_tags` and no tag argument on `list_items`. Desktop and
+>    Android already hold every overview in memory; each UI computes tag
+>    counts and the tag filter from those overviews, as it does category
+>    counts.
+> 3. The extension popup has no search box, so "popup search matches tags"
+>    is dropped.
+>
+> Smaller decisions taken while building:
+>
+> * Bitwarden export folder ids are a UUID v8 built from the first 16 bytes
+>   of SHA-256(tag): stable per tag, no new dependency.
+> * Desktop tag editor: suggestions start with no active option, so Enter
+>   adds the typed text unless an arrow key picked a suggestion; the
+>   suggestion list renders in the row's flow (the group clips anything
+>   floating); typed text is committed when the field loses focus.
+> * Extension: tags show on login rows only (not on OTP rows).
+> * Android: the Add tag field also commits on blur and on Save, and a Plus
+>   button adds; the kit's `InsetGroupScope.row` takes an optional key.
 
 ## 1. Goal
 
@@ -27,7 +56,7 @@ mode that hides items.
 | Tag vocabulary | Free-form; no separate registry. The vault's tag set is the union of item tags |
 | Case | Normalised to lowercase |
 | Colours | None (both DESIGN.md files forbid a second accent) |
-| Where stored | Inside the sealed `ItemOverview`; no server or SQLite change |
+| Where stored | Inside the sealed `ItemOverview`; no server or SQLite change. `ItemInput.tags`: `None` keeps the stored tags, `Some` replaces them |
 | Older clients | An edit from an older version drops the item's tags; documented, not worked around. From this version, unknown overview fields survive edits |
 | Import | Bitwarden folders, CSV `folder`/`grouping`, 1Password tags → tags |
 | Export | Bitwarden JSON: first tag → folder. Backup: automatic. CSV: unchanged |
@@ -43,9 +72,10 @@ the title and username (§36), and autofill authorization is unchanged.
 * `ItemOverview` (`crates/havenkeys-core/src/model.rs`) gains
   `#[serde(default)] tags: Vec<String>`. It is sealed with the rest of the
   overview, so the server and the local `items` table see nothing new.
-* `ItemInput` gains `#[serde(default)] tags: Vec<String>`; `build_item`
-  normalises them and writes them into the overview. On update, the tags in
-  the input replace the stored ones (clients always send the full set).
+* `ItemInput` gains `#[serde(default)] tags: Option<Vec<String>>`;
+  `build_item` normalises them and writes them into the overview. On update,
+  `Some` replaces the stored tags and `None` keeps them, so save paths that
+  do not know about tags cannot erase them.
 * Items written before this version read as `tags: []`. No migration.
 
 ### 3.2 Normalisation (`crates/havenkeys-core/src/tags.rs`)
@@ -64,11 +94,11 @@ a character that is not allowed.") and never echo the input.
 
 ### 3.3 Reads
 
-* `list_tags() -> Vec<{ name, count }>`: every tag in use across live items,
-  sorted by name, with how many items carry it. Computed in memory from the
-  decrypted overviews while unlocked; nothing is cached on disk.
-* `list_items(query, tag: Option<String>)`: the tag filter is an exact match
-  on the normalised tag, applied together with the search query.
+* Rust exposes no tag list and no tag filter. Desktop and Android already
+  hold every item overview in memory while unlocked; each UI computes the
+  tags in use (sorted by name, with counts) and the tag filter (an exact
+  match on the normalised tag, combined with the search query) from those
+  overviews, as it does for categories. Nothing is cached on disk.
 * `search` also matches a query against an item's tags (same substring rule
   as titles).
 
@@ -135,7 +165,8 @@ No colours per tag.
 * Frame geometry does not change (Fixed Frame Rule: rows stay 46px; no
   change to `content/frames.ts`). On overflow the tag text is what gets
   truncated, never the username.
-* The popup's site rows do the same; the popup's search also matches tags.
+* The popup's site rows do the same. (The popup has no search box.)
+* Tags show on login rows only, not on one-time-code rows.
 * The extension only receives the tags of logins already matched to the
   current origin. It never receives the vault's tag list.
 
@@ -152,12 +183,10 @@ No colours per tag.
 
 ## 5. Interfaces
 
-* **Tauri:** `list_items` gains an optional `tag`; new `list_tags` command
-  (added to the capability allowlist). Item DTOs carry `tags`; the item input
-  DTO accepts `tags`.
+* **Tauri:** no new command. Item DTOs carry `tags`; the item input DTO
+  accepts an optional `tags` (absent keeps the stored ones).
 * **UniFFI (`havenkeys-mobile`):** `ItemSummary` and the editor input record
-  gain `tags`; `list_tags()` and a tag filter on `list_items` are exported.
-  Regenerate the Kotlin bindings.
+  gain `tags`. Regenerate the Kotlin bindings.
 * **Native messaging:** `Match` (`crates/havenkeys-protocol/src/message.rs`)
   gains `tags: Vec<String>`; the response validator caps it at 20 entries of
   32 characters. The TS validator in `packages/protocol/src/index.ts` adds
@@ -201,8 +230,8 @@ No colours per tag.
 
 * **Rust core:** normalisation (case, whitespace, duplicates, 32-char and
   20-tag limits, control characters, comma, Unicode lowercase); errors never
-  contain the input; `list_tags` counts and exclusion of deleted items; tag
-  filter combined with a query; search matching tags; `extra` overview
+  contain the input; `None` keeps and `Some` replaces stored tags; search
+  matching tags; `extra` overview
   fields survive `stage_update`; items without the field read as `[]`.
 * **Import/export:** each importer's folder/tag mapping, nested folders,
   invalid values falling back to notes; Bitwarden export's folders and
@@ -210,10 +239,11 @@ No colours per tag.
 * **Protocol:** Rust and TS `Match` accept tags within limits and reject
   oversized lists or tags; extend the protocol fuzz targets with the field.
 * **Desktop (TS):** the tag editor (add by Enter/comma, remove, Backspace,
-  suggestions, 32/20 limits), sidebar section appears/disappears, selecting a
-  tag filters the list, detail pill selects the tag.
+  suggestions, 32/20 limits), tag counts and the tag filter computed from the
+  overviews, sidebar section appears/disappears, selecting a tag filters the
+  list, detail pill selects the tag.
 * **Extension:** the menu and popup render tags on the username line, cap at
-  2 + "+N", never truncate the username; popup search matches tags.
+  2 + "+N", never truncate the username.
 * **Android:** ViewModel tag list and filter; editor add/remove; screenshot
   tests of the editor, the Tags group and a tag list, light and dark, 360dp
   and 411dp.
