@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import raw from "../data/passkey-sites.json";
+import raw from "../../../../crates/havenkeys-core/data/passkey-sites.json";
 import { findPasskeySite, parsePasskeySites, PASSKEY_SITES, type PasskeySite } from "./passkey-sites";
 
 const site = (name: string, domains: string[], help: string | null = `https://${domains[0]}/help`): PasskeySite => ({ name, domains, passwordless: true, mfa: false, help });

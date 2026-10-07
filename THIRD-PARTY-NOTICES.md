@@ -144,7 +144,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ### Passkeys Directory
 
-`apps/extension/src/data/passkey-sites.json` is derived from the
+`crates/havenkeys-core/data/passkey-sites.json` is derived from the
 [Passkeys Directory by 2factorauth](https://github.com/2factorauth/passkeys)
 (site names, domains, passkey support and documentation links; snapshot of
 commit `b711c588aa0a1cace2afb5b5a20a70810bb0433b`), licensed under
@@ -152,6 +152,18 @@ commit `b711c588aa0a1cace2afb5b5a20a70810bb0433b`), licensed under
 without a valid hostname or passkey support are dropped, non-https
 documentation links are removed, and fields not used by HavenKeys are left
 out. It is embedded in the browser extension package.
+
+### 2FA Directory
+
+`crates/havenkeys-core/data/twofactor-sites.json` is derived from the
+[2FA Directory by 2factorauth](https://github.com/2factorauth/twofactorauth)
+(site names, domains, TOTP support and documentation links; snapshot of
+commit `1d7b66d093c8f9ca6a6afede1d3c62fe01a0e697`), licensed under the MIT
+License (Copyright © 2021 2factorauth and Contributors). Changes: only
+entries that offer TOTP codes with a valid hostname are kept, non-https
+documentation links are removed, and fields not used by HavenKeys are left
+out. Used in: `crates/havenkeys-core/data/twofactor-sites.json` (Vault
+health).
 
 ## Images
 
