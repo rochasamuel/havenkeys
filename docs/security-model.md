@@ -1922,3 +1922,115 @@ Tauri, uniffi or Kotlin layers.
 * Logs: the server logs only `outcome` and ids at `info`; envelopes, tokens,
   claim secrets and keys are never logged, and `PairingKeys`, `ClaimSecret`
   and `PairingPayload` print as `<redacted>`.
+
+## 24. Vault health
+
+Spec: `docs/superpowers/specs/2026-10-07-vault-health-design.md`. No rule of
+`CLAUDE.md` is relaxed.
+
+### 24.1 What it does
+
+A screen (desktop and Android) lists the logins that need attention: weak,
+reused and old passwords, a site that accepts passkeys or one-time codes
+that the login does not use, an `http://` website, and duplicate logins.
+Everything is computed in `havenkeys-core` (`health/`) on the unlocked
+vault. No network access and no third party: leaked-password lookups (Have
+I Been Pwned) are deliberately not implemented.
+
+### 24.2 What the report contains
+
+`HealthReport` holds item IDs, check kinds, group indexes and counts.
+It holds **no** password, strength score, length, hash, title, username
+or URL; the apps already hold the item overviews and join on the ID. The
+`reused_group` and `duplicate_group` numbers are indexes assigned when
+the report is built, ordered by the smallest item ID in each group, so
+the number says nothing about the password. `Debug` on every report type
+is redacted. A test serializes a report and asserts that no password or
+substring of one (4+ characters) appears in it.
+
+What the report does reveal is *which* logins are weak or reused. Anyone
+who can read the unlocked UI's memory can already read the overviews and
+reveal passwords, so this adds no new reader.
+
+### 24.3 Where it lives and when it is dropped
+
+* The report is cached in the unlocked vault state and dropped with it on
+  lock. It is recomputed after any item change (a local write, or a sync
+  pull that changed at least one item; an empty pull does not clear it),
+  after unlock, and when it is older than 10 minutes (`HEALTH_CACHE_MS`),
+  so "old" does not go stale in a long session.
+* The passwords are read under the vault lock into a short-lived snapshot
+  (`health_snapshot`). The lock is released before the slow part (zxcvbn)
+  runs, so fills from the extension or Android Autofill never wait on it.
+  The snapshot is released when the computation ends. The snapshot carries
+  a generation and the session epoch; `store_health` caches the result only
+  if neither moved, so a report computed from a stale snapshot, or across a
+  lock and unlock, is returned to its caller but never cached.
+* Grouping of reused passwords uses a `HashMap` keyed by a borrowed `&str`,
+  dropped before the report is returned. Nothing derived from a password is
+  kept.
+* The desktop `health_report` command deliberately does **not** count as
+  user activity for auto-lock (§16), like `list_items`: the view reloads in
+  the background, and a machine-driven call must not hold the vault open.
+  Reloads happen on item changes, not on search.
+
+### 24.4 zxcvbn and memory
+
+`zxcvbn` (MIT) copies up to 100 characters of each password
+into its own allocations and drops its match list without zeroizing it. This
+is the same limitation as every other heap `String` in the process (§8,
+"Memory handling"): the core cannot control a third-party crate's
+buffers. The passwords it sees are the ones already in the vault's decrypted
+details; the exposure window is the compute (milliseconds per password), and
+the process is the same one that holds the vault key. Accepted and
+documented.
+
+### 24.5 Site directories and help links
+
+* `crates/havenkeys-core/data/passkey-sites.json` (moved from the
+  extension; the extension imports the same file) and
+  `crates/havenkeys-core/data/twofactor-sites.json` (sites listing `totp` in
+  `2factorauth/twofactorauth`) are embedded with `include_str!`, parsed once,
+  and never fetched at runtime. They are refreshed by
+  `scripts/update-passkey-directory.mjs` and
+  `scripts/update-twofactor-directory.mjs` and reviewed like code. An entry
+  that fails validation is dropped, never a panic.
+* A login matches a directory site only through `origin.rs`: the rule's host
+  equals the site's domain or is a subdomain of it, decided on the registrable
+  domain from the Public Suffix List. `evilgithub.com`, `github.com.evil.com`
+  and `github-login.example.com` never match `github.com`.
+* The data is taken unedited from upstream, and neither list has a top-level
+  `google.com` entry (only product subdomains such as `mail.google.com`), so
+  a login saved as `google.com` gets no passkey or 2FA suggestion.
+* "How to enable" links come from the directory entry the core looked up
+  from the login's own URL rules; the UI never passes a URL. Only `https`
+  links are returned; no link is `NotFound`. The desktop's Rust opens it
+  (`open_health_help`); on Android Kotlin hands the string to an `Intent`
+  unchanged. A link is opened only on an explicit click, in the system
+  browser; the desktop never loads a remote page (§41 of the project rules).
+
+### 24.6 Dismissals
+
+A dismissed check is the login's `health_ignored` list, ordinary encrypted
+item data that syncs (§4: the server sees one more ciphertext update, as for
+any edit). It needs the server like every change. It does not change
+`updated_at`, so dismissing does not reorder "recently edited". Only login
+items accept it; any other ID is rejected. Every item editor keeps the field
+unchanged, as it does for `app_bindings`.
+
+### 24.7 Commands
+
+Three allowlisted desktop commands (`health_report`, `set_health_ignored`,
+`open_health_help`) and three `havenkeys-mobile` calls (`healthReport`,
+`setHealthIgnored`, `healthHelpUrl`). A locked vault returns `Locked`; errors
+carry no item content. Native messaging and the extension are not touched.
+
+### 24.8 Known limitations
+
+* Group indexes are assigned before dismissals, so after some members of a
+  reused or duplicate group are dismissed a chip can show fewer members than
+  the group has (the UIs never show fewer than 2 / 1).
+* An imported login's `created_at` is the import time unless the format
+  carried one, so "old" under-reports for imports.
+* "Weak" is zxcvbn's estimate, not a guarantee; a passphrase it scores 3 can
+  still be guessable by someone who knows the user.

@@ -317,6 +317,28 @@ In-memory, over decrypted overviews (title, username, URL hosts),
 case-insensitive substring match. Secure-note bodies and login notes are not
 searched (they live in details blobs). There is no persistent index.
 
+## Vault health
+
+`crates/havenkeys-core/src/health/` computes the seven checks (weak,
+reused, old, passkey available, two-factor available, unsecured website,
+duplicates) over the unlocked vault. `mod.rs` holds the report types and
+`compute`; `directory.rs` parses and looks up the two bundled site
+directories; `vault.rs` is the `VaultService` side (snapshot, cache,
+dismissal staging). The directories are plain JSON in
+`crates/havenkeys-core/data/` (`passkey-sites.json`,
+`twofactor-sites.json`), embedded with `include_str!`, and refreshed by
+`scripts/update-passkey-directory.mjs` and
+`scripts/update-twofactor-directory.mjs`; the extension imports the same
+passkey file.
+
+The client computes off the vault lock: `HavenClient::health_report`
+(`crates/havenkeys-client/src/health.rs`) returns a fresh cached report, or
+takes a snapshot under the lock, releases it, runs `compute` (zxcvbn, a few
+milliseconds per password) and stores the result only if no change happened
+meanwhile. The desktop calls it through a `spawn_blocking` Tauri command;
+Android through the coroutine the ViewModels already use. See
+`security-model.md` §24.
+
 ## Auto-lock
 
 `LockManager` is pure logic fed with monotonic and wall-clock timestamps. The

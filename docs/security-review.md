@@ -3328,3 +3328,109 @@ whole message invalid and no provider was offered.
 **Fix:** the bound is `SSO_PROVIDER_IDS.length`; the per-provider origin bound
 in `start_sso` is derived from the table too (`MAX_PROVIDER_ORIGINS`).
 Tests accept 5 and 9 providers and reject 10, duplicates and unknown names.
+
+# Security Review: Vault health (2026-10-07)
+
+Branch `feat/vault-health`. Spec: `docs/superpowers/specs/2026-10-07-vault-health-design.md`;
+model: `security-model.md` §24. Internal review, not an independent audit.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| VH1 | Info | Core `health/` | Report content: item IDs and check kinds only | Mitigated |
+| VH2 | Low | Core `health/vault.rs`, client | Lock/epoch race: a stale report must not be cached | Mitigated |
+| VH3 | Low | Core `health/directory.rs` | Poisoned or hostile directory data | Mitigated |
+| VH4 | Low | Core (`zxcvbn`) | zxcvbn copies passwords without zeroizing | Accepted, documented |
+| VH5 | Info | Dependencies, binaries | New crates and size cost | Recorded |
+| VH6 | Info | Scope | Leaked-password lookup (HIBP) not implemented | By design |
+
+### VH1. Report content (Info, mitigated)
+**Component:** `crates/havenkeys-core/src/health/mod.rs`.
+**Attack:** a secret leaks through the new report that both UIs receive
+(and that crosses the Tauri / FFI boundary).
+**Mitigation:** `HealthReport` holds item IDs, check kinds, group indexes and
+counts. No password, strength score, length, hash, title, username or URL.
+Group indexes are numbered by the smallest item ID in each group, not by the
+password. `Debug` is redacted. A leak test serializes a report and asserts no
+password or 4+ character substring of one appears. The grouping map borrows
+the passwords and is dropped before the report is returned.
+**Remaining:** the report says which logins are weak or reused; a reader of the
+unlocked UI's memory can already reveal the passwords. The report is dropped on
+lock.
+
+### VH2. Lock/epoch race and the vault mutex (Low, mitigated)
+**Component:** `health/vault.rs` (`health_snapshot`, `store_health`),
+`crates/havenkeys-client/src/health.rs`.
+**Attack / failure:** the slow part of the report (zxcvbn) runs outside the
+vault lock so fills never wait on it. A write, a sync pull, or a lock and
+unlock may happen meanwhile; caching the finished report would then show a
+stale picture, or (after a lock) keep decrypted-derived data in a new session.
+**Mitigation:** the snapshot carries the item generation and the session
+epoch; `store_health` caches only when both are unchanged. A stale result is
+returned to its caller but never cached. Writes, a sync pull that changed
+items, and unlock clear the cache; lock drops it. A test proves the vault lock
+is free while the report computes. The desktop `health_report` command does
+not count as user activity (like `list_items`), so the background reload cannot
+defeat auto-lock.
+**Remaining:** a sync pull that changes state some other way than rows,
+deletions or unreadable items would leave a report up to 10 minutes old.
+
+### VH3. Directory poisoning (Low, mitigated)
+**Component:** `crates/havenkeys-core/data/*.json`, `health/directory.rs`,
+`scripts/update-*-directory.mjs`.
+**Attack:** a hostile upstream entry, or a typo-squatting domain, makes the
+app suggest the wrong site or open a malicious help link.
+**Mitigation:** the data is bundled, committed and reviewed like code; it is
+never fetched at runtime. Entries are validated (hostname, name length, https
+URL) and an invalid one is dropped, never a panic (a hostile-entries unit
+test covers this; there is no fuzz target for the directory parsers yet).
+Matching is by registrable domain from the Public Suffix List, not by string,
+so `evilgithub.com` and `github.com.evil.com` never match `github.com`. Help
+links are `https` only, looked up by the core from the login's own URL rules
+(the UI never passes a URL), and opened only on a click, in the system
+browser.
+**Remaining:** a bad entry could still show the wrong "How to enable" page or
+a wrong suggestion. The upstream lists have no top-level `google.com` entry,
+so a `google.com` login gets no suggestion (data taken unedited).
+
+### VH4. zxcvbn copies (Low, accepted)
+**Component:** `zxcvbn` 3.1 (Rust port, MIT).
+**Finding:** it copies up to 100 characters of each password into its own
+allocations and drops its match list without zeroizing.
+**Why accepted:** same class as other heap strings in the process
+(`security-model.md` §8); the window is the compute; no extra copy leaves the
+process; the crate cannot be made to zeroize without forking it.
+
+### VH5. Dependencies and size cost (Info, recorded)
+`zxcvbn` adds transitive dependencies: `chrono`, `time`, `regex`,
+`fancy-regex` 0.18 (next to 0.17, already in the tree), `itertools` 0.14 (next
+to 0.13) and `lazy_static`. Audits at the branch tip: `cargo audit` shows no
+vulnerabilities and the same 2 allowed warnings as before (RUSTSEC-2024-0370
+`proc-macro-error`, RUSTSEC-2024-0429 `glib`); `cargo deny check` reports
+`advisories ok, bans ok, licenses ok, sources ok`; `pnpm audit --prod` finds
+no known vulnerabilities. Nothing is new compared with `main`.
+
+Release sizes, built from `4aa6237` (main before the feature) and from the
+branch tip (`scripts/build-android.sh --release`, `cargo build --release -p
+havenkeys-desktop`, Linux x86_64 host):
+
+| Artifact | Before | After | Change |
+|---|---|---|---|
+| `libhavenkeys_mobile.so` (aarch64, symbols kept, debuginfo stripped) | 11,149,528 B | 14,371,968 B | +3,222,440 B (+28.9%) |
+| `havenkeys-desktop` (Linux) | 18,069,752 B | 21,151,768 B | +3,082,016 B (+17.1%) |
+
+The cost is about three times the spec's "about 1 MB" estimate: it covers the
+zxcvbn dictionaries and its regex/time dependencies plus the 203 KB two-factor
+and 54 KB passkey directories (the two-factor file is above the spec's 50-100
+KB estimate). The Android build strips the `.so` when packaging, so the
+installed cost is smaller than this raw figure.
+
+### VH6. Leaked-password lookup (Info, by design)
+Have I Been Pwned is **not** implemented: it would send password-derived data
+to a third party (CLAUDE.md §1). It would need its own spec and an off-by-default
+setting.
+
+### Other limitations
+Group indexes are numbered before dismissals, so a chip can show a group
+smaller than the real one; the UIs clamp it to at least 2 (reused) and 1
+(duplicate). An imported login's age starts at the import time. A dismissal is
+an item edit and needs the server.
