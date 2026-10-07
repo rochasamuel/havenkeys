@@ -1,0 +1,239 @@
+# Item tags — design
+
+Date: 2026-10-07. Status: approved in conversation.
+
+## 1. Goal
+
+Let the user separate items by context — work, development, staging,
+production, personal — with free-form tags they create on any item and reuse
+on others. Two payoffs:
+
+* **Organise the vault**: filter the desktop and Android lists by a tag;
+  search matches tags.
+* **Tell logins apart while filling**: when one site has several logins
+  (dev, staging, prod admin), the autofill menu and popup show each one's
+  tags, very small, on the username line.
+
+Tags never change *which* logins autofill offers. There is no "active tag"
+mode that hides items.
+
+## 2. Decisions taken
+
+| Question | Decision |
+|---|---|
+| What tags do in autofill | Labels only (option B): shown on the suggestion; no grouping, no scoping |
+| Extension grouping setting | None. Matches per site are usually 1–3; group headers would cost more than they separate |
+| Which items | All item types (login, secure note, card, identity) |
+| Tag vocabulary | Free-form; no separate registry. The vault's tag set is the union of item tags |
+| Case | Normalised to lowercase |
+| Colours | None (both DESIGN.md files forbid a second accent) |
+| Where stored | Inside the sealed `ItemOverview`; no server or SQLite change |
+| Older clients | An edit from an older version drops the item's tags; documented, not worked around. From this version, unknown overview fields survive edits |
+| Import | Bitwarden folders, CSV `folder`/`grouping`, 1Password tags → tags |
+| Export | Bitwarden JSON: first tag → folder. Backup: automatic. CSV: unchanged |
+| Protocol compatibility | `Match` gains `tags`; desktop and extension ship together in one version bump |
+
+No CLAUDE.md amendment is needed: tags are non-secret metadata sealed like
+the title and username (§36), and autofill authorization is unchanged.
+
+## 3. Data model and rules (Rust core)
+
+### 3.1 Storage
+
+* `ItemOverview` (`crates/havenkeys-core/src/model.rs`) gains
+  `#[serde(default)] tags: Vec<String>`. It is sealed with the rest of the
+  overview, so the server and the local `items` table see nothing new.
+* `ItemInput` gains `#[serde(default)] tags: Vec<String>`; `build_item`
+  normalises them and writes them into the overview. On update, the tags in
+  the input replace the stored ones (clients always send the full set).
+* Items written before this version read as `tags: []`. No migration.
+
+### 3.2 Normalisation (`crates/havenkeys-core/src/tags.rs`)
+
+One function every write path goes through (`build_item`, import):
+
+1. Trim; collapse internal whitespace runs to one space; lowercase
+   (Unicode-aware `to_lowercase`).
+2. Reject: empty, more than 32 characters (counted in `char`s), any control
+   character, or a comma (the editor uses comma as a separator).
+3. Deduplicate and sort.
+4. Reject more than 20 tags on one item.
+
+Errors are fixed strings ("Tag is too long.", "Too many tags.", "Tag contains
+a character that is not allowed.") and never echo the input.
+
+### 3.3 Reads
+
+* `list_tags() -> Vec<{ name, count }>`: every tag in use across live items,
+  sorted by name, with how many items carry it. Computed in memory from the
+  decrypted overviews while unlocked; nothing is cached on disk.
+* `list_items(query, tag: Option<String>)`: the tag filter is an exact match
+  on the normalised tag, applied together with the search query.
+* `search` also matches a query against an item's tags (same substring rule
+  as titles).
+
+### 3.4 Keeping unknown overview fields
+
+`ItemOverview` gets a `#[serde(flatten)] extra: serde_json::Map` catch-all.
+`stage_update` copies `extra` from the stored overview into the rebuilt one,
+so a field added by a future version survives an edit made on this one. This
+does not rescue tags from versions released before it; that gap is accepted
+(section 7).
+
+## 4. UI
+
+Visual language for every surface: a tag is an **outlined muted pill** — the
+desktop's match chip / Android's `pill-outline` — in the label face, never
+mono, never brass-filled (filled brass pills stay reserved for state markers).
+No colours per tag.
+
+### 4.1 Desktop — editor
+
+* One **Tags** row in the item's group (Row Is the Field rule: no box around
+  the input). Existing tags show as pills with a small × button, followed by
+  an inline "Add tag" input.
+* Typing opens a suggestion popover (floating-menu style: raised, 11px
+  radius, lift shadow) listing matching vault tags with their counts, plus a
+  last row "Create "<text>"" when the text is not an existing tag.
+* Enter or comma adds; Backspace in an empty input removes the last tag;
+  arrow keys move through suggestions; Escape closes the popover.
+* The input stops accepting characters at 32. At 20 tags the input is
+  replaced by a muted line ("20 tags is the limit.").
+* Validation errors from Rust show inline under the row, never in a toast.
+
+### 4.2 Desktop — sidebar, list and detail
+
+* The sidebar gains a **Tags** section under the categories: standard 32px
+  nav rows with a tag glyph, the tag name and a tabular count, sorted A–Z.
+  The section is absent when no item has a tag.
+* Selecting a tag works like selecting a category: it becomes the single
+  current row (brass wash), the list head's serif title becomes the tag name,
+  and the search field narrows within it.
+* List rows are unchanged (no chips), keeping the 300px list calm.
+* The detail pane shows a **Tags** row of pills when the item has any;
+  clicking a pill selects that tag in the sidebar.
+
+### 4.3 Android
+
+* The Items tab gains a **Tags** group under the categories, one row per tag
+  with its count; tapping opens a tag list laid out exactly like a category
+  list (28sp serif large title, the same back chevron).
+* The editor gains a **Tags** group modelled on the websites group: one row
+  per tag with a 48dp remove button (pills are markers and have no target),
+  then an **Add tag** row with an inline field; matching suggestions appear
+  as rows below it while typing.
+* Item detail shows the tags as a row of outline pills.
+* Tags are never cut with an ellipsis (Android rule); a long tag
+  wraps.
+
+### 4.4 Extension — in-page menu and popup
+
+* Tags go on the **username line**, after a thin middot, as the smallest and
+  faintest text on the row: one step below the username's size, muted ink.
+  The row reads as the username first: `admin@acme.com · staging`.
+* At most 2 tags, then "+N". Text, not pills.
+* Frame geometry does not change (Fixed Frame Rule: rows stay 46px; no
+  change to `content/frames.ts`). On overflow the tag text is what gets
+  truncated, never the username.
+* The popup's site rows do the same; the popup's search also matches tags.
+* The extension only receives the tags of logins already matched to the
+  current origin. It never receives the vault's tag list.
+
+### 4.5 States
+
+* No tags anywhere: no Tags section on desktop or Android; no tag text in the
+  extension.
+* A tag disappears from the sidebar, the Items tab and suggestions once no
+  item uses it.
+* Offline (read-only): the editor is already gated, so tags cannot change;
+  filtering and search keep working.
+* A desktop tag filter whose tag disappears (last item untagged or deleted)
+  falls back to All items.
+
+## 5. Interfaces
+
+* **Tauri:** `list_items` gains an optional `tag`; new `list_tags` command
+  (added to the capability allowlist). Item DTOs carry `tags`; the item input
+  DTO accepts `tags`.
+* **UniFFI (`havenkeys-mobile`):** `ItemSummary` and the editor input record
+  gain `tags`; `list_tags()` and a tag filter on `list_items` are exported.
+  Regenerate the Kotlin bindings.
+* **Native messaging:** `Match` (`crates/havenkeys-protocol/src/message.rs`)
+  gains `tags: Vec<String>`; the response validator caps it at 20 entries of
+  32 characters. The TS validator in `packages/protocol/src/index.ts` adds
+  `tags` to its exact key list with the same caps. Because both sides check
+  exact keys, the desktop and extension must be released in the same version
+  bump; the release notes say so. `PROTOCOL_VERSION` stays 1, as with earlier
+  `Match` additions.
+
+## 6. Import and export
+
+* **Import:**
+  * Bitwarden JSON: each item's folder name becomes a tag; nested folders
+    (`Work/Staging`) become one tag with the `/` kept (`work/staging`).
+  * CSV: a `folder` or `grouping` column (Bitwarden, LastPass) becomes a tag.
+  * 1Password `.1pux`: the item's tags become tags, and stop being appended
+    to the notes.
+  * A value that fails normalisation (too long, comma, over 20) is not
+    dropped: it is appended to the item's notes as `Tags: …`, as today.
+* **Export:**
+  * Bitwarden JSON: `folders` lists each distinct first tag; an item's
+    `folderId` is its first tag (alphabetical, so deterministic). Other tags
+    are not exported there (Bitwarden allows one folder).
+  * Encrypted backup: `BackupItem` serialises the whole overview, so tags are
+    included and restored without change.
+  * CSV: unchanged (keeps the Chrome column set other managers import).
+
+## 7. Compatibility and limitations
+
+* No server change, no SQLite change, no vault format version bump.
+* An item edited by a HavenKeys version from before this one loses its tags,
+  because that version rebuilds the overview without the field. The owner
+  updates their own devices; this is documented in the release notes and
+  `docs/architecture.md`, not worked around.
+* Desktop/extension version skew breaks suggestions in either direction
+  until both are updated (exact-key validation on both sides).
+* Tags are encrypted at rest and on the server, like titles. The extension
+  sees the tags of matched logins only, as it already sees their titles and
+  usernames.
+
+## 8. Testing
+
+* **Rust core:** normalisation (case, whitespace, duplicates, 32-char and
+  20-tag limits, control characters, comma, Unicode lowercase); errors never
+  contain the input; `list_tags` counts and exclusion of deleted items; tag
+  filter combined with a query; search matching tags; `extra` overview
+  fields survive `stage_update`; items without the field read as `[]`.
+* **Import/export:** each importer's folder/tag mapping, nested folders,
+  invalid values falling back to notes; Bitwarden export's folders and
+  `folderId`; backup round trip keeps tags; CSV output unchanged.
+* **Protocol:** Rust and TS `Match` accept tags within limits and reject
+  oversized lists or tags; extend the protocol fuzz targets with the field.
+* **Desktop (TS):** the tag editor (add by Enter/comma, remove, Backspace,
+  suggestions, 32/20 limits), sidebar section appears/disappears, selecting a
+  tag filters the list, detail pill selects the tag.
+* **Extension:** the menu and popup render tags on the username line, cap at
+  2 + "+N", never truncate the username; popup search matches tags.
+* **Android:** ViewModel tag list and filter; editor add/remove; screenshot
+  tests of the editor, the Tags group and a tag list, light and dark, 360dp
+  and 411dp.
+* **UI review:** `/impeccable` critique of the desktop and Android screens
+  against each DESIGN.md, as in earlier stages.
+
+## 9. Documentation
+
+* `docs/native-messaging.md`: the `Match.tags` field and its limits.
+* `docs/security-model.md`: tags listed with the other sealed overview
+  metadata (not plaintext anywhere).
+* `docs/architecture.md`: the older-client limitation from section 7.
+* `apps/desktop/DESIGN.md` and `apps/android/DESIGN.md`: the tag pill, the
+  Tags sidebar/Items section and the tag editor row.
+
+## 10. Out of scope
+
+* Renaming or deleting a tag across all items (a later Settings action).
+* Tag colours or icons.
+* Nested tag hierarchy beyond the literal `/` in a name.
+* Scoping autofill or the vault to an "active" tag.
+* Grouping suggestions by tag in the extension.
+* Tags in the CSV export.
