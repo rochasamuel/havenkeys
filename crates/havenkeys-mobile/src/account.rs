@@ -137,6 +137,7 @@ mod tests {
         assert!(matches!(v.status().unwrap().state, LockState::Unlocked));
         v.sign_out().unwrap();
         assert!(matches!(v.status().unwrap().state, LockState::Locked));
-        assert!(seen.has("locked:user"));
+        // The lock event is delivered from its own thread.
+        crate::vault::tests::wait_for(|| seen.has("locked:user"));
     }
 }
