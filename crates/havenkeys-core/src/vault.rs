@@ -2164,7 +2164,7 @@ fn dedupe_key(overview: &ItemOverview, details: &ItemDetails) -> [u8; 32] {
 
 /// Digest identifying "the same item" for import de-duplication. Hashed so the
 /// set never holds a second plaintext copy of note bodies.
-fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [u8; 32] {
+pub(crate) fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDetails>) -> [u8; 32] {
     let mut h = Sha256::new();
     let field = |h: &mut Sha256, s: &str| {
         h.update((s.len() as u64).to_le_bytes());
@@ -2250,36 +2250,47 @@ pub(crate) fn build_item(
 
     let details = match item_type {
         ItemType::Login => {
-            let (cur_pw, cur_totp, cur_notes, mut history, passkeys, cur_sections, app_bindings) =
-                match current {
-                    Some(ItemDetails::Login {
-                        password,
-                        totp,
-                        notes,
-                        password_history,
-                        passkeys,
-                        sections,
-                        app_bindings,
-                    }) => (
-                        password,
-                        totp,
-                        notes,
-                        password_history,
-                        passkeys,
-                        sections,
-                        app_bindings,
-                    ),
-                    Some(_) => return Err(Error::Corrupted),
-                    None => (
-                        None,
-                        None,
-                        None,
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                    ),
-                };
+            let (
+                cur_pw,
+                cur_totp,
+                cur_notes,
+                mut history,
+                passkeys,
+                cur_sections,
+                app_bindings,
+                health_ignored,
+            ) = match current {
+                Some(ItemDetails::Login {
+                    password,
+                    totp,
+                    notes,
+                    password_history,
+                    passkeys,
+                    sections,
+                    app_bindings,
+                    health_ignored,
+                }) => (
+                    password,
+                    totp,
+                    notes,
+                    password_history,
+                    passkeys,
+                    sections,
+                    app_bindings,
+                    health_ignored,
+                ),
+                Some(_) => return Err(Error::Corrupted),
+                None => (
+                    None,
+                    None,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                ),
+            };
             let previous = cur_pw.clone();
             let password = password.apply(cur_pw);
             if let Some(p) = &password {
@@ -2312,6 +2323,7 @@ pub(crate) fn build_item(
                 passkeys,
                 sections,
                 app_bindings,
+                health_ignored,
             }
         }
         ItemType::SecureNote => {

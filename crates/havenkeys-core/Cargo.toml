@@ -27,6 +27,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2.5"
 uuid = { version = "1.20", features = ["v4", "v8", "serde"] }
+# Password strength for Vault health (Dropbox's zxcvbn, Rust port by
+# shssoichiro; MIT). No builder feature: we only call `zxcvbn()`.
+zxcvbn = { version = "3.1", default-features = false }
 # --- storage / errors ---
 rusqlite = { version = "0.40", features = ["bundled"] }
 thiserror = "2"

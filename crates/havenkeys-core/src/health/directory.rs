@@ -18,6 +18,7 @@ const MAX_SITES: usize = 20_000;
 const MAX_NAME: usize = 100;
 
 pub(crate) struct Site {
+    #[allow(dead_code)] // shown by the Vault health screen (later task)
     pub(crate) help: Option<String>,
 }
 
@@ -63,25 +64,34 @@ impl Directory {
     /// `require_passwordless`: keep only sites where a passkey replaces the
     /// password (the passkey list); the TOTP list passes `false`.
     pub(crate) fn parse(json: &str, require_passwordless: bool) -> Self {
-        let mut dir = Directory { sites: Vec::new(), by_domain: HashMap::new() };
+        let mut dir = Directory {
+            sites: Vec::new(),
+            by_domain: HashMap::new(),
+        };
         let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(json) else {
             return dir;
         };
         for entry in entries.into_iter().take(MAX_SITES) {
-            let Ok(raw) = serde_json::from_value::<RawSite>(entry) else { continue };
+            let Ok(raw) = serde_json::from_value::<RawSite>(entry) else {
+                continue;
+            };
             if !clean_name(&raw.name) {
                 continue;
             }
             if require_passwordless && raw.passwordless != Some(true) {
                 continue;
             }
-            let Some(list) = raw.domains.as_array() else { continue };
+            let Some(list) = raw.domains.as_array() else {
+                continue;
+            };
             let domains: Vec<String> = list.iter().filter_map(clean_host).collect();
             if domains.is_empty() {
                 continue;
             }
             let idx = dir.sites.len();
-            dir.sites.push(Site { help: clean_help(&raw.help) });
+            dir.sites.push(Site {
+                help: clean_help(&raw.help),
+            });
             for d in domains {
                 dir.by_domain.entry(d).or_insert(idx);
             }
@@ -89,6 +99,7 @@ impl Directory {
         dir
     }
 
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.sites.len()
     }
@@ -112,12 +123,16 @@ impl Directory {
 }
 
 /// Scheme and normalized host of a saved website rule; only http(s).
+#[allow(dead_code)] // used by the snapshot builder (later task)
 pub(crate) fn rule_host(url: &str) -> Option<(String, String)> {
     let url = Url::parse(url).ok()?;
     if !matches!(url.scheme(), "http" | "https") {
         return None;
     }
-    Some((url.scheme().to_owned(), host_key(&url)?.to_ascii_lowercase()))
+    Some((
+        url.scheme().to_owned(),
+        host_key(&url)?.to_ascii_lowercase(),
+    ))
 }
 
 pub(crate) fn passkey_sites() -> &'static Directory {
@@ -175,8 +190,13 @@ mod tests {
     fn passwordless_filter_and_bad_entries_are_dropped() {
         let d = dir();
         assert!(d.lookup("mfa-only.com").is_none());
-        assert!(Directory::parse(SAMPLE, false).lookup("mfa-only.com").is_some());
-        assert!(d.lookup("plain.com").unwrap().help.is_none(), "http help links are dropped");
+        assert!(Directory::parse(SAMPLE, false)
+            .lookup("mfa-only.com")
+            .is_some());
+        assert!(
+            d.lookup("plain.com").unwrap().help.is_none(),
+            "http help links are dropped"
+        );
         assert_eq!(
             d.lookup("github.com").unwrap().help.as_deref(),
             Some("https://docs.github.com/passkeys")

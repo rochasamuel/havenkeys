@@ -124,11 +124,12 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
             passkeys,
             sections,
             app_bindings,
+            health_ignored,
         } => {
             check_history(&password_history)?;
             check_passkeys(&passkeys)?;
             check_bindings(&app_bindings)?;
-            extra = Some((password_history, passkeys, app_bindings));
+            extra = Some((password_history, passkeys, app_bindings, health_ignored));
             ItemInput {
                 username: ov.username.clone(),
                 urls: ov.urls.clone(),
@@ -166,11 +167,12 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
     };
     let (mut overview, mut details) = build_item(id, input, None, ov.created_at, ov.updated_at)?;
     if let (
-        Some((history, keys, bindings)),
+        Some((history, keys, bindings, ignored)),
         ItemDetails::Login {
             password_history,
             passkeys,
             app_bindings,
+            health_ignored,
             ..
         },
     ) = (extra, &mut details)
@@ -179,6 +181,7 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
         *password_history = history;
         *passkeys = keys;
         *app_bindings = bindings;
+        *health_ignored = ignored;
     }
     Ok((overview, details))
 }

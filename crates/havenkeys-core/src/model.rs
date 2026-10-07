@@ -149,6 +149,10 @@ pub enum ItemDetails {
         /// like passkeys, and carried over by every edit.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         app_bindings: Vec<AppBinding>,
+        /// Vault health checks the user dismissed for this login (spec
+        /// 2026-10-07-vault-health §4.8). Carried over by every edit.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        health_ignored: Vec<crate::health::HealthCheck>,
     },
     SecureNote {
         content: SecretString,
@@ -703,6 +707,7 @@ mod tests {
             passkeys: Vec::new(),
             sections: Vec::new(),
             app_bindings: Vec::new(),
+            health_ignored: Vec::new(),
         })
         .unwrap();
         assert!(!json.contains("passkeys") && !json.contains("appBindings"));
