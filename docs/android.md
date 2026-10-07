@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-10-01-android-app-design.md`. Security:
 
 > This software has not undergone an independent security audit.
 
-**Status: Android M4.** Sign in with the Emergency Kit (QR code or typed) or
+**Status: Android M4.** Sign in with the Recovery Sheet (QR code or typed) or
 an invite; approve a new desktop's sign-in by scanning its QR code (Settings →
 "Sign in a new device", behind biometrics; `security-model.md` §23); unlock with the master password or, once turned on, a fingerprint
 or face; browse, search, reveal, copy and read TOTP codes offline; generate
@@ -213,7 +213,7 @@ itself; `adb reverse` forwards it to your machine.
 
 1. Start a server (`docs/deployment.md` §7). It listens on port 8080.
 2. Make an invite: `havenkeys-server admin new-account --email you@example.com`
-   (`docs/deployment.md`), or sign in with an Emergency Kit from an existing
+   (`docs/deployment.md`), or sign in with a Recovery Sheet from an existing
    account.
 3. Forward the phone's port 8080 to your machine's:
 
@@ -269,7 +269,7 @@ Review every added package and certificate before committing.
 Android installs an update only when it is signed with the same key as the
 installed app. The release key is therefore permanent: if it is lost, every
 user has to uninstall HavenKeys (removing the phone's local copy of the
-vault) and sign in again with their Emergency Kit.
+vault) and sign in again with their Recovery Sheet.
 
 Create it once, on your own machine:
 

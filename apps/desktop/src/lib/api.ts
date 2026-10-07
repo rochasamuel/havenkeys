@@ -86,7 +86,7 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 export const api = {
   status: () => call<VaultStatus>("vault_status"),
-  /** `secretKey` only when this device does not have it yet (from the Emergency Kit). */
+  /** `secretKey` only when this device does not have it yet (from the Recovery Sheet). */
   unlock: (password: string, secretKey?: string) =>
     call<VaultStatus>("unlock_vault", { password, secretKey: secretKey?.trim() ? secretKey : null }),
   lock: () => call<void>("lock_vault"),

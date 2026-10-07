@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 impl HavenClient {
     /// The vault stays on the server. The local file is renamed, not
     /// deleted: if the old server is gone, it is the only copy left, and it
-    /// still opens with the master password and the Emergency Kit.
+    /// still opens with the master password and the Recovery Sheet.
     ///
     /// Only while unlocked: the shell is not trusted to gate this, and
     /// locked would let a caller delete the Secret Key for an account

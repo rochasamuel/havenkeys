@@ -9,7 +9,7 @@ import type { IconName } from "../components/Icon";
  * exactly (it is typed as Messages), so a string added here and forgotten
  * there fails the typecheck instead of shipping half-translated.
  *
- * Product names that appear in the app's own UI (Secret Key, Emergency Kit,
+ * Product names that appear in the app's own UI (Secret Key, Recovery Sheet,
  * havenkeys-server) stay in English in every locale, because that is what
  * the user will see on screen.
  */
@@ -107,7 +107,7 @@ export const en = {
     steps: [
       { title: "Install the app", text: "Get HavenKeys for Windows, macOS, Linux or Android." },
       { title: "Get your account", text: "Request an invite to our server, or run your own." },
-      { title: "Print your Emergency Kit", text: "It holds your Secret Key. Keep it somewhere safe: it’s how you get back in on a new device." },
+      { title: "Print your Recovery Sheet", text: "It holds your Secret Key. Keep it somewhere safe: it’s how you get back in on a new device." },
       { title: "Bring your passwords", text: "Import them from your old password manager, or add them as you go: HavenKeys offers to save new ones." },
       { title: "Add the extension, then click", text: "Install it in Chrome or Firefox. On a sign-in page, click the field and pick your login." },
     ],
@@ -188,7 +188,7 @@ export const en = {
       masterLabel: "Master password",
       masterWhere: "Only in your head",
       secretLabel: "Secret Key",
-      secretWhere: "On your devices and your Emergency Kit",
+      secretWhere: "On your devices and your Recovery Sheet",
       argonParam: "128 MiB of memory · 4 passes · 4 lanes",
       hkdfParam: "master key + Secret Key → key-encryption key",
       vaultKey: "Vault key",
@@ -283,7 +283,7 @@ export const en = {
   },
 
   kit: {
-    aria: "Illustration of a HavenKeys Emergency Kit",
+    aria: "Illustration of a HavenKeys Recovery Sheet",
     caption: "Illustration. The key shown is made up.",
   },
 
@@ -355,11 +355,11 @@ export const en = {
 
     paperTitle: "Two secrets. One of them lives on paper.",
     paperP1:
-      "Your master password is the one you remember. Your Secret Key is 128 random bits made on your device when you set up. It’s stored on each of your computers and printed on your Emergency Kit, and it never goes to the server.",
+      "Your master password is the one you remember. Your Secret Key is 128 random bits made on your device when you set up. It’s stored on each of your computers and printed on your Recovery Sheet, and it never goes to the server.",
     paperP2:
       "So a stolen copy of the server’s database isn’t a password-guessing exercise. Without the Secret Key, an attacker has to guess both.",
     paperWarn:
-      "There’s no account recovery. Lose the kit and every device that holds the key, and the vault is gone. That’s the price of nobody else being able to open it.",
+      "There’s no account recovery. Lose the sheet and every device that holds the key, and the vault is gone. That’s the price of nobody else being able to open it.",
 
     ledgerTitle: "What it defends. What it doesn’t.",
     ledgerLede:
@@ -532,14 +532,14 @@ export const en = {
     protectsTitle: "What it protects",
     protects: [
       { title: "Your vault, wherever it’s stored", text: "Passwords, notes, codes and passkeys are locked on your device before they’re saved or sent. The server keeps a copy it has no key for." },
-      { title: "A stolen server", text: "Someone who copies the server’s data still needs your master password and your Secret Key, which never reach the server in a form anyone can read (your Secret Key also lives on your Emergency Kit)." },
+      { title: "A stolen server", text: "Someone who copies the server’s data still needs your master password and your Secret Key, which never reach the server in a form anyone can read (your Secret Key also lives on your Recovery Sheet)." },
       { title: "Fake websites", text: "The extension offers a login only on the site it was saved for, and fills only after you click. Look-alike addresses don’t match." },
       { title: "Accidental leaks", text: "Passwords never show up in logs, notifications or window titles, and copied passwords are cleared from the clipboard." },
     ],
     limitsTitle: "What it can’t do",
     limits: [
       "Protect you from malware already running on your computer while your vault is unlocked.",
-      "Bring back a vault if you lose your Emergency Kit and every device. There’s no account recovery: that’s the price of nobody else holding a key.",
+      "Bring back a vault if you lose your Recovery Sheet and every device. There’s no account recovery: that’s the price of nobody else holding a key.",
       "Restore a server you run yourself that was lost without a backup.",
     ],
     auditTitle: "Honest about where it stands",
@@ -570,7 +570,7 @@ export const en = {
       stepsTitle: "Installing on Android",
       steps: [
         { title: "Install the APK", body: "Download it and open it. Android asks once to allow installing apps from your browser." },
-        { title: "Sign in", body: "Open HavenKeys and scan your Emergency Kit, or use an invite." },
+        { title: "Sign in", body: "Open HavenKeys and scan your Recovery Sheet, or use an invite." },
         { title: "Turn on autofill", body: "In HavenKeys, open Settings → Autofill setup." },
         { title: "Use it in Chrome", body: "Open Settings → Autofill services and choose “Autofill using another service”." },
       ],
@@ -590,7 +590,7 @@ export const en = {
         body: (
           <>
             HavenKeys keeps your locked vault on a server. Request an invite to ours, or{" "}
-            <Link to="/self-host">run your own server</Link>. Then print your Emergency Kit: it’s how you
+            <Link to="/self-host">run your own server</Link>. Then print your Recovery Sheet: it’s how you
             sign in on a new device.
           </>
         ),
@@ -663,7 +663,7 @@ export const en = {
           HavenKeys the application contains no telemetry, no analytics, and no crash reporting.
           Your master password and Secret Key are never sent to the server or to the browser
           extension; to sign in, the app sends the server a key derived from them. Your Secret Key
-          leaves your device only in ways you choose: on your Emergency Kit, and when you enter it
+          leaves your device only in ways you choose: on your Recovery Sheet, and when you enter it
           on another device of your own. Vault keys are generated on your device and never leave it
           unencrypted.
         </p>

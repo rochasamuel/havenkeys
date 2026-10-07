@@ -6,8 +6,8 @@ import type { Messages } from "./en";
 
 /*
  * Português do Brasil. Same shape as en.tsx, enforced by the Messages type.
- * Secret Key, Emergency Kit and havenkeys-server keep their English names:
- * they are what the app itself shows.
+ * Secret Key and havenkeys-server keep their English names: they are what
+ * the app itself shows. Recovery Sheet is "Folha de Recuperação", as in the app.
  */
 
 const GH = "https://github.com/rochasamuel/havenkeys";
@@ -101,7 +101,7 @@ export const ptBR: Messages = {
     steps: [
       { title: "Instale o app", text: "Baixe o HavenKeys para Windows, macOS, Linux ou Android." },
       { title: "Tenha sua conta", text: "Peça um convite para o nosso servidor, ou rode o seu." },
-      { title: "Imprima seu Emergency Kit", text: "Ele guarda sua Secret Key. Deixe-o em lugar seguro: é com ele que você entra num dispositivo novo." },
+      { title: "Imprima sua Folha de Recuperação", text: "Ela guarda sua Secret Key. Deixe-a em lugar seguro: é com ela que você entra num dispositivo novo." },
       { title: "Traga suas senhas", text: "Importe do seu gerenciador antigo, ou adicione aos poucos: o HavenKeys oferece para salvar as novas." },
       { title: "Adicione a extensão e clique", text: "Instale no Chrome ou no Firefox. Numa página de login, clique no campo e escolha seu login." },
     ],
@@ -183,7 +183,7 @@ export const ptBR: Messages = {
       masterLabel: "Senha mestra",
       masterWhere: "Só na sua cabeça",
       secretLabel: "Secret Key",
-      secretWhere: "Nos seus dispositivos e no seu Emergency Kit",
+      secretWhere: "Nos seus dispositivos e na sua Folha de Recuperação",
       argonParam: "128 MiB de memória · 4 passadas · 4 faixas",
       hkdfParam: "chave mestra + Secret Key → chave de cifragem de chaves",
       vaultKey: "Chave do cofre",
@@ -274,7 +274,7 @@ export const ptBR: Messages = {
   },
 
   kit: {
-    aria: "Ilustração de um Emergency Kit do HavenKeys",
+    aria: "Ilustração de uma Folha de Recuperação do HavenKeys",
     caption: "Ilustração. A chave mostrada é inventada.",
   },
 
@@ -355,11 +355,11 @@ export const ptBR: Messages = {
 
     paperTitle: "Dois segredos. Um deles mora no papel.",
     paperP1:
-      "A senha mestra é a que você lembra. A Secret Key são 128 bits aleatórios criados no seu dispositivo durante a configuração. Ela fica guardada em cada um dos seus computadores e impressa no seu Emergency Kit, e nunca vai para o servidor.",
+      "A senha mestra é a que você lembra. A Secret Key são 128 bits aleatórios criados no seu dispositivo durante a configuração. Ela fica guardada em cada um dos seus computadores e impressa na sua Folha de Recuperação, e nunca vai para o servidor.",
     paperP2:
       "Assim, uma cópia roubada do banco de dados do servidor não vira um exercício de adivinhar senhas. Sem a Secret Key, o atacante precisa adivinhar as duas.",
     paperWarn:
-      "Não existe recuperação de conta. Se você perder o kit e todos os dispositivos que guardam a chave, o cofre se perde. Esse é o preço de ninguém mais conseguir abri-lo.",
+      "Não existe recuperação de conta. Se você perder a Folha de Recuperação e todos os dispositivos que guardam a chave, o cofre se perde. Esse é o preço de ninguém mais conseguir abri-lo.",
 
     ledgerTitle: "Do que ele protege. Do que não protege.",
     ledgerLede:
@@ -540,14 +540,14 @@ export const ptBR: Messages = {
     protectsTitle: "O que ele protege",
     protects: [
       { title: "Seu cofre, onde quer que esteja", text: "Senhas, notas, códigos e passkeys são trancados no seu dispositivo antes de serem salvos ou enviados. O servidor guarda uma cópia que ele não tem como abrir." },
-      { title: "Um servidor roubado", text: "Quem copiar os dados do servidor ainda precisa da sua senha mestra e da sua Secret Key, que nunca chegam ao servidor de um jeito que alguém consiga ler (a Secret Key também fica no seu Emergency Kit)." },
+      { title: "Um servidor roubado", text: "Quem copiar os dados do servidor ainda precisa da sua senha mestra e da sua Secret Key, que nunca chegam ao servidor de um jeito que alguém consiga ler (a Secret Key também fica na sua Folha de Recuperação)." },
       { title: "Sites falsos", text: "A extensão só oferece um login no site para o qual ele foi salvo, e só preenche depois do seu clique. Endereços parecidos não valem." },
       { title: "Vazamentos acidentais", text: "Senhas nunca aparecem em logs, notificações ou títulos de janela, e senhas copiadas são apagadas da área de transferência." },
     ],
     limitsTitle: "O que ele não consegue fazer",
     limits: [
       "Proteger você de um malware já rodando no seu computador enquanto o cofre está aberto.",
-      "Recuperar um cofre se você perder o Emergency Kit e todos os dispositivos. Não existe recuperação de conta: é o preço de ninguém mais ter uma chave.",
+      "Recuperar um cofre se você perder a Folha de Recuperação e todos os dispositivos. Não existe recuperação de conta: é o preço de ninguém mais ter uma chave.",
       "Restaurar um servidor seu que foi perdido sem backup.",
     ],
     auditTitle: "Honesto sobre onde está",
@@ -578,7 +578,7 @@ export const ptBR: Messages = {
       stepsTitle: "Instalando no Android",
       steps: [
         { title: "Instale o APK", body: "Baixe e abra. O Android pede uma vez para permitir instalar apps pelo navegador." },
-        { title: "Entre", body: "Abra o HavenKeys e escaneie o seu Emergency Kit, ou use um convite." },
+        { title: "Entre", body: "Abra o HavenKeys e escaneie a sua Folha de Recuperação, ou use um convite." },
         { title: "Ative o preenchimento automático", body: "No HavenKeys, abra Configurações → Configurar preenchimento automático." },
         { title: "Use no Chrome", body: "Abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”." },
       ],
@@ -598,7 +598,7 @@ export const ptBR: Messages = {
         body: (
           <>
             O HavenKeys guarda seu cofre trancado num servidor. Peça um convite para o nosso, ou{" "}
-            <Link to="/pt-br/self-host">rode seu próprio servidor</Link>. Depois imprima seu Emergency Kit:
+            <Link to="/pt-br/self-host">rode seu próprio servidor</Link>. Depois imprima sua Folha de Recuperação:
             é com ele que você entra num dispositivo novo.
           </>
         ),
@@ -672,7 +672,7 @@ export const ptBR: Messages = {
           O aplicativo HavenKeys não tem telemetria, analytics nem relatórios de falha. A sua senha
           mestra e a sua Secret Key nunca são enviadas ao servidor nem à extensão do navegador; para
           fazer login, o app envia ao servidor uma chave derivada delas. A sua Secret Key só sai do
-          seu dispositivo do jeito que você escolher: no seu Emergency Kit e quando você a digita em
+          seu dispositivo do jeito que você escolher: na sua Folha de Recuperação e quando você a digita em
           outro dispositivo seu. As chaves do cofre são geradas no seu dispositivo e nunca saem dele
           sem estarem cifradas.
         </p>

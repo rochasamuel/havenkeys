@@ -1,7 +1,7 @@
 //! Secret Key: 128 random bits that, together with the master password,
 //! protect the vault (docs/crypto.md, "Secret Key").
 //!
-//! It never leaves the user's devices except on the Emergency Kit they save.
+//! It never leaves the user's devices except on the Recovery Sheet they save.
 //! A copy of the vault from a sync folder or a backup cannot be unlocked with
 //! the master password alone, so offline guessing needs both.
 //!
@@ -65,7 +65,7 @@ impl SecretKey {
         Self(Zeroizing::new(bytes))
     }
 
-    /// `H1-XXXX-…`, for the Emergency Kit and the device's own storage.
+    /// `H1-XXXX-…`, for the Recovery Sheet and the device's own storage.
     pub fn to_text(&self) -> SecretString {
         let mut body = Zeroizing::new(BASE32_NOPAD.encode(self.0.as_ref()));
         body.push_str(&check_chars(&self.0));

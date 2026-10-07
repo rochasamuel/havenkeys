@@ -47,7 +47,7 @@ import uniffi.havenkeys_mobile.LumaFrame
  * The back camera, handing each frame's brightness plane to [onFrame]. The
  * camera permission is asked for here, when the user chose to scan, and
  * nowhere else. [cameraNeeded] and [cameraUnavailable] say what to do
- * instead of scanning; they default to the Emergency Kit's words.
+ * instead of scanning; they default to the Recovery Sheet's words.
  */
 @Composable
 fun KitScanner(

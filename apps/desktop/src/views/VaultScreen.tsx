@@ -304,7 +304,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     setPane({ kind: "view", id: identity.id });
   }
 
-  // "Show Emergency Kit" on the Account item: Settings, scrolled to the kit.
+  // "Show Recovery Sheet" on the Account item: Settings, scrolled to the kit.
   function showKit() {
     setSection("settings");
     window.requestAnimationFrame(() =>

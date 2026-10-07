@@ -54,7 +54,7 @@
     "typographyMeta": {
       "display": { "displayName": "Display", "purpose": "The unlock headline (30px); the extension options h1." },
       "emphasis": { "displayName": "Brass Italic", "purpose": "The one italic word in \"HavenKeys is locked.\" on the unlock screen, in brass-ink. Nowhere else." },
-      "headline": { "displayName": "Headline", "purpose": "Item title, editor and tool heads, Emergency Kit screen head." },
+      "headline": { "displayName": "Headline", "purpose": "Item title, editor and tool heads, Recovery Sheet screen head." },
       "title": { "displayName": "Pane Title", "purpose": "The list pane title; kit sheet heading; empty-detail line." },
       "title-sm": { "displayName": "Small Serif", "purpose": "Avatar monograms, empty-list line, popup notice." },
       "body": { "displayName": "Body", "purpose": "The app's reading size; 13px in popup and in-page frames, 14px on the options page." },
@@ -66,7 +66,7 @@
       "code": { "displayName": "TOTP Code", "purpose": "The live one-time code, brass-ink, tabular; 15px in the popup." }
     },
     "shadows": [
-      { "name": "lift", "value": "0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45)", "purpose": "Popover menus, the toast, the Emergency Kit sheet (dark theme)." },
+      { "name": "lift", "value": "0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45)", "purpose": "Popover menus, the toast, the Recovery Sheet sheet (dark theme)." },
       { "name": "lift-light", "value": "0 24px 48px -18px rgba(22,35,31,0.28), 0 8px 16px -8px rgba(22,35,31,0.14)", "purpose": "The same floating objects in light theme." },
       { "name": "thumb", "value": "0 1px 3px rgba(0,0,0,0.35)", "purpose": "Switch thumb; the slider thumb uses 0 1px 4px rgba(0,0,0,0.45)." },
       { "name": "segmented-thumb", "value": "0 1px 3px rgba(0,0,0,0.25), inset 0 0 0 1px var(--line-strong)", "purpose": "The selected segment of a segmented control." },
@@ -155,11 +155,11 @@
       "css": ".ds-pill { padding: 1px 8px; border-radius: 999px; background: rgba(201,164,92,0.14); color: #e3c483; font: 600 11px \"Hanken Grotesk Variable\", system-ui, sans-serif; }"
     },
     {
-      "name": "Emergency Kit Sheet",
+      "name": "Recovery Sheet Sheet",
       "kind": "card",
       "refersTo": "kit-sheet",
       "description": "Paper in every theme: the printable sheet with the Secret Key.",
-      "html": "<article class=\"ds-kit\"><header class=\"ds-kit-head\"><h2>Emergency Kit</h2><p>HavenKeys</p></header><div class=\"ds-kit-label\">Secret Key</div><code class=\"ds-kit-key\">A3-4KQ7ZP-9WXM2R-TD8C6N-JH5V</code></article>",
+      "html": "<article class=\"ds-kit\"><header class=\"ds-kit-head\"><h2>Recovery Sheet</h2><p>HavenKeys</p></header><div class=\"ds-kit-label\">Secret Key</div><code class=\"ds-kit-key\">A3-4KQ7ZP-9WXM2R-TD8C6N-JH5V</code></article>",
       "css": ".ds-kit { width: 460px; padding: 36px 40px 30px; border-radius: 6px; background: #fbfcfb; color: #3a4842; box-shadow: 0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45); font-family: \"Hanken Grotesk Variable\", system-ui, sans-serif; } .ds-kit-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 18px; border-bottom: 2px solid #121a17; } .ds-kit-head h2 { margin: 0; font: 500 22px \"Source Serif 4 Variable\", Georgia, serif; color: #121a17; } .ds-kit-head p { margin: 0; font-size: 12px; color: #5a6a63; } .ds-kit-label { margin-bottom: 4px; font-size: 11.5px; font-weight: 650; color: #5a6a63; } .ds-kit-key { display: block; padding: 10px 12px; border-radius: 6px; background: #edf1ee; font: 500 17px \"JetBrains Mono\", ui-monospace, monospace; letter-spacing: 0.04em; color: #121a17; }"
     },
     {
@@ -188,12 +188,12 @@
       "Serif titles; one brass italic, on the unlock headline only.",
       "Mono only for secrets, one-time codes, keys and the literal machine strings around them.",
       "Brass as a fitting: selection wash, the committing action, focus, the live TOTP code.",
-      "The sidebar is forest green in every theme; the Emergency Kit sheet is paper in every theme."
+      "The sidebar is forest green in every theme; the Recovery Sheet sheet is paper in every theme."
     ],
     "rules": [
       { "name": "The One Fitting Rule", "body": "Brass is a fitting, not a finish: selection, the one committing action, focus, and the live TOTP code. In light theme the everyday primary button turns forest (`primary-light`) and brass stays on the unlock arrow, the kit's Done and the fittings.", "section": "colors" },
       { "name": "The Evergreen Sidebar Rule", "body": "The sidebar is forest green in dark, light and system themes. Its text uses the `side-*` inks, never the theme's text tokens.", "section": "colors" },
-      { "name": "The Paper Sheet Rule", "body": "The Emergency Kit sheet is paper in every theme, because it is what gets printed. It is the only light surface in the dark theme and uses only the paper set.", "section": "colors" },
+      { "name": "The Paper Sheet Rule", "body": "The Recovery Sheet sheet is paper in every theme, because it is what gets printed. It is the only light surface in the dark theme and uses only the paper set.", "section": "colors" },
       { "name": "The One Italic Rule", "body": "The serif italic in brass appears once in the app: \"HavenKeys is *locked*.\" on the unlock screen (400, brass-ink). Every other title is roman, with no emphasis.", "section": "typography" },
       { "name": "The Literal String Rule", "body": "JetBrains Mono is for secrets, one-time codes, keys and the literal machine strings around them (Secret Key, setup keys, the server URL). Never for labels, headings or numbers-as-decoration.", "section": "typography" },
       { "name": "The Sentence Case Rule", "body": "Labels, group titles and sidebar headings are sentence case at their size; no all-caps tracked labels.", "section": "typography" },
@@ -209,7 +209,7 @@
       "**Do** build details, forms and settings from inset groups (12px) of hairline-separated rows.",
       "**Do** set titles in Source Serif 4 roman (28px item and editor, 22px pane, 30px unlock).",
       "**Do** keep brass to selection, the one committing action, focus and the live TOTP code.",
-      "**Do** keep the sidebar forest green and the Emergency Kit sheet paper in every theme.",
+      "**Do** keep the sidebar forest green and the Recovery Sheet sheet paper in every theme.",
       "**Do** move on `cubic-bezier(0.32, 0.72, 0, 1)` at 160, 280 or 420ms, and turn every animation off under reduced motion.",
       "**Do** keep in-page frame CSS in lockstep with `content/frames.ts` (34px header, 46px rows, 8px padding, 340 x 138 save prompt).",
       "**Do** animate only the children of the in-page `.card`.",

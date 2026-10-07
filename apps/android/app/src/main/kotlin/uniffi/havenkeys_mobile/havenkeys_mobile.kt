@@ -2508,7 +2508,7 @@ public interface MobileVaultInterface {
     fun `createUnlockBundle`(`password`: kotlin.String, `bootCount`: kotlin.Long): kotlin.ByteArray
     
     /**
-     * `secret_key` is the Emergency Kit's key, typed when this device lacks
+     * `secret_key` is the Recovery Sheet's key, typed when this device lacks
      * it (`Status::needs_secret_key`); the device keeps it after unlocking.
      */
     fun `unlockPassword`(`password`: kotlin.String, `secretKey`: kotlin.String?): Status
@@ -3656,7 +3656,7 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
-     * `secret_key` is the Emergency Kit's key, typed when this device lacks
+     * `secret_key` is the Recovery Sheet's key, typed when this device lacks
      * it (`Status::needs_secret_key`); the device keeps it after unlocking.
      */
     @Throws(MobileException::class)override fun `unlockPassword`(`password`: kotlin.String, `secretKey`: kotlin.String?): Status {

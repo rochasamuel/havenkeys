@@ -38,7 +38,7 @@ class UnlockViewModel(
         }
     }
 
-    /** [secretKey] is the Emergency Kit's, typed when this device lacks it; blank means none. */
+    /** [secretKey] is the Recovery Sheet's, typed when this device lacks it; blank means none. */
     fun unlockPassword(password: String, secretKey: String? = null) {
         _state.update { it.copy(busy = true, errorCode = null) }
         val typed = secretKey?.trim()?.takeIf { it.isNotEmpty() }

@@ -3,7 +3,7 @@
  * shape exactly (it is typed as Messages), so a string added here and
  * forgotten there fails the typecheck instead of shipping half-translated.
  *
- * Product names (HavenKeys, Secret Key, Emergency Kit, havenkeys-server)
+ * Product names (HavenKeys, Secret Key, Recovery Sheet, havenkeys-server)
  * stay in English in every locale. Strings are inserted with textContent
  * only; parameterised strings are functions.
  *

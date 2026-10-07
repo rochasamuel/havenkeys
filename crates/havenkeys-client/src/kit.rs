@@ -1,4 +1,4 @@
-//! The Emergency Kit code (`havenkeys://kit/v2?account=…&email=…&key=…&server=…`),
+//! The Recovery Sheet code (`havenkeys://kit/v2?account=…&email=…&key=…&server=…`),
 //! scanned or pasted on a new device. Everything is checked here; the Secret
 //! Key goes straight into a `SecretString`.
 

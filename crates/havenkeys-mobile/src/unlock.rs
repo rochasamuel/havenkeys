@@ -4,7 +4,7 @@ use havenkeys_core::{SecretBytes, SecretString};
 
 #[uniffi::export]
 impl MobileVault {
-    /// `secret_key` is the Emergency Kit's key, typed when this device lacks
+    /// `secret_key` is the Recovery Sheet's key, typed when this device lacks
     /// it (`Status::needs_secret_key`); the device keeps it after unlocking.
     pub fn unlock_password(
         &self,

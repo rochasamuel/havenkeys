@@ -2,8 +2,8 @@
  * Português do Brasil. Same shape as en.ts, enforced by the Messages type.
  * Terms (shared with the browser extension): senha, senha mestra, cofre,
  * login, nota segura, código de verificação (one-time code), chave de acesso
- * (passkey). Product names (HavenKeys, Secret Key, Emergency Kit,
- * havenkeys-server) stay in English: "a Secret Key", "o Emergency Kit".
+ * (passkey), Folha de Recuperação (Recovery Sheet). Product names (HavenKeys,
+ * Secret Key, havenkeys-server) stay in English: "a Secret Key".
  */
 import type { ErrorCode, Messages } from "./en";
 
@@ -57,7 +57,7 @@ const codes: Record<ErrorCode, string | null> = {
     "O HavenKeys não conseguiu confirmar se o servidor aplicou a nova senha mestra. Se a sua senha atual parar de funcionar, use a nova.",
   password_changed_elsewhere:
     "Sua senha mestra foi alterada em outro dispositivo. Bloqueie e desbloqueie com a nova senha.",
-  invalid_kit: "Este não é um código de Kit de Emergência do HavenKeys.",
+  invalid_kit: "Este não é um código de Folha de Recuperação do HavenKeys.",
   signed_out: "O HavenKeys foi desconectado desta conta. Desbloqueie de novo para reconectar.",
   account_deleted: "Esta conta foi excluída.",
   rate_limited: "Tentativas demais. Tente novamente em alguns minutos.",
@@ -182,7 +182,7 @@ export const ptBR: Messages = {
   app: {
     fatalTitle: "O HavenKeys não consegue abrir este cofre",
     fatalFallback: "O HavenKeys não conseguiu acessar o armazenamento do cofre. Reinicie o app.",
-    kitTitle: "Salve seu Emergency Kit",
+    kitTitle: "Salve sua Folha de Recuperação",
     kitBody:
       "Esta é a única cópia da sua Secret Key. Sem ela — e sem a sua senha mestra — ninguém consegue abrir este cofre, nem mesmo nós.",
     keychainNotCleared:
@@ -211,7 +211,7 @@ export const ptBR: Messages = {
     createFailed: "Não foi possível configurar este cofre.",
     createNote:
       "Sua senha mestra e sua Secret Key nunca saem deste computador. O servidor guarda apenas dados criptografados.",
-    serverHint: "Do seu Emergency Kit.",
+    serverHint: "Da sua Folha de Recuperação.",
     tabPhone: "Usar o celular",
     subPhone: "Aprove este computador pelo HavenKeys no seu celular.",
     phoneServer: "Seu servidor",
@@ -223,9 +223,9 @@ export const ptBR: Messages = {
     phoneExpired: "Este código expirou.",
     phoneNewCode: "Novo código",
     phoneDenied: "A entrada foi recusada no seu celular.",
-    phoneUseKit: "Usar o Emergency Kit",
+    phoneUseKit: "Usar a Folha de Recuperação",
     emailPlaceholder: "voce@exemplo.com",
-    secretKeyHint: "O código longo do seu Emergency Kit. Deixe em branco se este computador já o tiver.",
+    secretKeyHint: "O código longo da sua Folha de Recuperação. Deixe em branco se este computador já o tiver.",
     signIn: "Entrar",
     signingIn: "Entrando…",
     signInFailed: "Não foi possível entrar.",
@@ -246,10 +246,10 @@ export const ptBR: Messages = {
     },
     enterPassword: "Digite sua senha mestra para desbloquear.",
     enterPasswordAndKey:
-      "Digite sua senha mestra e a Secret Key do seu Emergency Kit. Este computador guarda a Secret Key depois que você desbloquear.",
+      "Digite sua senha mestra e a Secret Key da sua Folha de Recuperação. Este computador guarda a Secret Key depois que você desbloquear.",
     unlock: "Desbloquear",
     secretKeyPlaceholder: "Secret Key  H1-XXXX-XXXX-…",
-    useKitInstead: "Digitar a Secret Key do meu Emergency Kit em vez disso",
+    useKitInstead: "Digitar a Secret Key da minha Folha de Recuperação em vez disso",
     failed: "Não foi possível abrir o cofre.",
     hint: "Seu cofre é descriptografado somente neste computador.",
   },
@@ -527,7 +527,7 @@ export const ptBR: Messages = {
     },
     notOnThisComputer: "A Secret Key não está neste computador.",
     note: "Use estes dados com sua senha mestra para entrar no HavenKeys em outro computador.",
-    showKit: "Mostrar Emergency Kit",
+    showKit: "Mostrar Folha de Recuperação",
     readOnly: "Gerado a partir da sua conta. Não pode ser editado nem excluído.",
   },
 
@@ -635,10 +635,10 @@ export const ptBR: Messages = {
   },
   kit: {
     qrLabel: "QR code da Secret Key",
-    loadFailed: "Não foi possível carregar o Emergency Kit.",
-    preparing: "Preparando seu Emergency Kit…",
-    sheetLabel: "Emergency Kit",
-    heading: "Emergency Kit do HavenKeys",
+    loadFailed: "Não foi possível carregar a Folha de Recuperação.",
+    preparing: "Preparando sua Folha de Recuperação…",
+    sheetLabel: "Folha de Recuperação",
+    heading: "Folha de Recuperação",
     created: (date: string) => `Criado em ${date}`,
     ledeBefore: "Para abrir o seu cofre em um novo computador ou celular, você precisa de ",
     ledeBoth: "ambas",
@@ -647,9 +647,9 @@ export const ptBR: Messages = {
     blankLine: "Linha em branco para anotar sua senha mestra, se quiser",
     accountId: "ID da conta",
     qrCaption: "Escaneie para configurar outro dispositivo: a conta, o endereço, o servidor e a Secret Key.",
-    foot: "O HavenKeys não consegue recuperar a sua senha mestra nem a sua Secret Key. Se perder este kit, você pode vê-lo de novo em qualquer dispositivo com o cofre desbloqueado (Configurações → Conta).",
+    foot: "O HavenKeys não consegue recuperar a sua senha mestra nem a sua Secret Key. Se perder esta folha, você pode vê-la de novo em qualquer dispositivo com o cofre desbloqueado (Configurações → Conta).",
     print: "Imprimir ou salvar como PDF",
-    savedCheck: "Salvei meu Emergency Kit",
+    savedCheck: "Salvei minha Folha de Recuperação",
   },
 
   settings: {
@@ -748,15 +748,15 @@ export const ptBR: Messages = {
     redownloadAll: "Baixar tudo de novo",
     signOut: "Sair e bloquear",
     devices: "Dispositivos",
-    kitTitle: "Emergency Kit",
+    kitTitle: "Folha de Recuperação",
     keyInFile:
       "Sua Secret Key está guardada em um arquivo neste computador porque não há um chaveiro do sistema disponível.",
     kitTeaser:
       "Sua Secret Key, a conta e o servidor — tudo o que outro computador precisa, além da sua senha mestra.",
-    showKit: "Mostrar Emergency Kit",
+    showKit: "Mostrar Folha de Recuperação",
     removeTitle: "Remover este dispositivo",
     removeNote:
-      "Tira este computador da conta e volta o HavenKeys para a tela inicial, onde você pode entrar em qualquer conta ou servidor. Seu cofre continua no servidor. Uma cópia do arquivo criptografado fica guardada como vault.sqlite3.removed-… na pasta de dados do app; para abri-la depois, você precisa da sua senha mestra e da Secret Key do seu Emergency Kit.",
+      "Tira este computador da conta e volta o HavenKeys para a tela inicial, onde você pode entrar em qualquer conta ou servidor. Seu cofre continua no servidor. Uma cópia do arquivo criptografado fica guardada como vault.sqlite3.removed-… na pasta de dados do app; para abri-la depois, você precisa da sua senha mestra e da Secret Key da sua Folha de Recuperação.",
     typeToConfirm: (email: string) => `Digite ${email} para confirmar`,
     remove: "Remover este dispositivo",
   },

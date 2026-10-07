@@ -544,7 +544,7 @@ pub(crate) fn unwrap_vault_key(kek: &Key256, vault_id: Uuid, wrapped: &[u8]) -> 
 }
 
 /// A vault created for an account, with the two things the caller must not
-/// lose: the Secret Key (for the Emergency Kit) and the auth key (for the
+/// lose: the Secret Key (for the Recovery Sheet) and the auth key (for the
 /// activation request).
 pub struct AccountVault {
     pub prepared: PreparedVault,

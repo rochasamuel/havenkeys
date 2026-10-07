@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Wording from the desktop app (apps/desktop/src/i18n/pt-BR.ts). Terms:
      senha, senha mestra, cofre, login, nota segura, código de verificação,
-     chave de acesso. Secret Key and Emergency Kit stay in English. -->
+     chave de acesso, and Recovery Sheet is Folha de Recuperação. Secret Key stays in English. -->
 <resources>
     <string name="error_unlock_failed">Senha mestra incorreta ou cofre danificado.</string>
     <string name="error_bundle_refused">Digite sua senha mestra para desbloquear.</string>
     <string name="error_locked">O cofre está bloqueado.</string>
     <string name="error_offline">O HavenKeys está offline — o cofre fica somente leitura até reconectar.</string>
     <string name="error_sign_in_failed">E-mail, senha mestra ou Secret Key incorretos.</string>
-    <string name="error_invalid_kit">Este não é um código de Kit de Emergência do HavenKeys.</string>
+    <string name="error_invalid_kit">Este não é um código de Folha de Recuperação do HavenKeys.</string>
     <string name="error_secret_key_required">Este cofre precisa da sua Secret Key.</string>
     <string name="error_rate_limited">Tentativas demais. Tente novamente em alguns minutos.</string>
     <string name="error_invalid_server_url">Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.</string>
@@ -33,7 +33,7 @@
     <string name="biometric_cancel">Usar senha mestra</string>
     <string name="unlock_busy">Desbloqueando…</string>
     <string name="unlock_secret_key">Secret Key</string>
-    <string name="unlock_enter_password_and_key">Digite sua senha mestra e a Secret Key do seu Emergency Kit. Este aparelho guarda a Secret Key depois que você desbloquear.</string>
+    <string name="unlock_enter_password_and_key">Digite sua senha mestra e a Secret Key da sua Folha de Recuperação. Este aparelho guarda a Secret Key depois que você desbloquear.</string>
     <string name="biometric_enroll_title">Ativar desbloqueio com digital ou rosto</string>
     <string name="biometric_enroll_cancel">Cancelar</string>
 
@@ -104,24 +104,24 @@
 
     <string name="onboarding_title">Boas-vindas ao HavenKeys</string>
     <string name="onboarding_how">Como configurar</string>
-    <string name="onboarding_scan_kit">Escanear meu Emergency Kit</string>
-    <string name="onboarding_scan_kit_sub">Aponte a câmera para o QR code do seu Emergency Kit.</string>
-    <string name="onboarding_type_kit">Digitar meu Emergency Kit</string>
+    <string name="onboarding_scan_kit">Escanear minha Folha de Recuperação</string>
+    <string name="onboarding_scan_kit_sub">Aponte a câmera para o QR code da sua Folha de Recuperação.</string>
+    <string name="onboarding_type_kit">Digitar minha Folha de Recuperação</string>
     <string name="onboarding_type_kit_sub">Adicione este celular a uma conta que você já tem.</string>
     <string name="onboarding_invite_choice">Tenho um convite</string>
     <string name="onboarding_invite_sub">Configure este celular com o seu convite.</string>
     <string name="onboarding_back">Voltar</string>
     <string name="onboarding_cancel">Cancelar</string>
     <string name="onboarding_scanning">Procurando um QR code…</string>
-    <string name="onboarding_camera_needed">Permita o uso da câmera para escanear o seu Emergency Kit, ou volte e digite-o.</string>
+    <string name="onboarding_camera_needed">Permita o uso da câmera para escanear a sua Folha de Recuperação, ou volte e digite-a.</string>
     <string name="onboarding_camera_allow">Permitir câmera</string>
-    <string name="onboarding_camera_unavailable">Não foi possível abrir a câmera. Volte e digite o seu Emergency Kit.</string>
+    <string name="onboarding_camera_unavailable">Não foi possível abrir a câmera. Volte e digite a sua Folha de Recuperação.</string>
     <string name="onboarding_server">Servidor</string>
-    <string name="onboarding_server_hint">Do seu Emergency Kit.</string>
+    <string name="onboarding_server_hint">Da sua Folha de Recuperação.</string>
     <string name="onboarding_email">E-mail</string>
     <string name="onboarding_email_placeholder">voce@exemplo.com</string>
     <string name="onboarding_secret_key">Secret Key</string>
-    <string name="onboarding_secret_key_hint">O código longo do seu Emergency Kit.</string>
+    <string name="onboarding_secret_key_hint">O código longo da sua Folha de Recuperação.</string>
     <string name="onboarding_master_password">Senha mestra</string>
     <string name="onboarding_password_hint">Pelo menos 10 caracteres. Ninguém pode redefini-la para você — nem o servidor, nem nós.</string>
     <string name="onboarding_repeat_password">Repita a senha mestra</string>
@@ -132,7 +132,7 @@
     <string name="onboarding_create">Criar meu cofre</string>
     <string name="onboarding_creating">Configurando…</string>
     <string name="onboarding_create_note">Sua senha mestra e sua Secret Key nunca saem deste celular. O servidor guarda apenas dados criptografados.</string>
-    <string name="onboarding_kit_found">Emergency Kit encontrado</string>
+    <string name="onboarding_kit_found">Folha de Recuperação encontrada</string>
     <string name="onboarding_kit_password">Digite sua senha mestra para entrar.</string>
     <string name="onboarding_sign_in">Entrar</string>
     <string name="onboarding_signing_in">Entrando…</string>
@@ -182,7 +182,7 @@
     <string name="settings_sign_out">Sair e bloquear</string>
     <string name="settings_sign_out_confirm">Desconectar este celular?</string>
     <string name="settings_remove_title">Remover este dispositivo</string>
-    <string name="settings_remove_note">Tira este celular da conta e volta o HavenKeys para a tela inicial. Seu cofre continua no servidor. Para entrar de novo, você precisa da sua senha mestra e da Secret Key do seu Emergency Kit.</string>
+    <string name="settings_remove_note">Tira este celular da conta e volta o HavenKeys para a tela inicial. Seu cofre continua no servidor. Para entrar de novo, você precisa da sua senha mestra e da Secret Key da sua Folha de Recuperação.</string>
     <string name="settings_type_to_confirm">Digite %1$s para confirmar</string>
     <string name="settings_type_email">Digite o e-mail da sua conta para confirmar</string>
     <string name="settings_remove_mismatch">Esse não é o e-mail desta conta.</string>

@@ -161,7 +161,7 @@ components:
 
 **Creative North Star: "The Brass-Fitted Strongroom"**
 
-The site is a dark forest-green room with one metal fitting. Grounds step from near-black green (ink, ground, bg) up through raised panels, all divided by hairline green rules; brass is the only accent and it marks the one thing that commits (Download), the active state, and the human voice in the three headlines that carry it. An engraved guilloche rosette, drawn in brass at about a tenth of its strength, sits behind the hero and the closing call, the banknote pattern that says "hard to forge" without a word. One chapter, the Emergency Kit, changes the whole field to pale paper: the only light surface on the site, and the only place a sheet of paper is shown as an object.
+The site is a dark forest-green room with one metal fitting. Grounds step from near-black green (ink, ground, bg) up through raised panels, all divided by hairline green rules; brass is the only accent and it marks the one thing that commits (Download), the active state, and the human voice in the three headlines that carry it. An engraved guilloche rosette, drawn in brass at about a tenth of its strength, sits behind the hero and the closing call, the banknote pattern that says "hard to forge" without a word. One chapter, the Recovery Sheet, changes the whole field to pale paper: the only light surface on the site, and the only place a sheet of paper is shown as an object.
 
 Type is a conversation between a serif and a grotesque. Source Serif 4, with optical sizing, sets every heading in roman at a light 440 weight; its italic, in brass, is the human voice and is spent in three places only. Hanken Grotesk carries all reading text at a relaxed 1.6 line height. JetBrains Mono appears only where the visitor is looking at a literal machine string. The product is shown, not described: real extension renders, framed windows, and a sticky journey stage that moves one fictional login through four states.
 
@@ -197,7 +197,7 @@ A near-monochrome forest-green ramp with a single brass fitting, plus one pale p
 - **Hairline / Strong Hairline** (line, line-strong): every divider and every interactive border.
 - **Bone / Bright Bone** (text, text-strong): body copy and headings.
 - **Lichen / Pale Lichen** (muted, muted-hi): captions and meta; `muted-hi` is the reading color for ledes and paragraphs on dark.
-- **Paper set** (paper, paper-sheet, paper-text, paper-strong, paper-muted, paper-line, paper-brass): the Emergency Kit field only. On paper, brass darkens to `paper-brass` or it disappears.
+- **Paper set** (paper, paper-sheet, paper-text, paper-strong, paper-muted, paper-line, paper-brass): the Recovery Sheet field only. On paper, brass darkens to `paper-brass` or it disappears.
 
 ### Named Rules
 **The One Fitting Rule.** Brass is the only accent. A screen has one brass-filled control at most (Download); everything else brass is a hairline, a dot, a word or a wash.
@@ -244,7 +244,7 @@ Depth is mostly tonal: grounds step from ink to raised, and hairlines separate. 
 - **Lift** (`box-shadow: 0 40px 80px -24px rgba(0,0,0,0.65), 0 12px 24px -12px rgba(0,0,0,0.5)`): framed windows, the browser frame, the hero popup screenshot.
 - **Stage** (`box-shadow: 0 30px 60px -30px rgba(0,0,0,0.6)`): the journey stage.
 - **Screenshot drop** (`filter: drop-shadow(0 24px 34px rgba(0,0,0,0.5))`): transparent extension renders, so the shadow follows their shape.
-- **Paper sheet** (`0 1px 0 #d6ded9, 0 36px 60px -24px rgba(22,35,31,0.38), 0 8px 18px -8px rgba(22,35,31,0.2)`): the Emergency Kit, on the paper field only.
+- **Paper sheet** (`0 1px 0 #d6ded9, 0 36px 60px -24px rgba(22,35,31,0.38), 0 8px 18px -8px rgba(22,35,31,0.2)`): the Recovery Sheet, on the paper field only.
 - **Brass hover glow** (`0 10px 22px -10px rgba(201,164,92,0.6)`): primary button hover only.
 
 ### Named Rules
@@ -286,7 +286,7 @@ The PNGs in `src/assets/shots` are real renders of the extension UI (popup, in-p
 ### Journey Stage (signature)
 A sticky, 18px-rounded ground panel with a four-step rail (Typed, Sealed, Stored, Filled) at the top; the active step is brass-hi, completed steps fill their dot. Scenes cross-fade with a small rise and blur (520 to 620ms, mechanical easing); in the sealed step plaintext visibly scrambles into cipher-green ciphertext. This is the site's one orchestrated motion; reduced motion shows every scene settled.
 
-### Emergency Kit (signature)
+### Recovery Sheet (signature)
 On the paper field, a white sheet with a heavy 2px rule under the header, an italic serif document title in paper-brass, the Secret Key in mono on a pale well, a QR block and blank write-in lines.
 
 ## Do's and Don'ts

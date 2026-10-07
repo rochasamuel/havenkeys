@@ -43,7 +43,7 @@ notice the extension.
 Two claims together, weighted equally:
 
 1. **1Password-grade experience, on your own server.** Master password plus
-   Secret Key, an Emergency Kit, and deliberate, explicit-action autofill,
+   Secret Key, a Recovery Sheet, and deliberate, explicit-action autofill,
    with no vendor, account service or subscription.
 2. **Small, honest and auditable.** The security core is Rust, and the
    codebase is small enough for one person to read end to end. Security
@@ -64,7 +64,7 @@ ownership or legibility.
 - Webpages are treated as hostile. In-page UI runs next to untrusted DOM and
   must not be spoofable or leak secrets.
 - Setup needs an invite from the server operator. A second computer needs the
-  email, master password and Secret Key from the Emergency Kit.
+  email, master password and Secret Key from the Recovery Sheet.
 - The marketing site is static on Vercel and its download page reads GitHub
   Releases. Installers are unsigned, so OS warnings appear on first run.
 
@@ -85,7 +85,7 @@ ownership or legibility.
 - Offline mode is read-only. The UI shows an offline banner and gates writes.
 - The desktop app has a dark theme by default, with light and match-system
   options.
-- Terminology: vault, item, login, secure note, Secret Key, Emergency Kit,
+- Terminology: vault, item, login, secure note, Secret Key, Recovery Sheet,
   master password, `havenkeys-server`, invite, device.
 
 ## Brand Commitments

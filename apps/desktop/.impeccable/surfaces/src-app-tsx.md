@@ -7,7 +7,7 @@ related_targets: ["src/views/VaultScreen.tsx","src/views/UnlockScreen.tsx"]
 
 # Surface brief: HavenKeys desktop app
 
-Scope: `apps/desktop/src` (Tauri window): welcome, unlock, Emergency Kit, vault (sidebar, list, detail, editor), generator, settings. Mode: Operate.
+Scope: `apps/desktop/src` (Tauri window): welcome, unlock, Recovery Sheet, vault (sidebar, list, detail, editor), generator, settings. Mode: Operate.
 User: the author, daily. Tasks: unlock, find, reveal/copy, fill TOTP, add/edit, lock. Constraints: no behavior or security change; secrets only on explicit reveal; lock/online state always visible; dark, light and system themes all supported; CSP style-src 'self'.
 Brief (user, pinned): same premises as havenkeys.net, professional, smooth like Apple apps, animation where it helps, new icons and fonts matching the website. macOS gets an overlay title bar.
 

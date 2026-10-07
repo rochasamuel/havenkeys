@@ -61,7 +61,7 @@ import uniffi.havenkeys_mobile.LumaFrame
 private const val MIN_PASSWORD_LENGTH = 10
 
 /**
- * First run: scan the Emergency Kit, type it, or activate an invite.
+ * First run: scan the Recovery Sheet, type it, or activate an invite.
  * Typed secrets (master password, Secret Key, invite) live only in this
  * composition: plain `remember`, never `rememberSaveable`, so they are not
  * written to the saved instance state. A password is emptied when sent; the

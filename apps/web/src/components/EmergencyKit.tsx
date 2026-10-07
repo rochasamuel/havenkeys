@@ -1,7 +1,7 @@
 import { useI18n } from "../i18n/context";
 
 /*
- * An illustration of the printed Emergency Kit. The key is made up and the
+ * An illustration of the printed Recovery Sheet. The key is made up and the
  * code is decorative (it encodes nothing); the page says so on the sheet.
  */
 function qrCells(): boolean[] {
@@ -40,7 +40,7 @@ export function EmergencyKit() {
       <div className="kit__sheet" lang="en">
         <header className="kit__head">
           <span className="kit__brand">HavenKeys</span>
-          <span className="kit__doc">Emergency Kit</span>
+          <span className="kit__doc">Recovery Sheet</span>
         </header>
         <p className="kit__intro">
           Keep this page somewhere safe. With your master password, it lets you sign in on a new

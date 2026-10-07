@@ -581,7 +581,7 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   says so rather than letting a click fail.
 * The sync client never holds the vault lock across a request, so locking is
   never delayed by a slow or hostile server.
-* The Emergency Kit (Secret Key, account, email, server and a QR code) is
+* The Recovery Sheet (Secret Key, account, email, server and a QR code) is
   shown only while unlocked, on request. Right after activation, continuing
   requires confirming it was saved.
 * The **HavenKeys Account** item pinned first in the vault list is virtual:
@@ -626,7 +626,7 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   from this device, not this device from something already running as you.
   A keychain that fails or does not answer is never read as "no key": unlock
   asks the user to approve the keychain's prompt and retry
-  (`keychain_unavailable`) instead of asking for the Emergency Kit.
+  (`keychain_unavailable`) instead of asking for the Recovery Sheet.
 * **Changing the master password** (`change_master_password`) is one atomic
   server operation, not a local-first one: the device proves it knows the
   *current* auth key (rate-limited like login), and the server updates the
@@ -643,7 +643,7 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   the vault, renames the local vault file to
   `vault.sqlite3.removed-<timestamp>` rather than deleting it — it stays on
   disk as ciphertext, openable later only with the master password and the
-  Secret Key from the Emergency Kit — and only then best-effort revokes the
+  Secret Key from the Recovery Sheet — and only then best-effort revokes the
   device on the server (revoking first would leave an intact vault on a
   device the server refuses if the rename failed). It forgets the Secret Key
   from both stores and issues a fresh device ID, returning the app to first
@@ -1230,7 +1230,7 @@ authentication — the Secret Key alone opens nothing). Kotlin only encrypts
 and decrypts bytes. There is **no plaintext fallback**: the desktop's
 `device.json` fallback is turned off (`without_file_fallback`), and a cipher
 that fails writes nothing (tested). Sign out keeps the file, as the desktop
-keeps its keychain entry, so the next unlock needs no Emergency Kit; Remove
+keeps its keychain entry, so the next unlock needs no Recovery Sheet; Remove
 device forgets it and deletes its Keystore key.
 
 ### 22.4 Direct fill and "Confirm before filling"
@@ -1481,7 +1481,7 @@ hosts whose registrable domain's first label appears in the package name
 |---|---|
 | `INTERNET` | The user's server and `assetlinks.json` |
 | `USE_BIOMETRIC` | Biometric unlock (BiometricPrompt) |
-| `CAMERA` | Scanning the Emergency Kit's QR code; requested when scanning. `android.hardware.camera` is not required |
+| `CAMERA` | Scanning the Recovery Sheet's QR code; requested when scanning. `android.hardware.camera` is not required |
 | `QUERY_ALL_PACKAGES` (`github` flavor only) | Reading the signing certificates of the app or browser being filled (§22.5) |
 
 No other permission is declared (`ManifestTest` checks both sets). In
@@ -1543,7 +1543,7 @@ only. `ManifestTest` checks the source manifest only.
   until garbage collection. The decrypted bundle passes briefly through a
   `ByteArray` that is zeroed at once, but the JVM, the Keystore provider and
   UniFFI's buffers may hold copies we cannot reach. Camera frames of the
-  Emergency Kit's QR code (which contains the Secret Key) are not zeroed.
+  Recovery Sheet's QR code (which contains the Secret Key) are not zeroed.
   These join the limits in §8. The editor and Autofill save add to this:
   every typed value (a password, a TOTP key, a card number, a note) and every
   value read from a save request passes through `String`s that stay in the

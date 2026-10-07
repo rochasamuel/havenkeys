@@ -195,7 +195,7 @@ impl HavenClient {
     }
 
     /// A second device: server, email, master password and the Secret Key
-    /// from the Emergency Kit.
+    /// from the Recovery Sheet.
     ///
     /// Nothing is written to disk until the header the server serves has
     /// been opened with the keys derived here — which is what proves all
@@ -347,7 +347,7 @@ impl HavenClient {
 
     /// Unlock. Every vault is account-bound: the account comes from the local
     /// store (never from the caller), and unlocking needs the Secret Key too
-    /// — either typed from the Emergency Kit (it is then saved here once the
+    /// — either typed from the Recovery Sheet (it is then saved here once the
     /// unlock succeeds) or the one already saved on this device.
     pub async fn unlock(
         self: &Arc<Self>,
@@ -368,7 +368,7 @@ impl HavenClient {
             _ => None,
         };
         // A keychain that failed or did not answer in time may hold the key.
-        // Asking for the Emergency Kit now would be wrong, and the typed key
+        // Asking for the Recovery Sheet now would be wrong, and the typed key
         // would land in device.json because that keychain would not take it
         // either. The vault never left LOCKED, so nothing needs resetting.
         if typed.is_none() && stored.is_none() && !definite {
@@ -475,7 +475,7 @@ impl HavenClient {
         Ok(status)
     }
 
-    /// A Secret Key typed from the Emergency Kit proved correct: remember it.
+    /// A Secret Key typed from the Recovery Sheet proved correct: remember it.
     fn remember_typed_secret_key(&self, account: Uuid, key_text: Option<SecretString>) {
         if let Some(text) = key_text {
             if let Ok(k) = SecretKey::parse(text.expose()) {

@@ -7,7 +7,7 @@
 //! Secret Key too, in plain text, only when no keychain answered — which
 //! Settings shows as a warning. Either way, keeping the Secret Key out of the
 //! vault database means a copied or backed-up vault file is useless without
-//! the Emergency Kit. See docs/crypto.md, "Secret Key".
+//! the Recovery Sheet. See docs/crypto.md, "Secret Key".
 //!
 //! Only one Secret Key is kept in `device.json`, without an account: a
 //! device holds one vault, and the key there is the one for that vault's
@@ -181,7 +181,7 @@ impl Device {
 
     /// The key for `account` and whether the answer is definite. `(None,
     /// false)` means the keychain failed or did not answer in time: it may
-    /// hold the key, so the caller must not ask for the Emergency Kit (a key
+    /// hold the key, so the caller must not ask for the Recovery Sheet (a key
     /// typed now would end up in `device.json`, since that same keychain
     /// would not take it either).
     pub fn secret_key_lookup(&mut self, account: Uuid) -> (Option<SecretString>, bool) {

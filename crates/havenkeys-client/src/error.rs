@@ -136,7 +136,7 @@ impl ClientError {
     }
 
     pub fn invalid_kit() -> Self {
-        Self::fixed("invalid_kit", "That is not a HavenKeys Emergency Kit code.")
+        Self::fixed("invalid_kit", "That is not a HavenKeys Recovery Sheet code.")
     }
 
     pub fn password_changed_elsewhere() -> Self {

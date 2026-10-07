@@ -17,7 +17,7 @@ Constraints: verbatim audit disclaimer; no invented users, benchmarks or claims;
 
 THESIS: The page follows one login (github.com, sam@example.com) from the moment it is typed to the moment it is filled, so security is a story the visitor watches rather than a spec sheet. Refuses the feature-card grid and the doc-link list the old site shipped.
 
-OWN-WORLD: Deep forest green grounds (#0b110f → #172320) with brass (#c9a45c / #e3c483) as the single fitting; one light paper chapter (Emergency Kit) as a page-scale field change. Source Serif 4 display (optical size, italic for the human voice) over Hanken Grotesk body; JetBrains Mono only for real keys, ciphertext, codes and commands. Hairline green rules, 8–10px radii, framed product windows with soft offset shadows. Shield-keyhole mark.
+OWN-WORLD: Deep forest green grounds (#0b110f → #172320) with brass (#c9a45c / #e3c483) as the single fitting; one light paper chapter (Recovery Sheet) as a page-scale field change. Source Serif 4 display (optical size, italic for the human voice) over Hanken Grotesk body; JetBrains Mono only for real keys, ciphertext, codes and commands. Hairline green rules, 8–10px radii, framed product windows with soft offset shadows. Shield-keyhole mark.
 
 STORY: Visitor sees the product itself first, understands in four chapters that keys never leave the device and the server holds only ciphertext, sees the browser autofill in real screenshots, reads honestly what is and isn't defended, downloads.
 

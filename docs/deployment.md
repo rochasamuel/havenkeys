@@ -309,7 +309,7 @@ so nothing is lost if the steps are followed in order:
    and 3.
 4. **On each desktop**, before starting the new build, move `vault.sqlite3`
    and `device.json` out of the app's data folder to somewhere safe. Start
-   the new build, choose **Sign in**, and use the Emergency Kit (email,
+   the new build, choose **Sign in**, and use the Recovery Sheet (email,
    server, Secret Key) and the master password. Delete the moved files once
    the vault has synced.
 

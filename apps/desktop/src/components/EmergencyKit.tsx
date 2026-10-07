@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import type { EmergencyKit as Kit } from "../lib/types";
 import { formatDate } from "../lib/format";
 import { Icon } from "./Icon";
+import { Seal } from "./Seal";
+import { Guilloche } from "./Guilloche";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
@@ -31,7 +34,7 @@ interface Props {
 }
 
 /**
- * The Emergency Kit: the Secret Key the user needs, with the master
+ * The Recovery Sheet: the Secret Key the user needs, with the master
  * password, to open the vault on another device. Fetched on demand and
  * dropped from memory when this component unmounts (for example on lock).
  */
@@ -57,48 +60,66 @@ export function EmergencyKit({ onDone }: Props) {
   if (error) return <p className="form-error">{error}</p>;
   if (!kit) return <p className="muted">{t.kit.preparing}</p>;
 
+  const sheet = (
+    <article className="kit-sheet" aria-label={t.kit.sheetLabel}>
+      <Guilloche className="kit-rosette" />
+      <header className="kit-head">
+        <div className="kit-brand">
+          <span className="kit-mark">
+            <Seal size={34} />
+          </span>
+          <span className="kit-wordmark">HavenKeys</span>
+        </div>
+        <p className="kit-date">{t.kit.created(formatDate(kit.createdAt, dateLocale))}</p>
+      </header>
+
+      <h2 className="kit-title">{t.kit.heading}</h2>
+      <p className="kit-lede">
+        {t.kit.ledeBefore}
+        <strong>{t.kit.ledeBoth}</strong>
+        {t.kit.ledeAfter}
+      </p>
+
+      <section className="kit-secret">
+        <span className="kit-label">{t.common.secretKey}</span>
+        <code className="kit-key">{kit.secretKey}</code>
+      </section>
+
+      <div className="kit-body">
+        <dl className="kit-fields">
+          <div className="kit-field">
+            <dt className="kit-label">{t.common.email}</dt>
+            <dd><code>{kit.email}</code></dd>
+          </div>
+          <div className="kit-field">
+            <dt className="kit-label">{t.common.server}</dt>
+            <dd><code>{kit.serverUrl}</code></dd>
+          </div>
+          <div className="kit-field">
+            <dt className="kit-label">{t.kit.accountId}</dt>
+            <dd><code>{kit.accountId}</code></dd>
+          </div>
+          <div className="kit-field kit-field-blank">
+            <dt className="kit-label">{t.common.masterPassword}</dt>
+            <dd className="kit-blank" aria-label={t.kit.blankLine} />
+          </div>
+        </dl>
+        <figure className="kit-figure">
+          <QrCode size={kit.qrSize} modules={kit.qrModules} />
+          <figcaption>{t.kit.qrCaption}</figcaption>
+        </figure>
+      </div>
+
+      <footer className="kit-foot">{t.kit.foot}</footer>
+    </article>
+  );
+
   return (
     <div className="kit">
-      <article className="kit-sheet" aria-label={t.kit.sheetLabel}>
-        <header className="kit-head">
-          <h2>{t.kit.heading}</h2>
-          <p>{t.kit.created(formatDate(kit.createdAt, dateLocale))}</p>
-        </header>
-        <p className="kit-lede">
-          {t.kit.ledeBefore}
-          <strong>{t.kit.ledeBoth}</strong>
-          {t.kit.ledeAfter}
-        </p>
-        <div className="kit-body">
-          <div className="kit-fields">
-            <div className="kit-field">
-              <span>{t.common.secretKey}</span>
-              <code className="kit-key">{kit.secretKey}</code>
-            </div>
-            <div className="kit-field">
-              <span>{t.common.masterPassword}</span>
-              <div className="kit-blank" aria-label={t.kit.blankLine} />
-            </div>
-            <div className="kit-field kit-small">
-              <span>{t.common.email}</span>
-              <code>{kit.email}</code>
-            </div>
-            <div className="kit-field kit-small">
-              <span>{t.common.server}</span>
-              <code>{kit.serverUrl}</code>
-            </div>
-            <div className="kit-field kit-small">
-              <span>{t.kit.accountId}</span>
-              <code>{kit.accountId}</code>
-            </div>
-          </div>
-          <figure className="kit-figure">
-            <QrCode size={kit.qrSize} modules={kit.qrModules} />
-            <figcaption>{t.kit.qrCaption}</figcaption>
-          </figure>
-        </div>
-        <p className="kit-foot">{t.kit.foot}</p>
-      </article>
+      {sheet}
+      {/* The printed copy: a direct child of <body>, so printing can drop the
+          whole app (display: none) and the sheet starts at the top of page 1. */}
+      {createPortal(<div className="kit-print" aria-hidden="true">{sheet}</div>, document.body)}
 
       <div className="kit-actions">
         <button className="btn" type="button" onClick={() => window.print()}>

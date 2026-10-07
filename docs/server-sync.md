@@ -32,7 +32,7 @@ In code today, and tested:
 * **`havenkeys-sync-client`** — the HTTP client, with a hostile-server suite
   and a round trip that runs real core crypto against the real server and a
   real Postgres.
-* **The desktop** — activation, second-device sign-in, the Emergency Kit,
+* **The desktop** — activation, second-device sign-in, the Recovery Sheet,
   Account settings (devices, revoke, sign out), the online/offline
   distinction with a read-only gate on every mutating command, and a pull
   every 60 seconds while unlocked and online.
@@ -74,7 +74,7 @@ server, deletions included, so an untested backup means the vault has none.
   it (the auth key it does receive authenticates a login and unwraps
   nothing).
 
-## 3. Secret Key and Emergency Kit
+## 3. Secret Key and Recovery Sheet
 
 Unchanged in substance from the superseded document: every account vault has
 a Secret Key, 128 random bits from the OS CSPRNG, shown as
@@ -89,14 +89,14 @@ vault is account-bound from the moment it exists.
   available, a call to it errors, or it does not answer within 5 seconds — the
   file always still holds the device ID. §7 below covers the fallback and its
   limits.
-* The Emergency Kit is a printable page with the Secret Key and a QR code of
+* The Recovery Sheet is a printable page with the Secret Key and a QR code of
   it. The desktop generates its payload as
   `havenkeys://kit/v1?vault=<vault id>&key=<Secret Key>` today
   (`apps/desktop/src-tauri/src/emergency_kit.rs`). The design's kit v2, which also
   carries the account ID, email and server URL so a second device needs
   nothing else, is part of the activation/sign-in work that has not landed
   (§1).
-* Losing both the Emergency Kit and every device that holds the Secret Key
+* Losing both the Recovery Sheet and every device that holds the Secret Key
   means losing the vault — there is no account-recovery path.
 
 ## 4. Online, offline and read-only
@@ -293,7 +293,7 @@ header.
   A keychain that errors or does not answer is never taken to mean "no key":
   at unlock, when nothing else holds the key, the app says the keychain did
   not answer and asks to approve its prompt and retry (`keychain_unavailable`)
-  rather than asking for the Emergency Kit — a key typed then would go to
+  rather than asking for the Recovery Sheet — a key typed then would go to
   `device.json`, since the same keychain would not take it. The user can
   still choose to enter the Secret Key from the kit. A platform keychain that
   failed to install, or is still installing after the 5-second wait, counts
@@ -366,7 +366,7 @@ client treats a `410` as a deletion only when the body's code is
 
 ## 8. For a future mobile app
 
-Unchanged in intent from the superseded document: scan the Emergency Kit QR
+Unchanged in intent from the superseded document: scan the Recovery Sheet QR
 (or type the Secret Key), sign in with the account's email and the master
 password, and reuse `havenkeys-core` (for example through UniFFI) rather
 than reimplementing the key derivation or the wire formats. Store the Secret

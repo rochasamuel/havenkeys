@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Wording from the desktop app (apps/desktop/src/i18n/en.ts). Product
-     names (HavenKeys, Secret Key, Emergency Kit) stay in English in every
+     names (HavenKeys, Secret Key, Recovery Sheet) stay in English in every
      locale. No string ever carries a secret. -->
 <resources>
     <string name="app_name" translatable="false">HavenKeys</string>
@@ -11,7 +11,7 @@
     <string name="error_locked">The vault is locked.</string>
     <string name="error_offline">HavenKeys is offline — the vault is read-only until it reconnects.</string>
     <string name="error_sign_in_failed">Email, master password or Secret Key is incorrect.</string>
-    <string name="error_invalid_kit">That is not a HavenKeys Emergency Kit code.</string>
+    <string name="error_invalid_kit">That is not a HavenKeys Recovery Sheet code.</string>
     <string name="error_secret_key_required">This vault needs your Secret Key.</string>
     <string name="error_rate_limited">Too many attempts. Try again in a few minutes.</string>
     <string name="error_invalid_server_url">That server address cannot be used. It must start with https://.</string>
@@ -38,7 +38,7 @@
     <string name="unlock_busy">Unlocking…</string>
     <string name="unlock_secret_key">Secret Key</string>
     <string name="unlock_secret_key_placeholder" translatable="false">H1-XXXX-XXXX-…</string>
-    <string name="unlock_enter_password_and_key">Enter your master password and the Secret Key from your Emergency Kit. This device remembers the Secret Key after you unlock.</string>
+    <string name="unlock_enter_password_and_key">Enter your master password and the Secret Key from your Recovery Sheet. This device remembers the Secret Key after you unlock.</string>
     <string name="biometric_enroll_title">Turn on unlock with fingerprint or face</string>
     <string name="biometric_enroll_cancel">Cancel</string>
 
@@ -112,24 +112,24 @@
     <!-- Onboarding -->
     <string name="onboarding_title">Welcome to HavenKeys</string>
     <string name="onboarding_how">How to set up</string>
-    <string name="onboarding_scan_kit">Scan my Emergency Kit</string>
-    <string name="onboarding_scan_kit_sub">Point the camera at the QR code on your Emergency Kit.</string>
-    <string name="onboarding_type_kit">Type my Emergency Kit</string>
+    <string name="onboarding_scan_kit">Scan my Recovery Sheet</string>
+    <string name="onboarding_scan_kit_sub">Point the camera at the QR code on your Recovery Sheet.</string>
+    <string name="onboarding_type_kit">Type my Recovery Sheet</string>
     <string name="onboarding_type_kit_sub">Add this phone to an account you already have.</string>
     <string name="onboarding_invite_choice">I have an invite</string>
     <string name="onboarding_invite_sub">Set up this phone with your invite.</string>
     <string name="onboarding_back">Back</string>
     <string name="onboarding_cancel">Cancel</string>
     <string name="onboarding_scanning">Looking for a QR code…</string>
-    <string name="onboarding_camera_needed">Allow the camera to scan your Emergency Kit, or go back and type it.</string>
+    <string name="onboarding_camera_needed">Allow the camera to scan your Recovery Sheet, or go back and type it.</string>
     <string name="onboarding_camera_allow">Allow camera</string>
-    <string name="onboarding_camera_unavailable">The camera could not be opened. Go back and type your Emergency Kit.</string>
+    <string name="onboarding_camera_unavailable">The camera could not be opened. Go back and type your Recovery Sheet.</string>
     <string name="onboarding_server">Server</string>
-    <string name="onboarding_server_hint">From your Emergency Kit.</string>
+    <string name="onboarding_server_hint">From your Recovery Sheet.</string>
     <string name="onboarding_email">Email</string>
     <string name="onboarding_email_placeholder">you@example.com</string>
     <string name="onboarding_secret_key">Secret Key</string>
-    <string name="onboarding_secret_key_hint">The long code on your Emergency Kit.</string>
+    <string name="onboarding_secret_key_hint">The long code on your Recovery Sheet.</string>
     <string name="onboarding_master_password">Master password</string>
     <string name="onboarding_password_hint">At least 10 characters. Nobody can reset it for you — not the server, not us.</string>
     <string name="onboarding_repeat_password">Repeat master password</string>
@@ -140,7 +140,7 @@
     <string name="onboarding_create">Create my vault</string>
     <string name="onboarding_creating">Setting up…</string>
     <string name="onboarding_create_note">Your master password and Secret Key never leave this phone. The server stores only encrypted data.</string>
-    <string name="onboarding_kit_found">Emergency Kit found</string>
+    <string name="onboarding_kit_found">Recovery Sheet found</string>
     <string name="onboarding_kit_password">Enter your master password to sign in.</string>
     <string name="onboarding_sign_in">Sign in</string>
     <string name="onboarding_signing_in">Signing in…</string>
@@ -192,7 +192,7 @@
     <string name="settings_sign_out">Sign out and lock</string>
     <string name="settings_sign_out_confirm">Sign this phone out?</string>
     <string name="settings_remove_title">Remove this device</string>
-    <string name="settings_remove_note">Takes this phone off the account and returns HavenKeys to its first-run screen. Your vault stays on the server. Signing in again needs your master password and the Secret Key from your Emergency Kit.</string>
+    <string name="settings_remove_note">Takes this phone off the account and returns HavenKeys to its first-run screen. Your vault stays on the server. Signing in again needs your master password and the Secret Key from your Recovery Sheet.</string>
     <string name="settings_type_to_confirm">Type %1$s to confirm</string>
     <string name="settings_type_email">Type your account email to confirm</string>
     <string name="settings_remove_mismatch">That is not this account’s email.</string>

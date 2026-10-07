@@ -44,7 +44,7 @@ pub async fn activate_account(
 }
 
 /// A second device: server, email, master password and the Secret Key from
-/// the Emergency Kit.
+/// the Recovery Sheet.
 #[tauri::command]
 pub async fn sign_in(
     app: AppHandle,

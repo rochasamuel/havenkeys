@@ -17,7 +17,7 @@ import { PhoneSignInPanel } from "./PhoneSignInPanel";
  */
 
 interface Props {
-  /** Activation succeeded: the caller shows the Emergency Kit before the vault. */
+  /** Activation succeeded: the caller shows the Recovery Sheet before the vault. */
   onActivated: (status: VaultStatus) => void;
   /** Sign-in succeeded: this device already has a kit somewhere else. */
   onSignedIn: (status: VaultStatus) => void;

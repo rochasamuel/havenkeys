@@ -21,7 +21,7 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
 
 ```text
  master password (UTF-8, never stored)     Secret Key (128 random bits; on each
-        │                                  device and on the Emergency Kit only)
+        │                                  device and on the Recovery Sheet only)
         │  Argon2id(salt = 16 random bytes, m, t, p)         │
         ▼          params + salt stored in header            │
  master key (32 bytes, memory only)                          │
@@ -76,7 +76,7 @@ Why this shape:
   errors, or it does not answer within 5 seconds. Only the `H1-…` text is
   ever stored; errors from the store never carry the value. A keychain that
   errors or does not answer is never taken as "no key" (unlock asks to retry
-  rather than for the Emergency Kit). See `server-sync.md` §7 for the
+  rather than for the Recovery Sheet). See `server-sync.md` §7 for the
   trade-off this fallback keeps.
   On Android the key is a file in app-private storage, sealed by an Android
   Keystore key, with no plaintext fallback (`security-model.md` §22.3).

@@ -94,7 +94,7 @@ docker compose exec server havenkeys-server admin new-account \
 
 It prints an invite starting with `HKINV1-`. It is shown once, works once,
 and expires in 7 days. Paste it into the first screen of the HavenKeys
-desktop app, then print the Emergency Kit the app offers.
+desktop app, then print the Recovery Sheet the app offers.
 
 Other admin commands:
 
@@ -119,7 +119,7 @@ before storing real passwords ([deployment.md](deployment.md) section 5).
 Your server address is `https://<your domain>`.
 
 * **Desktop:** on the first-run screen, paste the invite from step 4.
-* **Android:** scan the Emergency Kit, or sign in with your account.
+* **Android:** scan the Recovery Sheet, or sign in with your account.
 * **Browser extension:** it talks to the desktop app, so install the
   desktop app first.
 

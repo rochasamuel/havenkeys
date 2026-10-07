@@ -180,7 +180,7 @@ stored string.
    `pt-BR.ts`. Keep terminology consistent: *senha* (password), *cofre*
    (vault), *login*, *código de verificação* (one-time code), *chave de
    acesso* (passkey). Never translate product names (HavenKeys, Secret Key,
-   Emergency Kit, havenkeys-server), URLs, or key names, and never use `tu` —
+   Recovery Sheet, havenkeys-server), URLs, or key names, and never use `tu` —
    Brazilian Portuguese here is *você*.
 2. Use it from `t.<path>` — `useI18n().t` in the desktop React tree
    (`apps/desktop/src/i18n/context.tsx`), or the module-level `t` in the

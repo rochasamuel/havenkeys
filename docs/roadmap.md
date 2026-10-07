@@ -49,7 +49,7 @@ the design. Steps 1–5 of its §13 have landed; what remains is not code.
    hostile-server suite, and a round trip against the real server with real
    core crypto.
 4. **Desktop — done.** Activation from an invite, second-device sign-in, the
-   Emergency Kit v2, Account settings (devices, revoke, sign out, sync,
+   Recovery Sheet v2, Account settings (devices, revoke, sign out, sync,
    re-download), the offline banner and the read-only gate. The browser
    extension's save-login writes through the same path.
 5. **Docs — done.** `CLAUDE.md` §1, `README.md`, `threat-model.md`,

@@ -3,7 +3,7 @@
  * shape exactly (it is typed as Messages), so a string added here and
  * forgotten there fails the typecheck instead of shipping half-translated.
  *
- * Product names (HavenKeys, Secret Key, Emergency Kit, havenkeys-server)
+ * Product names (HavenKeys, Secret Key, Recovery Sheet, havenkeys-server)
  * stay in English in every locale, as do URLs and keyboard keys. Strings
  * are rendered as React text only; parameterised strings are functions.
  */
@@ -110,7 +110,7 @@ const codes: Record<ErrorCode, string | null> = {
     "HavenKeys could not confirm whether the server applied the new master password. If your current password stops working, use the new one.",
   password_changed_elsewhere:
     "Your master password was changed on another device. Lock and unlock with the new password.",
-  invalid_kit: "That is not a HavenKeys Emergency Kit code.",
+  invalid_kit: "That is not a HavenKeys Recovery Sheet code.",
   signed_out: "HavenKeys is signed out of this account. Unlock again to reconnect.",
   account_deleted: "This account was deleted.",
   rate_limited: "Too many attempts. Try again in a few minutes.",
@@ -157,7 +157,7 @@ export const en = {
   app: {
     fatalTitle: "HavenKeys cannot open this vault",
     fatalFallback: "HavenKeys could not reach its vault storage. Restart the app.",
-    kitTitle: "Save your Emergency Kit",
+    kitTitle: "Save your Recovery Sheet",
     kitBody:
       "This is the only copy of your Secret Key. Without it — and your master password — nobody can open this vault, including us.",
     /** Rust's KEYCHAIN_NOT_CLEARED (account.rs), word for word. */
@@ -186,7 +186,7 @@ export const en = {
     creating: "Setting up…",
     createFailed: "Could not set up this vault.",
     createNote: "Your master password and Secret Key never leave this computer. The server stores only encrypted data.",
-    serverHint: "From your Emergency Kit.",
+    serverHint: "From your Recovery Sheet.",
     tabPhone: "Use my phone",
     subPhone: "Approve this computer from HavenKeys on your phone.",
     phoneServer: "Your server",
@@ -198,9 +198,9 @@ export const en = {
     phoneExpired: "This code has expired.",
     phoneNewCode: "New code",
     phoneDenied: "The sign-in was denied on your phone.",
-    phoneUseKit: "Use the Emergency Kit instead",
+    phoneUseKit: "Use the Recovery Sheet instead",
     emailPlaceholder: "you@example.com",
-    secretKeyHint: "The long code on your Emergency Kit. Leave it empty if this computer already has it.",
+    secretKeyHint: "The long code on your Recovery Sheet. Leave it empty if this computer already has it.",
     signIn: "Sign in",
     signingIn: "Signing in…",
     signInFailed: "Could not sign in.",
@@ -222,10 +222,10 @@ export const en = {
     } as Record<string, string>,
     enterPassword: "Enter your master password to unlock.",
     enterPasswordAndKey:
-      "Enter your master password and the Secret Key from your Emergency Kit. This computer remembers the Secret Key after you unlock.",
+      "Enter your master password and the Secret Key from your Recovery Sheet. This computer remembers the Secret Key after you unlock.",
     unlock: "Unlock",
     secretKeyPlaceholder: "Secret Key  H1-XXXX-XXXX-…",
-    useKitInstead: "Enter the Secret Key from my Emergency Kit instead",
+    useKitInstead: "Enter the Secret Key from my Recovery Sheet instead",
     failed: "Could not open the vault.",
     hint: "Your vault is decrypted on this computer only.",
   },
@@ -502,7 +502,7 @@ export const en = {
     },
     notOnThisComputer: "The Secret Key is not on this computer.",
     note: "Use these with your master password to sign in to HavenKeys on another computer.",
-    showKit: "Show Emergency Kit",
+    showKit: "Show Recovery Sheet",
     readOnly: "Built from your account. It cannot be edited or deleted.",
   },
 
@@ -608,10 +608,10 @@ export const en = {
   },
   kit: {
     qrLabel: "Secret Key QR code",
-    loadFailed: "Could not load the Emergency Kit.",
-    preparing: "Preparing your Emergency Kit…",
-    sheetLabel: "Emergency Kit",
-    heading: "HavenKeys Emergency Kit",
+    loadFailed: "Could not load the Recovery Sheet.",
+    preparing: "Preparing your Recovery Sheet…",
+    sheetLabel: "Recovery Sheet",
+    heading: "Recovery Sheet",
     created: (date: string) => `Created ${date}`,
     /** "…you need <strong>both</strong> your master password…" */
     ledeBefore: "To open your vault on a new computer or phone you need ",
@@ -621,9 +621,9 @@ export const en = {
     blankLine: "Blank line to write your master password, if you choose",
     accountId: "Account ID",
     qrCaption: "Scan to set up another device: the account, the address, the server and the Secret Key.",
-    foot: "HavenKeys cannot recover your master password or Secret Key. If you lose this kit, you can view it again on any device where your vault is unlocked (Settings → Account).",
+    foot: "HavenKeys cannot recover your master password or Secret Key. If you lose this sheet, you can view it again on any device where your vault is unlocked (Settings → Account).",
     print: "Print or save as PDF",
-    savedCheck: "I have saved my Emergency Kit",
+    savedCheck: "I have saved my Recovery Sheet",
   },
 
   settings: {
@@ -722,14 +722,14 @@ export const en = {
     redownloadAll: "Re-download everything",
     signOut: "Sign out and lock",
     devices: "Devices",
-    kitTitle: "Emergency Kit",
+    kitTitle: "Recovery Sheet",
     keyInFile: "Your Secret Key is stored in a file on this computer because no system keychain is available.",
     kitTeaser:
       "Your Secret Key, the account and the server — everything another computer needs, besides your master password.",
-    showKit: "Show Emergency Kit",
+    showKit: "Show Recovery Sheet",
     removeTitle: "Remove this device",
     removeNote:
-      "Takes this computer off the account and returns HavenKeys to its first-run screen, where you can sign in to any account or server. Your vault stays on the server. A copy of the encrypted file is kept as vault.sqlite3.removed-… in the app's data folder; opening it later needs your master password and the Secret Key from your Emergency Kit.",
+      "Takes this computer off the account and returns HavenKeys to its first-run screen, where you can sign in to any account or server. Your vault stays on the server. A copy of the encrypted file is kept as vault.sqlite3.removed-… in the app's data folder; opening it later needs your master password and the Secret Key from your Recovery Sheet.",
     typeToConfirm: (email: string) => `Type ${email} to confirm`,
     remove: "Remove this device",
   },

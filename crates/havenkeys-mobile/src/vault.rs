@@ -48,7 +48,7 @@ pub struct MobileVault {
     pub(crate) runtime: tokio::runtime::Runtime,
     pub(crate) clock: Arc<LockClock>,
     pub(crate) events: Arc<MobileEvents>,
-    /// A scanned Emergency Kit waiting for its master password.
+    /// A scanned Recovery Sheet waiting for its master password.
     pub(crate) kit: Mutex<Option<KitFields>>,
     pub(crate) own_package: String,
 }

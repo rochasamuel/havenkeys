@@ -52,8 +52,8 @@ Portuguese file is typed against the English one, so adding a string to
   `/pt-br` once. Picking a language with the switcher stores that choice in
   `localStorage` (`hk-locale`), and the redirect stops. Only `/` redirects, so
   shared links to English pages stay English.
-* Names the app shows in English (Secret Key, Emergency Kit,
-  `havenkeys-server`) stay in English in the Portuguese copy. The Emergency Kit
+* Names the app shows in English (Secret Key, Recovery Sheet,
+  `havenkeys-server`) stay in English in the Portuguese copy. The Recovery Sheet
   illustration stays in English because it depicts the printed kit.
 * The Portuguese pages carry a Portuguese translation of the audit disclaimer.
 

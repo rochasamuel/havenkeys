@@ -9,7 +9,7 @@ import type { Messages } from "../i18n/en";
 
 /**
  * Settings → Account: which account this vault belongs to, which computers
- * are signed in to it, and the Emergency Kit.
+ * are signed in to it, and the Recovery Sheet.
  *
  * The device list comes from the server, so it is only available while this
  * device has a session. Offline, the section still shows the account and the

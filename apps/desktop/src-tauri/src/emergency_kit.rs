@@ -1,4 +1,4 @@
-//! The Emergency Kit: what a new device needs to join the account.
+//! The Recovery Sheet: what a new device needs to join the account.
 
 use crate::account::off_main_thread;
 use crate::state::{AppState, CmdError, CmdResult};
@@ -22,7 +22,7 @@ pub struct EmergencyKit {
     qr_modules: Vec<bool>,
 }
 
-/// The Emergency Kit: everything a new device needs, and nothing a thief can
+/// The Recovery Sheet: everything a new device needs, and nothing a thief can
 /// use without the master password. Only while unlocked, and only on explicit
 /// request.
 #[tauri::command]

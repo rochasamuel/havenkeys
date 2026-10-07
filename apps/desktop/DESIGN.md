@@ -292,7 +292,7 @@ Motion is quiet and physical, on one curve (`cubic-bezier(0.32, 0.72, 0, 1)`) at
 - Serif titles; one brass italic, on the unlock headline only.
 - Mono only for secrets, one-time codes, keys and the literal machine strings around them.
 - Brass as a fitting: selection wash, the committing action, focus, the live TOTP code.
-- The sidebar is forest green in every theme; the Emergency Kit sheet is paper in every theme.
+- The sidebar is forest green in every theme; the Recovery Sheet sheet is paper in every theme.
 
 ## Colors
 
@@ -320,14 +320,14 @@ A forest-green ramp, a single brass fitting and one paper sheet; dark is the def
 - **Bone / Bright Bone / Lichen** (text, text-strong, muted, and their light counterparts): body, titles and values, labels and meta.
 - **Sidebar inks** (side-text, side-muted, side-hover): text and states on the sidebar, which never follow the theme.
 - **Glass** (glass, glass-light): the toast, a dark translucent pill in both themes.
-- **Paper set** (paper-sheet, paper-text, paper-strong, paper-muted, paper-well, paper-line): the Emergency Kit sheet only.
+- **Paper set** (paper-sheet, paper-text, paper-strong, paper-muted, paper-well, paper-line): the Recovery Sheet sheet only.
 
 ### Named Rules
 **The One Fitting Rule.** Brass is a fitting, not a finish: selection, the one committing action, focus, and the live TOTP code. In light theme the everyday primary button turns forest (`primary-light`) and brass stays on the unlock arrow, the kit's Done and the fittings.
 
 **The Evergreen Sidebar Rule.** The sidebar is forest green in dark, light and system themes. Its text uses the `side-*` inks, never the theme's text tokens.
 
-**The Paper Sheet Rule.** The Emergency Kit sheet is paper in every theme, because it is what gets printed. It is the only light surface in the dark theme and uses only the paper set.
+**The Paper Sheet Rule.** The Recovery Sheet sheet is paper in every theme, because it is what gets printed. It is the only light surface in the dark theme and uses only the paper set.
 
 ## Typography
 
@@ -339,7 +339,7 @@ A forest-green ramp, a single brass fitting and one paper sheet; dark is the def
 
 ### Hierarchy
 - **Display** (460, 30px, 1.1): the unlock headline. The options page's h1 matches it at 480.
-- **Headline** (480, 28px, 1.15): item title, editor and tool heads, Emergency Kit screen head (welcome h1 at 27px).
+- **Headline** (480, 28px, 1.15): item title, editor and tool heads, Recovery Sheet screen head (welcome h1 at 27px).
 - **Title** (480, 22px): the list pane title ("All items"); the kit sheet's heading at 22px 500; the empty-detail line at 21px.
 - **Small title** (500 to 520, 16 to 17px): avatar monograms, empty-list line, popup notice.
 - **Body** (400, 13.5px, 1.45): the app's reading size; the popup and in-page frames run at 13px; the options page at 14px.
@@ -370,7 +370,7 @@ The extension popup is 320px wide with a 48px bar. The in-page frames are sized 
 
 ## Elevation & Depth
 
-Depth is tonal: the sidebar, list and pane step through greens, and groups sit on a slightly lifted surface with a hairline. Shadows are soft, offset downward and reserved for things that float: the new-item menu, the toast and the Emergency Kit sheet (lift), plus the small thumbs of the switch, slider and segmented control. Focus is a ring, not a shadow.
+Depth is tonal: the sidebar, list and pane step through greens, and groups sit on a slightly lifted surface with a hairline. Shadows are soft, offset downward and reserved for things that float: the new-item menu, the toast and the Recovery Sheet sheet (lift), plus the small thumbs of the switch, slider and segmented control. Focus is a ring, not a shadow.
 
 ### Shadow Vocabulary
 - **Lift** (`0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45)`; light: `0 24px 48px -18px rgba(22,35,31,0.28), 0 8px 16px -8px rgba(22,35,31,0.14)`): popover menus, the toast, the kit sheet.
@@ -390,7 +390,7 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 ### Buttons
 - **Shape:** 8px radius, 32px tall; small 28px at 7px; large 42px full width at 10px.
 - **Primary:** brass with on-brass text in dark; forest with pale text in light. One per view.
-- **Brass:** always brass, in both themes (the Emergency Kit's Done).
+- **Brass:** always brass, in both themes (the Recovery Sheet's Done).
 - **Secondary:** transparent with a line-strong border; quiet and ghost drop the border; danger fills ember; quiet-danger is ember text with a 12% ember hover.
 - **Hover / Active:** hover takes the hover ground (brass lifts to brass-hi); press scales to 0.97 (icon buttons 0.92). 160ms on the house ease. Disabled drops to 42% opacity.
 - **Copy button:** the copy glyph cross-fades and scales into a green check, then back.
@@ -417,8 +417,8 @@ The sidebar: brand row with the mark at 22px, a translucent search field (brass 
 ### Toast
 A glass pill centred 22px above the bottom: blurred dark ground in both themes, bright text, a green check or ember alert, lift shadow; rises in and falls away.
 
-### Emergency Kit (signature)
-A paper sheet (paper-sheet, 6px, lift shadow) in every theme: a serif roman heading over a 2px paper-strong rule, the Secret Key in mono 17px on a paper-well, write-in lines, a QR block, a hairline foot. Printing hides everything but the sheet.
+### Recovery Sheet (signature)
+A paper sheet (paper-sheet, 6px, lift shadow) in every theme, laid out like a certificate: the app icon in miniature (brass seal on a 34px forest tile) and the wordmark beside the created date; a faint guilloche rosette cropped by the top-right corner in paper-line; the serif title at 34px over a 2px paper-strong rule; the Secret Key in mono 19px in a paper-well box with a paper-line hairline; email, server and account ID as hairline-separated rows ending in the master-password write-in line, with the QR beside them; a hairline foot. Printing hides everything but the sheet, on A4 with a zero page margin (so the browser prints no date, title, address or page number) and the sheet's own 18–20mm padding.
 
 ### Unlock (signature)
 The shield-and-keyhole mark at 72px over the slowly turning guilloche rosette (brass at 8% opacity, masked to a circle), the serif headline with its one brass italic, a one-line reason, one field. The key in the mark turns 90° while unlocking.
@@ -447,7 +447,7 @@ The shield-and-keyhole mark at 72px over the slowly turning guilloche rosette (b
 - **Do** build details, forms and settings from inset groups (12px) of hairline-separated rows.
 - **Do** set titles in Source Serif 4 roman (28px item and editor, 22px pane, 30px unlock).
 - **Do** keep brass to selection, the one committing action, focus and the live TOTP code.
-- **Do** keep the sidebar forest green and the Emergency Kit sheet paper in every theme.
+- **Do** keep the sidebar forest green and the Recovery Sheet sheet paper in every theme.
 - **Do** move on `cubic-bezier(0.32, 0.72, 0, 1)` at 160, 280 or 420ms, and turn every animation off under reduced motion.
 - **Do** keep in-page frame CSS in lockstep with `content/frames.ts` (34px header, 46px rows, 8px padding, 340 x 138 save prompt).
 - **Do** animate only the children of the in-page `.card`.

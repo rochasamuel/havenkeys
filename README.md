@@ -21,7 +21,7 @@ changes need the server.
 | Passkeys (WebAuthn, ES256) | Implemented and unit-tested: create, save to a login, sign in (chooser and passkey autofill), an automatic upgrade after a password fill, a field-menu hint for known passkey sites, delete from the desktop. Not yet checked against real sites in a browser ([docs/security-review.md](docs/security-review.md), Passkeys) |
 | Import | 1Password `.1pux`, Bitwarden (`.json`/`.csv`), Chrome/Edge/Brave, Firefox, KeePassXC and LastPass CSV (logins, notes, TOTP, cards; other item kinds become secure notes) |
 | Export | Not implemented |
-| Secret Key + Emergency Kit | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
+| Secret Key + Recovery Sheet | Every vault needs the master password **and** a 128-bit Secret Key ([docs/server-sync.md](docs/server-sync.md)) |
 | Account server (`havenkeys-server`) | Implemented and tested against Postgres; deployed ([docs/deployment.md](docs/deployment.md)). The backup restore drill (§5) and real cross-device use are not yet done — see [docs/roadmap.md](docs/roadmap.md) §3 |
 | Marketing/download website (havenkeys.net) | Implemented; static site on Vercel, download page reads GitHub Releases ([docs/website.md](docs/website.md)) |
 | Sync between your computers | Through your own server: it is the single writer, and each device keeps an encrypted read-only replica ([docs/server-sync.md](docs/server-sync.md)) |
@@ -100,7 +100,7 @@ Android (early release): download the APK from the website's download page or fr
 
 What the Android app does (early release; tried on one phone, the instrumented tests have not run yet):
 
-* Sign in by scanning the Emergency Kit's QR code (or typing it), or
+* Sign in by scanning the Recovery Sheet's QR code (or typing it), or
   activate from an invite
 * Approve a new desktop's sign-in: Settings → "Sign in a new device", scan
   its QR code, check the name and place, and tap Allow (behind biometrics)
@@ -130,7 +130,7 @@ What the Android app does (early release; tried on one phone, the instrumented t
 Setting up the first computer needs an invite from whoever runs the server
 (`havenkeys-server admin new-account`); see
 [docs/deployment.md](docs/deployment.md). A second computer needs the email,
-the master password and the Secret Key from your Emergency Kit, or the
+the master password and the Secret Key from your Recovery Sheet, or the
 phone: scan the new desktop's QR code from Settings → "Sign in a new device"
 and tap Allow (see [docs/security-model.md](docs/security-model.md) §23).
 

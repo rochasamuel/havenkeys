@@ -157,14 +157,14 @@ class TextFieldsTest {
                 revealed = false,
                 onRevealChange = {},
                 error = error,
-                hint = "On your Emergency Kit",
+                hint = "On your Recovery Sheet",
             )
         }
         val field = rule.onNode(hasSetTextAction())
-        assertTrue(texts(field).contains("On your Emergency Kit"))
+        assertTrue(texts(field).contains("On your Recovery Sheet"))
         error = "Check the Secret Key"
         rule.waitForIdle()
-        assertTrue(texts(field).none { it == "On your Emergency Kit" })
+        assertTrue(texts(field).none { it == "On your Recovery Sheet" })
         field.assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, "Check the Secret Key"))
     }
 
