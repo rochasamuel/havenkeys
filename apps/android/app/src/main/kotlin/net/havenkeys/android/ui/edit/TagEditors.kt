@@ -50,28 +50,19 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
     } else {
         vaultTags.filter { query in it && it !in editor.tags }.take(SUGGESTIONS)
     }
+    // Why the typed text was not added; cleared as soon as the text changes.
+    var refusal by remember(editor) { mutableStateOf<TagRefusal?>(null) }
     LaunchedEffect(text) {
         // A comma ends a tag, as on the desktop: each one before it is added.
         snapshotFlow { text.text.toString() }.collect { now ->
+            refusal = null
             if (',' in now) {
                 now.split(',').dropLast(1).forEach(editor::addTag)
                 text.setTextAndPlaceCursorAtEnd(now.substringAfterLast(','))
             }
         }
     }
-    // Why the typed text was not added; cleared as soon as the text changes.
-    var refusal by remember(editor) { mutableStateOf<TagRefusal?>(null) }
-    LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect { refusal = null } }
-    val commit = {
-        val typedNow = text.text.toString()
-        val why = tagRefusal(typedNow)
-        when {
-            // Kept so it can be corrected, and the field says why.
-            why != null -> refusal = why
-            // Added, or a tag the item already has: either way the field empties.
-            editor.addTag(typedNow) || tagForm(typedNow) in editor.tags -> text.clearText()
-        }
-    }
+    val commit = { commitTag(editor, text) { refusal = it } }
     Column {
         SectionHeader(stringResource(R.string.edit_tags))
         InsetGroup {
@@ -90,14 +81,7 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
                 }
             } else {
                 // Keyed: a tag added before it must not take the field's focus away.
-                row(key = "add") {
-                    val error = when (refusal) {
-                        TagRefusal.TooLong -> stringResource(R.string.edit_tag_too_long)
-                        TagRefusal.NotAllowed -> stringResource(R.string.edit_tag_not_allowed)
-                        null -> null
-                    }
-                    AddTagField(text, error, enabled = query.isNotEmpty(), commit = commit)
-                }
+                row(key = "add") { AddTagField(text, refusal, enabled = query.isNotEmpty(), commit = commit) }
                 suggestions.forEach { name ->
                     row(key = "suggestion:$name") {
                         GroupRow(
@@ -115,6 +99,19 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
     }
 }
 
+/**
+ * Adds what was typed. A tag Rust would refuse stays in the field so it can
+ * be corrected, and [onRefused] gets why; a tag the item has just empties it.
+ */
+private fun commitTag(editor: EditorState, text: TextFieldState, onRefused: (TagRefusal) -> Unit) {
+    val typed = text.text.toString()
+    val why = tagRefusal(typed)
+    when {
+        why != null -> onRefused(why)
+        editor.addTag(typed) || tagForm(typed) in editor.tags -> text.clearText()
+    }
+}
+
 @Composable
 private fun TagRow(tag: String, onRemove: () -> Unit) {
     GroupRow(
@@ -124,8 +121,13 @@ private fun TagRow(tag: String, onRemove: () -> Unit) {
 }
 
 @Composable
-private fun AddTagField(text: TextFieldState, error: String?, enabled: Boolean, commit: () -> Unit) {
+private fun AddTagField(text: TextFieldState, refusal: TagRefusal?, enabled: Boolean, commit: () -> Unit) {
     val label = stringResource(R.string.edit_add_tag)
+    val error = when (refusal) {
+        TagRefusal.TooLong -> stringResource(R.string.edit_tag_too_long)
+        TagRefusal.NotAllowed -> stringResource(R.string.edit_tag_not_allowed)
+        null -> null
+    }
     var focused by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         HavenTextField(
