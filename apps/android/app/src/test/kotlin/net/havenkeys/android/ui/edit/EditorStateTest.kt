@@ -2,6 +2,7 @@ package net.havenkeys.android.ui.edit
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.havenkeys_mobile.Change
@@ -156,6 +157,16 @@ class EditorStateTest {
         assertFalse(state.addTag("\u00A0\u2003"))
         assertTrue(state.addTag("a\u0085b"))
         assertTrue("a b" in state.tags)
+    }
+
+    @Test
+    fun tagRefusalNamesWhyRustWouldRefuseATag() {
+        assertEquals(TagRefusal.TooLong, tagRefusal("x".repeat(33)))
+        assertEquals(TagRefusal.NotAllowed, tagRefusal("a\u0007b"))
+        assertEquals(TagRefusal.NotAllowed, tagRefusal("a,b"))
+        assertNull(tagRefusal("x".repeat(32)))
+        assertNull(tagRefusal("  Work "))
+        assertNull(tagRefusal("   "))
     }
 
     @Test

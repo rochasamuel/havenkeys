@@ -1,6 +1,12 @@
 package net.havenkeys.android.ui.kit
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertAll
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onNodeWithTag
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -72,6 +78,22 @@ class ActionsTest {
     fun aPillIsAMarkerNotAControl() {
         rule.setKit { Pill("This device") }
         rule.onNodeWithText("This device").assertIsDisplayed().assertHasNoClickAction()
+    }
+
+    @Test
+    fun aPillsGlyphWidensItButIsNotRead() {
+        rule.setKit {
+            Column {
+                Pill("work", Modifier.testTag("plain"), tone = PillTone.Outline)
+                Pill("work", Modifier.testTag("tagged"), tone = PillTone.Outline, icon = HavenIcon.Tag)
+            }
+        }
+        val plain = rule.onNodeWithTag("plain").fetchSemanticsNode().size.width
+        val tagged = rule.onNodeWithTag("tagged", useUnmergedTree = true).fetchSemanticsNode().size.width
+        assertTrue(tagged > plain)
+        // The glyph is decoration: the tagged pill reads as its text alone.
+        rule.onNodeWithTag("tagged", useUnmergedTree = true).onChildren()
+            .assertAll(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
     }
 
     @Test

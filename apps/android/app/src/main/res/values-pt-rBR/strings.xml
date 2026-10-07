@@ -241,6 +241,8 @@
     <string name="edit_add_tag">Adicionar tag</string>
     <string name="edit_remove_tag">Remover tag %1$s</string>
     <string name="edit_tag_limit">O limite é 20 tags.</string>
+    <string name="edit_tag_too_long">A tag é longa demais. O limite é 32 caracteres.</string>
+    <string name="edit_tag_not_allowed">A tag contém um caractere não permitido.</string>
     <string name="edit_remove_website">Remover site</string>
     <string name="edit_match_domain">Site inteiro, qualquer subdomínio</string>
     <string name="edit_match_origin">Somente este site</string>

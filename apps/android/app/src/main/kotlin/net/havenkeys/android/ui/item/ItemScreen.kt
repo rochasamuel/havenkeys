@@ -161,7 +161,10 @@ private fun ItemTags(tags: List<String>) {
         Modifier.padding(bottom = 16.dp).semantics { contentDescription = label },
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) { tags.forEach { Pill(it, tone = PillTone.Outline) } }
+    ) {
+        // The tag glyph tells them from the vault-health chips under them (both are outline pills).
+        tags.forEach { Pill(it, tone = PillTone.Outline, icon = HavenIcon.Tag) }
+    }
 }
 
 /**

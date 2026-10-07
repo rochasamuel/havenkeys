@@ -2,9 +2,11 @@ package net.havenkeys.android.ui.kit
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -13,22 +15,29 @@ import androidx.compose.ui.unit.dp
 import net.havenkeys.android.ui.theme.HavenShape
 import net.havenkeys.android.ui.theme.HavenTheme
 
-/** A small marker. Not a control: it has no action and needs no touch target. */
+/**
+ * A small marker. Not a control: it has no action and needs no touch target.
+ * An optional [icon] (decoration, 12dp in the pill's ink) says what kind of
+ * marker it is, as the tag glyph does on an item's tags.
+ */
 @Composable
-fun Pill(text: String, modifier: Modifier = Modifier, tone: PillTone = PillTone.Brass) {
+fun Pill(text: String, modifier: Modifier = Modifier, tone: PillTone = PillTone.Brass, icon: HavenIcon? = null) {
     val colors = HavenTheme.colors
     val ground = if (tone == PillTone.Brass) colors.brassSoft else Color.Transparent
     val edge = if (tone == PillTone.Outline) colors.lineStrong else Color.Transparent
-    HavenText(
-        text,
+    val ink = if (tone == PillTone.Brass) colors.brassInk else colors.muted
+    Row(
         modifier
             .clip(HavenShape.pill)
             .background(ground)
             .border(1.dp, edge, HavenShape.pill)
-            .padding(horizontal = 9.dp, vertical = 3.dp),
-        style = HavenTheme.type.pill,
-        color = if (tone == PillTone.Brass) colors.brassInk else colors.muted,
-    )
+            .padding(start = if (icon != null) 7.dp else 9.dp, end = 9.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (icon != null) IconGlyph(icon, contentDescription = null, tint = ink, size = 12.dp)
+        HavenText(text, style = HavenTheme.type.pill, color = ink)
+    }
 }
 
 enum class PillTone {
@@ -46,6 +55,7 @@ private fun PillPreview() {
         Row {
             Pill("This device")
             Pill("Whole site", Modifier.padding(start = 8.dp), tone = PillTone.Outline)
+            Pill("work", Modifier.padding(start = 8.dp), tone = PillTone.Outline, icon = HavenIcon.Tag)
         }
     }
 }

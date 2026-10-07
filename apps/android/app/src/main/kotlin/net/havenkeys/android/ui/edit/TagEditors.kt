@@ -59,7 +59,19 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
             }
         }
     }
-    val commit = { if (editor.addTag(text.text.toString())) text.clearText() }
+    // Why the typed text was not added; cleared as soon as the text changes.
+    var refusal by remember(editor) { mutableStateOf<TagRefusal?>(null) }
+    LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect { refusal = null } }
+    val commit = {
+        val typedNow = text.text.toString()
+        val why = tagRefusal(typedNow)
+        when {
+            // Kept so it can be corrected, and the field says why.
+            why != null -> refusal = why
+            // Added, or a tag the item already has: either way the field empties.
+            editor.addTag(typedNow) || tagForm(typedNow) in editor.tags -> text.clearText()
+        }
+    }
     Column {
         SectionHeader(stringResource(R.string.edit_tags))
         InsetGroup {
@@ -78,7 +90,14 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
                 }
             } else {
                 // Keyed: a tag added before it must not take the field's focus away.
-                row(key = "add") { AddTagField(text, enabled = query.isNotEmpty(), commit = commit) }
+                row(key = "add") {
+                    val error = when (refusal) {
+                        TagRefusal.TooLong -> stringResource(R.string.edit_tag_too_long)
+                        TagRefusal.NotAllowed -> stringResource(R.string.edit_tag_not_allowed)
+                        null -> null
+                    }
+                    AddTagField(text, error, enabled = query.isNotEmpty(), commit = commit)
+                }
                 suggestions.forEach { name ->
                     row(key = "suggestion:$name") {
                         GroupRow(
@@ -105,7 +124,7 @@ private fun TagRow(tag: String, onRemove: () -> Unit) {
 }
 
 @Composable
-private fun AddTagField(text: TextFieldState, enabled: Boolean, commit: () -> Unit) {
+private fun AddTagField(text: TextFieldState, error: String?, enabled: Boolean, commit: () -> Unit) {
     val label = stringResource(R.string.edit_add_tag)
     var focused by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,6 +141,7 @@ private fun AddTagField(text: TextFieldState, enabled: Boolean, commit: () -> Un
                 autoCorrectEnabled = false,
                 imeAction = ImeAction.Done,
             ),
+            error = error,
             // Done adds the tag and keeps the keyboard up for the next one.
             onKeyboardAction = KeyboardActionHandler { commit() },
         )

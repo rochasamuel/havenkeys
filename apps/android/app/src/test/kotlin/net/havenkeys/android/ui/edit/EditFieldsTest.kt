@@ -101,6 +101,39 @@ class EditFieldsTest {
     }
 
     @Test
+    fun aRefusedTagStaysInTheFieldAndSaysWhyUntilItChanges() {
+        val (editor, _) = show(login(emptyList()))
+        val long = "x".repeat(33)
+        field(text(R.string.edit_add_tag)).performTextReplacement(long)
+        field(text(R.string.edit_add_tag)).performImeAction()
+        rule.runOnIdle { assertEquals(emptyList<String>(), editor.toDraft().tags) }
+        field(text(R.string.edit_add_tag)).assert(typed(long))
+        field(text(R.string.edit_add_tag))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, text(R.string.edit_tag_too_long)))
+        field(text(R.string.edit_add_tag)).performTextReplacement("x".repeat(32))
+        field(text(R.string.edit_add_tag)).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Error))
+    }
+
+    @Test
+    fun aControlCharacterIsNamedAsNotAllowed() {
+        show(login(emptyList()))
+        field(text(R.string.edit_add_tag)).performTextReplacement("a\u0007b")
+        field(text(R.string.edit_add_tag)).performImeAction()
+        field(text(R.string.edit_add_tag))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, text(R.string.edit_tag_not_allowed)))
+    }
+
+    @Test
+    fun aTagTheItemHasClearsTheFieldQuietly() {
+        val (editor, _) = show(login(emptyList(), tags = listOf("work")))
+        field(text(R.string.edit_add_tag)).performTextReplacement("Work")
+        field(text(R.string.edit_add_tag)).performImeAction()
+        field(text(R.string.edit_add_tag)).assert(typed(""))
+        field(text(R.string.edit_add_tag)).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Error))
+        rule.runOnIdle { assertEquals(listOf("work"), editor.toDraft().tags) }
+    }
+
+    @Test
     fun aCommaEndsATag() {
         val (editor, _) = show(login(emptyList()))
         field(text(R.string.edit_add_tag)).performTextReplacement("prod, ops,db")

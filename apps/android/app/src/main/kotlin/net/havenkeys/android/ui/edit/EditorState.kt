@@ -31,6 +31,20 @@ internal fun tagForm(raw: String): String =
         .joinToString(" ")
         .lowercase()
 
+/** Why Rust would refuse a typed tag, for the editor to say (never echoing it). */
+internal enum class TagRefusal { TooLong, NotAllowed }
+
+/** Why Rust would refuse [raw] as a tag; null when it would take it, or when it is blank. */
+internal fun tagRefusal(raw: String): TagRefusal? {
+    val tag = tagForm(raw)
+    return when {
+        tag.isEmpty() -> null
+        tag.any { it == ',' || it.isISOControl() } -> TagRefusal.NotAllowed
+        tag.codePointCount(0, tag.length) > MAX_TAG_CHARS -> TagRefusal.TooLong
+        else -> null
+    }
+}
+
 class WebsiteRow(url: String, match: MatchKind) {
     var url by mutableStateOf(url)
     var match by mutableStateOf(match)
@@ -106,8 +120,7 @@ class EditorState(private val edit: ItemEdit) {
     fun addTag(raw: String): Boolean {
         val tag = tagForm(raw)
         val ok = tag.isNotEmpty() &&
-            tag.codePointCount(0, tag.length) <= MAX_TAG_CHARS &&
-            tag.none { it == ',' || it.isISOControl() } &&
+            tagRefusal(raw) == null &&
             tag !in tags &&
             tags.size < MAX_TAGS
         if (ok) {

@@ -253,6 +253,8 @@
     <string name="edit_add_tag">Add tag</string>
     <string name="edit_remove_tag">Remove tag %1$s</string>
     <string name="edit_tag_limit">20 tags is the limit.</string>
+    <string name="edit_tag_too_long">Tag is too long. 32 characters is the limit.</string>
+    <string name="edit_tag_not_allowed">Tag contains a character that is not allowed.</string>
     <string name="edit_remove_website">Remove website</string>
     <string name="edit_match_domain">Whole site, any subdomain</string>
     <string name="edit_match_origin">This exact site</string>
