@@ -12,12 +12,12 @@
 //!   rows whose url is `http://sn` (its secure notes) and KeePassXC entries
 //!   with nothing but notes, which become secure notes.
 //! * A TOTP value that does not parse stays in the notes.
-//! * Folders/groups, favourites and LastPass's `grouping` are left out.
+//! * A folder (Bitwarden) or grouping (LastPass) becomes a tag; favourites are left out.
 
 use super::common::{
     clean_line, collect_urls, join_notes, non_empty, parse_utc_timestamp_ms, set_or_keep, Extras,
 };
-use super::{ImportReport, ImportSource, ImportedItem, Parsed, MAX_ITEMS};
+use super::{split_tags, ImportReport, ImportSource, ImportedItem, Parsed, MAX_ITEMS};
 use crate::error::{Error, Result};
 use crate::model::{
     ItemInput, ItemType, MatchType, SecretUpdate, MAX_TITLE_CHARS, MAX_USERNAME_CHARS,
@@ -163,6 +163,8 @@ struct Login<'a> {
     notes: Option<&'a str>,
     /// Text kept in the notes after `notes` (e.g. Bitwarden's custom fields).
     more_notes: Option<&'a str>,
+    /// Bitwarden's folder or LastPass's grouping, kept as a tag.
+    folder: Option<&'a str>,
     created_at: Option<i64>,
     updated_at: Option<i64>,
 }
@@ -229,6 +231,7 @@ fn convert_row(
                     None,
                     created_at,
                     updated_at,
+                    None,
                     report,
                 )
             } else {
@@ -244,6 +247,7 @@ fn convert_row(
                     None,
                     None,
                     None,
+                    row.get("grouping"),
                     report,
                 ));
             }
@@ -255,6 +259,7 @@ fn convert_row(
                     urls: url.into_iter().collect(),
                     totp: row.get("totp"),
                     notes: row.get("extra"),
+                    folder: row.get("grouping"),
                     ..Login::default()
                 },
                 report,
@@ -272,6 +277,7 @@ fn convert_row(
                     row.get("fields"),
                     None,
                     None,
+                    row.get("folder"),
                     report,
                 )),
                 Some("login") => Some(login(
@@ -286,6 +292,7 @@ fn convert_row(
                         totp: row.get("login_totp"),
                         notes: row.get("notes"),
                         more_notes: row.get("fields"),
+                        folder: row.get("folder"),
                         ..Login::default()
                     },
                     report,
@@ -326,6 +333,16 @@ fn login(fields: Login<'_>, report: &mut ImportReport) -> ImportedItem {
         extras.section(None);
         extras.push(None, more);
     }
+    let (tags, rejected) = split_tags(
+        non_empty(fields.folder)
+            .map(str::to_owned)
+            .into_iter()
+            .collect(),
+    );
+    for name in &rejected {
+        extras.section(None);
+        extras.push(Some("Folder"), name);
+    }
     // Untitled browser logins are named after their website.
     let title = title_or(fields.title, || {
         let first = urls.first()?;
@@ -343,6 +360,7 @@ fn login(fields: Login<'_>, report: &mut ImportReport) -> ImportedItem {
             password: set_or_keep(fields.password.map(SecretString::from)),
             totp: set_or_keep(totp),
             notes: set_or_keep(join_notes(fields.notes, &extras)),
+            tags: Some(tags),
             ..ItemInput::blank(ItemType::Login, title)
         },
         created_at: fields.created_at,
@@ -356,16 +374,23 @@ fn note(
     more: Option<&str>,
     created_at: Option<i64>,
     updated_at: Option<i64>,
+    folder: Option<&str>,
     report: &mut ImportReport,
 ) -> ImportedItem {
     let mut extras = Extras::default();
     if let Some(more) = non_empty(more) {
         extras.push(None, more);
     }
+    let (tags, rejected) = split_tags(non_empty(folder).map(str::to_owned).into_iter().collect());
+    for name in &rejected {
+        extras.section(None);
+        extras.push(Some("Folder"), name);
+    }
     report.secure_notes += 1;
     ImportedItem {
         input: ItemInput {
             content: SecretUpdate::Set(join_notes(content, &extras).unwrap_or_default()),
+            tags: Some(tags),
             ..ItemInput::blank(ItemType::SecureNote, title_or(title, || None))
         },
         created_at,
@@ -483,11 +508,18 @@ mod tests {
         let csv = "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n\
             ,,login,Site,n,\"PIN: 1234\",0,\"https://a.example,https://b.example\",me,pw,JBSWY3DPEHPK3PXP\n\
             Docs,1,note,Memo,body,,0,,,,\n\
+            \"a,b\",,login,Odd,,,0,,,,\n\
             ,,card,Visa,,,0,,,,\n";
         let parsed = parse(ImportSource::BitwardenCsv, csv.as_bytes()).unwrap();
         let r = parsed.report;
-        assert_eq!((r.logins, r.secure_notes, r.failed), (1, 1, 1));
+        assert_eq!((r.logins, r.secure_notes, r.failed), (2, 1, 1));
         let site = &parsed.items[0].input;
+        assert_eq!(site.tags, Some(vec![]));
+        assert_eq!(parsed.items[1].input.tags, Some(vec!["docs".to_string()]));
+        // A folder name that cannot be a tag stays in the notes.
+        let odd = &parsed.items[2].input;
+        assert_eq!(odd.tags, Some(vec![]));
+        assert_eq!(set(&odd.notes), Some("Folder: a,b"));
         assert_eq!(site.urls.len(), 2);
         assert_eq!(set(&site.notes), Some("n\n\nPIN: 1234"));
         assert_eq!(set(&parsed.items[1].input.content), Some("body"));

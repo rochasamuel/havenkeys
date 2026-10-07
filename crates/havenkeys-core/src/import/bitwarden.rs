@@ -10,6 +10,7 @@
 //!   notes.
 //! * Identity (4), SSH key (5) and anything else → secure note with every
 //!   value written out.
+//! * A folder becomes a tag (a nested one stays a single name).
 //! * Trashed items, password history and passkeys are skipped and counted.
 //! * Encrypted exports are refused: opening them would mean reimplementing
 //!   Bitwarden's key scheme.
@@ -18,7 +19,7 @@ use super::common::{
     brand_from_name, clean_line, collect_urls, join_notes, non_empty, parse_utc_timestamp_ms,
     set_or_keep, str_at, validated, wipe, Extras, LoginSections,
 };
-use super::{ImportReport, ImportedItem, Parsed, MAX_ITEMS};
+use super::{split_tags, ImportReport, ImportedItem, Parsed, MAX_ITEMS};
 use crate::card::{self, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
 use crate::custom_field::FieldValueInput;
 use crate::error::{Error, Result};
@@ -28,6 +29,7 @@ use crate::model::{
 use crate::secret::SecretString;
 use crate::totp::parse_totp_input;
 use serde_json::Value;
+use std::collections::HashMap;
 use zeroize::Zeroize;
 
 const INVALID: Error = Error::InvalidInput("not a valid Bitwarden export file");
@@ -49,6 +51,15 @@ fn convert(root: &Value) -> Result<Parsed> {
     if list.len() > MAX_ITEMS {
         return Err(Error::InvalidInput("export contains too many items"));
     }
+    let folders: HashMap<&str, &str> = root
+        .get("folders")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|f| Some((text(f, "id")?, text(f, "name")?)))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut report = ImportReport::default();
     let mut items = Vec::new();
     for item in list {
@@ -56,7 +67,7 @@ fn convert(root: &Value) -> Result<Parsed> {
             report.skipped_archived += 1;
             continue;
         }
-        match convert_item(item, &mut report) {
+        match convert_item(item, &folders, &mut report) {
             Some(parsed) => items.push(parsed),
             None => report.failed += 1,
         }
@@ -87,7 +98,11 @@ fn type_name(t: i64) -> &'static str {
     }
 }
 
-fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem> {
+fn convert_item(
+    item: &Value,
+    folders: &HashMap<&str, &str>,
+    report: &mut ImportReport,
+) -> Option<ImportedItem> {
     if !item.is_object() {
         return None;
     }
@@ -110,7 +125,14 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
         .map_or(&[], Vec::as_slice);
 
     let mut extras = Extras::default();
-    let input = match kind {
+    // The folder becomes a tag; a name that cannot be one stays in the notes.
+    let folder = text(item, "folderId").and_then(|id| folders.get(id).copied());
+    let (tags, rejected) = split_tags(folder.map(str::to_owned).into_iter().collect());
+    for name in &rejected {
+        extras.section(None);
+        extras.push(Some("Folder"), name);
+    }
+    let mut input = match kind {
         1 => {
             let login = item.get("login").unwrap_or(&Value::Null);
             if let Some(passkeys) = login.get("fido2Credentials").and_then(Value::as_array) {
@@ -241,6 +263,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             }
         }
     };
+    input.tags = Some(tags);
     Some(ImportedItem {
         input,
         created_at,
@@ -403,6 +426,10 @@ mod tests {
         assert_eq!(r.passkeys_skipped, 1);
         assert_eq!(r.urls_moved_to_notes, 2);
 
+        assert_eq!(parsed.items[0].input.tags, Some(vec!["work".to_string()]));
+        for other in &parsed.items[1..] {
+            assert_eq!(other.input.tags, Some(vec![]));
+        }
         let gh = &parsed.items[0];
         assert_eq!(gh.created_at, Some(1_704_067_200_000));
         assert_eq!(gh.updated_at, Some(1_735_787_045_000));

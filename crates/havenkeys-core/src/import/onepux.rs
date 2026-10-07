@@ -20,7 +20,7 @@ use super::common::{
     self, clean_line, fill, format_date, non_empty, set_or_keep, str_at, validated, wipe, Extras,
     LoginSections,
 };
-use super::{ImportReport, ImportedItem, Parsed, MAX_ITEMS};
+use super::{split_tags, ImportReport, ImportedItem, Parsed, MAX_ITEMS};
 use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
 use crate::custom_field::{AddressValue, FieldValueInput};
 use crate::error::{Error, Result};
@@ -519,12 +519,21 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
         }
     }
 
-    if let Some(tags) = overview.get("tags").and_then(Value::as_array) {
-        let tags: Vec<&str> = tags.iter().filter_map(Value::as_str).collect();
-        if !tags.is_empty() {
-            extras.section(None);
-            extras.push(Some("Tags"), &tags.join(", "));
-        }
+    let (tags, rejected) = split_tags(
+        overview
+            .get("tags")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    );
+    if !rejected.is_empty() {
+        extras.section(None);
+        extras.push(Some("Tags"), &rejected.join(", "));
     }
 
     let notes_plain = non_empty(str_at(details, &["notesPlain"]));
@@ -542,7 +551,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     let created_at = timestamp_ms(item, "createdAt");
     let updated_at = timestamp_ms(item, "updatedAt");
 
-    let input = match category {
+    let mut input = match category {
         "001" | "005" => {
             fields.start(None);
             let (username, mut password) =
@@ -631,6 +640,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             }
         }
     };
+    input.tags = Some(tags);
 
     Some(ImportedItem {
         input,
@@ -674,7 +684,7 @@ mod tests {
                 "overview": {"title": "GitHub", "url": "https://github.com/login",
                     "urls": [{"label": "", "url": "https://github.com/login", "mode": "default"},
                              {"label": "", "url": "javascript:alert(1)", "mode": "default"}],
-                    "tags": ["work"]},
+                    "tags": ["Work", "a,b"]},
                 "details": {
                     "loginFields": [
                         {"value": "octo", "id": "", "name": "login", "fieldType": "T", "designation": "username"},
@@ -981,7 +991,15 @@ mod tests {
             !notes.contains("Sign in with Google"),
             "ssoLogin no longer falls through to notes"
         );
-        assert!(notes.contains("Tags: work"));
+        assert_eq!(gh.input.tags, Some(vec!["work".to_string()]));
+        assert!(
+            notes.contains("Tags: a,b"),
+            "a tag that cannot be one stays in the notes"
+        );
+        assert!(
+            !notes.contains("work"),
+            "a valid tag is not repeated in the notes"
+        );
         assert!(
             notes.contains("Website: javascript:alert(1)"),
             "non-http URLs are kept as text"
@@ -1078,7 +1096,9 @@ mod tests {
         a.extend_from_slice(&[0xff, 0xff, 0xff, 0xff]);
         a.extend_from_slice(&[0xff; 8]);
         // A comment holding a fake EOCD that claims one entry.
-        let fake = [0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let fake = [
+            0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
         a.extend_from_slice(&(fake.len() as u16).to_le_bytes());
         a.extend_from_slice(&fake);
         assert_eq!(declared_entries(&a), 1 << 40);

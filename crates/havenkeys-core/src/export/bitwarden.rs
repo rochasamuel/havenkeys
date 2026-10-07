@@ -84,7 +84,7 @@ struct Identity {
 struct Item {
     id: uuid::Uuid,
     organization_id: Option<()>,
-    folder_id: Option<()>,
+    folder_id: Option<String>,
     r#type: u8,
     reprompt: u8,
     name: String,
@@ -131,11 +131,22 @@ fn name(ov: &ItemOverview, details: &ItemDetails) -> String {
     }
 }
 
+/// A stable folder ID for a tag, so the same tag is one folder.
+fn folder_id(tag: &str) -> String {
+    uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, tag.as_bytes()).to_string()
+}
+
+#[derive(Serialize)]
+struct Folder<'a> {
+    id: String,
+    name: &'a str,
+}
+
 fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
     let mut it = Item {
         id: ov.id,
         organization_id: None,
-        folder_id: None,
+        folder_id: ov.tags.first().map(|t| folder_id(t)),
         r#type: 1,
         reprompt: 0,
         name: name(ov, &details),
@@ -284,7 +295,26 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
 pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
     let mut summary = ExportSummary::default();
     let mut out = Zeroizing::new(Vec::new());
-    out.extend_from_slice(br#"{"encrypted":false,"folders":[],"items":["#);
+    // The first tag of each item is its folder (Bitwarden has one per item).
+    let mut folders = std::collections::BTreeSet::new();
+    for_each_item(vault, |ov, d| {
+        if d.is_some() {
+            if let Some(tag) = ov.tags.first() {
+                folders.insert(tag.clone());
+            }
+        }
+        Ok(())
+    })?;
+    let list: Vec<Folder<'_>> = folders
+        .iter()
+        .map(|name| Folder {
+            id: folder_id(name),
+            name,
+        })
+        .collect();
+    out.extend_from_slice(br#"{"encrypted":false,"folders":"#);
+    serde_json::to_writer(&mut *out, &list).map_err(|_| Error::Encryption)?;
+    out.extend_from_slice(br#","items":["#);
     let mut first = true;
     for_each_item(vault, |ov, d| {
         let Some(d) = d else {

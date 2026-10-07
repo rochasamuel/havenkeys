@@ -15,6 +15,23 @@ use crate::error::{Error, Result};
 use crate::model::ItemInput;
 use serde::{Deserialize, Serialize};
 
+/// Imported folder or tag names as HavenKeys tags: the ones that normalise
+/// (at most [`crate::tags::MAX_TAGS`], in source order), and the rest as
+/// they came, for the caller to keep in the notes rather than drop.
+pub(crate) fn split_tags(raw: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let mut ok: Vec<String> = Vec::new();
+    let mut rejected = Vec::new();
+    for value in raw {
+        match crate::tags::normalize_one(&value) {
+            Ok(tag) if ok.contains(&tag) => {}
+            Ok(tag) if ok.len() < crate::tags::MAX_TAGS => ok.push(tag),
+            _ => rejected.push(value),
+        }
+    }
+    ok.sort();
+    (ok, rejected)
+}
+
 /// Most items one export may hold.
 pub const MAX_ITEMS: usize = 50_000;
 /// Largest JSON or CSV export accepted.
@@ -145,4 +162,29 @@ pub struct ImportReport {
     /// Logins already in the vault (same title, username and websites) that
     /// lacked "Sign in with" and got it from this import.
     pub sso_upgraded: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_tags;
+
+    #[test]
+    fn split_tags_keeps_valid_and_returns_the_rest() {
+        let (ok, rejected) = split_tags(vec![
+            "Work".into(),
+            "a,b".into(),
+            "work".into(),
+            "x".repeat(40),
+        ]);
+        assert_eq!(ok, vec!["work"]);
+        assert_eq!(rejected, vec!["a,b".to_string(), "x".repeat(40)]);
+    }
+
+    #[test]
+    fn split_tags_overflow_past_twenty_goes_to_rejected() {
+        let raw: Vec<String> = (0..22).map(|i| format!("t{i:02}")).collect();
+        let (ok, rejected) = split_tags(raw);
+        assert_eq!(ok.len(), 20);
+        assert_eq!(rejected, vec!["t20".to_string(), "t21".to_string()]);
+    }
 }

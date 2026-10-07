@@ -1059,3 +1059,77 @@ fn a_hostile_backup_restores_only_its_valid_items() {
         "pw-b"
     );
 }
+
+fn tagged(
+    mut input: havenkeys_core::model::ItemInput,
+    tags: &[&str],
+) -> havenkeys_core::model::ItemInput {
+    input.tags = Some(tags.iter().map(|t| (*t).to_owned()).collect());
+    input
+}
+
+#[test]
+fn a_backup_keeps_every_items_tags() {
+    let (mut a, _) = activated_vault();
+    commit_all(
+        &mut a,
+        vec![
+            tagged(
+                login("Bank", "me", "pw", "https://bank.example"),
+                &["money", "family"],
+            ),
+            tagged(note("Recovery", "1111"), &["work"]),
+        ],
+    );
+    let file = backup_of(&a, BACKUP_PW);
+    let (mut b, _) = activated_vault();
+    assert_eq!(restore_into(&mut b, &file, 0).failed, 0);
+    let mut got: Vec<(String, Vec<String>)> = b
+        .list_items()
+        .unwrap()
+        .into_iter()
+        .map(|o| (o.title.clone(), o.tags.clone()))
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        vec![
+            (
+                "Bank".to_owned(),
+                vec!["family".to_owned(), "money".to_owned()]
+            ),
+            ("Recovery".to_owned(), vec!["work".to_owned()]),
+        ]
+    );
+}
+
+#[test]
+fn bitwarden_json_exports_the_first_tag_as_the_folder() {
+    let (mut v, _) = activated_vault();
+    commit_all(
+        &mut v,
+        vec![
+            tagged(
+                login("Bank", "me", "pw", "https://bank.example"),
+                &["b", "a"],
+            ),
+            login("Plain", "me", "pw", "https://plain.example"),
+        ],
+    );
+    let out = export::render(&v, ExportFormat::BitwardenJson, NOW).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    let folders = json["folders"].as_array().unwrap();
+    assert_eq!(folders.len(), 1);
+    assert_eq!(folders[0]["name"], "a");
+    let items = json["items"].as_array().unwrap();
+    let bank = items.iter().find(|i| i["name"] == "Bank").unwrap();
+    let plain = items.iter().find(|i| i["name"] == "Plain").unwrap();
+    assert_eq!(bank["folderId"], folders[0]["id"]);
+    assert!(plain["folderId"].is_null());
+
+    // And it comes back in as the tag.
+    let parsed = import::parse(ImportSource::BitwardenJson, &out.bytes).unwrap();
+    let tags: Vec<_> = parsed.items.iter().map(|i| i.input.tags.clone()).collect();
+    assert!(tags.contains(&Some(vec!["a".to_owned()])));
+    assert!(tags.contains(&Some(vec![])));
+}

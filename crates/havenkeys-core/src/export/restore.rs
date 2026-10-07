@@ -113,7 +113,8 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
     if details.item_type() != ov.item_type {
         return Err(BAD);
     }
-    let blank = ItemInput::blank(ov.item_type, ov.title.clone());
+    let mut blank = ItemInput::blank(ov.item_type, ov.title.clone());
+    blank.tags = Some(ov.tags.clone());
     let mut extra = None;
     let input = match details {
         ItemDetails::Login {
