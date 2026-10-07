@@ -229,6 +229,32 @@ describe("content script", () => {
     }
   });
 
+  it("Riot: clicking a form-less, icon-only sign-in button offers the typed login", async () => {
+    await new Promise((r) => setTimeout(r, 1100)); // submit debounce
+    document.body.innerHTML = `<div><div><input name="username" type="text"></div>
+      <div><input name="password" type="password" autocomplete="off"><button type="button" tabindex="-1"><svg aria-label="visibilityOff"></svg></button></div>
+      <div><button data-testid="btn-signin-submit"><div><svg role="img" aria-label="forward"><path d="M0"></path></svg></div></button></div></div>`;
+    field("username").value = "octo";
+    field("password").value = "new-typed-pw";
+    markUserEdit(field("username"));
+    markUserEdit(field("password"));
+    const arrow = document.querySelector("path") as Element;
+    for (const l of windowListeners.get("click") ?? []) l({ isTrusted: true, composedPath: () => [arrow] } as unknown as Event);
+    expect(sent).toContainEqual({ type: "cs_submit", username: "octo", password: "new-typed-pw" });
+  });
+
+  it("the password toggle beside it is not a submit", async () => {
+    await new Promise((r) => setTimeout(r, 1100)); // submit debounce
+    document.body.innerHTML = `<div><input name="username" type="text"><input name="password" type="password">
+      <button type="button" id="eye"><svg aria-label="visibilityOff"></svg></button></div>`;
+    field("username").value = "octo";
+    field("password").value = "half";
+    markUserEdit(field("password"));
+    const eye = document.querySelector("#eye") as Element;
+    for (const l of windowListeners.get("click") ?? []) l({ isTrusted: true, composedPath: () => [eye] } as unknown as Event);
+    expect(sent.filter((m) => (m as { type: string }).type === "cs_submit")).toEqual([]);
+  });
+
   it("page script cannot open menus by synthesizing typing", async () => {
     const pw = field("pw");
     pw.focus();

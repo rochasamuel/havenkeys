@@ -46,10 +46,25 @@ const NEGATIVE_WORDS = [
   "com google", "com apple", "com facebook", "com microsoft", "com github",
 ];
 
-function label(el: Element): string {
-  const attr = (n: string) => (el.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
+/** Icons read for an icon-only button's label. */
+const MAX_ICONS = 3;
+
+/**
+ * A button's label: its text (an input's value), `aria-label` and `title`.
+ * An icon-only button has none of those, so it is named by its icons'
+ * `aria-label`s and its own `id`, `name` and `data-testid` instead (Riot's
+ * `<button data-testid="btn-signin-submit"><svg aria-label="forward">`).
+ * Those only stand in for a missing label, never add to a visible one.
+ */
+export function buttonLabel(el: Element): string {
+  const attr = (e: Element, n: string) => (e.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
   const own = el instanceof HTMLInputElement ? el.value.slice(0, MAX_HINT_CHARS) : (el.textContent ?? "").slice(0, MAX_HINT_CHARS);
-  return normalize(`${own} ${attr("aria-label")} ${attr("title")}`, MAX_HINT_CHARS * 3);
+  const shown = normalize(`${own} ${attr(el, "aria-label")} ${attr(el, "title")}`, MAX_HINT_CHARS * 3);
+  if (shown) return shown;
+  const icons = Array.from(el.querySelectorAll("[aria-label]"))
+    .slice(0, MAX_ICONS)
+    .map((i) => attr(i, "aria-label"));
+  return normalize([...icons, attr(el, "id"), attr(el, "name"), attr(el, "data-testid")].join(" "), MAX_HINT_CHARS * 6);
 }
 
 function isSubmitter(el: Element): el is HTMLButtonElement | HTMLInputElement {
@@ -60,7 +75,7 @@ function isSubmitter(el: Element): el is HTMLButtonElement | HTMLInputElement {
 }
 
 function score(el: HTMLElement, field: HTMLInputElement, step: PressStep): number {
-  const text = label(el);
+  const text = buttonLabel(el);
   if (hasAny(text, NEGATIVE_WORDS)) return -1;
   let s = 0;
   if (field.form && isSubmitter(el) && el.form === field.form) s += 60;

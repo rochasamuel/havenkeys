@@ -18,6 +18,21 @@ const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".
 
 beforeEach(() => (document.body.innerHTML = ""));
 
+/** auth.riotgames.com's sign-in (trimmed): no <form>; the arrow button has no text. */
+const RIOT = `<div><h5>Sign in</h5><div>
+  <div><iframe aria-hidden="true" style="display: none;" src="https://newassets.hcaptcha.com/captcha/v1/x/static/hcaptcha.html#frame=checkbox-invisible"></iframe>
+  <textarea name="h-captcha-response" style="display: none;"></textarea></div>
+  <div><div class="field"><input name="username" data-testid="input-username" type="text"><label>Username</label></div></div>
+  <div><div class="field"><input name="password" data-testid="input-password" type="password" autocomplete="off">
+    <button type="button" tabindex="-1"><svg role="img" aria-label="visibilityOff"><path d="M0"></path></svg></button><label>Password</label></div></div>
+  <div><div class="social-button-group"><button data-testid="facebook"><svg role="img" aria-label="facebook"><title>facebook</title></svg></button></div>
+    <div class="social-button-group"><button data-testid="google"><svg role="img" aria-label="google"><title>google</title></svg></button></div>
+    <div class="social-button-group"><button data-testid="apple"><svg role="img" aria-label="apple"><title>apple</title></svg></button></div></div>
+  <div><input id="rememberme" type="checkbox"><label for="rememberme">Stay signed in</label></div>
+  <div><button disabled="" data-testid="btn-signin-submit"><div><svg role="img" aria-label="forward"><path d="M0"></path></svg></div></button></div>
+  <div><a href="https://recovery.riotgames.com/en">Can't sign in?</a><a href="https://auth.riotgames.com/authorize?prompt=signup">Create account</a></div>
+</div></div>`;
+
 describe("findSubmitButton", () => {
   it("EX-02: never picks a button that sends the form to another origin", () => {
     const form = (action: string) =>
@@ -46,6 +61,18 @@ describe("findSubmitButton", () => {
         <button id="submit-button" type="submit" name="operation" value="enter-password" aria-label="Botão Entrar. Aperte a tecla enter para entrar.">Entrar</button>
       </div><button id="password-recovery" type="button" name="operation" value="call-account-recovery">Esqueci minha senha</button></div></form>`;
     expect(findSubmitButton($("form"), $("#password"), "password", env)?.id).toBe("submit-button");
+  });
+
+  it("Riot: an icon-only, form-less button labelled only by its data-testid", () => {
+    document.body.innerHTML = RIOT;
+    const pw = $("[name=password]");
+    expect(findSubmitButton(groupRoot(pw), pw, "password", env)?.dataset.testid).toBe("btn-signin-submit");
+  });
+
+  it("an icon-only button's id never outweighs a visible label", () => {
+    document.body.innerHTML = `<div id="root"><input name="u"><input name="p" type="password">
+      <button id="login-help">Need help?</button><button id="go">Sign in</button></div>`;
+    expect(findSubmitButton($("#root"), $("[name=p]"), "password", env)?.id).toBe("go");
   });
 
   it("prefers the form's sign-in button over social and recovery buttons", () => {

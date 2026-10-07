@@ -35,7 +35,7 @@ import { cardFieldsForFill, cardGroupFor, findCardGroup } from "../autofill/card
 import { cardRolesToFill, fillCard, readCardSubmission } from "../autofill/card-fill";
 import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
-import { findSubmitButton, hasChallenge, pressWhenReady, waitForSubmitButton, type PressStep } from "../autofill/submit";
+import { buttonLabel, findSubmitButton, hasChallenge, pressWhenReady, waitForSubmitButton, type PressStep } from "../autofill/submit";
 import { findIdentityGroup, identityGroupFor } from "../autofill/identity";
 import { fillIdentity, rolesToFill } from "../autofill/identity-fill";
 import { hasAny, normalize, PAY_WORDS, SUBMIT_WORDS } from "../autofill/text";
@@ -418,8 +418,7 @@ function start(): void {
   function isSubmitLike(el: Element): boolean {
     if (el instanceof HTMLInputElement) return el.type === "submit" || el.type === "image";
     if (el instanceof HTMLButtonElement && el.form) return el.type === "submit";
-    const label = normalize(`${el.textContent ?? ""} ${el.getAttribute("aria-label") ?? ""}`);
-    return hasAny(label, SUBMIT_WORDS);
+    return hasAny(buttonLabel(el), SUBMIT_WORDS);
   }
 
   // ------------------------------------------------------------ automatic sign-in
