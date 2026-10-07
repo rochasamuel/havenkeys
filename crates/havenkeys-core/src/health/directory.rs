@@ -121,6 +121,17 @@ impl Directory {
     }
 }
 
+impl Directory {
+    /// The https help page of the first of `hosts` this list has one for.
+    /// Shared by the report's `help` flag and `health_help_url`, so the two
+    /// never disagree.
+    pub(crate) fn help_for<'a>(&self, hosts: impl IntoIterator<Item = &'a str>) -> Option<&str> {
+        hosts
+            .into_iter()
+            .find_map(|h| self.lookup(h).and_then(|s| s.help.as_deref()))
+    }
+}
+
 /// Scheme and normalized host of a saved website rule; only http(s).
 pub(crate) fn rule_host(url: &str) -> Option<(String, String)> {
     let url = Url::parse(url).ok()?;
@@ -199,6 +210,22 @@ mod tests {
             d.lookup("github.com").unwrap().help.as_deref(),
             Some("https://docs.github.com/passkeys")
         );
+    }
+
+    #[test]
+    fn help_for_is_the_first_listed_host_with_an_https_link() {
+        let d = dir();
+        assert_eq!(
+            d.help_for(["unlisted.example", "gist.github.com"]),
+            Some("https://docs.github.com/passkeys")
+        );
+        assert_eq!(d.help_for(["accounts.deep.com"]), None, "listed, help null");
+        assert_eq!(d.help_for(["plain.com"]), None, "listed, http help");
+        assert_eq!(
+            d.help_for(["accounts.deep.com", "github.com"]),
+            Some("https://docs.github.com/passkeys")
+        );
+        assert_eq!(d.help_for(["unlisted.example"]), None);
     }
 
     #[test]

@@ -6,8 +6,8 @@ const report: HealthReport = {
   computedAt: 1,
   counts: { weak: 1, reused: 2, old: 0, passkey: 1, twoFactor: 0, insecure: 0, duplicate: 0 },
   issues: [
-    { itemId: "a", checks: ["weak", "reused"], reusedGroup: 0, duplicateGroup: null },
-    { itemId: "b", checks: ["reused", "passkey"], reusedGroup: 0, duplicateGroup: null },
+    { itemId: "a", checks: ["weak", "reused"], reusedGroup: 0, duplicateGroup: null, help: false },
+    { itemId: "b", checks: ["reused", "passkey"], reusedGroup: 0, duplicateGroup: null, help: true },
   ],
   dismissed: [{ itemId: "c", checks: ["old"] }],
 };
@@ -24,7 +24,7 @@ describe("health helpers", () => {
     expect(rowsFor(report, "weak").map((r) => r.itemId)).toEqual(["a"]);
     expect(rowsFor(report, "all").map((r) => r.itemId)).toEqual(["a", "b"]);
     expect(rowsFor(report, "dismissed")).toEqual([
-      { itemId: "c", checks: ["old"], reusedGroup: null, duplicateGroup: null, dismissed: true },
+      { itemId: "c", checks: ["old"], reusedGroup: null, duplicateGroup: null, help: false, dismissed: true },
     ]);
   });
 
@@ -34,8 +34,8 @@ describe("health helpers", () => {
     const lone: HealthReport = {
       ...report,
       issues: [
-        { itemId: "a", checks: ["reused"], reusedGroup: 3, duplicateGroup: null },
-        { itemId: "d", checks: ["duplicate"], reusedGroup: null, duplicateGroup: 1 },
+        { itemId: "a", checks: ["reused"], reusedGroup: 3, duplicateGroup: null, help: false },
+        { itemId: "d", checks: ["duplicate"], reusedGroup: null, duplicateGroup: 1, help: false },
       ],
     };
     expect(reusedCount(lone, "a")).toBe(2);
@@ -47,7 +47,7 @@ describe("health helpers", () => {
   it("counts the other duplicates in a group", () => {
     const three: HealthReport = {
       ...report,
-      issues: ["x", "y", "z"].map((id) => ({ itemId: id, checks: ["duplicate"], reusedGroup: null, duplicateGroup: 0 })),
+      issues: ["x", "y", "z"].map((id) => ({ itemId: id, checks: ["duplicate"], reusedGroup: null, duplicateGroup: 0, help: false })),
     };
     expect(duplicateOthers(three, "x")).toBe(2);
   });

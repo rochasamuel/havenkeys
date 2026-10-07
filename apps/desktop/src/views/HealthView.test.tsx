@@ -15,7 +15,9 @@ vi.mock("../lib/api", async (importOriginal) => ({
   },
 }));
 
+import { ApiError } from "../lib/api";
 import { en } from "../i18n/en";
+import { ToastProvider } from "../components/Toast";
 import { HealthView } from "./HealthView";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -39,8 +41,8 @@ const report: HealthReport = {
   computedAt: 1,
   counts: { weak: 1, reused: 2, old: 0, passkey: 1, twoFactor: 0, insecure: 0, duplicate: 0 },
   issues: [
-    { itemId: "a", checks: ["weak", "reused"], reusedGroup: 0, duplicateGroup: null },
-    { itemId: "b", checks: ["reused", "passkey"], reusedGroup: 0, duplicateGroup: null },
+    { itemId: "a", checks: ["weak", "reused"], reusedGroup: 0, duplicateGroup: null, help: false },
+    { itemId: "b", checks: ["reused", "passkey"], reusedGroup: 0, duplicateGroup: null, help: true },
   ],
   dismissed: [{ itemId: "c", checks: ["old"] }],
 };
@@ -55,7 +57,9 @@ const onChanged = vi.fn();
 function render(r: HealthReport | null, loading = false, readOnly = false) {
   act(() =>
     root.render(
-      <HealthView items={items} report={r} loading={loading} readOnly={readOnly} onOpen={onOpen} onEdit={onEdit} onChanged={onChanged} />,
+      <ToastProvider>
+        <HealthView items={items} report={r} loading={loading} readOnly={readOnly} onOpen={onOpen} onEdit={onEdit} onChanged={onChanged} />
+      </ToastProvider>,
     ),
   );
 }
@@ -159,6 +163,36 @@ describe("HealthView", () => {
     act(() => button(en.health.cards.passkey.title)?.click());
     await act(async () => button(en.health.howToEnable)?.click());
     expect(openHealthHelp).toHaveBeenCalledWith("b", "passkey");
+  });
+
+  // 139 two-factor and 25 passkey sites publish no setup guide (help: null).
+  it("offers no How to enable for a site without a setup guide", () => {
+    const noGuide: HealthReport = {
+      ...report,
+      counts: { ...report.counts, twoFactor: 1 },
+      issues: [
+        { itemId: "a", checks: ["passkey"], reusedGroup: null, duplicateGroup: null, help: false },
+        { itemId: "b", checks: ["two_factor"], reusedGroup: null, duplicateGroup: null, help: false },
+      ],
+    };
+    render(noGuide);
+    expect(host.textContent).toContain("Alpha");
+    expect(host.textContent).toContain("Beta");
+    expect(button(en.health.howToEnable)).toBeUndefined();
+    act(() => button(en.health.cards.passkey.title)?.click());
+    expect(host.textContent).toContain("Alpha");
+    expect(button(en.health.howToEnable)).toBeUndefined();
+    act(() => button(en.health.cards.two_factor.title)?.click());
+    expect(host.textContent).toContain("Beta");
+    expect(button(en.health.howToEnable)).toBeUndefined();
+  });
+
+  it("says the site publishes no guide when Rust finds no help link", async () => {
+    openHealthHelp.mockRejectedValue(new ApiError("not_found", "Item not found."));
+    render(report);
+    await act(async () => button(en.health.howToEnable)?.click());
+    expect(host.textContent).toContain(en.health.noHelp);
+    expect(host.textContent).not.toContain("Item not found");
   });
 
   it("says no issues found, never that the vault is secure", () => {

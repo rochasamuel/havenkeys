@@ -454,6 +454,7 @@ export const en = {
     open: "Open",
     changePassword: "Change password",
     howToEnable: "How to enable",
+    noHelp: "This site doesn't publish a setup guide.",
     dismiss: "Dismiss",
     undo: "Undo",
     dismissFailed: "Couldn't save that change.",

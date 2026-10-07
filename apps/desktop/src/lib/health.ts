@@ -55,12 +55,14 @@ export interface HealthRow {
   checks: HealthCheck[];
   reusedGroup: number | null;
   duplicateGroup: number | null;
+  /** The site publishes a passkey or two-factor setup guide. */
+  help: boolean;
   dismissed: boolean;
 }
 
 export function rowsFor(r: HealthReport, filter: HealthFilter): HealthRow[] {
   if (filter === "dismissed") {
-    return r.dismissed.map((d) => ({ itemId: d.itemId, checks: d.checks, reusedGroup: null, duplicateGroup: null, dismissed: true }));
+    return r.dismissed.map((d) => ({ itemId: d.itemId, checks: d.checks, reusedGroup: null, duplicateGroup: null, help: false, dismissed: true }));
   }
   return r.issues
     .filter((i) => filter === "all" || i.checks.includes(filter))

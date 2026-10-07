@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import type { HealthCheck, HealthReport, ItemOverview } from "../lib/types";
 import { CHECK_ORDER, countOf, dismissedFor, rowsFor, totalIssues, type HealthFilter, type HealthRow } from "../lib/health";
 import { monogram } from "../lib/format";
@@ -68,7 +68,9 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
     try {
       await api.openHealthHelp(id, check);
     } catch (e) {
-      toast(errorMessage(e, t), "error");
+      // The report says which sites have a guide; a stale one may still ask.
+      const noGuide = e instanceof ApiError && e.code === "not_found";
+      toast(noGuide ? t.health.noHelp : errorMessage(e, t), "error");
     }
   }
 
@@ -83,13 +85,15 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
     const passwordFix = single
       ? PASSWORD_CHECKS.includes(single)
       : !row.dismissed && checks.some((c) => PASSWORD_CHECKS.includes(c));
-    const help = single
+    // Only when the site publishes a setup guide (the core's `help` flag).
+    const helpCheck = single
       ? HELP_CHECKS.includes(single)
         ? single
         : null
       : row.dismissed
         ? null
         : (checks.find((c) => HELP_CHECKS.includes(c)) ?? null);
+    const help = row.help ? helpCheck : null;
     const disabled = readOnly || busy === row.itemId;
 
     // Under "All issues" and "Dismissed" each chip carries its own control;

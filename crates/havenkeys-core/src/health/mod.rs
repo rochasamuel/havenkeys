@@ -68,6 +68,9 @@ pub struct HealthIssue {
     pub checks: Vec<HealthCheck>,
     pub reused_group: Option<u32>,
     pub duplicate_group: Option<u32>,
+    /// The issue's Passkey or TwoFactor check has an https setup guide in
+    /// the directory for this login's own site (`health_help_url` succeeds).
+    pub help: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
@@ -250,7 +253,15 @@ pub fn compute(snapshot: &HealthSnapshot, now_ms: i64) -> HealthReport {
         }
         if !kept.is_empty() {
             let has = |c| kept.contains(&c);
+            let dir = if has(HealthCheck::Passkey) {
+                Some(passkey_sites())
+            } else if has(HealthCheck::TwoFactor) {
+                Some(twofactor_sites())
+            } else {
+                None
+            };
             issues.push(HealthIssue {
+                help: dir.is_some_and(|d| d.help_for(hosts()).is_some()),
                 item_id: f.id,
                 reused_group: has(HealthCheck::Reused).then(|| reused[&i]),
                 duplicate_group: has(HealthCheck::Duplicate).then(|| duplicate[&i]),
@@ -390,6 +401,35 @@ mod tests {
         let r = report(vec![f]);
         assert!(!checks(&r, 1).contains(&HealthCheck::Passkey));
         assert!(checks(&r, 1).contains(&HealthCheck::TwoFactor));
+    }
+
+    fn help(r: &HealthReport, n: u128) -> bool {
+        r.issues
+            .iter()
+            .find(|i| i.item_id == Uuid::from_u128(n))
+            .is_some_and(|i| i.help)
+    }
+
+    #[test]
+    fn help_says_whether_the_site_publishes_a_setup_guide() {
+        // github.com has help links in both lists; airasia.com (passkey) and
+        // ngpvan.com (two-factor) are listed with `help: null`.
+        let mut totp_only = facts(4, "https://github.com", Some(STRONG));
+        totp_only.has_passkey = true;
+        let r = report(vec![
+            facts(1, "https://github.com", Some(STRONG)),
+            facts(2, "https://airasia.com", Some(STRONG)),
+            facts(3, "https://ngpvan.com", Some(STRONG)),
+            totp_only,
+            facts(5, "http://example.com", Some(STRONG)),
+        ]);
+        assert!(checks(&r, 2).contains(&HealthCheck::Passkey));
+        assert!(checks(&r, 3).contains(&HealthCheck::TwoFactor));
+        assert!(help(&r, 1), "passkey, github.com");
+        assert!(!help(&r, 2), "passkey, no help link");
+        assert!(!help(&r, 3), "two-factor, no help link");
+        assert!(help(&r, 4), "two-factor, github.com");
+        assert!(!help(&r, 5), "no site check");
     }
 
     #[test]

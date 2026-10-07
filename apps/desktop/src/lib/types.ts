@@ -439,6 +439,8 @@ export interface HealthIssue {
   checks: HealthCheck[];
   reusedGroup: number | null;
   duplicateGroup: number | null;
+  /** The site's passkey or two-factor setup guide exists ("How to enable"). */
+  help: boolean;
 }
 
 export interface HealthDismissed {

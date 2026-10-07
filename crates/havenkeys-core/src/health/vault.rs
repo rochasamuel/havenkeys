@@ -120,11 +120,14 @@ impl VaultService {
         if overview.item_type != ItemType::Login {
             return Err(Error::Denied);
         }
-        overview
+        let hosts: Vec<String> = overview
             .urls
             .iter()
             .filter_map(|r| rule_host(&r.url))
-            .find_map(|(_, host)| dir.lookup(&host).and_then(|s| s.help.clone()))
+            .map(|(_, host)| host)
+            .collect();
+        dir.help_for(hosts.iter().map(String::as_str))
+            .map(str::to_owned)
             .ok_or(Error::NotFound)
     }
 }
@@ -342,6 +345,9 @@ mod tests {
         );
         let url = v.health_help_url(&gh, HealthCheck::Passkey).unwrap();
         assert!(url.starts_with("https://"));
+        let r = v.health_report(NOW).unwrap();
+        let issue = r.issues.iter().find(|i| i.item_id == gh).unwrap();
+        assert!(issue.help, "the report agrees with health_help_url");
         assert_eq!(
             v.health_help_url(&other, HealthCheck::Passkey).err(),
             Some(Error::NotFound)

@@ -480,6 +480,7 @@ export const ptBR: Messages = {
     open: "Abrir",
     changePassword: "Trocar senha",
     howToEnable: "Como ativar",
+    noHelp: "Este site não publica um guia de configuração.",
     dismiss: "Ignorar",
     undo: "Desfazer",
     dismissFailed: "Não foi possível salvar essa alteração.",
