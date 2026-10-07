@@ -109,8 +109,11 @@ function PasswordHistory({ itemId }: { itemId: string }) {
   );
 }
 
-/** Passkeys saved on this login. Private keys never leave the core. */
-function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
+/**
+ * Passkeys saved on this login. Private keys never leave the core. A passkey's
+ * account name is left out when it repeats the login's username shown above.
+ */
+function Passkeys({ itemId, username, readOnly }: { itemId: string; username: string | null; readOnly: boolean }) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const [list, setList] = useState<PasskeyInfo[] | null>(null);
@@ -148,7 +151,9 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
             <Icon name="key" size={15} />
             <span className="selectable">{p.rpId}</span>
             <span className="muted">
-              {p.userName || p.displayName || t.detail.noAccountName} · {t.detail.passkeySaved(formatDate(p.createdAt, dateLocale))}
+              {username && p.userName === username
+                ? t.detail.passkeySaved(formatDate(p.createdAt, dateLocale))
+                : `${p.userName || p.displayName || t.detail.noAccountName} · ${t.detail.passkeySaved(formatDate(p.createdAt, dateLocale))}`}
             </span>
             {confirming === p.credentialId ? (
               <span className="confirm">
@@ -271,7 +276,7 @@ export function ItemDetail({ item, revision, health, readOnly, onEdit, onDelete,
 
           {item.hasPasskey && (
             <div className="group">
-              <Passkeys itemId={item.id} readOnly={readOnly} />
+              <Passkeys itemId={item.id} username={item.username} readOnly={readOnly} />
             </div>
           )}
 
