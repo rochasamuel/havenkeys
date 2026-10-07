@@ -15,6 +15,7 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
+import net.havenkeys.android.ui.items.readerOrder
 import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
@@ -126,7 +127,8 @@ class EditViewModel(
                 is EditTarget.New -> vault.template(target.kind)
             }
             // Suggestions are a convenience: without the list the editor offers none.
-            val vaultTags = (vault.list() as? Outcome.Ok)?.value.orEmpty().flatMap { it.tags }.distinct().sorted()
+            val vaultTags = (vault.list() as? Outcome.Ok)?.value.orEmpty()
+                .flatMap { it.tags }.distinct().sortedWith(readerOrder())
             _state.value = when (edit) {
                 is Outcome.Ok -> EditUiState(edit = edit.value, generation = generation, vaultTags = vaultTags)
                 is Outcome.Failed -> EditUiState(generation = generation, errorCode = edit.code)

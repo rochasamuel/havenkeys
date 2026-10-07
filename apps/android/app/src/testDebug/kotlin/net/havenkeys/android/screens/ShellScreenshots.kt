@@ -152,8 +152,8 @@ class ShellScreenshots {
                 category = { p, c, _ ->
                     CategoryScreen(remember { ItemListViewModel(home, accounts, events) }, c, { _, _ -> }, p)
                 },
-                tag = { p, name, _ ->
-                    TagScreen(remember { ItemListViewModel(home, accounts, events) }, name, { _, _ -> }, p)
+                tag = { p, name, back ->
+                    TagScreen(remember { ItemListViewModel(home, accounts, events) }, name, { _, _ -> }, back, p)
                 },
                 settings = { p ->
                     SettingsScreen(

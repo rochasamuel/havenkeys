@@ -25,6 +25,7 @@ import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
+import uniffi.havenkeys_mobile.ItemSummary
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditViewModelTest {
@@ -55,6 +56,24 @@ class EditViewModelTest {
         assertEquals(Outcome.Ok("hunter2"), vm.reveal("password"))
         assertFalse(vm.state.value.toString().contains("hunter2"))
         assertTrue("editable:id" in vault.calls)
+    }
+
+    private fun summary(id: String, tags: List<String>) =
+        ItemSummary(id, ItemKind.LOGIN, id, null, null, false, false, 0, 0, tags = tags)
+
+    /** Final review (tags): suggestions sorted by UTF-16 put "école" after "zoo". */
+    @Test
+    fun theVaultsTagsAreSuggestedAsAReaderSortsThem() = runTest {
+        val vault = vault().apply {
+            items = Outcome.Ok(
+                listOf(
+                    summary("1", listOf("zoo", "école")),
+                    summary("2", listOf("emploi", "zoo")),
+                ),
+            )
+        }
+        val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
+        assertEquals(listOf("école", "emploi", "zoo"), vm.state.value.vaultTags)
     }
 
     @Test

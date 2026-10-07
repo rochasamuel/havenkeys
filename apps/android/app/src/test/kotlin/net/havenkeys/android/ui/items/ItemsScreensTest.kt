@@ -44,7 +44,9 @@ class ItemsScreensTest {
         )
     }
 
-    private fun vm() = ItemListViewModel(vault, FakeAccountRepository(), VaultEventsHub())
+    private val events = VaultEventsHub()
+
+    private fun vm() = ItemListViewModel(vault, FakeAccountRepository(), events)
 
     @Test
     fun theItemsTabCountsEachCategoryAndOpensIt() {
@@ -82,11 +84,37 @@ class ItemsScreensTest {
     fun aTagListsOnlyItsItems() {
         val vm = vm()
         rule.setKit {
-            TagScreen(vm, "work", onOpen = { _, _ -> }, contentPadding = PaddingValues())
+            TagScreen(vm, "work", onOpen = { _, _ -> }, onGone = {}, contentPadding = PaddingValues())
         }
         rule.onNodeWithText("work").assert(isHeading())
         rule.onNode(hasText("bank") and hasClickAction()).assertIsDisplayed()
         rule.onNodeWithText("Amazon").assertDoesNotExist()
+    }
+
+    /** Final review (tags): the list of a tag no item carries any more stayed open, empty. */
+    @Test
+    fun aTagNoItemCarriesAnyMoreClosesItsList() {
+        val vm = vm()
+        var gone = 0
+        rule.setKit {
+            TagScreen(vm, "work", onOpen = { _, _ -> }, onGone = { gone++ }, contentPadding = PaddingValues())
+        }
+        rule.runOnIdle { assertEquals(0, gone) }
+        // Its last item untagged here, or by a sync: the vault's list no longer has it.
+        vault.items = Outcome.Ok(listOf(item("1", ItemKind.LOGIN, "bank", tags = listOf("staging"))))
+        events.itemsChanged()
+        rule.runOnIdle { assertEquals(1, gone) }
+    }
+
+    @Test
+    fun aTagListStaysOpenThroughTheLockWipe() {
+        val vm = vm()
+        var gone = 0
+        rule.setKit {
+            TagScreen(vm, "work", onOpen = { _, _ -> }, onGone = { gone++ }, contentPadding = PaddingValues())
+        }
+        events.locked("user")
+        rule.runOnIdle { assertEquals(0, gone) }
     }
 
     @Test

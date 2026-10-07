@@ -30,14 +30,37 @@ fun categoryCounts(items: List<ItemSummary>): Map<Category, Int> =
     Category.entries.associateWith { category -> items.count(category::keeps) }
 
 /** Every tag in use with how many items carry it, A–Z, for the Items tab. */
-fun tagCounts(items: List<ItemSummary>): List<Pair<String, Int>> =
-    items.flatMap { it.tags }.groupingBy { it }.eachCount().toList().sortedBy { it.first }
-
-/** A–Z as a reader expects: accents and case do not split the alphabet. */
-internal fun alphabetical(items: List<ItemSummary>): List<ItemSummary> {
-    val collator = Collator.getInstance().apply { strength = Collator.SECONDARY }
-    return items.sortedWith { a, b -> collator.compare(a.title, b.title) }
+fun tagCounts(items: List<ItemSummary>): List<Pair<String, Int>> {
+    val order = readerOrder()
+    return items.flatMap { it.tags }.groupingBy { it }.eachCount().toList().sortedWith { a, b ->
+        order.compare(a.first, b.first)
+    }
 }
+
+/**
+ * A–Z as a reader expects: accents and case do not split the alphabet
+ * ("école" sorts with the e's, not after "z"). Text that only differs in
+ * ways it ignores keeps a fixed order. Item titles, the tag list and the
+ * editor's tag suggestions all use it, as the desktop's `localeCompare`.
+ */
+internal fun readerOrder(): Comparator<String> {
+    val collator = Collator.getInstance().apply { strength = Collator.SECONDARY }
+    return Comparator { a, b -> collator.compare(a, b).takeIf { it != 0 } ?: a.compareTo(b) }
+}
+
+/** Items A–Z by title, in [readerOrder]. */
+internal fun alphabetical(items: List<ItemSummary>): List<ItemSummary> {
+    val order = readerOrder()
+    return items.sortedWith { a, b -> order.compare(a.title, b.title) }
+}
+
+/**
+ * Whether a tag's list should close: the vault, as last read, has no item
+ * carrying [tag] (its last item was untagged or deleted, here or by a
+ * sync). Not while loading (the lock wipe resets to that) or after an error.
+ */
+internal fun tagGone(state: ItemListUiState, tag: String): Boolean =
+    !state.loading && state.errorCode == null && state.items.none { tag in it.tags }
 
 /** The vault's items for the Items tab and a category list; each screen has its own. */
 class ItemListViewModel(

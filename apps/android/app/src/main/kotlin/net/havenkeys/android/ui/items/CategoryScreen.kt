@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -54,25 +55,36 @@ fun CategoryScreen(
     sharedTitle,
 )
 
-/** One tag's items, A–Z: a category list whose title is the tag. */
+/**
+ * One tag's items, A–Z: a category list whose title is the tag. When no
+ * item carries the tag any more, [onGone] takes the user back to Items, as
+ * the desktop falls back to All items.
+ */
+@Suppress("LongParameterList") // the category list's, plus the way out
 @Composable
 fun TagScreen(
     viewModel: ItemListViewModel,
     tag: String,
     onOpen: OpenItem,
+    onGone: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     sharedTitle: SharedTitle = NoSharedTitle,
-) = FilteredList(
-    viewModel,
-    tag,
-    filter = "tag:$tag",
-    { tag in it.tags },
-    onOpen,
-    contentPadding,
-    modifier,
-    sharedTitle,
-)
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val gone = tagGone(state, tag)
+    LaunchedEffect(gone) { if (gone) onGone() }
+    FilteredList(
+        viewModel,
+        tag,
+        filter = "tag:$tag",
+        { tag in it.tags },
+        onOpen,
+        contentPadding,
+        modifier,
+        sharedTitle,
+    )
+}
 
 @Suppress("LongParameterList") // the two lists' shared body
 @Composable

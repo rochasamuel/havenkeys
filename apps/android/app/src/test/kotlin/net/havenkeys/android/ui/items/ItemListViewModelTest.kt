@@ -111,6 +111,13 @@ class ItemListViewModelTest {
         assertEquals(listOf("prod" to 1, "work" to 2), tagCounts(items))
     }
 
+    /** Final review (tags): tags sorted by UTF-16, so "école" came after "zoo". */
+    @Test
+    fun tagsSortAsAReaderExpects() {
+        val items = listOf(item("1", ItemKind.LOGIN, "A", tags = listOf("zoo", "école", "emploi", "banque")))
+        assertEquals(listOf("banque", "école", "emploi", "zoo"), tagCounts(items).map { it.first })
+    }
+
     private fun item(
         id: String,
         kind: ItemKind,

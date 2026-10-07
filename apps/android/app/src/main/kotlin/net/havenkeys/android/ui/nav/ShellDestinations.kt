@@ -58,11 +58,12 @@ internal fun shellScreens(
             sharedTitle = sharedTitle,
         )
     },
-    tag = { padding, name, _ ->
+    tag = { padding, name, onBack ->
         TagScreen(
             viewModel = itemList(services),
             tag = name,
             onOpen = open,
+            onGone = onBack,
             contentPadding = padding,
             sharedTitle = sharedTitle,
         )
