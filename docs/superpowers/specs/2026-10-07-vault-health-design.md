@@ -11,6 +11,13 @@ Show the user which logins need attention, and why:
 * **Old** passwords (not changed in over a year).
 * **Passkey available**: the site accepts passkeys and the login has none.
 * **2FA available**: the site offers TOTP codes and the login has no TOTP.
+* **Unsecured website**: the login has an `http://` website.
+* **Duplicates**: two or more logins with the same title, username and
+  websites.
+
+The metrics follow 1Password's Watchtower (reused, weak, unsecured
+websites, duplicates, passkeys available, two-factor), plus "old". No
+overall strength bar.
 
 Everything is computed in the Rust core with the vault unlocked. Nothing
 leaves the device, and no third-party service is contacted. Desktop and
@@ -21,7 +28,7 @@ Android ship it together, over the same Rust API.
 | Question | Decision |
 |---|---|
 | Platforms | Desktop and Android in the same release; the extension gets nothing new |
-| Checks | All five: weak, reused, old, passkey available, 2FA available |
+| Checks | Seven: weak, reused, old, passkey available, 2FA available, unsecured website, duplicates (Watchtower's set plus "old"; added 2026-10-07 after the first approval) |
 | Where it is computed | On demand in `havenkeys-core` (approach A); per-item flags stored at save time (B) and computing in the UI (C) rejected |
 | Weak | `zxcvbn` score 0–2, with the login's title and username as user inputs |
 | Reused | Current passwords only; `password_history` is not compared |
@@ -85,11 +92,27 @@ Only `login` items are checked. Cards, identities and secure notes are not.
   (sites listing `totp`), the login has no TOTP, and the login is **not**
   already flagged "passkey available". One suggestion per site.
 
-### 4.6 Dismissed checks
+### 4.6 Unsecured website
+
+* Flagged when one of the login's URL rules is `http` and its host has a
+  registrable domain under a known public suffix. `localhost`, IP
+  addresses and names like `router.lan` are not flagged: they are local
+  devices that often have no https.
+* The fix is the user's: edit the website to `https://`.
+
+### 4.7 Duplicates
+
+* Logins with the same digest as the importer's de-duplication
+  (`dedupe_key_parts` in `vault.rs`: title, username and the sorted URL
+  rules; the password is not part of it). Every group of two or more gets
+  one `duplicate_group` number, assigned like `reused_group`.
+* The fix is the user's: open the logins and delete the extra ones.
+
+### 4.8 Dismissed checks
 
 * `ItemDetails::Login` gains
   `#[serde(default, skip_serializing_if = "Vec::is_empty")] health_ignored: Vec<HealthCheck>`.
-  `HealthCheck` is `weak | reused | old | passkey | two_factor`.
+  `HealthCheck` is `weak | reused | old | passkey | two_factor | insecure | duplicate`.
 * A dismissed check is reported under `dismissed`, not under `issues`, and
   is not counted.
 * No migration: the vault is resettable and the field defaults to empty.
@@ -103,8 +126,9 @@ Only `login` items are checked. Cards, identities and secure notes are not.
 ```text
 HealthReport {
   computed_at: i64,
-  counts: { weak, reused, old, passkey, two_factor },   // non-dismissed only
-  issues:    [ { item_id, checks: [HealthCheck], reused_group: Option<u32> } ],
+  counts: { weak, reused, old, passkey, two_factor, insecure, duplicate },   // non-dismissed only
+  issues:    [ { item_id, checks: [HealthCheck], reused_group: Option<u32>,
+                 duplicate_group: Option<u32> } ],
   dismissed: [ { item_id, checks: [HealthCheck] } ],
 }
 ```
@@ -112,8 +136,9 @@ HealthReport {
 * Only item IDs, check kinds and group numbers. No password, score,
   length, hash or any other value derived from a password. No title or
   username either: both UIs already hold the item overviews.
-* `reused_group` is an index (0, 1, 2…) assigned when the report is built,
-  in an order unrelated to the password.
+* `reused_group` and `duplicate_group` are indexes (0, 1, 2…) assigned
+  when the report is built, ordered by the smallest item ID in each group,
+  so the order says nothing about the password.
 * `Debug` on every report type is redacted, like the other model types.
 
 ### 5.2 Operations
@@ -140,6 +165,12 @@ HealthReport {
 
 * The report is cached in the unlocked vault state. Any write, a sync pull
   and unlock clear it; lock drops it with the rest of the decrypted state.
+  A cached report older than 10 minutes is computed again, so "old" does
+  not go stale in a long session.
+* The passwords are read under the vault lock into a short-lived snapshot;
+  the slow part (zxcvbn) runs after the lock is released, so fills from
+  the extension or Android Autofill never wait on it. A report computed
+  from a snapshot taken before a change is not cached.
 * The next call computes it on a worker thread (desktop: Tauri async
   command; Android: the coroutine the ViewModel already uses for core
   calls). The UI shows a spinner, never a partial report.
@@ -168,25 +199,29 @@ HealthReport {
 
 * **Sidebar:** "Vault health" under Tools, next to the Generator, with a
   badge counting non-dismissed issues (`nav-count`).
-* **View:** a row of five summary cards (Weak · Reused · Old · Passkey
-  available · 2FA available) with counts; clicking one filters the list.
+* **View:** a grid of summary cards in Watchtower's order (Reused · Weak
+  · Unsecured websites · Duplicates · Passkeys available · Two-factor
+  authentication · Old), each with its count, one line on why it matters
+  and "Show items"; clicking one filters the list.
   A "Dismissed" filter lists dismissed checks with "Undo".
 * **Rows:** title and username from the overviews, check chips, and actions:
   * **Open**: the login's detail.
   * **Change password**: the login's editor with the generator ready.
   * **How to enable** (passkey and 2FA only): `open_health_help`.
+  * Unsecured and duplicates have no action of their own: Open, then edit
+    the website or delete the extra login.
   * **Dismiss** (per check).
 * **Login detail:** the same chips, under the title.
 * **Empty state:** "No issues found." Never "Your vault is secure."
 * **Copy:** "Weak password", "Used in 3 logins", "Not changed in over a
-  year", "Supports passkeys", "Supports two-factor codes". English and
-  pt-BR.
+  year", "Supports passkeys", "Supports two-factor codes", "Uses http",
+  "Duplicate of 1 other login". English and pt-BR.
 
 ## 8. Android
 
 * **Home:** one "Vault health" card with the total, opening the Health
   screen.
-* **Health screen:** the same five filters and "Dismissed", rows with Open,
+* **Health screen:** the same seven filters and "Dismissed", rows with Open,
   Change password, How to enable and Dismiss.
 * **Item screen:** the same chips.
 * English and pt-BR strings.
@@ -225,6 +260,10 @@ HealthReport {
   `github.com.evil.com` and `github-login.example.com` never match; logins
   with a passkey / TOTP not flagged; a site in both directories gets only
   the passkey suggestion.
+* **Unsecured:** `http://example.com` flagged; `https://`, `http://localhost`,
+  `http://192.168.0.1` and `http://router.lan` not flagged.
+* **Duplicates:** same title, username and websites grouped; a different
+  username or website not grouped; the password does not matter.
 * **Dismissed:** moves to `dismissed`, leaves the counts, leaves
   `updated_at` alone, survives an edit from every editor; non-login IDs
   rejected.
