@@ -15,6 +15,8 @@ interface Props {
   /** Offline: editing would fail, so the control is disabled up front. */
   readOnly: boolean;
   onEdit: () => void;
+  /** Open the vault filtered by this tag. */
+  onTag?: (tag: string) => void;
 }
 
 /** A masked field with an eye; hides itself again after 30 s, like a password. */
@@ -60,7 +62,7 @@ function MaskedField({ label, value, copyButton }: { label: string; value: strin
  * that decrypts its values (as with a secure note); they are dropped when
  * this unmounts, including on lock. Copies go through Rust.
  */
-export function IdentityDetail({ item, readOnly, onEdit }: Props) {
+export function IdentityDetail({ item, readOnly, onTag, onEdit }: Props) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const [view, setView] = useState<IdentityView | null>(null);
@@ -128,6 +130,16 @@ export function IdentityDetail({ item, readOnly, onEdit }: Props) {
           </button>
         </div>
       </header>
+
+      {item.tags.length > 0 && (
+        <div className="detail-tags" role="group" aria-label={t.detail.tags}>
+          {item.tags.map((name) => (
+            <button key={name} type="button" className="chip tag-chip" onClick={() => onTag?.(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!fields ? (
         !failed && <p className="muted">{t.common.decrypting}</p>

@@ -53,6 +53,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const toast = useToast();
   const { t } = useI18n();
   const [section, setSection] = useState<Section>("all");
+  // A tag filter narrows All items; picking any other place clears it.
+  const [tag, setTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemOverview[]>([]);
   /** Bumped each time the items are reloaded; lets a detail row follow other items. */
@@ -149,7 +151,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   const openFromExtension = useCallback((id: string) => {
     setPendingOpen(null);
-    setSection("login");
+    pickSection("login");
     setQuery("");
     setPane({ kind: "view", id });
   }, []);
@@ -182,7 +184,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
         case "reveal":
           // This item is already shown, just hidden behind
           // Settings/Generator: bring it back without touching its state.
-          setSection("login");
+          pickSection("login");
           return;
         case "confirm":
           setPendingOpen(id);
@@ -250,10 +252,12 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     }
   }
 
-  const visible = useMemo(
-    () => (section === "login" || section === "secure_note" || section === "card" ? items.filter((i) => i.itemType === section) : items),
-    [items, section],
-  );
+  const visible = useMemo(() => {
+    if (tag !== null) return items.filter((i) => i.tags.includes(tag));
+    return section === "login" || section === "secure_note" || section === "card"
+      ? items.filter((i) => i.itemType === section)
+      : items;
+  }, [items, section, tag]);
   const counts = useMemo(
     () => ({
       all: items.length,
@@ -301,26 +305,38 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   function openIdentity() {
     if (!identity) return;
-    setSection("all");
+    pickSection("all");
     setQuery("");
     setPane({ kind: "view", id: identity.id });
   }
 
   // "Show Recovery Sheet" on the Account item: Settings, scrolled to the kit.
   function showKit() {
-    setSection("settings");
+    pickSection("settings");
     window.requestAnimationFrame(() =>
       document.getElementById("emergency-kit")?.scrollIntoView({ block: "start", behavior: "smooth" }),
     );
   }
 
   function newItem(itemType: ItemType) {
-    if (isToolSection) setSection("all");
+    if (isToolSection) pickSection("all");
     setPane({ kind: "new", itemType });
   }
 
   const isMac = document.documentElement.dataset.platform === "mac";
   const vaultTags = useMemo(() => tagCounts(allItems), [allItems]);
+  // The last item with this tag lost it (here or on another device).
+  useEffect(() => {
+    if (tag !== null && !vaultTags.some((v) => v.name === tag)) setTag(null);
+  }, [tag, vaultTags]);
+  const pickSection = (s: Section) => {
+    setTag(null);
+    setSection(s);
+  };
+  const openTag = (name: string) => {
+    setSection("all");
+    setTag(name);
+  };
 
   return (
     <VaultTagsProvider value={vaultTags}>
@@ -341,7 +357,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
-                if (isToolSection) setSection("all");
+                if (isToolSection) pickSection("all");
               }}
               spellCheck={false}
               autoComplete="off"
@@ -355,8 +371,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               <button
                 key={s.id}
                 className="nav-item"
-                aria-current={section === s.id && !identitySelected ? "page" : undefined}
-                onClick={() => setSection(s.id)}
+                aria-current={section === s.id && !identitySelected && tag === null ? "page" : undefined}
+                onClick={() => pickSection(s.id)}
               >
                 <Icon name={s.icon} size={17} />
                 <span>{s.label(t)}</span>
@@ -373,11 +389,28 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               <Icon name="idCard" size={17} />
               <span>{t.identity.nav}</span>
             </button>
+            {vaultTags.length > 0 && (
+              <>
+                <p className="nav-heading">{t.vault.tagsHeading}</p>
+                {vaultTags.map((v) => (
+                  <button
+                    key={v.name}
+                    className="nav-item"
+                    aria-current={tag === v.name ? "page" : undefined}
+                    onClick={() => openTag(v.name)}
+                  >
+                    <Icon name="tag" size={17} />
+                    <span>{v.name}</span>
+                    <span className="nav-count">{v.count}</span>
+                  </button>
+                ))}
+              </>
+            )}
             <p className="nav-heading">{t.vault.toolsHeading}</p>
             <button
               className="nav-item"
               aria-current={section === "health" ? "page" : undefined}
-              onClick={() => setSection("health")}
+              onClick={() => pickSection("health")}
             >
               <Icon name="shield" size={17} />
               <span>{t.vault.health}</span>
@@ -386,7 +419,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
             <button
               className="nav-item"
               aria-current={section === "generator" ? "page" : undefined}
-              onClick={() => setSection("generator")}
+              onClick={() => pickSection("generator")}
             >
               <Icon name="dice" size={17} />
               <span>{t.vault.generator}</span>
@@ -394,7 +427,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
             <button
               className="nav-item"
               aria-current={section === "settings" ? "page" : undefined}
-              onClick={() => setSection("settings")}
+              onClick={() => pickSection("settings")}
             >
               <Icon name="gear" size={17} />
               <span>{t.vault.settings}</span>
@@ -426,12 +459,12 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
             loading={healthLoading}
             readOnly={readOnly}
             onOpen={(id) => {
-              setSection("login");
+              pickSection("login");
               setQuery("");
               setPane({ kind: "view", id });
             }}
             onEdit={(id) => {
-              setSection("login");
+              pickSection("login");
               setQuery("");
               setPane({ kind: "edit", id });
             }}
@@ -461,6 +494,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                 items={visible}
                 query={query}
                 section={section}
+                tag={tag}
                 selectedId={selectedId}
                 onSelect={(id) => setPane({ kind: "view", id })}
                 onNew={newItem}
@@ -499,7 +533,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                       <button className="btn" onClick={() => newItem("secure_note")} disabled={readOnly}>
                         <Icon name="note" size={16} /> {t.vault.addNote}
                       </button>
-                      <button className="btn" onClick={() => setSection("settings")} disabled={readOnly}>
+                      <button className="btn" onClick={() => pickSection("settings")} disabled={readOnly}>
                         {t.vault.importOther}
                       </button>
                     </div>
@@ -514,6 +548,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   key={selected.id + selected.updatedAt}
                   item={selected}
                   readOnly={readOnly}
+                  onTag={openTag}
                   onEdit={() => setPane({ kind: "edit", id: selected.id })}
                 />
               )}
@@ -532,6 +567,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   key={selected.id + selected.updatedAt}
                   item={selected}
                   readOnly={readOnly}
+                  onTag={openTag}
                   onEdit={() => setPane({ kind: "edit", id: selected.id })}
                   onDelete={() => void onDelete(selected)}
                 />
@@ -553,6 +589,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                   revision={revision}
                   health={health}
                   readOnly={readOnly}
+                  onTag={openTag}
                   onEdit={() => setPane({ kind: "edit", id: selected.id })}
                   onDelete={() => void onDelete(selected)}
                   onOpen={(id) => setPane({ kind: "view", id })}

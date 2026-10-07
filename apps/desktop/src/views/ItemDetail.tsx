@@ -23,6 +23,8 @@ interface Props {
   /** Offline: editing or deleting would fail, so the controls are disabled up front. */
   readOnly: boolean;
   onEdit: () => void;
+  /** Open the vault filtered by this tag. */
+  onTag?: (tag: string) => void;
   onDelete: () => void;
   onOpen: (id: string) => void;
 }
@@ -175,7 +177,7 @@ function Passkeys({ itemId, username, readOnly }: { itemId: string; username: st
   );
 }
 
-export function ItemDetail({ item, revision, health, readOnly, onEdit, onDelete, onOpen }: Props) {
+export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, onDelete, onOpen }: Props) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const copy = useCopy(item.id);
@@ -221,6 +223,16 @@ export function ItemDetail({ item, revision, health, readOnly, onEdit, onDelete,
         </div>
         {health && <HealthChips checks={checksFor(health, item.id)} report={health} itemId={item.id} />}
       </header>
+
+      {item.tags.length > 0 && (
+        <div className="detail-tags" role="group" aria-label={t.detail.tags}>
+          {item.tags.map((name) => (
+            <button key={name} type="button" className="chip tag-chip" onClick={() => onTag?.(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {item.itemType === "login" && (
         <>

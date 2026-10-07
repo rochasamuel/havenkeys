@@ -14,6 +14,8 @@ interface Props {
   items: ItemOverview[];
   query: string;
   section: Section;
+  /** A tag filter is active: it titles the list. */
+  tag: string | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNew: (type: ItemType) => void;
@@ -29,6 +31,7 @@ export function ItemList({
   items,
   query,
   section,
+  tag,
   selectedId,
   onSelect,
   onNew,
@@ -66,7 +69,7 @@ export function ItemList({
     <section className="list" aria-label={t.list.items}>
       <header className="list-head" data-tauri-drag-region>
         <div className="list-title" data-tauri-drag-region>
-          <h2>{query.trim() ? t.list.results : headings[section]}</h2>
+          <h2>{query.trim() ? t.list.results : tag ?? headings[section]}</h2>
           <span className="list-count">{items.length}</span>
         </div>
         <div className="new-menu" ref={menuRef}>

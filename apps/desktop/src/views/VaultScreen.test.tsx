@@ -98,3 +98,91 @@ describe("VaultScreen health report", () => {
     expect(healthReport.mock.calls.length).toBe(afterMount + 1);
   });
 });
+
+function overview(id: string, title: string, tags: string[]) {
+  return {
+    id,
+    itemType: "login",
+    title,
+    username: null,
+    urls: [],
+    hasPassword: false,
+    hasTotp: false,
+    hasNotes: false,
+    hasPasskey: false,
+    autoSignIn: false,
+    tags,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+async function mountWith(items: ReturnType<typeof overview>[]) {
+  listItems.mockResolvedValue(items);
+  act(() =>
+    root.render(
+      <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} onLock={() => undefined} />,
+    ),
+  );
+  await settle();
+}
+
+const navButton = (label: string) =>
+  [...host.querySelectorAll<HTMLButtonElement>(".nav button")].find((b) => b.textContent?.trim() === label);
+const listHead = () => host.querySelector(".list-head h2")?.textContent;
+const click = (el: Element | undefined | null) => act(() => el!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+const three = () => [overview("a", "Alpha", ["staging"]), overview("b", "Bravo", ["staging", "work"]), overview("c", "Charlie", [])];
+
+describe("VaultScreen tags", () => {
+  it("lists the vault's tags with counts in the sidebar", async () => {
+    await mountWith(three());
+    const headings = [...host.querySelectorAll(".nav .nav-heading")].map((h) => h.textContent);
+    expect(headings).toContain("Tags");
+    expect(navButton("staging2")).toBeTruthy();
+    expect(navButton("work1")).toBeTruthy();
+  });
+
+  it("filters the list by a tag and titles the list with it", async () => {
+    await mountWith(three());
+    click(navButton("staging2"));
+    await settle();
+    expect(listHead()).toBe("staging");
+    const text = host.querySelector(".list")!.textContent!;
+    expect(text).toContain("Alpha");
+    expect(text).toContain("Bravo");
+    expect(text).not.toContain("Charlie");
+    expect(navButton("staging2")!.getAttribute("aria-current")).toBe("page");
+    expect(navButton("All items3")!.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("has no Tags section when no item has a tag", async () => {
+    await mountWith([overview("c", "Charlie", [])]);
+    expect([...host.querySelectorAll(".nav .nav-heading")].map((h) => h.textContent)).not.toContain("Tags");
+  });
+
+  it("falls back to All items when the selected tag disappears", async () => {
+    await mountWith(three());
+    click(navButton("work1"));
+    await settle();
+    expect(listHead()).toBe("work");
+    listItems.mockResolvedValue([overview("a", "Alpha", ["staging"]), overview("b", "Bravo", ["staging"]), overview("c", "Charlie", [])]);
+    await act(async () => itemsChangedListener?.());
+    await settle();
+    expect(listHead()).toBe("All items");
+    const text = host.querySelector(".list")!.textContent!;
+    expect(text).toContain("Charlie");
+  });
+
+  it("opens a tag from the detail pane", async () => {
+    await mountWith(three());
+    click([...host.querySelectorAll<HTMLElement>(".list button")].find((b) => b.textContent?.includes("Bravo")));
+    await settle();
+    const pill = host.querySelector<HTMLButtonElement>(".detail-tags button.tag-chip")!;
+    expect(pill.textContent).toBe("staging");
+    click(pill);
+    await settle();
+    expect(listHead()).toBe("staging");
+    expect(navButton("staging2")!.getAttribute("aria-current")).toBe("page");
+  });
+});

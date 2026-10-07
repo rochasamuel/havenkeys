@@ -2361,6 +2361,25 @@ input::-ms-clear {
   padding-right: 4px;
 }
 
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 18px;
+}
+
+button.tag-chip {
+  cursor: pointer;
+  background: transparent;
+  padding-right: 9px;
+  font-family: inherit;
+}
+
+button.tag-chip:hover {
+  color: var(--text-strong);
+  border-color: var(--muted);
+}
+
 .tag-remove {
   display: inline-grid;
   place-items: center;

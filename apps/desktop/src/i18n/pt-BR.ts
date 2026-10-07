@@ -262,6 +262,7 @@ export const ptBR: Messages = {
     searchLabel: "Buscar no cofre",
     sectionsLabel: "Seções do cofre",
     vaultHeading: "Cofre",
+    tagsHeading: "Tags",
     toolsHeading: "Ferramentas",
     health: "Saúde do cofre",
     generator: "Gerador de senhas",
@@ -311,6 +312,7 @@ export const ptBR: Messages = {
   },
 
   detail: {
+    tags: "Tags",
     copied: {
       username: (seconds: number) => `Usuário copiado. A área de transferência é limpa em ${seconds}\u00a0s.`,
       password: (seconds: number) => `Senha copiada. A área de transferência é limpa em ${seconds}\u00a0s.`,

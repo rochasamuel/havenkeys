@@ -238,6 +238,7 @@ export const en = {
     searchLabel: "Search vault",
     sectionsLabel: "Vault sections",
     vaultHeading: "Vault",
+    tagsHeading: "Tags",
     toolsHeading: "Tools",
     health: "Vault health",
     generator: "Password generator",
@@ -285,6 +286,7 @@ export const en = {
   },
 
   detail: {
+    tags: "Tags",
     /** By copied field; each language agrees the word with its own noun. */
     copied: {
       username: (seconds: number) => `Username copied. The clipboard clears in ${seconds}\u00a0s.`,

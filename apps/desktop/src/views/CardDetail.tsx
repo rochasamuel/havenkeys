@@ -16,6 +16,8 @@ interface Props {
   /** Offline: editing and deleting would fail, so the controls are disabled up front. */
   readOnly: boolean;
   onEdit: () => void;
+  /** Open the vault filtered by this tag. */
+  onTag?: (tag: string) => void;
   onDelete: () => void;
 }
 
@@ -86,7 +88,7 @@ function RevealableField(props: {
 }
 
 /** A card, read-only. Opening it decrypts everything but the number and code. */
-export function CardDetail({ item, readOnly, onEdit, onDelete }: Props) {
+export function CardDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const [view, setView] = useState<CardView | null>(null);
@@ -143,6 +145,16 @@ export function CardDetail({ item, readOnly, onEdit, onDelete }: Props) {
           </button>
         </div>
       </header>
+
+      {item.tags.length > 0 && (
+        <div className="detail-tags" role="group" aria-label={t.detail.tags}>
+          {item.tags.map((name) => (
+            <button key={name} type="button" className="chip tag-chip" onClick={() => onTag?.(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!view ? (
         !failed && <p className="muted">{t.common.decrypting}</p>
