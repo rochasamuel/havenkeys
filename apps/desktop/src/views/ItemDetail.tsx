@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
-import type { CopyField, ItemOverview, PasskeyInfo } from "../lib/types";
+import type { CopyField, HealthReport, ItemOverview, PasskeyInfo } from "../lib/types";
+import { checksFor } from "../lib/health";
 import { formatDate, monogram, primaryHost } from "../lib/format";
 import { useRevealedSecret } from "../lib/hooks";
 import { CopyButton } from "../components/CopyButton";
 import { Field, IconButton, TotpField } from "../components/Field";
+import { HealthChips } from "../components/HealthChips";
 import { Icon } from "../components/Icon";
 import { SsoRow } from "../components/SsoRow";
 import { useToast } from "../components/Toast";
@@ -16,6 +18,8 @@ interface Props {
   item: ItemOverview;
   /** Bumped when the vault reloads its items (see SsoRow). */
   revision: number;
+  /** The vault health report, for this login's chips under its title. */
+  health?: HealthReport | null;
   /** Offline: editing or deleting would fail, so the controls are disabled up front. */
   readOnly: boolean;
   onEdit: () => void;
@@ -166,7 +170,7 @@ function Passkeys({ itemId, readOnly }: { itemId: string; readOnly: boolean }) {
   );
 }
 
-export function ItemDetail({ item, revision, readOnly, onEdit, onDelete, onOpen }: Props) {
+export function ItemDetail({ item, revision, health, readOnly, onEdit, onDelete, onOpen }: Props) {
   const toast = useToast();
   const { t, dateLocale } = useI18n();
   const copy = useCopy(item.id);
@@ -210,6 +214,7 @@ export function ItemDetail({ item, revision, readOnly, onEdit, onDelete, onOpen 
             <Icon name="edit" size={15} /> {t.common.edit}
           </button>
         </div>
+        {health && <HealthChips checks={checksFor(health, item.id)} report={health} itemId={item.id} />}
       </header>
 
       {item.itemType === "login" && (

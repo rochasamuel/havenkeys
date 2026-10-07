@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import type { AccountStatus, ItemOverview, ItemType } from "../lib/types";
+import type { AccountStatus, HealthReport, ItemOverview, ItemType } from "../lib/types";
+import { totalIssues } from "../lib/health";
 import { showAccountItem } from "../lib/accountItem";
 import { decideOpen } from "../lib/openItem";
 import { Icon, type IconName } from "../components/Icon";
@@ -16,11 +17,12 @@ import { IdentityEditor } from "./IdentityEditor";
 import { ItemEditor } from "./ItemEditor";
 import { GeneratorView } from "./GeneratorView";
 import { SettingsView } from "./SettingsView";
+import { HealthView } from "./HealthView";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
-export type Section = "all" | "login" | "secure_note" | "card" | "generator" | "settings";
+export type Section = "all" | "login" | "secure_note" | "card" | "health" | "generator" | "settings";
 
 type Pane =
   | { kind: "empty" }
@@ -63,6 +65,10 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [identityId, setIdentityId] = useState<string | null>(null);
+  // The vault health report: IDs and check kinds only, gone with this
+  // component on lock. Never written to browser storage.
+  const [health, setHealth] = useState<HealthReport | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   // The account's one Identity: created on this or another device at
   // connect, so it may appear later through a sync.
@@ -76,6 +82,28 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     api.accountStatus().then(setAccount, () => setAccount(null));
   }, []);
 
+  const sectionRef = useRef(section);
+  sectionRef.current = section;
+
+  // Only the latest request may land: an older answer must not replace a newer one.
+  const healthSeq = useRef(0);
+  const loadHealth = useCallback(async () => {
+    const seq = ++healthSeq.current;
+    setHealthLoading(true);
+    try {
+      const report = await api.healthReport();
+      if (seq === healthSeq.current) setHealth(report);
+    } catch (e) {
+      if (seq !== healthSeq.current) return;
+      setHealth(null);
+      if (sectionRef.current === "health" && !(e instanceof ApiError && e.code === "locked")) {
+        toast(errorMessage(e, t, t.health.loadFailed), "error");
+      }
+    } finally {
+      if (seq === healthSeq.current) setHealthLoading(false);
+    }
+  }, [toast, t]);
+
   const refresh = useCallback(async () => {
     try {
       const searching = query.trim() !== "";
@@ -83,10 +111,16 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       setItems(found);
       setRevision((r) => r + 1);
       setAllItems(all ?? found);
+      void loadHealth();
     } catch (e) {
       if (e instanceof ApiError && e.code !== "locked") toast(errorMessage(e, t), "error");
     }
-  }, [query, toast, t]);
+  }, [query, toast, t, loadHealth]);
+
+  // Opening the view checks again: a password changed elsewhere since.
+  useEffect(() => {
+    if (section === "health") void loadHealth();
+  }, [section, loadHealth]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 120);
@@ -113,8 +147,6 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   paneRef.current = pane;
   const editorDirtyRef = useRef(editorDirty);
   editorDirtyRef.current = editorDirty;
-  const sectionRef = useRef(section);
-  sectionRef.current = section;
 
   // "Open in HavenKeys" from the browser extension's popup. Subscribes once
   // (stable deps): re-subscribing on every pane/editorDirty change would
@@ -128,7 +160,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       // The Account item has no editor to lose: it counts as an empty pane.
       const ref =
         pane.kind === "new" ? { kind: "new" as const } : pane.kind === "account" ? { kind: "empty" as const } : pane;
-      const editorShown = sectionRef.current !== "generator" && sectionRef.current !== "settings";
+      const editorShown =
+        sectionRef.current !== "generator" && sectionRef.current !== "settings" && sectionRef.current !== "health";
       switch (decideOpen(ref, editorDirtyRef.current, id, editorShown)) {
         case "already":
           return;
@@ -218,7 +251,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   const selectedId = pane.kind === "view" || pane.kind === "edit" ? pane.id : null;
   const selected = allItems.find((i) => i.id === selectedId) ?? null;
-  const isToolSection = section === "generator" || section === "settings";
+  const isToolSection = section === "generator" || section === "settings" || section === "health";
 
   async function lock() {
     try {
@@ -325,6 +358,15 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
           <p className="nav-heading">{t.vault.toolsHeading}</p>
           <button
             className="nav-item"
+            aria-current={section === "health" ? "page" : undefined}
+            onClick={() => setSection("health")}
+          >
+            <Icon name="shield" size={17} />
+            <span>{t.vault.health}</span>
+            {health && totalIssues(health) > 0 && <span className="nav-count">{totalIssues(health)}</span>}
+          </button>
+          <button
+            className="nav-item"
             aria-current={section === "generator" ? "page" : undefined}
             onClick={() => setSection("generator")}
           >
@@ -359,6 +401,25 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
         </footer>
       </aside>
 
+      {section === "health" && (
+        <HealthView
+          items={allItems}
+          report={health}
+          loading={healthLoading}
+          readOnly={readOnly}
+          onOpen={(id) => {
+            setSection("login");
+            setQuery("");
+            setPane({ kind: "view", id });
+          }}
+          onEdit={(id) => {
+            setSection("login");
+            setQuery("");
+            setPane({ kind: "edit", id });
+          }}
+          onChanged={() => void loadHealth()}
+        />
+      )}
       {section === "generator" && <GeneratorView />}
       {section === "settings" && <SettingsView onImported={() => void refresh()} online={!readOnly} />}
 
@@ -472,6 +533,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                 key={selected.id + selected.updatedAt}
                 item={selected}
                 revision={revision}
+                health={health}
                 readOnly={readOnly}
                 onEdit={() => setPane({ kind: "edit", id: selected.id })}
                 onDelete={() => void onDelete(selected)}

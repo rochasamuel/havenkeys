@@ -177,6 +177,17 @@ const kit = {
   qrModules: Array.from({ length: 625 }, (_, i) => ((i * 7919) % 13) < 6),
 };
 
+/** The vault health report: GitHub and the long SSO login share a password. */
+const healthReport = {
+  computedAt: NOW,
+  counts: { weak: 1, reused: 2, old: 1, passkey: 1, twoFactor: 1, insecure: 0, duplicate: 0 },
+  issues: [
+    { itemId: "7c9e6679-7425-40de-944b-e07fc1f90ae7", checks: ["reused", "old", "passkey"], reusedGroup: 0, duplicateGroup: null },
+    { itemId: "11111111-2222-4333-8444-555555555555", checks: ["reused", "weak", "two_factor"], reusedGroup: 0, duplicateGroup: null },
+  ],
+  dismissed: [{ itemId: "33333333-4444-4555-8666-777777777777", checks: ["two_factor", "old"] }],
+};
+
 /** Canned answers per command. Values that are `{ reject }` reject with that error. */
 function baseResponses() {
   return {
@@ -263,6 +274,9 @@ function baseResponses() {
       unreadable: 0,
     },
     lock_vault: null,
+    health_report: healthReport,
+    set_health_ignored: null,
+    open_health_help: null,
   };
 }
 
@@ -272,6 +286,7 @@ const reject = (code, message = "Error from the core.") => ({ reject: { code, me
 const nav = (n) => `.nav .nav-item:nth-of-type(${n})`;
 const SETTINGS = ".nav > button.nav-item:last-of-type";
 const GENERATOR = ".nav > button.nav-item:nth-last-of-type(2)";
+const HEALTH = ".nav > button.nav-item:nth-last-of-type(3)";
 const firstItem = ".list-items li:nth-child(1) .list-item";
 
 async function scrollTool(page, where) {
@@ -784,6 +799,48 @@ export const desktopScenarios = [
   },
 
   // ---------------------------------------------------------------- tools
+  {
+    name: "health",
+    respond: {},
+    async act(page) {
+      await page.click(HEALTH);
+      await page.waitForTimeout(200);
+    },
+    shots: [".health-list-head"],
+  },
+  {
+    name: "health-filtered",
+    respond: {},
+    async act(page) {
+      await page.click(HEALTH);
+      await page.waitForTimeout(150);
+      await page.click(".health-card >> nth=0");
+      await page.waitForTimeout(150);
+      await scrollTo(page, ".health-list-head");
+    },
+  },
+  {
+    name: "health-dismissed",
+    respond: {},
+    async act(page) {
+      await page.click(HEALTH);
+      await page.waitForTimeout(150);
+      await page.click(".health-list-head .segmented button >> nth=1");
+      await page.waitForTimeout(150);
+      await scrollTo(page, ".health-list-head");
+    },
+  },
+  {
+    name: "health-empty",
+    respond: {
+      health_report: { computedAt: NOW, counts: { weak: 0, reused: 0, old: 0, passkey: 0, twoFactor: 0, insecure: 0, duplicate: 0 }, issues: [], dismissed: [] },
+    },
+    async act(page) {
+      await page.click(HEALTH);
+      await page.waitForTimeout(200);
+    },
+    shots: [".health-list-head"],
+  },
   {
     name: "generator",
     respond: {},
