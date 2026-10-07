@@ -452,13 +452,15 @@ impl VaultService {
             self.store
                 .apply_pull(&rows, &deletions, &unreadable, cursor.map(|c| (c, now_ms)))?;
         report.deleted = deleted;
+        // A routine pull with nothing in it must keep the health cache.
+        let items_changed = !overviews.is_empty() || !deletions.is_empty();
         for overview in overviews {
             self.session_mut()?.overviews.insert(overview.id, overview);
         }
         for id in &deletions {
             self.session_mut()?.overviews.remove(id);
         }
-        {
+        if items_changed {
             let s = self.session_mut()?;
             s.generation = s.generation.wrapping_add(1);
             s.health = None;
@@ -784,6 +786,16 @@ mod tests {
         assert!(vault.cached_health(NOW).unwrap().is_none());
         // A report computed before the pull is not cached afterwards.
         assert!(!vault.store_health(&snap, &report));
+    }
+
+    #[test]
+    fn an_empty_pull_keeps_the_cached_health_report() {
+        let mut vault = activated_vault();
+        let staged = vault.stage_create(login("GitHub"), NOW).unwrap();
+        vault.commit_write(staged, 1).unwrap();
+        vault.health_report(NOW).unwrap();
+        vault.apply_remote_changes(5, vec![], NOW).unwrap();
+        assert!(vault.cached_health(NOW).unwrap().is_some());
     }
 
     #[test]
