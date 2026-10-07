@@ -206,8 +206,8 @@ private class RowOffer(row: HealthRow, filter: HealthFilter) {
 /**
  * One login: its title and username, the checks it fails as chips, and its
  * actions behind More. Tapping the row opens the login. While a Dismiss or
- * Undo waits for the next report, More is disabled, so a second change cannot
- * be built on a report from before the first.
+ * Undo is being saved, More is disabled; once saved, the next change builds
+ * on it (the ViewModel keeps it until a newer report arrives).
  */
 @Composable
 private fun IssueRow(

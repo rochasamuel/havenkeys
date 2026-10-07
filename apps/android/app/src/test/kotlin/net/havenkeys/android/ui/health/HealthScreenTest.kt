@@ -3,6 +3,7 @@ package net.havenkeys.android.ui.health
 import android.content.Intent
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.hasClickAction
@@ -175,13 +176,18 @@ class HealthScreenTest {
     }
 
     @Test
-    fun theRowsActionsWaitForTheNextReportAfterADismiss() {
+    fun theRowsActionsWaitWhileItsSaveIsInFlight() {
         show()
+        val saving = CompletableDeferred<Unit>()
+        vault.ignoreGate = saving
         vault.healthGate = CompletableDeferred()
         more("GitHub").performClick()
         rule.onNodeWithText("Dismiss: Weak password").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Weak password").assertDoesNotExist()
         more("GitHub").assertIsNotEnabled()
+        saving.complete(Unit)
+        rule.waitForIdle()
+        more("GitHub").assertIsEnabled()
     }
 }

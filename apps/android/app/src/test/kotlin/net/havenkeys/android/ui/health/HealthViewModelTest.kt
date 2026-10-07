@@ -110,17 +110,32 @@ class HealthViewModelTest {
     }
 
     @Test
-    fun aRowWaitsForTheReloadAfterAChangeAndHidesWhatWasDismissed() {
+    fun aRowIsBusyOnlyWhileItsSaveIsInFlightAndHidesWhatWasDismissed() {
         val vm = vm()
         vm.shown()
-        val gate = CompletableDeferred<Unit>()
-        vault.healthGate = gate
+        val saving = CompletableDeferred<Unit>()
+        vault.ignoreGate = saving
+        vault.healthGate = CompletableDeferred()
         vm.dismiss("a", HealthKind.WEAK)
         val pending = vm.state.value.rows.first { it.id == "a" }
         assertTrue(pending.busy)
         assertEquals(listOf(HealthKind.REUSED), pending.kinds)
-        gate.complete(Unit)
+        saving.complete(Unit)
+        // Saved, the reload still running: the row is free and still hides the dismissed check.
+        val saved = vm.state.value.rows.first { it.id == "a" }
+        assertFalse(saved.busy)
+        assertEquals(listOf(HealthKind.REUSED), saved.kinds)
+    }
+
+    @Test
+    fun aFailedReloadAfterASaveLeavesTheRowFreeAndTheNextChangeBuildsOnTheSave() {
+        val vm = vm()
+        vm.shown()
+        vault.healthView = Outcome.Failed("network")
+        vm.dismiss("a", HealthKind.WEAK)
         assertFalse(vm.state.value.rows.first { it.id == "a" }.busy)
+        vm.dismiss("a", HealthKind.REUSED)
+        assertEquals(listOf("ignore:a:WEAK", "ignore:a:WEAK,REUSED"), vault.calls.filter { it.startsWith("ignore") })
     }
 
     @Test

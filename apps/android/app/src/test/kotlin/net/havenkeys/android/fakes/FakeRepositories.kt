@@ -213,6 +213,9 @@ class FakeVaultRepository : VaultRepository {
     var helpUrl: Outcome<String> = Outcome.Failed("not_found")
     var ignoreResult: Outcome<Unit> = Outcome.Ok(Unit)
 
+    /** When set, setHealthIgnored waits for it: a test can look at a save in flight. */
+    var ignoreGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
     /** When set, health waits for it: a test can act while a report is still being computed. */
     var healthGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
@@ -224,6 +227,7 @@ class FakeVaultRepository : VaultRepository {
 
     override suspend fun setHealthIgnored(id: String, kinds: List<HealthKind>): Outcome<Unit> {
         calls += "ignore:$id:${kinds.joinToString(",")}"
+        ignoreGate?.await()
         return ignoreResult
     }
 

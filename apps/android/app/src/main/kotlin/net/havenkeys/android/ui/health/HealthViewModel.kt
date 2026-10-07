@@ -24,7 +24,7 @@ sealed interface HealthFilter {
 
 /**
  * One row: the title and username from the overview, never a value.
- * [busy]: a Dismiss or Undo on this login has not yet come back in a new report.
+ * [busy]: a Dismiss or Undo on this login is still being saved.
  */
 data class HealthRow(
     val id: String,
@@ -165,6 +165,8 @@ class HealthViewModel(private val vault: VaultRepository, events: VaultEventsHub
                 is Outcome.Ok -> {
                     landed += 1
                     saved[id] = Saved(next.toSet(), landed)
+                    // The row is free now, even if the reload below fails.
+                    _state.update { it.copy(rows = rows(it.filter)) }
                     load()
                 }
             }
@@ -228,7 +230,8 @@ class HealthViewModel(private val vault: VaultRepository, events: VaultEventsHub
                         duplicatesOf(active.count { (o, k) -> o.duplicateGroup == g && HealthKind.DUPLICATE in k })
                     },
                     dismissed = issue.dismissed,
-                    busy = issue.itemId in saving || issue.itemId in saved,
+                    // Only while the save is in flight: once it landed, the next change builds on it.
+                    busy = issue.itemId in saving,
                 )
             }
     }
