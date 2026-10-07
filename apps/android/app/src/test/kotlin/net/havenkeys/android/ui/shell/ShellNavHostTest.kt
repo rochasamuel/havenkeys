@@ -26,11 +26,13 @@ class ShellNavHostTest {
 
     private lateinit var nav: NavHostController
     private var openCategory: ((Category) -> Unit)? = null
+    private var openTag: ((String) -> Unit)? = null
 
     private val screens = ShellScreens(
         home = { HavenText("Home root") },
         items = { _, onCategory, onTag ->
             openCategory = onCategory
+            openTag = onTag
             Column {
                 HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) })
                 HavenButton("Open tag", onClick = { onTag("work/staging") })
@@ -117,6 +119,18 @@ class ShellNavHostTest {
         select(Tab.ITEMS)
         rule.onNodeWithText("Open logins").performClick()
         rule.runOnIdle { assertEquals(Tab.ITEMS, nav.currentDestination?.tab()) }
+    }
+
+    /** Review (tags): a tag that encodes differently ("side project") was pushed twice by a double tap. */
+    @Test
+    fun twoQuickTapsOnATagWithASpaceOpenItOnce() {
+        select(Tab.ITEMS)
+        rule.runOnIdle { repeat(2) { openTag!!("side project") } }
+        rule.waitForIdle()
+        rule.onNodeWithText("Tag side project").assertIsDisplayed()
+        rule.runOnIdle { nav.popBackStack() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Open logins").assertIsDisplayed()
     }
 
     /** Final review (stage 4): a double tap on a category pushed its list twice. */

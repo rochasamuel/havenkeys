@@ -149,6 +149,16 @@ class EditorStateTest {
     }
 
     @Test
+    fun unicodeWhiteSpaceIsTrimmedAndCollapsedAsRustDoes() {
+        val state = EditorState(login())
+        assertTrue(state.addTag("\u00A0Side\u2003\u00A0Project\u3000"))
+        assertEquals(listOf("side project"), state.tags.toList())
+        assertFalse(state.addTag("\u00A0\u2003"))
+        assertTrue(state.addTag("a\u0085b"))
+        assertTrue("a b" in state.tags)
+    }
+
+    @Test
     fun theTwentyFirstTagIsRefused() {
         val state = EditorState(login(tags = (1..20).map { "t%02d".format(it) }))
         assertFalse(state.addTag("more"))

@@ -44,7 +44,7 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
     // `remember`ed, never saved state, like every draft field (spec §9.4).
     val text = remember(editor) { TextFieldState() }
     val typed = text.text.toString()
-    val query = typed.trim().lowercase()
+    val query = tagForm(typed)
     val suggestions = if (query.isEmpty()) {
         emptyList()
     } else {

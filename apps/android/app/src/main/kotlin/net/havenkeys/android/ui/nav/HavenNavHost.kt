@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.nav
 
+import android.net.Uri
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
@@ -158,10 +159,16 @@ internal fun NavHostController.pushOnce(route: String): Boolean {
     return true
 }
 
-/** This entry's route with its arguments filled in ("item/{id}" → "item/abc"). Ids and kinds only. */
+/**
+ * This entry's route with its arguments filled in ("item/{id}" → "item/abc"),
+ * encoded as a route is built (a tag's "side project" → "side%20project"),
+ * so it equals the route that opened it. Ids and kinds encode to themselves.
+ */
 internal fun NavBackStackEntry.concreteRoute(): String? {
     val pattern = destination.route ?: return null
-    return ArgumentSlot.replace(pattern) { slot -> arguments?.getString(slot.groupValues[1]) ?: slot.value }
+    return ArgumentSlot.replace(pattern) { slot ->
+        arguments?.getString(slot.groupValues[1])?.let(Uri::encode) ?: slot.value
+    }
 }
 
 private val ArgumentSlot = Regex("\\{([^}]+)\\}")

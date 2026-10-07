@@ -46,6 +46,7 @@ fun CategoryScreen(
 ) = FilteredList(
     viewModel,
     stringResource(category.label),
+    filter = category,
     category::keeps,
     onOpen,
     contentPadding,
@@ -62,13 +63,24 @@ fun TagScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     sharedTitle: SharedTitle = NoSharedTitle,
-) = FilteredList(viewModel, tag, { tag in it.tags }, onOpen, contentPadding, modifier, sharedTitle)
+) = FilteredList(
+    viewModel,
+    tag,
+    filter = "tag:$tag",
+    { tag in it.tags },
+    onOpen,
+    contentPadding,
+    modifier,
+    sharedTitle,
+)
 
 @Suppress("LongParameterList") // the two lists' shared body
 @Composable
 private fun FilteredList(
     viewModel: ItemListViewModel,
     title: String,
+    /** Which list this is (a category, or "tag:" and its name): the filter's identity. */
+    filter: Any,
     keeps: (ItemSummary) -> Boolean,
     onOpen: OpenItem,
     contentPadding: PaddingValues,
@@ -76,7 +88,7 @@ private fun FilteredList(
     sharedTitle: SharedTitle,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val shown = remember(state.items, title) { state.items.filter(keeps) }
+    val shown = remember(state.items, filter) { state.items.filter(keeps) }
     PullToRefresh(
         refreshing = state.refreshing,
         onRefresh = viewModel::refresh,

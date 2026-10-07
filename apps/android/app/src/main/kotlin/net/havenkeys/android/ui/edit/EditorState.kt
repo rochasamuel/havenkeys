@@ -15,7 +15,21 @@ import uniffi.havenkeys_mobile.Website
 /** Rust's limits for an item's tags; the editor previews them, Rust stays the authority. */
 internal const val MAX_TAGS = 20
 private const val MAX_TAG_CHARS = 32
-private val Whitespace = Regex("\\s+")
+
+/**
+ * Unicode's White_Space, as Rust's `char::is_whitespace`: Kotlin's set plus
+ * NEL, less the four separators U+001C–U+001F (control characters to Rust).
+ * Not a regex: Android's ICU patterns do not take the Unicode-classes flag.
+ */
+private fun Char.isRustWhitespace(): Boolean = this == '\u0085' || (isWhitespace() && this !in '\u001C'..'\u001F')
+
+/** [raw] as Rust stores a tag: white space trimmed and collapsed to one space, lower case. */
+internal fun tagForm(raw: String): String =
+    buildString { raw.forEach { append(if (it.isRustWhitespace()) ' ' else it) } }
+        .split(' ')
+        .filter { it.isNotEmpty() }
+        .joinToString(" ")
+        .lowercase()
 
 class WebsiteRow(url: String, match: MatchKind) {
     var url by mutableStateOf(url)
@@ -90,7 +104,7 @@ class EditorState(private val edit: ItemEdit) {
      * character, is already here, or the item has its 20 tags.
      */
     fun addTag(raw: String): Boolean {
-        val tag = raw.trim().split(Whitespace).joinToString(" ").lowercase()
+        val tag = tagForm(raw)
         val ok = tag.isNotEmpty() &&
             tag.codePointCount(0, tag.length) <= MAX_TAG_CHARS &&
             tag.none { it == ',' || it.isISOControl() } &&
