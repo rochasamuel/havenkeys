@@ -3347,8 +3347,8 @@ model: `security-model.md` §24. Internal review, not an independent audit.
 **Component:** `crates/havenkeys-core/src/health/mod.rs`.
 **Attack:** a secret leaks through the new report that both UIs receive
 (and that crosses the Tauri / FFI boundary).
-**Mitigation:** `HealthReport` holds item IDs, check kinds, group indexes and
-counts. No password, strength score, length, hash, title, username or URL.
+**Mitigation:** `HealthReport` holds item IDs, check kinds, group indexes,
+counts and a per-issue `help` flag (from public directory data). No password, strength score, length, hash, title, username or URL.
 Group indexes are numbered by the smallest item ID in each group, not by the
 password. `Debug` is redacted. A leak test serializes a report and asserts no
 password or 4+ character substring of one appears. The grouping map borrows
@@ -3365,8 +3365,12 @@ vault lock so fills never wait on it. A write, a sync pull, or a lock and
 unlock may happen meanwhile; caching the finished report would then show a
 stale picture, or (after a lock) keep decrypted-derived data in a new session.
 **Mitigation:** the snapshot carries the item generation and the session
-epoch; `store_health` caches only when both are unchanged. A stale result is
-returned to its caller but never cached. Writes, a sync pull that changed
+epoch; `store_health` caches only when both are unchanged. A result made
+stale by a write or pull is returned to its caller but never cached; one
+computed across a lock (even with a later unlock) is neither cached nor
+returned: `HavenClient::health_report` answers `Locked` (client test).
+Desktop "How to enable" is offered only when the report's `help` flag says
+the site has a guide (same lookup as `open_health_help`). Writes, a sync pull that changed
 items, and unlock clear the cache; lock drops it. A test proves the vault lock
 is free while the report computes. The desktop `health_report` command does
 not count as user activity (like `list_items`), so the background reload cannot
@@ -3382,14 +3386,15 @@ app suggest the wrong site or open a malicious help link.
 **Mitigation:** the data is bundled, committed and reviewed like code; it is
 never fetched at runtime. Entries are validated (hostname, name length, https
 URL) and an invalid one is dropped, never a panic (a hostile-entries unit
-test covers this; there is no fuzz target for the directory parsers yet).
+test covers this).
 Matching is by registrable domain from the Public Suffix List, not by string,
 so `evilgithub.com` and `github.com.evil.com` never match `github.com`. Help
 links are `https` only, looked up by the core from the login's own URL rules
 (the UI never passes a URL), and opened only on a click, in the system
 browser.
 **Remaining:** a bad entry could still show the wrong "How to enable" page or
-a wrong suggestion. The upstream lists have no top-level `google.com` entry,
+a wrong suggestion. There is no cargo-fuzz target for the directory parsers
+(spec §10); only deterministic hostile-input tests. The upstream lists have no top-level `google.com` entry,
 so a `google.com` login gets no suggestion (data taken unedited).
 
 ### VH4. zxcvbn copies (Low, accepted)
@@ -3407,7 +3412,8 @@ to 0.13) and `lazy_static`. Audits at the branch tip: `cargo audit` shows no
 vulnerabilities and the same 2 allowed warnings as before (RUSTSEC-2024-0370
 `proc-macro-error`, RUSTSEC-2024-0429 `glib`); `cargo deny check` reports
 `advisories ok, bans ok, licenses ok, sources ok`; `pnpm audit --prod` finds
-no known vulnerabilities. Nothing is new compared with `main`.
+no known vulnerabilities. These are the same two allowed warnings as the
+2026-10-04 audit; the audits were not re-run on `main`.
 
 Release sizes, built from `4aa6237` (main before the feature) and from the
 branch tip (`scripts/build-android.sh --release`, `cargo build --release -p
@@ -3421,8 +3427,8 @@ havenkeys-desktop`, Linux x86_64 host):
 The cost is about three times the spec's "about 1 MB" estimate: it covers the
 zxcvbn dictionaries and its regex/time dependencies plus the 203 KB two-factor
 and 54 KB passkey directories (the two-factor file is above the spec's 50-100
-KB estimate). The Android build strips the `.so` when packaging, so the
-installed cost is smaller than this raw figure.
+KB estimate). The `.so` figure keeps symbols; the size installed from a
+release APK was not measured.
 
 ### VH6. Leaked-password lookup (Info, by design)
 Have I Been Pwned is **not** implemented: it would send password-derived data
@@ -3432,5 +3438,8 @@ setting.
 ### Other limitations
 Group indexes are numbered before dismissals, so a chip can show a group
 smaller than the real one; the UIs clamp it to at least 2 (reused) and 1
-(duplicate). An imported login's age starts at the import time. A dismissal is
-an item edit and needs the server.
+(duplicate). An imported login's age starts at the import time, and a login
+that got its first password after creation is measured from `created_at`. A
+dismissal is an item edit and needs the server. A dismissal whose check no
+longer applies is dropped when the user dismisses or restores another check on
+that login (both UIs build the new list from the report's `dismissed`).

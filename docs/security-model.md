@@ -1939,13 +1939,16 @@ I Been Pwned) are deliberately not implemented.
 
 ### 24.2 What the report contains
 
-`HealthReport` holds item IDs, check kinds, group indexes and counts.
-It holds **no** password, strength score, length, hash, title, username
-or URL; the apps already hold the item overviews and join on the ID. The
-`reused_group` and `duplicate_group` numbers are indexes assigned when
-the report is built, ordered by the smallest item ID in each group, so
-the number says nothing about the password. `Debug` on every report type
-is redacted. A test serializes a report and asserts that no password or
+`HealthReport` holds item IDs, check kinds, group indexes and counts,
+and per issue a `help` flag (whether the site's directory entry has an
+https setup guide; derived from public directory data, not from the
+password). It holds **no** password, strength score, length, hash, title,
+username or URL; the apps already hold the item overviews and join on the
+ID. The `reused_group` and `duplicate_group` numbers are indexes assigned
+when the report is built, ordered by the smallest item ID in each group,
+so the number says nothing about the password. `Debug` is redacted on
+every report type that carries item IDs (`HealthCounts` and `HealthCheck`
+derive it and hold no secret). A test serializes a report and asserts that no password or
 substring of one (4+ characters) appears in it.
 
 What the report does reveal is *which* logins are weak or reused. Anyone
@@ -1964,13 +1967,15 @@ reveal passwords, so this adds no new reader.
   runs, so fills from the extension or Android Autofill never wait on it.
   The snapshot is released when the computation ends. The snapshot carries
   a generation and the session epoch; `store_health` caches the result only
-  if neither moved, so a report computed from a stale snapshot, or across a
-  lock and unlock, is returned to its caller but never cached.
+  if neither moved. A report computed from a stale snapshot (an item
+  changed meanwhile) is returned to its caller but never cached; one
+  computed across a lock (with or without a later unlock) is neither cached
+  nor returned: `HavenClient::health_report` answers `Locked`.
 * Grouping of reused passwords uses a `HashMap` keyed by a borrowed `&str`,
   dropped before the report is returned. Nothing derived from a password is
   kept.
 * The desktop `health_report` command deliberately does **not** count as
-  user activity for auto-lock (§16), like `list_items`: the view reloads in
+  user activity for auto-lock (`CLAUDE.md` §16), like `list_items`: the view reloads in
   the background, and a machine-driven call must not hold the vault open.
   Reloads happen on item changes, not on search.
 
@@ -2004,7 +2009,9 @@ documented.
   a login saved as `google.com` gets no passkey or 2FA suggestion.
 * "How to enable" links come from the directory entry the core looked up
   from the login's own URL rules; the UI never passes a URL. Only `https`
-  links are returned; no link is `NotFound`. The desktop's Rust opens it
+  links are returned; no link is `NotFound`. The report's `help` flag comes
+  from the same lookup (`Directory::help_for`), so the desktop offers "How
+  to enable" only where a link exists. The desktop's Rust opens it
   (`open_health_help`); on Android Kotlin hands the string to an `Intent`
   unchanged. A link is opened only on an explicit click, in the system
   browser; the desktop never loads a remote page (§41 of the project rules).
@@ -2016,7 +2023,9 @@ item data that syncs (§4: the server sees one more ciphertext update, as for
 any edit). It needs the server like every change. It does not change
 `updated_at`, so dismissing does not reorder "recently edited". Only login
 items accept it; any other ID is rejected. Every item editor keeps the field
-unchanged, as it does for `app_bindings`.
+unchanged, as it does for `app_bindings`. It is read leniently: a check kind
+this build does not know (added by a newer app) is dropped rather than
+failing the whole login.
 
 ### 24.7 Commands
 
@@ -2031,6 +2040,13 @@ carry no item content. Native messaging and the extension are not touched.
   reused or duplicate group are dismissed a chip can show fewer members than
   the group has (the UIs never show fewer than 2 / 1).
 * An imported login's `created_at` is the import time unless the format
-  carried one, so "old" under-reports for imports.
+  carried one, so "old" under-reports for imports. Likewise a login created
+  without a password that gets one later is measured from `created_at` (no
+  history entry records the first password), so it can show "old" early.
+* Both UIs build a login's new dismissed list from the report's
+  `dismissed`, which only lists checks that currently apply. A dismissal
+  whose check no longer applies (dormant, e.g. "weak" after the password
+  was changed) is dropped when the user dismisses or restores another check
+  on that login, and the check shows again if it later applies.
 * "Weak" is zxcvbn's estimate, not a guarantee; a passphrase it scores 3 can
   still be guessable by someone who knows the user.

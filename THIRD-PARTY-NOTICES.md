@@ -9,7 +9,10 @@ Rust and npm dependencies are linked or bundled under permissive licences
 packages themselves; `cargo deny check licenses` enforces the allowed set.
 Five crates (`cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`,
 `selectors`) are MPL-2.0, a file-level copyleft satisfied by their being
-redistributed unmodified from crates.io.
+redistributed unmodified from crates.io. Among the MIT crates, `zxcvbn`
+(Copyright (c) 2016 Joshua Holmer; the Rust port by shssoichiro of Dropbox's
+zxcvbn) compiles its password and word lists into the core, so they ship in
+the desktop app and the Android library (Vault health).
 
 The fonts and data below are different: their files are embedded in the
 desktop application bundle, the browser extension package, the Android app
@@ -151,7 +154,9 @@ commit `b711c588aa0a1cace2afb5b5a20a70810bb0433b`), licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changes: entries
 without a valid hostname or passkey support are dropped, non-https
 documentation links are removed, and fields not used by HavenKeys are left
-out. It is embedded in the browser extension package.
+out. It is embedded in the browser extension package and compiled into the
+core (`include_str!`), so it also ships in the desktop app and the Android
+library (Vault health).
 
 ### 2FA Directory
 
@@ -162,8 +167,8 @@ commit `1d7b66d093c8f9ca6a6afede1d3c62fe01a0e697`), licensed under the MIT
 License (Copyright © 2021 2factorauth and Contributors). Changes: only
 entries that offer TOTP codes with a valid hostname are kept, non-https
 documentation links are removed, and fields not used by HavenKeys are left
-out. Used in: `crates/havenkeys-core/data/twofactor-sites.json` (Vault
-health).
+out. It is compiled into the core (`include_str!`), so it ships in the
+desktop app and the Android library (Vault health).
 
 ## Images
 
