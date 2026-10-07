@@ -141,6 +141,18 @@ class EditFieldsTest {
         field(text(R.string.edit_add_tag)).assert(typed("db"))
     }
 
+    /** Final review (tags): a refused part of a pasted list was dropped without a word. */
+    @Test
+    fun aRefusedPartOfACommaListStaysInTheFieldAndSaysWhy() {
+        val (editor, _) = show(login(emptyList()))
+        val long = "x".repeat(33)
+        field(text(R.string.edit_add_tag)).performTextReplacement("prod,$long,db")
+        rule.runOnIdle { assertEquals(listOf("prod"), editor.toDraft().tags) }
+        field(text(R.string.edit_add_tag)).assert(typed("$long,db"))
+        field(text(R.string.edit_add_tag))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, text(R.string.edit_tag_too_long)))
+    }
+
     @Test
     fun typingOffersTheVaultsMatchingTagsAndATapAddsOne() {
         val (editor, _) = show(

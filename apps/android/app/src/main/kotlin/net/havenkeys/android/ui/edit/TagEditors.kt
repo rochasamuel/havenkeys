@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.KeyboardActionHandler
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,8 +40,8 @@ private const val SUGGESTIONS = 5
  */
 @Composable
 internal fun Tags(editor: EditorState, vaultTags: List<String>) {
-    // `remember`ed, never saved state, like every draft field (spec §9.4).
-    val text = remember(editor) { TextFieldState() }
+    // Part of the draft (`remember`ed, never saved state, spec §9.4), so Save and Back see it.
+    val text = editor.tagField
     val typed = text.text.toString()
     val query = tagForm(typed)
     val suggestions = if (query.isEmpty()) {
@@ -50,19 +49,10 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
     } else {
         vaultTags.filter { query in it && it !in editor.tags }.take(SUGGESTIONS)
     }
-    // Why the typed text was not added; cleared as soon as the text changes.
-    var refusal by remember(editor) { mutableStateOf<TagRefusal?>(null) }
-    LaunchedEffect(text) {
-        // A comma ends a tag, as on the desktop: each one before it is added.
-        snapshotFlow { text.text.toString() }.collect { now ->
-            refusal = null
-            if (',' in now) {
-                now.split(',').dropLast(1).forEach(editor::addTag)
-                text.setTextAndPlaceCursorAtEnd(now.substringAfterLast(','))
-            }
-        }
+    LaunchedEffect(editor) {
+        snapshotFlow { text.text.toString() }.collect { editor.tagTextChanged() }
     }
-    val commit = { commitTag(editor, text) { refusal = it } }
+    val commit = { editor.commitTypedTag() }
     Column {
         SectionHeader(stringResource(R.string.edit_tags))
         InsetGroup {
@@ -81,7 +71,9 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
                 }
             } else {
                 // Keyed: a tag added before it must not take the field's focus away.
-                row(key = "add") { AddTagField(text, refusal, enabled = query.isNotEmpty(), commit = commit) }
+                row(key = "add") {
+                    AddTagField(text, editor.tagRefused, enabled = query.isNotEmpty(), commit = { commit() })
+                }
                 suggestions.forEach { name ->
                     row(key = "suggestion:$name") {
                         GroupRow(
@@ -96,19 +88,6 @@ internal fun Tags(editor: EditorState, vaultTags: List<String>) {
                 }
             }
         }
-    }
-}
-
-/**
- * Adds what was typed. A tag Rust would refuse stays in the field so it can
- * be corrected, and [onRefused] gets why; a tag the item has just empties it.
- */
-private fun commitTag(editor: EditorState, text: TextFieldState, onRefused: (TagRefusal) -> Unit) {
-    val typed = text.text.toString()
-    val why = tagRefusal(typed)
-    when {
-        why != null -> onRefused(why)
-        editor.addTag(typed) || tagForm(typed) in editor.tags -> text.clearText()
     }
 }
 

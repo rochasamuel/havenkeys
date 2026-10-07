@@ -80,9 +80,10 @@ fun EditScreen(
                 HavenButton(
                     stringResource(R.string.edit_save),
                     onClick = {
-                        // Leaving the field first adds a tag still being typed to the draft.
+                        // A tag still being typed joins the draft; one Rust would refuse
+                        // keeps the editor open, its field saying why.
                         focus.clearFocus()
-                        editor?.let { viewModel.save(it.toDraft()) }
+                        editor?.takeIf { it.commitTypedTag() }?.let { viewModel.save(it.toDraft()) }
                     },
                     // The bar pads 4dp: 12 more puts Save's edge on the fields' 16dp gutter.
                     Modifier.padding(start = 4.dp, end = 12.dp),

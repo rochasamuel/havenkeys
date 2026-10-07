@@ -4,6 +4,8 @@ import android.view.KeyEvent
 import kotlin.math.abs
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -110,6 +112,30 @@ class EditScreenTest {
         rule.onNodeWithText(text(R.string.edit_save)).assertIsEnabled().performClick()
         rule.waitForIdle()
         assertEquals(listOf("work"), vault.drafts.single().tags)
+    }
+
+    /** Final review (tags): Save with a refused tag in the field saved the item without it. */
+    @Test
+    fun saveWaitsWhileTheTagFieldHoldsATagRustWouldRefuse() {
+        show()
+        val tag = rule.onNode(hasSetTextAction() and hasText(text(R.string.edit_add_tag)))
+        tag.performClick()
+        tag.performTextReplacement("x".repeat(33))
+        rule.onNodeWithText(text(R.string.edit_save)).assertIsEnabled().performClick()
+        rule.waitForIdle()
+        assertTrue(vault.drafts.isEmpty())
+        assertTrue(done.isEmpty())
+        tag.assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, text(R.string.edit_tag_too_long)))
+    }
+
+    /** Final review (tags): text typed in the tag field did not count as a change, so Back dropped it. */
+    @Test
+    fun aTagStillBeingTypedMakesBackAskFirst() {
+        show()
+        rule.onNode(hasSetTextAction() and hasText(text(R.string.edit_add_tag))).performTextReplacement("work")
+        rule.onNodeWithContentDescription(text(R.string.item_back)).performClick()
+        rule.onNodeWithText(text(R.string.edit_discard_changes)).assertExists()
+        assertEquals(0, backs)
     }
 
     @Test

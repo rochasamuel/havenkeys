@@ -170,6 +170,32 @@ class EditorStateTest {
     }
 
     @Test
+    fun aTypedTagIsAddedOnCommitAndARefusedOneHoldsTheSave() {
+        val state = EditorState(login())
+        state.tagField.edit { replace(0, length, "x".repeat(33)) }
+        assertTrue(state.dirty)
+        assertFalse(state.commitTypedTag())
+        assertEquals(TagRefusal.TooLong, state.tagRefused)
+        assertEquals("x".repeat(33), state.tagField.text.toString())
+        state.tagField.edit { replace(0, length, " Work ") }
+        state.tagTextChanged()
+        assertNull(state.tagRefused)
+        assertTrue(state.commitTypedTag())
+        assertEquals("", state.tagField.text.toString())
+        assertEquals(listOf("work"), state.toDraft().tags)
+    }
+
+    @Test
+    fun aCommaListKeepsItsRefusedPartsInTheField() {
+        val state = EditorState(login())
+        state.tagField.edit { replace(0, length, "a\u0007b,prod,ops") }
+        state.tagTextChanged()
+        assertEquals(listOf("prod"), state.tags.toList())
+        assertEquals("a\u0007b,ops", state.tagField.text.toString())
+        assertEquals(TagRefusal.NotAllowed, state.tagRefused)
+    }
+
+    @Test
     fun theTwentyFirstTagIsRefused() {
         val state = EditorState(login(tags = (1..20).map { "t%02d".format(it) }))
         assertFalse(state.addTag("more"))

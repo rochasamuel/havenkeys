@@ -1,5 +1,8 @@
 package net.havenkeys.android.ui.edit
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -66,6 +69,13 @@ class EditorState(private val edit: ItemEdit) {
 
     /** The item's tags as Rust will store them: normalised, unique, A–Z. */
     val tags = mutableStateListOf<String>().apply { addAll(edit.tags) }
+
+    /** The Add tag field: text typed but not yet a tag. Draft state, never saved. */
+    internal val tagField = TextFieldState()
+
+    /** Why the typed tag was not added; cleared once the text changes to one Rust would take. */
+    internal var tagRefused by mutableStateOf<TagRefusal?>(null)
+        private set
 
     private val loaded = mutableStateMapOf<String, String>()
     private val typed = mutableStateMapOf<String, String>()
@@ -134,9 +144,47 @@ class EditorState(private val edit: ItemEdit) {
         tags.remove(tag)
     }
 
+    /**
+     * The Add tag field changed. A comma ends a tag, as on the desktop: each
+     * one before it is added, except one Rust would refuse, which stays in
+     * the field (commas kept) with [tagRefused] saying why.
+     */
+    internal fun tagTextChanged() {
+        val now = tagField.text.toString()
+        tagRefused = null
+        if (',' !in now) return
+        val parts = now.split(',')
+        val kept = parts.dropLast(1).filter { part ->
+            val why = tagRefusal(part)
+            if (why == null) addTag(part) else if (tagRefused == null) tagRefused = why
+            why != null
+        }
+        val rest = (kept + parts.last()).joinToString(",")
+        if (rest != now) tagField.setTextAndPlaceCursorAtEnd(rest)
+    }
+
+    /**
+     * Adds what is typed in the Add tag field. False when Rust would refuse
+     * it: the text stays to be corrected and [tagRefused] says why, so a
+     * Save must wait. A tag the item has, or a 21st, just empties the field.
+     */
+    internal fun commitTypedTag(): Boolean {
+        val typed = tagField.text.toString()
+        tagRefusal(typed)?.let {
+            tagRefused = it
+            return false
+        }
+        if (tagForm(typed).isNotEmpty()) {
+            addTag(typed)
+            tagField.clearText()
+        }
+        return true
+    }
+
+    /** A typed tag not yet added counts as a change: Back asks before it is lost. */
     val dirty: Boolean
         get() = title != edit.title || websitesOf() != edit.websites || tags.toList() != edit.tags ||
-            changes().isNotEmpty()
+            tagForm(tagField.text.toString()).isNotEmpty() || changes().isNotEmpty()
 
     /** Carries the revision the edit was opened at: Rust refuses it if the item changed since. */
     fun toDraft(): ItemDraft = ItemDraft(kind, title.trim(), websitesOf(), changes(), edit.revision, tags.toList())
