@@ -413,6 +413,17 @@ mod tests {
     }
 
     #[test]
+    fn a_folder_that_cannot_be_a_tag_stays_in_the_notes() {
+        let parsed = parse_value(&json!({"folders": [{"id": "f", "name": "a,b"}], "items": [
+            {"id": "1", "type": 1, "name": "Site", "folderId": "f",
+             "login": {"username": "u", "password": "p", "uris": []}}
+        ]}));
+        let input = &parsed.items[0].input;
+        assert_eq!(input.tags, Some(vec![]));
+        assert_eq!(set(&input.notes), Some("Folder: a,b"));
+    }
+
+    #[test]
     fn maps_items() {
         let parsed = parse_value(&sample());
         let r = parsed.report;

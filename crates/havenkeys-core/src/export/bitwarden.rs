@@ -133,7 +133,11 @@ fn name(ov: &ItemOverview, details: &ItemDetails) -> String {
 
 /// A stable folder ID for a tag, so the same tag is one folder.
 fn folder_id(tag: &str) -> String {
-    uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, tag.as_bytes()).to_string()
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(tag.as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&hash[..16]);
+    uuid::Uuid::new_v8(bytes).to_string()
 }
 
 #[derive(Serialize)]
@@ -296,15 +300,12 @@ pub(super) fn render(vault: &VaultService) -> Result<Rendered> {
     let mut summary = ExportSummary::default();
     let mut out = Zeroizing::new(Vec::new());
     // The first tag of each item is its folder (Bitwarden has one per item).
-    let mut folders = std::collections::BTreeSet::new();
-    for_each_item(vault, |ov, d| {
-        if d.is_some() {
-            if let Some(tag) = ov.tags.first() {
-                folders.insert(tag.clone());
-            }
-        }
-        Ok(())
-    })?;
+    let folders: std::collections::BTreeSet<&String> = vault
+        .session()?
+        .overviews
+        .values()
+        .filter_map(|ov| ov.tags.first())
+        .collect();
     let list: Vec<Folder<'_>> = folders
         .iter()
         .map(|name| Folder {

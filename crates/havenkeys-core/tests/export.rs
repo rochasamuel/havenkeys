@@ -1133,3 +1133,31 @@ fn bitwarden_json_exports_the_first_tag_as_the_folder() {
     assert!(tags.contains(&Some(vec!["a".to_owned()])));
     assert!(tags.contains(&Some(vec![])));
 }
+
+#[test]
+fn a_backup_item_with_an_invalid_tag_fails_alone() {
+    let (mut a, _) = activated_vault();
+    commit_all(
+        &mut a,
+        vec![
+            tagged(login("Bad", "a", "pw-a", "https://a.example"), &["ok"]),
+            tagged(note("Fine", "body"), &["work"]),
+        ],
+    );
+    let mut payload = payload_of(&a);
+    let items = payload["items"].as_array_mut().unwrap();
+    let bad = items
+        .iter()
+        .position(|i| i["overview"]["title"] == "Bad")
+        .unwrap();
+    items[bad]["overview"]["tags"] = serde_json::json!(["a,b"]);
+    let (mut b, _) = activated_vault();
+    let report = restore_into(&mut b, &seal_json(&payload), 0);
+    assert_eq!((report.imported, report.failed), (1, 1));
+    let kept = b.list_items().unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(
+        (kept[0].title.as_str(), kept[0].tags.clone()),
+        ("Fine", vec!["work".to_owned()])
+    );
+}
