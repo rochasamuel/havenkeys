@@ -473,7 +473,7 @@ The **fade** is 120ms on the house curve `cubic-bezier(0.32, 0.72, 0, 1)`: fades
 - **HavenButton:** 48dp minimum, 10dp radius, 16sp 550 label that wraps and is never cut, optional 18dp glyph. Primary (brass in dark, forest in light; one per screen), secondary (outlined line-strong), quiet (bare text), danger (ember). Press scales and washes; disabled fades to 42%. TalkBack: the label, "Button", disabled when so.
 - **HavenIconButton:** a 22dp glyph in a 48dp round target, muted unless tinted (ember for delete). Its content description is its name.
 - **CopyButton:** a 48dp round target whose copy glyph cross-fades to a green check for 1.5 s, with a confirm haptic. The caller copies, toasts and clears the clipboard. TalkBack reads "Copy Password" (the field's name, never its value) and then "Copied" as its state.
-- **Pill:** a 12sp marker: brass wash with brass ink for a state or device ("This device"), or outlined and muted for how something applies ("Whole site") and for an item's tags. Not a control. No colour per tag.
+- **Pill:** a 12sp marker: brass wash with brass ink for a state or device ("This device"), or outlined and muted for how something applies ("Whole site") and for an item's tags. An optional 12dp leading glyph in the pill's ink says what kind of marker it is (the tag glyph on tags). Not a control. No colour per tag.
 - **AddButton:** the floating 56dp disc in the primary colour with a 26dp plus and a 10dp shadow, placed by `HavenScaffold`. TalkBack: "New item".
 
 ### Overlays
@@ -557,8 +557,8 @@ The screens over the shell (item, editor, generator, devices, autofill setup) sh
 - **OfflineNote:** the muted line that says why an action is dimmed offline.
 - **MaskedValue / RevealedValue:** a hidden value is the fixed 12 dots, read as "Hidden <label>", never its length; a revealed one is mono with coloured digits and symbols (`style` sets the size, the generator's plate uses 20/30). Revealed values live only in composable state and clear after 30 s, on leaving the screen, when the app stops and on lock.
 - **Item header:** a 56dp tile and the title in the headline style; the tapped row's tile and title travel into it.
-- **Item tags:** under the header, the item's tags as outline pills in a wrapping row (never cut with an ellipsis). Markers only: no target.
-- **Editor Tags group:** modelled on the websites group: one row per tag (tag glyph, the name, a 48dp remove button), then an **Add tag** field row with a 48dp Plus button; Done, a comma, leaving the field and Save all add what was typed. Matching vault tags appear as rows below the field while typing. At 20 tags the field gives way to a muted "20 tags is the limit." line.
+- **Item tags:** under the header, the item's tags as outline pills that lead with a 12dp tag glyph (`Pill(icon = HavenIcon.Tag)`), in a wrapping row (never cut with an ellipsis). The glyph is what tells them from the vault-health chips under them. Markers only: no target.
+- **Editor Tags group:** modelled on the websites group: one row per tag (tag glyph, the name, a 48dp remove button), then an **Add tag** field row with a 48dp Plus button; Done, a comma, leaving the field and Save all add what was typed. A tag Rust would refuse (over 32 characters, a control character) stays in the field with the field's error saying why (never echoing it), cleared when the text changes; a tag the item already has just empties the field. Matching vault tags appear as rows below the field while typing. At 20 tags the field gives way to a muted "20 tags is the limit." line.
 - **Typed secrets** use `remember { TextFieldState() }`, never `rememberTextFieldState()` (which saves its text); they are never put in a route, `SavedStateHandle`, `rememberSaveable` or a view model.
 
 ## Review notes (stage 2)
@@ -683,3 +683,20 @@ Nothing grew. The saving is small because R8 had already stripped most of Materi
 - The TalkBack pass over the whole app is a device check (no emulator); it is on the stage 5 checklist in `docs/android.md`.
 
 **Device checks not yet run.** Everything in the stage 2 to 4 lists, plus the stage 5 list in `docs/android.md`: brass selection handles and wash in an editor field and the search pill, and the kit press (no ripple) on a long-press of any row.
+
+## Review notes (tags)
+
+**How the review ran.** The screenshot tests rendered into `apps/android/.impeccable/review/tags` (before) and `tags-after` (git-ignored) with `./gradlew testGithubDebugUnitTest --tests '*Screenshots*' -PscreensDir=...`. `/impeccable critique` ran in a single context (no subagents; the owner was away, so the interview was skipped). Of 92 files, exactly the 2 item-tags shots (light and dark) differ after the fixes; the `Pill` change leaves every other pill byte-identical.
+
+**Fixed in the review:**
+1. [P1] On the item page the tag pills and the vault-health chips were the same outline pill in consecutive rows and read as one set; tag pills now lead with a 12dp tag glyph (`Pill` takes an optional `icon`; `ActionsTest.aPillsGlyphWidensItButIsNotRead`).
+2. [P1] A refused tag (over 32 characters, a control character) gave no feedback: the text just stayed. The Add tag field now shows the reason as its error until the text changes, and a tag the item already has empties the field (`EditFieldsTest.aRefusedTagStaysInTheFieldAndSaysWhyUntilItChanges`, `aControlCharacterIsNamedAsNotAllowed`, `aTagTheItemHasClearsTheFieldQuietly`; `EditorStateTest.tagRefusalNamesWhyRustWouldRefuseATag`).
+
+**Checked and kept.** The Items tab's Tags group matches the categories (glyph, count, chevron) and a tag list is laid out exactly like a category list. The editor's tag rows mirror the websites group with 48dp remove buttons. Suggestions are tappable rows under the field.
+
+**Open (P2/P3):**
+- [P2] Text typed in Add tag but not committed does not make the draft dirty, so Back leaves without the discard question. Save commits it (focus is cleared first), so only Back loses it.
+- [P2] Save with a refused tag in the field saves the item without it and leaves; the error is shown only for the instant before the screen closes. Holding Save while the field has a refusal would need the editor to expose it.
+- [P3] The field's focus ring stops before the Plus button (the kit's `FieldRow` has a `trailing` slot that `HavenTextField` does not expose).
+- [P3] The item page puts tags above the health chips; the desktop puts them below. Either order works now that the glyph separates them; aligning them is a one-line move.
+- [P3] The Tags group sits after Notes at the end of the editor; on a long login it is a scroll away.

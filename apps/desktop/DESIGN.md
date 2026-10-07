@@ -398,7 +398,7 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 ### Chips
 - **Pill:** 999px, brass-soft ground, brass-ink text, 11px 600: device and state markers.
 - **Match chip:** outlined pill (line-strong), 11.5px muted: how a URL matches ("Whole site").
-- **Tag chip:** the match chip's outline and size; in the editor it carries a 16px × to remove it; in the detail it is a button that selects the tag in the sidebar. Never brass-filled, never mono, no colour per tag.
+- **Tag chip:** the match chip's outline and size; in the editor it carries a 16px × to remove it; in the detail it leads with a 12px tag glyph (so it never reads as one of the vault-health chips above it) and is a button that selects the tag in the sidebar. Never brass-filled, never mono, no colour per tag.
 
 ### Cards / Containers
 - **Inset group:** 12px radius, group ground, 1px group-line border, rows inside separated by group-line hairlines; overflow clipped so row highlights meet the corners.
@@ -411,7 +411,7 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 - **Form fields (welcome, settings):** 36 to 40px, 9px radius, field ground; focus as above with a 3px halo.
 - **Switch:** 38 x 22 track, line-strong off, brass on; white thumb that stretches while pressed.
 - **Segmented:** field track, 9px radius; selected segment raised with a hairline and a small shadow.
-- **Tags row (editor):** one editor row labelled Tags: the item's tag chips, then a bare "Add tag" input (Row Is the Field). Typing lists matching vault tags with counts, plus "Create “…”", in the row's own flow (raised ground, 11px radius) because the group clips anything floating. No suggestion is active until an arrow key picks one, so Enter adds what was typed; comma and leaving the field add too; Backspace in an empty field removes the last chip. At 20 tags the input gives way to a muted "20 tags is the limit."
+- **Tags row (editor):** one editor row labelled Tags: the item's tag chips, then a bare "Add tag" input (Row Is the Field). Typing lists matching vault tags with counts, plus "Create “…”", in the row's own flow (raised ground, 11px radius) because the group clips anything floating. No suggestion is active until an arrow key picks one, so Enter adds what was typed; comma and leaving the field add too; Backspace in an empty field removes the last chip. A tag Rust would refuse (over 32 characters, a control character) stays in the field, which is marked invalid, with an ember 12.5px line under it in the row saying why, never echoing the text; it clears as soon as the text changes. A tag the item already has just empties the field. At 20 tags the input gives way to a muted "20 tags is the limit."
 
 ### Navigation
 The sidebar: brand row with the mark at 22px, a translucent search field (brass halo on focus), sentence-case section headings, 32px nav rows at 7px radius with muted icons and tabular counts. The current row takes the brass wash with bright text and a brass-hi icon. The footer always shows sync state (cloud icon, green or ember) and a lock button with its shortcut (Ctrl L / ⌘L); the lock icon tilts on hover.
@@ -469,3 +469,20 @@ The shield-and-keyhole mark at 72px over the slowly turning guilloche rosette (b
 - **Don't** fetch fonts or styles from the network in the extension.
 - **Don't** give flat groups, rows or in-page cards a shadow; shadows are for floating things.
 - **Don't** put small all-caps tracked labels above headings.
+
+## Review notes (tags)
+
+**How the review ran.** `/impeccable critique` in a single context (the implementer may not spawn subagents; the owner was away, so the interview was skipped and the assumptions are stated here). Screens came from `pnpm ui:check`, which gained the scenarios `vault-tag-selected`, `editor-tags-suggest`, `editor-tags-refused` and tags on the fixture items (desktop: development, production, work; extension: staging, and admin/production/work), in English and Portuguese, light and dark, at the minimum and default window sizes. The detector reported nothing in the tag CSS or markup (13 advisory findings elsewhere in the stylesheets, all older).
+
+**Fixed in the review:**
+1. [P1] The detail's tag pills and the vault-health chips above them were the same outlined pill in consecutive rows and read as one set; a tag pill now leads with a 12px tag glyph (`VaultScreen.test.tsx`, "opens a tag from the detail pane").
+2. [P1] A tag Rust would refuse (too long, a control character) was silently dropped and the typed text cleared; it now stays in the field, marked invalid, with an inline ember line saying why (`TagsEditor.test.tsx`, the three "refused" / "duplicate" cases).
+3. `ui:check`: the fixture items carry `tags` (Rust always sends the field; without it the vault screens threw), and two selectors that took the first `div` of the detail as its first group now take the first `.group`.
+
+**Checked and kept.** The sidebar's Tags section reads as the categories do (tag glyph, tabular count, brass wash when current) and the list head takes the tag's name. The suggestion list starts with nothing active, so Enter adds what was typed. The extension's tag text is the smallest and faintest on its row (10.5px at 75% of the muted username ink), on login rows only, and gives way entirely before the username is cut.
+
+**Open (P2/P3):**
+- [P2] Many tags push Tools (Vault health, Password generator, Settings) below the sidebar's fold; the nav scrolls, but Settings is no longer one glance away. Options: Tags after Tools, or show the first N tags with "Show all".
+- [P3] The suggestion list sits in the row's flow (the group clips anything floating), so typing pushes the rest of the form down by up to nine rows.
+- [P3] At the minimum window width the "too long" line wraps to three lines under the input; a shorter message ("At most 32 characters.") would fit on one.
+- [P3] When the username fills the extension row, the tags disappear with no "+N" hint; that is the spec's priority (username first), noted in case it surprises.
