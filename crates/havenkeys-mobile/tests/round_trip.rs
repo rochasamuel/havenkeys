@@ -63,6 +63,7 @@ impl Server {
             trust_forwarded_for: false,
             cors_origin: None,
             locator: None,
+            max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -372,6 +373,41 @@ fn two_phones_edit_one_vault_through_the_server() {
         .unwrap();
     assert_eq!(values[0][0].value, "321");
 
+    rt.block_on(server.cleanup());
+}
+
+#[test]
+fn a_phone_dismisses_a_health_check_through_the_server() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let server = rt.block_on(Server::start());
+    let invite = rt.block_on(server.invite());
+    let dir = tempfile::tempdir().unwrap();
+    let v = phone(dir.path());
+    v.activate(invite, PASSWORD.into()).unwrap();
+    online(&v);
+    v.create_item(draft(
+        "GitHub",
+        vec![
+            replace("username", "octo"),
+            replace("password", "hunter2hunter2"),
+        ],
+        None,
+    ))
+    .unwrap();
+    let report = v.health_report().unwrap();
+    let issue = report
+        .issues
+        .iter()
+        .find(|i| !i.dismissed)
+        .expect("the github login has an issue");
+    assert!(issue.kinds.contains(&HealthKind::Passkey));
+    v.set_health_ignored(issue.item_id.clone(), vec![HealthKind::Passkey])
+        .unwrap();
+    let after = v.health_report().unwrap();
+    assert!(after
+        .issues
+        .iter()
+        .any(|i| i.dismissed && i.kinds == vec![HealthKind::Passkey]));
     rt.block_on(server.cleanup());
 }
 

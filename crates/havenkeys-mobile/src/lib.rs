@@ -20,6 +20,7 @@ mod credentials;
 mod edit;
 mod error;
 mod events;
+mod health;
 mod identity_fill;
 mod items;
 mod key_file;
@@ -43,6 +44,7 @@ pub use credentials::{
 pub use edit::{Change, EditField, FieldChange, ItemDraft, ItemEdit, MatchKind, Website};
 pub use error::{MobileError, MobileResult};
 pub use events::VaultEvents;
+pub use health::{HealthCountsView, HealthIssueView, HealthKind, HealthView};
 pub use identity_fill::{IdentityChoice, IdentityRole, IdentityValue, MAX_IDENTITY_ROLES};
 pub use items::{
     FieldKind, Generated, GeneratorOptions, ItemKind, ItemSummary, ItemView, TotpNow, ViewField,

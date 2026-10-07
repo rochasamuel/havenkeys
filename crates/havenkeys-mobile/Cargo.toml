@@ -22,6 +22,11 @@ path = "tests/regressions.rs"
 required-features = ["testing"]
 
 [[test]]
+name = "health"
+path = "tests/health.rs"
+required-features = ["testing"]
+
+[[test]]
 name = "round_trip"
 path = "tests/round_trip.rs"
 required-features = ["server-tests"]

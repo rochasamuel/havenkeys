@@ -853,6 +853,12 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_health_help_url(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_health_report(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_set_health_ignored(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity_values(
@@ -1038,6 +1044,12 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_scan_totp(`ptr`: Long,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_update_item(`ptr`: Long,`id`: RustBuffer.ByValue,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_health_help_url(`ptr`: Long,`id`: RustBuffer.ByValue,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_health_report(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_set_health_ignored(`ptr`: Long,`id`: RustBuffer.ByValue,`kinds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_identity(`ptr`: Long,`target`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1349,6 +1361,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_update_item() and 0xFFFF) != 43620) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_health_help_url() and 0xFFFF) != 32867) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_health_report() and 0xFFFF) != 59432) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_set_health_ignored() and 0xFFFF) != 38629) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity() and 0xFFFF) != 64409) {
@@ -2400,6 +2421,18 @@ public interface MobileVaultInterface {
     
     fun `updateItem`(`id`: kotlin.String, `draft`: ItemDraft)
     
+    fun `healthHelpUrl`(`id`: kotlin.String, `kind`: HealthKind): kotlin.String
+    
+    /**
+     * Blocking and slow on a large vault: call on `Dispatchers.IO`.
+     */
+    fun `healthReport`(): HealthView
+    
+    /**
+     * Replaces the login's dismissed checks (send the full list).
+     */
+    fun `setHealthIgnored`(`id`: kotlin.String, `kinds`: List<HealthKind>)
+    
     /**
      * The identity a form may be offered. `None`: no identity, or nothing
      * in it that can be filled here.
@@ -3225,6 +3258,57 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
         
         FfiConverterString.lower(`id`),
         FfiConverterTypeItemDraft.lower(`draft`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(MobileException::class)override fun `healthHelpUrl`(`id`: kotlin.String, `kind`: HealthKind): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_health_help_url(
+        it,
+        
+        FfiConverterString.lower(`id`),
+        FfiConverterTypeHealthKind.lower(`kind`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Blocking and slow on a large vault: call on `Dispatchers.IO`.
+     */
+    @Throws(MobileException::class)override fun `healthReport`(): HealthView {
+            return FfiConverterTypeHealthView.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_health_report(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Replaces the login's dismissed checks (send the full list).
+     */
+    @Throws(MobileException::class)override fun `setHealthIgnored`(`id`: kotlin.String, `kinds`: List<HealthKind>)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_set_health_ignored(
+        it,
+        
+        FfiConverterString.lower(`id`),
+        FfiConverterSequenceTypeHealthKind.lower(`kinds`),_status)
 }
     }
     
@@ -4855,6 +4939,160 @@ public object FfiConverterTypeGeneratorOptions: FfiConverterRustBuffer<Generator
 
 
 
+data class HealthCountsView (
+    var `weak`: kotlin.UInt
+    , 
+    var `reused`: kotlin.UInt
+    , 
+    var `old`: kotlin.UInt
+    , 
+    var `passkey`: kotlin.UInt
+    , 
+    var `twoFactor`: kotlin.UInt
+    , 
+    var `insecure`: kotlin.UInt
+    , 
+    var `duplicate`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHealthCountsView: FfiConverterRustBuffer<HealthCountsView> {
+    override fun read(buf: ByteBuffer): HealthCountsView {
+        return HealthCountsView(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HealthCountsView) = (
+            FfiConverterUInt.allocationSize(value.`weak`) +
+            FfiConverterUInt.allocationSize(value.`reused`) +
+            FfiConverterUInt.allocationSize(value.`old`) +
+            FfiConverterUInt.allocationSize(value.`passkey`) +
+            FfiConverterUInt.allocationSize(value.`twoFactor`) +
+            FfiConverterUInt.allocationSize(value.`insecure`) +
+            FfiConverterUInt.allocationSize(value.`duplicate`)
+    )
+
+    override fun write(value: HealthCountsView, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`weak`, buf)
+            FfiConverterUInt.write(value.`reused`, buf)
+            FfiConverterUInt.write(value.`old`, buf)
+            FfiConverterUInt.write(value.`passkey`, buf)
+            FfiConverterUInt.write(value.`twoFactor`, buf)
+            FfiConverterUInt.write(value.`insecure`, buf)
+            FfiConverterUInt.write(value.`duplicate`, buf)
+    }
+}
+
+
+
+data class HealthIssueView (
+    var `itemId`: kotlin.String
+    , 
+    var `kinds`: List<HealthKind>
+    , 
+    var `reusedGroup`: kotlin.UInt?
+    , 
+    var `duplicateGroup`: kotlin.UInt?
+    , 
+    var `dismissed`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHealthIssueView: FfiConverterRustBuffer<HealthIssueView> {
+    override fun read(buf: ByteBuffer): HealthIssueView {
+        return HealthIssueView(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeHealthKind.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HealthIssueView) = (
+            FfiConverterString.allocationSize(value.`itemId`) +
+            FfiConverterSequenceTypeHealthKind.allocationSize(value.`kinds`) +
+            FfiConverterOptionalUInt.allocationSize(value.`reusedGroup`) +
+            FfiConverterOptionalUInt.allocationSize(value.`duplicateGroup`) +
+            FfiConverterBoolean.allocationSize(value.`dismissed`)
+    )
+
+    override fun write(value: HealthIssueView, buf: ByteBuffer) {
+            FfiConverterString.write(value.`itemId`, buf)
+            FfiConverterSequenceTypeHealthKind.write(value.`kinds`, buf)
+            FfiConverterOptionalUInt.write(value.`reusedGroup`, buf)
+            FfiConverterOptionalUInt.write(value.`duplicateGroup`, buf)
+            FfiConverterBoolean.write(value.`dismissed`, buf)
+    }
+}
+
+
+
+data class HealthView (
+    var `counts`: HealthCountsView
+    , 
+    var `issues`: List<HealthIssueView>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHealthView: FfiConverterRustBuffer<HealthView> {
+    override fun read(buf: ByteBuffer): HealthView {
+        return HealthView(
+            FfiConverterTypeHealthCountsView.read(buf),
+            FfiConverterSequenceTypeHealthIssueView.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HealthView) = (
+            FfiConverterTypeHealthCountsView.allocationSize(value.`counts`) +
+            FfiConverterSequenceTypeHealthIssueView.allocationSize(value.`issues`)
+    )
+
+    override fun write(value: HealthView, buf: ByteBuffer) {
+            FfiConverterTypeHealthCountsView.write(value.`counts`, buf)
+            FfiConverterSequenceTypeHealthIssueView.write(value.`issues`, buf)
+    }
+}
+
+
+
 data class IdentityChoice (
     var `title`: kotlin.String
     , 
@@ -6107,6 +6345,45 @@ public object FfiConverterTypeFieldKind: FfiConverterRustBuffer<FieldKind> {
 
 
 
+enum class HealthKind {
+    
+    WEAK,
+    REUSED,
+    OLD,
+    PASSKEY,
+    TWO_FACTOR,
+    INSECURE,
+    DUPLICATE;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHealthKind: FfiConverterRustBuffer<HealthKind> {
+    override fun read(buf: ByteBuffer) = try {
+        HealthKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: HealthKind) = 4UL
+
+    override fun write(value: HealthKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class IdentityRole {
     
     FULL_NAME,
@@ -6408,6 +6685,38 @@ public object FfiConverterTypeTargetKind: FfiConverterRustBuffer<TargetKind> {
 }
 
 
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalUInt: FfiConverterRustBuffer<kotlin.UInt?> {
+    override fun read(buf: ByteBuffer): kotlin.UInt? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUInt.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UInt?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUInt.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UInt?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUInt.write(value, buf)
+        }
+    }
+}
 
 
 
@@ -6883,6 +7192,34 @@ public object FfiConverterSequenceTypeFrameFacts: FfiConverterRustBuffer<List<Fr
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeHealthIssueView: FfiConverterRustBuffer<List<HealthIssueView>> {
+    override fun read(buf: ByteBuffer): List<HealthIssueView> {
+        val len = buf.getInt()
+        return List<HealthIssueView>(len) {
+            FfiConverterTypeHealthIssueView.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<HealthIssueView>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeHealthIssueView.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<HealthIssueView>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeHealthIssueView.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeIdentityValue: FfiConverterRustBuffer<List<IdentityValue>> {
     override fun read(buf: ByteBuffer): List<IdentityValue> {
         val len = buf.getInt()
@@ -7041,6 +7378,34 @@ public object FfiConverterSequenceTypeCardRole: FfiConverterRustBuffer<List<Card
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeCardRole.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeHealthKind: FfiConverterRustBuffer<List<HealthKind>> {
+    override fun read(buf: ByteBuffer): List<HealthKind> {
+        val len = buf.getInt()
+        return List<HealthKind>(len) {
+            FfiConverterTypeHealthKind.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<HealthKind>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeHealthKind.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<HealthKind>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeHealthKind.write(it, buf)
         }
     }
 }
