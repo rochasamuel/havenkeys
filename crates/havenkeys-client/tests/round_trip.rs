@@ -173,6 +173,7 @@ async fn until(what: impl Fn() -> bool) {
 
 fn login(title: &str) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Login,
         title: title.into(),
         username: Some("me@example.com".into()),

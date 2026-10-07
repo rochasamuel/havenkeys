@@ -28,6 +28,7 @@ pub fn open_file(path: &Path) -> VaultService {
 
 pub fn login(title: &str, username: &str, password: &str, url: &str) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Login,
         title: title.into(),
         username: Some(username.into()),
@@ -113,6 +114,7 @@ pub fn second_device(first: &VaultService, sk: &SecretKey) -> VaultService {
 
 pub fn note(title: &str, content: &str) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::SecureNote,
         title: title.into(),
         username: None,

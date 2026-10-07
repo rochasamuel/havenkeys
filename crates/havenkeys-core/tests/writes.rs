@@ -168,6 +168,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
     let (mut vault, _sk) = activated_vault();
 
     let existing_login = |title: &str, url: &str, notes: &str| ItemInput {
+        tags: None,
         item_type: ItemType::Login,
         title: title.into(),
         username: None,
@@ -187,6 +188,7 @@ fn a_staged_import_upgrades_a_matching_login_with_sign_in_with() {
     };
     let imported = |title: &str, url: &str| ImportedItem {
         input: ItemInput {
+            tags: None,
             item_type: ItemType::Login,
             title: title.into(),
             username: None,

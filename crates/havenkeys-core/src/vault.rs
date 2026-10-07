@@ -774,6 +774,15 @@ impl VaultService {
         Ok(self.store.header()?.map(|h| h.vault_id))
     }
 
+    /// Puts a field this version does not know into an item's in-memory
+    /// overview, as a pull from a newer device would.
+    #[cfg(any(test, feature = "test-util"))]
+    #[doc(hidden)]
+    pub fn insert_extra_for_tests(&mut self, id: &Uuid, key: &str, value: serde_json::Value) {
+        let session = self.session_mut().unwrap();
+        session.overviews.get_mut(id).unwrap().extra.insert(key.into(), value);
+    }
+
     pub(crate) fn session(&self) -> Result<&Session> {
         match (&self.state, &self.session) {
             (VaultState::Unlocked, Some(s)) => Ok(s),
@@ -1242,7 +1251,7 @@ impl VaultService {
         Ok(items)
     }
 
-    /// Case-insensitive search over title, username and website hosts.
+    /// Case-insensitive search over title, username, website hosts and tags.
     /// Secret fields and note bodies are never searched.
     pub fn search(&self, query: &str) -> Result<Vec<ItemOverview>> {
         let session = self.session()?;
@@ -1261,6 +1270,7 @@ impl VaultService {
                     || i.username
                         .as_deref()
                         .is_some_and(|u| u.to_lowercase().contains(&q))
+                    || i.tags.iter().any(|t| t.contains(&q))
                     || i.urls.iter().any(|r| {
                         url::Url::parse(&r.url)
                             .ok()
@@ -1813,9 +1823,13 @@ impl VaultService {
             return Err(Error::InvalidInput("item type cannot change"));
         }
         input.auto_sign_in.get_or_insert(existing.auto_sign_in);
+        if input.tags.is_none() {
+            input.tags = Some(existing.tags.clone());
+        }
         let current = self.load_details(id)?;
-        let (overview, details) =
+        let (mut overview, details) =
             build_item(*id, input, Some(current), existing.created_at, now_ms)?;
+        overview.extra = existing.extra.clone();
         let base = self.store.item_revision(id)?;
         self.stage(overview, Some(&details), base)
     }
@@ -1886,6 +1900,7 @@ impl VaultService {
             }),
             card: None,
             sections: None,
+            tags: None,
         };
         let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
         self.stage(overview, Some(&details), None).map(Some)
@@ -2260,6 +2275,7 @@ pub(crate) fn build_item(
         identity,
         card,
         sections,
+        tags,
     } = input;
 
     let details = match item_type {
@@ -2446,6 +2462,8 @@ pub(crate) fn build_item(
             ItemDetails::Card(fields) => Some(fields.summary()),
             _ => None,
         },
+        tags: crate::tags::normalize(&tags.unwrap_or_default())?,
+        extra: serde_json::Map::new(),
         created_at,
         updated_at: now_ms,
     };

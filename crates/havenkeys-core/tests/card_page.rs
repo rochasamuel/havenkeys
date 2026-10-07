@@ -15,6 +15,7 @@ const SHOP: &str = "https://shop.example.com/checkout";
 
 fn card_input(title: &str, number: &str, cvv: Option<&str>) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Card,
         title: title.into(),
         username: None,

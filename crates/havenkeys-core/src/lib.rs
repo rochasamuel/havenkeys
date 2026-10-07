@@ -32,6 +32,7 @@ pub mod secret;
 pub mod sso;
 pub mod store;
 pub mod sync;
+pub mod tags;
 pub mod totp;
 pub mod unlock_bundle;
 pub mod vault;

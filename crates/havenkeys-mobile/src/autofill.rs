@@ -327,6 +327,7 @@ mod tests {
 
     fn add_login(v: &MobileVault, url: &str) -> String {
         let input = ItemInput {
+            tags: None,
             item_type: ItemType::Login,
             title: "GitHub".into(),
             username: Some("octo".into()),

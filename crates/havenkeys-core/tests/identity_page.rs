@@ -31,6 +31,7 @@ fn with_identity() -> VaultService {
         ..Default::default()
     };
     let input = ItemInput {
+        tags: None,
         item_type: ItemType::Identity,
         title: String::new(),
         username: None,
@@ -98,6 +99,7 @@ fn a_long_accented_name_fits_the_summary_title_limit() {
         ..Default::default()
     };
     let input = ItemInput {
+        tags: None,
         item_type: ItemType::Identity,
         title: String::new(),
         username: None,

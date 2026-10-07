@@ -158,6 +158,7 @@ mod tests {
 
     fn add_github(v: &MobileVault) -> Uuid {
         let input = ItemInput {
+            tags: None,
             item_type: ItemType::Login,
             title: "GitHub".into(),
             username: Some("octo".into()),

@@ -88,6 +88,7 @@ impl ItemInputWire {
             })
             .transpose()?;
         Ok(ItemInput {
+            tags: None,
             item_type: self.item_type,
             title: self.title,
             username: self.username,

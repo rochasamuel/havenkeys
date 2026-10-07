@@ -87,6 +87,14 @@ pub struct ItemOverview {
     /// A card's brand, last four digits and expiry; `None` for other items.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub card: Option<CardSummary>,
+    /// The user's tags, normalised by [`crate::tags::normalize`]. `default`:
+    /// overviews written before tags existed have none.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Fields written by a newer version that this one does not know. Kept
+    /// so an edit made here does not erase them (spec 2026-10-07-item-tags §3.4).
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
     /// Unix milliseconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -107,6 +115,9 @@ impl Drop for ItemOverview {
         self.username.zeroize();
         for rule in &mut self.urls {
             rule.url.zeroize();
+        }
+        for tag in &mut self.tags {
+            tag.zeroize();
         }
     }
 }
@@ -287,6 +298,10 @@ pub struct ItemInput {
     /// order (`custom_field::apply_sections`).
     #[serde(default)]
     pub sections: Option<Vec<SectionInput>>,
+    /// The item's tags. `None` keeps them as they are (every save path that
+    /// does not show tags); `Some` replaces the whole set.
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 impl ItemInput {
@@ -314,6 +329,7 @@ impl ItemInput {
             identity: None,
             card: None,
             sections: None,
+            tags: None,
         }
     }
 }

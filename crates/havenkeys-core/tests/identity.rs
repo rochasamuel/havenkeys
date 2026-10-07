@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 fn identity_input(fields: IdentityFields) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Identity,
         title: String::new(),
         username: None,

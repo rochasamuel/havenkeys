@@ -181,6 +181,7 @@ fn invalid(code: &str, detail: &str) -> MobileError {
 
 fn blank(item_type: ItemType, title: String) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type,
         title,
         username: None,

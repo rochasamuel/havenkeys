@@ -67,6 +67,7 @@ fn new_account_vault(kdf: KdfParams) -> VaultService {
 
 fn item(title: &str, user: &str, pw: &str, url: &str, totp: Option<&str>) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Login,
         title: title.into(),
         username: Some(user.into()),
@@ -125,6 +126,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
     let staged = v
         .stage_create(
             ItemInput {
+                tags: None,
                 item_type: ItemType::SecureNote,
                 title: "Recovery codes".into(),
                 username: None,
@@ -146,6 +148,7 @@ fn build_fixture(writer: Option<()>) -> Fixture {
     let staged = v
         .stage_create(
             ItemInput {
+                tags: None,
                 item_type: ItemType::Login,
                 title: "Typeform".into(),
                 username: None,
@@ -518,6 +521,7 @@ fn secret_requests_are_rate_limited() {
 fn add_card(f: &Fixture) -> Uuid {
     let mut v = f.vault.lock().unwrap();
     let input = ItemInput {
+        tags: None,
         item_type: ItemType::Card,
         title: "Visa".into(),
         username: None,
@@ -1832,6 +1836,7 @@ fn add_identity(f: &Fixture) -> Uuid {
     let id = staged.item_id;
     v.commit_write(staged, 50).unwrap();
     let input = ItemInput {
+        tags: None,
         item_type: ItemType::Identity,
         title: String::new(),
         username: None,

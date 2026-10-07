@@ -874,6 +874,7 @@ fn password_history_is_bounded_and_skips_unchanged() {
     let existing = v.get_item(&gh).unwrap();
     let update_password = |v: &mut havenkeys_core::vault::VaultService, pw: &str, now: i64| {
         let input = ItemInput {
+            tags: None,
             item_type: ItemType::Login,
             title: existing.title.clone(),
             username: existing.username.clone(),

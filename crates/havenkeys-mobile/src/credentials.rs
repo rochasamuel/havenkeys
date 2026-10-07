@@ -440,6 +440,7 @@ mod tests {
     /// (which seeds it again) is not used here.
     fn add_github_login(v: &MobileVault) {
         let input = ItemInput {
+            tags: None,
             item_type: ItemType::Login,
             title: "GitHub".into(),
             username: Some("octo".into()),

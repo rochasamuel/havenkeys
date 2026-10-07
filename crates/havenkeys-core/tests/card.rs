@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 fn card_input(title: &str, card: CardInput) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Card,
         title: title.into(),
         username: None,

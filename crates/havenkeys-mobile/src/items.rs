@@ -366,6 +366,7 @@ mod tests {
 
     fn add_login(v: &MobileVault) -> String {
         let input = ItemInput {
+            tags: None,
             item_type: ItemType::Login,
             title: "GitHub".into(),
             username: Some("octo".into()),
@@ -529,6 +530,7 @@ mod tests {
 
     fn blank(item_type: ItemType, title: &str) -> ItemInput {
         ItemInput {
+            tags: None,
             item_type,
             title: title.into(),
             username: None,

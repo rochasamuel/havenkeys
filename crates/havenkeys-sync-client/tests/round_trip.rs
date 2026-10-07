@@ -138,6 +138,7 @@ async fn push(
 
 fn login_item(title: &str, password: &str) -> ItemInput {
     ItemInput {
+        tags: None,
         item_type: ItemType::Login,
         title: title.into(),
         username: Some("me@example.com".into()),

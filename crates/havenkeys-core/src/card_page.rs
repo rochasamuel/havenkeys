@@ -285,6 +285,7 @@ impl VaultService {
                 .to_owned(),
         };
         let input = ItemInput {
+            tags: None,
             item_type: ItemType::Card,
             title,
             username: None,

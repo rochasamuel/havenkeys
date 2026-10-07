@@ -147,6 +147,7 @@ pub mod testing {
     /// An item input with nothing set but its type and title.
     fn blank(item_type: ItemType, title: &str) -> ItemInput {
         ItemInput {
+            tags: None,
             item_type,
             title: title.into(),
             username: None,
