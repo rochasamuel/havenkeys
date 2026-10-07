@@ -6,6 +6,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -36,6 +38,38 @@ class ShellScreens(
 )
 
 /**
+ * The tag each open tag list shows, by its back stack entry's id (a random
+ * UUID). Memory only, never a route, a Bundle or saved state (security
+ * model §22.12). It lives with the shell's entry, so the lock, which
+ * replaces the shell, drops it; so does a process death, and a tag list
+ * that finds no name here backs out to Items.
+ */
+internal class TagSelections : ViewModel() {
+    private val names = mutableMapOf<String, String>()
+
+    operator fun get(entryId: String): String? = names[entryId]
+
+    operator fun set(entryId: String, name: String) {
+        names[entryId] = name
+    }
+
+    override fun onCleared() = names.clear()
+}
+
+/**
+ * Opens [name]'s list. Two quick taps on one tag open it once; a tap on
+ * another tag goes there at once, as [pushOnce] does for routes with
+ * arguments. The back stack changes synchronously, so the new entry is on
+ * top when its name is recorded.
+ */
+internal fun NavHostController.openTag(name: String, selections: TagSelections) {
+    val top = currentBackStackEntry
+    if (top?.destination?.route == ShellRoutes.TAG && selections[top.id] == name) return
+    navigate(ShellRoutes.TAG)
+    currentBackStackEntry?.let { selections[it.id] = name }
+}
+
+/**
  * The shell's content: one nested graph per tab, so each tab keeps its own
  * back stack (spec §6.1). [padding] is the room the scaffold leaves for the
  * floating button.
@@ -49,6 +83,8 @@ fun ShellNavHost(
 ) {
     val motion = HavenTheme.motion
     val shift = with(LocalDensity.current) { TabShift.roundToPx() }
+    // Scoped to the shell's own entry: it outlives the tabs' back stacks and an item opened over them.
+    val selections = viewModel { TagSelections() }
     NavHost(
         navController = navController,
         startDestination = Tab.HOME.graph,
@@ -71,7 +107,7 @@ fun ShellNavHost(
         navigation(startDestination = Tab.HOME.root, route = Tab.HOME.graph) {
             composable(Tab.HOME.root) { screens.home(padding) }
         }
-        itemsGraph(navController, screens, padding)
+        itemsGraph(navController, screens, padding, selections)
         navigation(startDestination = Tab.SETTINGS.root, route = Tab.SETTINGS.graph) {
             composable(Tab.SETTINGS.root) { screens.settings(padding) }
         }
@@ -83,6 +119,7 @@ private fun NavGraphBuilder.itemsGraph(
     navController: NavHostController,
     screens: ShellScreens,
     padding: PaddingValues,
+    selections: TagSelections,
 ) {
     navigation(startDestination = Tab.ITEMS.root, route = Tab.ITEMS.graph) {
         composable(Tab.ITEMS.root) {
@@ -90,14 +127,12 @@ private fun NavGraphBuilder.itemsGraph(
             screens.items(
                 padding,
                 { category -> navController.pushOnce(ShellRoutes.category(category)) },
-                { name -> navController.pushOnce(ShellRoutes.tag(name)) },
+                { name -> navController.openTag(name, selections) },
             )
         }
-        composable(
-            ShellRoutes.TAG,
-            arguments = listOf(navArgument(ShellRoutes.TAG_ARG) { type = NavType.StringType }),
-        ) { entry ->
-            val name = entry.arguments?.getString(ShellRoutes.TAG_ARG)
+        composable(ShellRoutes.TAG) { entry ->
+            // None after a process death, or for a route opened some other way.
+            val name = selections[entry.id]
             if (name.isNullOrBlank()) {
                 LaunchedEffect(Unit) { navController.popBackStack() }
             } else {

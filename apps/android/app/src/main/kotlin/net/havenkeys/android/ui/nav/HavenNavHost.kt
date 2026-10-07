@@ -161,8 +161,8 @@ internal fun NavHostController.pushOnce(route: String): Boolean {
 
 /**
  * This entry's route with its arguments filled in ("item/{id}" → "item/abc"),
- * encoded as a route is built (a tag's "side project" → "side%20project"),
- * so it equals the route that opened it. Ids and kinds encode to themselves.
+ * encoded as a route is built, so it equals the route that opened it. Ids,
+ * kinds and categories encode to themselves.
  */
 internal fun NavBackStackEntry.concreteRoute(): String? {
     val pattern = destination.route ?: return null

@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.shell
 
+import android.os.Parcel
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
@@ -13,6 +14,7 @@ import net.havenkeys.android.ui.kit.HavenButton
 import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.setKit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -105,6 +107,62 @@ class ShellNavHostTest {
         rule.onNodeWithText("Tag work/staging").performClick()
         rule.onNodeWithText("Open tag").assertIsDisplayed()
     }
+
+    /**
+     * Final review (tags): a tag's name was a route argument, so it landed in
+     * the saved-state Bundle. Neither the route nor the saved back stacks
+     * carry it now.
+     */
+    @Test
+    fun aTagsNameIsInNoRouteAndNoSavedState() {
+        val name = "secret-project"
+        select(Tab.ITEMS)
+        rule.runOnIdle { openTag!!(name) }
+        rule.onNodeWithText("Tag $name").assertIsDisplayed()
+        // Saved as a tab switch saves it, and as the activity's state is written.
+        select(Tab.HOME)
+        rule.runOnIdle {
+            val routes = nav.currentBackStack.value.mapNotNull { it.destination.route }
+            assertFalse(routes.any { name in it })
+            val parcel = Parcel.obtain()
+            try {
+                parcel.writeBundle(nav.saveState())
+                val bytes = parcel.marshall()
+                for (encoded in listOf(Charsets.UTF_8, Charsets.UTF_16LE)) {
+                    val needle = name.toByteArray(encoded)
+                    assertFalse("the tag is in the saved state ($encoded)", bytes.contains(needle))
+                }
+            } finally {
+                parcel.recycle()
+            }
+        }
+        select(Tab.ITEMS)
+        rule.onNodeWithText("Tag $name").assertIsDisplayed()
+    }
+
+    /** A tag list with no name in memory (after a process death) backs out to Items. */
+    @Test
+    fun aTagListWithNoNameBacksOut() {
+        select(Tab.ITEMS)
+        rule.runOnIdle { nav.navigate(ShellRoutes.TAG) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Open logins").assertIsDisplayed()
+    }
+
+    @Test
+    fun twoQuickTapsOnTwoTagsOpenTheSecond() {
+        select(Tab.ITEMS)
+        rule.runOnIdle {
+            openTag!!("work")
+            openTag!!("home")
+        }
+        rule.onNodeWithText("Tag home").assertIsDisplayed()
+        rule.runOnIdle { nav.popBackStack() }
+        rule.onNodeWithText("Tag work").assertIsDisplayed()
+    }
+
+    private fun ByteArray.contains(needle: ByteArray) =
+        indices.any { i -> needle.indices.all { j -> getOrNull(i + j) == needle[j] } }
 
     @Test
     fun anUnknownCategoryOpensNothing() {
