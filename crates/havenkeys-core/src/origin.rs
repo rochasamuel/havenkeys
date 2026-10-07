@@ -387,7 +387,8 @@ mod tests {
     #[test]
     fn best_rule_wins() {
         let item = ItemOverview {
-            tags: Vec::new(), extra: serde_json::Map::new(),
+            tags: Vec::new(),
+            extra: serde_json::Map::new(),
             id: uuid::Uuid::nil(),
             item_type: crate::model::ItemType::Login,
             title: "x".into(),

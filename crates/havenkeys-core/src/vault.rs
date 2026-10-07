@@ -782,7 +782,12 @@ impl VaultService {
     #[doc(hidden)]
     pub fn insert_extra_for_tests(&mut self, id: &Uuid, key: &str, value: serde_json::Value) {
         let session = self.session_mut().unwrap();
-        session.overviews.get_mut(id).unwrap().extra.insert(key.into(), value);
+        session
+            .overviews
+            .get_mut(id)
+            .unwrap()
+            .extra
+            .insert(key.into(), value);
     }
 
     pub(crate) fn session(&self) -> Result<&Session> {
