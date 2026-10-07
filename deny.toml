@@ -38,7 +38,7 @@ allow = [
 
 [[licenses.clarify]]
 crate = "havenkeys-core"
-expression = "MIT OR Apache-2.0"
+expression = "Apache-2.0"
 license-files = []
 
 [bans]

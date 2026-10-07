@@ -1,7 +1,7 @@
 # Third-party notices
 
-HavenKeys itself is licensed under [MIT](LICENSE-MIT) OR
-[Apache-2.0](LICENSE-APACHE). This file carries the notices that third-party
+HavenKeys itself is licensed under the
+[Apache License 2.0](LICENSE-APACHE). This file carries the notices that third-party
 material redistributed with it requires.
 
 Rust and npm dependencies are linked or bundled under permissive licences

@@ -230,11 +230,10 @@ docs/                      Threat model, security model, crypto, architecture, r
 
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [LICENSE-MIT](LICENSE-MIT) and
-[LICENSE-APACHE](LICENSE-APACHE).
+Apache License 2.0. See [LICENSE-APACHE](LICENSE-APACHE).
 
 The desktop app and the website embed the Hanken Grotesk and JetBrains Mono
 typefaces, which are licensed separately under the SIL Open Font License 1.1.
 Their notices and that licence are in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which ships inside the
-desktop bundle alongside the two licences above.
+desktop bundle alongside the licence above.

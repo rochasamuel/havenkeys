@@ -105,7 +105,7 @@ ownership or legibility.
 
 - Security documentation in `docs/`: threat model, security model, crypto,
   native messaging, autofill, and a self-review in `security-review.md`.
-- The product is open source (MIT / Apache-2.0).
+- The product is open source (Apache-2.0).
 - There are no users besides the author, and no testimonials, customers,
   benchmarks, press or independent audit. Future work must not fabricate any
   of these.

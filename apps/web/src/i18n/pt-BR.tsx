@@ -842,15 +842,14 @@ export const ptBR: Messages = {
 
   terms: {
     title: "Termos de Serviço",
-    updated: "Atualizados em 6 de outubro de 2026.",
+    updated: "Atualizados em 7 de outubro de 2026.",
     body: (
       <>
         <h2>Licença</h2>
         <p>
-          O HavenKeys é software de código aberto, com licença dupla:{" "}
-          <Ext href={`${GH}/blob/main/LICENSE-MIT`}>Licença MIT</Ext> e{" "}
+          O HavenKeys é software de código aberto, sob a{" "}
           <Ext href={`${GH}/blob/main/LICENSE-APACHE`}>Licença Apache 2.0</Ext>. Você pode usá-lo,
-          modificá-lo e redistribuí-lo nos termos de qualquer uma delas.
+          modificá-lo e redistribuí-lo nos termos dela.
         </p>
         <p>
           Este site, o app de desktop e a extensão do navegador incorporam as fontes Hanken Grotesk,

@@ -100,7 +100,6 @@
     },
     "resources": {
       "../../../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
-      "../../../LICENSE-MIT": "LICENSE-MIT",
       "../../../LICENSE-APACHE": "LICENSE-APACHE"
     },
     "icon": [

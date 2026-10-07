@@ -827,15 +827,14 @@ export const en = {
 
   terms: {
     title: "Terms of Service",
-    updated: "Last updated October 6, 2026.",
+    updated: "Last updated October 7, 2026.",
     body: (
       <>
         <h2>License</h2>
         <p>
-          HavenKeys is open-source software, dual-licensed under the{" "}
-          <Ext href={`${GH}/blob/main/LICENSE-MIT`}>MIT License</Ext> and the{" "}
+          HavenKeys is open-source software, licensed under the{" "}
           <Ext href={`${GH}/blob/main/LICENSE-APACHE`}>Apache License 2.0</Ext>. You may use,
-          modify, and redistribute it under the terms of either.
+          modify, and redistribute it under its terms.
         </p>
         <p>
           This site, the desktop app and the browser extension embed the Hanken Grotesk, Source
