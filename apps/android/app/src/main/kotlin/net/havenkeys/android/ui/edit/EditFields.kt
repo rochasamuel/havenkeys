@@ -45,7 +45,7 @@ private val longText = setOf("notes", "content", "card.notes", "identity.notes")
 private const val LONG_TEXT_LINES = 3
 
 @Composable
-internal fun EditFields(editor: EditorState, edit: ItemEdit, values: FieldValues) {
+internal fun EditFields(editor: EditorState, edit: ItemEdit, values: FieldValues, vaultTags: List<String>) {
     Column(verticalArrangement = Arrangement.spacedBy(HavenSpacing.groupGap)) {
         // The identity's title is its name, built by Rust.
         if (edit.kind != ItemKind.IDENTITY) InsetGroup { row { TitleEditor(editor) } }
@@ -62,6 +62,7 @@ internal fun EditFields(editor: EditorState, edit: ItemEdit, values: FieldValues
                 color = HavenTheme.colors.muted,
             )
         }
+        Tags(editor, vaultTags)
     }
 }
 

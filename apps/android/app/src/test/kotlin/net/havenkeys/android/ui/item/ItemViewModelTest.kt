@@ -53,7 +53,10 @@ class ItemViewModelTest {
         assertEquals(listOf("id"), vault.usesRecorded)
     }
 
-    private fun summary() = ItemSummary("id", ItemKind.LOGIN, "GitHub", "octo", "github.com", true, false, 0, 0)
+    private fun summary() = ItemSummary(
+        "id", ItemKind.LOGIN, "GitHub", "octo", "github.com", true, false, 0, 0,
+        tags = emptyList(),
+    )
 
     private fun loginView() = ItemView(
         summary(),

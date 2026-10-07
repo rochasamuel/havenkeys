@@ -8,7 +8,7 @@ import uniffi.havenkeys_mobile.ItemSummary
 
 class CategoryTest {
     private fun item(kind: ItemKind, passkey: Boolean = false) =
-        ItemSummary("id", kind, "Title", null, null, false, passkey, 0, 0)
+        ItemSummary("id", kind, "Title", null, null, false, passkey, 0, 0, tags = emptyList())
 
     private val all = listOf(
         item(ItemKind.LOGIN),

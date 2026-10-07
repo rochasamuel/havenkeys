@@ -55,6 +55,7 @@
     <string name="vault_empty_hint">New items you add appear here.</string>
     <string name="vault_no_matches">No matches</string>
     <string name="item_back">Back</string>
+    <string name="item_tags">Tags</string>
     <string name="item_code_failed">Could not generate a code.</string>
     <plurals name="item_seconds_remaining">
         <item quantity="one">%d second remaining</item>
@@ -248,6 +249,10 @@
     <string name="edit_title">Title</string>
     <string name="edit_websites">Websites</string>
     <string name="edit_add_website">Add website</string>
+    <string name="edit_tags">Tags</string>
+    <string name="edit_add_tag">Add tag</string>
+    <string name="edit_remove_tag">Remove tag %1$s</string>
+    <string name="edit_tag_limit">20 tags is the limit.</string>
     <string name="edit_remove_website">Remove website</string>
     <string name="edit_match_domain">Whole site, any subdomain</string>
     <string name="edit_match_origin">This exact site</string>
@@ -344,6 +349,7 @@
     <string name="home_frequent_empty">Items you fill or copy will show here.</string>
     <string name="home_identity_empty">Add your details</string>
     <string name="items_empty">Nothing here yet</string>
+    <string name="items_tags">Tags</string>
     <string name="search_recent">Recent searches</string>
     <string name="search_clear">Clear</string>
     <string name="search_cancel">Cancel</string>

@@ -36,8 +36,8 @@ class ItemsScreensTest {
     private val vault = FakeVaultRepository().apply {
         items = Outcome.Ok(
             listOf(
-                item("1", ItemKind.LOGIN, "bank"),
-                item("2", ItemKind.LOGIN, "Amazon", passkey = true),
+                item("1", ItemKind.LOGIN, "bank", tags = listOf("staging", "work")),
+                item("2", ItemKind.LOGIN, "Amazon", passkey = true, tags = listOf("staging")),
                 item("3", ItemKind.SECURE_NOTE, "Wi-Fi"),
                 item("4", ItemKind.IDENTITY, "Sam"),
             ),
@@ -50,13 +50,43 @@ class ItemsScreensTest {
     fun theItemsTabCountsEachCategoryAndOpensIt() {
         val vm = vm()
         val opened = mutableListOf<Category>()
-        rule.setKit { ItemsScreen(vm, onCategory = { opened += it }, contentPadding = PaddingValues()) }
+        rule.setKit { ItemsScreen(vm, onCategory = { opened += it }, onTag = {}, contentPadding = PaddingValues()) }
         rule.onNodeWithText("Items").assert(isHeading())
         rule.onNode(hasText("All items") and hasClickAction()).assert(hasText("4"))
         rule.onNode(hasText("Logins") and hasClickAction()).assert(hasText("2"))
         rule.onNode(hasText("Cards") and hasClickAction()).assert(hasText("0"))
         rule.onNode(hasText("Passkeys") and hasClickAction()).assert(hasText("1")).performClick()
         assertEquals(listOf(Category.PASSKEYS), opened)
+    }
+
+    @Test
+    fun theItemsTabListsEachTagWithItsCountAndOpensIt() {
+        val vm = vm()
+        val opened = mutableListOf<String>()
+        rule.setKit { ItemsScreen(vm, onCategory = {}, onTag = { opened += it }, contentPadding = PaddingValues()) }
+        rule.onNodeWithText("Tags").assert(isHeading())
+        rule.onNode(hasText("work") and hasClickAction()).assert(hasText("1"))
+        rule.onNode(hasText("staging") and hasClickAction()).assert(hasText("2")).performClick()
+        assertEquals(listOf("staging"), opened)
+    }
+
+    @Test
+    fun withNoTagsTheItemsTabHasNoTagsGroup() {
+        vault.items = Outcome.Ok(listOf(item("3", ItemKind.SECURE_NOTE, "Wi-Fi")))
+        val vm = vm()
+        rule.setKit { ItemsScreen(vm, onCategory = {}, onTag = {}, contentPadding = PaddingValues()) }
+        rule.onNodeWithText("Tags").assertDoesNotExist()
+    }
+
+    @Test
+    fun aTagListsOnlyItsItems() {
+        val vm = vm()
+        rule.setKit {
+            TagScreen(vm, "work", onOpen = { _, _ -> }, contentPadding = PaddingValues())
+        }
+        rule.onNodeWithText("work").assert(isHeading())
+        rule.onNode(hasText("bank") and hasClickAction()).assertIsDisplayed()
+        rule.onNodeWithText("Amazon").assertDoesNotExist()
     }
 
     @Test
@@ -91,6 +121,11 @@ class ItemsScreensTest {
         rule.onNodeWithText("Nothing here yet").assertIsDisplayed()
     }
 
-    private fun item(id: String, kind: ItemKind, title: String, passkey: Boolean = false) =
-        ItemSummary(id, kind, title, null, null, false, passkey, 0, 0)
+    private fun item(
+        id: String,
+        kind: ItemKind,
+        title: String,
+        passkey: Boolean = false,
+        tags: List<String> = emptyList(),
+    ) = ItemSummary(id, kind, title, null, null, false, passkey, 0, 0, tags = tags)
 }

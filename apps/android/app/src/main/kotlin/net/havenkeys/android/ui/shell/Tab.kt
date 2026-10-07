@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.shell
 
+import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -17,12 +18,17 @@ enum class Tab(val graph: String, val root: String, @StringRes val label: Int, v
     SETTINGS("tab-settings", "settings", R.string.settings_title, HavenIcon.Gear),
 }
 
-/** Routes inside the shell. A category list carries only its category's name. */
+/** Routes inside the shell. A category list carries only its category's name, a tag list its tag. */
 object ShellRoutes {
     const val CATEGORY_ARG = "category"
     const val CATEGORY = "items/{$CATEGORY_ARG}"
+    const val TAG_ARG = "tag"
+    const val TAG = "items/tag/{$TAG_ARG}"
 
     fun category(category: Category) = "items/${category.arg}"
+
+    /** Encoded, so a tag with a slash or a space stays one segment. */
+    fun tag(name: String) = "items/tag/${Uri.encode(name)}"
 }
 
 /** The tab a destination belongs to. */

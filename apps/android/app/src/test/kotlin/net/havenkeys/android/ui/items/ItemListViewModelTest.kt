@@ -101,6 +101,21 @@ class ItemListViewModelTest {
         assertEquals(5, vm.state.value.items.size)
     }
 
-    private fun item(id: String, kind: ItemKind, title: String, passkey: Boolean = false) =
-        ItemSummary(id, kind, title, null, null, false, passkey, 0, 0)
+    @Test
+    fun tagCountsCountEachTagAToZ() {
+        val items = listOf(
+            item("1", ItemKind.LOGIN, "A", tags = listOf("prod", "work")),
+            item("2", ItemKind.LOGIN, "B", tags = listOf("work")),
+            item("3", ItemKind.LOGIN, "C"),
+        )
+        assertEquals(listOf("prod" to 1, "work" to 2), tagCounts(items))
+    }
+
+    private fun item(
+        id: String,
+        kind: ItemKind,
+        title: String,
+        passkey: Boolean = false,
+        tags: List<String> = emptyList(),
+    ) = ItemSummary(id, kind, title, null, null, false, passkey, 0, 0, tags = tags)
 }

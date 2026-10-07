@@ -2,8 +2,10 @@ package net.havenkeys.android.ui.item
 
 import android.content.res.Resources
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -51,6 +54,8 @@ import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.InsetGroup
 import net.havenkeys.android.ui.kit.ItemTile
 import net.havenkeys.android.ui.kit.MenuItem
+import net.havenkeys.android.ui.kit.Pill
+import net.havenkeys.android.ui.kit.PillTone
 import net.havenkeys.android.ui.kit.ToastState
 import net.havenkeys.android.ui.kit.ToastTone
 import net.havenkeys.android.ui.kit.rememberToastState
@@ -110,6 +115,7 @@ fun ItemScreen(
         ) {
             state.view?.let { view ->
                 ItemHeader(view.summary, titleModifier, tileModifier)
+                ItemTags(view.summary.tags)
                 if (state.health.isNotEmpty()) {
                     // Vault health's checks for this login, under its title, before its fields.
                     HealthChips(state.health, state.reusedIn, state.duplicates, Modifier.padding(bottom = 16.dp))
@@ -144,6 +150,18 @@ private fun ItemHeader(summary: ItemSummary, titleModifier: Modifier, tileModifi
             color = HavenTheme.colors.textStrong,
         )
     }
+}
+
+/** The item's tags as markers under its title: outlined, muted, with no action. */
+@Composable
+private fun ItemTags(tags: List<String>) {
+    if (tags.isEmpty()) return
+    val label = stringResource(R.string.item_tags)
+    FlowRow(
+        Modifier.padding(bottom = 16.dp).semantics { contentDescription = label },
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) { tags.forEach { Pill(it, tone = PillTone.Outline) } }
 }
 
 /**

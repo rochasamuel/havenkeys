@@ -1,5 +1,6 @@
 package net.havenkeys.android.ui.shell
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -28,11 +29,15 @@ class ShellNavHostTest {
 
     private val screens = ShellScreens(
         home = { HavenText("Home root") },
-        items = { _, onCategory ->
+        items = { _, onCategory, onTag ->
             openCategory = onCategory
-            HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) })
+            Column {
+                HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) })
+                HavenButton("Open tag", onClick = { onTag("work/staging") })
+            }
         },
         category = { _, category, onBack -> HavenButton("List ${category.arg}", onClick = onBack) },
+        tag = { _, name, onBack -> HavenButton("Tag $name", onClick = onBack) },
         settings = { HavenText("Settings root") },
     )
 
@@ -88,6 +93,15 @@ class ShellNavHostTest {
         rule.onNodeWithText("Open logins").performClick()
         rule.onNodeWithText("List logins").performClick()
         rule.onNodeWithText("Open logins").assertIsDisplayed()
+    }
+
+    @Test
+    fun aTagWithASlashOpensItsListAndBacksOutToItems() {
+        select(Tab.ITEMS)
+        rule.onNodeWithText("Open tag").performClick()
+        rule.runOnIdle { assertEquals(ShellRoutes.TAG, nav.currentDestination?.route) }
+        rule.onNodeWithText("Tag work/staging").performClick()
+        rule.onNodeWithText("Open tag").assertIsDisplayed()
     }
 
     @Test

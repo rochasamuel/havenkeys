@@ -25,6 +25,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -117,7 +118,10 @@ class ScreenScreenshots {
     private val dir: File? = System.getProperty("havenkeys.screens.dir")?.takeIf { it.isNotBlank() }?.let(::File)
 
     private val app = RuntimeEnvironment.getApplication()
-    private val github = ItemSummary("1", ItemKind.LOGIN, "GitHub", "sam@example.com", "github.com", true, true, 0, 0)
+    private val github = ItemSummary(
+        "1", ItemKind.LOGIN, "GitHub", "sam@example.com", "github.com", true, true, 0, 0,
+        tags = emptyList(),
+    )
     private val vault = FakeVaultRepository().apply {
         view = Outcome.Ok(
             ItemView(
@@ -146,15 +150,25 @@ class ScreenScreenshots {
                 false,
                 true,
                 3L,
+                tags = emptyList(),
             ),
         )
         generated = Outcome.Ok(Generated("vR7#kq2-Lm9!xT4w", 104.0))
         items = Outcome.Ok(
             listOf(
                 github,
-                ItemSummary("2", ItemKind.LOGIN, "GitLab", "sam@example.com", "gitlab.com", false, false, 0, 0),
-                ItemSummary("3", ItemKind.LOGIN, "Example Bank", "sam.rocha", "bank.example", false, false, 0, 0),
-                ItemSummary("4", ItemKind.LOGIN, "Old forum", null, "forum.example", false, false, 0, 0),
+                ItemSummary(
+                    "2", ItemKind.LOGIN, "GitLab", "sam@example.com", "gitlab.com", false, false, 0, 0,
+                    tags = emptyList(),
+                ),
+                ItemSummary(
+                    "3", ItemKind.LOGIN, "Example Bank", "sam.rocha", "bank.example", false, false, 0, 0,
+                    tags = emptyList(),
+                ),
+                ItemSummary(
+                    "4", ItemKind.LOGIN, "Old forum", null, "forum.example", false, false, 0, 0,
+                    tags = emptyList(),
+                ),
             ),
         )
         healthView = Outcome.Ok(
@@ -170,8 +184,33 @@ class ScreenScreenshots {
         )
     }
 
+    /** The same login with tags, in a vault whose other tags the editor suggests. */
+    private val tagged = FakeVaultRepository().apply {
+        val summary = github.copy(tags = listOf("staging", "work"))
+        view = vault.view.let { (it as Outcome.Ok).copy(value = it.value.copy(summary = summary)) }
+        totpNow = vault.totpNow
+        edit = vault.edit.let { (it as Outcome.Ok).copy(value = it.value.copy(tags = listOf("staging", "work"))) }
+        items = Outcome.Ok(
+            listOf(
+                summary,
+                ItemSummary(
+                    "2", ItemKind.LOGIN, "Stripe", "sam@example.com", "stripe.com", false, false, 0, 0,
+                    tags = listOf("stripe", "work"),
+                ),
+            ),
+        )
+    }
+
+    private val typeATag = {
+        val field = hasSetTextAction() and hasText(app.getString(R.string.edit_add_tag))
+        rule.onNode(field).performScrollTo().performTextInput("st")
+        rule.waitForIdle()
+        rule.onNode(hasText("stripe") and hasClickAction()).performScrollTo()
+        rule.waitForIdle()
+    }
+
     private fun editing(kind: ItemKind, title: String, fields: List<EditField>) = FakeVaultRepository().apply {
-        edit = Outcome.Ok(ItemEdit(kind, title, emptyList(), fields, false, true, 3L))
+        edit = Outcome.Ok(ItemEdit(kind, title, emptyList(), fields, false, true, 3L, tags = emptyList()))
     }
 
     private val note = editing(
@@ -219,9 +258,9 @@ class ScreenScreenshots {
     )
 
     @Composable
-    private fun Item() {
+    private fun Item(repo: FakeVaultRepository = vault) {
         ItemScreen(
-            remember { ItemViewModel(vault, FakeSettingsRepository(), events, "1") },
+            remember { ItemViewModel(repo, FakeSettingsRepository(), events, "1") },
             clipboard,
             true,
             ItemNavigation({}, {}, {}, {}),
@@ -267,6 +306,8 @@ class ScreenScreenshots {
         Shot("item") { Item() },
         Shot("item-revealed", before = revealPassword) { Item() },
         Shot("editor") { Editor(vault) },
+        Shot("editor-tags", before = typeATag) { Editor(tagged) },
+        Shot("item-tags") { Item(tagged) },
         Shot("editor-note") { Editor(note) },
         Shot("editor-card") { Editor(card) },
         Shot("editor-identity") { Editor(identity) },
@@ -371,6 +412,7 @@ class ScreenScreenshots {
         "screens-360",
         listOf(
             Shot("editor") { Editor(vault) },
+            Shot("editor-tags", before = typeATag) { Editor(tagged) },
             Shot("passkey-sheet") { PasskeySheet() },
             Shot("health") { Health() },
             Shot("item") { Item() },

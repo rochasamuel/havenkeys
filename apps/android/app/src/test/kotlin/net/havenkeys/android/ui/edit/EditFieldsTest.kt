@@ -21,7 +21,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.text.AnnotatedString
 import net.havenkeys.android.R
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
@@ -56,12 +58,16 @@ class EditFieldsTest {
 
     private fun text(id: Int, vararg args: Any) = RuntimeEnvironment.getApplication().getString(id, *args)
 
-    private fun login(fields: List<EditField>, websites: List<Website> = emptyList()) =
-        ItemEdit(ItemKind.LOGIN, "GitHub", websites, fields, false, true, 3L)
+    private fun login(
+        fields: List<EditField>,
+        websites: List<Website> = emptyList(),
+        tags: List<String> = emptyList(),
+    ) = ItemEdit(ItemKind.LOGIN, "GitHub", websites, fields, false, true, 3L, tags = tags)
 
     private fun show(
         edit: ItemEdit,
         loading: List<String> = emptyList(),
+        vaultTags: List<String> = emptyList(),
     ): Pair<EditorState, SnapshotStateList<String>> {
         vault.edit = Outcome.Ok(edit)
         val vm = EditViewModel(vault, FakeAccountRepository(), VaultEventsHub(), EditTarget.Existing("id"))
@@ -69,13 +75,59 @@ class EditFieldsTest {
         val pending = mutableStateListOf<String>().apply { addAll(loading) }
         rule.setKit {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                EditFields(editor, edit, FieldValues(vm, pending))
+                EditFields(editor, edit, FieldValues(vm, pending), vaultTags)
             }
         }
         return editor to pending
     }
 
+    private fun typed(value: String) =
+        SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(value))
+
     private fun field(label: String) = rule.onNode(hasSetTextAction() and hasText(label))
+
+    @Test
+    fun doneAddsTheTypedTagAndRemoveTakesItOff() {
+        val (editor, _) = show(login(emptyList(), tags = listOf("work")))
+        field(text(R.string.edit_add_tag)).performTextReplacement("  Staging ")
+        field(text(R.string.edit_add_tag)).performImeAction()
+        rule.runOnIdle { assertEquals(listOf("staging", "work"), editor.toDraft().tags) }
+        field(text(R.string.edit_add_tag)).assert(typed(""))
+        rule.onNodeWithContentDescription(text(R.string.edit_remove_tag, "work")).performClick()
+        rule.runOnIdle {
+            assertEquals(listOf("staging"), editor.toDraft().tags)
+            assertTrue(editor.dirty)
+        }
+    }
+
+    @Test
+    fun aCommaEndsATag() {
+        val (editor, _) = show(login(emptyList()))
+        field(text(R.string.edit_add_tag)).performTextReplacement("prod, ops,db")
+        rule.runOnIdle { assertEquals(listOf("ops", "prod"), editor.toDraft().tags) }
+        field(text(R.string.edit_add_tag)).assert(typed("db"))
+    }
+
+    @Test
+    fun typingOffersTheVaultsMatchingTagsAndATapAddsOne() {
+        val (editor, _) = show(
+            login(emptyList(), tags = listOf("work")),
+            vaultTags = listOf("staging", "stock", "work"),
+        )
+        rule.onNode(hasText("staging") and hasClickAction()).assertDoesNotExist()
+        field(text(R.string.edit_add_tag)).performTextReplacement("st")
+        rule.onNode(hasText("stock") and hasClickAction()).assertExists()
+        rule.onNode(hasText("staging") and hasClickAction()).performClick()
+        rule.runOnIdle { assertEquals(listOf("staging", "work"), editor.toDraft().tags) }
+        rule.onNode(hasText("stock") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun atTwentyTagsTheFieldGivesWayToTheLimit() {
+        show(login(emptyList(), tags = (1..20).map { "t%02d".format(it) }))
+        field(text(R.string.edit_add_tag)).assertDoesNotExist()
+        rule.onNodeWithText(text(R.string.edit_tag_limit)).assertExists()
+    }
 
     @Test
     fun typingTheTitleChangesTheDraft() {

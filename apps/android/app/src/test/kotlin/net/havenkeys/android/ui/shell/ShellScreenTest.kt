@@ -38,8 +38,9 @@ class ShellScreenTest {
 
     private val screens = ShellScreens(
         home = { HavenText("Home root") },
-        items = { _, onCategory -> HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) }) },
+        items = { _, onCategory, _ -> HavenButton("Open logins", onClick = { onCategory(Category.LOGINS) }) },
         category = { _, category, _ -> HavenText("List ${category.arg}") },
+        tag = { _, name, _ -> HavenText("Tag $name") },
         settings = { HavenText("Settings root") },
     )
 

@@ -38,6 +38,8 @@ data class EditUiState(
     val saving: Boolean = false,
     val errorCode: String? = null,
     val conflict: Boolean = false,
+    /** Every tag in the vault, A–Z: the editor's suggestions. */
+    val vaultTags: List<String> = emptyList(),
 ) {
     // `edit` holds the username.
     override fun toString() = "EditUiState(…)"
@@ -123,8 +125,10 @@ class EditViewModel(
                 is EditTarget.Existing -> vault.editable(target.id)
                 is EditTarget.New -> vault.template(target.kind)
             }
+            // Suggestions are a convenience: without the list the editor offers none.
+            val vaultTags = (vault.list() as? Outcome.Ok)?.value.orEmpty().flatMap { it.tags }.distinct().sorted()
             _state.value = when (edit) {
-                is Outcome.Ok -> EditUiState(edit = edit.value, generation = generation)
+                is Outcome.Ok -> EditUiState(edit = edit.value, generation = generation, vaultTags = vaultTags)
                 is Outcome.Failed -> EditUiState(generation = generation, errorCode = edit.code)
             }
         }

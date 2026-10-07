@@ -1,9 +1,11 @@
 package net.havenkeys.android.ui.item
 
 import android.content.ClipboardManager
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -59,8 +61,8 @@ class ItemScreenTest {
     private val app = RuntimeEnvironment.getApplication()
     private fun text(id: Int, vararg args: Any) = app.getString(id, *args)
 
-    private fun summary(kind: ItemKind = ItemKind.LOGIN, passkey: Boolean = false) =
-        ItemSummary("id", kind, "GitHub", "sam", "github.com", false, passkey, 0, 0)
+    private fun summary(kind: ItemKind = ItemKind.LOGIN, passkey: Boolean = false, tags: List<String> = emptyList()) =
+        ItemSummary("id", kind, "GitHub", "sam", "github.com", false, passkey, 0, 0, tags = tags)
 
     private fun login(passkey: Boolean = false) = ItemView(
         summary(passkey = passkey),
@@ -90,6 +92,21 @@ class ItemScreenTest {
     private fun show(online: Boolean = true) {
         val vm = vm()
         rule.setKit { ItemScreen(vm, clipboard, online, navigation) }
+    }
+
+    @Test
+    fun theTagsAreMarkersUnderTheTitle() {
+        vault.view = Outcome.Ok(login().copy(summary = summary(tags = listOf("staging", "work"))))
+        show()
+        rule.onNodeWithContentDescription(text(R.string.item_tags)).assertExists()
+        rule.onNodeWithText("staging").assert(hasClickAction().not())
+        rule.onNodeWithText("work").assertExists()
+    }
+
+    @Test
+    fun anUntaggedItemShowsNoTags() {
+        show()
+        rule.onNodeWithContentDescription(text(R.string.item_tags)).assertDoesNotExist()
     }
 
     @Test

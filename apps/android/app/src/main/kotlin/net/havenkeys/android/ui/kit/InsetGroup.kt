@@ -12,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,12 +57,15 @@ fun InsetGroup(modifier: Modifier = Modifier, content: InsetGroupScope.() -> Uni
             .border(1.dp, colors.groupLine, HavenShape.group),
     ) {
         rows.forEachIndexed { index, row ->
-            val textStart = remember { RowTextStart() }
-            if (index > 0) Hairline(textStart, colors.groupLine)
-            CompositionLocalProvider(
-                LocalRowTextStart provides textStart,
-                LocalRowShape provides rowShape(first = index == 0, last = index == rows.lastIndex),
-            ) { row() }
+            // A keyed row keeps its state (a field's focus, its typed text) when rows come and go before it.
+            key(row.key ?: Position(index)) {
+                val textStart = remember { RowTextStart() }
+                if (index > 0) Hairline(textStart, colors.groupLine)
+                CompositionLocalProvider(
+                    LocalRowTextStart provides textStart,
+                    LocalRowShape provides rowShape(first = index == 0, last = index == rows.lastIndex),
+                ) { row.content() }
+            }
         }
     }
 }
@@ -123,12 +127,18 @@ internal fun ReportRowTextStart(start: Dp) {
 
 /** Collects an [InsetGroup]'s rows so the group can draw the hairlines between them. */
 class InsetGroupScope internal constructor() {
-    internal val rows = mutableListOf<@Composable () -> Unit>()
+    internal val rows = mutableListOf<GroupRowSlot>()
 
-    fun row(content: @Composable () -> Unit) {
-        rows += content
+    /** A row; give it a [key] when rows before it are added or removed while it shows. */
+    fun row(key: Any? = null, content: @Composable () -> Unit) {
+        rows += GroupRowSlot(key, content)
     }
 }
+
+internal class GroupRowSlot(val key: Any?, val content: @Composable () -> Unit)
+
+/** An unkeyed row's place, which no caller's key can equal. */
+private data class Position(val index: Int)
 
 @PreviewLightDark
 @Composable

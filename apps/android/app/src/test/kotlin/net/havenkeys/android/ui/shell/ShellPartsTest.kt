@@ -40,7 +40,7 @@ class ShellPartsTest {
         website: String? = null,
         totp: Boolean = false,
         passkey: Boolean = false,
-    ) = ItemSummary("id-1", kind, "GitHub", subtitle, website, totp, passkey, 0, 0)
+    ) = ItemSummary("id-1", kind, "GitHub", subtitle, website, totp, passkey, 0, 0, tags = emptyList())
 
     @Test
     fun eachKindHasItsTile() {

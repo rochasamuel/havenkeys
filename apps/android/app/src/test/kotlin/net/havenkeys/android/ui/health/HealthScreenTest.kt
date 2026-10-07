@@ -43,8 +43,11 @@ class HealthScreenTest {
     private val vault = FakeVaultRepository().apply {
         items = Outcome.Ok(
             listOf(
-                ItemSummary("a", ItemKind.LOGIN, "GitHub", "sam@example.com", null, false, false, 0, 0),
-                ItemSummary("b", ItemKind.LOGIN, "Bank", null, null, false, false, 0, 0),
+                ItemSummary(
+                    "a", ItemKind.LOGIN, "GitHub", "sam@example.com", null, false, false, 0, 0,
+                    tags = emptyList(),
+                ),
+                ItemSummary("b", ItemKind.LOGIN, "Bank", null, null, false, false, 0, 0, tags = emptyList()),
             ),
         )
         healthView = Outcome.Ok(

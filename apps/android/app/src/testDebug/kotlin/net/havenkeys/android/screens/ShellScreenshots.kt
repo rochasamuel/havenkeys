@@ -33,6 +33,7 @@ import net.havenkeys.android.ui.home.HomeViewModel
 import net.havenkeys.android.ui.items.CategoryScreen
 import net.havenkeys.android.ui.items.ItemListViewModel
 import net.havenkeys.android.ui.items.ItemsScreen
+import net.havenkeys.android.ui.items.TagScreen
 import net.havenkeys.android.ui.kit.SheetSurface
 import net.havenkeys.android.ui.search.SearchScreen
 import net.havenkeys.android.ui.search.SearchViewModel
@@ -89,7 +90,7 @@ class ShellScreenshots {
         sub: String? = null,
         totp: Boolean = false,
         passkey: Boolean = false,
-    ) = ItemSummary(id, kind, title, sub, null, totp, passkey, 0, 0)
+    ) = ItemSummary(id, kind, title, sub, null, totp, passkey, 0, 0, tags = emptyList())
 
     private val identity = summary("9", ItemKind.IDENTITY, "Sam Rocha")
     private val sample = listOf(
@@ -117,6 +118,14 @@ class ShellScreenshots {
         searches += listOf("bank", "github")
     }
 
+    /** The same vault with tags, for the Items tab's Tags group and a tag's list. */
+    private val taggedVault = FakeVaultRepository().apply {
+        val tags = mapOf("1" to listOf("dev", "work"), "2" to listOf("finance"), "5" to listOf("shopping", "work"))
+        items = Outcome.Ok(sample.map { it.copy(tags = tags[it.id].orEmpty()) })
+        recent = vault.recent
+        view = vault.view
+    }
+
     /** A Home whose Recently added failed to load and whose Frequently used is empty. */
     private val failingVault = FakeVaultRepository().apply {
         items = Outcome.Ok(sample)
@@ -137,9 +146,14 @@ class ShellScreenshots {
                         contentPadding = p,
                     )
                 },
-                items = { p, open -> ItemsScreen(remember { ItemListViewModel(home, accounts, events) }, open, p) },
+                items = { p, open, openTag ->
+                    ItemsScreen(remember { ItemListViewModel(home, accounts, events) }, open, openTag, p)
+                },
                 category = { p, c, _ ->
                     CategoryScreen(remember { ItemListViewModel(home, accounts, events) }, c, { _, _ -> }, p)
+                },
+                tag = { p, name, _ ->
+                    TagScreen(remember { ItemListViewModel(home, accounts, events) }, name, { _, _ -> }, p)
                 },
                 settings = { p ->
                     SettingsScreen(
@@ -171,10 +185,17 @@ class ShellScreenshots {
             Shell()
         }
 
+    private val tagShot: Shot
+        get() = Shot("tag", before = { tap("Items"); rule.mainClock.advanceTimeBy(SETTLE_MS); tap("work") }) {
+            Shell(taggedVault)
+        }
+
     private val shots: List<Shot> = listOf(
         Shot("home") { Shell() },
         Shot("items", before = { tap("Items") }) { Shell() },
+        Shot("items-tags", before = { tap("Items") }) { Shell(taggedVault) },
         categoryShot,
+        tagShot,
         Shot("settings", before = { tap("Settings") }) { Shell() },
         Shot("home-error") { Shell(failingVault) },
         Shot("search") {

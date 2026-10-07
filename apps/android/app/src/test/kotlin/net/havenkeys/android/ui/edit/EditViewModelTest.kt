@@ -37,10 +37,12 @@ class EditViewModelTest {
     private val edit = ItemEdit(
         ItemKind.LOGIN, "GitHub", emptyList(),
         listOf(EditField("password", FieldKind.SECRET, true, null)), false, true, 3L,
+        tags = emptyList(),
     )
     private val draft = ItemDraft(
         ItemKind.LOGIN, "GitHub", emptyList(),
         listOf(FieldChange("password", Change.Replace("hunter3"))), 3L,
+        tags = emptyList(),
     )
 
     private fun vault() = FakeVaultRepository().apply { this.edit = Outcome.Ok(this@EditViewModelTest.edit) }

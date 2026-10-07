@@ -38,6 +38,7 @@ import uniffi.havenkeys_mobile.EditField
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
+import uniffi.havenkeys_mobile.ItemSummary
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h891dp")
@@ -57,6 +58,7 @@ class EditScreenTest {
                 false,
                 true,
                 3L,
+                tags = emptyList(),
             ),
         )
     }
@@ -97,6 +99,27 @@ class EditScreenTest {
         rule.waitForIdle()
         assertEquals("GitHub work", vault.drafts.single().title)
         assertEquals(listOf("id"), done)
+    }
+
+    @Test
+    fun aTagStillBeingTypedIsSavedWithTheDraft() {
+        show()
+        val tag = rule.onNode(hasSetTextAction() and hasText(text(R.string.edit_add_tag)))
+        tag.performClick()
+        tag.performTextReplacement("Work")
+        rule.onNodeWithText(text(R.string.edit_save)).assertIsEnabled().performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("work"), vault.drafts.single().tags)
+    }
+
+    @Test
+    fun theVaultsTagsAreOfferedWhileTyping() {
+        vault.items = Outcome.Ok(
+            listOf(ItemSummary("2", ItemKind.LOGIN, "Bank", null, null, false, false, 0, 0, tags = listOf("staging"))),
+        )
+        show()
+        rule.onNode(hasSetTextAction() and hasText(text(R.string.edit_add_tag))).performTextReplacement("sta")
+        rule.onNode(hasText("staging") and hasClickAction()).assertExists()
     }
 
     @Test
@@ -158,6 +181,7 @@ class EditScreenTest {
                 false,
                 true,
                 3L,
+                tags = emptyList(),
             ),
         )
         val restoration = StateRestorationTester(rule)

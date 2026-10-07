@@ -199,5 +199,5 @@ class HealthViewModelTest {
     }
 
     private fun summary(id: String, title: String) =
-        ItemSummary(id, ItemKind.LOGIN, title, null, null, false, false, 0, 0)
+        ItemSummary(id, ItemKind.LOGIN, title, null, null, false, false, 0, 0, tags = emptyList())
 }

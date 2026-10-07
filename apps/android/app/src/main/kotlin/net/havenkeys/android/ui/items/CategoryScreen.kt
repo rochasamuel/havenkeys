@@ -25,6 +25,7 @@ import net.havenkeys.android.ui.shell.SummaryRow
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
+import uniffi.havenkeys_mobile.ItemSummary
 
 private val Gutter = Modifier.padding(horizontal = HavenSpacing.gutter)
 
@@ -42,9 +43,40 @@ fun CategoryScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     sharedTitle: SharedTitle = NoSharedTitle,
+) = FilteredList(
+    viewModel,
+    stringResource(category.label),
+    category::keeps,
+    onOpen,
+    contentPadding,
+    modifier,
+    sharedTitle,
+)
+
+/** One tag's items, A–Z: a category list whose title is the tag. */
+@Composable
+fun TagScreen(
+    viewModel: ItemListViewModel,
+    tag: String,
+    onOpen: OpenItem,
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier,
+    sharedTitle: SharedTitle = NoSharedTitle,
+) = FilteredList(viewModel, tag, { tag in it.tags }, onOpen, contentPadding, modifier, sharedTitle)
+
+@Suppress("LongParameterList") // the two lists' shared body
+@Composable
+private fun FilteredList(
+    viewModel: ItemListViewModel,
+    title: String,
+    keeps: (ItemSummary) -> Boolean,
+    onOpen: OpenItem,
+    contentPadding: PaddingValues,
+    modifier: Modifier,
+    sharedTitle: SharedTitle,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val shown = remember(state.items, category) { state.items.filter(category::keeps) }
+    val shown = remember(state.items, title) { state.items.filter(keeps) }
     PullToRefresh(
         refreshing = state.refreshing,
         onRefresh = viewModel::refresh,
@@ -54,7 +86,7 @@ fun CategoryScreen(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + HavenSpacing.gutter),
         ) {
-            item(key = "title") { LargeTitle(stringResource(category.label), Gutter.padding(top = 8.dp)) }
+            item(key = "title") { LargeTitle(title, Gutter.padding(top = 8.dp)) }
             state.errorCode?.let { code -> item(key = "error") { ErrorLine(code, Gutter) } }
             if (shown.isEmpty() && !state.loading && state.errorCode == null) {
                 item(key = "empty") { EmptyLine(stringResource(R.string.items_empty), Gutter) }

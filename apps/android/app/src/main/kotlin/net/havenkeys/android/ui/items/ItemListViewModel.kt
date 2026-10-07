@@ -29,6 +29,10 @@ data class ItemListUiState(
 fun categoryCounts(items: List<ItemSummary>): Map<Category, Int> =
     Category.entries.associateWith { category -> items.count(category::keeps) }
 
+/** Every tag in use with how many items carry it, A–Z, for the Items tab. */
+fun tagCounts(items: List<ItemSummary>): List<Pair<String, Int>> =
+    items.flatMap { it.tags }.groupingBy { it }.eachCount().toList().sortedBy { it.first }
+
 /** A–Z as a reader expects: accents and case do not split the alphabet. */
 internal fun alphabetical(items: List<ItemSummary>): List<ItemSummary> {
     val collator = Collator.getInstance().apply { strength = Collator.SECONDARY }

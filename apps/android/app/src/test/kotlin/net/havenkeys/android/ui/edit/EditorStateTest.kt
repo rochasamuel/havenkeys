@@ -13,7 +13,7 @@ import uniffi.havenkeys_mobile.MatchKind
 import uniffi.havenkeys_mobile.Website
 
 class EditorStateTest {
-    private fun login(present: Boolean = true) = ItemEdit(
+    private fun login(present: Boolean = true, tags: List<String> = emptyList()) = ItemEdit(
         ItemKind.LOGIN,
         "GitHub",
         listOf(Website("https://github.com", MatchKind.DOMAIN)),
@@ -26,6 +26,7 @@ class EditorStateTest {
         false,
         true,
         7L,
+        tags = tags,
     )
 
     private fun EditorState.changes() = toDraft().changes.associate { it.key to it.change }
@@ -132,6 +133,35 @@ class EditorStateTest {
         val other = EditorState(login())
         other.title = "GitHub (work)"
         assertTrue(other.dirty)
+    }
+
+    @Test
+    fun addTagNormalisesAndRefusesDuplicatesAndCommas() {
+        val state = EditorState(login(tags = listOf("work")))
+        assertTrue(state.addTag("  Prod   Server "))
+        assertFalse(state.addTag("WORK"))
+        assertFalse(state.addTag("a,b"))
+        assertFalse(state.addTag("   "))
+        assertFalse(state.addTag("x".repeat(33)))
+        assertTrue(state.addTag("x".repeat(32)))
+        assertEquals(listOf("prod server", "work", "x".repeat(32)), state.toDraft().tags)
+        assertTrue(state.dirty)
+    }
+
+    @Test
+    fun theTwentyFirstTagIsRefused() {
+        val state = EditorState(login(tags = (1..20).map { "t%02d".format(it) }))
+        assertFalse(state.addTag("more"))
+        assertEquals(20, state.tags.size)
+    }
+
+    @Test
+    fun removingATagMarksTheDraftDirty() {
+        val state = EditorState(login(tags = listOf("work")))
+        assertFalse(state.dirty)
+        state.removeTag("work")
+        assertEquals(emptyList<String>(), state.toDraft().tags)
+        assertTrue(state.dirty)
     }
 
     @Test

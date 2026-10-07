@@ -32,7 +32,7 @@ class SearchScreenTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private val github = ItemSummary("1", ItemKind.LOGIN, "GitHub", "sam", null, false, false, 0, 0)
+    private val github = ItemSummary("1", ItemKind.LOGIN, "GitHub", "sam", null, false, false, 0, 0, tags = emptyList())
     private val events = VaultEventsHub()
     private val vault = FakeVaultRepository().apply {
         items = Outcome.Ok(listOf(github))

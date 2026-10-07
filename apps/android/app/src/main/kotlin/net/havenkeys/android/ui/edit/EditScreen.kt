@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +65,7 @@ fun EditScreen(
     val loading = rememberTextLoads(editor, edit, viewModel)
     var confirmDiscard by remember { mutableStateOf(false) }
     val leave = { if (editor?.dirty == true) confirmDiscard = true else navigation.onBack() }
+    val focus = LocalFocusManager.current
     val canSave = online && editor != null && loading.isEmpty() && !state.saving
 
     LaunchedEffect(viewModel) {
@@ -77,7 +79,11 @@ fun EditScreen(
             ScreenBar(onBack = leave, online = online, onLock = navigation.onLock) {
                 HavenButton(
                     stringResource(R.string.edit_save),
-                    onClick = { editor?.let { viewModel.save(it.toDraft()) } },
+                    onClick = {
+                        // Leaving the field first adds a tag still being typed to the draft.
+                        focus.clearFocus()
+                        editor?.let { viewModel.save(it.toDraft()) }
+                    },
                     // The bar pads 4dp: 12 more puts Save's edge on the fields' 16dp gutter.
                     Modifier.padding(start = 4.dp, end = 12.dp),
                     enabled = canSave,
@@ -95,7 +101,9 @@ fun EditScreen(
             edit?.let { LargeTitle(stringResource(screenTitle(it.kind, isNew))) }
             if (!online) OfflineNote(stringResource(R.string.edit_offline))
             state.errorCode?.let { ErrorLine(it) }
-            if (editor != null && edit != null) EditFields(editor, edit, FieldValues(viewModel, loading))
+            if (editor != null && edit != null) {
+                EditFields(editor, edit, FieldValues(viewModel, loading), state.vaultTags)
+            }
         }
     }
     if (confirmDiscard) {

@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,13 +24,14 @@ private val TabShift = 6.dp
 
 /**
  * The shell's tab screens. The app's NavHost builds them with their
- * ViewModels; tests pass plain text. [items] gets the way to open a
- * category, [category] the way back.
+ * ViewModels; tests pass plain text. [items] gets the ways to open a
+ * category and a tag, [category] and [tag] the way back.
  */
 class ShellScreens(
     val home: @Composable (PaddingValues) -> Unit,
-    val items: @Composable (PaddingValues, onCategory: (Category) -> Unit) -> Unit,
+    val items: @Composable (PaddingValues, onCategory: (Category) -> Unit, onTag: (String) -> Unit) -> Unit,
     val category: @Composable (PaddingValues, Category, onBack: () -> Unit) -> Unit,
+    val tag: @Composable (PaddingValues, String, onBack: () -> Unit) -> Unit,
     val settings: @Composable (PaddingValues) -> Unit,
 )
 
@@ -69,25 +71,49 @@ fun ShellNavHost(
         navigation(startDestination = Tab.HOME.root, route = Tab.HOME.graph) {
             composable(Tab.HOME.root) { screens.home(padding) }
         }
-        navigation(startDestination = Tab.ITEMS.root, route = Tab.ITEMS.graph) {
-            composable(Tab.ITEMS.root) {
-                // Two quick taps on a category open its list once.
-                screens.items(padding) { category -> navController.pushOnce(ShellRoutes.category(category)) }
-            }
-            composable(
-                ShellRoutes.CATEGORY,
-                arguments = listOf(navArgument(ShellRoutes.CATEGORY_ARG) { type = NavType.StringType }),
-            ) { entry ->
-                val category = Category.fromArg(entry.arguments?.getString(ShellRoutes.CATEGORY_ARG))
-                if (category == null) {
-                    LaunchedEffect(Unit) { navController.popBackStack() }
-                } else {
-                    screens.category(padding, category) { navController.popBackStack() }
-                }
-            }
-        }
+        itemsGraph(navController, screens, padding)
         navigation(startDestination = Tab.SETTINGS.root, route = Tab.SETTINGS.graph) {
             composable(Tab.SETTINGS.root) { screens.settings(padding) }
+        }
+    }
+}
+
+/** The Items tab: the categories and tags, and the list each one opens. */
+private fun NavGraphBuilder.itemsGraph(
+    navController: NavHostController,
+    screens: ShellScreens,
+    padding: PaddingValues,
+) {
+    navigation(startDestination = Tab.ITEMS.root, route = Tab.ITEMS.graph) {
+        composable(Tab.ITEMS.root) {
+            // Two quick taps on a category or a tag open its list once.
+            screens.items(
+                padding,
+                { category -> navController.pushOnce(ShellRoutes.category(category)) },
+                { name -> navController.pushOnce(ShellRoutes.tag(name)) },
+            )
+        }
+        composable(
+            ShellRoutes.TAG,
+            arguments = listOf(navArgument(ShellRoutes.TAG_ARG) { type = NavType.StringType }),
+        ) { entry ->
+            val name = entry.arguments?.getString(ShellRoutes.TAG_ARG)
+            if (name.isNullOrBlank()) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                screens.tag(padding, name) { navController.popBackStack() }
+            }
+        }
+        composable(
+            ShellRoutes.CATEGORY,
+            arguments = listOf(navArgument(ShellRoutes.CATEGORY_ARG) { type = NavType.StringType }),
+        ) { entry ->
+            val category = Category.fromArg(entry.arguments?.getString(ShellRoutes.CATEGORY_ARG))
+            if (category == null) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                screens.category(padding, category) { navController.popBackStack() }
+            }
         }
     }
 }

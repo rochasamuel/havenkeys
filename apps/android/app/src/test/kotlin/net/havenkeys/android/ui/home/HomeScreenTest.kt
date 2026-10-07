@@ -36,9 +36,18 @@ class HomeScreenTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private val github = ItemSummary("1", ItemKind.LOGIN, "GitHub", "sam@example.com", null, false, false, 0, 0)
-    private val wifi = ItemSummary("2", ItemKind.SECURE_NOTE, "Wi-Fi", null, null, false, false, 0, 0)
-    private val identity = ItemSummary("9", ItemKind.IDENTITY, "Sam", null, null, false, false, 0, 0)
+    private val github = ItemSummary(
+        "1", ItemKind.LOGIN, "GitHub", "sam@example.com", null, false, false, 0, 0,
+        tags = emptyList(),
+    )
+    private val wifi = ItemSummary(
+        "2", ItemKind.SECURE_NOTE, "Wi-Fi", null, null, false, false, 0, 0,
+        tags = emptyList(),
+    )
+    private val identity = ItemSummary(
+        "9", ItemKind.IDENTITY, "Sam", null, null, false, false, 0, 0,
+        tags = emptyList(),
+    )
 
     private val vault = FakeVaultRepository().apply {
         items = Outcome.Ok(listOf(github, wifi, identity))

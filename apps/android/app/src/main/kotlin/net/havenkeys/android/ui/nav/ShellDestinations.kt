@@ -1,5 +1,7 @@
 package net.havenkeys.android.ui.nav
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -9,6 +11,7 @@ import net.havenkeys.android.ui.home.HomeViewModel
 import net.havenkeys.android.ui.items.CategoryScreen
 import net.havenkeys.android.ui.items.ItemListViewModel
 import net.havenkeys.android.ui.items.ItemsScreen
+import net.havenkeys.android.ui.items.TagScreen
 import net.havenkeys.android.ui.settings.SettingsNavigation
 import net.havenkeys.android.ui.settings.SettingsScreen
 import net.havenkeys.android.ui.settings.SettingsViewModel
@@ -38,45 +41,59 @@ internal fun shellScreens(
             sharedTitle = sharedTitle,
         )
     },
-    items = { padding, onCategory ->
+    items = { padding, onCategory, onTag ->
         ItemsScreen(
-            viewModel = viewModel {
-                ItemListViewModel(services.vault, services.accounts, services.events)
-            },
+            viewModel = itemList(services),
             onCategory = onCategory,
+            onTag = onTag,
             contentPadding = padding,
         )
     },
     category = { padding, category, _ ->
         CategoryScreen(
-            viewModel = viewModel {
-                ItemListViewModel(services.vault, services.accounts, services.events)
-            },
+            viewModel = itemList(services),
             category = category,
             onOpen = open,
             contentPadding = padding,
             sharedTitle = sharedTitle,
         )
     },
-    settings = { padding ->
-        val online by services.events.online.collectAsStateWithLifecycle()
-        SettingsScreen(
-            viewModel = viewModel {
-                SettingsViewModel(
-                    services.settings,
-                    services.accounts,
-                    services.vault,
-                    biometricEnrolled = services.hasBiometricUnlock,
-                )
-            },
-            online = online,
-            actions = services.settingsActions(),
-            navigation = SettingsNavigation(
-                onDevices = { navController.pushOnce(Routes.DEVICES) },
-                onAutofillSetup = { navController.pushOnce(Routes.AUTOFILL_SETUP) },
-                onPairing = { navController.pushOnce(Routes.PAIRING) },
-            ),
+    tag = { padding, name, _ ->
+        TagScreen(
+            viewModel = itemList(services),
+            tag = name,
+            onOpen = open,
             contentPadding = padding,
+            sharedTitle = sharedTitle,
         )
     },
+    settings = { padding -> SettingsTab(services, navController, padding) },
 )
+
+/** The list behind the Items tab and each category or tag list; each screen has its own. */
+@Composable
+private fun itemList(services: NavServices): ItemListViewModel =
+    viewModel { ItemListViewModel(services.vault, services.accounts, services.events) }
+
+@Composable
+private fun SettingsTab(services: NavServices, navController: NavHostController, padding: PaddingValues) {
+    val online by services.events.online.collectAsStateWithLifecycle()
+    SettingsScreen(
+        viewModel = viewModel {
+            SettingsViewModel(
+                services.settings,
+                services.accounts,
+                services.vault,
+                biometricEnrolled = services.hasBiometricUnlock,
+            )
+        },
+        online = online,
+        actions = services.settingsActions(),
+        navigation = SettingsNavigation(
+            onDevices = { navController.pushOnce(Routes.DEVICES) },
+            onAutofillSetup = { navController.pushOnce(Routes.AUTOFILL_SETUP) },
+            onPairing = { navController.pushOnce(Routes.PAIRING) },
+        ),
+        contentPadding = padding,
+    )
+}

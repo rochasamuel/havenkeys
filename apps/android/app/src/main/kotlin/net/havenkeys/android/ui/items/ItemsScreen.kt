@@ -16,23 +16,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowText
+import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.InsetGroup
 import net.havenkeys.android.ui.kit.PullToRefresh
+import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.kit.TrailingText
 import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.shell.LargeTitle
 import net.havenkeys.android.ui.theme.HavenSpacing
 
-/** The Items tab (spec §6.7): each category with its count; each opens its own list. */
+/**
+ * The Items tab (spec §6.7): each category with its count, then each tag in
+ * use with its count; each opens its own list.
+ */
 @Composable
 fun ItemsScreen(
     viewModel: ItemListViewModel,
     onCategory: (Category) -> Unit,
+    onTag: (String) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val counts = remember(state.items) { categoryCounts(state.items) }
+    val tags = remember(state.items) { tagCounts(state.items) }
     PullToRefresh(refreshing = state.refreshing, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -52,6 +59,21 @@ fun ItemsScreen(
                             trailing = { if (!state.loading) TrailingText(counts.getValue(category).toString()) },
                             chevron = true,
                         ) { GroupRowText(stringResource(category.label)) }
+                    }
+                }
+            }
+            if (tags.isNotEmpty()) {
+                SectionHeader(stringResource(R.string.items_tags), Modifier.padding(top = 16.dp))
+                InsetGroup {
+                    tags.forEach { (name, count) ->
+                        row {
+                            GroupRow(
+                                onClick = { onTag(name) },
+                                icon = HavenIcon.Tag,
+                                trailing = { TrailingText(count.toString()) },
+                                chevron = true,
+                            ) { GroupRowText(name) }
+                        }
                     }
                 }
             }

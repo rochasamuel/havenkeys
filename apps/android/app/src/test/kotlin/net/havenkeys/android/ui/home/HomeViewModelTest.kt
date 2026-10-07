@@ -215,5 +215,5 @@ class HomeViewModelTest {
         ItemView(identity, keys.map { ViewField(it, it, FieldKind.TEXT, value) })
 
     private fun item(id: String, kind: ItemKind, title: String) =
-        ItemSummary(id, kind, title, null, null, false, false, 0, 0)
+        ItemSummary(id, kind, title, null, null, false, false, 0, 0, tags = emptyList())
 }

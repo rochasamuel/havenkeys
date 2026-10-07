@@ -12,6 +12,11 @@ import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.MatchKind
 import uniffi.havenkeys_mobile.Website
 
+/** Rust's limits for an item's tags; the editor previews them, Rust stays the authority. */
+internal const val MAX_TAGS = 20
+private const val MAX_TAG_CHARS = 32
+private val Whitespace = Regex("\\s+")
+
 class WebsiteRow(url: String, match: MatchKind) {
     var url by mutableStateOf(url)
     var match by mutableStateOf(match)
@@ -30,6 +35,9 @@ class EditorState(private val edit: ItemEdit) {
     val websites = mutableStateListOf<WebsiteRow>().apply {
         edit.websites.forEach { add(WebsiteRow(it.url, it.matchKind)) }
     }
+
+    /** The item's tags as Rust will store them: normalised, unique, A–Z. */
+    val tags = mutableStateListOf<String>().apply { addAll(edit.tags) }
 
     private val loaded = mutableStateMapOf<String, String>()
     private val typed = mutableStateMapOf<String, String>()
@@ -76,11 +84,35 @@ class EditorState(private val edit: ItemEdit) {
         websites.add(WebsiteRow("", MatchKind.DOMAIN))
     }
 
+    /**
+     * Adds [raw] as Rust will store it (trimmed, spaces collapsed, lower
+     * case); false if that is empty, too long, has a comma or a control
+     * character, is already here, or the item has its 20 tags.
+     */
+    fun addTag(raw: String): Boolean {
+        val tag = raw.trim().split(Whitespace).joinToString(" ").lowercase()
+        val ok = tag.isNotEmpty() &&
+            tag.codePointCount(0, tag.length) <= MAX_TAG_CHARS &&
+            tag.none { it == ',' || it.isISOControl() } &&
+            tag !in tags &&
+            tags.size < MAX_TAGS
+        if (ok) {
+            tags.add(tag)
+            tags.sort()
+        }
+        return ok
+    }
+
+    fun removeTag(tag: String) {
+        tags.remove(tag)
+    }
+
     val dirty: Boolean
-        get() = title != edit.title || websitesOf() != edit.websites || changes().isNotEmpty()
+        get() = title != edit.title || websitesOf() != edit.websites || tags.toList() != edit.tags ||
+            changes().isNotEmpty()
 
     /** Carries the revision the edit was opened at: Rust refuses it if the item changed since. */
-    fun toDraft(): ItemDraft = ItemDraft(kind, title.trim(), websitesOf(), changes(), edit.revision)
+    fun toDraft(): ItemDraft = ItemDraft(kind, title.trim(), websitesOf(), changes(), edit.revision, tags.toList())
 
     private fun websitesOf(): List<Website> =
         websites.filter { it.url.isNotBlank() }.map { Website(it.url.trim(), it.match) }
