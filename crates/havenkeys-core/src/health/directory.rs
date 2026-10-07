@@ -18,7 +18,6 @@ const MAX_SITES: usize = 20_000;
 const MAX_NAME: usize = 100;
 
 pub(crate) struct Site {
-    #[allow(dead_code)] // shown by the Vault health screen (later task)
     pub(crate) help: Option<String>,
 }
 
@@ -123,7 +122,6 @@ impl Directory {
 }
 
 /// Scheme and normalized host of a saved website rule; only http(s).
-#[allow(dead_code)] // used by the snapshot builder (later task)
 pub(crate) fn rule_host(url: &str) -> Option<(String, String)> {
     let url = Url::parse(url).ok()?;
     if !matches!(url.scheme(), "http" | "https") {

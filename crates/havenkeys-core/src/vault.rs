@@ -86,6 +86,11 @@ pub(crate) struct Session {
     pub(crate) damaged_items: usize,
     pub(crate) damaged_settings: bool,
     pub(crate) recent_fills: Vec<RecentFill>,
+    /// Bumped on every change to the items (a write, a sync pull), so a
+    /// health report computed from an older snapshot is not cached.
+    pub(crate) generation: u64,
+    /// The last health report and when it was computed; dropped on lock.
+    pub(crate) health: Option<crate::health::HealthReport>,
 }
 
 /// A password HavenKeys filled: which login, on which site, when. In memory
@@ -829,6 +834,8 @@ impl VaultService {
             damaged_items: 0,
             damaged_settings: false,
             recent_fills: Vec::new(),
+            generation: 0,
+            health: None,
             vault_key: prepared.vault_key,
         });
         self.state = VaultState::Unlocked;
@@ -957,6 +964,8 @@ impl VaultService {
             damaged_items,
             damaged_settings,
             recent_fills: Vec::new(),
+            generation: 0,
+            health: None,
             vault_key: Key256::from_bytes(*vault_key.as_bytes()),
         })
     }
@@ -2131,6 +2140,11 @@ impl VaultService {
         self.session()?;
         if staged.epoch != self.epoch {
             return Err(Error::Locked);
+        }
+        {
+            let s = self.session_mut()?;
+            s.generation = s.generation.wrapping_add(1);
+            s.health = None;
         }
         match (staged.overview, staged.details, staged.plain) {
             (Some(ov), Some(det), Some(overview)) => {

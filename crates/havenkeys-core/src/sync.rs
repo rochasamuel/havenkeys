@@ -458,6 +458,11 @@ impl VaultService {
         for id in &deletions {
             self.session_mut()?.overviews.remove(id);
         }
+        {
+            let s = self.session_mut()?;
+            s.generation = s.generation.wrapping_add(1);
+            s.health = None;
+        }
         Ok(report)
     }
 
@@ -751,6 +756,34 @@ mod tests {
             .unwrap();
         assert_eq!(report.deleted, 1);
         assert!(vault.get_item(&id).is_err());
+    }
+
+    #[test]
+    fn a_pull_clears_the_cached_health_report() {
+        let mut vault = activated_vault();
+        let staged = vault.stage_create(login("GitHub"), NOW).unwrap();
+        let id = vault.commit_write(staged, 1).unwrap().unwrap().id;
+        vault.health_report(NOW).unwrap();
+        assert!(vault.cached_health(NOW).unwrap().is_some());
+        let snap = vault.health_snapshot().unwrap();
+        let report = crate::health::compute(&snap, NOW);
+
+        vault
+            .apply_remote_changes(
+                5,
+                vec![RemoteChange {
+                    item_id: id,
+                    revision: 5,
+                    overview: None,
+                    details: None,
+                    deleted: true,
+                }],
+                NOW,
+            )
+            .unwrap();
+        assert!(vault.cached_health(NOW).unwrap().is_none());
+        // A report computed before the pull is not cached afterwards.
+        assert!(!vault.store_health(&snap, &report));
     }
 
     #[test]

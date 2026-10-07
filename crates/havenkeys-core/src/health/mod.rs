@@ -4,6 +4,9 @@
 //! the unlocked vault; the report holds item IDs and check kinds only.
 
 pub(crate) mod directory;
+mod vault;
+
+pub use vault::HEALTH_CACHE_MS;
 
 use crate::secret::SecretString;
 use directory::{passkey_sites, twofactor_sites};
@@ -139,9 +142,7 @@ impl Drop for LoginFacts {
 /// state (`generation`, `epoch`) that was, so a stale report is not cached.
 pub struct HealthSnapshot {
     pub(crate) logins: Vec<LoginFacts>,
-    #[allow(dead_code)] // read by the report cache (later task)
     pub(crate) generation: u64,
-    #[allow(dead_code)] // read by the report cache (later task)
     pub(crate) epoch: u64,
 }
 
