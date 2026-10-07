@@ -31,7 +31,14 @@ impl HavenClient {
             }
         });
         let report = health::compute(&snapshot, now_ms);
-        self.vault()?.store_health(&snapshot, &report);
+        let mut vault = self.vault()?;
+        // Locked (and maybe unlocked again) while computing: the report
+        // belongs to a session that is gone, so it is neither cached nor
+        // returned.
+        if !vault.is_unlocked() || vault.epoch() != snapshot.epoch() {
+            return Err(havenkeys_core::Error::Locked.into());
+        }
+        vault.store_health(&snapshot, &report);
         Ok(report)
     }
 
@@ -67,6 +74,23 @@ mod tests {
         let r = client.health_report(now_ms()).unwrap();
         assert_eq!(r.counts.weak, 0);
         assert_eq!(r.dismissed.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_report_computed_across_a_lock_is_not_returned_or_cached() {
+        let (_dir, client, _server) = online().await;
+        create(&client, login("Weak", "password1")).await;
+        let probe = client.clone();
+        BEFORE_COMPUTE.with(|h| *h.borrow_mut() = Some(Box::new(move || probe.lock("user"))));
+        let report = client.health_report(now_ms());
+        BEFORE_COMPUTE.with(|h| *h.borrow_mut() = None);
+        assert_eq!(report.unwrap_err().code, "locked");
+        let vault = client.vault().unwrap();
+        assert!(!vault.is_unlocked());
+        assert_eq!(
+            vault.cached_health(now_ms()).err(),
+            Some(havenkeys_core::Error::Locked)
+        );
     }
 
     #[tokio::test]

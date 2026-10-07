@@ -173,6 +173,13 @@ pub struct HealthSnapshot {
     pub(crate) epoch: u64,
 }
 
+impl HealthSnapshot {
+    /// The lock epoch the snapshot was taken in (`VaultService::epoch`).
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+}
+
 impl fmt::Debug for HealthSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HealthSnapshot")
