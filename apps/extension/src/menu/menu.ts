@@ -5,6 +5,7 @@
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityRole, type PasswordOptions } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
+import { tagLine } from "../shared/tags";
 import { ask, createClickGuard, h, monogram, receiveToken, userData } from "./common";
 import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
 
@@ -25,6 +26,17 @@ function message(title: string, detail: string, error = false): HTMLElement {
 /** A row's text line: user data truncates with an ellipsis, our own copy wraps. */
 function line(className: "title" | "user", text: string, copy: boolean): HTMLElement {
   return copy ? h("span", { className: `${className} copy`, text }) : userData(h("span", { className, text }));
+}
+
+/**
+ * A login's user line. With tags, the username comes first and the tags
+ * follow, very small and faint; the tags are what shrink when the row is full.
+ */
+function userLine(detail: string, copy: boolean, tags: readonly string[]): HTMLElement {
+  const text = tagLine(tags);
+  if (!text) return line("user", detail, copy);
+  const name = copy ? h("span", { className: "user-name copy", text: detail }) : userData(h("span", { className: "user-name", text: detail }));
+  return h("span", { className: "user with-tags" }, name, userData(h("span", { className: "tags", text: `\u00b7 ${text}` })));
 }
 
 /** The generate row's glyph: a sparkle drawn in the app's 1.6-stroke icon set. */
@@ -49,12 +61,12 @@ function sparkle(): SVGSVGElement {
 type Copy = { title: boolean; detail: boolean };
 const DATA: Copy = { title: false, detail: false };
 
-function row(avatar: string | Node, title: string, detail: string, onPick: () => Promise<void>, copy: Copy = DATA): HTMLButtonElement {
+function row(avatar: string | Node, title: string, detail: string, onPick: () => Promise<void>, copy: Copy = DATA, tags: readonly string[] = []): HTMLButtonElement {
   const b = h(
     "button",
     { className: "row" },
     typeof avatar === "string" ? h("span", { className: "avatar", text: avatar }) : h("span", { className: "avatar avatar-icon" }, avatar),
-    h("span", { className: "who" }, line("title", title, copy.title), line("user", detail, copy.detail)),
+    h("span", { className: "who" }, line("title", title, copy.title), userLine(detail, copy.detail, tags)),
   );
   b.type = "button";
   b.addEventListener("click", (e) => {
@@ -77,13 +89,13 @@ function itemRow(t: string, item: MenuItemView, kind: "login" | "otp"): HTMLButt
     return row(providerIcon(item.provider), item.title, msg.menu.ssoRow(name, item.username), () => pick({ type: "menu_pick", token: t, itemId: item.id }), {
       title: false,
       detail: item.username === null,
-    });
+    }, item.tags);
   }
   // A code row names its account too: logins often share a title.
   const detail =
     item.username === null ? (kind === "otp" ? msg.menu.fillCode : msg.common.noUsername) : kind === "otp" ? msg.menu.codeRow(item.username) : item.username;
   const copy = { title: false, detail: item.username === null };
-  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy);
+  return row(monogram(item.title), item.title, detail, () => pick({ type: "menu_pick", token: t, itemId: item.id }), copy, item.tags);
 }
 
 function documentList(roles: readonly IdentityRole[]): string {

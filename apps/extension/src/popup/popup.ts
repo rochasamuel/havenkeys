@@ -12,6 +12,7 @@ import { applyDocumentLang, t } from "../i18n";
 import { cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
 import type { CardRowView } from "../messaging/inline";
 import { displayHost } from "../shared/url";
+import { tagLine } from "../shared/tags";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
@@ -117,6 +118,15 @@ async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: 
  * it's user data (truncates).
  */
 function userLine(m: Match): HTMLElement {
+  const tags = tagLine(m.tags);
+  if (tags) {
+    const text = m.provider
+      ? t.menu.ssoRow(SSO_PROVIDERS[m.provider].name, m.username)
+      : (m.username ?? t.common.noUsername);
+    const name = h("span", { className: m.provider || m.username === null ? "user-name copy" : "user-name", text });
+    if (m.username !== null) truncates(name);
+    return h("div", { className: "user with-tags" }, name, truncates(h("span", { className: "tags", text: `\u00b7 ${tags}` })));
+  }
   if (m.provider) {
     const text = t.menu.ssoRow(SSO_PROVIDERS[m.provider].name, m.username);
     return m.username !== null ? truncates(h("div", { className: "user", text })) : h("div", { className: "user copy", text });

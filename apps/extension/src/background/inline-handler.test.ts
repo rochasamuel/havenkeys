@@ -226,7 +226,7 @@ describe("suggestion menus", () => {
         state: "ready",
         kind: "login",
         site: "github.com",
-        items: [{ id: GH, title: "GitHub", username: "octo", provider: null }],
+        items: [{ id: GH, title: "GitHub", username: "octo", provider: null, tags: [] }],
         passkeys: [],
         hint: null,
         identity: null,

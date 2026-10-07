@@ -157,3 +157,28 @@ describe("popup cards", () => {
     expect(order).toEqual(["item identity", "item card", "notice offer"]);
   });
 });
+
+describe("popup tags", () => {
+  const match = (tags: string[]) => ({ id: "11111111-1111-4111-8111-111111111111", title: "Acme", username: "admin@acme.example.com", hasTotp: false, provider: null, tags });
+  const open = async (tags: string[]) => {
+    replies.popup_state = async () => ({ ok: true, value: { kind: "unlocked", site: "acme.example.com", matches: [match(tags)], identity: null } });
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelector(".item .who")).not.toBeNull());
+  };
+
+  it("shows the username first and the tags after it", async () => {
+    await open(["staging"]);
+    const user = document.querySelector(".item .who .user")!;
+    expect(user.querySelector(".user-name")!.textContent).toBe("admin@acme.example.com");
+    expect(user.querySelector(".tags")!.textContent).toBe("\u00b7 staging");
+    expect(user.firstElementChild!.className).toContain("user-name");
+  });
+
+  it("renders no tags element without tags", async () => {
+    await open([]);
+    expect(document.querySelector(".item .who .user")!.textContent).toBe("admin@acme.example.com");
+    expect(document.querySelector(".tags")).toBeNull();
+  });
+});
+

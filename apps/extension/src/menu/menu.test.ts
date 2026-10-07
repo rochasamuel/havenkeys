@@ -59,7 +59,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: { kind: "use_passkey" } },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null, tags: [] }], passkeys: [], hint: { kind: "use_passkey" } },
       },
     ];
     await load();
@@ -73,7 +73,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: { kind: "add_passkey", name: "GitHub" } },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null, tags: [] }], passkeys: [], hint: { kind: "add_passkey", name: "GitHub" } },
       },
     ];
     await load();
@@ -88,7 +88,7 @@ describe("field menu passkey hints", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null }], passkeys: [], hint: null },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: "octo", provider: null, tags: [] }], passkeys: [], hint: null },
       },
     ];
     await load();
@@ -103,7 +103,7 @@ describe("field menu copy and size", () => {
     replies = [
       {
         ok: true,
-        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null, provider: null }], passkeys: [], hint: null },
+        value: { state: "ready", kind: "login", site: "github.com", items: [{ id: ITEM, title: "GitHub", username: null, provider: null, tags: [] }], passkeys: [], hint: null },
       },
     ];
     await load();
@@ -122,8 +122,8 @@ describe("field menu copy and size", () => {
           kind: "otp",
           site: "github.com",
           items: [
-            { id: ITEM, title: "GitHub", username: "octo", provider: null },
-            { id: "22222222-2222-4222-8222-222222222222", title: "GitHub", username: null, provider: null },
+            { id: ITEM, title: "GitHub", username: "octo", provider: null, tags: [] },
+            { id: "22222222-2222-4222-8222-222222222222", title: "GitHub", username: null, provider: null, tags: [] },
           ],
           passkeys: [],
           hint: null,
@@ -201,7 +201,7 @@ describe("field menu focus", () => {
       state: "ready",
       kind: "login",
       site: "accounts.google.com",
-      items: Array.from({ length: n }, (_, i) => ({ id: ITEM, title: `Login ${i}`, username: `u${i}@x.io`, provider: null })),
+      items: Array.from({ length: n }, (_, i) => ({ id: ITEM, title: `Login ${i}`, username: `u${i}@x.io`, provider: null, tags: [] })),
       passkeys: [],
       hint: null,
     },
@@ -576,5 +576,25 @@ describe("generator settings", () => {
     await click(document.querySelector(".gen-toggle")!);
     await vi.advanceTimersByTimeAsync(50);
     expect(asked).toContainEqual({ type: "menu_resize", token: TOKEN, height: 34 + 46 + 150, animate: true });
+  });
+});
+
+describe("field menu tags", () => {
+  const items = (tags: string[]) => [{ id: ITEM, title: "Acme", username: "a-very-long-admin-name@acme.example.com", provider: null, tags }];
+  const ready = (tags: string[]) => ({ ok: true, value: { state: "ready", kind: "login", site: "acme.example.com", items: items(tags), passkeys: [], hint: null } });
+
+  it("puts the username first and the tags after it, as text", async () => {
+    replies = [ready(["staging", "work", "eu"])];
+    await load();
+    const user = document.querySelector("button.row .user")!;
+    expect(user.querySelector(".user-name")!.textContent).toBe("a-very-long-admin-name@acme.example.com");
+    expect(user.querySelector(".tags")!.textContent).toBe("\u00b7 staging, work +1");
+    expect(user.firstElementChild!.className).toContain("user-name");
+  });
+
+  it("renders no tags element without tags", async () => {
+    replies = [ready([])];
+    await load();
+    expect(document.querySelector("button.row .tags")).toBeNull();
   });
 });

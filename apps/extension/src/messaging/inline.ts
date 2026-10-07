@@ -178,6 +178,8 @@ export interface MenuItemView {
   username: string | null;
   /** Set for a login saved with "Sign in with <provider>"; picking it starts a run. */
   provider: SsoProvider | null;
+  /** The login's tags (vault data; rendered as text only). */
+  tags: string[];
 }
 
 /**

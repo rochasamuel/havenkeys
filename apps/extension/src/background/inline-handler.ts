@@ -792,7 +792,7 @@ export function createInlineHandler(deps: InlineDeps) {
           return { ok: true, value: { state: "cards", site, cards: m.card.insecure ? [] : m.card.rows, insecure: m.card.insecure } };
         }
         const site = displayHost(m.frame.url) ?? "";
-        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider }));
+        const items = m.items.map((i) => ({ id: i.id, title: i.title, username: i.username, provider: i.provider, tags: i.tags }));
         return { ok: true, value: { state: "ready", kind: m.kind, site, items, passkeys: m.passkeys, hint: m.hint, identity: m.identity } };
       }
       case "menu_pick_card": {
