@@ -119,6 +119,12 @@ impl HavenClient {
         self.vault.lock().map_err(|_| ClientError::internal())
     }
 
+    /// Whether the vault mutex can be taken right now, without waiting.
+    #[cfg(test)]
+    pub(crate) fn vault_is_free(&self) -> bool {
+        self.vault.try_lock().is_ok()
+    }
+
     pub fn device(&self) -> ClientResult<MutexGuard<'_, Device>> {
         self.device.lock().map_err(|_| ClientError::internal())
     }

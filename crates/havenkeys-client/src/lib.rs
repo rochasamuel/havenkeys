@@ -14,10 +14,10 @@ mod deletion;
 pub mod device;
 mod error;
 mod events;
+mod health;
 pub mod key_store;
 pub mod kit;
 mod pairing;
-mod health;
 mod removal;
 mod restore;
 #[cfg(test)]

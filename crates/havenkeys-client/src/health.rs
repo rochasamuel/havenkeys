@@ -5,6 +5,14 @@ use crate::{ClientResult, HavenClient};
 use havenkeys_core::health::{self, HealthCheck, HealthReport};
 use uuid::Uuid;
 
+#[cfg(test)]
+thread_local! {
+    /// Test seam: runs on the calling thread between the snapshot and the
+    /// computation, where the vault lock must already be free.
+    static BEFORE_COMPUTE: std::cell::RefCell<Option<Box<dyn Fn()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 impl HavenClient {
     /// Blocking: call from a worker thread (Tauri `spawn_blocking`, Android IO).
     pub fn health_report(&self, now_ms: i64) -> ClientResult<HealthReport> {
@@ -16,6 +24,12 @@ impl HavenClient {
             vault.health_snapshot()?
         };
         // The vault lock is free here: fills and other commands go ahead.
+        #[cfg(test)]
+        BEFORE_COMPUTE.with(|hook| {
+            if let Some(hook) = hook.borrow().as_ref() {
+                hook();
+            }
+        });
         let report = health::compute(&snapshot, now_ms);
         self.vault()?.store_health(&snapshot, &report);
         Ok(report)
@@ -33,9 +47,12 @@ impl HavenClient {
 
 #[cfg(test)]
 mod tests {
+    use super::BEFORE_COMPUTE;
     use crate::now_ms;
     use crate::restore::tests::{create, login, online};
     use havenkeys_core::health::HealthCheck;
+    use std::cell::Cell;
+    use std::rc::Rc;
 
     #[tokio::test]
     async fn the_report_and_a_dismissal_round_trip() {
@@ -54,15 +71,22 @@ mod tests {
 
     #[tokio::test]
     async fn fill_is_not_blocked_while_health_computes() {
-        // The vault mutex must be free while zxcvbn runs: take the snapshot,
-        // then prove the lock can be taken before compute is called.
+        // health_report must not hold the vault mutex while it computes: the
+        // hook runs exactly where compute is about to start and checks the lock.
         let (_dir, client, _server) = online().await;
         create(&client, login("Weak", "password1")).await;
-        let snapshot = client.vault().unwrap().health_snapshot().unwrap();
-        assert!(
-            client.vault().is_ok(),
-            "the lock is released after the snapshot"
+        let seen = Rc::new(Cell::new(None));
+        let (probe, out) = (client.clone(), seen.clone());
+        BEFORE_COMPUTE.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move || out.set(Some(probe.vault_is_free()))));
+        });
+        let report = client.health_report(now_ms());
+        BEFORE_COMPUTE.with(|h| *h.borrow_mut() = None);
+        report.unwrap();
+        assert_eq!(
+            seen.get(),
+            Some(true),
+            "the hook must run, with the vault lock free"
         );
-        let _ = havenkeys_core::health::compute(&snapshot, now_ms());
     }
 }
