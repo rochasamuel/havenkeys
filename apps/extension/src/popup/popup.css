@@ -287,6 +287,8 @@ main {
 
 .title,
 .user {
+  /* Two 18px lines: .item > .actions is centred on this 36px block. */
+  line-height: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -320,7 +322,7 @@ main {
   position: absolute;
   top: 8px;
   right: 8px;
-  height: 32px;
+  height: 36px;
   padding-left: 44px;
   pointer-events: none;
 }
