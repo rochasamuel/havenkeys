@@ -38,17 +38,18 @@ const ok = (value) => ({ ok: true, value });
 const err = (message) => ({ ok: false, message });
 
 const matches = [
-  { id: ID1, title: "GitHub", username: "octocat@example.com", hasTotp: true, strength: "same_host" },
+  { id: ID1, title: "GitHub", username: "octocat@example.com", hasTotp: true, strength: "same_host", tags: ["staging"] },
   {
     id: ID2,
     title: "GitHub — work account for the platform infrastructure team",
     username: "firstname.lastname.with-a-long-address@corporate-example.com",
     hasTotp: false,
     strength: "same_host",
+    tags: ["admin", "production", "work"],
   },
-  { id: ID3, title: "GitHub (old)", username: null, hasTotp: false, strength: "same_host" },
+  { id: ID3, title: "GitHub (old)", username: null, hasTotp: false, strength: "same_host", tags: [] },
 ];
-const menuItems = matches.map(({ id, title, username }) => ({ id, title, username }));
+const menuItems = matches.map(({ id, title, username, tags }) => ({ id, title, username, tags }));
 
 function identityRow(over) {
   return { title: "Samuel Rocha", fills: 5, documents: [], documentsAllowed: true, empty: false, missing: false, ...over };
