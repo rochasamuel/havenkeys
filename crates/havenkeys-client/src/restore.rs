@@ -130,7 +130,7 @@ fn take(batch: &mut Vec<StagedWrite>, id: Uuid) -> Option<StagedWrite> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::client::tests::client_in;
     use crate::client::HavenClient;
     use crate::stub_server::{StubAccount, StubRow, StubServer};
@@ -154,7 +154,7 @@ mod tests {
 
     /// A signed-in client against a stub server that keeps items with the
     /// real server's tombstone rules.
-    async fn online() -> (tempfile::TempDir, Arc<HavenClient>, StubServer) {
+    pub(crate) async fn online() -> (tempfile::TempDir, Arc<HavenClient>, StubServer) {
         let account = AccountRef::new(
             Uuid::from_u128(1),
             NormalizedEmail::parse("user@example.com").unwrap(),
@@ -196,14 +196,14 @@ mod tests {
         (dir, client, server)
     }
 
-    fn login(title: &str, password: &str) -> ItemInput {
+    pub(crate) fn login(title: &str, password: &str) -> ItemInput {
         ItemInput {
             password: SecretUpdate::Set(SecretString::from(password)),
             ..ItemInput::blank_for_tests(ItemType::Login, title)
         }
     }
 
-    async fn create(client: &HavenClient, input: ItemInput) -> Uuid {
+    pub(crate) async fn create(client: &HavenClient, input: ItemInput) -> Uuid {
         let w = client.vault().unwrap().stage_create(input, 1).unwrap();
         client.push(w).await.unwrap().unwrap().id
     }
