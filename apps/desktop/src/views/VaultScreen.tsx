@@ -111,11 +111,23 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       setItems(found);
       setRevision((r) => r + 1);
       setAllItems(all ?? found);
-      void loadHealth();
     } catch (e) {
       if (e instanceof ApiError && e.code !== "locked") toast(errorMessage(e, t), "error");
     }
-  }, [query, toast, t, loadHealth]);
+  }, [query, toast, t]);
+
+  // The report is reloaded when the items change (a save, a delete, an
+  // import, a sync, the extension), never from the search box: the query
+  // only filters the list, so a keystroke must not recompute the report.
+  const itemsChanged = useCallback(() => {
+    void refresh();
+    void loadHealth();
+  }, [refresh, loadHealth]);
+
+  // Once on unlock, for the sidebar badge.
+  useEffect(() => {
+    void loadHealth();
+  }, [loadHealth]);
 
   // Opening the view checks again: a password changed elsewhere since.
   useEffect(() => {
@@ -129,9 +141,9 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   // Logins saved from the browser extension.
   useEffect(() => {
-    const unlisten = api.onItemsChanged(() => void refresh());
+    const unlisten = api.onItemsChanged(itemsChanged);
     return () => void unlisten.then((f) => f());
-  }, [refresh]);
+  }, [itemsChanged]);
 
   const openFromExtension = useCallback((id: string) => {
     setPendingOpen(null);
@@ -207,11 +219,11 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   // a sync that only clears a previously-unreadable row reports 0 changes.
   useEffect(() => {
     const unlisten = api.onSynced((report) => {
-      if (report.added + report.updated + report.deleted > 0) void refresh();
+      if (report.added + report.updated + report.deleted > 0) itemsChanged();
       void refreshUnreadable();
     });
     return () => void unlisten.then((f) => f());
-  }, [refresh, refreshUnreadable]);
+  }, [itemsChanged, refreshUnreadable]);
 
   // Once per unlock: `t` is left out of the dependencies so that changing
   // the language does not show it again.
@@ -228,6 +240,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       await api.resync();
       await refreshUnreadable();
       await refresh();
+      void loadHealth();
     } catch (e) {
       toast(errorMessage(e, t, t.vault.redownloadFailed), "error");
     } finally {
@@ -262,7 +275,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   }
 
   function onSaved(item: ItemOverview) {
-    void refresh();
+    itemsChanged();
     setPane({ kind: "view", id: item.id });
     toast(t.vault.saved);
   }
@@ -272,6 +285,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       await api.deleteItem(item.id);
       setPane({ kind: "empty" });
       await refresh();
+      void loadHealth();
       toast(t.vault.deleted(item.title));
     } catch (e) {
       toast(errorMessage(e, t, t.vault.deleteFailed), "error");
@@ -417,11 +431,11 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
             setQuery("");
             setPane({ kind: "edit", id });
           }}
-          onChanged={() => void loadHealth()}
+          onChanged={loadHealth}
         />
       )}
       {section === "generator" && <GeneratorView />}
-      {section === "settings" && <SettingsView onImported={() => void refresh()} online={!readOnly} />}
+      {section === "settings" && <SettingsView onImported={itemsChanged} online={!readOnly} />}
 
       {!isToolSection && (
         <>

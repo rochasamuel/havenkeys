@@ -110,6 +110,28 @@ describe("HealthView", () => {
     expect(setHealthIgnored).toHaveBeenCalledWith("a", ["old", "weak"]);
   });
 
+  // The command replaces the login's whole list: a second Dismiss before the
+  // report reloads must build on the first, not on the old report.
+  it("keeps the first dismissal when a second follows before the report reloads", async () => {
+    render(report);
+    await act(async () => button(en.health.dismiss)?.click());
+    await act(async () => button(en.health.dismiss)?.click());
+    expect(setHealthIgnored.mock.calls).toEqual([
+      ["a", ["weak"]],
+      ["a", ["weak", "reused"]],
+    ]);
+  });
+
+  it("keeps the row disabled until the reloaded report arrives", async () => {
+    let finish: () => void = () => undefined;
+    onChanged.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    render(report);
+    await act(async () => button(en.health.dismiss)?.click());
+    expect(button(en.health.dismiss)?.disabled).toBe(true);
+    await act(async () => finish());
+    expect(button(en.health.dismiss)?.disabled).toBe(false);
+  });
+
   it("undoes one dismissed check and keeps the rest dismissed", async () => {
     render({ ...report, dismissed: [{ itemId: "c", checks: ["old", "weak"] }] });
     act(() => button(en.health.dismissedFilter)?.click());

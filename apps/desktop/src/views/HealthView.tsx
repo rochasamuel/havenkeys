@@ -17,8 +17,8 @@ interface Props {
   readOnly: boolean;
   onOpen: (id: string) => void;
   onEdit: (id: string) => void;
-  /** A dismissal was saved: the caller reloads the report. */
-  onChanged: () => void;
+  /** A dismissal was saved: the caller reloads the report (awaited before the row is enabled again). */
+  onChanged: () => Promise<void> | void;
 }
 
 /** Checks a new password fixes. */
@@ -31,12 +31,23 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
   const { t } = useI18n();
   const [filter, setFilter] = useState<HealthFilter>("all");
   const [busy, setBusy] = useState<string | null>(null);
+  // The dismissed lists saved since this report was computed. The command
+  // replaces a login's whole list, so the next Dismiss or Undo must build on
+  // what was last saved, not on a report that predates it. A new report
+  // (computed after the save) supersedes them.
+  const [saved, setSaved] = useState<{ report: HealthReport | null; lists: Record<string, HealthCheck[]> }>({
+    report: null,
+    lists: {},
+  });
+  const savedLists = saved.report === report ? saved.lists : {};
+  const ignoredFor = (r: HealthReport, id: string) => savedLists[id] ?? dismissedFor(r, id);
 
-  async function saveIgnored(id: string, checks: HealthCheck[]) {
+  async function saveIgnored(r: HealthReport, id: string, checks: HealthCheck[]) {
     setBusy(id);
     try {
       await api.setHealthIgnored(id, checks);
-      onChanged();
+      setSaved((prev) => ({ report: r, lists: { ...(prev.report === r ? prev.lists : {}), [id]: checks } }));
+      await onChanged();
     } catch (e) {
       toast(errorMessage(e, t, t.health.dismissFailed), "error");
     } finally {
@@ -45,12 +56,12 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
   }
 
   function dismiss(r: HealthReport, id: string, check: HealthCheck) {
-    const already = dismissedFor(r, id);
-    void saveIgnored(id, already.includes(check) ? already : [...already, check]);
+    const already = ignoredFor(r, id);
+    void saveIgnored(r, id, already.includes(check) ? already : [...already, check]);
   }
 
   function undo(r: HealthReport, id: string, check: HealthCheck) {
-    void saveIgnored(id, dismissedFor(r, id).filter((c) => c !== check));
+    void saveIgnored(r, id, ignoredFor(r, id).filter((c) => c !== check));
   }
 
   async function openHelp(id: string, check: HealthCheck) {
@@ -65,16 +76,20 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
     const item = items.find((i) => i.id === row.itemId);
     if (!item) return null;
     const single = filter !== "all" && filter !== "dismissed" ? filter : null;
+    // Hide what was dismissed or restored since this report, until the next one.
+    const ignored = ignoredFor(r, row.itemId);
+    const checks = row.checks.filter((c) => ignored.includes(c) === row.dismissed);
+    if (checks.length === 0 || (single && !checks.includes(single))) return null;
     const passwordFix = single
       ? PASSWORD_CHECKS.includes(single)
-      : !row.dismissed && row.checks.some((c) => PASSWORD_CHECKS.includes(c));
+      : !row.dismissed && checks.some((c) => PASSWORD_CHECKS.includes(c));
     const help = single
       ? HELP_CHECKS.includes(single)
         ? single
         : null
       : row.dismissed
         ? null
-        : (row.checks.find((c) => HELP_CHECKS.includes(c)) ?? null);
+        : (checks.find((c) => HELP_CHECKS.includes(c)) ?? null);
     const disabled = readOnly || busy === row.itemId;
 
     // Under "All issues" and "Dismissed" each chip carries its own control;
@@ -122,7 +137,7 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
               {item.username}
             </p>
           )}
-          <HealthChips checks={single ? [single] : row.checks} report={r} itemId={row.itemId} control={chipControl} />
+          <HealthChips checks={single ? [single] : checks} report={r} itemId={row.itemId} control={chipControl} />
         </div>
         <div className="health-row-actions">
           {passwordFix && (
@@ -183,7 +198,10 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
                   aria-pressed={filter === check}
                   onClick={() => setFilter(filter === check ? "all" : check)}
                 >
-                  <span className="health-card-title">{t.health.cards[check].title}</span>
+                  <span className="health-card-text">
+                    <span className="health-card-title">{t.health.cards[check].title}</span>
+                    <span className="health-card-body">{t.health.cards[check].body}</span>
+                  </span>
                   <span className="health-card-count">{n}</span>
                   <span className="sr-only">{t.health.showItems}</span>
                   <Icon name="chevronRight" size={15} className="health-card-chevron" />
@@ -204,7 +222,6 @@ export function HealthView({ items, report, loading, readOnly, onOpen, onEdit, o
             </button>
           </div>
         </div>
-        {filter !== "all" && filter !== "dismissed" && <p className="health-explain muted">{t.health.cards[filter].body}</p>}
 
         {rows.length > 0 ? (
           <ul className="group health-list">{rows}</ul>

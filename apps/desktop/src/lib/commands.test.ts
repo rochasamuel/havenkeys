@@ -89,3 +89,25 @@ describe("the Tauri command surface", () => {
     expect(calledFromApi().length).toBeGreaterThan(15);
   });
 });
+
+// Reads that the UI repeats after `vault://synced` and `vault://items-changed`
+// (sync thread, browser extension) must not reset the auto-lock timer, or a
+// server changing one item a minute would hold the vault unlocked forever.
+describe("background reads do not count as activity", () => {
+  /** The body of one command, up to the next `#[tauri::command]`, comments dropped. */
+  function body(file: string, name: string): string {
+    const text = read(file);
+    const start = text.search(new RegExp(`pub (?:async )?fn ${name}\\b`));
+    expect(start, `${name} not found in ${file}`).toBeGreaterThan(-1);
+    const rest = text.slice(start);
+    const end = rest.indexOf("#[tauri::command]");
+    return (end === -1 ? rest : rest.slice(0, end)).replace(/\/\/.*$/gm, "");
+  }
+
+  it("list_items and health_report never touch the lock timer", () => {
+    expect(body("../../src-tauri/src/commands.rs", "list_items")).not.toContain("touch()");
+    expect(body("../../src-tauri/src/health.rs", "health_report")).not.toContain("touch()");
+    // The guard itself: an explicit action in the same file still touches.
+    expect(body("../../src-tauri/src/health.rs", "set_health_ignored")).toContain("touch()");
+  });
+});
