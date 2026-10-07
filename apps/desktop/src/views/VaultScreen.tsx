@@ -499,7 +499,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                 onSelect={(id) => setPane({ kind: "view", id })}
                 onNew={newItem}
                 newDisabled={readOnly}
-                account={showAccountItem(account, section, query, t.accountItem.title) ? account : null}
+                account={tag === null && showAccountItem(account, section, query, t.accountItem.title) ? account : null}
                 accountSelected={pane.kind === "account"}
                 onSelectAccount={() => setPane({ kind: "account" })}
               />

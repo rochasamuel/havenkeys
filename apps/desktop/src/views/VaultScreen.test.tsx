@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const healthReport = vi.fn();
 const listItems = vi.fn();
+const accountStatus = vi.fn();
 let itemsChangedListener: (() => void) | null = null;
 
 // Every other command answers null; event subscriptions return an unlisten.
@@ -13,6 +14,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const known: Record<string, unknown> = {
     healthReport: (...a: unknown[]) => healthReport(...a),
     listItems: (...a: unknown[]) => listItems(...a),
+    accountStatus: () => accountStatus(),
     onItemsChanged: (cb: () => void) => {
       itemsChangedListener = cb;
       return Promise.resolve(() => undefined);
@@ -49,6 +51,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   healthReport.mockReset().mockResolvedValue(emptyReport);
   listItems.mockReset().mockResolvedValue([]);
+  accountStatus.mockReset().mockResolvedValue(null);
   itemsChangedListener = null;
   host = document.createElement("div");
   document.body.append(host);
@@ -127,8 +130,11 @@ async function mountWith(items: ReturnType<typeof overview>[]) {
   await settle();
 }
 
+/** The nav row whose name span reads `label` (the count is a separate span). */
 const navButton = (label: string) =>
-  [...host.querySelectorAll<HTMLButtonElement>(".nav button")].find((b) => b.textContent?.trim() === label);
+  [...host.querySelectorAll<HTMLButtonElement>(".nav button")].find(
+    (b) => b.querySelector("span:not(.nav-count)")?.textContent === label,
+  );
 const listHead = () => host.querySelector(".list-head h2")?.textContent;
 const click = (el: Element | undefined | null) => act(() => el!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
@@ -139,21 +145,21 @@ describe("VaultScreen tags", () => {
     await mountWith(three());
     const headings = [...host.querySelectorAll(".nav .nav-heading")].map((h) => h.textContent);
     expect(headings).toContain("Tags");
-    expect(navButton("staging2")).toBeTruthy();
-    expect(navButton("work1")).toBeTruthy();
+    expect(navButton("staging")).toBeTruthy();
+    expect(navButton("work")).toBeTruthy();
   });
 
   it("filters the list by a tag and titles the list with it", async () => {
     await mountWith(three());
-    click(navButton("staging2"));
+    click(navButton("staging"));
     await settle();
     expect(listHead()).toBe("staging");
     const text = host.querySelector(".list")!.textContent!;
     expect(text).toContain("Alpha");
     expect(text).toContain("Bravo");
     expect(text).not.toContain("Charlie");
-    expect(navButton("staging2")!.getAttribute("aria-current")).toBe("page");
-    expect(navButton("All items3")!.getAttribute("aria-current")).toBeNull();
+    expect(navButton("staging")!.getAttribute("aria-current")).toBe("page");
+    expect(navButton("All items")!.getAttribute("aria-current")).toBeNull();
   });
 
   it("has no Tags section when no item has a tag", async () => {
@@ -163,7 +169,7 @@ describe("VaultScreen tags", () => {
 
   it("falls back to All items when the selected tag disappears", async () => {
     await mountWith(three());
-    click(navButton("work1"));
+    click(navButton("work"));
     await settle();
     expect(listHead()).toBe("work");
     listItems.mockResolvedValue([overview("a", "Alpha", ["staging"]), overview("b", "Bravo", ["staging"]), overview("c", "Charlie", [])]);
@@ -183,6 +189,21 @@ describe("VaultScreen tags", () => {
     click(pill);
     await settle();
     expect(listHead()).toBe("staging");
-    expect(navButton("staging2")!.getAttribute("aria-current")).toBe("page");
+    expect(navButton("staging")!.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("pins the Account row in All items but not in a tag's list", async () => {
+    accountStatus.mockResolvedValue({
+      email: "me@example.com",
+      serverUrl: "https://vault.example.com",
+      accountId: "acc",
+      online: true,
+      lastSyncedAt: null,
+    });
+    await mountWith(three());
+    expect(host.querySelector(".list")!.textContent).toContain("HavenKeys Account");
+    click(navButton("staging"));
+    await settle();
+    expect(host.querySelector(".list")!.textContent).not.toContain("HavenKeys Account");
   });
 });
