@@ -374,4 +374,53 @@
     <string name="settings_delete_failed">Não foi possível excluir a conta.</string>
     <string name="onboarding_account_deleted">Esta conta foi excluída. Os dados dela não estão mais no servidor nem neste celular.</string>
     <string name="error_account_deleted">Esta conta foi excluída.</string>
+    <string name="health_title">Saúde do cofre</string>
+    <string name="health_intro">Verificado neste celular, com o cofre aberto. Nada é enviado.</string>
+    <string name="health_loading">Verificando seus logins…</string>
+    <string name="health_empty">Nenhum problema encontrado.</string>
+    <string name="health_empty_filtered">Nada aqui.</string>
+    <string name="health_all">Todos os problemas</string>
+    <string name="health_dismissed">Ignorados</string>
+    <string name="health_open">Abrir</string>
+    <string name="health_change_password">Trocar senha</string>
+    <string name="health_how_to_enable">Como ativar</string>
+    <string name="health_dismiss">Ignorar</string>
+    <string name="health_dismiss_named">Ignorar: %1$s</string>
+    <string name="health_undo_named">Desfazer: %1$s</string>
+    <string name="health_row_actions">Ações para %1$s</string>
+    <string name="health_checks">Verificações</string>
+    <plurals name="health_home_card">
+        <item quantity="one">%1$d problema para revisar</item>
+        <item quantity="many">%1$d problemas para revisar</item>
+        <item quantity="other">%1$d problemas para revisar</item>
+    </plurals>
+    <string name="health_reused_title">Senhas repetidas</string>
+    <string name="health_weak_title">Senhas fracas</string>
+    <string name="health_insecure_title">Sites sem segurança</string>
+    <string name="health_duplicate_title">Duplicados</string>
+    <string name="health_passkey_title">Chaves de acesso disponíveis</string>
+    <string name="health_two_factor_title">Verificação em duas etapas</string>
+    <string name="health_old_title">Senhas antigas</string>
+    <string name="health_reused_body">A mesma senha em vários logins. Se um site vazar, os outros ficam expostos.</string>
+    <string name="health_weak_body">Fáceis de adivinhar. Gere uma senha forte no lugar.</string>
+    <string name="health_insecure_body">Salvos com um endereço http://. Troque para https:// se o site aceitar.</string>
+    <string name="health_duplicate_body">Logins com o mesmo nome, usuário e sites. Apague os que sobram.</string>
+    <string name="health_passkey_body">Estes sites aceitam chaves de acesso, que não podem ser roubadas por phishing nem repetidas.</string>
+    <string name="health_two_factor_body">Estes sites oferecem códigos de uso único que você ainda não configurou.</string>
+    <string name="health_old_body">Não trocadas há mais de um ano.</string>
+    <string name="health_chip_weak">Senha fraca</string>
+    <plurals name="health_chip_reused">
+        <item quantity="one">Usada em %1$d login</item>
+        <item quantity="many">Usada em %1$d logins</item>
+        <item quantity="other">Usada em %1$d logins</item>
+    </plurals>
+    <string name="health_chip_old">Não trocada há mais de um ano</string>
+    <string name="health_chip_passkey">Aceita chaves de acesso</string>
+    <string name="health_chip_two_factor">Aceita códigos de duas etapas</string>
+    <string name="health_chip_insecure">Usa http</string>
+    <plurals name="health_chip_duplicate">
+        <item quantity="one">Duplicado de %1$d outro login</item>
+        <item quantity="many">Duplicado de %1$d outros logins</item>
+        <item quantity="other">Duplicado de %1$d outros logins</item>
+    </plurals>
 </resources>

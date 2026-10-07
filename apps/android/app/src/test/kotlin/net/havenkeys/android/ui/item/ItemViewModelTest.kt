@@ -23,6 +23,10 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import uniffi.havenkeys_mobile.FieldKind
+import uniffi.havenkeys_mobile.HealthCountsView
+import uniffi.havenkeys_mobile.HealthIssueView
+import uniffi.havenkeys_mobile.HealthKind
+import uniffi.havenkeys_mobile.HealthView
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
@@ -68,7 +72,7 @@ class ItemViewModelTest {
         val vm = vm(vault)
         assertEquals(Outcome.Ok("hunter2"), vm.reveal("password"))
         assertFalse(vm.state.value.toString().contains("hunter2"))
-        assertEquals(listOf("reveal:password"), vault.calls)
+        assertEquals(listOf("reveal:password"), vault.calls.filter { it.startsWith("reveal") })
     }
 
     @Test
@@ -100,6 +104,55 @@ class ItemViewModelTest {
         vault.view = Outcome.Ok(renamed)
         events.itemsChanged()
         assertEquals(renamed, vm.state.value.view)
+    }
+
+    private fun report(vararg issues: HealthIssueView) =
+        Outcome.Ok(HealthView(HealthCountsView(0u, 0u, 0u, 0u, 0u, 0u, 0u), issues.toList()))
+
+    @Test
+    fun aLoginCarriesTheChecksItFailsAndNotTheDismissedOnes() = runTest {
+        val vault = FakeVaultRepository().apply {
+            view = Outcome.Ok(loginView())
+            healthView = report(
+                HealthIssueView("id", listOf(HealthKind.WEAK, HealthKind.REUSED), 4u, null, false),
+                HealthIssueView("other", listOf(HealthKind.REUSED), 4u, null, false),
+                HealthIssueView("id", listOf(HealthKind.OLD), null, null, true),
+            )
+        }
+        val state = vm(vault).state.value
+        assertEquals(listOf(HealthKind.WEAK, HealthKind.REUSED), state.health)
+        assertEquals(2, state.reusedIn)
+        assertNull(state.duplicates)
+    }
+
+    @Test
+    fun chipCountsAreClampedWhenTheGroupsOtherLoginsAreNotInTheReport() = runTest {
+        val vault = FakeVaultRepository().apply {
+            view = Outcome.Ok(loginView())
+            healthView = report(HealthIssueView("id", listOf(HealthKind.REUSED, HealthKind.DUPLICATE), 1u, 2u, false))
+        }
+        val state = vm(vault).state.value
+        assertEquals(2, state.reusedIn)
+        assertEquals(1, state.duplicates)
+    }
+
+    @Test
+    fun onlyALoginAsksForHealth() = runTest {
+        val note = ItemView(summary().copy(kind = ItemKind.SECURE_NOTE), emptyList())
+        val vault = FakeVaultRepository().apply { view = Outcome.Ok(note) }
+        vm(vault)
+        assertFalse("health" in vault.calls)
+    }
+
+    @Test
+    fun aLockClearsTheChecksToo() = runTest {
+        val vault = FakeVaultRepository().apply {
+            view = Outcome.Ok(loginView())
+            healthView = report(HealthIssueView("id", listOf(HealthKind.WEAK), null, null, false))
+        }
+        val vm = vm(vault)
+        events.locked("user")
+        assertTrue(vm.state.value.health.isEmpty())
     }
 
     @Test

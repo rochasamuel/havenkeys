@@ -17,7 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
@@ -47,6 +51,9 @@ import net.havenkeys.android.ui.edit.EditTarget
 import net.havenkeys.android.ui.edit.EditViewModel
 import net.havenkeys.android.ui.generator.GeneratorScreen
 import net.havenkeys.android.ui.generator.GeneratorViewModel
+import net.havenkeys.android.ui.health.HealthNavigation
+import net.havenkeys.android.ui.health.HealthScreen
+import net.havenkeys.android.ui.health.HealthViewModel
 import net.havenkeys.android.ui.item.ItemNavigation
 import net.havenkeys.android.ui.item.ItemScreen
 import net.havenkeys.android.ui.item.ItemViewModel
@@ -75,6 +82,10 @@ import uniffi.havenkeys_mobile.DeviceInfo
 import uniffi.havenkeys_mobile.EditField
 import uniffi.havenkeys_mobile.FieldKind
 import uniffi.havenkeys_mobile.Generated
+import uniffi.havenkeys_mobile.HealthCountsView
+import uniffi.havenkeys_mobile.HealthIssueView
+import uniffi.havenkeys_mobile.HealthKind
+import uniffi.havenkeys_mobile.HealthView
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
@@ -138,6 +149,25 @@ class ScreenScreenshots {
             ),
         )
         generated = Outcome.Ok(Generated("vR7#kq2-Lm9!xT4w", 104.0))
+        items = Outcome.Ok(
+            listOf(
+                github,
+                ItemSummary("2", ItemKind.LOGIN, "GitLab", "sam@example.com", "gitlab.com", false, false, 0, 0),
+                ItemSummary("3", ItemKind.LOGIN, "Example Bank", "sam.rocha", "bank.example", false, false, 0, 0),
+                ItemSummary("4", ItemKind.LOGIN, "Old forum", null, "forum.example", false, false, 0, 0),
+            ),
+        )
+        healthView = Outcome.Ok(
+            HealthView(
+                HealthCountsView(1u, 2u, 1u, 1u, 1u, 1u, 0u),
+                listOf(
+                    HealthIssueView("1", listOf(HealthKind.WEAK, HealthKind.REUSED), 0u, null, false),
+                    HealthIssueView("2", listOf(HealthKind.REUSED, HealthKind.TWO_FACTOR), 0u, null, false),
+                    HealthIssueView("3", listOf(HealthKind.PASSKEY), null, null, false),
+                    HealthIssueView("4", listOf(HealthKind.INSECURE, HealthKind.OLD), null, null, false),
+                ),
+            ),
+        )
     }
 
     private fun editing(kind: ItemKind, title: String, fields: List<EditField>) = FakeVaultRepository().apply {
@@ -199,6 +229,15 @@ class ScreenScreenshots {
     }
 
     @Composable
+    private fun Health() {
+        HealthScreen(
+            remember { HealthViewModel(vault, events) },
+            true,
+            HealthNavigation({}, {}, {}, {}),
+        )
+    }
+
+    @Composable
     private fun Editor(repo: FakeVaultRepository, isNew: Boolean = false) {
         EditScreen(
             remember { EditViewModel(repo, accounts, events, EditTarget.Existing("1")) },
@@ -248,6 +287,15 @@ class ScreenScreenshots {
                 onDone = {},
             )
         },
+        Shot("health") { Health() },
+        Shot("health-filtered", before = {
+            rule.onNode(hasText(app.getString(R.string.health_reused_title)) and hasClickAction()).performClick()
+            rule.waitForIdle()
+        }) { Health() },
+        Shot("health-list", before = {
+            rule.onNode(hasScrollAction()).performScrollToNode(hasText("Old forum"))
+            rule.waitForIdle()
+        }) { Health() },
         Shot("devices") { DevicesScreen(remember { DevicesViewModel(accounts, events) }, true, {}, {}) },
         Shot("autofill-setup") { AutofillSetupScreen(online = false, onBack = {}, onLock = {}) },
         Shot(
@@ -321,6 +369,11 @@ class ScreenScreenshots {
     @Config(qualifiers = "w360dp-h640dp-xxhdpi")
     fun onASmallPhone() = render(
         "screens-360",
-        listOf(Shot("editor") { Editor(vault) }, Shot("passkey-sheet") { PasskeySheet() }),
+        listOf(
+            Shot("editor") { Editor(vault) },
+            Shot("passkey-sheet") { PasskeySheet() },
+            Shot("health") { Health() },
+            Shot("item") { Item() },
+        ),
     )
 }

@@ -15,14 +15,24 @@ import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
 import net.havenkeys.android.data.clipboardClearSeconds
+import net.havenkeys.android.ui.health.chipCounts
+import uniffi.havenkeys_mobile.HealthKind
+import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemView
 import uniffi.havenkeys_mobile.TotpNow
 
 /**
- * The item's overview: title, username, websites and which fields exist.
+ * The item's overview: title, username, websites and which fields exist, and
+ * for a login the health checks it fails (kinds and group sizes only).
  * Revealed values and one-time codes are never kept here (spec §9.4).
  */
-data class ItemUiState(val view: ItemView? = null, val errorCode: String? = null)
+data class ItemUiState(
+    val view: ItemView? = null,
+    val errorCode: String? = null,
+    val health: List<HealthKind> = emptyList(),
+    val reusedIn: Int? = null,
+    val duplicates: Int? = null,
+)
 
 class ItemViewModel(
     private val vault: VaultRepository,
@@ -70,11 +80,23 @@ class ItemViewModel(
 
     private fun load() {
         viewModelScope.launch {
-            _state.value = when (val view = vault.view(id)) {
+            val view = vault.view(id)
+            _state.value = when (view) {
                 is Outcome.Ok -> ItemUiState(view = view.value)
                 is Outcome.Failed -> ItemUiState(errorCode = view.code)
             }
+            if (view is Outcome.Ok && view.value.summary.kind == ItemKind.LOGIN) loadHealth()
         }
+    }
+
+    /** The checks this login fails and has not dismissed, for the chips under its title. */
+    private suspend fun loadHealth() {
+        val issues = (vault.health() as? Outcome.Ok)?.value?.issues.orEmpty()
+        val issue = issues.firstOrNull { it.itemId == id && !it.dismissed }
+        // A lock that landed while Rust checked has already wiped the view: nothing is added back.
+        if (issue == null || _state.value.view == null) return
+        val (reused, duplicates) = chipCounts(issue, issues)
+        _state.value = _state.value.copy(health = issue.kinds, reusedIn = reused, duplicates = duplicates)
     }
 
     private companion object {

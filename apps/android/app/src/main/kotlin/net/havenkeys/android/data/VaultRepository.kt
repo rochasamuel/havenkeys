@@ -2,6 +2,8 @@ package net.havenkeys.android.data
 
 import uniffi.havenkeys_mobile.Generated
 import uniffi.havenkeys_mobile.GeneratorOptions
+import uniffi.havenkeys_mobile.HealthKind
+import uniffi.havenkeys_mobile.HealthView
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
@@ -43,6 +45,12 @@ interface VaultRepository {
     suspend fun recentSearches(): Outcome<List<String>>
     suspend fun recordSearch(query: String): Outcome<Unit>
     suspend fun clearRecentSearches(): Outcome<Unit>
+    /** Vault health: ids and check kinds only. Slow on a large vault; never counts as user activity. */
+    suspend fun health(): Outcome<HealthView>
+    /** Online only; replaces the login's whole list of dismissed checks. */
+    suspend fun setHealthIgnored(id: String, kinds: List<HealthKind>): Outcome<Unit>
+    /** Rust's help link for the check, from the login's own websites; opened unchanged. */
+    suspend fun healthHelpUrl(id: String, kind: HealthKind): Outcome<String>
 }
 
 class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
@@ -86,4 +94,8 @@ class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
     override suspend fun recentSearches() = rust { vault.recentSearches() }
     override suspend fun recordSearch(query: String) = rust { vault.recordSearch(query) }
     override suspend fun clearRecentSearches() = rust { vault.clearRecentSearches() }
+    override suspend fun health() = rust { vault.healthReport() }
+    override suspend fun setHealthIgnored(id: String, kinds: List<HealthKind>) =
+        rust { vault.setHealthIgnored(id, kinds) }
+    override suspend fun healthHelpUrl(id: String, kind: HealthKind) = rust { vault.healthHelpUrl(id, kind) }
 }

@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -40,14 +41,16 @@ private val Gutter = Modifier.padding(horizontal = HavenSpacing.gutter)
 
 /**
  * Home (spec §6.5): the identity on top, then Recently added and Frequently
- * used. Pull to refresh syncs. The lists reload each time Home shows. The
- * first time a Home has its data, its groups settle in sequence (spec §7);
- * nothing is composed before then, so nothing settles early or twice.
+ * used, and last the way into Vault health with its issue count. Pull to
+ * refresh syncs. The lists reload each time Home shows. The first time a
+ * Home has its data, its groups settle in sequence (spec §7); nothing is
+ * composed before then, so nothing settles early or twice.
  */
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
     onOpen: OpenItem,
+    onHealth: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     sharedTitle: SharedTitle = NoSharedTitle,
@@ -81,6 +84,12 @@ fun HomeScreen(
                 }
                 activityGroup(rows, Recent, state.recent)
                 activityGroup(rows, Frequent, state.frequent)
+                // Last, so its count arriving after the lists moves nothing under it.
+                item(key = "health") {
+                    Settle(HEALTH_SETTLE, active = rows.settle) {
+                        HealthCardRow(state.healthTotal, onHealth, Gutter.padding(top = 24.dp))
+                    }
+                }
             }
         }
     }
@@ -97,6 +106,9 @@ private class GroupSpec(@StringRes val title: Int, @StringRes val emptyText: Int
 
 private val Recent = GroupSpec(R.string.home_recent, R.string.vault_empty_hint, Origins.RECENT, index = 1)
 private val Frequent = GroupSpec(R.string.home_frequent, R.string.home_frequent_empty, Origins.FREQUENT, index = 2)
+
+/** The health card settles after both lists. */
+private const val HEALTH_SETTLE = 3
 
 /** A titled group of item rows; keys carry the origin, since one item can be in both groups. */
 private fun LazyListScope.activityGroup(rows: HomeRows, spec: GroupSpec, items: List<ItemSummary>) {
@@ -131,6 +143,27 @@ private fun IdentityCardRow(card: IdentityCard, onOpen: OpenItem) {
         row {
             GroupRow(onClick = { onOpen(card.id, Origins.IDENTITY) }, icon = HavenIcon.IdCard) {
                 GroupRowText(card.title, summary)
+            }
+        }
+    }
+}
+
+/**
+ * The way into Vault health: how many issues there are to review, or that
+ * none were found. While the check runs, or if it failed, it names the screen
+ * alone. It never says the vault is secure.
+ */
+@Composable
+private fun HealthCardRow(total: Int?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val detail = when {
+        total == null -> null
+        total > 0 -> pluralStringResource(R.plurals.health_home_card, total, total)
+        else -> stringResource(R.string.health_empty)
+    }
+    InsetGroup(modifier) {
+        row {
+            GroupRow(onClick = onClick, icon = HavenIcon.Shield) {
+                GroupRowText(stringResource(R.string.health_title), detail)
             }
         }
     }

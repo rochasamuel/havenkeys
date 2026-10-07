@@ -35,6 +35,9 @@ import net.havenkeys.android.ui.edit.EditTarget
 import net.havenkeys.android.ui.edit.EditViewModel
 import net.havenkeys.android.ui.generator.GeneratorScreen
 import net.havenkeys.android.ui.generator.GeneratorViewModel
+import net.havenkeys.android.ui.health.HealthNavigation
+import net.havenkeys.android.ui.health.HealthScreen
+import net.havenkeys.android.ui.health.HealthViewModel
 import net.havenkeys.android.ui.item.ItemNavigation
 import net.havenkeys.android.ui.item.ItemScreen
 import net.havenkeys.android.ui.item.ItemViewModel
@@ -282,7 +285,7 @@ private fun EditRoute(nav: Nav, target: EditTarget) {
     )
 }
 
-/** The generator, and the screens Settings leads to. No route carries an argument. */
+/** The generator, vault health, and the screens Settings leads to. No route carries an argument. */
 private fun NavGraphBuilder.toolScreens(nav: Nav) {
     val services = nav.services
     composable(Routes.GENERATOR) {
@@ -314,6 +317,19 @@ private fun NavGraphBuilder.toolScreens(nav: Nav) {
             verifyUser = { _, subtitle -> services.verifyUser(title, subtitle) },
             onBack = nav.back,
             onLock = nav.lock,
+        )
+    }
+    composable(Routes.HEALTH) {
+        val online by services.events.online.collectAsStateWithLifecycle()
+        HealthScreen(
+            viewModel = viewModel { HealthViewModel(services.vault, services.events) },
+            online = online,
+            navigation = HealthNavigation(
+                onOpen = { id -> nav.controller.pushOnce(Routes.item(id)) },
+                onEdit = { id -> nav.controller.pushOnce(Routes.edit(id)) },
+                onBack = nav.back,
+                onLock = nav.lock,
+            ),
         )
     }
     composable(Routes.AUTOFILL_SETUP) {

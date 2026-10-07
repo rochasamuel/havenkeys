@@ -23,6 +23,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uniffi.havenkeys_mobile.FieldKind
+import uniffi.havenkeys_mobile.HealthCountsView
+import uniffi.havenkeys_mobile.HealthView
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
@@ -45,11 +47,17 @@ class HomeScreenTest {
         view = Outcome.Ok(ItemView(identity, listOf(field("identity.first_name"), field("identity.email"))))
     }
     private val opened = mutableListOf<Pair<String, String>>()
+    private var healthOpened = 0
 
     private fun show() {
         val vm = HomeViewModel(vault, FakeAccountRepository(), VaultEventsHub())
         rule.setKit {
-            HomeScreen(vm, onOpen = { id, origin -> opened += id to origin }, contentPadding = PaddingValues())
+            HomeScreen(
+                vm,
+                onOpen = { id, origin -> opened += id to origin },
+                onHealth = { healthOpened++ },
+                contentPadding = PaddingValues(),
+            )
         }
     }
 
@@ -91,6 +99,22 @@ class HomeScreenTest {
         vault.frequent = Outcome.Ok(emptyList())
         show()
         rule.onNodeWithText("Items you fill or copy will show here.").assertIsDisplayed()
+    }
+
+    @Test
+    fun theHealthCardCountsTheIssuesAndOpensHealth() {
+        vault.healthView = Outcome.Ok(HealthView(HealthCountsView(1u, 2u, 0u, 0u, 0u, 0u, 0u), emptyList()))
+        show()
+        rule.onNode(hasText("Vault health") and hasClickAction()).assert(hasText("3 issues to review")).performClick()
+        assertEquals(1, healthOpened)
+    }
+
+    @Test
+    fun theHealthCardSaysNoIssuesFoundAndNeverThatTheVaultIsSecure() {
+        show()
+        rule.onNode(hasText("Vault health") and hasClickAction())
+            .assert(hasText("No issues found."))
+            .assert(!hasText("secure", substring = true, ignoreCase = true))
     }
 
     private fun field(key: String) = ViewField(key, key, FieldKind.TEXT, null)

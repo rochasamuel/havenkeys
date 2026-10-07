@@ -13,6 +13,9 @@ import uniffi.havenkeys_mobile.DeviceInfo
 import uniffi.havenkeys_mobile.FillValues
 import uniffi.havenkeys_mobile.Generated
 import uniffi.havenkeys_mobile.GeneratorOptions
+import uniffi.havenkeys_mobile.HealthCountsView
+import uniffi.havenkeys_mobile.HealthKind
+import uniffi.havenkeys_mobile.HealthView
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
@@ -203,6 +206,30 @@ class FakeVaultRepository : VaultRepository {
     override suspend fun clearRecentSearches(): Outcome<Unit> {
         searches.clear()
         return Outcome.Ok(Unit)
+    }
+
+    var healthView: Outcome<HealthView> =
+        Outcome.Ok(HealthView(HealthCountsView(0u, 0u, 0u, 0u, 0u, 0u, 0u), emptyList()))
+    var helpUrl: Outcome<String> = Outcome.Failed("not_found")
+    var ignoreResult: Outcome<Unit> = Outcome.Ok(Unit)
+
+    /** When set, health waits for it: a test can act while a report is still being computed. */
+    var healthGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    override suspend fun health(): Outcome<HealthView> {
+        calls += "health"
+        healthGate?.await()
+        return healthView
+    }
+
+    override suspend fun setHealthIgnored(id: String, kinds: List<HealthKind>): Outcome<Unit> {
+        calls += "ignore:$id:${kinds.joinToString(",")}"
+        return ignoreResult
+    }
+
+    override suspend fun healthHelpUrl(id: String, kind: HealthKind): Outcome<String> {
+        calls += "help:$id:$kind"
+        return helpUrl
     }
 }
 

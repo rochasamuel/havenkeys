@@ -386,4 +386,50 @@
     <string name="settings_delete_failed">The account could not be deleted.</string>
     <string name="onboarding_account_deleted">This account was deleted. Its data is gone from the server and this phone.</string>
     <string name="error_account_deleted">This account was deleted.</string>
+    <string name="health_title">Vault health</string>
+    <string name="health_intro">Checked on this phone with the vault unlocked. Nothing is sent anywhere.</string>
+    <string name="health_loading">Checking your logins…</string>
+    <string name="health_empty">No issues found.</string>
+    <string name="health_empty_filtered">Nothing here.</string>
+    <string name="health_all">All issues</string>
+    <string name="health_dismissed">Dismissed</string>
+    <string name="health_open">Open</string>
+    <string name="health_change_password">Change password</string>
+    <string name="health_how_to_enable">How to enable</string>
+    <string name="health_dismiss">Dismiss</string>
+    <string name="health_dismiss_named">Dismiss: %1$s</string>
+    <string name="health_undo_named">Undo: %1$s</string>
+    <string name="health_row_actions">Actions for %1$s</string>
+    <string name="health_checks">Checks</string>
+    <plurals name="health_home_card">
+        <item quantity="one">%1$d issue to review</item>
+        <item quantity="other">%1$d issues to review</item>
+    </plurals>
+    <string name="health_reused_title">Reused passwords</string>
+    <string name="health_weak_title">Weak passwords</string>
+    <string name="health_insecure_title">Unsecured websites</string>
+    <string name="health_duplicate_title">Duplicates</string>
+    <string name="health_passkey_title">Passkeys available</string>
+    <string name="health_two_factor_title">Two-factor authentication</string>
+    <string name="health_old_title">Old passwords</string>
+    <string name="health_reused_body">The same password on several logins. If one site leaks it, the others are exposed.</string>
+    <string name="health_weak_body">Easy to guess. Generate a strong password instead.</string>
+    <string name="health_insecure_body">Saved with an http:// address. Change it to https:// if the site supports it.</string>
+    <string name="health_duplicate_body">Logins with the same name, username and websites. Delete the extra ones.</string>
+    <string name="health_passkey_body">These sites accept passkeys, which can’t be phished or reused.</string>
+    <string name="health_two_factor_body">These sites offer one-time codes you haven’t set up yet.</string>
+    <string name="health_old_body">Not changed in over a year.</string>
+    <string name="health_chip_weak">Weak password</string>
+    <plurals name="health_chip_reused">
+        <item quantity="one">Used in %1$d login</item>
+        <item quantity="other">Used in %1$d logins</item>
+    </plurals>
+    <string name="health_chip_old">Not changed in over a year</string>
+    <string name="health_chip_passkey">Supports passkeys</string>
+    <string name="health_chip_two_factor">Supports two-factor codes</string>
+    <string name="health_chip_insecure">Uses http</string>
+    <plurals name="health_chip_duplicate">
+        <item quantity="one">Duplicate of %1$d other login</item>
+        <item quantity="other">Duplicate of %1$d other logins</item>
+    </plurals>
 </resources>

@@ -13,6 +13,7 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
+import net.havenkeys.android.ui.health.total
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 
@@ -28,6 +29,8 @@ data class HomeUiState(
     val errorCode: String? = null,
     /** True until the first answer from Rust, so empty lists are not announced early. */
     val loading: Boolean = true,
+    /** Vault health's issue count for the Home card; null until known or when the check failed. */
+    val healthTotal: Int? = null,
 )
 
 class HomeViewModel(
@@ -84,6 +87,9 @@ class HomeViewModel(
                     loading = false,
                 )
             }
+            // After the lists: the check is slow on a large vault, and Home should not wait for it.
+            val health = (vault.health() as? Outcome.Ok)?.value?.counts?.total()
+            _state.update { it.copy(healthTotal = health) }
         }
     }
 

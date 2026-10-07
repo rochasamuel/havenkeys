@@ -33,6 +33,7 @@ internal fun shellScreens(
                 HomeViewModel(services.vault, services.accounts, services.events)
             },
             onOpen = open,
+            onHealth = { navController.pushOnce(Routes.HEALTH) },
             contentPadding = padding,
             sharedTitle = sharedTitle,
         )

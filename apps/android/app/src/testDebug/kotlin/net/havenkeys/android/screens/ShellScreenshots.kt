@@ -133,6 +133,7 @@ class ShellScreenshots {
                     HomeScreen(
                         remember { HomeViewModel(home, accounts, events) },
                         onOpen = { _, _ -> },
+                        onHealth = {},
                         contentPadding = p,
                     )
                 },

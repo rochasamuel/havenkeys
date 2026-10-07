@@ -37,6 +37,7 @@ import net.havenkeys.android.clipboard.SensitiveClipboard
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.ui.components.ScreenBar
 import net.havenkeys.android.ui.components.errorText
+import net.havenkeys.android.ui.health.HealthChips
 import net.havenkeys.android.ui.kit.CopyButton
 import net.havenkeys.android.ui.kit.DialogAction
 import net.havenkeys.android.ui.kit.GroupRow
@@ -109,6 +110,10 @@ fun ItemScreen(
         ) {
             state.view?.let { view ->
                 ItemHeader(view.summary, titleModifier, tileModifier)
+                if (state.health.isNotEmpty()) {
+                    // Vault health's checks for this login, under its title, before its fields.
+                    HealthChips(state.health, state.reusedIn, state.duplicates, Modifier.padding(bottom = 16.dp))
+                }
                 ItemFields(view, actions)
             }
             state.errorCode?.let { ErrorLine(it) }

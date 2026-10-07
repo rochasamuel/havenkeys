@@ -18,6 +18,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import uniffi.havenkeys_mobile.FieldKind
+import uniffi.havenkeys_mobile.HealthCountsView
+import uniffi.havenkeys_mobile.HealthView
 import uniffi.havenkeys_mobile.ItemKind
 import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.ItemView
@@ -189,6 +191,24 @@ class HomeViewModelTest {
             IdentityPart.of(keys),
         )
         assertEquals(emptyList<IdentityPart>(), IdentityPart.of(emptyList()))
+    }
+
+    @Test
+    fun shownLoadsTheHealthTotal() {
+        vault.healthView = Outcome.Ok(HealthView(HealthCountsView(1u, 2u, 0u, 1u, 0u, 0u, 0u), emptyList()))
+        val vm = vm()
+        vm.shown()
+        assertEquals(4, vm.state.value.healthTotal)
+        assertTrue("health" in vault.calls)
+    }
+
+    @Test
+    fun aFailedHealthCheckLeavesTheTotalUnknown() {
+        vault.healthView = Outcome.Failed("locked")
+        val vm = vm()
+        vm.shown()
+        assertNull(vm.state.value.healthTotal)
+        assertNull(vm.state.value.errorCode)
     }
 
     private fun identityView(vararg keys: String, value: String? = null) =

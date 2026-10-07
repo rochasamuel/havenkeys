@@ -24,6 +24,7 @@ object Routes {
     const val DEVICES = "devices"
     const val PAIRING = "pairing"
     const val AUTOFILL_SETUP = "autofill-setup"
+    const val HEALTH = "health"
     const val EDIT = "edit/{$ITEM_ID}"
     const val KIND = "kind"
     const val NEW = "new/{$KIND}"
