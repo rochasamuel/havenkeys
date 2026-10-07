@@ -390,6 +390,8 @@ export const en = {
     createTag: (tag: string) => `Create “${tag}”`,
     tagLimit: "20 tags is the limit.",
     tagSuggestions: "Tag suggestions",
+    tagTooLong: "Tag is too long. 32 characters is the limit.",
+    tagNotAllowed: "Tag contains a character that is not allowed.",
   },
 
   fields: {

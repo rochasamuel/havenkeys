@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useI18n } from "../i18n/context";
-import { MAX_TAG_CHARS, MAX_TAGS, cleanTag } from "../lib/tags";
+import { MAX_TAG_CHARS, MAX_TAGS, cleanTag, tagProblem } from "../lib/tags";
 import { useVaultTags } from "../lib/vaultTags";
 import { Icon } from "./Icon";
 
@@ -18,6 +18,9 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [active, setActive] = useState(-1); // -1: nothing picked yet, so Enter takes what was typed
+  // Why the typed text was not added; cleared as soon as the text changes.
+  const [problem, setProblem] = useState<"tooLong" | "notAllowed" | null>(null);
+  const errorId = `${listId}-error`;
   const typed = cleanTag(text);
 
   const options = useMemo(() => {
@@ -32,6 +35,12 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
   }, [text, typed, vault, value, t]);
 
   const add = (raw: string) => {
+    const refused = tagProblem(raw);
+    if (refused) {
+      // Keep the text so it can be corrected, and say why (never echoing it).
+      setProblem(refused);
+      return;
+    }
     const tag = cleanTag(raw);
     if (tag && !value.includes(tag) && value.length < MAX_TAGS) onChange([...value, tag].sort());
     setText("");
@@ -70,6 +79,7 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
     }
     setText(parts[parts.length - 1] ?? "");
     setActive(-1);
+    setProblem(null);
   };
 
   return (
@@ -110,6 +120,8 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
             aria-expanded={options.length > 0}
             aria-controls={listId}
             aria-autocomplete="list"
+            aria-invalid={problem ? true : undefined}
+            aria-describedby={problem ? errorId : undefined}
             aria-activedescendant={active >= 0 && active < options.length ? `${listId}-${active}` : undefined}
             autoComplete="off"
             onChange={onType}
@@ -118,6 +130,11 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
           />
         )}
       </div>
+      {problem && (
+        <p className="tags-error" id={errorId} role="alert">
+          {problem === "tooLong" ? t.editor.tagTooLong : t.editor.tagNotAllowed}
+        </p>
+      )}
       {options.length > 0 && (
         <ul className="tags-suggest" id={listId} role="listbox" aria-label={t.editor.tagSuggestions}>
           {options.map((o, i) => (

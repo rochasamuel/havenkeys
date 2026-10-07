@@ -142,4 +142,33 @@ describe("TagsEditor", () => {
     act(() => void host.querySelector<HTMLElement>(".tags-edit")!.click());
     expect(document.activeElement).toBe(input());
   });
+
+  it("keeps a refused tag's text and says why, until the text changes", () => {
+    show([]);
+    type("x".repeat(33));
+    key("Enter");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input().value).toBe("x".repeat(33));
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(en.editor.tagTooLong);
+    expect(input().getAttribute("aria-invalid")).toBe("true");
+    type("x".repeat(32));
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("says why on blur too, and names a character it cannot take", () => {
+    show([]);
+    type("tab\u0007");
+    act(() => void input().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(en.editor.tagNotAllowed);
+  });
+
+  it("clears a duplicate without complaint", () => {
+    show(["work"]);
+    type("Work");
+    key("Enter");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input().value).toBe("");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
 });

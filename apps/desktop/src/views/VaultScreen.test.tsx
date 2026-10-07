@@ -186,6 +186,8 @@ describe("VaultScreen tags", () => {
     await settle();
     const pill = host.querySelector<HTMLButtonElement>(".detail-tags button.tag-chip")!;
     expect(pill.textContent).toBe("staging");
+    // A tag glyph tells a tag from the vault-health chips just above it.
+    expect(pill.querySelector("svg")).not.toBeNull();
     click(pill);
     await settle();
     expect(listHead()).toBe("staging");

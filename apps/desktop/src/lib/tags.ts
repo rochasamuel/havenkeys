@@ -12,6 +12,15 @@ export function cleanTag(raw: string): string | null {
   return tag;
 }
 
+/** Why Rust would refuse `raw` as a tag, for the editor to say; null when it would take it or it is blank. */
+export function tagProblem(raw: string): "tooLong" | "notAllowed" | null {
+  const tag = raw.trim().split(/\s+/).join(" ");
+  if (!tag) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[,\u0000-\u001f\u007f-\u009f]/.test(tag)) return "notAllowed";
+  return [...tag.toLowerCase()].length > MAX_TAG_CHARS ? "tooLong" : null;
+}
+
 export interface TagCount {
   name: string;
   count: number;

@@ -135,6 +135,7 @@ export function IdentityDetail({ item, readOnly, onTag, onEdit }: Props) {
         <div className="detail-tags" role="group" aria-label={t.detail.tags}>
           {item.tags.map((name) => (
             <button key={name} type="button" className="chip tag-chip" onClick={() => onTag?.(name)}>
+              <Icon name="tag" size={12} />
               {name}
             </button>
           ))}

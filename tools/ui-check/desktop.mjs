@@ -95,6 +95,13 @@ const items = [
   },
 ];
 
+// Tags (Rust always sends the field): two shared, one on a single item.
+const TAGS = {
+  "7c9e6679-7425-40de-944b-e07fc1f90ae7": ["development", "work"],
+  "11111111-2222-4333-8444-555555555555": ["production", "work"],
+};
+for (const item of items) item.tags = TAGS[item.id] ?? [];
+
 const IDENTITY_ID = "00f03a59-33cc-8082-a649-ca545b3b372d";
 
 const identity = {
@@ -447,6 +454,16 @@ export const desktopScenarios = [
     },
   },
 
+  {
+    name: "vault-tag-selected",
+    respond: {},
+    async act(page) {
+      // After the four categories and the Identity row: development, production, work.
+      await page.click(nav(8));
+      await page.waitForTimeout(200);
+    },
+  },
+
   // ---------------------------------------------------------------- item detail
   {
     name: "detail-login",
@@ -464,7 +481,8 @@ export const desktopScenarios = [
       await page.click(firstItem);
       await page.waitForTimeout(200);
       // Password eye, notes eye, history, passkey delete, item delete.
-      await page.click(".item .group:first-of-type .icon-btn >> nth=0");
+      // The first group of fields (the tag pills sit in a div before it).
+      await page.click(".item .group >> nth=0 >> .icon-btn >> nth=0");
       await page.click(".group-history .row-button");
       await page.waitForTimeout(200);
     },
@@ -631,7 +649,7 @@ export const desktopScenarios = [
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
-      await page.click(".item .group:first-of-type .field:first-child .icon-btn, .item .group:first-of-type button[aria-label] >> nth=0");
+      await page.click(".item .group >> nth=0 >> button[aria-label] >> nth=0");
       await page.waitForTimeout(200);
     },
   },
@@ -647,6 +665,35 @@ export const desktopScenarios = [
       await page.waitForTimeout(200);
     },
     shots: [".editor .group-title >> nth=0", ".edit-area"],
+  },
+  {
+    name: "editor-tags-suggest",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.fill(".tags-input", "pro");
+      await page.mouse.move(0, 0); // no hover: only an arrow key marks a suggestion
+      await page.waitForTimeout(150);
+      await scrollTool(page, ".tags-edit");
+    },
+  },
+  {
+    name: "editor-tags-refused",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.fill(".tags-input", "a-tag-name-that-runs-past-the-limit");
+      await page.press(".tags-input", "Enter");
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(150);
+      await scrollTool(page, ".tags-edit");
+    },
   },
   {
     name: "editor-sso-picker",

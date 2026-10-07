@@ -228,6 +228,7 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
         <div className="detail-tags" role="group" aria-label={t.detail.tags}>
           {item.tags.map((name) => (
             <button key={name} type="button" className="chip tag-chip" onClick={() => onTag?.(name)}>
+              <Icon name="tag" size={12} />
               {name}
             </button>
           ))}

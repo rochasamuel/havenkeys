@@ -2368,10 +2368,13 @@ input::-ms-clear {
   margin: -6px 0 18px;
 }
 
+/* In the detail a tag pill leads with the tag glyph, so it never reads as one of the
+   vault-health chips in the row above it. */
 button.tag-chip {
+  gap: 4px;
   cursor: pointer;
   background: transparent;
-  padding-right: 9px;
+  padding: 1px 9px 1px 7px;
   font-family: inherit;
 }
 
@@ -2406,6 +2409,17 @@ button.tag-chip:hover {
 .tags-limit {
   color: var(--muted);
   font-size: 12px;
+}
+
+/* Why a typed tag was refused: under the input, in the row, ember like the other inline errors. */
+.tags-error {
+  flex: 1 0 100%;
+  box-sizing: border-box;
+  margin: -2px 0 2px;
+  padding-left: 110px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--danger);
 }
 
 .tags-suggest {

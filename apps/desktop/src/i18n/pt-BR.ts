@@ -415,6 +415,8 @@ export const ptBR: Messages = {
     createTag: (tag: string) => `Criar “${tag}”`,
     tagLimit: "O limite é 20 tags.",
     tagSuggestions: "Sugestões de tags",
+    tagTooLong: "A tag é longa demais. O limite é 32 caracteres.",
+    tagNotAllowed: "A tag contém um caractere não permitido.",
   },
 
   fields: {
