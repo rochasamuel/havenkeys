@@ -13,6 +13,7 @@ mod device_label;
 mod emergency_kit;
 mod events;
 mod export;
+mod health;
 mod identity;
 mod import;
 mod item_input;
@@ -322,6 +323,9 @@ pub fn run() {
             commands::get_totp_code,
             commands::copy_secret,
             commands::open_website,
+            health::health_report,
+            health::set_health_ignored,
+            health::open_health_help,
             commands::scan_totp_qr,
             commands::create_item,
             commands::update_item,

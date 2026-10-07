@@ -420,3 +420,35 @@ export type UpdateStatus = UpdatePhase & {
   canInstallInPlace: boolean;
   currentVersion: string;
 };
+
+export type HealthCheck = "weak" | "reused" | "old" | "passkey" | "two_factor" | "insecure" | "duplicate";
+
+export interface HealthCounts {
+  weak: number;
+  reused: number;
+  old: number;
+  passkey: number;
+  twoFactor: number;
+  insecure: number;
+  duplicate: number;
+}
+
+/** IDs and check kinds only: titles and usernames come from the item overviews. */
+export interface HealthIssue {
+  itemId: string;
+  checks: HealthCheck[];
+  reusedGroup: number | null;
+  duplicateGroup: number | null;
+}
+
+export interface HealthDismissed {
+  itemId: string;
+  checks: HealthCheck[];
+}
+
+export interface HealthReport {
+  computedAt: number;
+  counts: HealthCounts;
+  issues: HealthIssue[];
+  dismissed: HealthDismissed[];
+}

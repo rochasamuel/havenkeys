@@ -20,6 +20,8 @@ import type {
   DeviceStatus,
   EmergencyKit,
   ExportFormat,
+  HealthCheck,
+  HealthReport,
   ExportResult,
   ExportSummary,
   GeneratedPassword,
@@ -110,6 +112,9 @@ export const api = {
   copy: (id: string, field: CopyField) => call<CopyResult>("copy_secret", { id, field }),
   /** Rust opens it only if `url` is one of the item's saved websites. */
   openWebsite: (id: string, url: string) => call<void>("open_website", { id, url }),
+  healthReport: () => call<HealthReport>("health_report"),
+  setHealthIgnored: (id: string, checks: HealthCheck[]) => call<void>("set_health_ignored", { id, checks }),
+  openHealthHelp: (id: string, check: HealthCheck) => call<void>("open_health_help", { id, check }),
   loginFields: (id: string) => call<SectionView[]>("login_fields", { id }),
   revealLoginField: (id: string, fieldId: string) => call<string>("reveal_login_field", { id, fieldId }),
   loginFieldTotp: (id: string, fieldId: string) => call<TotpCode>("login_field_totp", { id, fieldId }),
