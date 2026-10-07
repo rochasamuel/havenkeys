@@ -30,6 +30,30 @@ implementation (see "Revisions from planning and implementation" below).
 > * Extension: tags show on login rows only (not on OTP rows).
 > * Android: the Add tag field also commits on blur and on Save, and a Plus
 >   button adds; the kit's `InsetGroupScope.row` takes an optional key.
+>
+> Fixed after the final branch review:
+>
+> * Android: a tag's name is no longer a navigation argument (it reached the
+>   Activity's saved-state Bundle, against security model §22.12). The tag
+>   list's route is a fixed `items/tag`; the name stays in memory in a
+>   ViewModel on the shell's entry, keyed by the back stack entry's id, and
+>   goes with the shell on lock. A tag list with no name there (process
+>   death) backs out to Items.
+> * Android: a tag list whose tag no item carries any more (untagged,
+>   deleted, or a sync) goes back to Items, as the desktop falls back to All
+>   items.
+> * Android: the Items tab's tags and the editor's suggestions sort with the
+>   titles' `Collator`, so accented tags sort as on the desktop
+>   (`localeCompare`).
+> * Bridge: a `find_matches` answer over `MAX_RESPONSE_BYTES` (50 logins with
+>   the longest titles, usernames and 20 tags each) drops tags, last match
+>   first, until it fits, instead of failing the frame and the connection. No
+>   protocol change.
+> * Desktop and Android: Save with a tag Rust would refuse in the tag field
+>   does not save; the field keeps the text and says why. A refused part of
+>   a comma-separated list stays in the field instead of being dropped. On
+>   Android, tag text typed but not added makes Back ask before discarding.
+> * §3.4 now says that restoring a backup does not keep `extra`.
 
 ## 1. Goal
 
@@ -109,6 +133,12 @@ a character that is not allowed.") and never echo the input.
 so a field added by a future version survives an edit made on this one. This
 does not rescue tags from versions released before it; that gap is accepted
 (section 7).
+
+Restoring an encrypted backup does not keep `extra` either: a backup is
+hostile input, so restore rebuilds every item through `build_item` from what
+`ItemInput` carries (tags included), and the rebuilt overview has no unknown
+fields. A field added by a future version is lost when its backup is
+restored by this one.
 
 ## 4. UI
 

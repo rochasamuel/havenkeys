@@ -695,8 +695,8 @@ Nothing grew. The saving is small because R8 had already stripped most of Materi
 **Checked and kept.** The Items tab's Tags group matches the categories (glyph, count, chevron) and a tag list is laid out exactly like a category list. The editor's tag rows mirror the websites group with 48dp remove buttons. Suggestions are tappable rows under the field.
 
 **Open (P2/P3):**
-- [P2] Text typed in Add tag but not committed does not make the draft dirty, so Back leaves without the discard question. Save commits it (focus is cleared first), so only Back loses it.
-- [P2] Save with a refused tag in the field saves the item without it and leaves; the error is shown only for the instant before the screen closes. Holding Save while the field has a refusal would need the editor to expose it.
+- ~~[P2] Text typed in Add tag but not committed does not make the draft dirty~~ Fixed after the final review: the field's text is part of the editor draft, so typed text makes Back ask first (`EditScreenTest.aTagStillBeingTypedMakesBackAskFirst`).
+- ~~[P2] Save with a refused tag in the field saves the item without it~~ Fixed after the final review: Save waits and the field keeps its error; a refused part of a comma list stays in the field (`EditScreenTest.saveWaitsWhileTheTagFieldHoldsATagRustWouldRefuse`, `EditFieldsTest.aRefusedPartOfACommaListStaysInTheFieldAndSaysWhy`, `EditorStateTest`).
 - [P3] The field's focus ring stops before the Plus button (the kit's `FieldRow` has a `trailing` slot that `HavenTextField` does not expose).
 - [P3] The item page puts tags above the health chips; the desktop puts them below. Either order works now that the glyph separates them; aligning them is a one-line move.
 - [P3] The Tags group sits after Notes at the end of the editor; on a long login it is a scroll away.

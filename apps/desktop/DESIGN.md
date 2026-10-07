@@ -486,3 +486,5 @@ The shield-and-keyhole mark at 72px over the slowly turning guilloche rosette (b
 - [P3] The suggestion list sits in the row's flow (the group clips anything floating), so typing pushes the rest of the form down by up to nine rows.
 - [P3] At the minimum window width the "too long" line wraps to three lines under the input; a shorter message ("At most 32 characters.") would fit on one.
 - [P3] When the username fills the extension row, the tags disappear with no "+N" hint; that is the spec's priority (username first), noted in case it surprises.
+
+**Fixed after the final review:** Save with a tag Rust would refuse in the field saved the item without it; the login, note, card and identity editors now keep the editor open with the field's inline error (`ItemEditor.test.tsx`). A refused part of a comma-separated paste stays in the field, with the error, instead of being dropped (`TagsEditor.test.tsx`).
