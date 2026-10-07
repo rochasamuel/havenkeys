@@ -54,11 +54,12 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [autoSignIn, setAutoSignIn] = useState(existing?.autoSignIn ?? true);
+  const [tags] = useState<string[]>(existing?.tags ?? []);
   const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
   const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
   const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
 
-  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, signInWith: signIn, sections };
+  const snapshot: EditorSnapshot = { title, username, urls, password, totp, notes, autoSignIn, tags, signInWith: signIn, sections };
   const [initialSnapshot, setInitialSnapshot] = useState(snapshot);
   const dirty = isDirty(initialSnapshot, snapshot);
   useEffect(() => {

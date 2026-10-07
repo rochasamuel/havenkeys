@@ -41,6 +41,7 @@ const base: EditorSnapshot = {
   totp: { mode: "keep" },
   notes: { mode: "keep" },
   autoSignIn: true,
+  tags: [],
   signInWith: null,
   sections: null,
 };

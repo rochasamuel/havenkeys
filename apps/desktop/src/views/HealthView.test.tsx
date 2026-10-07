@@ -33,6 +33,7 @@ const item = (id: string, title: string): ItemOverview => ({
   hasNotes: false,
   hasPasskey: false,
   autoSignIn: false,
+  tags: [],
   createdAt: 0,
   updatedAt: 0,
 });

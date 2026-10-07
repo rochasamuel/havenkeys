@@ -14,6 +14,7 @@ const item = (urls: string[]): ItemOverview => ({
   hasNotes: false,
   hasPasskey: false,
   autoSignIn: true,
+  tags: [],
   createdAt: 0,
   updatedAt: 0,
 });

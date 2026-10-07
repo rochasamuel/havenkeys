@@ -74,6 +74,7 @@ export interface ItemOverview {
   hasNotes: boolean;
   hasPasskey: boolean;
   autoSignIn: boolean;
+  tags: string[];
   signInWith?: SignInWith;
   card?: CardSummary;
   createdAt: number;
@@ -102,6 +103,8 @@ export interface ItemInput {
   sections?: SectionInput[];
   itemType: ItemType;
   title: string;
+  /** Absent: kept as they are. */
+  tags?: string[];
   username?: string | null;
   urls?: UrlRule[];
   password?: SecretUpdate;

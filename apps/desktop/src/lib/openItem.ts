@@ -39,6 +39,7 @@ export interface EditorSnapshot {
   totp: SecretEdit;
   notes: SecretEdit;
   autoSignIn: boolean;
+  tags: string[];
   signInWith: SignInWith | null;
   /** `null` while a login's custom fields are loading or failed to load. */
   sections: EditSection[] | null;

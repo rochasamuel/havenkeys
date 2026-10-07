@@ -17,7 +17,7 @@ import { SsoRow } from "./SsoRow";
 
 const vercel: ItemOverview = {
   id: "vercel", itemType: "login", title: "Vercel", username: null, urls: [], hasPassword: false, hasTotp: false,
-  hasNotes: false, hasPasskey: false, autoSignIn: true, createdAt: 0, updatedAt: 0,
+  hasNotes: false, hasPasskey: false, autoSignIn: true, tags: [], createdAt: 0, updatedAt: 0,
   signInWith: { provider: "google", account: "me@gmail.com" },
 };
 

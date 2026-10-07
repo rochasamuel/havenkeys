@@ -31,6 +31,8 @@ pub struct ItemInputWire {
     pub item_type: ItemType,
     pub title: String,
     #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    #[serde(default)]
     pub username: Option<String>,
     #[serde(default)]
     pub urls: Vec<UrlRule>,
@@ -88,7 +90,7 @@ impl ItemInputWire {
             })
             .transpose()?;
         Ok(ItemInput {
-            tags: None,
+            tags: self.tags,
             item_type: self.item_type,
             title: self.title,
             username: self.username,
@@ -165,6 +167,23 @@ mod tests {
             ]}]
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn tags_pass_through_and_absent_tags_stay_none() {
+        let now = Instant::now();
+        let slot = ScanSlot::default();
+        let w: ItemInputWire = serde_json::from_value(json!({
+            "itemType": "secure_note", "title": "n", "tags": ["Work"]
+        }))
+        .unwrap();
+        assert_eq!(
+            w.resolve(&slot, now).unwrap().tags,
+            Some(vec!["Work".to_string()])
+        );
+        let w: ItemInputWire =
+            serde_json::from_value(json!({ "itemType": "secure_note", "title": "n" })).unwrap();
+        assert_eq!(w.resolve(&slot, now).unwrap().tags, None);
     }
 
     #[test]
