@@ -33,6 +33,7 @@ pub struct ItemSummary {
     pub has_passkey: bool,
     pub updated_at: i64,
     pub created_at: i64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -130,6 +131,7 @@ pub(crate) fn summary(o: &ItemOverview) -> ItemSummary {
         has_passkey: o.has_passkey,
         updated_at: o.updated_at,
         created_at: o.created_at,
+        tags: o.tags.clone(),
     }
 }
 

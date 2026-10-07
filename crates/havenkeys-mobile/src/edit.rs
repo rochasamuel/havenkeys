@@ -64,6 +64,7 @@ pub struct ItemEdit {
     /// The revision the phone holds for the item; `None` for a new one.
     /// A draft carries it back so a save made from an older copy is refused.
     pub revision: Option<i64>,
+    pub tags: Vec<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -82,6 +83,8 @@ pub struct ItemDraft {
     pub websites: Vec<Website>,
     pub changes: Vec<FieldChange>,
     pub base_revision: Option<i64>,
+    /// Replaces the item's tags (Rust normalises them).
+    pub tags: Vec<String>,
 }
 
 /// Every identity value, in the order the desktop shows them.
@@ -365,7 +368,8 @@ impl MobileVault {
         }
         let mut changes = Changes::new(draft.changes, draft.kind)?;
         let title = draft.title.trim().to_owned();
-        let input = match draft.kind {
+        let tags = draft.tags;
+        let mut input = match draft.kind {
             ItemKind::Login | ItemKind::SecureNote if title.is_empty() => {
                 return Err(invalid("title_required", "Add a title."))
             }
@@ -442,6 +446,8 @@ impl MobileVault {
                 }
             }
         };
+        // Every kind's editor carries the tags: the draft replaces them.
+        input.tags = Some(tags);
         let now = havenkeys_client::now_ms();
         Ok(match id {
             Some(id) => vault.stage_update(id, input, now)?,
@@ -528,6 +534,7 @@ impl MobileVault {
             has_custom_fields,
             deletable: kind != ItemKind::Identity,
             revision: vault.item_revision(&id)?,
+            tags: o.tags.clone(),
         })
     }
 
@@ -553,6 +560,7 @@ impl MobileVault {
             has_custom_fields: false,
             deletable: true,
             revision: None,
+            tags: Vec::new(),
         })
     }
 
@@ -706,6 +714,7 @@ mod tests {
             websites: vec![github()],
             changes,
             base_revision: None,
+            tags: Vec::new(),
         }
     }
 
@@ -939,6 +948,7 @@ mod tests {
                 title: String::new(),
                 websites: vec![],
                 base_revision: None,
+                tags: Vec::new(),
                 changes: vec![
                     replace("card.holder", "ANA SOUZA"),
                     replace("card.number", "4111111111111111"),
@@ -956,6 +966,7 @@ mod tests {
                 title: "Visa".into(),
                 websites: vec![],
                 base_revision: None,
+                tags: Vec::new(),
                 changes: vec![replace("card.code", "999")],
             },
         );
@@ -980,6 +991,7 @@ mod tests {
                 title: "Visa".into(),
                 websites: vec![],
                 base_revision: None,
+                tags: Vec::new(),
                 changes: vec![replace("card.expiry", "2031-05"), remove("card.holder")],
             },
         );
@@ -1010,6 +1022,7 @@ mod tests {
             websites: vec![],
             changes,
             base_revision: None,
+            tags: Vec::new(),
         };
         update(
             &v,
@@ -1087,6 +1100,7 @@ mod tests {
             websites: vec![],
             changes,
             base_revision: None,
+            tags: Vec::new(),
         };
         assert_eq!(stage_error(&v, None, card(vec![])), "card_title_required");
         assert_eq!(
@@ -1107,6 +1121,7 @@ mod tests {
             websites: vec![],
             changes: vec![],
             base_revision: None,
+            tags: Vec::new(),
         };
         assert_eq!(stage_error(&v, Some(&id), note), "invalid_input");
     }
@@ -1204,6 +1219,7 @@ mod tests {
         }
         let stale = ItemDraft {
             base_revision: opened.revision,
+            tags: Vec::new(),
             ..login_draft("GitHub", vec![])
         };
         assert_eq!(stage_error(&v, Some(&id), stale), "item_changed_elsewhere");
@@ -1220,6 +1236,7 @@ mod tests {
         assert_eq!(fresh.revision, Some(2));
         let draft = ItemDraft {
             base_revision: fresh.revision,
+            tags: Vec::new(),
             ..login_draft("GitHub", vec![])
         };
         assert!(v.stage_draft(Some(&uuid), draft).is_ok());
@@ -1247,6 +1264,7 @@ mod tests {
             websites: vec![],
             changes,
             base_revision: None,
+            tags: Vec::new(),
         };
         let id = create(
             &v,

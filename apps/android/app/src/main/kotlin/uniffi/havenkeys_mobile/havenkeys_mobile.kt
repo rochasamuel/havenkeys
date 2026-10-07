@@ -5192,6 +5192,11 @@ data class ItemDraft (
     var `changes`: List<FieldChange>
     , 
     var `baseRevision`: kotlin.Long?
+    , 
+    /**
+     * Replaces the item's tags (Rust normalises them).
+     */
+    var `tags`: List<kotlin.String>
     
 ){
     
@@ -5213,6 +5218,7 @@ public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
             FfiConverterSequenceTypeWebsite.read(buf),
             FfiConverterSequenceTypeFieldChange.read(buf),
             FfiConverterOptionalLong.read(buf),
+            FfiConverterSequenceString.read(buf),
         )
     }
 
@@ -5221,7 +5227,8 @@ public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterSequenceTypeWebsite.allocationSize(value.`websites`) +
             FfiConverterSequenceTypeFieldChange.allocationSize(value.`changes`) +
-            FfiConverterOptionalLong.allocationSize(value.`baseRevision`)
+            FfiConverterOptionalLong.allocationSize(value.`baseRevision`) +
+            FfiConverterSequenceString.allocationSize(value.`tags`)
     )
 
     override fun write(value: ItemDraft, buf: ByteBuffer) {
@@ -5230,6 +5237,7 @@ public object FfiConverterTypeItemDraft: FfiConverterRustBuffer<ItemDraft> {
             FfiConverterSequenceTypeWebsite.write(value.`websites`, buf)
             FfiConverterSequenceTypeFieldChange.write(value.`changes`, buf)
             FfiConverterOptionalLong.write(value.`baseRevision`, buf)
+            FfiConverterSequenceString.write(value.`tags`, buf)
     }
 }
 
@@ -5256,6 +5264,8 @@ data class ItemEdit (
      * A draft carries it back so a save made from an older copy is refused.
      */
     var `revision`: kotlin.Long?
+    , 
+    var `tags`: List<kotlin.String>
     
 ){
     
@@ -5279,6 +5289,7 @@ public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalLong.read(buf),
+            FfiConverterSequenceString.read(buf),
         )
     }
 
@@ -5289,7 +5300,8 @@ public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
             FfiConverterSequenceTypeEditField.allocationSize(value.`fields`) +
             FfiConverterBoolean.allocationSize(value.`hasCustomFields`) +
             FfiConverterBoolean.allocationSize(value.`deletable`) +
-            FfiConverterOptionalLong.allocationSize(value.`revision`)
+            FfiConverterOptionalLong.allocationSize(value.`revision`) +
+            FfiConverterSequenceString.allocationSize(value.`tags`)
     )
 
     override fun write(value: ItemEdit, buf: ByteBuffer) {
@@ -5300,6 +5312,7 @@ public object FfiConverterTypeItemEdit: FfiConverterRustBuffer<ItemEdit> {
             FfiConverterBoolean.write(value.`hasCustomFields`, buf)
             FfiConverterBoolean.write(value.`deletable`, buf)
             FfiConverterOptionalLong.write(value.`revision`, buf)
+            FfiConverterSequenceString.write(value.`tags`, buf)
     }
 }
 
@@ -5323,6 +5336,8 @@ data class ItemSummary (
     var `updatedAt`: kotlin.Long
     , 
     var `createdAt`: kotlin.Long
+    , 
+    var `tags`: List<kotlin.String>
     
 ){
     
@@ -5348,6 +5363,7 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.read(buf),
             FfiConverterLong.read(buf),
             FfiConverterLong.read(buf),
+            FfiConverterSequenceString.read(buf),
         )
     }
 
@@ -5360,7 +5376,8 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.allocationSize(value.`hasTotp`) +
             FfiConverterBoolean.allocationSize(value.`hasPasskey`) +
             FfiConverterLong.allocationSize(value.`updatedAt`) +
-            FfiConverterLong.allocationSize(value.`createdAt`)
+            FfiConverterLong.allocationSize(value.`createdAt`) +
+            FfiConverterSequenceString.allocationSize(value.`tags`)
     )
 
     override fun write(value: ItemSummary, buf: ByteBuffer) {
@@ -5373,6 +5390,7 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.write(value.`hasPasskey`, buf)
             FfiConverterLong.write(value.`updatedAt`, buf)
             FfiConverterLong.write(value.`createdAt`, buf)
+            FfiConverterSequenceString.write(value.`tags`, buf)
     }
 }
 

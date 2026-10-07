@@ -167,6 +167,7 @@ fn draft(title: &str, changes: Vec<FieldChange>, base_revision: Option<i64>) -> 
         }],
         changes,
         base_revision,
+        tags: Vec::new(),
     }
 }
 
@@ -481,4 +482,43 @@ fn a_phone_without_an_open_vault_cannot_delete_the_account() {
     let v = phone(dir.path());
     let err = v.delete_account(EMAIL.into(), PASSWORD.into()).unwrap_err();
     assert_eq!(code(err), "locked");
+}
+
+#[test]
+fn tags_round_trip_through_the_draft_and_the_summary() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let server = rt.block_on(Server::start());
+    let invite = rt.block_on(server.invite());
+    let dir = tempfile::tempdir().unwrap();
+    let a = phone(dir.path());
+    a.activate(invite, PASSWORD.into()).unwrap();
+    online(&a);
+
+    let id = a
+        .create_item(ItemDraft {
+            tags: vec!["Work".into()],
+            ..draft("GitHub", vec![], None)
+        })
+        .unwrap();
+    let tags_of = |a: &MobileVault| {
+        a.list_items()
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == id)
+            .unwrap()
+            .tags
+    };
+    assert_eq!(tags_of(&a), vec!["work".to_string()]);
+    let edit = a.item_edit(id.clone()).unwrap();
+    assert_eq!(edit.tags, vec!["work".to_string()]);
+
+    a.update_item(
+        id.clone(),
+        ItemDraft {
+            tags: vec![],
+            ..draft("GitHub", vec![], edit.revision)
+        },
+    )
+    .unwrap();
+    assert!(tags_of(&a).is_empty());
 }
