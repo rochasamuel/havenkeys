@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useI18n } from "../i18n/context";
 import { MAX_TAG_CHARS, MAX_TAGS, cleanTag } from "../lib/tags";
 import { useVaultTags } from "../lib/vaultTags";
@@ -15,6 +15,7 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
   const { t } = useI18n();
   const vault = useVaultTags();
   const listId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [active, setActive] = useState(-1); // -1: nothing picked yet, so Enter takes what was typed
   const typed = cleanTag(text);
@@ -49,7 +50,7 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
       setActive((a) => Math.min(a + 1, options.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((a) => Math.max(a - 1, 0));
+      setActive((a) => (a <= 0 ? -1 : a - 1));
     } else if (e.key === "Escape" && text) {
       // Only closes the suggestions; an empty field leaves Escape to the editor.
       e.stopPropagation();
@@ -72,7 +73,12 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
   };
 
   return (
-    <div className="row edit-row tags-edit">
+    <div
+      className="row edit-row tags-edit"
+      onClick={(e) => {
+        if (!(e.target as HTMLElement).closest("button")) inputRef.current?.focus();
+      }}
+    >
       <span className="edit-label">{t.editor.tags}</span>
       <div className="tags-edit-line">
         {value.map((tag) => (
@@ -93,6 +99,7 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
           <span className="tags-limit">{t.editor.tagLimit}</span>
         ) : (
           <input
+            ref={inputRef}
             className="edit-input tags-input"
             value={text}
             disabled={disabled}
@@ -107,7 +114,7 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
             autoComplete="off"
             onChange={onType}
             onKeyDown={onKey}
-            onBlur={() => setText("")}
+            onBlur={() => text && add(text)}
           />
         )}
       </div>

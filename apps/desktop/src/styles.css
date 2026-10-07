@@ -2347,10 +2347,6 @@ input::-ms-clear {
 
 /* Tags editor row (spec 2026-10-07-item-tags 4.1): pills then a bare input; the row is the field.
    The suggestions sit in the row's flow because the group clips what overflows it. */
-.tags-edit {
-  cursor: text;
-}
-
 .tags-edit-line {
   display: flex;
   flex-wrap: wrap;

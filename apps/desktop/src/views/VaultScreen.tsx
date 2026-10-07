@@ -324,274 +324,274 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   return (
     <VaultTagsProvider value={vaultTags}>
-    <div className="vault">
-      <aside className="sidebar">
-        <div className="sidebar-top" data-tauri-drag-region>
-          <div className="brand" data-tauri-drag-region>
-            <Seal size={22} />
-            <span className="brand-name">HavenKeys</span>
+      <div className="vault">
+        <aside className="sidebar">
+          <div className="sidebar-top" data-tauri-drag-region>
+            <div className="brand" data-tauri-drag-region>
+              <Seal size={22} />
+              <span className="brand-name">HavenKeys</span>
+            </div>
           </div>
-        </div>
 
-        <label className="search">
-          <Icon name="search" size={15} />
-          <input
-            type="search"
-            placeholder={t.vault.search}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              if (isToolSection) setSection("all");
-            }}
-            spellCheck={false}
-            autoComplete="off"
-            aria-label={t.vault.searchLabel}
-          />
-        </label>
-
-        <nav className="nav" aria-label={t.vault.sectionsLabel}>
-          <p className="nav-heading">{t.vault.vaultHeading}</p>
-          {sections.map((s) => (
-            <button
-              key={s.id}
-              className="nav-item"
-              aria-current={section === s.id && !identitySelected ? "page" : undefined}
-              onClick={() => setSection(s.id)}
-            >
-              <Icon name={s.icon} size={17} />
-              <span>{s.label(t)}</span>
-              <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note" | "card"]}</span>
-            </button>
-          ))}
-          <button
-            className="nav-item"
-            aria-current={identitySelected ? "page" : undefined}
-            onClick={openIdentity}
-            disabled={!identity}
-            title={identity ? undefined : t.identity.notCreated}
-          >
-            <Icon name="idCard" size={17} />
-            <span>{t.identity.nav}</span>
-          </button>
-          <p className="nav-heading">{t.vault.toolsHeading}</p>
-          <button
-            className="nav-item"
-            aria-current={section === "health" ? "page" : undefined}
-            onClick={() => setSection("health")}
-          >
-            <Icon name="shield" size={17} />
-            <span>{t.vault.health}</span>
-            {health && totalIssues(health) > 0 && <span className="nav-count">{totalIssues(health)}</span>}
-          </button>
-          <button
-            className="nav-item"
-            aria-current={section === "generator" ? "page" : undefined}
-            onClick={() => setSection("generator")}
-          >
-            <Icon name="dice" size={17} />
-            <span>{t.vault.generator}</span>
-          </button>
-          <button
-            className="nav-item"
-            aria-current={section === "settings" ? "page" : undefined}
-            onClick={() => setSection("settings")}
-          >
-            <Icon name="gear" size={17} />
-            <span>{t.vault.settings}</span>
-          </button>
-        </nav>
-
-        <footer className="sidebar-foot">
-          <div className={`conn${readOnly ? " is-offline" : ""}`} role="status">
-            <Icon name={readOnly ? "cloudOff" : "cloud"} size={15} />
-            <span>{readOnly ? t.vault.offline : t.vault.connected}</span>
-          </div>
-          <button className="lock-btn" onClick={() => void lock()} title={t.vault.lockTitle(isMac ? "⌘L" : "Ctrl+L")}>
-            <span className="lock-btn-icon" aria-hidden="true">
-              <Icon name="unlock" size={16} />
-            </span>
-            <span className="lock-btn-text">
-              <strong>{t.vault.unlocked}</strong>
-              <small>{t.vault.lockNow}</small>
-            </span>
-            <kbd>{isMac ? "⌘L" : "Ctrl L"}</kbd>
-          </button>
-        </footer>
-      </aside>
-
-      {section === "health" && (
-        <HealthView
-          items={allItems}
-          report={health}
-          loading={healthLoading}
-          readOnly={readOnly}
-          onOpen={(id) => {
-            setSection("login");
-            setQuery("");
-            setPane({ kind: "view", id });
-          }}
-          onEdit={(id) => {
-            setSection("login");
-            setQuery("");
-            setPane({ kind: "edit", id });
-          }}
-          onChanged={loadHealth}
-        />
-      )}
-      {section === "generator" && <GeneratorView />}
-      {section === "settings" && <SettingsView onImported={itemsChanged} online={!readOnly} />}
-
-      {!isToolSection && (
-        <>
-          <div className="list-col">
-            {unreadable > 0 && (
-              <div className="banner banner-warn" role="status">
-                {t.vault.unreadable(unreadable)}{" "}
-                <button
-                  className="btn btn-quiet"
-                  type="button"
-                  disabled={readOnly || busyResync}
-                  onClick={() => void redownload()}
-                >
-                  {t.vault.redownload}
-                </button>
-              </div>
-            )}
-            <ItemList
-              items={visible}
-              query={query}
-              section={section}
-              selectedId={selectedId}
-              onSelect={(id) => setPane({ kind: "view", id })}
-              onNew={newItem}
-              newDisabled={readOnly}
-              account={showAccountItem(account, section, query, t.accountItem.title) ? account : null}
-              accountSelected={pane.kind === "account"}
-              onSelectAccount={() => setPane({ kind: "account" })}
+          <label className="search">
+            <Icon name="search" size={15} />
+            <input
+              type="search"
+              placeholder={t.vault.search}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (isToolSection) setSection("all");
+              }}
+              spellCheck={false}
+              autoComplete="off"
+              aria-label={t.vault.searchLabel}
             />
-          </div>
-          <section className="detail" aria-label={t.vault.details}>
-            {pendingOpen && (pane.kind === "edit" || pane.kind === "new") && (
-              <div className="confirm open-confirm" role="alert">
-                <span>
-                  {pane.kind === "edit" && selected ? t.vault.discardChanges(selected.title) : t.vault.discardNewItem}
-                </span>
-                <button className="btn btn-small" onClick={() => setPendingOpen(null)}>
-                  {t.vault.keepEditing}
-                </button>
-                <button className="btn btn-small btn-danger" onClick={() => openFromExtension(pendingOpen)}>
-                  {t.vault.discard}
-                </button>
-              </div>
-            )}
-            {pane.kind === "empty" && (
-              <div className="detail-empty">
-                <Seal size={44} />
-                <p className="detail-empty-title">{items.length === 0 ? t.vault.emptyTitle : t.vault.nothingSelected}</p>
-                <p className="muted">
-                  {items.length === 0 ? t.vault.emptyBody : t.vault.chooseItem}
-                </p>
-                {items.length === 0 && (
-                  <div className="detail-empty-actions">
-                    <button className="btn btn-primary" onClick={() => newItem("login")} disabled={readOnly}>
-                      <Icon name="key" size={16} /> {t.vault.addLogin}
-                    </button>
-                    <button className="btn" onClick={() => newItem("secure_note")} disabled={readOnly}>
-                      <Icon name="note" size={16} /> {t.vault.addNote}
-                    </button>
-                    <button className="btn" onClick={() => setSection("settings")} disabled={readOnly}>
-                      {t.vault.importOther}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            {pane.kind === "account" && account && (
-              <AccountItemDetail account={account} onShowKit={showKit} />
-            )}
-            {pane.kind === "view" && selected?.itemType === "identity" && (
-              <IdentityDetail
-                key={selected.id + selected.updatedAt}
-                item={selected}
-                readOnly={readOnly}
-                onEdit={() => setPane({ kind: "edit", id: selected.id })}
+          </label>
+
+          <nav className="nav" aria-label={t.vault.sectionsLabel}>
+            <p className="nav-heading">{t.vault.vaultHeading}</p>
+            {sections.map((s) => (
+              <button
+                key={s.id}
+                className="nav-item"
+                aria-current={section === s.id && !identitySelected ? "page" : undefined}
+                onClick={() => setSection(s.id)}
+              >
+                <Icon name={s.icon} size={17} />
+                <span>{s.label(t)}</span>
+                <span className="nav-count">{counts[s.id as "all" | "login" | "secure_note" | "card"]}</span>
+              </button>
+            ))}
+            <button
+              className="nav-item"
+              aria-current={identitySelected ? "page" : undefined}
+              onClick={openIdentity}
+              disabled={!identity}
+              title={identity ? undefined : t.identity.notCreated}
+            >
+              <Icon name="idCard" size={17} />
+              <span>{t.identity.nav}</span>
+            </button>
+            <p className="nav-heading">{t.vault.toolsHeading}</p>
+            <button
+              className="nav-item"
+              aria-current={section === "health" ? "page" : undefined}
+              onClick={() => setSection("health")}
+            >
+              <Icon name="shield" size={17} />
+              <span>{t.vault.health}</span>
+              {health && totalIssues(health) > 0 && <span className="nav-count">{totalIssues(health)}</span>}
+            </button>
+            <button
+              className="nav-item"
+              aria-current={section === "generator" ? "page" : undefined}
+              onClick={() => setSection("generator")}
+            >
+              <Icon name="dice" size={17} />
+              <span>{t.vault.generator}</span>
+            </button>
+            <button
+              className="nav-item"
+              aria-current={section === "settings" ? "page" : undefined}
+              onClick={() => setSection("settings")}
+            >
+              <Icon name="gear" size={17} />
+              <span>{t.vault.settings}</span>
+            </button>
+          </nav>
+
+          <footer className="sidebar-foot">
+            <div className={`conn${readOnly ? " is-offline" : ""}`} role="status">
+              <Icon name={readOnly ? "cloudOff" : "cloud"} size={15} />
+              <span>{readOnly ? t.vault.offline : t.vault.connected}</span>
+            </div>
+            <button className="lock-btn" onClick={() => void lock()} title={t.vault.lockTitle(isMac ? "⌘L" : "Ctrl+L")}>
+              <span className="lock-btn-icon" aria-hidden="true">
+                <Icon name="unlock" size={16} />
+              </span>
+              <span className="lock-btn-text">
+                <strong>{t.vault.unlocked}</strong>
+                <small>{t.vault.lockNow}</small>
+              </span>
+              <kbd>{isMac ? "⌘L" : "Ctrl L"}</kbd>
+            </button>
+          </footer>
+        </aside>
+
+        {section === "health" && (
+          <HealthView
+            items={allItems}
+            report={health}
+            loading={healthLoading}
+            readOnly={readOnly}
+            onOpen={(id) => {
+              setSection("login");
+              setQuery("");
+              setPane({ kind: "view", id });
+            }}
+            onEdit={(id) => {
+              setSection("login");
+              setQuery("");
+              setPane({ kind: "edit", id });
+            }}
+            onChanged={loadHealth}
+          />
+        )}
+        {section === "generator" && <GeneratorView />}
+        {section === "settings" && <SettingsView onImported={itemsChanged} online={!readOnly} />}
+
+        {!isToolSection && (
+          <>
+            <div className="list-col">
+              {unreadable > 0 && (
+                <div className="banner banner-warn" role="status">
+                  {t.vault.unreadable(unreadable)}{" "}
+                  <button
+                    className="btn btn-quiet"
+                    type="button"
+                    disabled={readOnly || busyResync}
+                    onClick={() => void redownload()}
+                  >
+                    {t.vault.redownload}
+                  </button>
+                </div>
+              )}
+              <ItemList
+                items={visible}
+                query={query}
+                section={section}
+                selectedId={selectedId}
+                onSelect={(id) => setPane({ kind: "view", id })}
+                onNew={newItem}
+                newDisabled={readOnly}
+                account={showAccountItem(account, section, query, t.accountItem.title) ? account : null}
+                accountSelected={pane.kind === "account"}
+                onSelectAccount={() => setPane({ kind: "account" })}
               />
-            )}
-            {pane.kind === "edit" && selected?.itemType === "identity" && (
-              <IdentityEditor
-                key={"edit" + selected.id}
-                existing={selected}
-                readOnly={readOnly}
-                onCancel={() => setPane({ kind: "view", id: selected.id })}
-                onSaved={onSaved}
-                onDirtyChange={setEditorDirty}
-              />
-            )}
-            {pane.kind === "view" && selected?.itemType === "card" && (
-              <CardDetail
-                key={selected.id + selected.updatedAt}
-                item={selected}
-                readOnly={readOnly}
-                onEdit={() => setPane({ kind: "edit", id: selected.id })}
-                onDelete={() => void onDelete(selected)}
-              />
-            )}
-            {pane.kind === "edit" && selected?.itemType === "card" && (
-              <CardEditor
-                key={"edit" + selected.id}
-                existing={selected}
-                readOnly={readOnly}
-                onCancel={() => setPane({ kind: "view", id: selected.id })}
-                onSaved={onSaved}
-                onDirtyChange={setEditorDirty}
-              />
-            )}
-            {pane.kind === "view" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
-              <ItemDetail
-                key={selected.id + selected.updatedAt}
-                item={selected}
-                revision={revision}
-                health={health}
-                readOnly={readOnly}
-                onEdit={() => setPane({ kind: "edit", id: selected.id })}
-                onDelete={() => void onDelete(selected)}
-                onOpen={(id) => setPane({ kind: "view", id })}
-              />
-            )}
-            {pane.kind === "edit" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
-              <ItemEditor
-                key={"edit" + selected.id}
-                existing={selected}
-                itemType={selected.itemType}
-                readOnly={readOnly}
-                onCancel={() => setPane({ kind: "view", id: selected.id })}
-                onSaved={onSaved}
-                onDirtyChange={setEditorDirty}
-              />
-            )}
-            {pane.kind === "new" && pane.itemType !== "card" && (
-              <ItemEditor
-                key={"new" + pane.itemType}
-                itemType={pane.itemType}
-                readOnly={readOnly}
-                onCancel={() => setPane({ kind: "empty" })}
-                onSaved={onSaved}
-                onDirtyChange={setEditorDirty}
-              />
-            )}
-            {pane.kind === "new" && pane.itemType === "card" && (
-              <CardEditor
-                key="new-card"
-                readOnly={readOnly}
-                onCancel={() => setPane({ kind: "empty" })}
-                onSaved={onSaved}
-                onDirtyChange={setEditorDirty}
-              />
-            )}
-          </section>
-        </>
-      )}
-    </div>
+            </div>
+            <section className="detail" aria-label={t.vault.details}>
+              {pendingOpen && (pane.kind === "edit" || pane.kind === "new") && (
+                <div className="confirm open-confirm" role="alert">
+                  <span>
+                    {pane.kind === "edit" && selected ? t.vault.discardChanges(selected.title) : t.vault.discardNewItem}
+                  </span>
+                  <button className="btn btn-small" onClick={() => setPendingOpen(null)}>
+                    {t.vault.keepEditing}
+                  </button>
+                  <button className="btn btn-small btn-danger" onClick={() => openFromExtension(pendingOpen)}>
+                    {t.vault.discard}
+                  </button>
+                </div>
+              )}
+              {pane.kind === "empty" && (
+                <div className="detail-empty">
+                  <Seal size={44} />
+                  <p className="detail-empty-title">{items.length === 0 ? t.vault.emptyTitle : t.vault.nothingSelected}</p>
+                  <p className="muted">
+                    {items.length === 0 ? t.vault.emptyBody : t.vault.chooseItem}
+                  </p>
+                  {items.length === 0 && (
+                    <div className="detail-empty-actions">
+                      <button className="btn btn-primary" onClick={() => newItem("login")} disabled={readOnly}>
+                        <Icon name="key" size={16} /> {t.vault.addLogin}
+                      </button>
+                      <button className="btn" onClick={() => newItem("secure_note")} disabled={readOnly}>
+                        <Icon name="note" size={16} /> {t.vault.addNote}
+                      </button>
+                      <button className="btn" onClick={() => setSection("settings")} disabled={readOnly}>
+                        {t.vault.importOther}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {pane.kind === "account" && account && (
+                <AccountItemDetail account={account} onShowKit={showKit} />
+              )}
+              {pane.kind === "view" && selected?.itemType === "identity" && (
+                <IdentityDetail
+                  key={selected.id + selected.updatedAt}
+                  item={selected}
+                  readOnly={readOnly}
+                  onEdit={() => setPane({ kind: "edit", id: selected.id })}
+                />
+              )}
+              {pane.kind === "edit" && selected?.itemType === "identity" && (
+                <IdentityEditor
+                  key={"edit" + selected.id}
+                  existing={selected}
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "view", id: selected.id })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+              {pane.kind === "view" && selected?.itemType === "card" && (
+                <CardDetail
+                  key={selected.id + selected.updatedAt}
+                  item={selected}
+                  readOnly={readOnly}
+                  onEdit={() => setPane({ kind: "edit", id: selected.id })}
+                  onDelete={() => void onDelete(selected)}
+                />
+              )}
+              {pane.kind === "edit" && selected?.itemType === "card" && (
+                <CardEditor
+                  key={"edit" + selected.id}
+                  existing={selected}
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "view", id: selected.id })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+              {pane.kind === "view" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
+                <ItemDetail
+                  key={selected.id + selected.updatedAt}
+                  item={selected}
+                  revision={revision}
+                  health={health}
+                  readOnly={readOnly}
+                  onEdit={() => setPane({ kind: "edit", id: selected.id })}
+                  onDelete={() => void onDelete(selected)}
+                  onOpen={(id) => setPane({ kind: "view", id })}
+                />
+              )}
+              {pane.kind === "edit" && selected && selected.itemType !== "identity" && selected.itemType !== "card" && (
+                <ItemEditor
+                  key={"edit" + selected.id}
+                  existing={selected}
+                  itemType={selected.itemType}
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "view", id: selected.id })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+              {pane.kind === "new" && pane.itemType !== "card" && (
+                <ItemEditor
+                  key={"new" + pane.itemType}
+                  itemType={pane.itemType}
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "empty" })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+              {pane.kind === "new" && pane.itemType === "card" && (
+                <CardEditor
+                  key="new-card"
+                  readOnly={readOnly}
+                  onCancel={() => setPane({ kind: "empty" })}
+                  onSaved={onSaved}
+                  onDirtyChange={setEditorDirty}
+                />
+              )}
+            </section>
+          </>
+        )}
+      </div>
     </VaultTagsProvider>
   );
 }

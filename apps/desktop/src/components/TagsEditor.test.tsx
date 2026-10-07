@@ -113,4 +113,33 @@ describe("TagsEditor", () => {
     type("sta");
     expect(options()).toEqual([en.editor.createTag("sta")]);
   });
+
+  it("adds the typed text on Enter when suggestions show but no arrow was pressed", () => {
+    show([]);
+    type("st");
+    key("Enter");
+    expect(onChange).toHaveBeenLastCalledWith(["st"]);
+  });
+
+  it("commits typed text on blur", () => {
+    show([]);
+    type("later");
+    act(() => void input().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onChange).toHaveBeenLastCalledWith(["later"]);
+  });
+
+  it("returns to no pick on ArrowUp from the first option", () => {
+    show([]);
+    type("st");
+    key("ArrowDown");
+    expect(input().getAttribute("aria-activedescendant")).not.toBeNull();
+    key("ArrowUp");
+    expect(input().getAttribute("aria-activedescendant")).toBeNull();
+  });
+
+  it("focuses the input when the row's empty area is clicked", () => {
+    show(["a"]);
+    act(() => void host.querySelector<HTMLElement>(".tags-edit")!.click());
+    expect(document.activeElement).toBe(input());
+  });
 });

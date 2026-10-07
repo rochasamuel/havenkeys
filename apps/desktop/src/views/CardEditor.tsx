@@ -169,72 +169,74 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
         !error && <p className="muted">{t.common.decrypting}</p>
       ) : (
         <>
-        <div className="group">
-          <label className="row edit-row">
-            <span className="edit-label">{f.title}</span>
-            <input className="edit-input" value={draft.title} placeholder={titlePlaceholder} maxLength={256}
-              onChange={(e) => set("title", e.target.value)} autoComplete="off" autoFocus />
-          </label>
-          <label className="row edit-row">
-            <span className="edit-label">{f.cardholderName}</span>
-            <input className="edit-input" value={draft.cardholderName} maxLength={256}
-              onChange={(e) => set("cardholderName", e.target.value)} autoComplete="off" spellCheck={false} />
-          </label>
-          <label className="row edit-row">
-            <span className="edit-label">{f.number}</span>
-            {draft.clearNumber ? (
-              clearRow("clearNumber", f.number, t.card.numberRemoved)
-            ) : (
-              <span className="card-number-input">
-                <input className="edit-input mono" inputMode="numeric" value={display}
-                  placeholder={existing ? t.card.keepNumber : undefined}
-                  onChange={(e) => set("number", capDigits(e.target.value, 19))} autoComplete="off" spellCheck={false} />
-                {digits && <CardBrandLogo brand={shownBrand} width={30} />}
-                {existing && has.number && !digits && removeButton("clearNumber", f.number)}
-              </span>
+          <div className="group">
+            <label className="row edit-row">
+              <span className="edit-label">{f.title}</span>
+              <input className="edit-input" value={draft.title} placeholder={titlePlaceholder} maxLength={256}
+                onChange={(e) => set("title", e.target.value)} autoComplete="off" autoFocus />
+            </label>
+          </div>
+          <div className="group">
+            <TagsEditor value={draft.tags} onChange={(next) => setDraft((d) => (d ? { ...d, tags: next } : d))} disabled={readOnly || saving} />
+          </div>
+          <div className="group">
+            <label className="row edit-row">
+              <span className="edit-label">{f.cardholderName}</span>
+              <input className="edit-input" value={draft.cardholderName} maxLength={256}
+                onChange={(e) => set("cardholderName", e.target.value)} autoComplete="off" spellCheck={false} />
+            </label>
+            <label className="row edit-row">
+              <span className="edit-label">{f.number}</span>
+              {draft.clearNumber ? (
+                clearRow("clearNumber", f.number, t.card.numberRemoved)
+              ) : (
+                <span className="card-number-input">
+                  <input className="edit-input mono" inputMode="numeric" value={display}
+                    placeholder={existing ? t.card.keepNumber : undefined}
+                    onChange={(e) => set("number", capDigits(e.target.value, 19))} autoComplete="off" spellCheck={false} />
+                  {digits && <CardBrandLogo brand={shownBrand} width={30} />}
+                  {existing && has.number && !digits && removeButton("clearNumber", f.number)}
+                </span>
+              )}
+            </label>
+            {showWarning && (
+              <p className="field-warning" role="status">
+                {t.card.checkDigitWarning}
+              </p>
             )}
-          </label>
-          {showWarning && (
-            <p className="field-warning" role="status">
-              {t.card.checkDigitWarning}
-            </p>
-          )}
-          <label className="row edit-row">
-            <span className="edit-label">{f.brand}</span>
-            <select className="edit-input" value={draft.brand} onChange={(e) => set("brand", e.target.value)}>
-              <option value="">{t.card.detectBrand}</option>
-              {CARD_BRAND_CHOICES.map((b) => (
-                <option key={b} value={b}>
-                  {BRAND_NAMES[b]}
-                </option>
-              ))}
-              <option value="other">{t.card.otherBrand}</option>
-            </select>
-          </label>
-          <label className="row edit-row">
-            <span className="edit-label">{f.verificationNumber}</span>
-            {draft.clearVerificationNumber ? (
-              clearRow("clearVerificationNumber", f.verificationNumber, t.card.verificationNumberRemoved)
-            ) : (
-              <span className="card-number-input">
-                <input className="edit-input mono" type="password" inputMode="numeric" value={draft.verificationNumber}
-                  placeholder={existing ? t.card.keepVerificationNumber : undefined}
-                  onChange={(e) => set("verificationNumber", capDigits(e.target.value, 8))} autoComplete="off" />
-                {existing && has.verificationNumber && !draft.verificationNumber && removeButton("clearVerificationNumber", f.verificationNumber)}
-              </span>
-            )}
-          </label>
-          <label className="row edit-row">
-            <span className="edit-label">{f.expiry}</span>
-            <input className="edit-input mono" value={draft.expiry} placeholder={t.card.expiryPlaceholder} maxLength={9}
-              inputMode="numeric" onChange={(e) => set("expiry", e.target.value)} autoComplete="off" />
-          </label>
-          <textarea className="edit-area" value={draft.notes} aria-label={f.notes} placeholder={f.notes}
-            onChange={(e) => set("notes", e.target.value)} spellCheck={false} rows={4} />
-        </div>
-        <div className="group">
-          <TagsEditor value={draft.tags} onChange={(next) => setDraft((d) => (d ? { ...d, tags: next } : d))} disabled={readOnly || saving} />
-        </div>
+            <label className="row edit-row">
+              <span className="edit-label">{f.brand}</span>
+              <select className="edit-input" value={draft.brand} onChange={(e) => set("brand", e.target.value)}>
+                <option value="">{t.card.detectBrand}</option>
+                {CARD_BRAND_CHOICES.map((b) => (
+                  <option key={b} value={b}>
+                    {BRAND_NAMES[b]}
+                  </option>
+                ))}
+                <option value="other">{t.card.otherBrand}</option>
+              </select>
+            </label>
+            <label className="row edit-row">
+              <span className="edit-label">{f.verificationNumber}</span>
+              {draft.clearVerificationNumber ? (
+                clearRow("clearVerificationNumber", f.verificationNumber, t.card.verificationNumberRemoved)
+              ) : (
+                <span className="card-number-input">
+                  <input className="edit-input mono" type="password" inputMode="numeric" value={draft.verificationNumber}
+                    placeholder={existing ? t.card.keepVerificationNumber : undefined}
+                    onChange={(e) => set("verificationNumber", capDigits(e.target.value, 8))} autoComplete="off" />
+                  {existing && has.verificationNumber && !draft.verificationNumber && removeButton("clearVerificationNumber", f.verificationNumber)}
+                </span>
+              )}
+            </label>
+            <label className="row edit-row">
+              <span className="edit-label">{f.expiry}</span>
+              <input className="edit-input mono" value={draft.expiry} placeholder={t.card.expiryPlaceholder} maxLength={9}
+                inputMode="numeric" onChange={(e) => set("expiry", e.target.value)} autoComplete="off" />
+            </label>
+            <textarea className="edit-area" value={draft.notes} aria-label={f.notes} placeholder={f.notes}
+              onChange={(e) => set("notes", e.target.value)} spellCheck={false} rows={4} />
+          </div>
         </>
       )}
 
