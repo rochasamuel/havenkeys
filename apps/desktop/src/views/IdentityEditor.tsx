@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { CustomField, IdentityFields, ItemOverview } from "../lib/types";
 import { IDENTITY_SECTIONS, type IdentityFieldDef } from "../lib/identity";
 import { Icon } from "../components/Icon";
-import { TagsEditor } from "../components/TagsEditor";
+import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { Switch } from "../components/Switch";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -30,6 +30,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
   const { t } = useI18n();
   const [fields, setFields] = useState<IdentityFields | null>(null);
   const [tags, setTags] = useState<string[]>(existing.tags);
+  const tagsRow = useRef<TagsEditorHandle>(null);
   const [initial, setInitial] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -66,10 +67,13 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!fields || saving || readOnly) return;
+    // A tag still being typed is saved too; one Rust would refuse keeps the editor open.
+    const finalTags = tagsRow.current ? tagsRow.current.commit() : tags;
+    if (finalTags === null) return;
     setSaving(true);
     setError(null);
     try {
-      const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields, tags });
+      const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields, tags: finalTags });
       onSaved(saved);
     } catch (err) {
       setError(errorMessage(err, t, t.editor.saveFailed));
@@ -97,7 +101,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
       ) : (
         <>
           <div className="group">
-            <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} />
+            <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} handle={tagsRow} />
           </div>
 
           {IDENTITY_SECTIONS.map((section, s) => (

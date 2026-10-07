@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { CardBrand, CardInput, CardNumberCheck, ItemOverview } from "../lib/types";
 import { BRAND_NAMES, CARD_BRAND_CHOICES, capDigits, cardSecretUpdate, digitsOnly, formatExpiry, isDerivedTitle, groupNumber, parseExpiryInput } from "../lib/card";
-import { TagsEditor } from "../components/TagsEditor";
+import { TagsEditor, type TagsEditorHandle } from "../components/TagsEditor";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -39,6 +39,7 @@ const EMPTY: Draft = { title: "", cardholderName: "", brand: "", number: "", ver
 export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChange }: Props) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<Draft | null>(existing ? null : EMPTY);
+  const tagsRow = useRef<TagsEditorHandle>(null);
   const [initial, setInitial] = useState<string>(JSON.stringify(EMPTY));
   const [check, setCheck] = useState<CardNumberCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +132,9 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
       setError(t.card.expiryInvalid);
       return;
     }
+    // A tag still being typed is saved too; one Rust would refuse keeps the editor open.
+    const tags = tagsRow.current ? tagsRow.current.commit() : draft.tags;
+    if (tags === null) return;
     const card: CardInput = {
       cardholderName: draft.cardholderName.trim() || null,
       brand: draft.brand || null,
@@ -142,7 +146,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
     setSaving(true);
     setError(null);
     try {
-      const input = { itemType: "card" as const, title: draft.title, card, tags: draft.tags };
+      const input = { itemType: "card" as const, title: draft.title, card, tags };
       onSaved(existing ? await api.updateItem(existing.id, input) : await api.createItem(input));
     } catch (err) {
       setError(errorMessage(err, t, t.editor.saveFailed));
@@ -177,7 +181,12 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
             </label>
           </div>
           <div className="group">
-            <TagsEditor value={draft.tags} onChange={(next) => setDraft((d) => (d ? { ...d, tags: next } : d))} disabled={readOnly || saving} />
+            <TagsEditor
+              value={draft.tags}
+              onChange={(next) => setDraft((d) => (d ? { ...d, tags: next } : d))}
+              disabled={readOnly || saving}
+              handle={tagsRow}
+            />
           </div>
           <div className="group">
             <label className="row edit-row">

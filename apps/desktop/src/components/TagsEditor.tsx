@@ -1,17 +1,39 @@
-import { useId, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type Ref,
+} from "react";
 import { useI18n } from "../i18n/context";
 import { MAX_TAG_CHARS, MAX_TAGS, cleanTag, tagProblem } from "../lib/tags";
 import { useVaultTags } from "../lib/vaultTags";
 import { Icon } from "./Icon";
 
+/** What an editor asks of its tags row when the user saves. */
+export interface TagsEditorHandle {
+  /**
+   * The item's tags with the text still in the field added. Null when Rust
+   * would refuse that text: the field keeps it and says why, and the editor
+   * must not save.
+   */
+  commit(): string[] | null;
+}
+
 interface Props {
   value: string[];
   onChange: (tags: string[]) => void;
   disabled?: boolean;
+  handle?: Ref<TagsEditorHandle>;
 }
 
+type Problem = "tooLong" | "notAllowed";
+
 /** One editor row: the item's tags as pills, then a field that suggests the vault's tags. */
-export function TagsEditor({ value, onChange, disabled }: Props) {
+export function TagsEditor({ value, onChange, disabled, handle }: Props) {
   const { t } = useI18n();
   const vault = useVaultTags();
   const listId = useId();
@@ -19,7 +41,7 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
   const [text, setText] = useState("");
   const [active, setActive] = useState(-1); // -1: nothing picked yet, so Enter takes what was typed
   // Why the typed text was not added; cleared as soon as the text changes.
-  const [problem, setProblem] = useState<"tooLong" | "notAllowed" | null>(null);
+  const [problem, setProblem] = useState<Problem | null>(null);
   const errorId = `${listId}-error`;
   const typed = cleanTag(text);
 
@@ -34,18 +56,36 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
     ];
   }, [text, typed, vault, value, t]);
 
-  const add = (raw: string) => {
+  /** The tags with `raw` added, or null (and the reason shown) when Rust would refuse it. */
+  const add = (raw: string): string[] | null => {
     const refused = tagProblem(raw);
     if (refused) {
       // Keep the text so it can be corrected, and say why (never echoing it).
       setProblem(refused);
-      return;
+      return null;
     }
     const tag = cleanTag(raw);
-    if (tag && !value.includes(tag) && value.length < MAX_TAGS) onChange([...value, tag].sort());
+    let next = value;
+    if (tag && !value.includes(tag) && value.length < MAX_TAGS) {
+      next = [...value, tag].sort();
+      onChange(next);
+    }
     setText("");
     setActive(-1);
+    return next;
   };
+
+  useImperativeHandle(
+    handle,
+    () => ({
+      commit: () => {
+        if (!text.trim()) return value;
+        const next = add(text);
+        if (next === null) inputRef.current?.focus();
+        return next;
+      },
+    }),
+  );
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" || e.key === ",") {
@@ -68,18 +108,32 @@ export function TagsEditor({ value, onChange, disabled }: Props) {
   };
 
   // A paste with commas adds every part but the last and keeps that as text.
+  // A part Rust would refuse stays in the field too (commas kept), and the
+  // field says why, so nothing is dropped without a word.
   const onType = (e: ChangeEvent<HTMLInputElement>) => {
     const parts = e.target.value.split(",");
+    let rest = parts[parts.length - 1] ?? "";
+    let why: Problem | null = null;
     if (parts.length > 1) {
+      const kept: string[] = [];
+      const fresh: string[] = [];
+      for (const part of parts.slice(0, -1)) {
+        const refused = tagProblem(part);
+        if (refused) {
+          why ??= refused;
+          kept.push(part);
+          continue;
+        }
+        const tag = cleanTag(part);
+        if (tag !== null && !value.includes(tag) && !fresh.includes(tag)) fresh.push(tag);
+      }
       const room = MAX_TAGS - value.length;
-      const fresh = [...new Set(parts.slice(0, -1).map(cleanTag))].filter(
-        (tag): tag is string => tag !== null && !value.includes(tag),
-      );
-      if (fresh.length) onChange([...new Set([...value, ...fresh.slice(0, room)])].sort());
+      if (fresh.length) onChange([...value, ...fresh.slice(0, room)].sort());
+      if (kept.length) rest = [...kept, rest].join(",");
     }
-    setText(parts[parts.length - 1] ?? "");
+    setText(rest);
     setActive(-1);
-    setProblem(null);
+    setProblem(why);
   };
 
   return (

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, createRef, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "../i18n/en";
 import { VaultTagsProvider } from "../lib/vaultTags";
-import { TagsEditor } from "./TagsEditor";
+import { TagsEditor, type TagsEditorHandle } from "./TagsEditor";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -28,11 +28,11 @@ afterEach(() => {
   host.remove();
 });
 
-function show(value: string[]) {
+function show(value: string[], handle?: Ref<TagsEditorHandle>) {
   act(() =>
     root.render(
       <VaultTagsProvider value={vault}>
-        <TagsEditor value={value} onChange={onChange} />
+        <TagsEditor value={value} onChange={onChange} handle={handle} />
       </VaultTagsProvider>,
     ),
   );
@@ -170,5 +170,33 @@ describe("TagsEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(input().value).toBe("");
     expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  // Final review (tags): a refused part of a pasted list was dropped without a word.
+  it("keeps a refused part of a comma list in the field and says why", () => {
+    show([]);
+    const long = "x".repeat(33);
+    type(`prod,${long},db`);
+    expect(onChange).toHaveBeenLastCalledWith(["prod"]);
+    expect(input().value).toBe(`${long},db`);
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(en.editor.tagTooLong);
+  });
+
+  // Final review (tags): Save with a refused tag in the field saved the item without it.
+  it("commit() adds the typed text, or refuses with the field's error", () => {
+    const handle = createRef<TagsEditorHandle>();
+    show(["work"], handle);
+    expect(handle.current!.commit()).toEqual(["work"]);
+    type("x".repeat(33));
+    let result: string[] | null = [];
+    act(() => void (result = handle.current!.commit()));
+    expect(result).toBeNull();
+    expect(input().value).toBe("x".repeat(33));
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(en.editor.tagTooLong);
+    expect(document.activeElement).toBe(input());
+    type(" Prod ");
+    act(() => void (result = handle.current!.commit()));
+    expect(result).toEqual(["prod", "work"]);
+    expect(onChange).toHaveBeenLastCalledWith(["prod", "work"]);
   });
 });
