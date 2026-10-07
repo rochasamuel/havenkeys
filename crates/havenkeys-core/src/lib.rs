@@ -18,6 +18,7 @@ pub mod custom_field;
 pub mod error;
 pub mod export;
 pub mod generator;
+pub mod health;
 pub mod identity;
 pub mod identity_page;
 pub mod import;
