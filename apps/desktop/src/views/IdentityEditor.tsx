@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import type { CustomField, IdentityFields, ItemOverview } from "../lib/types";
 import { IDENTITY_SECTIONS, type IdentityFieldDef } from "../lib/identity";
 import { Icon } from "../components/Icon";
+import { TagsEditor } from "../components/TagsEditor";
 import { Switch } from "../components/Switch";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -28,6 +29,7 @@ const inputType = (def: IdentityFieldDef) =>
 export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyChange }: Props) {
   const { t } = useI18n();
   const [fields, setFields] = useState<IdentityFields | null>(null);
+  const [tags, setTags] = useState<string[]>(existing.tags);
   const [initial, setInitial] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -38,7 +40,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
       (v) => {
         if (cancelled) return;
         setFields(v.fields);
-        setInitial(JSON.stringify(v.fields));
+        setInitial(JSON.stringify({ fields: v.fields, tags: existing.tags }));
       },
       (e) => !cancelled && setError(errorMessage(e, t, t.identity.loadFailed)),
     );
@@ -49,7 +51,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
     // `t` is left out: a language change must not decrypt the identity again.
   }, [existing.id]);
 
-  const dirty = fields !== null && JSON.stringify(fields) !== initial;
+  const dirty = fields !== null && JSON.stringify({ fields, tags }) !== initial;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -67,7 +69,7 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
     setSaving(true);
     setError(null);
     try {
-      const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields });
+      const saved = await api.updateItem(existing.id, { itemType: "identity", title: "", identity: fields, tags });
       onSaved(saved);
     } catch (err) {
       setError(errorMessage(err, t, t.editor.saveFailed));
@@ -94,6 +96,10 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
         !error && <p className="muted">{t.common.decrypting}</p>
       ) : (
         <>
+          <div className="group">
+            <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} />
+          </div>
+
           {IDENTITY_SECTIONS.map((section, s) => (
             <section key={section.id} aria-label={t.identity.sections[section.id]}>
               <h3 className="group-title">{t.identity.sections[section.id]}</h3>

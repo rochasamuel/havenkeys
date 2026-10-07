@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { CardBrand, CardInput, CardNumberCheck, ItemOverview } from "../lib/types";
 import { BRAND_NAMES, CARD_BRAND_CHOICES, capDigits, cardSecretUpdate, digitsOnly, formatExpiry, isDerivedTitle, groupNumber, parseExpiryInput } from "../lib/card";
+import { TagsEditor } from "../components/TagsEditor";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
@@ -26,9 +27,10 @@ interface Draft {
   notes: string;
   clearNumber: boolean;
   clearVerificationNumber: boolean;
+  tags: string[];
 }
 
-const EMPTY: Draft = { title: "", cardholderName: "", brand: "", number: "", verificationNumber: "", expiry: "", notes: "", clearNumber: false, clearVerificationNumber: false };
+const EMPTY: Draft = { title: "", cardholderName: "", brand: "", number: "", verificationNumber: "", expiry: "", notes: "", clearNumber: false, clearVerificationNumber: false, tags: [] };
 
 /**
  * Create or edit a card. The saved number and code are never loaded: left
@@ -58,6 +60,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
           brand: v.brand ?? "",
           expiry: v.expiry ? formatExpiry(v.expiry) : "",
           notes: v.notes ?? "",
+          tags: existing.tags,
         };
         setDraft(d);
         setInitial(JSON.stringify(d));
@@ -139,7 +142,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
     setSaving(true);
     setError(null);
     try {
-      const input = { itemType: "card" as const, title: draft.title, card };
+      const input = { itemType: "card" as const, title: draft.title, card, tags: draft.tags };
       onSaved(existing ? await api.updateItem(existing.id, input) : await api.createItem(input));
     } catch (err) {
       setError(errorMessage(err, t, t.editor.saveFailed));
@@ -165,6 +168,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
       {!draft ? (
         !error && <p className="muted">{t.common.decrypting}</p>
       ) : (
+        <>
         <div className="group">
           <label className="row edit-row">
             <span className="edit-label">{f.title}</span>
@@ -228,6 +232,10 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
           <textarea className="edit-area" value={draft.notes} aria-label={f.notes} placeholder={f.notes}
             onChange={(e) => set("notes", e.target.value)} spellCheck={false} rows={4} />
         </div>
+        <div className="group">
+          <TagsEditor value={draft.tags} onChange={(next) => setDraft((d) => (d ? { ...d, tags: next } : d))} disabled={readOnly || saving} />
+        </div>
+        </>
       )}
 
       {error && (

@@ -2345,6 +2345,81 @@ input::-ms-clear {
   background: var(--danger);
 }
 
+/* Tags editor row (spec 2026-10-07-item-tags 4.1): pills then a bare input; the row is the field.
+   The suggestions sit in the row's flow because the group clips what overflows it. */
+.tags-edit {
+  cursor: text;
+}
+
+.tags-edit-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-chip {
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.tag-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tag-remove:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text-strong);
+}
+
+.tags-input {
+  flex: 1;
+  min-width: 96px;
+}
+
+.tags-limit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tags-suggest {
+  flex: 1 0 100%;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+}
+
+.tags-suggest li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.tags-suggest li[aria-selected="true"],
+.tags-suggest li:hover {
+  background: var(--sel);
+}
+
 .chip-action {
   display: inline-grid;
   place-items: center;

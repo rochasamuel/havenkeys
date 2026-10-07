@@ -407,6 +407,12 @@ export const ptBR: Messages = {
     notesPlaceholder: "Qualquer outra coisa que valha guardar com este login",
     loadTextFailed: "Não foi possível carregar o texto existente.",
     saveFailed: "Não foi possível salvar o item.",
+    tags: "Tags",
+    addTag: "Adicionar tag",
+    removeTag: (tag: string) => `Remover tag ${tag}`,
+    createTag: (tag: string) => `Criar “${tag}”`,
+    tagLimit: "O limite é 20 tags.",
+    tagSuggestions: "Sugestões de tags",
   },
 
   fields: {

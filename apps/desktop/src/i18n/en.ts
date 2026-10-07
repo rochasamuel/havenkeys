@@ -382,6 +382,12 @@ export const en = {
     notesPlaceholder: "Anything else worth keeping with this login",
     loadTextFailed: "Could not load the existing text.",
     saveFailed: "Could not save the item.",
+    tags: "Tags",
+    addTag: "Add tag",
+    removeTag: (tag: string) => `Remove tag ${tag}`,
+    createTag: (tag: string) => `Create “${tag}”`,
+    tagLimit: "20 tags is the limit.",
+    tagSuggestions: "Tag suggestions",
   },
 
   fields: {

@@ -6,6 +6,7 @@ import { fromViews, sectionsInput, type EditSection } from "../lib/customFields"
 import { isDirty, type EditorSnapshot } from "../lib/openItem";
 import { shouldCollapse } from "../lib/sso";
 import { Icon } from "../components/Icon";
+import { TagsEditor } from "../components/TagsEditor";
 import { SsoPicker } from "../components/SsoPicker";
 import { Switch } from "../components/Switch";
 import { TotpEdit } from "../components/TotpEdit";
@@ -54,7 +55,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [autoSignIn, setAutoSignIn] = useState(existing?.autoSignIn ?? true);
-  const [tags] = useState<string[]>(existing?.tags ?? []);
+  const [tags, setTags] = useState<string[]>(existing?.tags ?? []);
   const [globalAutoSignIn, setGlobalAutoSignIn] = useState(true);
   const [signIn, setSignIn] = useState<SignInWith | null>(existing?.signInWith ?? null);
   const [passwordOpen, setPasswordOpen] = useState(!existing?.signInWith || existing.hasPassword);
@@ -161,8 +162,9 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             autoSignIn,
             signInWith: signIn ? { provider: signIn.provider, account: signIn.account?.trim() || null } : null,
             sections: sectionsInput(sections, t.fields.types),
+            tags,
           }
-        : { itemType, title, content: textUpdate };
+        : { itemType, title, content: textUpdate, tags };
 
     try {
       const saved = existing ? await api.updateItem(existing.id, input) : await api.createItem(input);
@@ -325,6 +327,10 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             )}
           </>
         )}
+      </div>
+
+      <div className="group">
+        <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} />
       </div>
 
       {itemType === "login" && (

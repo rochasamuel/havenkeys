@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { AccountStatus, HealthReport, ItemOverview, ItemType } from "../lib/types";
+import { tagCounts } from "../lib/tags";
+import { VaultTagsProvider } from "../lib/vaultTags";
 import { totalIssues } from "../lib/health";
 import { showAccountItem } from "../lib/accountItem";
 import { decideOpen } from "../lib/openItem";
@@ -318,8 +320,10 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   }
 
   const isMac = document.documentElement.dataset.platform === "mac";
+  const vaultTags = useMemo(() => tagCounts(allItems), [allItems]);
 
   return (
+    <VaultTagsProvider value={vaultTags}>
     <div className="vault">
       <aside className="sidebar">
         <div className="sidebar-top" data-tauri-drag-region>
@@ -588,5 +592,6 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
         </>
       )}
     </div>
+    </VaultTagsProvider>
   );
 }
