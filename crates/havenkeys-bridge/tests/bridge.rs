@@ -321,6 +321,52 @@ fn responses_carry_only_what_the_operation_needs() {
     assert!(!t.contains("gh-password"));
 }
 
+/// Final review (tags): 50 logins with the longest titles, usernames and 20
+/// tags each made a find_matches answer over MAX_RESPONSE_BYTES, so the
+/// frame could not be written and the extension lost its connection. Tags
+/// now go, last match first, until it fits.
+#[test]
+fn the_largest_find_matches_answer_still_fits_one_frame() {
+    let f = fixture();
+    // Four bytes a character, and no case to fold: Rust stores them as given.
+    let wide = |n: usize| "\u{1D54F}".repeat(n);
+    let tags: Vec<String> = (0..20u32)
+        .map(|i| format!("{}{}", wide(31), char::from_u32(0x1D400 + i).unwrap()))
+        .collect();
+    {
+        let mut v = f.vault.lock().unwrap();
+        for i in 0..MAX_MATCHES {
+            let input = ItemInput {
+                tags: Some(tags.clone()),
+                ..item(
+                    &format!("{}{:03}", wide(253), i),
+                    &wide(512),
+                    "pw",
+                    "https://big.example",
+                    None,
+                )
+            };
+            let staged = v.stage_create(input, NOW).unwrap();
+            v.commit_write(staged, 10 + i as i64).unwrap();
+        }
+    }
+    let out = f.bridge.handle_frame(&request(
+        1,
+        serde_json::json!({"type": "find_matches", "url": "https://big.example/"}),
+    ));
+    let bytes = out.to_bytes().unwrap();
+    assert!(bytes.len() <= MAX_RESPONSE_BYTES, "{} bytes", bytes.len());
+    let mut wire = Vec::new();
+    write_frame(&mut wire, &bytes, MAX_RESPONSE_BYTES).expect("the answer is framed");
+    // The native host accepts it, and every login is still suggested.
+    assert!(Outgoing::parse(&bytes).is_some());
+    let resp: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let matches = resp["result"]["matches"].as_array().unwrap();
+    assert_eq!(matches.len(), MAX_MATCHES);
+    assert_eq!(matches[0]["tags"].as_array().unwrap().len(), 20);
+    assert_eq!(matches[MAX_MATCHES - 1]["tags"], serde_json::json!([]));
+}
+
 /// A1: asking for the github.com login from another site is denied.
 #[test]
 fn a1_wrong_origin_denied() {

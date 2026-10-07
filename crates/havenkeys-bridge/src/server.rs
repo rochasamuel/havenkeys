@@ -153,7 +153,7 @@ impl Bridge {
             Err(rejection) => return rejection.response().into(),
         };
         match self.handle(&env.request) {
-            Ok(result) => Response::ok(env.id, result).into(),
+            Ok(result) => fit_frame(Response::ok(env.id, result)).into(),
             Err(code) => Response::err(Some(env.id), code).into(),
         }
     }
@@ -356,6 +356,45 @@ impl Bridge {
     fn forget(&self, id: u64) {
         guard(&self.inner.connections).retain(|(c, _)| *c != id);
     }
+}
+
+/// Bytes `response` takes on the wire, counted without keeping a copy.
+fn wire_len(response: &Response) -> usize {
+    struct Count(usize);
+    impl io::Write for Count {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0 += buf.len();
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    match serde_json::to_writer(&mut count, response) {
+        Ok(()) => count.0,
+        Err(_) => usize::MAX,
+    }
+}
+
+/// A `find_matches` answer too big for one frame (50 logins with the
+/// longest titles, usernames and 20 tags each) loses tags, last match
+/// first, until it fits: tags are only labels, and a frame over
+/// `MAX_RESPONSE_BYTES` would cost the extension its connection.
+fn fit_frame(mut response: Response) -> Response {
+    if !matches!(response.result, Some(ResultBody::FindMatches { .. })) {
+        return response;
+    }
+    while wire_len(&response) > MAX_RESPONSE_BYTES {
+        let Some(ResultBody::FindMatches { matches }) = &mut response.result else {
+            break;
+        };
+        match matches.iter_mut().rev().find(|m| !m.tags.is_empty()) {
+            Some(m) => m.tags.clear(),
+            None => break,
+        }
+    }
+    response
 }
 
 /// Which rate-limit bucket a request spends from. `status` spends nothing;

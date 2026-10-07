@@ -11,10 +11,11 @@ publish = false
 havenkeys-core = { path = "../havenkeys-core" }
 havenkeys-protocol = { path = "../havenkeys-protocol" }
 interprocess = "2.4"
+# Measures a find_matches answer before it is framed (already in the tree via havenkeys-protocol).
+serde_json = "1"
 uuid = "1.20"
 zeroize = "1.9"
 
 [dev-dependencies]
-serde_json = "1"
 tempfile = "3"
 uuid = { version = "1.20", features = ["v4"] }
