@@ -1432,7 +1432,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_create_unlock_bundle() and 0xFFFF) != 11120) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_password() and 0xFFFF) != 3378) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_password() and 0xFFFF) != 27098) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_with_bundle() and 0xFFFF) != 42943) {
