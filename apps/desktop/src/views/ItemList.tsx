@@ -27,6 +27,23 @@ interface Props {
   onSelectAccount: () => void;
 }
 
+/** An item's avatar: its monogram, or its type's glyph; `large` for a detail header. */
+export function ItemAvatar({ item, large = false }: { item: ItemOverview; large?: boolean }) {
+  return (
+    <span className={`avatar${large ? " avatar-lg" : ""} avatar-${item.itemType}`} aria-hidden="true">
+      {item.itemType === "secure_note" ? (
+        <Icon name="note" size={large ? 26 : 15} />
+      ) : item.itemType === "identity" ? (
+        <Icon name="idCard" size={large ? 26 : 16} />
+      ) : item.itemType === "card" ? (
+        <CardBrandLogo brand={item.card?.brand ?? "other"} width={large ? 46 : 26} />
+      ) : (
+        monogram(item.title)
+      )}
+    </span>
+  );
+}
+
 export function ItemList({
   items,
   query,
@@ -170,17 +187,7 @@ export function ItemList({
                   aria-current={item.id === selectedId ? "true" : undefined}
                   onClick={() => onSelect(item.id)}
                 >
-                  <span className={`avatar avatar-${item.itemType}`} aria-hidden="true">
-                    {item.itemType === "secure_note" ? (
-                      <Icon name="note" size={15} />
-                    ) : item.itemType === "identity" ? (
-                      <Icon name="idCard" size={16} />
-                    ) : item.itemType === "card" ? (
-                      <CardBrandLogo brand={item.card?.brand ?? "other"} width={26} />
-                    ) : (
-                      monogram(item.title)
-                    )}
-                  </span>
+                  <ItemAvatar item={item} />
                   <span className="list-item-text">
                     {/* User data may be cut with an ellipsis (data-truncate); our own words never are. */}
                     <span className="list-item-title" data-truncate="">

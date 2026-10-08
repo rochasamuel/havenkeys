@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const healthReport = vi.fn();
 const listItems = vi.fn();
 const accountStatus = vi.fn();
+const trashItem = vi.fn();
+const restoreItem = vi.fn();
+const listTrash = vi.fn();
 let itemsChangedListener: (() => void) | null = null;
 
 // Every other command answers null; event subscriptions return an unlisten.
@@ -15,6 +18,9 @@ vi.mock("../lib/api", async (importOriginal) => {
     healthReport: (...a: unknown[]) => healthReport(...a),
     listItems: (...a: unknown[]) => listItems(...a),
     accountStatus: () => accountStatus(),
+    trashItem: (...a: unknown[]) => trashItem(...a),
+    restoreItem: (...a: unknown[]) => restoreItem(...a),
+    listTrash: () => listTrash(),
     onItemsChanged: (cb: () => void) => {
       itemsChangedListener = cb;
       return Promise.resolve(() => undefined);
@@ -34,6 +40,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 });
 
 import { VaultScreen } from "./VaultScreen";
+import { ToastProvider } from "../components/Toast";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -52,6 +59,9 @@ beforeEach(() => {
   healthReport.mockReset().mockResolvedValue(emptyReport);
   listItems.mockReset().mockResolvedValue([]);
   accountStatus.mockReset().mockResolvedValue(null);
+  trashItem.mockReset().mockResolvedValue(true);
+  restoreItem.mockReset();
+  listTrash.mockReset().mockResolvedValue([]);
   itemsChangedListener = null;
   host = document.createElement("div");
   document.body.append(host);
@@ -220,5 +230,61 @@ describe("VaultScreen tags", () => {
     click(navButton("staging"));
     await settle();
     expect(host.querySelector(".list")!.textContent).not.toContain("HavenKeys Account");
+  });
+});
+
+describe("VaultScreen Trash", () => {
+  const github = overview("11111111-1111-4111-8111-111111111111", "GitHub", []);
+
+  async function mountSelected() {
+    listItems.mockResolvedValue([github]);
+    act(() =>
+      root.render(
+        <ToastProvider>
+          <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} onLock={() => undefined} />
+        </ToastProvider>,
+      ),
+    );
+    await settle();
+    click([...host.querySelectorAll<HTMLElement>(".list button")].find((b) => b.textContent?.includes("GitHub")));
+    await settle();
+  }
+  const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === label);
+  const toastText = () => host.ownerDocument.querySelector(".toast")?.textContent ?? "";
+
+  it("Delete moves the item to the Trash with an Undo that restores it", async () => {
+    restoreItem.mockResolvedValue(github);
+    await mountSelected();
+    click(host.querySelector(".item-foot .btn-quiet-danger"));
+    await settle();
+    // No confirm first: the Trash is the safety net.
+    expect(trashItem).toHaveBeenCalledWith(github.id);
+    expect(toastText()).toContain("Moved “GitHub” to Trash.");
+    click(button("Undo"));
+    await settle();
+    expect(restoreItem).toHaveBeenCalledWith(github.id);
+    expect(host.querySelector(".item-title")?.textContent).toBe("GitHub");
+  });
+
+  it("says Deleted when the item could not be trashed", async () => {
+    trashItem.mockResolvedValue(false);
+    await mountSelected();
+    click(host.querySelector(".item-foot .btn-quiet-danger"));
+    await settle();
+    expect(trashItem).toHaveBeenCalledWith(github.id);
+    expect(toastText()).toContain("Deleted “GitHub”.");
+    expect(button("Undo")).toBeUndefined();
+  });
+
+  it("shows Trash in the sidebar with a count only when not empty", async () => {
+    await mountSelected();
+    expect(navButton("Trash")).toBeTruthy();
+    expect(navButton("Trash")!.querySelector(".nav-count")).toBeNull();
+
+    listTrash.mockResolvedValue([{ ...github, trashedAt: Date.now(), daysLeft: 30 }]);
+    listItems.mockResolvedValue([]);
+    click(host.querySelector(".item-foot .btn-quiet-danger"));
+    await settle();
+    expect(navButton("Trash")!.querySelector(".nav-count")?.textContent).toBe("1");
   });
 });

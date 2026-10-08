@@ -44,6 +44,7 @@ import type {
   SsoProvider,
   SyncReport,
   TotpCode,
+  TrashEntry,
   UpdateStatus,
   VaultStatus,
 } from "./types";
@@ -126,7 +127,12 @@ export const api = {
   scanTotpQr: () => call<ScannedTotp[]>("scan_totp_qr"),
   createItem: (input: ItemInput) => call<ItemOverview>("create_item", { input }),
   updateItem: (id: string, input: ItemInput) => call<ItemOverview>("update_item", { id, input }),
-  deleteItem: (id: string) => call<void>("delete_item", { id }),
+  /** Moves the item to the Trash; `false` when it was deleted for good (its details did not open). */
+  trashItem: (id: string) => call<boolean>("trash_item", { id }),
+  restoreItem: (id: string) => call<ItemOverview>("restore_item", { id }),
+  purgeItem: (id: string) => call<void>("purge_item", { id }),
+  emptyTrash: () => call<number>("empty_trash"),
+  listTrash: () => call<TrashEntry[]>("list_trash"),
 
   generate: (options: GeneratorOptions) => call<GeneratedPassword>("generate_password", { options }),
   copyGenerated: (value: string) => call<CopyResult>("copy_generated_password", { value }),

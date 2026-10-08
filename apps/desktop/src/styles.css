@@ -2626,6 +2626,63 @@ button.tag-chip:hover {
   padding: 20px 4px;
 }
 
+/* ----------------------------------------------------------------- trash */
+
+/* The Trash keeps the vault's list and detail columns; only overviews. */
+.trash-explain {
+  flex: none;
+  margin: -4px 0 8px;
+  padding: 0 18px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.trash-confirm {
+  flex: none;
+  margin: 0 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--group-line);
+  border-radius: 12px;
+  background: var(--group);
+}
+
+.trash-status {
+  padding: 20px 18px;
+}
+
+/* Our own words: they wrap rather than end in an ellipsis. */
+.trash-when {
+  margin-top: 1px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+}
+
+/* A state marker, so a pill (DESIGN.md, Chips), led by the passkey glyph. */
+.trash-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 1px 9px 1px 7px;
+  font-size: 11.5px;
+  color: var(--tag-ink);
+}
+
+.trash-restore-first {
+  margin: 18px 0 14px;
+  max-width: 60ch;
+  color: var(--muted);
+}
+
+.trash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ------------------------------------------------------------- generator */
 
 /* Tools take the list and detail columns together, centred at reading width. */
@@ -3069,6 +3126,34 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 
 .toast-error svg {
   color: var(--danger);
+}
+
+/* Undo and the like: a text button in brass ink. The glass is dark in both
+   themes, so brass-hi reads on it in light mode too. The region ignores the
+   pointer; the button takes it back. */
+.toast-action {
+  flex: none;
+  height: 26px;
+  margin: -4px -8px -4px 4px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--brass-hi);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: auto;
+  transition:
+    background-color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.toast-action:hover {
+  background: var(--brass-soft);
+}
+
+.toast-action:active {
+  transform: scale(0.97);
 }
 
 .toast.is-leaving {

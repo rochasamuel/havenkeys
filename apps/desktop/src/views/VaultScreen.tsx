@@ -20,11 +20,12 @@ import { ItemEditor } from "./ItemEditor";
 import { GeneratorView } from "./GeneratorView";
 import { SettingsView } from "./SettingsView";
 import { HealthView } from "./HealthView";
+import { TrashView } from "./TrashView";
 import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 import type { Messages } from "../i18n/en";
 
-export type Section = "all" | "login" | "secure_note" | "card" | "health" | "generator" | "settings";
+export type Section = "all" | "login" | "secure_note" | "card" | "health" | "generator" | "settings" | "trash";
 
 type Pane =
   | { kind: "empty" }
@@ -73,6 +74,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   // component on lock. Never written to browser storage.
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  // How many items are in the Trash, for the sidebar. Overviews only.
+  const [trashCount, setTrashCount] = useState(0);
 
   // The account's one Identity: created on this or another device at
   // connect, so it may appear later through a sync.
@@ -120,18 +123,29 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     }
   }, [query, toast, t]);
 
-  // The report is reloaded when the items change (a save, a delete, an
-  // import, a sync, the extension), never from the search box: the query
-  // only filters the list, so a keystroke must not recompute the report.
+  // A failure keeps the last known count.
+  const loadTrashCount = useCallback(() => {
+    api.listTrash().then(
+      (list) => setTrashCount(list.length),
+      () => undefined,
+    );
+  }, []);
+
+  // The report and the Trash count are reloaded when the items change (a
+  // save, a delete, an import, a sync, the extension), never from the
+  // search box: the query only filters the list, so a keystroke must not
+  // recompute the report.
   const itemsChanged = useCallback(() => {
     void refresh();
     void loadHealth();
-  }, [refresh, loadHealth]);
+    loadTrashCount();
+  }, [refresh, loadHealth, loadTrashCount]);
 
-  // Once on unlock, for the sidebar badge.
+  // Once on unlock, for the sidebar badges.
   useEffect(() => {
     void loadHealth();
-  }, [loadHealth]);
+    loadTrashCount();
+  }, [loadHealth, loadTrashCount]);
 
   // Opening the view checks again: a password changed elsewhere since.
   useEffect(() => {
@@ -177,7 +191,10 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       const ref =
         pane.kind === "new" ? { kind: "new" as const } : pane.kind === "account" ? { kind: "empty" as const } : pane;
       const editorShown =
-        sectionRef.current !== "generator" && sectionRef.current !== "settings" && sectionRef.current !== "health";
+        sectionRef.current !== "generator" &&
+        sectionRef.current !== "settings" &&
+        sectionRef.current !== "health" &&
+        sectionRef.current !== "trash";
       switch (decideOpen(ref, editorDirtyRef.current, id, editorShown)) {
         case "already":
           return;
@@ -245,6 +262,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       await refreshUnreadable();
       await refresh();
       void loadHealth();
+      loadTrashCount();
     } catch (e) {
       toast(errorMessage(e, t, t.vault.redownloadFailed), "error");
     } finally {
@@ -270,7 +288,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   const selectedId = pane.kind === "view" || pane.kind === "edit" ? pane.id : null;
   const selected = allItems.find((i) => i.id === selectedId) ?? null;
-  const isToolSection = section === "generator" || section === "settings" || section === "health";
+  const isToolSection = section === "generator" || section === "settings" || section === "health" || section === "trash";
 
   async function lock() {
     try {
@@ -288,13 +306,30 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
 
   async function onDelete(item: ItemOverview) {
     try {
-      await api.deleteItem(item.id);
+      const trashed = await api.trashItem(item.id);
       setPane({ kind: "empty" });
-      await refresh();
-      void loadHealth();
-      toast(t.vault.deleted(item.title));
+      itemsChanged();
+      if (trashed) {
+        toast(t.vault.movedToTrash(item.title), "info", {
+          label: t.vault.undo,
+          onClick: () => void undoTrash(item),
+        });
+      } else {
+        // Its details did not open, so it could not be kept in the Trash.
+        toast(t.vault.deleted(item.title));
+      }
     } catch (e) {
       toast(errorMessage(e, t, t.vault.deleteFailed), "error");
+    }
+  }
+
+  async function undoTrash(item: ItemOverview) {
+    try {
+      const back = await api.restoreItem(item.id);
+      itemsChanged();
+      setPane({ kind: "view", id: back.id });
+    } catch (e) {
+      toast(errorMessage(e, t, t.trash.restoreFailed), "error");
     }
   }
 
@@ -432,6 +467,15 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
               <Icon name="gear" size={17} />
               <span>{t.vault.settings}</span>
             </button>
+            <button
+              className="nav-item"
+              aria-current={section === "trash" ? "page" : undefined}
+              onClick={() => pickSection("trash")}
+            >
+              <Icon name="trash" size={17} />
+              <span>{t.vault.trash}</span>
+              {trashCount > 0 && <span className="nav-count">{trashCount}</span>}
+            </button>
           </nav>
 
           <footer className="sidebar-foot">
@@ -473,6 +517,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
         )}
         {section === "generator" && <GeneratorView />}
         {section === "settings" && <SettingsView onImported={itemsChanged} online={!readOnly} />}
+        {section === "trash" && <TrashView readOnly={readOnly} revision={revision} onChanged={itemsChanged} />}
 
         {!isToolSection && (
           <>

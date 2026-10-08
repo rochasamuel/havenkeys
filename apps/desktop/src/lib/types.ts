@@ -79,6 +79,14 @@ export interface ItemOverview {
   card?: CardSummary;
   createdAt: number;
   updatedAt: number;
+  /** When the item went to the Trash (Unix ms); only on Trash entries. */
+  trashedAt?: number;
+}
+
+/** An item in the Trash: its overview and the whole days left (0–30). */
+export interface TrashEntry extends ItemOverview {
+  trashedAt: number;
+  daysLeft: number;
 }
 
 /** A passkey saved on a login. Public details only. */

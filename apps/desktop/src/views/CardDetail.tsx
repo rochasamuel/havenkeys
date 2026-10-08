@@ -93,7 +93,6 @@ export function CardDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
   const { t, dateLocale } = useI18n();
   const [view, setView] = useState<CardView | null>(null);
   const [failed, setFailed] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const brand = item.card?.brand ?? "other";
 
   useEffect(() => {
@@ -220,21 +219,9 @@ export function CardDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
         <p className="muted">
           {t.detail.dates(formatDate(item.createdAt, dateLocale), formatDate(item.updatedAt, dateLocale))}
         </p>
-        {confirmDelete ? (
-          <div className="confirm">
-            <span>{t.detail.confirmDelete(item.title)}</span>
-            <button className="btn btn-small" onClick={() => setConfirmDelete(false)}>
-              {t.common.keep}
-            </button>
-            <button className="btn btn-small btn-danger" onClick={onDelete}>
-              {t.common.delete}
-            </button>
-          </div>
-        ) : (
-          <button className="btn btn-small btn-quiet-danger" onClick={() => setConfirmDelete(true)} disabled={readOnly}>
-            <Icon name="trash" size={15} /> {t.common.delete}
-          </button>
-        )}
+        <button className="btn btn-small btn-quiet-danger" onClick={onDelete} disabled={readOnly}>
+          <Icon name="trash" size={15} /> {t.common.delete}
+        </button>
       </footer>
     </article>
   );
