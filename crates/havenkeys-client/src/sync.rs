@@ -65,7 +65,13 @@ impl HavenClient {
             let epoch = vault.epoch();
             drop(vault);
             let server = self.server_for(&account.server_url)?;
-            (account.email, account.account_id, self.device_id()?, server, epoch)
+            (
+                account.email,
+                account.account_id,
+                self.device_id()?,
+                server,
+                epoch,
+            )
         };
 
         let session = server
@@ -210,9 +216,9 @@ impl HavenClient {
             // cursor would spin this loop forever.
             if !has_more || next <= cursor {
                 if from_zero && !has_more {
-                    let dropped = self
-                        .vault()?
-                        .drop_items_the_server_lacks(&held, &seen, now_ms())?;
+                    let dropped =
+                        self.vault()?
+                            .drop_items_the_server_lacks(&held, &seen, now_ms())?;
                     report.deleted += dropped.deleted;
                 }
                 break;
@@ -349,7 +355,11 @@ mod tests {
     fn open_account_vault_with_key(
         client: &HavenClient,
         server_url: &str,
-    ) -> (AuthKey, havenkeys_core::crypto::secret_key::SecretKey, AccountRef) {
+    ) -> (
+        AuthKey,
+        havenkeys_core::crypto::secret_key::SecretKey,
+        AccountRef,
+    ) {
         let account = AccountRef::new(
             Uuid::from_u128(1),
             NormalizedEmail::parse("user@example.com").unwrap(),

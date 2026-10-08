@@ -404,7 +404,11 @@ async fn a_restored_server_drops_items_it_no_longer_has() {
         .unwrap();
     until(|| a.is_online()).await;
     let now = havenkeys_client::now_ms;
-    let staged = a.vault().unwrap().stage_create(login("Kept"), now()).unwrap();
+    let staged = a
+        .vault()
+        .unwrap()
+        .stage_create(login("Kept"), now())
+        .unwrap();
     a.push(staged).await.unwrap();
     a.sync_now().await.unwrap();
 
@@ -414,7 +418,11 @@ async fn a_restored_server_drops_items_it_no_longer_has() {
         .await
         .unwrap()
         .get(0);
-    let staged = a.vault().unwrap().stage_create(login("Ghost"), now()).unwrap();
+    let staged = a
+        .vault()
+        .unwrap()
+        .stage_create(login("Ghost"), now())
+        .unwrap();
     a.push(staged).await.unwrap();
     a.sync_now().await.unwrap();
 
@@ -441,7 +449,11 @@ async fn a_restored_server_drops_items_it_no_longer_has() {
     assert!(!titles(&a).contains(&"Ghost".to_string()));
 
     // Writing works again, at revisions the device had seen before.
-    let staged = a.vault().unwrap().stage_create(login("After"), now()).unwrap();
+    let staged = a
+        .vault()
+        .unwrap()
+        .stage_create(login("After"), now())
+        .unwrap();
     a.push(staged).await.unwrap();
     a.sync_now().await.unwrap();
     assert!(titles(&a).contains(&"After".to_string()));
