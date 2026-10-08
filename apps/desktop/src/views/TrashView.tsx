@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { TrashEntry } from "../lib/types";
 import { cardSubtitle } from "../lib/card";
+import { syncAfterConflict } from "../lib/conflict";
 import { Field } from "../components/Field";
 import { Icon } from "../components/Icon";
 import { Seal } from "../components/Seal";
@@ -77,12 +78,15 @@ export function TrashView({ readOnly, revision, onChanged }: Props) {
     try {
       await run();
       setConfirm(null);
-      onChanged();
     } catch (e) {
       toast(errorMessage(e, t, fallback), "error");
+      // Restored or deleted on another device meanwhile: the sync removes it here.
+      await syncAfterConflict(e);
     } finally {
       setBusy(false);
-      // Restored or deleted on another device meanwhile: show what is left.
+      // Even a failed Empty Trash may have deleted some items: reload the
+      // vault and the count, and show what is left.
+      onChanged();
       void load();
     }
   }

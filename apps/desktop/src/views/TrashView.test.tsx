@@ -8,7 +8,8 @@ const listTrash = vi.fn<() => Promise<TrashEntry[]>>();
 const restoreItem = vi.fn();
 const purgeItem = vi.fn();
 const emptyTrash = vi.fn();
-// Only the five Trash calls exist: any secret fetch would throw.
+const syncNow = vi.fn();
+// Only the Trash calls and a sync exist: any secret fetch would throw.
 vi.mock("../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/api")>()),
   api: {
@@ -17,9 +18,11 @@ vi.mock("../lib/api", async (importOriginal) => ({
     purgeItem: (id: string) => purgeItem(id),
     emptyTrash: () => emptyTrash(),
     trashItem: () => Promise.reject(new Error("not used here")),
+    syncNow: () => syncNow(),
   },
 }));
 
+import { ApiError } from "../lib/api";
 import { ToastProvider } from "../components/Toast";
 import { TrashView } from "./TrashView";
 
@@ -68,6 +71,7 @@ beforeEach(() => {
   restoreItem.mockReset().mockResolvedValue({ ...entry, trashedAt: undefined });
   purgeItem.mockReset().mockResolvedValue(undefined);
   emptyTrash.mockReset().mockResolvedValue(1);
+  syncNow.mockReset().mockResolvedValue({});
   onChanged.mockReset();
   host = document.createElement("div");
   document.body.append(host);
@@ -125,6 +129,36 @@ describe("TrashView", () => {
     expect(emptyTrash).not.toHaveBeenCalled();
     await click([...confirm.querySelectorAll("button")].find((b) => b.textContent === "Delete"));
     expect(emptyTrash).toHaveBeenCalled();
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("syncs when another device already deleted the item, keeping the message", async () => {
+    restoreItem.mockRejectedValue(new ApiError("item_changed_elsewhere", "Item changed elsewhere."));
+    await render();
+    await select();
+    listTrash.mockResolvedValue([]);
+    await click(button("Restore"));
+    expect(syncNow).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".toast")?.textContent).toContain("This item changed on another device.");
+    expect(onChanged).toHaveBeenCalled();
+    expect(host.querySelector(".list")!.textContent).toContain("Trash is empty.");
+  });
+
+  it("does not sync for any other failure", async () => {
+    purgeItem.mockRejectedValue(new ApiError("offline", "Offline."));
+    await render();
+    await select();
+    await click(button("Delete permanently"));
+    await click([...host.querySelectorAll(".confirm button")].find((b) => b.textContent === "Delete"));
+    expect(syncNow).not.toHaveBeenCalled();
+  });
+
+  it("reloads the counts after an Empty Trash that failed part way", async () => {
+    emptyTrash.mockRejectedValue(new ApiError("item_changed_elsewhere", "Item changed elsewhere."));
+    await render();
+    await click(button("Empty Trash"));
+    await click([...host.querySelectorAll(".confirm button")].find((b) => b.textContent === "Delete"));
+    expect(syncNow).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalled();
   });
 

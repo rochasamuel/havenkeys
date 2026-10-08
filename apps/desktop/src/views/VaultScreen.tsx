@@ -6,6 +6,7 @@ import { VaultTagsProvider } from "../lib/vaultTags";
 import { totalIssues } from "../lib/health";
 import { showAccountItem } from "../lib/accountItem";
 import { decideOpen } from "../lib/openItem";
+import { syncAfterConflict } from "../lib/conflict";
 import { Icon, type IconName } from "../components/Icon";
 import { Seal } from "../components/Seal";
 import { useToast } from "../components/Toast";
@@ -330,6 +331,9 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       setPane({ kind: "view", id: back.id });
     } catch (e) {
       toast(errorMessage(e, t, t.trash.restoreFailed), "error");
+      // Already deleted for good on another device: the sync removes it here.
+      await syncAfterConflict(e);
+      itemsChanged();
     }
   }
 
