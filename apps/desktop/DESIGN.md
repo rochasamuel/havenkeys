@@ -396,9 +396,9 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 - **Copy button:** the copy glyph cross-fades and scales into a green check, then back.
 
 ### Chips
-- **Pill:** 999px, brass-soft ground, brass-ink text, 11px 600: device and state markers.
+- **Pill:** 999px, brass-soft ground, brass-ink text, 11px 600: device and state markers, and tags (below).
 - **Match chip:** outlined pill (line-strong), 11.5px muted: how a URL matches ("Whole site").
-- **Tag chip:** the match chip's outline and size; in the editor it carries a 16px × to remove it; in the detail it leads with a 12px tag glyph (so it never reads as one of the vault-health chips above it) and is a button that selects the tag in the sidebar. Never brass-filled, never mono, no colour per tag.
+- **Tag chip:** the brass pill (brass-soft ground, brass-ink text, 600, no outline) at the match chip's size, 11.5px; tags and the outlined vault-health chips differ by colour. In the editor it carries a 16px × in the same ink to remove it; in the detail it leads with a 12px tag glyph and is a button that selects the tag in the sidebar, its ground strengthening to sel-strong on hover, with the app's focus ring. A tag shows the spelling the user gave ("Dev Team"); "Work" and "work" are one tag, and the vault keeps the first spelling. Never mono, no colour per tag.
 
 ### Cards / Containers
 - **Inset group:** 12px radius, group ground, 1px group-line border, rows inside separated by group-line hairlines; overflow clipped so row highlights meet the corners.
@@ -411,12 +411,12 @@ Gently rounded, sized to the object: 7px small controls and sidebar rows, 8px bu
 - **Form fields (welcome, settings):** 36 to 40px, 9px radius, field ground; focus as above with a 3px halo.
 - **Switch:** 38 x 22 track, line-strong off, brass on; white thumb that stretches while pressed.
 - **Segmented:** field track, 9px radius; selected segment raised with a hairline and a small shadow.
-- **Tags row (editor):** one editor row labelled Tags: the item's tag chips, then a bare "Add tag" input (Row Is the Field). Typing lists matching vault tags with counts, plus "Create “…”", in the row's own flow (raised ground, 11px radius) because the group clips anything floating. No suggestion is active until an arrow key picks one, so Enter adds what was typed; comma and leaving the field add too; Backspace in an empty field removes the last chip. A tag Rust would refuse (over 32 characters, a control character) stays in the field, which is marked invalid, with an ember 12.5px line under it in the row saying why, never echoing the text; it clears as soon as the text changes. A tag the item already has just empties the field. At 20 tags the input gives way to a muted "20 tags is the limit."
+- **Tags row (editor):** one editor row labelled Tags: the item's tag chips, then a bare "Add tag" input (Row Is the Field). Focusing the empty field opens the vault's other tags right away, most used first (then A–Z), up to 8, with no "Create" row; picking one keeps the list open for the next, Escape in the empty field closes it, and with no other tags there is no list. Typing lists matching vault tags with counts (without case), plus "Create “…”", in the row's own flow (raised ground, 11px radius) because the group clips anything floating. No suggestion is active until an arrow key picks one, so Enter adds what was typed; comma and leaving the field add too; Backspace in an empty field removes the last chip. A tag Rust would refuse (over 32 characters, a control character) stays in the field, which is marked invalid, with an ember 12.5px line under it in the row saying why, never echoing the text; it clears as soon as the text changes. A tag the item already has, in any case, just empties the field; a typed tag the vault spells differently takes the vault's spelling. At 20 tags the input gives way to a muted "20 tags is the limit."
 
 ### Navigation
 The sidebar: brand row with the mark at 22px, a translucent search field (brass halo on focus), sentence-case section headings, 32px nav rows at 7px radius with muted icons and tabular counts. The current row takes the brass wash with bright text and a brass-hi icon. The footer always shows sync state (cloud icon, green or ember) and a lock button with its shortcut (Ctrl L / ⌘L); the lock icon tilts on hover.
 
-A **Tags** section, when any item has a tag, lists each tag A–Z as a nav row with a tag glyph and count; it is a filter like the categories. Selecting one makes it the current row and the list head's title; the section disappears when no item has a tag, and a selected tag that disappears falls back to All items.
+A **Tags** section, when any item has a tag, lists each tag A–Z (without case) as a nav row with a brass-hi tag glyph and count, text and count in the side inks; it is a filter like the categories. Selecting one makes it the current row and the list head's title; the section disappears when no item has a tag, and a selected tag that disappears falls back to All items.
 
 ### Toast
 A glass pill centred 22px above the bottom: blurred dark ground in both themes, bright text, a green check or ember alert, lift shadow; rises in and falls away.

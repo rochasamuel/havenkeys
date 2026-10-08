@@ -803,7 +803,8 @@ input::-ms-clear {
   color: #f3f7f5;
 }
 
-.nav-item[aria-current="page"] svg {
+.nav-item[aria-current="page"] svg,
+.nav-item.nav-tag svg {
   color: var(--brass-hi);
 }
 
@@ -2356,9 +2357,15 @@ input::-ms-clear {
   min-width: 0;
 }
 
+/* A tag is the system brass pill at the chip's size: brass wash, brass ink (which darkens in
+   light theme), no outline, so it never reads as one of the outlined vault-health chips. */
 .tag-chip {
   gap: 2px;
   padding-right: 4px;
+  border-color: transparent;
+  background: var(--brass-soft);
+  color: var(--brass-ink);
+  font-weight: 600;
 }
 
 .detail-tags {
@@ -2373,14 +2380,13 @@ input::-ms-clear {
 button.tag-chip {
   gap: 4px;
   cursor: pointer;
-  background: transparent;
   padding: 1px 9px 1px 7px;
   font-family: inherit;
+  transition: background-color var(--t-fast) var(--ease);
 }
 
 button.tag-chip:hover {
-  color: var(--text-strong);
-  border-color: var(--muted);
+  background: var(--sel-strong);
 }
 
 .tag-remove {
@@ -2392,13 +2398,12 @@ button.tag-chip:hover {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--muted);
+  color: inherit;
   cursor: pointer;
 }
 
 .tag-remove:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--text-strong);
+  background: var(--sel-strong);
 }
 
 .tags-input {

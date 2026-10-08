@@ -97,8 +97,8 @@ const items = [
 
 // Tags (Rust always sends the field): two shared, one on a single item.
 const TAGS = {
-  "7c9e6679-7425-40de-944b-e07fc1f90ae7": ["development", "work"],
-  "11111111-2222-4333-8444-555555555555": ["production", "work"],
+  "7c9e6679-7425-40de-944b-e07fc1f90ae7": ["Development", "Work"],
+  "11111111-2222-4333-8444-555555555555": ["Production", "Work"],
 };
 for (const item of items) item.tags = TAGS[item.id] ?? [];
 
@@ -458,7 +458,7 @@ export const desktopScenarios = [
     name: "vault-tag-selected",
     respond: {},
     async act(page) {
-      // After the four categories and the Identity row: development, production, work.
+      // After the four categories and the Identity row: Development, Production, Work.
       await page.click(nav(8));
       await page.waitForTimeout(200);
     },
@@ -676,6 +676,20 @@ export const desktopScenarios = [
       await page.waitForTimeout(200);
       await page.fill(".tags-input", "pro");
       await page.mouse.move(0, 0); // no hover: only an arrow key marks a suggestion
+      await page.waitForTimeout(150);
+      await scrollTool(page, ".tags-edit");
+    },
+  },
+  {
+    name: "editor-tags-focus",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+      await page.focus(".tags-input"); // empty field: the most used vault tags open at once
+      await page.mouse.move(0, 0);
       await page.waitForTimeout(150);
       await scrollTool(page, ".tags-edit");
     },
