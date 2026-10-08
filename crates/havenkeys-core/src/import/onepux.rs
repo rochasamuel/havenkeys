@@ -991,7 +991,7 @@ mod tests {
             !notes.contains("Sign in with Google"),
             "ssoLogin no longer falls through to notes"
         );
-        assert_eq!(gh.input.tags, Some(vec!["work".to_string()]));
+        assert_eq!(gh.input.tags, Some(vec!["Work".to_string()]));
         assert!(
             notes.contains("Tags: a,b"),
             "a tag that cannot be one stays in the notes"

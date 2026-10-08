@@ -1277,7 +1277,7 @@ impl VaultService {
                     || i.username
                         .as_deref()
                         .is_some_and(|u| u.to_lowercase().contains(&q))
-                    || i.tags.iter().any(|t| t.contains(&q))
+                    || i.tags.iter().any(|t| t.to_lowercase().contains(&q))
                     || i.urls.iter().any(|r| {
                         url::Url::parse(&r.url)
                             .ok()
@@ -1979,14 +1979,52 @@ impl VaultService {
             .ok_or(Error::NotFound)
     }
 
+    /// The one path every item write is sealed through (create, update,
+    /// import, restore, and the extension's and phone's saves).
     pub(crate) fn stage(
         &self,
         overview: ItemOverview,
         details: Option<&ItemDetails>,
         base_revision: Option<i64>,
     ) -> Result<StagedWrite> {
+        self.stage_in_batch(overview, details, base_revision, &mut HashMap::new())
+    }
+
+    /// [`stage`](Self::stage) for one of many writes sent together (an
+    /// import, a restore): `batch` carries the tag spellings the earlier
+    /// writes of the batch stored, since the replica does not hold them yet.
+    pub(crate) fn stage_in_batch(
+        &self,
+        mut overview: ItemOverview,
+        details: Option<&ItemDetails>,
+        base_revision: Option<i64>,
+        batch: &mut HashMap<String, String>,
+    ) -> Result<StagedWrite> {
         let session = self.session()?;
         let id = overview.id;
+        if !overview.tags.is_empty() {
+            // A tag another item already has keeps that item's spelling, so
+            // the vault holds one spelling per tag. The item itself is left
+            // out: the only item with a tag may change its case.
+            let mut spellings = HashMap::new();
+            for other in session.overviews.values().filter(|o| o.id != id) {
+                for t in &other.tags {
+                    spellings
+                        .entry(crate::tags::key(t))
+                        .or_insert_with(|| t.clone());
+                }
+            }
+            for (k, t) in batch.iter() {
+                spellings.entry(k.clone()).or_insert_with(|| t.clone());
+            }
+            overview.tags =
+                crate::tags::canonicalize(std::mem::take(&mut overview.tags), &spellings);
+            for t in &overview.tags {
+                batch
+                    .entry(crate::tags::key(t))
+                    .or_insert_with(|| t.clone());
+            }
+        }
         let ov_blob = seal_json(
             &session.data_key,
             &BlobContext::item(Purpose::ItemOverview, session.vault_id, id),
@@ -2028,6 +2066,7 @@ impl VaultService {
         // entries inside the export itself are imported as they are.
         let (existing, mut upgrade) = self.dedupe_index()?;
         let mut writes = Vec::new();
+        let mut spellings = HashMap::new();
         report.logins = 0;
         report.secure_notes = 0;
         report.cards = 0;
@@ -2067,7 +2106,7 @@ impl VaultService {
                 continue;
             }
             let item_type = overview.item_type;
-            let staged = self.stage(overview, Some(&details), None)?;
+            let staged = self.stage_in_batch(overview, Some(&details), None, &mut spellings)?;
             match item_type {
                 ItemType::Login => report.logins += 1,
                 ItemType::SecureNote => report.secure_notes += 1,

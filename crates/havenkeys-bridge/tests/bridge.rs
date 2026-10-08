@@ -277,7 +277,7 @@ fn suggestions_carry_the_logins_tags() {
     let f = fixture();
     let m = find(&f, "https://github.com/login");
     let matches = m["result"]["matches"].as_array().unwrap();
-    assert_eq!(matches[0]["tags"], serde_json::json!(["staging"]));
+    assert_eq!(matches[0]["tags"], serde_json::json!(["Staging"]));
     let m = find(&f, "https://bank.example/");
     assert_eq!(m["result"]["matches"][0]["tags"], serde_json::json!([]));
 }

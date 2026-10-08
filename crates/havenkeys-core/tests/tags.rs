@@ -19,11 +19,61 @@ fn tags_are_normalised_and_stored() {
         .stage_create(tagged(&[" Work ", "staging", "WORK"]), NOW)
         .unwrap();
     let ov = vault.commit_write(staged, 1).unwrap().unwrap();
-    assert_eq!(ov.tags, vec!["staging", "work"]);
+    assert_eq!(ov.tags, vec!["staging", "Work"]);
     assert_eq!(
         vault.get_item(&ov.id).unwrap().tags,
-        vec!["staging", "work"]
+        vec!["staging", "Work"]
     );
+}
+
+#[test]
+fn a_tag_keeps_its_case() {
+    let (mut vault, _sk) = activated_vault();
+    let staged = vault.stage_create(tagged(&["Dev Team"]), NOW).unwrap();
+    let ov = vault.commit_write(staged, 1).unwrap().unwrap();
+    assert_eq!(ov.tags, vec!["Dev Team"]);
+}
+
+#[test]
+fn a_new_item_takes_the_spelling_another_item_uses() {
+    let (mut vault, _sk) = activated_vault();
+    let staged = vault.stage_create(tagged(&["Work"]), NOW).unwrap();
+    vault.commit_write(staged, 1).unwrap();
+
+    let mut b = login("GitLab", "me", "pw", "gitlab.com");
+    b.tags = Some(vec!["work".into(), "api".into()]);
+    let staged = vault.stage_create(b, NOW).unwrap();
+    let id = staged.item_id;
+    vault.commit_write(staged, 2).unwrap();
+    assert_eq!(vault.get_item(&id).unwrap().tags, vec!["api", "Work"]);
+
+    // An update takes it too.
+    let mut b2 = login("GitLab", "me", "pw", "gitlab.com");
+    b2.tags = Some(vec!["WORK".into()]);
+    let staged = vault.stage_update(&id, b2, NOW + 1).unwrap();
+    vault.commit_write(staged, 3).unwrap();
+    assert_eq!(vault.get_item(&id).unwrap().tags, vec!["Work"]);
+}
+
+#[test]
+fn the_only_item_with_a_tag_can_change_its_case() {
+    let (mut vault, _sk) = activated_vault();
+    let staged = vault.stage_create(tagged(&["work"]), NOW).unwrap();
+    let id = staged.item_id;
+    vault.commit_write(staged, 1).unwrap();
+
+    let staged = vault.stage_update(&id, tagged(&["Work"]), NOW + 1).unwrap();
+    vault.commit_write(staged, 2).unwrap();
+    assert_eq!(vault.get_item(&id).unwrap().tags, vec!["Work"]);
+}
+
+#[test]
+fn search_matches_tags_without_case() {
+    let (mut vault, _sk) = activated_vault();
+    let staged = vault.stage_create(tagged(&["Work"]), NOW).unwrap();
+    vault.commit_write(staged, 1).unwrap();
+    assert_eq!(vault.search("work").unwrap().len(), 1);
+    assert_eq!(vault.search("WOR").unwrap().len(), 1);
 }
 
 #[test]
@@ -103,4 +153,39 @@ fn an_update_keeps_unknown_overview_fields() {
         .unwrap();
     vault.commit_write(staged, 2).unwrap();
     assert_eq!(vault.get_item(&id).unwrap().extra["fromTheFuture"], true);
+}
+
+#[test]
+fn one_import_stores_one_spelling_per_tag() {
+    use havenkeys_core::import::{ImportReport, ImportedItem};
+    let (mut vault, _sk) = activated_vault();
+    let staged = vault.stage_create(tagged(&["Work"]), NOW).unwrap();
+    vault.commit_write(staged, 1).unwrap();
+
+    let item = |title: &str, host: &str, tags: &[&str]| {
+        let mut input = login(title, "me", "pw", host);
+        input.tags = Some(tags.iter().map(|s| s.to_string()).collect());
+        ImportedItem {
+            input,
+            created_at: None,
+            updated_at: None,
+        }
+    };
+    let staged = vault
+        .stage_import(
+            vec![
+                item("A", "a.example", &["work", "Dev"]),
+                item("B", "b.example", &["dev"]),
+            ],
+            ImportReport::default(),
+            NOW,
+        )
+        .unwrap();
+    let tags: Vec<Vec<String>> = staged
+        .writes
+        .into_iter()
+        .zip(2..)
+        .map(|(w, rev)| vault.commit_write(w, rev).unwrap().unwrap().tags.clone())
+        .collect();
+    assert_eq!(tags, vec![vec!["Dev", "Work"], vec!["Dev"]]);
 }

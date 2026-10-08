@@ -227,6 +227,7 @@ impl VaultService {
         };
         let mut writes = Vec::new();
         let mut seen = std::collections::HashSet::new();
+        let mut spellings = std::collections::HashMap::new();
         for item in backup.items {
             let id = match item.overview.item_type {
                 ItemType::Identity => identity_id,
@@ -253,7 +254,7 @@ impl VaultService {
                 ItemType::Card => report.cards += 1,
                 ItemType::Identity => report.identities += 1,
             }
-            writes.push(self.stage(overview, Some(&details), None)?);
+            writes.push(self.stage_in_batch(overview, Some(&details), None, &mut spellings)?);
         }
         report.imported = writes.len();
         Ok(StagedImport { writes, report })

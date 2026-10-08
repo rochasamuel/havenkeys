@@ -23,12 +23,12 @@ pub(crate) fn split_tags(raw: Vec<String>) -> (Vec<String>, Vec<String>) {
     let mut rejected = Vec::new();
     for value in raw {
         match crate::tags::normalize_one(&value) {
-            Ok(tag) if ok.contains(&tag) => {}
+            Ok(tag) if ok.iter().any(|t| t.to_lowercase() == tag.to_lowercase()) => {}
             Ok(tag) if ok.len() < crate::tags::MAX_TAGS => ok.push(tag),
             _ => rejected.push(value),
         }
     }
-    ok.sort();
+    let ok = crate::tags::dedupe_sorted(ok);
     (ok, rejected)
 }
 
@@ -176,7 +176,7 @@ mod tests {
             "work".into(),
             "x".repeat(40),
         ]);
-        assert_eq!(ok, vec!["work"]);
+        assert_eq!(ok, vec!["Work"]);
         assert_eq!(rejected, vec!["a,b".to_string(), "x".repeat(40)]);
     }
 

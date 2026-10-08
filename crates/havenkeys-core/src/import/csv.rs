@@ -515,7 +515,7 @@ mod tests {
         assert_eq!((r.logins, r.secure_notes, r.failed), (2, 1, 1));
         let site = &parsed.items[0].input;
         assert_eq!(site.tags, Some(vec![]));
-        assert_eq!(parsed.items[1].input.tags, Some(vec!["docs".to_string()]));
+        assert_eq!(parsed.items[1].input.tags, Some(vec!["Docs".to_string()]));
         // A folder name that cannot be a tag stays in the notes.
         let odd = &parsed.items[2].input;
         assert_eq!(odd.tags, Some(vec![]));

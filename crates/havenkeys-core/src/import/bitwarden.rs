@@ -437,7 +437,7 @@ mod tests {
         assert_eq!(r.passkeys_skipped, 1);
         assert_eq!(r.urls_moved_to_notes, 2);
 
-        assert_eq!(parsed.items[0].input.tags, Some(vec!["work".to_string()]));
+        assert_eq!(parsed.items[0].input.tags, Some(vec!["Work".to_string()]));
         for other in &parsed.items[1..] {
             assert_eq!(other.input.tags, Some(vec![]));
         }
