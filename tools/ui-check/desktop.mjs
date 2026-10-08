@@ -195,6 +195,32 @@ const healthReport = {
   dismissed: [{ itemId: "33333333-4444-4555-8666-777777777777", checks: ["two_factor", "old"] }],
 };
 
+/** The Trash: overviews and days left. Ages count from the real clock, as the app does. */
+function trashEntries() {
+  const ago = (days) => Date.now() - days * DAY;
+  return [
+    { ...items[0], trashedAt: ago(0), daysLeft: 30 },
+    { ...items[1], hasPasskey: false, tags: ["work", "infrastructure"], trashedAt: ago(1), daysLeft: 29 },
+    {
+      id: "99999999-8888-4777-8666-555555555555",
+      itemType: "secure_note",
+      title: "Wi-Fi at the beach house",
+      username: null,
+      urls: [],
+      hasPassword: false,
+      hasTotp: false,
+      hasNotes: true,
+      hasPasskey: false,
+      autoSignIn: false,
+      tags: [],
+      createdAt: NOW - 90 * DAY,
+      updatedAt: NOW - 40 * DAY,
+      trashedAt: ago(30),
+      daysLeft: 0,
+    },
+  ];
+}
+
 /** Canned answers per command. Values that are `{ reject }` reject with that error. */
 function baseResponses() {
   return {
@@ -284,6 +310,11 @@ function baseResponses() {
     health_report: healthReport,
     set_health_ignored: null,
     open_health_help: null,
+    list_trash: trashEntries(),
+    trash_item: true,
+    restore_item: items[0],
+    purge_item: null,
+    empty_trash: 3,
   };
 }
 
@@ -291,9 +322,10 @@ const reject = (code, message = "Error from the core.") => ({ reject: { code, me
 
 // Selectors: structure, not text, so one script drives both languages.
 const nav = (n) => `.nav .nav-item:nth-of-type(${n})`;
-const SETTINGS = ".nav > button.nav-item:last-of-type";
-const GENERATOR = ".nav > button.nav-item:nth-last-of-type(2)";
-const HEALTH = ".nav > button.nav-item:nth-last-of-type(3)";
+const TRASH = ".nav > button.nav-item:last-of-type";
+const SETTINGS = ".nav > button.nav-item:nth-last-of-type(2)";
+const GENERATOR = ".nav > button.nav-item:nth-last-of-type(3)";
+const HEALTH = ".nav > button.nav-item:nth-last-of-type(4)";
 const firstItem = ".list-items li:nth-child(1) .list-item";
 
 async function scrollTool(page, where) {
@@ -495,10 +527,9 @@ export const desktopScenarios = [
       await page.click(firstItem);
       await page.waitForTimeout(200);
       await page.click(".history-row .icon-btn");
-      await page.click(".item-foot .btn");
       await page.waitForTimeout(150);
     },
-    shots: [".history-list", ".item-foot"],
+    shots: [".history-list"],
   },
   {
     name: "detail-custom-fields",
@@ -651,6 +682,17 @@ export const desktopScenarios = [
       await page.waitForTimeout(200);
       await page.click(".item .group >> nth=0 >> button[aria-label] >> nth=0");
       await page.waitForTimeout(200);
+    },
+  },
+
+  {
+    name: "detail-trashed-toast",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".item-foot .btn");
+      await page.waitForTimeout(300);
     },
   },
 
@@ -901,6 +943,46 @@ export const desktopScenarios = [
       await page.waitForTimeout(200);
     },
     shots: [".health-list-head"],
+  },
+  {
+    name: "trash",
+    respond: {},
+    async act(page) {
+      await page.click(TRASH);
+      await page.waitForTimeout(150);
+      await page.click(".list-items li:nth-child(2) .list-item");
+      await page.waitForTimeout(200);
+    },
+  },
+  {
+    name: "trash-confirm-delete",
+    respond: {},
+    async act(page) {
+      await page.click(TRASH);
+      await page.waitForTimeout(150);
+      await page.click(firstItem);
+      await page.waitForTimeout(150);
+      await page.click(".trash-actions .btn-quiet-danger");
+      await page.waitForTimeout(150);
+    },
+  },
+  {
+    name: "trash-confirm-empty",
+    respond: {},
+    async act(page) {
+      await page.click(TRASH);
+      await page.waitForTimeout(150);
+      await page.click(".list-head .btn-quiet-danger");
+      await page.waitForTimeout(150);
+    },
+  },
+  {
+    name: "trash-empty",
+    respond: { list_trash: [] },
+    async act(page) {
+      await page.click(TRASH);
+      await page.waitForTimeout(200);
+    },
   },
   {
     name: "generator",
