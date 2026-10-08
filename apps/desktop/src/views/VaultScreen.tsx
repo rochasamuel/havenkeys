@@ -311,7 +311,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
       itemsChanged();
       if (trashed) {
         toast(t.vault.movedToTrash(item.title), "info", {
-          label: t.vault.undo,
+          label: t.common.undo,
           onClick: () => void undoTrash(item),
         });
       } else {

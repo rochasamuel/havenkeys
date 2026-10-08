@@ -99,7 +99,7 @@ export function TrashView({ readOnly, revision, onChanged }: Props) {
       await api.purgeItem(entry.id);
       setSelectedId(null);
       toast(t.vault.deleted(entry.title));
-    }, t.trash.deleteFailed);
+    }, t.vault.deleteFailed);
 
   const empty = () =>
     runAction(async () => {
