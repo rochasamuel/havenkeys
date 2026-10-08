@@ -47,8 +47,10 @@ impl MobileVault {
         self.client.require_online()?;
         let staged = self.client.vault()?.stage_empty_trash()?;
         let client = self.client.clone();
-        let n = self.block_on(client.push_batches(staged))?;
+        let pushed = self.block_on(client.push_batches(staged));
+        // Even a refused batch may follow committed ones: reload either way.
         havenkeys_client::ClientEvents::items_changed(&*self.events);
+        let n = pushed?;
         Ok(u32::try_from(n).unwrap_or(u32::MAX))
     }
 

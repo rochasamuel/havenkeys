@@ -116,14 +116,49 @@ async fn exec(url: &str, sql: &str) -> Result<(), tokio_postgres::Error> {
     result
 }
 
+/// Counts `items_changed`, the app's cue to reload its lists.
+#[derive(Default)]
+struct ItemsChanged(std::sync::atomic::AtomicUsize);
+impl ItemsChanged {
+    fn take(&self) -> usize {
+        self.0.swap(0, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Events reach the app on another thread: wait for one.
+    fn arrives(&self) -> bool {
+        for _ in 0..200 {
+            if self.take() > 0 {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+}
+impl VaultEvents for ItemsChanged {
+    fn locked(&self, _: String) {}
+    fn unlocked(&self) {}
+    fn connectivity(&self, _: bool) {}
+    fn signed_out(&self) {}
+    fn items_changed(&self) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    fn removed(&self) {}
+    fn account_deleted(&self) {}
+}
+
 fn phone(dir: &std::path::Path) -> Arc<MobileVault> {
+    phone_with(dir, Arc::new(Quiet))
+}
+
+fn phone_with(dir: &std::path::Path, events: Arc<dyn VaultEvents>) -> Arc<MobileVault> {
     MobileVault::new(
         MobileConfig {
             data_dir: dir.to_string_lossy().into_owned(),
             own_package: "net.havenkeys.android".into(),
             device_name: "Pixel 8".into(),
         },
-        Arc::new(Quiet),
+        events,
         Arc::new(Xor),
     )
     .unwrap()
@@ -283,10 +318,12 @@ fn two_phones_edit_one_vault_through_the_server() {
     assert!(a.list_trash().unwrap().iter().any(|s| s.item.id == id));
     b.sync_now().unwrap();
     assert!(b.list_items().unwrap().iter().all(|s| s.id != id));
+    assert!(b.list_trash().unwrap().iter().any(|s| s.item.id == id));
     a.purge_item(id.clone()).unwrap();
     assert!(a.list_trash().unwrap().iter().all(|s| s.item.id != id));
     b.sync_now().unwrap();
     assert!(b.list_items().unwrap().iter().all(|s| s.id != id));
+    assert!(b.list_trash().unwrap().iter().all(|s| s.item.id != id));
 
     // A passkey created on phone A for a site in Chrome reaches phone B,
     // which signs in with it.
@@ -378,6 +415,44 @@ fn two_phones_edit_one_vault_through_the_server() {
         )
         .unwrap();
     assert_eq!(values[0][0].value, "321");
+
+    rt.block_on(server.cleanup());
+}
+
+#[test]
+fn a_refused_empty_trash_still_tells_the_app_to_reload() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let server = rt.block_on(Server::start());
+    let invite = rt.block_on(server.invite());
+    let dir_a = tempfile::tempdir().unwrap();
+    let events = Arc::new(ItemsChanged::default());
+    let a = phone_with(dir_a.path(), events.clone());
+    a.activate(invite, PASSWORD.into()).unwrap();
+    online(&a);
+    let id = a.create_item(draft("GitHub", vec![], None)).unwrap();
+    a.trash_item(id.clone()).unwrap();
+
+    // Phone B deletes it for good first; A has not synced since.
+    let dir_b = tempfile::tempdir().unwrap();
+    let b = phone(dir_b.path());
+    b.sign_in(
+        server.base.clone(),
+        EMAIL.into(),
+        PASSWORD.into(),
+        testing::secret_key_text(&a),
+    )
+    .unwrap();
+    online(&b);
+    b.sync_now().unwrap();
+    b.purge_item(id.clone()).unwrap();
+
+    while events.arrives() {}
+    let refused = a
+        .empty_trash()
+        .err()
+        .expect("the server refuses A's stale tombstone");
+    assert_eq!(code(refused), "item_changed_elsewhere");
+    assert!(events.arrives(), "the app is told to reload its counts");
 
     rt.block_on(server.cleanup());
 }
