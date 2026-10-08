@@ -55,6 +55,31 @@ pub(crate) fn dedupe_sorted(tags: Vec<String>) -> Vec<String> {
     out
 }
 
+/// The vault's spelling of each tag (key -> spelling), from every item's
+/// tag set: the spelling the most items carry, a tie going to the smallest
+/// spelling, so the choice never depends on the order items come in. One
+/// spelling per tag is the rule; this settles data from before it.
+pub(crate) fn spellings<'a>(
+    tag_sets: impl Iterator<Item = &'a [String]>,
+) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    let mut counts: HashMap<String, HashMap<&'a str, usize>> = HashMap::new();
+    for set in tag_sets {
+        for t in set {
+            *counts.entry(key(t)).or_default().entry(t).or_default() += 1;
+        }
+    }
+    counts
+        .into_iter()
+        .filter_map(|(k, by_spelling)| {
+            by_spelling
+                .into_iter()
+                .max_by(|(a, na), (b, nb)| na.cmp(nb).then_with(|| b.cmp(a)))
+                .map(|(t, _)| (k, t.to_owned()))
+        })
+        .collect()
+}
+
 /// Give `tags` the spelling the rest of the vault already uses: each tag
 /// whose key is in `vault` (key -> spelling) takes that spelling. Then
 /// deduplicated and sorted again.
@@ -112,6 +137,23 @@ mod tests {
             vec!["api", "Work"]
         );
         assert_eq!(canonicalize(vec!["Other".into()], &vault), vec!["Other"]);
+    }
+
+    #[test]
+    fn the_spelling_most_items_carry_wins_then_the_smallest() {
+        let sets: Vec<Vec<String>> = vec![
+            vec!["work".into()],
+            vec!["Work".into()],
+            vec!["Work".into(), "API".into()],
+            vec!["api".into()],
+        ];
+        let map = spellings(sets.iter().map(|s| s.as_slice()));
+        assert_eq!(map["work"], "Work");
+        // A tie: "API" < "api" byte-wise.
+        assert_eq!(map["api"], "API");
+        // The order the items come in does not matter.
+        let map = spellings(sets.iter().rev().map(|s| s.as_slice()));
+        assert_eq!((map["work"].as_str(), map["api"].as_str()), ("Work", "API"));
     }
 
     #[test]

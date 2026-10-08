@@ -227,7 +227,7 @@ impl VaultService {
         };
         let mut writes = Vec::new();
         let mut seen = std::collections::HashSet::new();
-        let mut spellings = std::collections::HashMap::new();
+        let mut spellings = self.tag_spellings(None)?;
         for item in backup.items {
             let id = match item.overview.item_type {
                 ItemType::Identity => identity_id,

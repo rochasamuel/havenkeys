@@ -1161,3 +1161,40 @@ fn a_backup_item_with_an_invalid_tag_fails_alone() {
         ("Fine", vec!["work".to_owned()])
     );
 }
+
+#[test]
+fn a_restore_takes_the_tag_spelling_this_vault_uses() {
+    let tagged = |title: &str, host: &str, tags: &[&str]| {
+        let mut input = login(title, "me", "pw", host);
+        input.tags = Some(tags.iter().map(|s| s.to_string()).collect());
+        input
+    };
+    let (mut a, _) = activated_vault();
+    commit_all(
+        &mut a,
+        vec![
+            tagged("Bank", "https://bank.example", &["work", "dev"]),
+            tagged("Mail", "https://mail.example", &["Dev"]),
+        ],
+    );
+    let file = backup_of(&a, BACKUP_PW);
+
+    let (mut b, _) = activated_vault();
+    commit_all(
+        &mut b,
+        vec![tagged("Wiki", "https://wiki.example", &["Work"])],
+    );
+    assert_eq!(restore_into(&mut b, &file, 10).imported, 2);
+    let tags = |title: &str| {
+        b.list_items()
+            .unwrap()
+            .into_iter()
+            .find(|i| i.title == title)
+            .unwrap()
+            .tags
+            .clone()
+    };
+    assert_eq!(tags("Bank"), vec!["dev", "Work"]);
+    // Vault A already held one spelling ("dev", the first one saved).
+    assert_eq!(tags("Mail"), vec!["dev"]);
+}
