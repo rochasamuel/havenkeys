@@ -33,7 +33,7 @@ import { isLoginRole, isNewPasswordRole } from "../autofill/classify";
 import { fillLogin, fillNewPassword, fillOtp, markUserEdit, valueSource } from "../autofill/fill";
 import { cardFieldsForFill, cardGroupFor, findCardGroup } from "../autofill/card";
 import { cardRolesToFill, fillCard, readCardSubmission } from "../autofill/card-fill";
-import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered } from "../autofill/group";
+import { classifyGroup, defaultEnv, fieldsOf, groupFor, groupRoot, isFillable, isRendered, type Env } from "../autofill/group";
 import { findLoginGroup, findOtpGroup, readSubmission } from "../autofill/page";
 import { buttonLabel, findSubmitButton, hasChallenge, pressWhenReady, waitForSubmitButton, type PressStep } from "../autofill/submit";
 import { findIdentityGroup, identityGroupFor } from "../autofill/identity";
@@ -55,6 +55,7 @@ import { frameAncestry } from "./ancestry";
 import { InlineFrame, menuBox, saveBox, type Box } from "./frames";
 import { findHostIframe } from "./host-frame";
 import { FieldIcon, iconBox } from "./icon";
+import { replacementFor, twinsOf, type Twins } from "./rerender";
 import { createSsoContent } from "./sso";
 import { getInlineSuggestions, onInlineSuggestionsChanged } from "../shared/prefs";
 
@@ -128,7 +129,7 @@ export function menuKindFor(field: HTMLInputElement): { kind: MenuKind; roles?: 
 function start(): void {
   let menu: OpenMenu | null = null;
   /** The last menu the user could pick from, kept briefly for its fill. */
-  let picked: { token: string; field: HTMLInputElement; until: number } | null = null;
+  let picked: { token: string; field: HTMLInputElement; until: number; twins: Twins } | null = null;
   let saveFrame: InlineFrame | null = null;
   /** A group we filled a generated password into and have not seen submitted. */
   let generatedIn: ParentNode | null = null;
@@ -158,7 +159,7 @@ function start(): void {
     const { frame, field, token } = menu;
     menu = null;
     frame?.remove();
-    picked = { token, field, until: Date.now() + PICK_WINDOW_MS };
+    picked = { token, field, until: Date.now() + PICK_WINDOW_MS, twins: twinsOf(field) };
     if (tellBackground) void send({ type: "cs_close_menu", token });
     if (icon && deepActiveElement() !== icon.field) hideIcon();
   }
@@ -531,6 +532,18 @@ function start(): void {
 
   // ------------------------------------------------------------ fills
 
+  /**
+   * The field of the menu `token` names, if it was picked from within
+   * PICK_WINDOW_MS; the pick is used up. A field the page re-rendered while
+   * the menu was open is found again only when unambiguous (content/rerender.ts).
+   */
+  function takePicked(token: string, env: Env): HTMLInputElement | null {
+    const p = picked && picked.token === token && picked.until > Date.now() ? picked : null;
+    picked = null;
+    if (!p) return null;
+    return p.field.isConnected ? p.field : replacementFor(p.twins, env);
+  }
+
   function handleFill(m: Extract<BackgroundToContent, { type: "bg_fill" }>): FillReply | Promise<FillReply> {
     const none: FillReply = { filled: 0, pressing: null };
     // A sandboxed document (CSP `sandbox`) keeps its URL but runs with an
@@ -542,33 +555,30 @@ function start(): void {
     // A card fills the picked field's card group, or (another frame of the
     // tab, or the popup) this frame's card fields. Never submits.
     if (m.fill.kind === "card") {
-      let target: typeof picked = null;
+      let target: HTMLInputElement | null = null;
       if (m.token !== null) {
-        target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
-        picked = null;
-        if (!target || !target.field.isConnected) return none;
+        target = takePicked(m.token, env);
+        if (!target) return none;
       }
-      const g = target ? cardGroupFor(target.field, env) : cardFieldsForFill(document, env);
+      const g = target ? cardGroupFor(target, env) : cardFieldsForFill(document, env);
       return { filled: g ? fillCard(g, m.fill.values, env) : 0, pressing: null };
     }
     // An identity fills the identity group of the picked field (or the page's
     // first one for a popup fill), never the login group.
     if (m.fill.kind === "identity") {
-      let target: typeof picked = null;
+      let target: HTMLInputElement | null = null;
       if (m.token !== null) {
-        target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
-        picked = null;
-        if (!target || !target.field.isConnected) return none;
+        target = takePicked(m.token, env);
+        if (!target) return none;
       }
-      const ig = target ? identityGroupFor(target.field, env) : findIdentityGroup(document, env);
+      const ig = target ? identityGroupFor(target, env) : findIdentityGroup(document, env);
       return { filled: ig ? fillIdentity(ig, m.fill.values, env) : 0, pressing: null };
     }
     let group;
     if (m.token !== null) {
-      const target = picked && picked.token === m.token && picked.until > Date.now() ? picked : null;
-      picked = null;
-      if (!target || !target.field.isConnected) return none;
-      group = groupFor(target.field, env).group;
+      const target = takePicked(m.token, env);
+      if (!target) return none;
+      group = groupFor(target, env).group;
     } else {
       group = m.fill.kind === "otp" ? findOtpGroup(document, env) : findLoginGroup(document, env);
     }

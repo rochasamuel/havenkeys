@@ -595,6 +595,49 @@ describe("identity fills", () => {
     expect((b.querySelector("#bn") as HTMLInputElement).value).toBe("");
   });
 
+  // americanas.com.br (VTEX, trimmed): an email-only "send me a code" form
+  // whose React input is swapped for a fresh copy while the menu is open.
+  const VTEX = `<div><h3>Receber código de acesso por e-mail</h3><form><label><div>
+    <input name="email" placeholder="ex.: exemplo@mail.com" type="email" value=""></div></label>
+    <div><button type="submit"><div><span>Enviar</span></div></button></div></form></div>`;
+  const VTEX_INPUT = `<input name="email" placeholder="ex.: exemplo@mail.com" type="email" value="">`;
+  const emailFill = (token: string) => ({ ...loginFill(location.origin), token, fill: { kind: "login", username: "me@example.com", password: "pw-from-vault" } });
+
+  async function pickLogin(el: HTMLInputElement): Promise<string> {
+    const token = (++seq).toString(16).padStart(32, "c");
+    openReply = { ok: true, token, rows: 1 };
+    el.focus();
+    for (const l of windowListeners.get("pointerdown") ?? []) l({ isTrusted: true, composedPath: () => [el] } as unknown as Event);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent).toContainEqual(expect.objectContaining({ type: "cs_open_menu", kind: "login" }));
+    deliver({ type: "bg_close_menu", token });
+    openReply = undefined;
+    return token;
+  }
+  const emails = () => Array.from(document.querySelectorAll<HTMLInputElement>('[name="email"]'));
+
+  it("fills the picked field's re-rendered copy (VTEX)", async () => {
+    document.body.innerHTML = VTEX;
+    const token = await pickLogin(field("email"));
+    field("email").closest("div")!.innerHTML = VTEX_INPUT;
+    expect(deliver(emailFill(token))).toEqual({ filled: 1, pressing: null });
+    expect(field("email").value).toBe("me@example.com");
+  });
+
+  it("fills nothing when the re-render is ambiguous or only a look-alike that was already there remains", async () => {
+    document.body.innerHTML = VTEX;
+    let token = await pickLogin(field("email"));
+    field("email").closest("div")!.innerHTML = VTEX_INPUT + VTEX_INPUT;
+    expect(deliver(emailFill(token))).toEqual({ filled: 0, pressing: null });
+    for (const e of emails()) expect(e.value).toBe("");
+
+    document.body.innerHTML = VTEX + VTEX;
+    token = await pickLogin(emails()[1] as HTMLInputElement);
+    document.querySelectorAll("form")[1]?.remove();
+    expect(deliver(emailFill(token))).toEqual({ filled: 0, pressing: null });
+    expect(emails()[0]?.value).toBe("");
+  });
+
   it("leaves a login form's fields alone", async () => {
     document.body.innerHTML = `<form><h1>Sign in</h1><input id="le" name="user" type="email"><input id="lp" name="pw" type="password">
       <button type="submit">Sign in</button></form>
