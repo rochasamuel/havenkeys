@@ -88,7 +88,7 @@ revision, as today.
   `trashed_at = now`; the encrypted details are not touched. On commit the
   item moves from `overviews` to `trash`. This replaces `stage_delete` as
   what the apps' Delete does.
-* `stage_restore(id)`: the item must be in `trash` (else `NotFound`).
+* `stage_restore_trashed(id)`: the item must be in `trash` (else `NotFound`).
   Re-seals the overview with `trashed_at = None`. On commit it moves back to
   `overviews`.
 * `stage_purge(id)`: the item must be in `trash` (else `NotFound`). Sends
@@ -179,9 +179,9 @@ capability files are updated to match.
   category: that enum drives filtering across the app.
 * **Delete** (item's More menu): moves the item to the Trash without the
   dialog and shows a snackbar "Moved to Trash" with **Undo**.
-* **Trash screen:** the same list as the desktop. Tapping an item opens it
-  read-only, with Restore and Delete permanently in the More menu; Empty
-  Trash in the top bar. Permanent actions confirm in a dialog.
+* **Trash screen:** the same list as the desktop. Tapping an item opens a
+  sheet with Restore and Delete permanently; Empty Trash is under the
+  screen's More menu. Permanent actions confirm in a dialog.
 * **Offline:** disabled, as Delete is today.
 
 New UniFFI functions in `havenkeys-mobile` mirror §5.2, each behind

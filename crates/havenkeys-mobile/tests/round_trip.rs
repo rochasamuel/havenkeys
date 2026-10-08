@@ -277,9 +277,14 @@ fn two_phones_edit_one_vault_through_the_server() {
         SaveResult::Updated
     ));
 
-    // Delete reaches the other phone.
-    a.delete_item(id.clone()).unwrap();
+    // Trash, then delete for good: both reach the other phone.
+    a.trash_item(id.clone()).unwrap();
     assert!(a.list_items().unwrap().iter().all(|s| s.id != id));
+    assert!(a.list_trash().unwrap().iter().any(|s| s.item.id == id));
+    b.sync_now().unwrap();
+    assert!(b.list_items().unwrap().iter().all(|s| s.id != id));
+    a.purge_item(id.clone()).unwrap();
+    assert!(a.list_trash().unwrap().iter().all(|s| s.item.id != id));
     b.sync_now().unwrap();
     assert!(b.list_items().unwrap().iter().all(|s| s.id != id));
 

@@ -3480,5 +3480,9 @@ so the exposure is limited to an item they chose to delete.
 **Attack scenario:** a page or the extension asks for a trashed item by ID to
 fill, read TOTP or sign a passkey assertion.
 **Mitigation:** every secret path reads the live map only, so the request is
-denied like an unknown ID. Covered by the Task 3 tests.
+denied like an unknown ID. Covered by `a2_a_trashed_login_is_denied_like_an_unknown_id`
+(`crates/havenkeys-bridge/tests/bridge.rs`),
+`attack_a_trashed_login_is_not_filled_on_its_own_site` and
+`a_trashed_login_is_offered_to_no_app_and_no_passkey_request`
+(`crates/havenkeys-core/tests/trash.rs`).
 **Remaining limitations:** none known.
