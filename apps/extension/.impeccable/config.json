@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/autofill/submit.test.ts"
+        ],
+        "createdAt": "2026-10-08T02:47:50.964Z",
+        "reason": "model triage: jsdom test fixture mirroring Google's CAPTCHA <img>, never rendered"
+      }
+    ]
+  }
+}

@@ -168,6 +168,30 @@ describe("findSubmitButton", () => {
     expect(findSubmitButton($("#root"), $("#u"), "username", env)).toBeNull();
   });
 
+  // AliExpress's sign-in (structure only): form-less "cosmos" type=button
+  // buttons labelled by text and an equal aria-label, beside an alternative
+  // that shares the step's verb.
+  const ALI_BTN = (id: string, label: string) =>
+    `<button id="${id}" aria-label="${label}" type="button" class="cosmos-btn cosmos-btn-primary cosmos-btn-large cosmos-btn-block"><span class="cosmos-btn-inner-text">${label}</span></button>`;
+
+  it("AliExpress: Continuar (labelled exactly) over a longer Continuar… alternative", () => {
+    document.body.innerHTML = `<div class="fm"><div id="root"><input id="u" type="text" autocomplete="username"></div>
+      <div>${ALI_BTN("next", "Continuar")}</div><div><button type="button">Continuar com código de verificação</button></div></div>`;
+    expect(findSubmitButton($("#root"), $("#u"), "username", env)?.id).toBe("next");
+  });
+
+  it("AliExpress: Entrar (labelled exactly) over Entrar com código", () => {
+    document.body.innerHTML = `<div class="fm"><div id="root"><input id="pw" type="password"></div>
+      <div>${ALI_BTN("go", "Entrar")}</div><div><button type="button">Entrar com código</button></div></div>`;
+    expect(findSubmitButton($("#root"), $("#pw"), "password", env)?.id).toBe("go");
+  });
+
+  it("an exact label alone does not reach the press threshold before the field", () => {
+    document.body.innerHTML = `<div id="root"><button id="tab" type="button">Entrar</button><input id="pw" type="password">
+      <button id="go" type="button">Entrar</button></div>`;
+    expect(findSubmitButton($("#root"), $("#pw"), "password", env)).toBeNull();
+  });
+
   it("scores an input[type=submit] by its value", () => {
     document.body.innerHTML = `<form><input name="otp"><input type="submit" id="v" value="Verify"></form>`;
     expect(findSubmitButton($("form"), $("[name=otp]"), "otp", env)?.id).toBe("v");

@@ -56,10 +56,16 @@ const MAX_ICONS = 3;
  * `<button data-testid="btn-signin-submit"><svg aria-label="forward">`).
  * Those only stand in for a missing label, never add to a visible one.
  */
+const attr = (e: Element, n: string) => (e.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
+
+/** The visible label's sources, each normalized: text (an input's value), `aria-label`, `title`. */
+function shownLabels(el: Element): string[] {
+  const own = el instanceof HTMLInputElement ? el.value : (el.textContent ?? "");
+  return [own, attr(el, "aria-label"), attr(el, "title")].map((s) => normalize(s)).filter(Boolean);
+}
+
 export function buttonLabel(el: Element): string {
-  const attr = (e: Element, n: string) => (e.getAttribute(n) ?? "").slice(0, MAX_HINT_CHARS);
-  const own = el instanceof HTMLInputElement ? el.value.slice(0, MAX_HINT_CHARS) : (el.textContent ?? "").slice(0, MAX_HINT_CHARS);
-  const shown = normalize(`${own} ${attr(el, "aria-label")} ${attr(el, "title")}`, MAX_HINT_CHARS * 3);
+  const shown = shownLabels(el).join(" ");
   if (shown) return shown;
   const icons = Array.from(el.querySelectorAll("[aria-label]"))
     .slice(0, MAX_ICONS)
@@ -80,6 +86,9 @@ function score(el: HTMLElement, field: HTMLInputElement, step: PressStep): numbe
   let s = 0;
   if (field.form && isSubmitter(el) && el.form === field.form) s += 60;
   if (hasAny(text, STEP_WORDS[step])) s += 50;
+  // Labelled by the step's word alone ("Entrar", not "Entrar com código"):
+  // the step's own button, over alternatives that share its verb.
+  if (shownLabels(el).some((l) => STEP_WORDS[step].includes(l))) s += 25;
   if (hasAny(text, SUBMIT_WORDS)) s += 20;
   if (field.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) s += 10;
   return s;
