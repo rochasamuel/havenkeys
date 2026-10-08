@@ -46,7 +46,8 @@ impl VaultService {
 
     /// Delete one trashed item for good.
     pub fn stage_purge(&self, id: &Uuid) -> Result<StagedWrite> {
-        if !self.session()?.trash.contains_key(id) {
+        let session = self.session()?;
+        if *id == session.identity_id || !session.trash.contains_key(id) {
             return Err(Error::NotFound);
         }
         self.tombstone(id)
@@ -54,7 +55,13 @@ impl VaultService {
 
     /// Delete every trashed item for good.
     pub fn stage_empty_trash(&self) -> Result<Vec<StagedWrite>> {
-        let mut ids: Vec<Uuid> = self.session()?.trash.keys().copied().collect();
+        let session = self.session()?;
+        let mut ids: Vec<Uuid> = session
+            .trash
+            .keys()
+            .filter(|id| **id != session.identity_id)
+            .copied()
+            .collect();
         ids.sort_unstable();
         ids.iter().map(|id| self.tombstone(id)).collect()
     }
@@ -62,13 +69,14 @@ impl VaultService {
     /// Tombstones for items trashed at least `TRASH_RETENTION_MS` ago. A
     /// `trashed_at` in the future (another device's clock) is not due.
     pub fn stage_expired_trash(&self, now_ms: i64) -> Result<Vec<StagedWrite>> {
-        let mut ids: Vec<Uuid> = self
-            .session()?
+        let session = self.session()?;
+        let mut ids: Vec<Uuid> = session
             .trash
             .values()
             .filter(|o| {
-                o.trashed_at
-                    .is_some_and(|t| now_ms.saturating_sub(t) >= TRASH_RETENTION_MS)
+                o.id != session.identity_id
+                    && o.trashed_at
+                        .is_some_and(|t| now_ms.saturating_sub(t) >= TRASH_RETENTION_MS)
             })
             .map(|o| o.id)
             .collect();

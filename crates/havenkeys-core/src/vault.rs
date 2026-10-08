@@ -99,10 +99,11 @@ pub(crate) struct Session {
 
 impl Session {
     /// Put an overview in the one map its `trashed_at` says, taking it out
-    /// of the other.
+    /// of the other. The Identity is never trashed: it stays live even if a
+    /// pulled overview of it carries `trashed_at`.
     pub(crate) fn place(&mut self, overview: ItemOverview) {
         let id = overview.id;
-        if overview.trashed_at.is_some() {
+        if overview.trashed_at.is_some() && id != self.identity_id {
             self.overviews.remove(&id);
             self.trash.insert(id, overview);
         } else {
@@ -826,6 +827,19 @@ impl VaultService {
             .insert(key.into(), value);
     }
 
+    /// Seals a live item as another device would if it had trashed it at
+    /// `trashed_at`, bypassing every check (the Identity included). Returns
+    /// the overview and details blobs for a simulated pull.
+    #[cfg(any(test, feature = "test-util"))]
+    #[doc(hidden)]
+    pub fn sealed_as_trashed_for_tests(&self, id: &Uuid, trashed_at: i64) -> (Vec<u8>, Vec<u8>) {
+        let mut overview = self.session().unwrap().overviews[id].clone();
+        overview.trashed_at = Some(trashed_at);
+        let details = self.load_details(id).unwrap();
+        let staged = self.seal_staged(overview, Some(&details), None).unwrap();
+        (staged.overview.unwrap(), staged.details.unwrap())
+    }
+
     pub(crate) fn session(&self) -> Result<&Session> {
         match (&self.state, &self.session) {
             (VaultState::Unlocked, Some(s)) => Ok(s),
@@ -990,6 +1004,8 @@ impl VaultService {
         let damaged_settings = opened.is_none();
         let settings = opened.unwrap_or_else(Settings::restrictive);
 
+        // The Identity is never trashed: it stays live whatever its overview says.
+        let identity_id = derive_identity_item_id(vault_key)?;
         let mut overviews = HashMap::new();
         let mut trash = HashMap::new();
         let mut damaged_items = 0;
@@ -1004,7 +1020,7 @@ impl VaultService {
             });
             match parsed {
                 Ok(ov) => {
-                    if ov.trashed_at.is_some() {
+                    if ov.trashed_at.is_some() && ov.id != identity_id {
                         trash.insert(ov.id, ov);
                     } else {
                         overviews.insert(ov.id, ov);
@@ -1016,7 +1032,7 @@ impl VaultService {
         Ok(Session {
             vault_id,
             data_key,
-            identity_id: derive_identity_item_id(vault_key)?,
+            identity_id,
             overviews,
             trash,
             settings,
@@ -1953,7 +1969,7 @@ impl VaultService {
     ) -> Result<Option<StagedWrite>> {
         let session = self.session()?;
         let id = session.identity_id;
-        if session.overviews.contains_key(&id) {
+        if session.overviews.contains_key(&id) || session.trash.contains_key(&id) {
             return Ok(None);
         }
         let input = ItemInput {

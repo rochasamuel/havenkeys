@@ -65,10 +65,12 @@ impl VaultService {
     }
 
     /// Drops uses of deleted items and uses older than a year, then seals.
+    /// A trashed item keeps its uses, so a restore brings its history back.
     fn save_activity(&self, mut activity: Activity, now_ms: i64) -> Result<()> {
-        let overviews = &self.session()?.overviews;
+        let session = self.session()?;
         activity.uses.retain(|id, u| {
-            overviews.contains_key(id) && now_ms.saturating_sub(u.last_ms) <= FORGET_AFTER_MS
+            (session.overviews.contains_key(id) || session.trash.contains_key(id))
+                && now_ms.saturating_sub(u.last_ms) <= FORGET_AFTER_MS
         });
         self.write_local(LocalSlot::Activity, &activity)
     }
@@ -305,6 +307,27 @@ mod tests {
         v.record_use(&fresh, T0 + 366 * DAY).unwrap();
         let stored = v.activity().unwrap();
         assert_eq!(stored.uses.keys().collect::<Vec<_>>(), [&fresh]);
+    }
+
+    #[test]
+    fn a_trashed_item_keeps_its_uses_for_a_restore() {
+        let mut v = unlocked_vault();
+        let trashed = add(&mut v, "Trashed", T0);
+        let other = add(&mut v, "Other", T0);
+        v.record_use(&trashed, T0).unwrap();
+        v.record_use(&trashed, T0).unwrap();
+        let staged = v.stage_trash(&trashed, T0).unwrap();
+        v.commit_write(staged, 2).unwrap();
+        // A write while it sits in the Trash must not drop its history.
+        v.record_use(&other, T0 + 1).unwrap();
+        assert!(v.activity().unwrap().uses.contains_key(&trashed));
+        assert_eq!(titles(&v.frequently_used(10, T0 + 1).unwrap()), ["Other"]);
+        let staged = v.stage_restore_trashed(&trashed).unwrap();
+        v.commit_write(staged, 3).unwrap();
+        assert_eq!(
+            titles(&v.frequently_used(10, T0 + 1).unwrap()),
+            ["Trashed", "Other"]
+        );
     }
 
     #[test]

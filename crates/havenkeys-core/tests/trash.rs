@@ -245,6 +245,44 @@ fn the_identity_cannot_be_trashed() {
 }
 
 #[test]
+fn a_pulled_trashed_identity_stays_live_and_is_never_purged() {
+    let (mut v, sk) = activated_vault();
+    let staged = v
+        .stage_identity_if_missing("me@example.com", NOW)
+        .unwrap()
+        .unwrap();
+    let id = staged.item_id;
+    v.commit_write(staged, 1).unwrap();
+    // Another device's (buggy or hostile) overview of the Identity, trashed
+    // long ago: it must not hide the Identity or let it be purged.
+    let blobs = v.sealed_as_trashed_for_tests(&id, NOW - 90 * DAY);
+    v.apply_remote_changes(2, vec![change(id, 2, blobs)], NOW)
+        .unwrap();
+
+    let check = |v: &havenkeys_core::vault::VaultService| {
+        assert_eq!(v.identity_item_id().unwrap(), id);
+        assert!(v.get_item(&id).is_ok(), "still live");
+        assert_eq!(v.trash_count().unwrap(), 0);
+        assert!(v.list_trash(NOW).unwrap().is_empty());
+        assert!(matches!(v.stage_purge(&id), Err(Error::NotFound)));
+        assert!(v.stage_empty_trash().unwrap().is_empty());
+        assert!(v.stage_expired_trash(NOW).unwrap().is_empty());
+        assert!(
+            v.stage_identity_if_missing("me@example.com", NOW)
+                .unwrap()
+                .is_none(),
+            "not created twice"
+        );
+    };
+    check(&v);
+    // The same after a fresh unlock, which sorts the stored overviews again.
+    v.lock();
+    v.unlock_for_account(&secret(PASSWORD), &sk, &account())
+        .unwrap();
+    check(&v);
+}
+
+#[test]
 fn restore_and_trash_check_the_right_map() {
     let (mut v, _sk) = activated_vault();
     let id = created(&mut v, "X");
@@ -312,6 +350,19 @@ const GH: &str = "https://github.com/login";
 /// A GitHub login with a password, a TOTP secret and a passkey, then trashed.
 /// Returns its id and the passkey's credential id.
 fn trashed_github(v: &mut havenkeys_core::vault::VaultService) -> (uuid::Uuid, Vec<u8>) {
+    let (id, cred) = live_github(v);
+    trash(v, &id);
+    (id, cred)
+}
+
+fn trash(v: &mut havenkeys_core::vault::VaultService, id: &uuid::Uuid) {
+    let t = v.stage_trash(id, NOW).unwrap();
+    v.commit_write(t, 3).unwrap();
+}
+
+/// A live GitHub login with a password, a TOTP secret and a passkey.
+/// Returns its id and the passkey's credential id.
+fn live_github(v: &mut havenkeys_core::vault::VaultService) -> (uuid::Uuid, Vec<u8>) {
     let mut input = login("GitHub", "octo", "gh-secret-pw", "github.com");
     input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
     let s = v.stage_create(input, NOW).unwrap();
@@ -335,17 +386,23 @@ fn trashed_github(v: &mut havenkeys_core::vault::VaultService) -> (uuid::Uuid, V
         .unwrap();
     let cred = pk.registration.credential_id.clone();
     v.commit_write(pk.write, 2).unwrap();
-    let t = v.stage_trash(&id, NOW).unwrap();
-    v.commit_write(t, 3).unwrap();
     (id, cred)
 }
 
 #[test]
 fn attack_a_trashed_login_is_not_filled_on_its_own_site() {
     let (mut v, _sk) = activated_vault();
-    let (id, _) = trashed_github(&mut v);
-
+    let (id, _) = live_github(&mut v);
     let page = "https://github.com/login";
+    // Positive control: while live, the same calls succeed.
+    assert_eq!(v.find_matches(page, None).unwrap().len(), 1);
+    assert!(v.fill_for_page(&id, page, None, NOW).is_ok());
+    assert!(v.totp_for_page(&id, page, None, 59).is_ok());
+    assert!(v.totp_code(&id, 59).is_ok());
+    assert_eq!(v.search("git").unwrap().len(), 1);
+    assert!(v.reveal(&id, SecretField::Password).is_ok());
+    trash(&mut v, &id);
+
     assert!(v.find_matches(page, None).unwrap().is_empty());
     assert!(v.fill_for_page(&id, page, None, NOW).is_err());
     assert!(v.totp_for_page(&id, page, None, 59).is_err());
@@ -370,16 +427,31 @@ fn attack_a_trashed_login_is_not_filled_on_its_own_site() {
 fn a_trashed_login_is_offered_to_no_app_and_no_passkey_request() {
     use havenkeys_core::app_target::AppIdentity;
     let (mut v, _sk) = activated_vault();
-    let (id, cred) = trashed_github(&mut v);
-
+    let (id, cred) = live_github(&mut v);
     // An app whose verified host is github.com.
     let app = AppIdentity::new("com.github.android", &[vec![0xab; 32]]).unwrap();
     let hosts = vec!["github.com".to_string()];
+    let allow = vec![cred.clone()];
+    // Positive control: while live, the same calls succeed.
+    assert_eq!(v.matches_for_app(&app, &hosts).unwrap().len(), 1);
+    assert!(v.fill_for_app(&id, &app, &hosts).is_ok());
+    assert_eq!(
+        v.find_passkeys("github.com", GH, None, &allow)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(v.has_passkey_for_page(GH, None).unwrap());
+    assert!(v
+        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32])
+        .is_ok());
+    trash(&mut v, &id);
+
     assert!(v.matches_for_app(&app, &hosts).unwrap().is_empty());
     assert!(v.fill_for_app(&id, &app, &hosts).is_err());
 
     assert!(v
-        .find_passkeys("github.com", GH, None, &[])
+        .find_passkeys("github.com", GH, None, &allow)
         .unwrap()
         .is_empty());
     assert!(!v.has_passkey_for_page(GH, None).unwrap());
