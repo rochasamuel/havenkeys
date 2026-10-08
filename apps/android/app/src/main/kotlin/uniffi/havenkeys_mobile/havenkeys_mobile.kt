@@ -843,8 +843,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_create_item(
     ): Int
-    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_delete_item(
-    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_edit(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_item_template(
@@ -896,6 +894,16 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_settings(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_update_settings(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_empty_trash(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_list_trash(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_purge_item(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_restore_item(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_trash_item(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_create_unlock_bundle(
     ): Int
@@ -1035,8 +1043,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_create_item(`ptr`: Long,`draft`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_delete_item(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
-    ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_edit(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_item_template(`ptr`: Long,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1089,6 +1095,16 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_update_settings(`ptr`: Long,`s`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_empty_trash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_list_trash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_purge_item(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_restore_item(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_trash_item(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_create_unlock_bundle(`ptr`: Long,`password`: RustBuffer.ByValue,`bootCount`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_unlock_password(`ptr`: Long,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1348,9 +1364,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_create_item() and 0xFFFF) != 49671) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_delete_item() and 0xFFFF) != 18313) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_item_edit() and 0xFFFF) != 6199) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1427,6 +1440,21 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_update_settings() and 0xFFFF) != 30174) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_empty_trash() and 0xFFFF) != 21610) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_list_trash() and 0xFFFF) != 34309) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_purge_item() and 0xFFFF) != 38153) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_restore_item() and 0xFFFF) != 28037) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_trash_item() and 0xFFFF) != 4513) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_create_unlock_bundle() and 0xFFFF) != 11120) {
@@ -2397,11 +2425,6 @@ public interface MobileVaultInterface {
     fun `createItem`(`draft`: ItemDraft): kotlin.String
     
     /**
-     * The identity cannot be deleted (the core refuses).
-     */
-    fun `deleteItem`(`id`: kotlin.String)
-    
-    /**
      * What the editor needs to open `id`: names and presence, the title,
      * websites and username. No secret.
      */
@@ -2500,6 +2523,20 @@ public interface MobileVaultInterface {
     fun `settings`(): MobileSettings
     
     fun `updateSettings`(`s`: MobileSettings)
+    
+    fun `emptyTrash`(): kotlin.UInt
+    
+    fun `listTrash`(): List<TrashSummary>
+    
+    fun `purgeItem`(`id`: kotlin.String)
+    
+    fun `restoreItem`(`id`: kotlin.String)
+    
+    /**
+     * Delete moves the item to the Trash. `false`: its details did not
+     * open, so it was deleted for good. The identity cannot be (the core refuses).
+     */
+    fun `trashItem`(`id`: kotlin.String): kotlin.Boolean
     
     /**
      * The bytes the app seals with its biometric Keystore key. The app
@@ -3176,23 +3213,6 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
-     * The identity cannot be deleted (the core refuses).
-     */
-    @Throws(MobileException::class)override fun `deleteItem`(`id`: kotlin.String)
-        = 
-    callWithHandle {
-    uniffiRustCallWithError(MobileException) { _status ->
-    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_delete_item(
-        it,
-        
-        FfiConverterString.lower(`id`),_status)
-}
-    }
-    
-    
-
-    
-    /**
      * What the editor needs to open `id`: names and presence, the title,
      * websites and username. No secret.
      */
@@ -3632,6 +3652,81 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 }
     }
     
+    
+
+    
+    @Throws(MobileException::class)override fun `emptyTrash`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_empty_trash(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(MobileException::class)override fun `listTrash`(): List<TrashSummary> {
+            return FfiConverterSequenceTypeTrashSummary.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_list_trash(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(MobileException::class)override fun `purgeItem`(`id`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_purge_item(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(MobileException::class)override fun `restoreItem`(`id`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_restore_item(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Delete moves the item to the Trash. `false`: its details did not
+     * open, so it was deleted for good. The identity cannot be (the core refuses).
+     */
+    @Throws(MobileException::class)override fun `trashItem`(`id`: kotlin.String): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_trash_item(
+        it,
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -6057,6 +6152,49 @@ public object FfiConverterTypeTotpNow: FfiConverterRustBuffer<TotpNow> {
 
 
 
+data class TrashSummary (
+    var `item`: ItemSummary
+    , 
+    var `trashedAt`: kotlin.Long
+    , 
+    var `daysLeft`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTrashSummary: FfiConverterRustBuffer<TrashSummary> {
+    override fun read(buf: ByteBuffer): TrashSummary {
+        return TrashSummary(
+            FfiConverterTypeItemSummary.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TrashSummary) = (
+            FfiConverterTypeItemSummary.allocationSize(value.`item`) +
+            FfiConverterLong.allocationSize(value.`trashedAt`) +
+            FfiConverterUInt.allocationSize(value.`daysLeft`)
+    )
+
+    override fun write(value: TrashSummary, buf: ByteBuffer) {
+            FfiConverterTypeItemSummary.write(value.`item`, buf)
+            FfiConverterLong.write(value.`trashedAt`, buf)
+            FfiConverterUInt.write(value.`daysLeft`, buf)
+    }
+}
+
+
+
 data class ViewField (
     var `key`: kotlin.String
     , 
@@ -7312,6 +7450,34 @@ public object FfiConverterSequenceTypePasskeyOffer: FfiConverterRustBuffer<List<
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypePasskeyOffer.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTrashSummary: FfiConverterRustBuffer<List<TrashSummary>> {
+    override fun read(buf: ByteBuffer): List<TrashSummary> {
+        val len = buf.getInt()
+        return List<TrashSummary>(len) {
+            FfiConverterTypeTrashSummary.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TrashSummary>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTrashSummary.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TrashSummary>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTrashSummary.write(it, buf)
         }
     }
 }

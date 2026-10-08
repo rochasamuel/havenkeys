@@ -30,6 +30,7 @@ mod passkey_json;
 mod qr;
 mod save;
 mod settings;
+mod trash;
 mod unlock;
 mod vault;
 

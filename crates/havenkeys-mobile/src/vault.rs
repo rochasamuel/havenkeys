@@ -61,11 +61,18 @@ impl MobileVault {
     /// Send one staged write and record it once the server has accepted it.
     /// A conflict comes back as `item_changed_elsewhere`; nothing is
     /// recorded then.
-    pub(crate) fn send(&self, staged: havenkeys_core::vault::StagedWrite) -> MobileResult<()> {
+    pub(crate) fn send_returning(
+        &self,
+        staged: havenkeys_core::vault::StagedWrite,
+    ) -> MobileResult<Option<havenkeys_core::model::ItemOverview>> {
         let client = self.client.clone();
-        self.block_on(client.push(staged))?;
+        let ov = self.block_on(client.push(staged))?;
         havenkeys_client::ClientEvents::items_changed(&*self.events);
-        Ok(())
+        Ok(ov)
+    }
+
+    pub(crate) fn send(&self, staged: havenkeys_core::vault::StagedWrite) -> MobileResult<()> {
+        self.send_returning(staged).map(|_| ())
     }
 
     fn auto_lock_tick(client: &HavenClient, clock: &LockClock) {

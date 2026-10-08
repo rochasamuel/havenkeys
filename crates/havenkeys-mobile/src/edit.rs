@@ -581,15 +581,6 @@ impl MobileVault {
         let staged = self.stage_draft(Some(&id), draft)?;
         self.send(staged)
     }
-
-    /// The identity cannot be deleted (the core refuses).
-    pub fn delete_item(&self, id: String) -> MobileResult<()> {
-        let id = parse_id(&id)?;
-        self.unlocked()?;
-        self.client.require_online()?;
-        let staged = self.client.vault()?.stage_delete(&id)?;
-        self.send(staged)
-    }
 }
 
 /// The scheme and type of the only QR codes the editor keeps.
@@ -1172,7 +1163,7 @@ mod tests {
             ),
             "offline"
         );
-        assert_eq!(code(v.delete_item(id.clone()).err().unwrap()), "offline");
+        assert_eq!(code(v.trash_item(id.clone()).err().unwrap()), "offline");
         assert_eq!(v.list_items().unwrap().len(), 1);
         assert_eq!(v.item_view(id).unwrap().summary.title, "GitHub");
     }
@@ -1188,7 +1179,7 @@ mod tests {
         overdue_refuses(&v, &seen, |v| {
             v.update_item(id.clone(), login_draft("x", vec![]))
         });
-        overdue_refuses(&v, &seen, |v| v.delete_item(id.clone()));
+        overdue_refuses(&v, &seen, |v| v.trash_item(id.clone()));
         assert_eq!(
             code(v.stage_draft(None, login_draft("x", vec![])).err().unwrap()),
             "locked"
