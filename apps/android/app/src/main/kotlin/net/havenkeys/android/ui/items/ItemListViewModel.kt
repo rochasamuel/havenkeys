@@ -31,22 +31,29 @@ fun categoryCounts(items: List<ItemSummary>): Map<Category, Int> =
     Category.entries.associateWith { category -> items.count(category::keeps) }
 
 /**
- * Every tag in use with how many items carry it, A–Z, for the Items tab.
- * Tags that differ only in case are one (two devices can each create a
- * spelling before they sync): the first spelling seen names it.
+ * Every tag in use with how many items carry it, in no order. Tags that
+ * differ only in case are one (two devices can each create a spelling
+ * before they sync); the spelling most items carry names it (ties: the
+ * smallest by code point), as Rust picks one for a new save.
  */
-fun tagCounts(items: List<ItemSummary>): List<Pair<String, Int>> {
-    val order = readerOrder()
-    val spelling = mutableMapOf<String, String>()
-    val counts = mutableMapOf<String, Int>()
+internal fun tagUse(items: List<ItemSummary>): List<Pair<String, Int>> {
+    val spellings = mutableMapOf<String, MutableMap<String, Int>>()
     items.forEach { item ->
         item.tags.distinctBy(::tagKey).forEach { tag ->
-            val key = tagKey(tag)
-            spelling.getOrPut(key) { tag }
-            counts[key] = (counts[key] ?: 0) + 1
+            val counts = spellings.getOrPut(tagKey(tag)) { mutableMapOf() }
+            counts[tag] = (counts[tag] ?: 0) + 1
         }
     }
-    return counts.map { (key, n) -> spelling.getValue(key) to n }.sortedWith { a, b -> order.compare(a.first, b.first) }
+    return spellings.values.map { counts ->
+        counts.entries.minWith(compareBy<Map.Entry<String, Int>> { -it.value }.thenBy { it.key }).key to
+            counts.values.sum()
+    }
+}
+
+/** Every tag in use with how many items carry it, A–Z, for the Items tab (see [tagUse]). */
+fun tagCounts(items: List<ItemSummary>): List<Pair<String, Int>> {
+    val order = readerOrder()
+    return tagUse(items).sortedWith { a, b -> order.compare(a.first, b.first) }
 }
 
 /** Whether [item] carries [tag], in any case. */

@@ -114,11 +114,12 @@ class ItemListViewModelTest {
     @Test
     fun tagCountsMergeTagsThatDifferOnlyInCase() {
         val items = listOf(
-            item("1", ItemKind.LOGIN, "A", tags = listOf("Work")),
-            item("2", ItemKind.LOGIN, "B", tags = listOf("work", "prod")),
-            item("3", ItemKind.LOGIN, "C", tags = listOf("WORK")),
+            item("1", ItemKind.LOGIN, "A", tags = listOf("work")),
+            item("2", ItemKind.LOGIN, "B", tags = listOf("Work", "prod")),
+            item("3", ItemKind.LOGIN, "C", tags = listOf("Work", "Prod")),
         )
-        assertEquals(listOf("prod" to 1, "Work" to 3), tagCounts(items))
+        // "Work" is carried by most items (not first seen); "Prod"/"prod" tie, the smallest wins.
+        assertEquals(listOf("Prod" to 2, "Work" to 3), tagCounts(items))
     }
 
     @Test

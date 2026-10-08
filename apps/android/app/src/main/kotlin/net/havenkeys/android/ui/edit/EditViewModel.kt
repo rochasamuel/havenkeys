@@ -16,6 +16,7 @@ import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
 import net.havenkeys.android.ui.items.readerOrder
+import net.havenkeys.android.ui.items.tagUse
 import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
@@ -40,19 +41,8 @@ sealed interface EditTarget {
  * (ties: the smallest by code point), as the spelling a new tag will take.
  */
 internal fun tagsByUse(items: List<ItemSummary>): List<String> {
-    val spellings = mutableMapOf<String, MutableMap<String, Int>>()
-    items.forEach { item ->
-        item.tags.distinctBy(::tagKey).forEach { tag ->
-            val counts = spellings.getOrPut(tagKey(tag)) { mutableMapOf() }
-            counts[tag] = (counts[tag] ?: 0) + 1
-        }
-    }
     val order = readerOrder()
-    return spellings.values
-        .map { counts ->
-            counts.entries.minWith(compareBy<Map.Entry<String, Int>> { -it.value }.thenBy { it.key }).key to
-                counts.values.sum()
-        }
+    return tagUse(items)
         .sortedWith { a, b -> (b.second - a.second).takeIf { it != 0 } ?: order.compare(a.first, b.first) }
         .map { it.first }
 }
