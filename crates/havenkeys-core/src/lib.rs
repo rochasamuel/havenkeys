@@ -34,6 +34,7 @@ pub mod store;
 pub mod sync;
 pub mod tags;
 pub mod totp;
+pub mod trash;
 pub mod unlock_bundle;
 pub mod vault;
 

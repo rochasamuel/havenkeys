@@ -240,7 +240,10 @@ impl VaultService {
                 }
                 _ => item.overview.id,
             };
-            if session.overviews.contains_key(&id) || !seen.insert(id) {
+            if session.overviews.contains_key(&id)
+                || session.trash.contains_key(&id)
+                || !seen.insert(id)
+            {
                 report.skipped_existing += 1;
                 continue;
             }

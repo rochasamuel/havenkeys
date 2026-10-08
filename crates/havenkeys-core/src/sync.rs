@@ -430,7 +430,8 @@ impl VaultService {
             };
             match checked {
                 Some(((id, ov, det), overview)) => {
-                    if self.session()?.overviews.contains_key(&id) {
+                    let s = self.session()?;
+                    if s.overviews.contains_key(&id) || s.trash.contains_key(&id) {
                         report.updated += 1;
                     } else {
                         report.added += 1;
@@ -455,10 +456,10 @@ impl VaultService {
         // A routine pull with nothing in it must keep the health cache.
         let items_changed = !overviews.is_empty() || !deletions.is_empty();
         for overview in overviews {
-            self.session_mut()?.overviews.insert(overview.id, overview);
+            self.session_mut()?.place(overview);
         }
         for id in &deletions {
-            self.session_mut()?.overviews.remove(id);
+            self.session_mut()?.forget(id);
         }
         if items_changed {
             let s = self.session_mut()?;

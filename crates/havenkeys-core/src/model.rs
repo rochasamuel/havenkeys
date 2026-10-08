@@ -91,6 +91,11 @@ pub struct ItemOverview {
     /// overviews written before tags existed have none.
     #[serde(default)]
     pub tags: Vec<String>,
+    /// When the item was moved to the Trash, Unix milliseconds; `None` for a
+    /// live item (spec 2026-10-08-trash §4). `default`: overviews written
+    /// before the Trash existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trashed_at: Option<i64>,
     /// Fields written by a newer version that this one does not know. Kept
     /// so an edit made here does not erase them (spec 2026-10-07-item-tags §3.4).
     #[serde(flatten)]
@@ -915,4 +920,14 @@ mod tests {
         .unwrap();
         assert!(check_shape(&input).is_err());
     }
+}
+
+/// One item in the Trash and the whole days left before it is removed for
+/// good (0 to 30). Overview only: a trashed item's secrets are not shown.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashEntry {
+    #[serde(flatten)]
+    pub overview: ItemOverview,
+    pub days_left: u32,
 }

@@ -82,6 +82,10 @@ pub(crate) struct Session {
     /// The item ID of the account's one Identity, derived from the vault key.
     pub(crate) identity_id: Uuid,
     pub(crate) overviews: HashMap<Uuid, ItemOverview>,
+    /// Items in the Trash (spec 2026-10-08-trash §5.1). Only the trash
+    /// functions read this map; every other reader sees `overviews` alone,
+    /// so a trashed item is never filled, searched or exported.
+    pub(crate) trash: HashMap<Uuid, ItemOverview>,
     pub(crate) settings: Settings,
     pub(crate) damaged_items: usize,
     pub(crate) damaged_settings: bool,
@@ -91,6 +95,27 @@ pub(crate) struct Session {
     pub(crate) generation: u64,
     /// The last health report and when it was computed; dropped on lock.
     pub(crate) health: Option<crate::health::HealthReport>,
+}
+
+impl Session {
+    /// Put an overview in the one map its `trashed_at` says, taking it out
+    /// of the other.
+    pub(crate) fn place(&mut self, overview: ItemOverview) {
+        let id = overview.id;
+        if overview.trashed_at.is_some() {
+            self.overviews.remove(&id);
+            self.trash.insert(id, overview);
+        } else {
+            self.trash.remove(&id);
+            self.overviews.insert(id, overview);
+        }
+    }
+
+    /// Drop an item from both maps (a tombstone).
+    pub(crate) fn forget(&mut self, id: &Uuid) {
+        self.overviews.remove(id);
+        self.trash.remove(id);
+    }
 }
 
 /// A password HavenKeys filled: which login, on which site, when. In memory
@@ -776,6 +801,17 @@ impl VaultService {
         Ok(self.store.header()?.map(|h| h.vault_id))
     }
 
+    /// Flips a bit in an item's details blob so it no longer opens.
+    #[cfg(any(test, feature = "test-util"))]
+    #[doc(hidden)]
+    pub fn corrupt_details_for_tests(&mut self, id: &Uuid) {
+        let (ov, mut det) = self.store.item_blobs(id).unwrap().unwrap();
+        let last = det.len() - 1;
+        det[last] ^= 1;
+        let rev = self.store.item_revision(id).unwrap().unwrap_or(0);
+        self.store.upsert_item(id, &ov, &det, rev).unwrap();
+    }
+
     /// Puts a field this version does not know into an item's in-memory
     /// overview, as a pull from a newer device would.
     #[cfg(any(test, feature = "test-util"))]
@@ -846,6 +882,7 @@ impl VaultService {
             data_key,
             identity_id,
             overviews: HashMap::new(),
+            trash: HashMap::new(),
             settings,
             damaged_items: 0,
             damaged_settings: false,
@@ -954,6 +991,7 @@ impl VaultService {
         let settings = opened.unwrap_or_else(Settings::restrictive);
 
         let mut overviews = HashMap::new();
+        let mut trash = HashMap::new();
         let mut damaged_items = 0;
         for row in self.store.item_overviews()? {
             let parsed = row.and_then(|(id, data)| {
@@ -966,7 +1004,11 @@ impl VaultService {
             });
             match parsed {
                 Ok(ov) => {
-                    overviews.insert(ov.id, ov);
+                    if ov.trashed_at.is_some() {
+                        trash.insert(ov.id, ov);
+                    } else {
+                        overviews.insert(ov.id, ov);
+                    }
                 }
                 Err(_) => damaged_items += 1,
             }
@@ -976,6 +1018,7 @@ impl VaultService {
             data_key,
             identity_id: derive_identity_item_id(vault_key)?,
             overviews,
+            trash,
             settings,
             damaged_items,
             damaged_settings,
@@ -1313,6 +1356,23 @@ impl VaultService {
     pub(crate) fn load_details(&self, id: &Uuid) -> Result<ItemDetails> {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
+        self.open_details(session, id, overview.item_type)
+    }
+
+    /// A trashed item's details, for restoring it. Never used by a fill,
+    /// reveal or copy path.
+    pub(crate) fn load_trashed_details(&self, id: &Uuid) -> Result<ItemDetails> {
+        let session = self.session()?;
+        let overview = session.trash.get(id).ok_or(Error::NotFound)?;
+        self.open_details(session, id, overview.item_type)
+    }
+
+    fn open_details(
+        &self,
+        session: &Session,
+        id: &Uuid,
+        item_type: ItemType,
+    ) -> Result<ItemDetails> {
         let (ov_blob, data) = self.store.item_blobs(id)?.ok_or(Error::NotFound)?;
         let ctx = BlobContext::item_details(session.vault_id, *id, &ov_blob);
         let details: ItemDetails =
@@ -1320,7 +1380,7 @@ impl VaultService {
                 Error::Corrupted => Error::Corrupted,
                 _ => Error::Decryption,
             })?;
-        if details.item_type() != overview.item_type {
+        if details.item_type() != item_type {
             return Err(Error::Corrupted);
         }
         Ok(details)
@@ -1861,6 +1921,11 @@ impl VaultService {
         if *id == session.identity_id {
             return Err(Error::Denied);
         }
+        self.tombstone(id)
+    }
+
+    /// A deletion: no blobs, only the revision this device last saw.
+    pub(crate) fn tombstone(&self, id: &Uuid) -> Result<StagedWrite> {
         Ok(StagedWrite {
             item_id: *id,
             base_revision: self.store.item_revision(id)?,
@@ -2037,7 +2102,7 @@ impl VaultService {
         self.seal_staged(overview, details, base_revision)
     }
 
-    fn seal_staged(
+    pub(crate) fn seal_staged(
         &self,
         overview: ItemOverview,
         details: Option<&ItemDetails>,
@@ -2232,14 +2297,12 @@ impl VaultService {
             (Some(ov), Some(det), Some(overview)) => {
                 self.store
                     .upsert_item(&staged.item_id, &ov, &det, revision)?;
-                self.session_mut()?
-                    .overviews
-                    .insert(staged.item_id, overview.clone());
+                self.session_mut()?.place(overview.clone());
                 Ok(Some(overview))
             }
             (None, None, None) => {
                 self.store.delete_item(&staged.item_id)?;
-                self.session_mut()?.overviews.remove(&staged.item_id);
+                self.session_mut()?.forget(&staged.item_id);
                 Ok(None)
             }
             // `overview`/`details` are `pub` (see `StagedWrite`) so a caller
@@ -2530,6 +2593,7 @@ pub(crate) fn build_item(
             _ => None,
         },
         tags: crate::tags::normalize(&tags.unwrap_or_default())?,
+        trashed_at: None,
         extra: serde_json::Map::new(),
         created_at,
         updated_at: now_ms,
