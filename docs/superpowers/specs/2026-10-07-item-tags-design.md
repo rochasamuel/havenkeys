@@ -3,6 +3,24 @@
 Date: 2026-10-07. Status: approved in conversation; revised after
 implementation (see "Revisions from planning and implementation" below).
 
+> **Revision 2026-10-07 (owner request): tags keep their case, brass pills.**
+>
+> * Tags keep the case the user gave them ("Dev Team"); whitespace is still
+>   trimmed and collapsed. Duplicates are found without case.
+> * The vault keeps one spelling per tag: when an item is saved, Rust maps
+>   each of its tags to the spelling other items already use (the item
+>   itself left out, so the only item with a tag can change its case).
+> * Concurrent creation of "Work" and "work" on two devices can leave two
+>   spellings until either item is saved again; the UIs merge spellings
+>   without case (sidebar / Items tab counts, the tag filter, suggestions).
+> * Tag pills use the brass pill (brass wash, brass ink) on desktop and
+>   Android; vault-health chips stay outlined, so the two differ by colour.
+>   The extension is unchanged.
+> * The tag editor offers the vault's most-used tags (those the item lacks,
+>   up to 5) when its empty field gains focus; typing narrows them.
+>
+> §2 "Case", §3.2 and §4 below are updated to match.
+
 > **Revisions from planning and implementation** (plan
 > `docs/superpowers/plans/2026-10-07-item-tags.md`, "Deviations from the
 > spec"):
@@ -78,7 +96,7 @@ mode that hides items.
 | Extension grouping setting | None. Matches per site are usually 1–3; group headers would cost more than they separate |
 | Which items | All item types (login, secure note, card, identity) |
 | Tag vocabulary | Free-form; no separate registry. The vault's tag set is the union of item tags |
-| Case | Normalised to lowercase |
+| Case | Kept as typed; compared without case. The vault keeps one spelling per tag (revision 2026-10-07) |
 | Colours | None (both DESIGN.md files forbid a second accent) |
 | Where stored | Inside the sealed `ItemOverview`; no server or SQLite change. `ItemInput.tags`: `None` keeps the stored tags, `Some` replaces them |
 | Older clients | An edit from an older version drops the item's tags; documented, not worked around. From this version, unknown overview fields survive edits |
@@ -106,12 +124,19 @@ the title and username (§36), and autofill authorization is unchanged.
 
 One function every write path goes through (`build_item`, import):
 
-1. Trim; collapse internal whitespace runs to one space; lowercase
-   (Unicode-aware `to_lowercase`).
+1. Trim; collapse internal whitespace runs to one space. Case is kept.
 2. Reject: empty, more than 32 characters (counted in `char`s), any control
    character, or a comma (the editor uses comma as a separator).
-3. Deduplicate and sort.
+3. Deduplicate without case (the key is Unicode-aware `to_lowercase`; the
+   first spelling given wins) and sort by (key, spelling).
 4. Reject more than 20 tags on one item.
+5. On every staged write, each tag takes the spelling other items already
+   use for its key (the item being written is left out). Imports and
+   restores carry the spellings of their earlier writes.
+
+Two devices that each create a spelling of a new tag before syncing leave
+two spellings until either item is saved again; desktop and Android merge
+them without case wherever they list or filter tags.
 
 Errors are fixed strings ("Tag is too long.", "Too many tags.", "Tag contains
 a character that is not allowed.") and never echo the input.
@@ -142,16 +167,22 @@ restored by this one.
 
 ## 4. UI
 
-Visual language for every surface: a tag is an **outlined muted pill** — the
-desktop's match chip / Android's `pill-outline` — in the label face, never
-mono, never brass-filled (filled brass pills stay reserved for state markers).
-No colours per tag.
+Visual language for every surface: a tag is a **brass pill** (brass wash,
+brass ink, with the tag glyph on Android) in the label face, never mono
+(revision 2026-10-07; it was an outlined muted pill). Vault-health chips stay
+outlined, so tags and health differ by colour. In list rows (desktop
+sidebar, Android Items tab and editor rows) the tag glyph is brass and the
+name keeps the normal ink. The extension keeps its text-only tags. No colours
+per tag. Tags are shown in their stored case; lists and filters compare
+without case.
 
 ### 4.1 Desktop — editor
 
 * One **Tags** row in the item's group (Row Is the Field rule: no box around
   the input). Existing tags show as pills with a small × button, followed by
   an inline "Add tag" input.
+* Focusing the empty input offers the vault's most-used tags the item lacks
+  (up to 5, most used first, then A–Z), counted over the other items.
 * Typing opens a suggestion popover (floating-menu style: raised, 11px
   radius, lift shadow) listing matching vault tags with their counts, plus a
   last row "Create "<text>"" when the text is not an existing tag.
@@ -180,9 +211,11 @@ No colours per tag.
   list (28sp serif large title, the same back chevron).
 * The editor gains a **Tags** group modelled on the websites group: one row
   per tag with a 48dp remove button (pills are markers and have no target),
-  then an **Add tag** row with an inline field; matching suggestions appear
-  as rows below it while typing.
-* Item detail shows the tags as a row of outline pills.
+  then an **Add tag** row with an inline field. Focusing the empty field
+  offers up to 5 of the other items' tags the item lacks, most used first,
+  then A–Z, as rows below it; typing narrows them (without case). Tapping
+  one adds it and keeps the field focused.
+* Item detail shows the tags as a row of brass pills with the tag glyph.
 * Tags are never cut with an ellipsis (Android rule); a long tag
   wraps.
 
