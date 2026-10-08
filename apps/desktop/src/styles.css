@@ -19,6 +19,7 @@
   --field: #0b110f;
   --sel: rgba(201, 164, 92, 0.15);
   --sel-strong: rgba(201, 164, 92, 0.22);
+  --tag-ink: var(--brass-ink);
   --glass: rgba(15, 22, 20, 0.9);
   --lift: 0 24px 48px -16px rgba(0, 0, 0, 0.6), 0 8px 16px -8px rgba(0, 0, 0, 0.45);
 }
@@ -30,6 +31,7 @@
   --field: #ffffff;
   --sel: rgba(201, 164, 92, 0.18);
   --sel-strong: rgba(201, 164, 92, 0.26);
+  --tag-ink: #6f5728;
   --glass: rgba(22, 35, 31, 0.94);
   --lift: 0 24px 48px -18px rgba(22, 35, 31, 0.28), 0 8px 16px -8px rgba(22, 35, 31, 0.14);
 }
@@ -42,6 +44,7 @@
     --field: #ffffff;
     --sel: rgba(201, 164, 92, 0.18);
     --sel-strong: rgba(201, 164, 92, 0.26);
+    --tag-ink: #6f5728;
     --glass: rgba(22, 35, 31, 0.94);
     --lift: 0 24px 48px -18px rgba(22, 35, 31, 0.28), 0 8px 16px -8px rgba(22, 35, 31, 0.14);
   }
@@ -2357,14 +2360,16 @@ input::-ms-clear {
   min-width: 0;
 }
 
-/* A tag is the system brass pill at the chip's size: brass wash, brass ink (which darkens in
-   light theme), no outline, so it never reads as one of the outlined vault-health chips. */
+/* A tag is the system brass pill at the chip's size: brass wash, brass ink, no outline, so it
+   never reads as one of the outlined vault-health chips. In light theme the ink is a darker
+   brass (--tag-ink #6f5728): 6.0:1 on the pill over the pane, 5.6:1 on its hover ground, 5.0:1
+   in a focused editor row; brass-ink #8f7236 reached only 3.3 to 4.0:1 at 11.5px. */
 .tag-chip {
   gap: 2px;
   padding-right: 4px;
   border-color: transparent;
   background: var(--brass-soft);
-  color: var(--brass-ink);
+  color: var(--tag-ink);
   font-weight: 600;
 }
 

@@ -186,6 +186,7 @@ export function CardEditor({ existing, readOnly, onCancel, onSaved, onDirtyChang
               onChange={(next) => setDraft((d) => (d ? { ...d, tags: next } : d))}
               disabled={readOnly || saving}
               handle={tagsRow}
+              itemId={existing?.id}
             />
           </div>
           <div className="group">

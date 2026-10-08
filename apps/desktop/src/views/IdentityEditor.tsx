@@ -101,7 +101,13 @@ export function IdentityEditor({ existing, readOnly, onCancel, onSaved, onDirtyC
       ) : (
         <>
           <div className="group">
-            <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} handle={tagsRow} />
+            <TagsEditor
+              value={tags}
+              onChange={setTags}
+              disabled={readOnly || saving}
+              handle={tagsRow}
+              itemId={existing.id}
+            />
           </div>
 
           {IDENTITY_SECTIONS.map((section, s) => (

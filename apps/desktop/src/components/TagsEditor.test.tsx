@@ -8,10 +8,11 @@ import { TagsEditor, type TagsEditorHandle } from "./TagsEditor";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const vault = [
-  { name: "api", count: 1 },
-  { name: "staging", count: 3 },
-  { name: "work", count: 1 },
+// api 1, staging 3, work 1.
+let vault = [
+  { id: "x1", tags: ["api", "staging", "work"] },
+  { id: "x2", tags: ["staging"] },
+  { id: "x3", tags: ["staging"] },
 ];
 
 let host: HTMLElement;
@@ -20,6 +21,11 @@ const onChange = vi.fn<(tags: string[]) => void>();
 
 beforeEach(() => {
   onChange.mockReset();
+  vault = [
+    { id: "x1", tags: ["api", "staging", "work"] },
+    { id: "x2", tags: ["staging"] },
+    { id: "x3", tags: ["staging"] },
+  ];
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -29,11 +35,11 @@ afterEach(() => {
   host.remove();
 });
 
-function show(value: string[], handle?: Ref<TagsEditorHandle>) {
+function show(value: string[], handle?: Ref<TagsEditorHandle>, itemId?: string) {
   act(() =>
     root.render(
       <VaultTagsProvider value={vault}>
-        <TagsEditor value={value} onChange={onChange} handle={handle} />
+        <TagsEditor value={value} onChange={onChange} handle={handle} itemId={itemId} />
       </VaultTagsProvider>,
     ),
   );
@@ -84,6 +90,37 @@ describe("TagsEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith(["staging"]);
     show(["staging"]);
     expect(options()).toEqual(["api1", "work1"]);
+  });
+
+  it("leaves the edited item out of the vault's tags, so the only item with one may change its case", () => {
+    vault = [{ id: "me", tags: ["work"] }, ...vault.slice(1)];
+    show([], undefined, "me"); // "work" removed from this item
+    type("Work");
+    expect(options()).toEqual([en.editor.createTag("Work")]);
+    key("Enter");
+    expect(onChange).toHaveBeenLastCalledWith(["Work"]);
+  });
+
+  it("counts the vault's tags on focus without the edited item's own", () => {
+    vault = [{ id: "me", tags: ["staging"] }, ...vault];
+    show([], undefined, "me");
+    act(() => input().focus());
+    expect(options()).toEqual(["staging3", "api1", "work1"]);
+  });
+
+  it("clears typed text and closes the list on one Escape; the next is the editor's", () => {
+    show([]);
+    act(() => input().focus());
+    type("st");
+    const outer = vi.fn();
+    document.body.addEventListener("keydown", outer);
+    key("Escape");
+    expect(input().value).toBe("");
+    expect(options()).toEqual([]);
+    expect(outer).not.toHaveBeenCalled();
+    key("Escape");
+    expect(outer).toHaveBeenCalledTimes(1);
+    document.body.removeEventListener("keydown", outer);
   });
 
   it("closes the open list on Escape with an empty field, and on blur", () => {

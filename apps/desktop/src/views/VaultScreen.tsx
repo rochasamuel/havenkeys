@@ -339,7 +339,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   };
 
   return (
-    <VaultTagsProvider value={vaultTags}>
+    <VaultTagsProvider value={allItems}>
       <div className="vault">
         <aside className="sidebar">
           <div className="sidebar-top" data-tauri-drag-region>

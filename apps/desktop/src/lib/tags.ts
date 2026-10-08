@@ -40,15 +40,29 @@ export const hasTag = (tags: readonly string[], tag: string): boolean => tags.so
 export const compareTags = (a: string, b: string): number =>
   tagKey(a).localeCompare(tagKey(b)) || a.localeCompare(b);
 
-/** Every tag in use with how many items carry it, A–Z without case; spellings merge under the first seen. */
-export function tagCounts(items: readonly ItemOverview[]): TagCount[] {
-  const counts = new Map<string, TagCount>();
+/**
+ * Every tag in use with how many items carry it, A–Z without case. Spellings of one tag merge under
+ * the one most items carry, a tie going to the smallest, as Rust picks it (`tags::spellings`).
+ */
+export function tagCounts(items: readonly Pick<ItemOverview, "tags">[]): TagCount[] {
+  const byKey = new Map<string, Map<string, number>>();
   for (const item of items) {
     for (const tag of item.tags) {
-      const entry = counts.get(tagKey(tag));
-      if (entry) entry.count += 1;
-      else counts.set(tagKey(tag), { name: tag, count: 1 });
+      const spellings = byKey.get(tagKey(tag)) ?? new Map<string, number>();
+      spellings.set(tag, (spellings.get(tag) ?? 0) + 1);
+      byKey.set(tagKey(tag), spellings);
     }
   }
-  return [...counts.values()].sort((a, b) => compareTags(a.name, b.name));
+  return [...byKey.values()]
+    .map((spellings) => {
+      let name = "";
+      let best = 0;
+      let count = 0;
+      for (const [spelling, n] of spellings) {
+        count += n;
+        if (n > best || (n === best && spelling < name)) [name, best] = [spelling, n];
+      }
+      return { name, count };
+    })
+    .sort((a, b) => compareTags(a.name, b.name));
 }

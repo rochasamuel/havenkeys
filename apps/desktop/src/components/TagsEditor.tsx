@@ -28,6 +28,8 @@ interface Props {
   onChange: (tags: string[]) => void;
   disabled?: boolean;
   handle?: Ref<TagsEditorHandle>;
+  /** The item being edited: its saved tags are not counted among the vault's. */
+  itemId?: string;
 }
 
 type Problem = "tooLong" | "notAllowed";
@@ -36,9 +38,9 @@ type Problem = "tooLong" | "notAllowed";
  * One editor row: the item's tags as pills, then a field that suggests the vault's tags:
  * on focus the most used ones, while typing the ones that contain the text.
  */
-export function TagsEditor({ value, onChange, disabled, handle }: Props) {
+export function TagsEditor({ value, onChange, disabled, handle, itemId }: Props) {
   const { t } = useI18n();
-  const vault = useVaultTags();
+  const vault = useVaultTags(itemId);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -119,11 +121,10 @@ export function TagsEditor({ value, onChange, disabled, handle }: Props) {
       e.preventDefault();
       setActive((a) => (a <= 0 ? -1 : a - 1));
     } else if (e.key === "Escape" && (text || options.length > 0)) {
-      // Clears the text, then closes the suggestions; once both are gone,
-      // Escape is the editor's.
+      // Clears the text and closes the suggestions; the next Escape is the editor's.
       e.stopPropagation();
-      if (text) setText("");
-      else setOpen(false);
+      setText("");
+      setOpen(false);
       setActive(-1);
     }
   };

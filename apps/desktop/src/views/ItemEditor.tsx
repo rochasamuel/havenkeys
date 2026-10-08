@@ -334,7 +334,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
       </div>
 
       <div className="group">
-        <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} handle={tagsRow} />
+        <TagsEditor value={tags} onChange={setTags} disabled={readOnly || saving} handle={tagsRow} itemId={existing?.id} />
       </div>
 
       {itemType === "login" && (
