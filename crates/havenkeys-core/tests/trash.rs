@@ -306,3 +306,141 @@ fn a_backup_restore_skips_items_in_the_trash() {
     assert_eq!(staged.report.skipped_existing, 1);
     assert!(staged.writes.iter().all(|w| w.item_id != id));
 }
+
+const GH: &str = "https://github.com/login";
+
+/// A GitHub login with a password, a TOTP secret and a passkey, then trashed.
+/// Returns its id and the passkey's credential id.
+fn trashed_github(v: &mut havenkeys_core::vault::VaultService) -> (uuid::Uuid, Vec<u8>) {
+    let mut input = login("GitHub", "octo", "gh-secret-pw", "github.com");
+    input.totp = havenkeys_core::model::SecretUpdate::Set(secret("JBSWY3DPEHPK3PXPJBSWY3DP"));
+    let s = v.stage_create(input, NOW).unwrap();
+    let id = s.item_id;
+    v.commit_write(s, 1).unwrap();
+    let pk = v
+        .stage_passkey_create(
+            havenkeys_core::passkey::PasskeyCreate {
+                rp_id: "github.com",
+                page_url: GH,
+                top_url: None,
+                challenge: &[7; 32],
+                user_handle: &[1],
+                user_name: "octo",
+                display_name: None,
+                item_id: Some(id),
+                conditional: false,
+            },
+            NOW,
+        )
+        .unwrap();
+    let cred = pk.registration.credential_id.clone();
+    v.commit_write(pk.write, 2).unwrap();
+    let t = v.stage_trash(&id, NOW).unwrap();
+    v.commit_write(t, 3).unwrap();
+    (id, cred)
+}
+
+#[test]
+fn attack_a_trashed_login_is_not_filled_on_its_own_site() {
+    let (mut v, _sk) = activated_vault();
+    let (id, _) = trashed_github(&mut v);
+
+    let page = "https://github.com/login";
+    assert!(v.find_matches(page, None).unwrap().is_empty());
+    assert!(v.fill_for_page(&id, page, None, NOW).is_err());
+    assert!(v.totp_for_page(&id, page, None, 59).is_err());
+    assert!(v.totp_code(&id, 59).is_err());
+    assert!(v.search("git").unwrap().is_empty());
+    assert!(v.search_logins("git").unwrap().is_empty());
+    assert!(v.list_items().unwrap().is_empty());
+    assert!(v
+        .stage_update(&id, login("GitHub", "me", "pw2", "github.com"), NOW)
+        .is_err());
+    assert!(v.record_use(&id, NOW).is_err());
+    assert!(v
+        .frequently_used(10, NOW)
+        .unwrap()
+        .iter()
+        .all(|o| o.id != id));
+    assert!(v.recently_created(10).unwrap().iter().all(|o| o.id != id));
+    assert!(v.reveal(&id, SecretField::Password).is_err());
+}
+
+#[test]
+fn a_trashed_login_is_offered_to_no_app_and_no_passkey_request() {
+    use havenkeys_core::app_target::AppIdentity;
+    let (mut v, _sk) = activated_vault();
+    let (id, cred) = trashed_github(&mut v);
+
+    // An app whose verified host is github.com.
+    let app = AppIdentity::new("com.github.android", &[vec![0xab; 32]]).unwrap();
+    let hosts = vec!["github.com".to_string()];
+    assert!(v.matches_for_app(&app, &hosts).unwrap().is_empty());
+    assert!(v.fill_for_app(&id, &app, &hosts).is_err());
+
+    assert!(v
+        .find_passkeys("github.com", GH, None, &[])
+        .unwrap()
+        .is_empty());
+    assert!(!v.has_passkey_for_page(GH, None).unwrap());
+    assert!(v
+        .passkey_assert(&id, &cred, "github.com", GH, None, &[3; 32])
+        .is_err());
+    let cred_b64 = havenkeys_core::passkey::encode_b64url(&cred);
+    assert!(v.stage_remove_passkey(&id, &cred_b64, NOW).is_err());
+}
+
+#[test]
+fn health_and_export_leave_the_trash_out() {
+    let (mut v, _sk) = activated_vault();
+    let (id, _) = trashed_github(&mut v);
+    // A live login with the same weak shape proves the readers do see live items.
+    let s = v
+        .stage_create(login("Bank", "alice", "pw", "mybank.com"), NOW)
+        .unwrap();
+    let live = s.item_id;
+    v.commit_write(s, 4).unwrap();
+
+    let report = v.health_report(NOW).unwrap();
+    assert!(report.issues.iter().any(|i| i.item_id == live));
+    assert!(report.issues.iter().all(|i| i.item_id != id));
+
+    for format in [ExportFormat::BitwardenJson, ExportFormat::Csv] {
+        let out = export::render(&v, format, NOW).unwrap();
+        let text = std::str::from_utf8(&out.bytes).unwrap();
+        assert!(!text.contains("gh-secret-pw") && !text.contains("JBSWY3DPEHPK3PXP"));
+        assert!(!text.contains("octo") && !text.contains("GitHub"));
+        assert!(text.contains("alice"), "live items are exported");
+    }
+    let backup = export::render(&v, ExportFormat::Backup, NOW).unwrap();
+    assert_eq!(backup.summary.logins, 1);
+    let file = seal_backup(
+        &backup.bytes,
+        &secret("a separate backup passphrase"),
+        &common::fast_kdf(),
+    )
+    .unwrap();
+    let opened = open_backup(&file, &secret("a separate backup passphrase")).unwrap();
+    assert_eq!(opened.items.len(), 1, "only the live login");
+}
+
+#[test]
+fn saving_a_login_ignores_the_trash() {
+    use havenkeys_core::vault::SaveAction;
+    let (mut v, _sk) = activated_vault();
+    trashed_github(&mut v);
+    let action = v
+        .check_login(
+            "https://github.com/session",
+            None,
+            Some("octo"),
+            &secret("gh-secret-pw"),
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        action,
+        SaveAction::Add,
+        "no trashed login to match or update"
+    );
+}

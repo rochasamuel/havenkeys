@@ -428,6 +428,31 @@ fn a2_arbitrary_item_id_denied() {
     );
 }
 
+/// A2 variant: a trashed login is answered exactly like an unknown ID, even
+/// from the origin it was saved for.
+#[test]
+fn a2_a_trashed_login_is_denied_like_an_unknown_id() {
+    let f = fixture();
+    {
+        let mut v = f.vault.lock().unwrap();
+        let staged = v.stage_trash(&f.github, NOW).unwrap();
+        v.commit_write(staged, 99).unwrap();
+    }
+    let page = "https://github.com/";
+    assert_eq!(error_code(&fill(&f, f.github, page)), Some("denied"));
+    assert_eq!(error_code(&totp(&f, f.github, page)), Some("denied"));
+    assert_eq!(
+        fill(&f, f.github, page)["error"],
+        fill(&f, Uuid::new_v4(), page)["error"],
+        "same answer as an unknown ID"
+    );
+    assert_eq!(
+        find(&f, page)["result"]["matches"],
+        serde_json::json!([]),
+        "not offered either"
+    );
+}
+
 /// A3: a locked vault answers status and nothing else.
 #[test]
 fn a3_locked_vault_refuses() {
