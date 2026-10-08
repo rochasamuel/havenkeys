@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import net.havenkeys.android.data.Outcome
+import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeSettingsRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
@@ -18,6 +19,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import net.havenkeys.android.ui.trash.trashSummary
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
@@ -30,7 +32,9 @@ class SettingsViewModelTest {
     private val vault = FakeVaultRepository()
     private var enrolled = false
 
-    private fun vm() = SettingsViewModel(repo, accounts, vault, biometricEnrolled = { enrolled })
+    private val events = VaultEventsHub()
+
+    private fun vm() = SettingsViewModel(repo, accounts, vault, events, biometricEnrolled = { enrolled })
 
     @Test
     fun loadsTheSettingsTheEmailAndTheBiometricState() = runTest {
@@ -161,5 +165,15 @@ class SettingsViewModelTest {
         enrolled = true
         vm.biometricChanged(Outcome.Ok(Unit))
         assertTrue(vm.state.value.biometricEnrolled)
+    }
+
+    @Test
+    fun countsTheTrashAndRecountsWhenItemsChange() {
+        vault.trashList = Outcome.Ok(listOf(trashSummary("a", "A")))
+        val vm = vm()
+        assertEquals(1, vm.state.value.trashCount)
+        vault.trashList = Outcome.Ok(emptyList())
+        events.itemsChanged()
+        assertEquals(0, vm.state.value.trashCount)
     }
 }

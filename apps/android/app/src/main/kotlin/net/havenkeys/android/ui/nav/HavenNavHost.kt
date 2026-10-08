@@ -54,6 +54,7 @@ import net.havenkeys.android.ui.shell.OpenItem
 import net.havenkeys.android.ui.shell.ShellNavigation
 import net.havenkeys.android.ui.shell.ShellScreen
 import net.havenkeys.android.ui.shell.ShellViewModel
+import net.havenkeys.android.ui.shell.TrashUndo
 import net.havenkeys.android.ui.theme.HavenMotion
 import net.havenkeys.android.ui.theme.HavenTheme
 
@@ -64,6 +65,7 @@ private class Nav(
     val shared: SharedTransitionScope,
     val motion: HavenMotion,
     val travel: TitleTravel,
+    val trashUndo: TrashUndo,
 ) {
     /** Opens an item over the shell; its title travels from the tapped row. */
     val open: OpenItem = { id, origin ->
@@ -104,9 +106,11 @@ internal fun HavenNavHost(
     val scope = rememberCoroutineScope()
     val motion = HavenTheme.motion
     val travel = remember { TitleTravel() }
+    // One per graph: the item screen hands its Delete to the screen it pops back to.
+    val trashUndo = remember(services) { TrashUndo(services.vault::restore) }
     // The window's ground shows through a screen that fades under a push, which reads as dimmed.
     SharedTransitionLayout(modifier.background(HavenTheme.colors.pane)) {
-        val nav = Nav(services, navController, this, motion, travel)
+        val nav = Nav(services, navController, this, motion, travel, trashUndo)
         NavHost(
             navController = navController,
             startDestination = routeOf(first),
@@ -212,6 +216,7 @@ private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
                 onGenerator = { nav.controller.pushOnce(Routes.GENERATOR) },
             ),
             searchPillModifier = Modifier.sharedIfMoving(nav.shared, SEARCH_KEY, this, nav.motion),
+            trashUndo = nav.trashUndo,
         )
     }
     composable(Routes.SEARCH) {
@@ -227,6 +232,7 @@ private fun NavGraphBuilder.shellAndSearch(nav: Nav) {
                 SharedTransitionScope.ResizeMode.RemeasureToBounds,
             ),
             sharedTitle = nav.travel.from(nav.shared, this, nav.motion),
+            trashUndo = nav.trashUndo,
         )
     }
 }
@@ -247,7 +253,15 @@ private fun NavGraphBuilder.itemScreens(nav: Nav) {
                 onBack = nav.back,
                 onLock = nav.lock,
                 onEdit = { nav.controller.pushOnce(Routes.edit(id)) },
-                onDeleted = nav.back,
+                // The screen it pops back to (the shell, search or vault health) says so, with Undo.
+                onTrashed = { title ->
+                    nav.trashUndo.offer(id, title)
+                    nav.back()
+                },
+                onDeleted = { title ->
+                    nav.trashUndo.deletedForGood(id, title)
+                    nav.back()
+                },
             ),
             titleModifier = Modifier.sharedIfMoving(nav.shared, titleKey(id), this, nav.motion),
             tileModifier = Modifier.sharedIfMoving(nav.shared, tileKey(id), this, nav.motion),
@@ -292,7 +306,10 @@ private fun EditRoute(nav: Nav, target: EditTarget) {
     )
 }
 
-/** The generator, vault health, and the screens Settings leads to. No route carries an argument. */
+/**
+ * The generator, vault health, and the screens Settings leads to; the Trash
+ * shows overviews only and opens no item. No route carries an argument.
+ */
 private fun NavGraphBuilder.toolScreens(nav: Nav) {
     val services = nav.services
     composable(Routes.GENERATOR) {
@@ -337,10 +354,12 @@ private fun NavGraphBuilder.toolScreens(nav: Nav) {
                 onBack = nav.back,
                 onLock = nav.lock,
             ),
+            trashUndo = nav.trashUndo,
         )
     }
     composable(Routes.AUTOFILL_SETUP) {
         val online by services.events.online.collectAsStateWithLifecycle()
         AutofillSetupScreen(online = online, onBack = nav.back, onLock = nav.lock)
     }
+    trashScreen(services, onBack = nav.back, onLock = nav.lock)
 }

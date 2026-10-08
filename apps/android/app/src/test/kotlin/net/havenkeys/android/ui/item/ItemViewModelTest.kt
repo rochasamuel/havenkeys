@@ -188,9 +188,18 @@ class ItemViewModelTest {
     }
 
     @Test
-    fun deleteAsksRustForThisItem() = runTest {
+    fun deleteMovesTheItemToTheTrash() = runTest {
         val vault = FakeVaultRepository().apply { view = Outcome.Ok(loginView()) }
-        assertEquals(Outcome.Ok(Unit), vm(vault).delete())
-        assertTrue("delete:id" in vault.calls)
+        assertEquals(Outcome.Ok(true), vm(vault).trash())
+        assertTrue("trash:id" in vault.calls)
+    }
+
+    @Test
+    fun deleteSaysWhenTheItemWasDeletedForGood() = runTest {
+        val vault = FakeVaultRepository().apply {
+            view = Outcome.Ok(loginView())
+            trashed = Outcome.Ok(false)
+        }
+        assertEquals(Outcome.Ok(false), vm(vault).trash())
     }
 }

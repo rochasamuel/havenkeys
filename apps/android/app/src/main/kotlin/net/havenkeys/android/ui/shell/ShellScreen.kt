@@ -36,6 +36,7 @@ fun ShellScreen(
     navigation: ShellNavigation,
     modifier: Modifier = Modifier,
     searchPillModifier: Modifier = Modifier,
+    trashUndo: TrashUndo? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val tabs = rememberNavController()
@@ -53,6 +54,8 @@ fun ShellScreen(
             viewModel.syncErrorShown()
         }
     }
+    // An item opened from Home or Items and deleted pops back here, which says so with Undo.
+    TrashUndoToast(trashUndo, toasts)
     // The add button floats on Home and Items (category lists included), not on Settings.
     val addButton: (@Composable () -> Unit)? = if (tab == Tab.SETTINGS) null else {
         { AddButton(onClick = { adding = true }) }

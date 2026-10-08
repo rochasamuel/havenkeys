@@ -27,6 +27,7 @@ import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.InsetGroup
 import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.kit.ToggleRow
+import net.havenkeys.android.ui.kit.TrailingText
 import net.havenkeys.android.ui.shell.LargeTitle
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -40,8 +41,8 @@ private class SettingsOpen(val choose: (SettingsChoice) -> Unit, val dialog: (Se
 
 /**
  * The Settings tab (spec §6.8): today's settings as grouped rows. The
- * shell's top bar above it has Lock and Sync now; Devices and Autofill
- * setup open full screen over the shell.
+ * shell's top bar above it has Lock and Sync now; Devices, Autofill
+ * setup and the Trash open full screen over the shell.
  */
 @Composable
 fun SettingsScreen(
@@ -71,6 +72,7 @@ fun SettingsScreen(
             SecurityGroup(settings, state.biometricEnrolled, actions, viewModel, open)
             AutofillGroup(settings, viewModel, navigation.onAutofillSetup)
         }
+        VaultGroup(state.trashCount, navigation.onTrash)
         AccountGroup(state.email, online, navigation, open)
     }
     val settings = state.settings
@@ -169,6 +171,21 @@ private fun AutofillGroup(settings: MobileSettings, viewModel: SettingsViewModel
                 viewModel::setAssetLinks,
                 detail = stringResource(R.string.settings_asset_links_note),
             )
+        }
+    }
+}
+
+/** The Trash, with how many items wait in it; it opens full screen, as Devices does. */
+@Composable
+private fun VaultGroup(trashCount: Int?, onTrash: () -> Unit) {
+    SectionHeader(stringResource(R.string.settings_vault), Modifier.padding(top = 16.dp))
+    InsetGroup {
+        row {
+            GroupRow(
+                onClick = onTrash,
+                trailing = { if (trashCount != null) TrailingText(trashCount.toString()) },
+                chevron = true,
+            ) { GroupRowText(stringResource(R.string.trash_title)) }
         }
     }
 }

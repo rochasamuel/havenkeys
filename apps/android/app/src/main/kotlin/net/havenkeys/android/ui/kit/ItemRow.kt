@@ -40,7 +40,8 @@ private val TileGap = 12.dp
  * One vault item in a list: tile, title, non-secret subtitle, and marks for
  * a passkey and a one-time code. One button for TalkBack; the tile is
  * decoration. [titleModifier] and [tileModifier] let the title and the tile travel
- * to the detail screen.
+ * to the detail screen. An optional [note] is a muted line of our own under
+ * the subtitle (the Trash's "Deleted 3 days ago"); it wraps.
  * Only the title and subtitle (user data) may be cut with an ellipsis.
  */
 @Composable
@@ -54,6 +55,7 @@ fun ItemRow(
     tileModifier: Modifier = Modifier,
     hasPasskey: Boolean = false,
     hasCode: Boolean = false,
+    note: String? = null,
 ) {
     val colors = HavenTheme.colors
     ReportRowTextStart(HavenSpacing.rowX + HavenSpacing.tile + TileGap)
@@ -85,6 +87,7 @@ fun ItemRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (note != null) HavenText(note, style = HavenTheme.type.rowSubtitle, color = colors.muted)
         }
         if (hasCode) {
             IconGlyph(

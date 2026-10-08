@@ -223,9 +223,37 @@
     <string name="vault_new_card">Cartão</string>
     <string name="item_edit">Editar</string>
     <string name="item_delete">Excluir</string>
-    <string name="item_confirm_delete">Excluir “%1$s” permanentemente?</string>
-    <string name="item_passkey_warning">As chaves de acesso vão junto, e você pode perder o acesso a esses sites.</string>
     <string name="item_cancel">Cancelar</string>
+    <string name="item_deleted">“%1$s” foi excluído.</string>
+    <string name="trash_title">Lixeira</string>
+    <string name="trash_explain">Os itens daqui são excluídos de vez depois de 30 dias.</string>
+    <string name="trash_empty">A Lixeira está vazia.</string>
+    <string name="trash_moved">“%1$s” foi para a Lixeira.</string>
+    <string name="trash_restore">Restaurar</string>
+    <string name="trash_restored">“%1$s” foi restaurado.</string>
+    <string name="trash_delete_forever">Excluir de vez</string>
+    <string name="trash_confirm_delete">Excluir “%1$s” de vez? Não dá para desfazer.</string>
+    <string name="trash_empty_action">Esvaziar Lixeira</string>
+    <plurals name="trash_confirm_empty">
+        <item quantity="one">Excluir %1$d item de vez? Não dá para desfazer.</item>
+        <item quantity="many">Excluir %1$d itens de vez? Não dá para desfazer.</item>
+        <item quantity="other">Excluir %1$d itens de vez? Não dá para desfazer.</item>
+    </plurals>
+    <string name="trash_passkey_warning">As chaves de acesso dele vão junto. Os sites que as usam vão pedir outra forma de entrar.</string>
+    <string name="trash_restore_first">Restaure o item para ver ou usar as senhas e códigos.</string>
+    <plurals name="trash_deleted_ago">
+        <item quantity="one">Excluído há %1$d dia</item>
+        <item quantity="many">Excluído há %1$d dias</item>
+        <item quantity="other">Excluído há %1$d dias</item>
+    </plurals>
+    <string name="trash_deleted_today">Excluído hoje</string>
+    <plurals name="trash_removed_in">
+        <item quantity="one">Sai em %1$d dia</item>
+        <item quantity="many">Sai em %1$d dias</item>
+        <item quantity="other">Sai em %1$d dias</item>
+    </plurals>
+    <string name="trash_removed_next_sync">Sai na próxima sincronização</string>
+    <string name="settings_vault">Cofre</string>
     <string name="edit_new_login">Novo login</string>
     <string name="edit_new_note">Nova nota segura</string>
     <string name="edit_new_card">Novo cartão</string>

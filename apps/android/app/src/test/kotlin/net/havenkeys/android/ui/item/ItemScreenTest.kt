@@ -82,7 +82,8 @@ class ItemScreenTest {
         onBack = { went += "back" },
         onLock = { went += "lock" },
         onEdit = { went += "edit" },
-        onDeleted = { went += "deleted" },
+        onTrashed = { went += "trashed:$it" },
+        onDeleted = { went += "deleted:$it" },
     )
 
     private val hub = VaultEventsHub()
@@ -151,29 +152,34 @@ class ItemScreenTest {
     }
 
     @Test
-    fun deleteAsksFirstWarnsOfPasskeysAndLeavesAfterRust() {
+    fun deleteMovesTheItemToTheTrashWithoutAskingThenLeaves() {
         vault.view = Outcome.Ok(login(passkey = true))
         show()
         rule.onNodeWithContentDescription(text(R.string.vault_more)).performClick()
         rule.onNodeWithText(text(R.string.item_delete)).performClick()
-        rule.onNodeWithText(text(R.string.item_confirm_delete, "GitHub")).assertExists()
-        rule.onNodeWithText(text(R.string.item_passkey_warning)).assertExists()
-        rule.onNode(hasText(text(R.string.item_delete)) and hasAnyAncestor(isDialog())).performClick()
         rule.waitForIdle()
-        assertTrue("delete:id" in vault.calls)
-        assertEquals(listOf("deleted"), went)
+        rule.onAllNodes(isDialog()).assertCountEquals(0)
+        assertTrue("trash:id" in vault.calls)
+        assertEquals(listOf("trashed:GitHub"), went)
     }
 
-    /** Final review (stage 4): the delete dialog's Cancel closes it and deletes nothing. */
     @Test
-    fun cancellingTheDeleteDialogDeletesNothing() {
+    fun anItemDeletedForGoodLeavesSayingSo() {
+        vault.trashed = Outcome.Ok(false)
         show()
         rule.onNodeWithContentDescription(text(R.string.vault_more)).performClick()
         rule.onNodeWithText(text(R.string.item_delete)).performClick()
-        rule.onNode(hasText(text(R.string.item_cancel)) and hasAnyAncestor(isDialog())).performClick()
         rule.waitForIdle()
-        rule.onAllNodesWithText(text(R.string.item_confirm_delete, "GitHub")).assertCountEquals(0)
-        assertTrue(vault.calls.none { it.startsWith("delete") })
+        assertEquals(listOf("deleted:GitHub"), went)
+    }
+
+    @Test
+    fun aFailedDeleteSaysWhyAndStays() {
+        vault.trashed = Outcome.Failed("offline")
+        show()
+        rule.onNodeWithContentDescription(text(R.string.vault_more)).performClick()
+        rule.onNodeWithText(text(R.string.item_delete)).performClick()
+        rule.onNodeWithText(text(errorText("offline"))).assertExists()
         assertEquals(emptyList<String>(), went)
     }
 

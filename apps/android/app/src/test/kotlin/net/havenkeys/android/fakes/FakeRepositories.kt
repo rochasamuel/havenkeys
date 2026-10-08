@@ -42,6 +42,7 @@ import uniffi.havenkeys_mobile.Status
 import uniffi.havenkeys_mobile.TargetFacts
 import uniffi.havenkeys_mobile.TargetKind
 import uniffi.havenkeys_mobile.TotpNow
+import uniffi.havenkeys_mobile.TrashSummary
 
 fun status(state: LockState = LockState.UNLOCKED, exists: Boolean = true) =
     Status(state, exists, false, false, "user@example.com", "https://vault.example.com", null, 0u)
@@ -144,7 +145,11 @@ class FakeVaultRepository : VaultRepository {
     var edit: Outcome<ItemEdit> = Outcome.Failed("not_found")
     var created: Outcome<String> = Outcome.Ok("new-id")
     var updated: Outcome<Unit> = Outcome.Ok(Unit)
-    var deleted: Outcome<Unit> = Outcome.Ok(Unit)
+    var trashed: Outcome<Boolean> = Outcome.Ok(true)
+    var restored: Outcome<Unit> = Outcome.Ok(Unit)
+    var purged: Outcome<Unit> = Outcome.Ok(Unit)
+    var emptied: Outcome<Int> = Outcome.Ok(0)
+    var trashList: Outcome<List<TrashSummary>> = Outcome.Ok(emptyList())
     /** Drafts handed over, for assertions; a test fake only. */
     val drafts = mutableListOf<ItemDraft>()
 
@@ -170,9 +175,29 @@ class FakeVaultRepository : VaultRepository {
         return updated
     }
 
-    override suspend fun delete(id: String): Outcome<Unit> {
-        calls += "delete:$id"
-        return deleted
+    override suspend fun trash(id: String): Outcome<Boolean> {
+        calls += "trash:$id"
+        return trashed
+    }
+
+    override suspend fun restore(id: String): Outcome<Unit> {
+        calls += "restore:$id"
+        return restored
+    }
+
+    override suspend fun purge(id: String): Outcome<Unit> {
+        calls += "purge:$id"
+        return purged
+    }
+
+    override suspend fun emptyTrash(): Outcome<Int> {
+        calls += "emptyTrash"
+        return emptied
+    }
+
+    override suspend fun listTrash(): Outcome<List<TrashSummary>> {
+        calls += "listTrash"
+        return trashList
     }
 
     val usesRecorded = mutableListOf<String>()

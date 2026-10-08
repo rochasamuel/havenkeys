@@ -42,10 +42,8 @@ import net.havenkeys.android.ui.components.ScreenBar
 import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.health.HealthChips
 import net.havenkeys.android.ui.kit.CopyButton
-import net.havenkeys.android.ui.kit.DialogAction
 import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowField
-import net.havenkeys.android.ui.kit.HavenDialog
 import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.HavenIconButton
 import net.havenkeys.android.ui.kit.HavenMenu
@@ -95,13 +93,12 @@ fun ItemScreen(
     val actions = remember(viewModel, clipboard, toasts, scope, resources) {
         FieldActions(viewModel, clipboard, toasts, scope, resources)
     }
-    var confirmDelete by remember { mutableStateOf(false) }
 
     HavenScaffold(
         modifier = modifier,
         topBar = {
             ScreenBar(onBack = navigation.onBack, online = online, onLock = navigation.onLock) {
-                ItemActions(state.view, online, navigation.onEdit, onDelete = { confirmDelete = true })
+                ItemActions(state.view, online, navigation.onEdit, onDelete = { actions.trash(navigation) })
             }
         },
         toastState = toasts,
@@ -124,17 +121,6 @@ fun ItemScreen(
             }
             state.errorCode?.let { ErrorLine(it) }
         }
-    }
-    val view = state.view
-    if (confirmDelete && view != null) {
-        DeleteDialog(
-            view,
-            onCancel = { confirmDelete = false },
-            onDelete = {
-                confirmDelete = false
-                actions.delete(navigation.onDeleted)
-            },
-        )
     }
 }
 
@@ -180,7 +166,7 @@ private fun ItemFields(view: ItemView, actions: FieldActions) {
     }
 }
 
-/** Edit, and Delete behind More; both write to the server, so both need it online. */
+/** Edit, and Delete (to the Trash) behind More; both write to the server, so both need it online. */
 @Composable
 private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
     HavenIconButton(
@@ -209,17 +195,6 @@ private fun ItemActions(view: ItemView?, online: Boolean, onEdit: () -> Unit, on
             items = listOf(MenuItem(stringResource(R.string.item_delete), onDelete, HavenIcon.Trash, danger = true)),
         )
     }
-}
-
-@Composable
-private fun DeleteDialog(view: ItemView, onCancel: () -> Unit, onDelete: () -> Unit) {
-    HavenDialog(
-        title = stringResource(R.string.item_confirm_delete, view.summary.title),
-        onDismiss = onCancel,
-        confirm = DialogAction(stringResource(R.string.item_delete), onDelete, danger = true),
-        message = if (view.summary.hasPasskey) stringResource(R.string.item_passkey_warning) else null,
-        dismiss = DialogAction(stringResource(R.string.item_cancel), onCancel),
-    )
 }
 
 /** What a field (and the item) can do; every value passes through here without being kept. */
@@ -262,14 +237,28 @@ private class FieldActions(
         }
     }
 
-    fun delete(onDeleted: () -> Unit) {
+    /**
+     * Delete, with no question: the item goes to the Trash and the screen
+     * underneath offers Undo. The title is read before Rust answers, since
+     * the overview reloads without the item once it has gone.
+     */
+    fun trash(navigation: ItemNavigation) {
+        val title = viewModel.state.value.view?.summary?.title ?: return
+        // A second Delete while the first is with the server would only fail.
+        if (trashing) return
+        trashing = true
         scope.launch {
-            when (val r = viewModel.delete()) {
-                is Outcome.Ok -> onDeleted()
-                is Outcome.Failed -> fail(r.code)
+            when (val r = viewModel.trash()) {
+                is Outcome.Ok -> if (r.value) navigation.onTrashed(title) else navigation.onDeleted(title)
+                is Outcome.Failed -> {
+                    trashing = false
+                    fail(r.code)
+                }
             }
         }
     }
+
+    private var trashing = false
 
     fun copyShown(label: String, value: String) {
         scope.launch { copy(label, value) }

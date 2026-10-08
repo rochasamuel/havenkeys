@@ -13,6 +13,7 @@ import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileVault
 import uniffi.havenkeys_mobile.Status
 import uniffi.havenkeys_mobile.TotpNow
+import uniffi.havenkeys_mobile.TrashSummary
 
 @Suppress("TooManyFunctions") // the one seam to the Rust vault; activity calls extend it
 interface VaultRepository {
@@ -38,7 +39,13 @@ interface VaultRepository {
     /** Online only; the new item's id. */
     suspend fun create(draft: ItemDraft): Outcome<String>
     suspend fun update(id: String, draft: ItemDraft): Outcome<Unit>
-    suspend fun delete(id: String): Outcome<Unit>
+    /** Delete moves the item to the Trash; `false` when it was deleted for good (its details did not open). */
+    suspend fun trash(id: String): Outcome<Boolean>
+    suspend fun restore(id: String): Outcome<Unit>
+    suspend fun purge(id: String): Outcome<Unit>
+    suspend fun emptyTrash(): Outcome<Int>
+    /** Overviews only, newest first. */
+    suspend fun listTrash(): Outcome<List<TrashSummary>>
     suspend fun recordUse(id: String): Outcome<Unit>
     suspend fun frequentlyUsed(n: Int): Outcome<List<ItemSummary>>
     suspend fun recentlyCreated(n: Int): Outcome<List<ItemSummary>>
@@ -87,7 +94,11 @@ class RustVaultRepository(private val vault: MobileVault) : VaultRepository {
     override suspend fun template(kind: ItemKind) = rust { vault.itemTemplate(kind) }
     override suspend fun create(draft: ItemDraft) = rust { vault.createItem(draft) }
     override suspend fun update(id: String, draft: ItemDraft) = rust { vault.updateItem(id, draft) }
-    override suspend fun delete(id: String) = rust { vault.deleteItem(id) }
+    override suspend fun trash(id: String) = rust { vault.trashItem(id) }
+    override suspend fun restore(id: String) = rust { vault.restoreItem(id) }
+    override suspend fun purge(id: String) = rust { vault.purgeItem(id) }
+    override suspend fun emptyTrash() = rust { vault.emptyTrash().toInt() }
+    override suspend fun listTrash() = rust { vault.listTrash() }
     override suspend fun recordUse(id: String) = rust { vault.recordUse(id) }
     override suspend fun frequentlyUsed(n: Int) = rust { vault.frequentlyUsed(n.toUInt()) }
     override suspend fun recentlyCreated(n: Int) = rust { vault.recentlyCreated(n.toUInt()) }

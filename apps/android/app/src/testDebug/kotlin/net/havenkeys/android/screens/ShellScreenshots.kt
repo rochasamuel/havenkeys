@@ -158,11 +158,17 @@ class ShellScreenshots {
                 settings = { p ->
                     SettingsScreen(
                         remember {
-                            SettingsViewModel(FakeSettingsRepository(), accounts, home, biometricEnrolled = { true })
+                            SettingsViewModel(
+                                FakeSettingsRepository(),
+                                accounts,
+                                home,
+                                events,
+                                biometricEnrolled = { true },
+                            )
                         },
                         online = false,
                         actions = SettingsActions(true, {}, { Outcome.Ok(Unit) }, { true }),
-                        navigation = SettingsNavigation({}, {}, {}),
+                        navigation = SettingsNavigation({}, {}, {}, {}),
                         contentPadding = p,
                     )
                 },

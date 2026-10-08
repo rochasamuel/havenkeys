@@ -235,9 +235,34 @@
     <string name="vault_new_card">Card</string>
     <string name="item_edit">Edit</string>
     <string name="item_delete">Delete</string>
-    <string name="item_confirm_delete">Delete “%1$s” permanently?</string>
-    <string name="item_passkey_warning">Its passkeys go with it, and you may lose access to those sites.</string>
     <string name="item_cancel">Cancel</string>
+    <string name="item_deleted">Deleted “%1$s”.</string>
+    <string name="trash_title">Trash</string>
+    <string name="trash_explain">Items here are removed for good after 30 days.</string>
+    <string name="trash_empty">Trash is empty.</string>
+    <string name="trash_moved">Moved “%1$s” to Trash.</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_restored">Restored “%1$s”.</string>
+    <string name="trash_delete_forever">Delete permanently</string>
+    <string name="trash_confirm_delete">Delete “%1$s” permanently? This cannot be undone.</string>
+    <string name="trash_empty_action">Empty Trash</string>
+    <plurals name="trash_confirm_empty">
+        <item quantity="one">Delete %1$d item permanently? This cannot be undone.</item>
+        <item quantity="other">Delete %1$d items permanently? This cannot be undone.</item>
+    </plurals>
+    <string name="trash_passkey_warning">Its passkeys go too. Sites that use them will need another way to sign in.</string>
+    <string name="trash_restore_first">Restore this item to see or use its passwords and codes.</string>
+    <plurals name="trash_deleted_ago">
+        <item quantity="one">Deleted %1$d day ago</item>
+        <item quantity="other">Deleted %1$d days ago</item>
+    </plurals>
+    <string name="trash_deleted_today">Deleted today</string>
+    <plurals name="trash_removed_in">
+        <item quantity="one">Removed in %1$d day</item>
+        <item quantity="other">Removed in %1$d days</item>
+    </plurals>
+    <string name="trash_removed_next_sync">Removed at next sync</string>
+    <string name="settings_vault">Vault</string>
     <string name="edit_new_login">New login</string>
     <string name="edit_new_note">New secure note</string>
     <string name="edit_new_card">New card</string>

@@ -73,8 +73,11 @@ class ItemViewModel(
         }
     }
 
-    /** Online only; the screen pops on success. */
-    suspend fun delete(): Outcome<Unit> = vault.delete(id)
+    /**
+     * Delete moves the item to the Trash (online only); `false` when Rust
+     * deleted it for good because its details did not open. The screen pops either way.
+     */
+    suspend fun trash(): Outcome<Boolean> = vault.trash(id)
 
     suspend fun clipboardClearSeconds(): Int = settings.clipboardClearSeconds()
 

@@ -38,12 +38,16 @@ import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.SectionAction
 import net.havenkeys.android.ui.kit.SectionHeader
+import net.havenkeys.android.ui.kit.ToastHost
+import net.havenkeys.android.ui.kit.rememberToastState
 import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.shell.NoSharedTitle
 import net.havenkeys.android.ui.shell.OpenItem
 import net.havenkeys.android.ui.shell.Origins
 import net.havenkeys.android.ui.shell.SharedTitle
 import net.havenkeys.android.ui.shell.SummaryRow
+import net.havenkeys.android.ui.shell.TrashUndo
+import net.havenkeys.android.ui.shell.TrashUndoToast
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -68,8 +72,12 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     fieldModifier: Modifier = Modifier,
     sharedTitle: SharedTitle = NoSharedTitle,
+    trashUndo: TrashUndo? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val toasts = rememberToastState()
+    // A result opened and deleted pops back here, which says so with Undo.
+    TrashUndoToast(trashUndo, toasts)
     val field = remember(viewModel) { TextFieldState(viewModel.state.value.query) }
     val focus = remember { FocusRequester() }
     // The field owns its text: typing flows to the ViewModel and is never pushed back.
@@ -104,12 +112,16 @@ fun SearchScreen(
             SearchField(field, Modifier.weight(1f).then(fieldModifier).focusRequester(focus))
             HavenButton(stringResource(R.string.search_cancel), onClick = onCancel, style = ButtonStyle.Quiet)
         }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = HavenSpacing.gutter)) {
-            if (state.query.isBlank()) {
-                recents(state.recents, viewModel::useRecent, viewModel::clearRecents)
-            } else {
-                results(state, open, sharedTitle)
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = HavenSpacing.gutter)) {
+                if (state.query.isBlank()) {
+                    recents(state.recents, viewModel::useRecent, viewModel::clearRecents)
+                } else {
+                    results(state, open, sharedTitle)
+                }
             }
+            // Where HavenScaffold puts its toasts: 22dp above the bottom edge.
+            ToastHost(toasts, Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp))
         }
     }
 }

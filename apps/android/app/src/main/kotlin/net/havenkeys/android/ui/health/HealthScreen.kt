@@ -43,9 +43,12 @@ import net.havenkeys.android.ui.kit.MenuItem
 import net.havenkeys.android.ui.kit.SectionAction
 import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.kit.SegmentedControl
+import net.havenkeys.android.ui.kit.rememberToastState
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.shell.LargeTitle
+import net.havenkeys.android.ui.shell.TrashUndo
+import net.havenkeys.android.ui.shell.TrashUndoToast
 import net.havenkeys.android.ui.shell.insetGroup
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
@@ -73,13 +76,18 @@ fun HealthScreen(
     online: Boolean,
     navigation: HealthNavigation,
     modifier: Modifier = Modifier,
+    trashUndo: TrashUndo? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) { viewModel.shown() }
+    val toasts = rememberToastState()
+    // A login opened from here and deleted pops back here, which says so with Undo.
+    TrashUndoToast(trashUndo, toasts)
 
     HavenScaffold(
         modifier = modifier,
         topBar = { ScreenBar(onBack = navigation.onBack, online = online, onLock = navigation.onLock) },
+        toastState = toasts,
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize(),

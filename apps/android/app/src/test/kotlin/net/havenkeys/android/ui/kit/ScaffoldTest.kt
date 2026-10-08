@@ -10,7 +10,10 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.Role
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -65,6 +68,39 @@ class ScaffoldTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
         rule.mainClock.advanceTimeBy(TOAST_MILLIS + 1_000)
         rule.onNodeWithText("Password copied").assertDoesNotExist()
+    }
+
+    @Test
+    fun aToastsActionIsItsOwnButtonThatActsAndCloses() {
+        rule.mainClock.autoAdvance = false
+        var undone = 0
+        rule.setKit {
+            val toasts = rememberToastState()
+            LaunchedEffect(Unit) { toasts.show("Moved “GitHub” to Trash.", action = ToastAction("Undo") { undone++ }) }
+            HavenScaffold(toastState = toasts) { HavenText("Content") }
+        }
+        rule.mainClock.advanceTimeBy(500)
+        // The message is announced without the button's label; the button is a 48dp target of its own.
+        rule.onNodeWithText("Moved “GitHub” to Trash.")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+        rule.onNode(hasText("Undo") and hasRole(Role.Button)).assertTouchTarget().performClick()
+        rule.mainClock.advanceTimeBy(500)
+        org.junit.Assert.assertEquals(1, undone)
+        rule.onNodeWithText("Moved “GitHub” to Trash.").assertDoesNotExist()
+    }
+
+    @Test
+    fun aToastWithAnActionStaysLongEnoughToReachIt() {
+        rule.mainClock.autoAdvance = false
+        rule.setKit {
+            val toasts = rememberToastState()
+            LaunchedEffect(Unit) { toasts.show("Moved “GitHub” to Trash.", action = ToastAction("Undo") {}) }
+            HavenScaffold(toastState = toasts) { HavenText("Content") }
+        }
+        rule.mainClock.advanceTimeBy(TOAST_MILLIS + 1_000)
+        rule.onNodeWithText("Undo").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(TOAST_ACTION_MILLIS)
+        rule.onNodeWithText("Undo").assertDoesNotExist()
     }
 
     @Test

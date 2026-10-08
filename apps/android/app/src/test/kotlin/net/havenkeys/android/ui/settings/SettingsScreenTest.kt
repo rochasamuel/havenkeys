@@ -20,11 +20,13 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import net.havenkeys.android.data.Outcome
+import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeSettingsRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
 import net.havenkeys.android.ui.kit.hasRole
 import net.havenkeys.android.ui.kit.setKit
+import net.havenkeys.android.ui.trash.trashSummary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -41,12 +43,13 @@ class SettingsScreenTest {
 
     private val settings = FakeSettingsRepository()
     private val accounts = FakeAccountRepository()
+    private val vault = FakeVaultRepository()
     private val done = mutableListOf<String>()
 
     private var verified = true
 
     private fun show(online: Boolean = true, enrolled: Boolean = false) {
-        val vm = SettingsViewModel(settings, accounts, FakeVaultRepository(), biometricEnrolled = { enrolled })
+        val vm = SettingsViewModel(settings, accounts, vault, VaultEventsHub(), biometricEnrolled = { enrolled })
         val actions = SettingsActions(
             biometricAvailable = true,
             forgetBiometric = { done += "forget" },
@@ -63,6 +66,7 @@ class SettingsScreenTest {
             onDevices = { done += "devices" },
             onAutofillSetup = { done += "setup" },
             onPairing = { done += "pairing" },
+            onTrash = { done += "trash" },
         )
         rule.setKit { SettingsScreen(vm, online, actions, navigation, PaddingValues()) }
     }
@@ -89,6 +93,17 @@ class SettingsScreenTest {
         row("Autofill setup").performClick()
         row("Devices").performClick()
         assertEquals(listOf("setup", "devices"), done)
+    }
+
+    @Test
+    fun theTrashRowShowsItsCountAndOpensTheTrash() {
+        vault.trashList = Outcome.Ok(
+            listOf(trashSummary("a", "A"), trashSummary("b", "B")),
+        )
+        show()
+        rule.onNodeWithText("Vault").assert(isHeading())
+        row("Trash").assert(hasText("2")).performClick()
+        assertEquals(listOf("trash"), done)
     }
 
     @Test

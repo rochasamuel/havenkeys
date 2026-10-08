@@ -280,7 +280,7 @@ class ScreenScreenshots {
             remember { ItemViewModel(repo, FakeSettingsRepository(), events, "1") },
             clipboard,
             true,
-            ItemNavigation({}, {}, {}, {}),
+            ItemNavigation({}, {}, {}, {}, {}),
         )
     }
 

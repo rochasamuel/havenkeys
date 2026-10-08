@@ -10,6 +10,8 @@ import kotlinx.coroutines.launch
 import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.SettingsRepository
+import net.havenkeys.android.data.VaultEvent
+import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
 import uniffi.havenkeys_mobile.MobileSettings
 
@@ -28,6 +30,8 @@ data class SettingsUiState(
     val deleteErrorCode: String? = null,
     /** As [removeFailures], for "Delete account". */
     val deleteFailures: Int = 0,
+    /** How many items are in the Trash, for its row; null until known. */
+    val trashCount: Int? = null,
 )
 
 @Suppress("TooManyFunctions") // one setter per setting, plus the account actions
@@ -35,6 +39,7 @@ class SettingsViewModel(
     private val settings: SettingsRepository,
     private val accounts: AccountRepository,
     private val vault: VaultRepository,
+    events: VaultEventsHub,
     private val biometricEnrolled: () -> Boolean,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState(biometricEnrolled = biometricEnrolled()))
@@ -47,6 +52,18 @@ class SettingsViewModel(
                 is Outcome.Ok -> _state.update { it.copy(settings = r.value, email = email) }
                 is Outcome.Failed -> _state.update { it.copy(errorCode = r.code, email = email) }
             }
+        }
+        loadTrashCount()
+        viewModelScope.launch {
+            events.events.collect { if (it == VaultEvent.ItemsChanged) loadTrashCount() }
+        }
+    }
+
+    /** A failed count leaves the row without one; the Trash screen says why. */
+    private fun loadTrashCount() {
+        viewModelScope.launch {
+            val r = vault.listTrash()
+            if (r is Outcome.Ok) _state.update { it.copy(trashCount = r.value.size) }
         }
     }
 

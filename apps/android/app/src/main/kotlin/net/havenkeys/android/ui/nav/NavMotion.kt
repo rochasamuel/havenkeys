@@ -39,6 +39,7 @@ internal val PUSHED = setOf(
     Routes.DEVICES,
     Routes.PAIRING,
     Routes.AUTOFILL_SETUP,
+    Routes.TRASH,
 )
 
 /** The old screen moves this share of its width left under a push (spec §7: about 30%)... */
