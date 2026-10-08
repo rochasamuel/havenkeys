@@ -98,11 +98,6 @@ revision, as today.
 * `list_trash()`: the trash overviews, newest `trashed_at` first, each with
   the days left before removal (0 to 30).
 * `trash_count()`: for the sidebar and Settings row.
-* `trashed_item(id)`: the overview and decrypted details of a trashed item,
-  for the read-only view (§6.1). Reveal and copy of a trashed item's secrets
-  go through the same functions as a live item's, looking in `trash` only
-  when the caller asks for a trashed item; fill, TOTP-for-fill and passkey
-  paths never do.
 
 `stage_delete` stays as the internal "send a tombstone" step used by purge;
 it is no longer reachable from the apps for a live item.
@@ -165,16 +160,16 @@ value (CLAUDE.md §39).
 * **Trash list:** title, username or card summary, and "Deleted N days ago ·
   removed in M days". A line above it says items are removed for good after
   30 days. **Empty Trash** button.
-* **Trashed item:** opens read-only with **Restore** and **Delete
-  permanently**. Reveal and copy work so the user can check the item before
-  restoring it; nothing else (edit, TOTP, passkey management) is offered.
+* **Trashed item:** shown overview-only with **Restore** and **Delete
+  permanently**. Reveal, copy, edit, TOTP and passkey management are not
+  offered; restore first.
 * **Delete permanently / Empty Trash:** the inline confirm, naming the item
   (or the number of items), with the passkey warning when any of them holds
   a passkey.
 * **Offline:** all Trash actions disabled, as Delete is today.
 
 New Tauri commands: `trash_item`, `restore_item`, `purge_item`,
-`empty_trash`, `list_trash`, `get_trashed_item`. The existing
+`empty_trash`, `list_trash`. The existing
 `delete_item` command is replaced by `trash_item`; the allowlist and
 capability files are updated to match.
 
@@ -253,3 +248,25 @@ toast.
 * `docs/security-review.md`: an entry for the Trash (future-clock early
   purge, version skew).
 * `docs/ideas.md`: item 2 points to this spec.
+
+## 11. Revisions from planning
+
+* A trashed item is shown overview-only: title, username or card summary,
+  websites, tags, passkey badge, days left. Reveal and copy are not offered;
+  restore first. `trashed_item` is dropped, and `get_trashed_item` is not a
+  command. This keeps every secret path reading the live map only.
+* An item whose encrypted details no longer open is deleted for good by
+  Delete, since nothing could restore it; the apps then say "Deleted".
+* Android: tapping a trashed item opens a sheet (Restore, Delete
+  permanently) rather than a read-only item screen.
+* Desktop commands: `trash_item` (returns whether the item is in the Trash),
+  `restore_item`, `purge_item`, `empty_trash`, `list_trash`.
+* Core names: `stage_trash`, `stage_restore_trashed` (not `stage_restore`,
+  which the backup restore already uses), `stage_purge`, `stage_empty_trash`,
+  `stage_expired_trash`, `list_trash`, `trash_count`; the constant is
+  `TRASH_RETENTION_MS`.
+* Android: the Trash is a row in Settings, in a new "Vault" group. Empty
+  Trash is under the screen's More menu. Undo shows on whichever screen the
+  user lands on (shell, Search or Health).
+* pt-BR copy follows each app's existing vocabulary ("excluir", "chave de
+  acesso") rather than the wording in the plan.

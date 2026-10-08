@@ -3443,3 +3443,42 @@ that got its first password after creation is measured from `created_at`. A
 dismissal is an item edit and needs the server. A dismissal whose check no
 longer applies is dropped when the user dismisses or restores another check on
 that login (both UIs build the new list from the report's `dismissed`).
+
+---
+
+# Security Review: Trash (2026-10-08)
+
+Branch `feat/trash`. Spec: `docs/superpowers/specs/2026-10-08-trash-design.md`;
+model: `security-model.md` §2 "Trash". Internal review, not an independent audit.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| TR1 | Low | Core purge | A device clock set far ahead purges trash early | Accepted |
+| TR2 | Low | Version skew | An app older than this one fills trashed items | Accepted |
+| TR3 | N/A | Fill, native messaging, passkeys | A trashed item requested by ID | Tested: denied |
+
+### TR1. Clock set far ahead purges trash early (Low, accepted)
+**Component:** `crates/havenkeys-core` (`stage_expired_trash`).
+**Attack scenario:** a device whose clock is set far into the future runs the
+purge after a sync and permanently deletes items that are still inside their
+30 days.
+**Mitigation:** none beyond the existing reliance on the device clock for
+`updated_at`. A `trashed_at` in the future is never purged.
+**Remaining limitations:** a wrong clock can still shorten the window.
+
+### TR2. Older app versions fill trashed items (Low, accepted)
+**Component:** older desktop and Android builds.
+**Attack scenario:** the trash mark is a new field in the encrypted overview;
+an older build ignores it and offers the trashed item for fill like a live one.
+**Mitigation:** ship desktop and Android together. The item is the user's own,
+so the exposure is limited to an item they chose to delete.
+**Remaining limitations:** the user can run a mix of versions.
+
+### TR3. A trashed item requested by ID (N/A, tested)
+**Component:** native messaging (`crates/havenkeys-bridge/tests/bridge.rs`,
+`a2_a_trashed_login_is_denied_like_an_unknown_id`), app fill, passkey assertion.
+**Attack scenario:** a page or the extension asks for a trashed item by ID to
+fill, read TOTP or sign a passkey assertion.
+**Mitigation:** every secret path reads the live map only, so the request is
+denied like an unknown ID. Covered by the Task 3 tests.
+**Remaining limitations:** none known.

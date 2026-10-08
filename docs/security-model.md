@@ -42,6 +42,21 @@ This document describes *how* HavenKeys enforces the properties listed in
 | Master-password change is authenticated, not just session-authorized | `POST /v1/account/credentials` requires the *current* auth key, checked against the server's stored verifier under the same rate limiting as login; a stolen session token alone cannot change the password |
 | Master-password change revokes other sessions | On success the server deletes every other session on the account; other devices must unlock again (locally with the old password, or online with the new one) before they can sync |
 
+### Trash
+
+Delete moves an item to the Trash for 30 days instead of removing it.
+
+* Trash membership (`trashedAt`) is inside the encrypted overview, so the
+  server cannot tell trashed items from live ones; it sees an ordinary item
+  update.
+* Trashed items live in a separate in-memory map. No fill, search, Health,
+  passkey or export path reads it, and a trashed item is shown overview-only
+  (no reveal or copy) until it is restored.
+* They are purged 30 days after `trashedAt` by the first unlocked, online
+  device after a sync.
+* They count toward the 256 MiB quota until they are purged.
+* App versions older than this feature treat trashed items as live.
+
 ## 3. What is NOT protected
 
 * A malicious process running as your user while the vault is unlocked.
