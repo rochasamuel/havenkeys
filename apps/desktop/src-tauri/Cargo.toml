@@ -1,6 +1,6 @@
 [package]
 name = "havenkeys-desktop"
-version = "0.22.1"
+version = "0.23.0"
 description = "HavenKeys desktop password manager"
 edition.workspace = true
 license.workspace = true
