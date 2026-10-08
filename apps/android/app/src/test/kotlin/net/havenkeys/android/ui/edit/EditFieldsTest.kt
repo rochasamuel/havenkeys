@@ -191,6 +191,23 @@ class EditFieldsTest {
         rule.onNode(hasText("Prod") and hasClickAction()).assertDoesNotExist()
     }
 
+    /** Final review: the field left while focused at 20 tags came back offering tags, unfocused. */
+    @Test
+    fun theFieldBackAfterTheLimitOffersNothingUntilFocused() {
+        val (editor, _) = show(
+            login(emptyList(), tags = (1..19).map { "t%02d".format(it) }),
+            vaultTags = listOf("Prod", "Ops"),
+        )
+        field(text(R.string.edit_add_tag)).performClick()
+        rule.onNode(hasText("Prod") and hasClickAction()).performClick()
+        field(text(R.string.edit_add_tag)).assertDoesNotExist()
+        rule.onNodeWithContentDescription(text(R.string.edit_remove_tag, "t01")).performClick()
+        rule.runOnIdle { assertEquals(19, editor.tags.size) }
+        rule.onAllNodesWithTag(TAG_SUGGESTION).assertCountEquals(0)
+        field(text(R.string.edit_add_tag)).performClick()
+        rule.onNode(hasText("Ops") and hasClickAction()).assertExists()
+    }
+
     @Test
     fun withNoOtherVaultTagsFocusingOffersNothing() {
         show(login(emptyList(), tags = listOf("Work")), vaultTags = listOf("work"))

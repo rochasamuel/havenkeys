@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.input.KeyboardActionHandler
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -149,6 +150,8 @@ private fun AddTagField(
         null -> null
     }
     var focused by remember { mutableStateOf(false) }
+    // Leaving composition while focused (the 20th tag) need not report a blur: the field is not focused after.
+    DisposableEffect(Unit) { onDispose { onFocus(false) } }
     Row(verticalAlignment = Alignment.CenterVertically) {
         HavenTextField(
             text,

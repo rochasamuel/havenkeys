@@ -10,14 +10,19 @@ implementation (see "Revisions from planning and implementation" below).
 > * The vault keeps one spelling per tag: when an item is saved, Rust maps
 >   each of its tags to the spelling other items already use (the item
 >   itself left out, so the only item with a tag can change its case).
+>   Where older data holds several spellings of one tag, the one most items
+>   carry is used (ties: the smallest by code point), in Rust and in both UIs.
 > * Concurrent creation of "Work" and "work" on two devices can leave two
 >   spellings until either item is saved again; the UIs merge spellings
 >   without case (sidebar / Items tab counts, the tag filter, suggestions).
 > * Tag pills use the brass pill (brass wash, brass ink) on desktop and
 >   Android; vault-health chips stay outlined, so the two differ by colour.
->   The extension is unchanged.
+>   The extension is unchanged. In light theme the desktop's tag pills use a
+>   darker brass ink (`--tag-ink` #6f5728) to read on the wash; Android's
+>   `brass-ink-light` (#7d632f) already reads 4.66:1 or more there.
 > * The tag editor offers the vault's most-used tags (those the item lacks,
->   up to 5) when its empty field gains focus; typing narrows them.
+>   up to 8 on the desktop and 5 on Android) when its empty field gains
+>   focus; typing narrows them.
 >
 > §2 "Case", §3.2 and §4 below are updated to match.
 
@@ -131,8 +136,10 @@ One function every write path goes through (`build_item`, import):
    first spelling given wins) and sort by (key, spelling).
 4. Reject more than 20 tags on one item.
 5. On every staged write, each tag takes the spelling other items already
-   use for its key (the item being written is left out). Imports and
-   restores carry the spellings of their earlier writes.
+   use for its key (the item being written is left out); where they use
+   several (older data), the spelling most items carry wins, ties going to
+   the smallest by code point. Imports and restores carry the spellings of
+   their earlier writes.
 
 Two devices that each create a spelling of a new tag before syncing leave
 two spellings until either item is saved again; desktop and Android merge
@@ -182,7 +189,7 @@ without case.
   the input). Existing tags show as pills with a small × button, followed by
   an inline "Add tag" input.
 * Focusing the empty input offers the vault's most-used tags the item lacks
-  (up to 5, most used first, then A–Z), counted over the other items.
+  (up to 8, most used first, then A–Z), counted over the other items.
 * Typing opens a suggestion popover (floating-menu style: raised, 11px
   radius, lift shadow) listing matching vault tags with their counts, plus a
   last row "Create "<text>"" when the text is not an existing tag.
