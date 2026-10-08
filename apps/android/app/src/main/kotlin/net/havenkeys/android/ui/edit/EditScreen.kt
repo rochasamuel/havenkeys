@@ -45,6 +45,9 @@ class EditNavigation(
 /** Where the fields get values from: Rust, through the ViewModel, never kept there. */
 internal class FieldValues(val viewModel: EditViewModel, val loading: SnapshotStateList<String>)
 
+/** A fresh draft of [edit], knowing the vault's tag spellings; none while there is nothing to edit. */
+private fun draftOf(edit: ItemEdit?, vaultTags: List<String>): EditorState? = edit?.let { EditorState(it, vaultTags) }
+
 /**
  * Create or edit one item. The draft ([EditorState]) is remembered here per
  * load generation and nowhere else: not in the ViewModel, not in saved
@@ -61,7 +64,7 @@ fun EditScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val edit = state.edit
-    val editor = remember(state.generation, edit) { edit?.let(::EditorState) }
+    val editor = remember(state.generation, edit) { draftOf(edit, state.vaultTags) }
     val loading = rememberTextLoads(editor, edit, viewModel)
     var confirmDiscard by remember { mutableStateOf(false) }
     val leave = { if (editor?.dirty == true) confirmDiscard = true else navigation.onBack() }

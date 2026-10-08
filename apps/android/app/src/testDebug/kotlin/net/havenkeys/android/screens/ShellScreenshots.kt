@@ -120,7 +120,7 @@ class ShellScreenshots {
 
     /** The same vault with tags, for the Items tab's Tags group and a tag's list. */
     private val taggedVault = FakeVaultRepository().apply {
-        val tags = mapOf("1" to listOf("dev", "work"), "2" to listOf("finance"), "5" to listOf("shopping", "work"))
+        val tags = mapOf("1" to listOf("Dev", "Work"), "2" to listOf("Finance"), "5" to listOf("Shopping", "Work"))
         items = Outcome.Ok(sample.map { it.copy(tags = tags[it.id].orEmpty()) })
         recent = vault.recent
         view = vault.view
@@ -186,7 +186,7 @@ class ShellScreenshots {
         }
 
     private val tagShot: Shot
-        get() = Shot("tag", before = { tap("Items"); rule.mainClock.advanceTimeBy(SETTLE_MS); tap("work") }) {
+        get() = Shot("tag", before = { tap("Items"); rule.mainClock.advanceTimeBy(SETTLE_MS); tap("Work") }) {
             Shell(taggedVault)
         }
 

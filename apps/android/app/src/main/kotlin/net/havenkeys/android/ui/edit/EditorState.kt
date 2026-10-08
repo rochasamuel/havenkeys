@@ -26,13 +26,18 @@ private const val MAX_TAG_CHARS = 32
  */
 private fun Char.isRustWhitespace(): Boolean = this == '\u0085' || (isWhitespace() && this !in '\u001C'..'\u001F')
 
-/** [raw] as Rust stores a tag: white space trimmed and collapsed to one space, lower case. */
+/** [raw] as Rust stores a tag: white space trimmed and collapsed to one space, case kept. */
 internal fun tagForm(raw: String): String =
     buildString { raw.forEach { append(if (it.isRustWhitespace()) ' ' else it) } }
         .split(' ')
         .filter { it.isNotEmpty() }
         .joinToString(" ")
-        .lowercase()
+
+/** What two tags are compared by, as Rust's `tags::key`: the same tag whatever its case. */
+internal fun tagKey(tag: String): String = tag.lowercase()
+
+/** Tags A–Z without case, then by spelling, as Rust sorts an item's tags. */
+private val TagOrder: Comparator<String> = compareBy<String> { tagKey(it) }.thenBy { it }
 
 /** Why Rust would refuse a typed tag, for the editor to say (never echoing it). */
 internal enum class TagRefusal { TooLong, NotAllowed }
@@ -60,15 +65,18 @@ class WebsiteRow(url: String, match: MatchKind) {
  * drop it. A field the user did not change is not sent: Rust keeps it.
  */
 @Suppress("TooManyFunctions") // the screen's whole draft API, specified by the plan
-class EditorState(private val edit: ItemEdit) {
+class EditorState(private val edit: ItemEdit, vaultTags: List<String> = emptyList()) {
     val kind = edit.kind
     var title by mutableStateOf(edit.title)
     val websites = mutableStateListOf<WebsiteRow>().apply {
         edit.websites.forEach { add(WebsiteRow(it.url, it.matchKind)) }
     }
 
-    /** The item's tags as Rust will store them: normalised, unique, A–Z. */
+    /** The item's tags as Rust will store them: normalised, unique without case, A–Z. */
     val tags = mutableStateListOf<String>().apply { addAll(edit.tags) }
+
+    /** The other items' spelling of each tag, by [tagKey]: a typed tag takes it, as Rust would. */
+    private val spellings = vaultTags.associateBy(::tagKey)
 
     /** The Add tag field: text typed but not yet a tag. Draft state, never saved. */
     internal val tagField = TextFieldState()
@@ -123,19 +131,21 @@ class EditorState(private val edit: ItemEdit) {
     }
 
     /**
-     * Adds [raw] as Rust will store it (trimmed, spaces collapsed, lower
-     * case); false if that is empty, too long, has a comma or a control
-     * character, is already here, or the item has its 20 tags.
+     * Adds [raw] as Rust will store it (trimmed, spaces collapsed, in the
+     * spelling the vault already uses for it, else as typed); false if that
+     * is empty, too long, has a comma or a control character, is already
+     * here in any case, or the item has its 20 tags.
      */
     fun addTag(raw: String): Boolean {
-        val tag = tagForm(raw)
-        val ok = tag.isNotEmpty() &&
+        val typed = tagForm(raw)
+        val key = tagKey(typed)
+        val ok = typed.isNotEmpty() &&
             tagRefusal(raw) == null &&
-            tag !in tags &&
+            tags.none { tagKey(it) == key } &&
             tags.size < MAX_TAGS
         if (ok) {
-            tags.add(tag)
-            tags.sort()
+            tags.add(spellings[key] ?: typed)
+            tags.sortWith(TagOrder)
         }
         return ok
     }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -39,6 +40,8 @@ fun GroupRow(
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     icon: HavenIcon? = null,
+    /** The glyph's colour; muted unless the glyph marks something (brass ink on a tag). */
+    iconTint: Color? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
     chevron: Boolean = onClick != null && trailing == null,
     content: @Composable ColumnScope.() -> Unit,
@@ -64,7 +67,7 @@ fun GroupRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            IconGlyph(icon, contentDescription = null, tint = colors.muted, size = GlyphSize)
+            IconGlyph(icon, contentDescription = null, tint = iconTint ?: colors.muted, size = GlyphSize)
             Spacer(Modifier.width(GlyphGap))
         }
         // Read-only: label and value are one TalkBack stop; Copy, Show and the like stay separate.

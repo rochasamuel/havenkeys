@@ -20,6 +20,7 @@ import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
+import uniffi.havenkeys_mobile.ItemSummary
 import uniffi.havenkeys_mobile.LumaFrame
 
 sealed interface EditTarget {
@@ -33,13 +34,39 @@ sealed interface EditTarget {
  * not kept. [generation] changes on every (re)load, and the screen starts a
  * fresh draft for each.
  */
+/**
+ * [items]' tags, one spelling each, most used first, then A–Z. Where old
+ * data holds a tag in several spellings, the one most items carry names it
+ * (ties: the smallest by code point), as the spelling a new tag will take.
+ */
+internal fun tagsByUse(items: List<ItemSummary>): List<String> {
+    val spellings = mutableMapOf<String, MutableMap<String, Int>>()
+    items.forEach { item ->
+        item.tags.distinctBy(::tagKey).forEach { tag ->
+            val counts = spellings.getOrPut(tagKey(tag)) { mutableMapOf() }
+            counts[tag] = (counts[tag] ?: 0) + 1
+        }
+    }
+    val order = readerOrder()
+    return spellings.values
+        .map { counts ->
+            counts.entries.minWith(compareBy<Map.Entry<String, Int>> { -it.value }.thenBy { it.key }).key to
+                counts.values.sum()
+        }
+        .sortedWith { a, b -> (b.second - a.second).takeIf { it != 0 } ?: order.compare(a.first, b.first) }
+        .map { it.first }
+}
+
 data class EditUiState(
     val edit: ItemEdit? = null,
     val generation: Int = 0,
     val saving: Boolean = false,
     val errorCode: String? = null,
     val conflict: Boolean = false,
-    /** Every tag in the vault, A–Z: the editor's suggestions. */
+    /**
+     * The other items' tags, one spelling each, most used first, then A–Z:
+     * the editor's suggestions and the spelling a typed tag takes.
+     */
     val vaultTags: List<String> = emptyList(),
 ) {
     // `edit` holds the username.
@@ -127,8 +154,10 @@ class EditViewModel(
                 is EditTarget.New -> vault.template(target.kind)
             }
             // Suggestions are a convenience: without the list the editor offers none.
-            val vaultTags = (vault.list() as? Outcome.Ok)?.value.orEmpty()
-                .flatMap { it.tags }.distinct().sortedWith(readerOrder())
+            // The item's own tags are left out, as Rust leaves the item out when it picks a spelling.
+            val others = (vault.list() as? Outcome.Ok)?.value.orEmpty()
+                .filter { target !is EditTarget.Existing || it.id != target.id }
+            val vaultTags = tagsByUse(others)
             _state.value = when (edit) {
                 is Outcome.Ok -> EditUiState(edit = edit.value, generation = generation, vaultTags = vaultTags)
                 is Outcome.Failed -> EditUiState(generation = generation, errorCode = edit.code)

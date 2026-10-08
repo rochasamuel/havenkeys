@@ -41,7 +41,7 @@ fun Pill(text: String, modifier: Modifier = Modifier, tone: PillTone = PillTone.
 }
 
 enum class PillTone {
-    /** Brass wash, brass ink: a state or a device marker ("This device"). */
+    /** Brass wash, brass ink: a state or a device marker ("This device"), and an item's tags. */
     Brass,
 
     /** Outlined, muted: how something applies ("Whole site"). */
@@ -55,7 +55,7 @@ private fun PillPreview() {
         Row {
             Pill("This device")
             Pill("Whole site", Modifier.padding(start = 8.dp), tone = PillTone.Outline)
-            Pill("work", Modifier.padding(start = 8.dp), tone = PillTone.Outline, icon = HavenIcon.Tag)
+            Pill("Work", Modifier.padding(start = 8.dp), icon = HavenIcon.Tag)
         }
     }
 }

@@ -24,6 +24,7 @@ import net.havenkeys.android.ui.kit.TrailingText
 import net.havenkeys.android.ui.shell.ErrorLine
 import net.havenkeys.android.ui.shell.LargeTitle
 import net.havenkeys.android.ui.theme.HavenSpacing
+import net.havenkeys.android.ui.theme.HavenTheme
 
 /**
  * The Items tab (spec §6.7): each category with its count, then each tag in
@@ -70,6 +71,7 @@ fun ItemsScreen(
                             GroupRow(
                                 onClick = { onTag(name) },
                                 icon = HavenIcon.Tag,
+                                iconTint = HavenTheme.colors.brassInk,
                                 trailing = { TrailingText(count.toString()) },
                                 chevron = true,
                             ) { GroupRowText(name) }

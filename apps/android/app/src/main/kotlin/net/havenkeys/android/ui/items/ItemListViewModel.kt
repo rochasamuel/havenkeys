@@ -14,6 +14,7 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
+import net.havenkeys.android.ui.edit.tagKey
 import uniffi.havenkeys_mobile.ItemSummary
 
 /** Overviews only (Android spec §9.4): titles, usernames, websites, never a secret. */
@@ -29,13 +30,27 @@ data class ItemListUiState(
 fun categoryCounts(items: List<ItemSummary>): Map<Category, Int> =
     Category.entries.associateWith { category -> items.count(category::keeps) }
 
-/** Every tag in use with how many items carry it, A–Z, for the Items tab. */
+/**
+ * Every tag in use with how many items carry it, A–Z, for the Items tab.
+ * Tags that differ only in case are one (two devices can each create a
+ * spelling before they sync): the first spelling seen names it.
+ */
 fun tagCounts(items: List<ItemSummary>): List<Pair<String, Int>> {
     val order = readerOrder()
-    return items.flatMap { it.tags }.groupingBy { it }.eachCount().toList().sortedWith { a, b ->
-        order.compare(a.first, b.first)
+    val spelling = mutableMapOf<String, String>()
+    val counts = mutableMapOf<String, Int>()
+    items.forEach { item ->
+        item.tags.distinctBy(::tagKey).forEach { tag ->
+            val key = tagKey(tag)
+            spelling.getOrPut(key) { tag }
+            counts[key] = (counts[key] ?: 0) + 1
+        }
     }
+    return counts.map { (key, n) -> spelling.getValue(key) to n }.sortedWith { a, b -> order.compare(a.first, b.first) }
 }
+
+/** Whether [item] carries [tag], in any case. */
+internal fun carries(item: ItemSummary, tag: String): Boolean = item.tags.any { tagKey(it) == tagKey(tag) }
 
 /**
  * A–Z as a reader expects: accents and case do not split the alphabet
@@ -60,7 +75,7 @@ internal fun alphabetical(items: List<ItemSummary>): List<ItemSummary> {
  * sync). Not while loading (the lock wipe resets to that) or after an error.
  */
 internal fun tagGone(state: ItemListUiState, tag: String): Boolean =
-    !state.loading && state.errorCode == null && state.items.none { tag in it.tags }
+    !state.loading && state.errorCode == null && state.items.none { carries(it, tag) }
 
 /** The vault's items for the Items tab and a category list; each screen has its own. */
 class ItemListViewModel(

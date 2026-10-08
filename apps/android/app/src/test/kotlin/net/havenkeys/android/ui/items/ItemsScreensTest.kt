@@ -91,6 +91,19 @@ class ItemsScreensTest {
         rule.onNodeWithText("Amazon").assertDoesNotExist()
     }
 
+    @Test
+    fun aTagListMatchesItsItemsWithoutCase() {
+        val vm = vm()
+        var gone = 0
+        rule.setKit {
+            TagScreen(vm, "Work", onOpen = { _, _ -> }, onGone = { gone++ }, contentPadding = PaddingValues())
+        }
+        rule.onNodeWithText("Work").assert(isHeading())
+        rule.onNode(hasText("bank") and hasClickAction()).assertIsDisplayed()
+        rule.onNodeWithText("Amazon").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(0, gone) }
+    }
+
     /** Final review (tags): the list of a tag no item carries any more stayed open, empty. */
     @Test
     fun aTagNoItemCarriesAnyMoreClosesItsList() {

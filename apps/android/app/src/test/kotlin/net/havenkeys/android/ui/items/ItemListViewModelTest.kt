@@ -111,6 +111,24 @@ class ItemListViewModelTest {
         assertEquals(listOf("prod" to 1, "work" to 2), tagCounts(items))
     }
 
+    @Test
+    fun tagCountsMergeTagsThatDifferOnlyInCase() {
+        val items = listOf(
+            item("1", ItemKind.LOGIN, "A", tags = listOf("Work")),
+            item("2", ItemKind.LOGIN, "B", tags = listOf("work", "prod")),
+            item("3", ItemKind.LOGIN, "C", tags = listOf("WORK")),
+        )
+        assertEquals(listOf("prod" to 1, "Work" to 3), tagCounts(items))
+    }
+
+    @Test
+    fun tagGoneComparesWithoutCase() {
+        val items = listOf(item("1", ItemKind.LOGIN, "A", tags = listOf("Work")))
+        val state = ItemListUiState(items = items, loading = false)
+        assertFalse(tagGone(state, "work"))
+        assertTrue(tagGone(state, "play"))
+    }
+
     /** Final review (tags): tags sorted by UTF-16, so "école" came after "zoo". */
     @Test
     fun tagsSortAsAReaderExpects() {

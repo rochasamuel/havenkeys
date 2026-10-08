@@ -145,15 +145,62 @@ class EditorStateTest {
         assertFalse(state.addTag("   "))
         assertFalse(state.addTag("x".repeat(33)))
         assertTrue(state.addTag("x".repeat(32)))
-        assertEquals(listOf("prod server", "work", "x".repeat(32)), state.toDraft().tags)
+        assertEquals(listOf("Prod Server", "work", "x".repeat(32)), state.toDraft().tags)
         assertTrue(state.dirty)
+    }
+
+    @Test
+    fun aTagKeepsItsCase() {
+        val state = EditorState(login())
+        assertTrue(state.addTag("  Dev   Team "))
+        assertEquals(listOf("Dev Team"), state.toDraft().tags)
+        assertEquals("Dev Team", tagForm(" Dev\u00A0Team"))
+    }
+
+    @Test
+    fun aTagTheItemHasInAnotherCaseIsAQuietDuplicate() {
+        val state = EditorState(login(tags = listOf("Work")))
+        state.tagField.edit { replace(0, length, "work") }
+        assertTrue(state.commitTypedTag())
+        assertNull(state.tagRefused)
+        assertEquals("", state.tagField.text.toString())
+        assertEquals(listOf("Work"), state.toDraft().tags)
+        assertFalse(state.dirty)
+    }
+
+    @Test
+    fun aTagTheVaultHasTakesTheVaultsSpelling() {
+        val state = EditorState(login(), vaultTags = listOf("Work", "Dev Team"))
+        assertTrue(state.addTag("work"))
+        assertTrue(state.addTag("dev  team"))
+        assertFalse(state.addTag("WORK"))
+        assertEquals(listOf("Dev Team", "Work"), state.toDraft().tags)
+    }
+
+    /** The only item tagged "work" may become "Work": its own tags are not the vault's spelling. */
+    @Test
+    fun theOnlyItemWithATagCanChangeItsCase() {
+        val state = EditorState(login(tags = listOf("work")), vaultTags = emptyList())
+        state.removeTag("work")
+        assertTrue(state.addTag("Work"))
+        assertEquals(listOf("Work"), state.toDraft().tags)
+        assertTrue(state.dirty)
+    }
+
+    @Test
+    fun tagsSortWithoutCase() {
+        val state = EditorState(login(tags = listOf("alpha")))
+        assertTrue(state.addTag("Beta"))
+        assertTrue(state.addTag("Zed"))
+        assertTrue(state.addTag("charlie"))
+        assertEquals(listOf("alpha", "Beta", "charlie", "Zed"), state.tags.toList())
     }
 
     @Test
     fun unicodeWhiteSpaceIsTrimmedAndCollapsedAsRustDoes() {
         val state = EditorState(login())
         assertTrue(state.addTag("\u00A0Side\u2003\u00A0Project\u3000"))
-        assertEquals(listOf("side project"), state.tags.toList())
+        assertEquals(listOf("Side Project"), state.tags.toList())
         assertFalse(state.addTag("\u00A0\u2003"))
         assertTrue(state.addTag("a\u0085b"))
         assertTrue("a b" in state.tags)
@@ -182,7 +229,7 @@ class EditorStateTest {
         assertNull(state.tagRefused)
         assertTrue(state.commitTypedTag())
         assertEquals("", state.tagField.text.toString())
-        assertEquals(listOf("work"), state.toDraft().tags)
+        assertEquals(listOf("Work"), state.toDraft().tags)
     }
 
     @Test

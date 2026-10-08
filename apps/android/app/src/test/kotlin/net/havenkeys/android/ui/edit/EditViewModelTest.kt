@@ -61,7 +61,7 @@ class EditViewModelTest {
     private fun summary(id: String, tags: List<String>) =
         ItemSummary(id, ItemKind.LOGIN, id, null, null, false, false, 0, 0, tags = tags)
 
-    /** Final review (tags): suggestions sorted by UTF-16 put "école" after "zoo". */
+    /** Final review (tags): suggestions sorted by UTF-16 put "école" after "zoo"; now most used leads. */
     @Test
     fun theVaultsTagsAreSuggestedAsAReaderSortsThem() = runTest {
         val vault = vault().apply {
@@ -73,7 +73,39 @@ class EditViewModelTest {
             )
         }
         val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
-        assertEquals(listOf("école", "emploi", "zoo"), vm.state.value.vaultTags)
+        // Most used first ("zoo" twice), then as a reader sorts them.
+        assertEquals(listOf("zoo", "école", "emploi"), vm.state.value.vaultTags)
+    }
+
+    /** One spelling per tag, most used first; the item's own tags are not the vault's (Rust leaves them out). */
+    @Test
+    fun theVaultsTagsMergeCaseAndLeaveTheItemOut() = runTest {
+        val vault = vault().apply {
+            items = Outcome.Ok(
+                listOf(
+                    summary("1", listOf("Work")),
+                    summary("2", listOf("work", "prod")),
+                    summary("id", listOf("Solo", "prod")),
+                ),
+            )
+        }
+        val vm = EditViewModel(vault, accounts, events, EditTarget.Existing("id"))
+        assertEquals(listOf("Work", "prod"), vm.state.value.vaultTags)
+        events.locked("idle")
+        assertEquals(emptyList<String>(), vm.state.value.vaultTags)
+    }
+
+    @Test
+    fun ofSeveralSpellingsTheOneMostItemsCarryNamesTheTag() {
+        val items = listOf(
+            summary("1", listOf("work")),
+            summary("2", listOf("Work")),
+            summary("3", listOf("Work")),
+            summary("4", listOf("prod")),
+            summary("5", listOf("Prod")),
+        )
+        // "Work" 2 to 1; "Prod"/"prod" tie, so the smallest ("Prod") wins.
+        assertEquals(listOf("Work", "Prod"), tagsByUse(items))
     }
 
     @Test

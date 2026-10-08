@@ -152,7 +152,7 @@ private fun ItemHeader(summary: ItemSummary, titleModifier: Modifier, tileModifi
     }
 }
 
-/** The item's tags as markers under its title: outlined, muted, with no action. */
+/** The item's tags as markers under its title: brass pills with the tag glyph, with no action. */
 @Composable
 private fun ItemTags(tags: List<String>) {
     if (tags.isEmpty()) return
@@ -162,8 +162,8 @@ private fun ItemTags(tags: List<String>) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // The tag glyph tells them from the vault-health chips under them (both are outline pills).
-        tags.forEach { Pill(it, tone = PillTone.Outline, icon = HavenIcon.Tag) }
+        // Brass, with the tag glyph: the vault-health chips under them stay outlined.
+        tags.forEach { Pill(it, tone = PillTone.Brass, icon = HavenIcon.Tag) }
     }
 }
 

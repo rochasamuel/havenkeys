@@ -12,12 +12,15 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -71,7 +74,7 @@ class EditFieldsTest {
     ): Pair<EditorState, SnapshotStateList<String>> {
         vault.edit = Outcome.Ok(edit)
         val vm = EditViewModel(vault, FakeAccountRepository(), VaultEventsHub(), EditTarget.Existing("id"))
-        val editor = EditorState(edit)
+        val editor = EditorState(edit, vaultTags)
         val pending = mutableStateListOf<String>().apply { addAll(loading) }
         rule.setKit {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -91,11 +94,11 @@ class EditFieldsTest {
         val (editor, _) = show(login(emptyList(), tags = listOf("work")))
         field(text(R.string.edit_add_tag)).performTextReplacement("  Staging ")
         field(text(R.string.edit_add_tag)).performImeAction()
-        rule.runOnIdle { assertEquals(listOf("staging", "work"), editor.toDraft().tags) }
+        rule.runOnIdle { assertEquals(listOf("Staging", "work"), editor.toDraft().tags) }
         field(text(R.string.edit_add_tag)).assert(typed(""))
         rule.onNodeWithContentDescription(text(R.string.edit_remove_tag, "work")).performClick()
         rule.runOnIdle {
-            assertEquals(listOf("staging"), editor.toDraft().tags)
+            assertEquals(listOf("Staging"), editor.toDraft().tags)
             assertTrue(editor.dirty)
         }
     }
@@ -164,7 +167,43 @@ class EditFieldsTest {
         rule.onNode(hasText("stock") and hasClickAction()).assertExists()
         rule.onNode(hasText("staging") and hasClickAction()).performClick()
         rule.runOnIdle { assertEquals(listOf("staging", "work"), editor.toDraft().tags) }
-        rule.onNode(hasText("stock") and hasClickAction()).assertDoesNotExist()
+        // The field keeps focus, emptied: the vault's other tags are offered next.
+        rule.onNode(hasText("staging") and hasClickAction()).assertDoesNotExist()
+        rule.onNode(hasText("stock") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun focusingTheEmptyFieldOffersTheMostUsedVaultTagsAndATapAddsOne() {
+        // The view model hands them most used first; the item's own are left out.
+        val (editor, _) = show(
+            login(emptyList(), tags = listOf("Work")),
+            vaultTags = listOf("Prod", "Work", "Staging", "a1", "a2", "a3", "a4"),
+        )
+        rule.onNode(hasText("Prod") and hasClickAction()).assertDoesNotExist()
+        field(text(R.string.edit_add_tag)).performClick()
+        val shown = rule.onAllNodesWithTag(TAG_SUGGESTION)
+        shown.assertCountEquals(5)
+        listOf("Prod", "Staging", "a1", "a2", "a3").forEachIndexed { i, name -> shown[i].assert(hasText(name)) }
+        rule.onNode(hasText("Prod") and hasClickAction()).performClick()
+        rule.runOnIdle { assertEquals(listOf("Prod", "Work"), editor.toDraft().tags) }
+        field(text(R.string.edit_add_tag)).assertIsFocused()
+        rule.onNode(hasText("a4") and hasClickAction()).assertExists()
+        rule.onNode(hasText("Prod") and hasClickAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun withNoOtherVaultTagsFocusingOffersNothing() {
+        show(login(emptyList(), tags = listOf("Work")), vaultTags = listOf("work"))
+        field(text(R.string.edit_add_tag)).performClick()
+        rule.onAllNodesWithTag(TAG_SUGGESTION).assertCountEquals(0)
+    }
+
+    @Test
+    fun typingMatchesTheVaultsTagsWithoutCase() {
+        show(login(emptyList()), vaultTags = listOf("Staging", "Work"))
+        field(text(R.string.edit_add_tag)).performTextReplacement("STA")
+        rule.onNode(hasText("Staging") and hasClickAction()).assertExists()
+        rule.onNode(hasText("Work") and hasClickAction()).assertDoesNotExist()
     }
 
     @Test

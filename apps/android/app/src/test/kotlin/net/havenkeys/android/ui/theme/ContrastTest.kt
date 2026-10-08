@@ -58,6 +58,9 @@ class ContrastTest {
             assertReads("$theme onDanger", c.onDanger, c.danger)
             assertReads("$theme toast", c.onGlass, c.glass.compositeOver(c.pane))
             assertReads("$theme pill", c.brassInk, c.brassSoft.compositeOver(c.group))
+            // Tag pills sit under the item's title on the pane (and the list ground on some screens).
+            assertReads("$theme pill on pane", c.brassInk, c.brassSoft.compositeOver(c.pane))
+            assertReads("$theme pill on list", c.brassInk, c.brassSoft.compositeOver(c.list))
             assertReads("$theme monogram", c.avatarFg, c.avatarBg)
         }
     }

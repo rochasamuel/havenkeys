@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.edit.tagKey
 import net.havenkeys.android.ui.kit.PullToRefresh
 import net.havenkeys.android.ui.shell.EmptyLine
 import net.havenkeys.android.ui.shell.ErrorLine
@@ -77,8 +78,8 @@ fun TagScreen(
     FilteredList(
         viewModel,
         tag,
-        filter = "tag:$tag",
-        { tag in it.tags },
+        filter = "tag:${tagKey(tag)}",
+        { carries(it, tag) },
         onOpen,
         contentPadding,
         modifier,

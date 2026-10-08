@@ -111,7 +111,7 @@ class EditScreenTest {
         tag.performTextReplacement("Work")
         rule.onNodeWithText(text(R.string.edit_save)).assertIsEnabled().performClick()
         rule.waitForIdle()
-        assertEquals(listOf("work"), vault.drafts.single().tags)
+        assertEquals(listOf("Work"), vault.drafts.single().tags)
     }
 
     /** Final review (tags): Save with a refused tag in the field saved the item without it. */

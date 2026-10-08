@@ -186,16 +186,24 @@ class ScreenScreenshots {
 
     /** The same login with tags, in a vault whose other tags the editor suggests. */
     private val tagged = FakeVaultRepository().apply {
-        val summary = github.copy(tags = listOf("staging", "work"))
+        val summary = github.copy(tags = listOf("Staging", "Work"))
         view = vault.view.let { (it as Outcome.Ok).copy(value = it.value.copy(summary = summary)) }
         totpNow = vault.totpNow
-        edit = vault.edit.let { (it as Outcome.Ok).copy(value = it.value.copy(tags = listOf("staging", "work"))) }
+        edit = vault.edit.let { (it as Outcome.Ok).copy(value = it.value.copy(tags = listOf("Staging", "Work"))) }
         items = Outcome.Ok(
             listOf(
                 summary,
                 ItemSummary(
                     "2", ItemKind.LOGIN, "Stripe", "sam@example.com", "stripe.com", false, false, 0, 0,
-                    tags = listOf("stripe", "work"),
+                    tags = listOf("Stripe", "Work", "Finance"),
+                ),
+                ItemSummary(
+                    "3", ItemKind.LOGIN, "Bank", "sam@example.com", "bank.com", false, false, 0, 0,
+                    tags = listOf("Finance", "Dev Team"),
+                ),
+                ItemSummary(
+                    "4", ItemKind.LOGIN, "AWS", "sam@example.com", "aws.amazon.com", false, false, 0, 0,
+                    tags = listOf("Finance", "Dev Team", "Ops"),
                 ),
             ),
         )
@@ -205,7 +213,16 @@ class ScreenScreenshots {
         val field = hasSetTextAction() and hasText(app.getString(R.string.edit_add_tag))
         rule.onNode(field).performScrollTo().performTextInput("st")
         rule.waitForIdle()
-        rule.onNode(hasText("stripe") and hasClickAction()).performScrollTo()
+        rule.onNode(hasText("Stripe") and hasClickAction()).performScrollTo()
+        rule.waitForIdle()
+    }
+
+    /** The empty Add tag field focused: the vault's most used tags are offered. */
+    private val focusTagField = {
+        val field = hasSetTextAction() and hasText(app.getString(R.string.edit_add_tag))
+        rule.onNode(field).performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNode(hasText("Ops") and hasClickAction()).performScrollTo()
         rule.waitForIdle()
     }
 
@@ -307,6 +324,7 @@ class ScreenScreenshots {
         Shot("item-revealed", before = revealPassword) { Item() },
         Shot("editor") { Editor(vault) },
         Shot("editor-tags", before = typeATag) { Editor(tagged) },
+        Shot("editor-tags-focus", before = focusTagField) { Editor(tagged) },
         Shot("item-tags") { Item(tagged) },
         Shot("editor-note") { Editor(note) },
         Shot("editor-card") { Editor(card) },
