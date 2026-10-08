@@ -139,8 +139,9 @@ existing conflict handling:
 
 * Trashed here while edited elsewhere: 409, pull, and the user sees the
   existing "This item changed on another device" message; nothing is lost.
-* Restore of an item another device already purged: 409, pull removes it,
-  and the user sees "This item was removed from Trash".
+* Restore, delete or empty of an item another device already purged (or
+  restored): 409, the app shows the existing "This item changed on another
+  device" message and syncs, which removes the item.
 
 ### 5.6 Errors
 

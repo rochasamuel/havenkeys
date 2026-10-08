@@ -3456,6 +3456,10 @@ model: `security-model.md` §2 "Trash". Internal review, not an independent audi
 | TR1 | Low | Core purge | A device clock set far ahead purges trash early | Accepted |
 | TR2 | Low | Version skew | An app older than this one fills trashed items | Accepted |
 | TR3 | N/A | Fill, native messaging, passkeys | A trashed item requested by ID | Tested: denied |
+| TR4 | Low | Core restore | A restore can leave two passkeys for one site and user | Known |
+| TR5 | Low | Core expiry | One conflicting item holds back the whole expiry batch | Known |
+| TR6 | Low | Desktop, Android editors | Editing an item trashed elsewhere answers "Item not found" | Known |
+| TR7 | Medium | Core session | A pulled overview marking the Identity trashed | Fixed, tested |
 
 ### TR1. Clock set far ahead purges trash early (Low, accepted)
 **Component:** `crates/havenkeys-core` (`stage_expired_trash`).
@@ -3486,3 +3490,49 @@ denied like an unknown ID. Covered by `a2_a_trashed_login_is_denied_like_an_unkn
 `a_trashed_login_is_offered_to_no_app_and_no_passkey_request`
 (`crates/havenkeys-core/tests/trash.rs`).
 **Remaining limitations:** none known.
+
+### TR4. A restore can leave two passkeys for one site and user (Low, known)
+**Component:** `crates/havenkeys-core` (`stage_restore_trashed`).
+**Attack scenario:** none; a usability gap. The user trashes a login with a
+passkey, a new passkey is created for the same site and user (the trashed one
+is not offered, so the site asks for a new one), then the old login is
+restored. Both passkeys are live; the site has replaced the older one, so it
+no longer signs in.
+**Mitigation:** none. The restore puts the item back exactly as it was.
+**Remaining limitations:** the user removes the stale passkey by hand.
+
+### TR5. One conflicting item holds back the whole expiry batch (Low, known)
+**Component:** `crates/havenkeys-core` (`stage_expired_trash`), the client's
+`push_batches`.
+**Attack scenario:** none; availability of the purge. If the server refuses
+one tombstone in a batch (another device changed that item), the batch is
+not applied, and the next sync's purge tries again. Until a pull brings the
+other device's version, items in the same batch stay in the Trash past their
+30 days.
+**Mitigation:** the pull that follows the refusal brings the newer version,
+so the next run normally goes through.
+**Remaining limitations:** an item that keeps conflicting delays the rest of
+its batch.
+
+### TR6. Editing an item trashed elsewhere answers "Item not found" (Low, known)
+**Component:** desktop and Android editors.
+**Attack scenario:** none; a confusing message. An editor opened before a
+pull that moved the item to the Trash saves against an item that is no
+longer live, and the core answers `not_found` rather than "This item changed
+on another device".
+**Mitigation:** nothing is written; the item stays in the Trash, intact.
+**Remaining limitations:** the message does not say the item was deleted.
+
+### TR7. A pulled overview marking the Identity trashed (Medium, fixed)
+**Component:** `crates/havenkeys-core` (`Session::place`, `open_session`,
+`stage_purge`, `stage_empty_trash`, `stage_expired_trash`).
+**Attack scenario:** a buggy or older device (or a corrupted write) uploads
+the Identity's overview with `trashedAt` set. Without a guard, every device
+would hide the Identity, offer it in the Trash, and purge it after 30 days,
+though the Identity can never be trashed here.
+**Mitigation:** the Identity always stays in the live map whatever its
+overview says, and purge, empty and expiry skip it. Covered by
+`a_pulled_trashed_identity_stays_live_and_is_never_purged`
+(`crates/havenkeys-core/tests/trash.rs`), across a lock and unlock.
+**Remaining limitations:** the stray `trashedAt` stays in that overview until
+the Identity is next saved, which clears it.
