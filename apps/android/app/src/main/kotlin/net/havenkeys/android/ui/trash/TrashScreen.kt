@@ -60,7 +60,7 @@ internal fun daysSince(trashedAt: Long, now: Long): Int =
 /** What the Trash screen asks before deleting for good: one item, or all of them. */
 private sealed interface TrashConfirm {
     data class Purge(val row: TrashRow) : TrashConfirm
-    data class Empty(val count: Int) : TrashConfirm
+    data class Empty(val count: Int, val passkeys: Boolean) : TrashConfirm
 }
 
 /**
@@ -86,7 +86,9 @@ fun TrashScreen(viewModel: TrashViewModel, online: Boolean, onBack: () -> Unit, 
             ScreenBar(onBack = onBack, online = online, onLock = onLock) {
                 EmptyTrashMenu(
                     enabled = canAct && state.rows.isNotEmpty(),
-                    onEmpty = { confirm = TrashConfirm.Empty(state.rows.size) },
+                    onEmpty = {
+                        confirm = TrashConfirm.Empty(state.rows.size, state.rows.any { it.summary.hasPasskey })
+                    },
                 )
             }
         },
@@ -170,8 +172,8 @@ private fun TrashList(state: TrashUiState, online: Boolean, padding: PaddingValu
             )
         }
         if (!online) item(key = "offline") { OfflineNote(stringResource(R.string.edit_offline), Gutter) }
-        state.errorCode?.let { code -> item(key = "error") { ErrorLine(code, Gutter) } }
-        if (!state.loading && state.rows.isEmpty() && state.errorCode == null) {
+        (state.errorCode ?: state.loadErrorCode)?.let { code -> item(key = "error") { ErrorLine(code, Gutter) } }
+        if (!state.loading && state.rows.isEmpty() && state.loadErrorCode == null) {
             item(key = "empty") { EmptyLine(stringResource(R.string.trash_empty), Gutter.padding(top = 8.dp)) }
         }
         if (state.rows.isNotEmpty()) item(key = "gap") { Spacer(Modifier.height(8.dp)) }
@@ -193,10 +195,10 @@ private fun TrashList(state: TrashUiState, online: Boolean, padding: PaddingValu
 @Composable
 private fun trashNote(row: TrashRow, now: Long): String {
     val ago = daysSince(row.trashedAt, now)
-    val deleted = if (ago == 0) {
-        stringResource(R.string.trash_deleted_today)
-    } else {
-        pluralStringResource(R.plurals.trash_deleted_ago, ago, ago)
+    val deleted = when (ago) {
+        0 -> stringResource(R.string.trash_deleted_today)
+        1 -> stringResource(R.string.trash_deleted_yesterday)
+        else -> pluralStringResource(R.plurals.trash_deleted_ago, ago, ago)
     }
     val removed = if (row.daysLeft <= 0) {
         stringResource(R.string.trash_removed_next_sync)
@@ -265,7 +267,10 @@ private fun TrashConfirmDialog(
         is TrashConfirm.Purge -> stringResource(R.string.trash_confirm_delete, confirm.row.summary.title)
         is TrashConfirm.Empty -> pluralStringResource(R.plurals.trash_confirm_empty, confirm.count, confirm.count)
     }
-    val passkeys = confirm is TrashConfirm.Purge && confirm.row.summary.hasPasskey
+    val passkeys = when (confirm) {
+        is TrashConfirm.Purge -> confirm.row.summary.hasPasskey
+        is TrashConfirm.Empty -> confirm.passkeys
+    }
     HavenDialog(
         title = title,
         onDismiss = onDismiss,

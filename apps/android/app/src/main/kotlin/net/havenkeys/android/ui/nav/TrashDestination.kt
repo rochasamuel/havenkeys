@@ -13,7 +13,7 @@ internal fun NavGraphBuilder.trashScreen(services: NavServices, onBack: () -> Un
     composable(Routes.TRASH) {
         val online by services.events.online.collectAsStateWithLifecycle()
         TrashScreen(
-            viewModel = viewModel { TrashViewModel(services.vault, services.events) },
+            viewModel = viewModel { TrashViewModel(services.vault, services.accounts, services.events) },
             online = online,
             onBack = onBack,
             onLock = onLock,

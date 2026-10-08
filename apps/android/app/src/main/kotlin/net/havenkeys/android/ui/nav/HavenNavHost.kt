@@ -107,7 +107,9 @@ internal fun HavenNavHost(
     val motion = HavenTheme.motion
     val travel = remember { TitleTravel() }
     // One per graph: the item screen hands its Delete to the screen it pops back to.
-    val trashUndo = remember(services) { TrashUndo(services.vault::restore) }
+    val trashUndo = remember(services) {
+        TrashUndo(services.vault::restore, sync = { services.accounts.syncNow(fresh = true) })
+    }
     // The window's ground shows through a screen that fades under a push, which reads as dimmed.
     SharedTransitionLayout(modifier.background(HavenTheme.colors.pane)) {
         val nav = Nav(services, navController, this, motion, travel, trashUndo)

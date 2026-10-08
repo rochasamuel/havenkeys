@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
@@ -24,12 +25,17 @@ data class TrashRow(val summary: ItemSummary, val trashedAt: Long, val daysLeft:
     val id: String get() = summary.id
 }
 
-/** [busy]: a restore, a delete or an empty is with the server. */
+/**
+ * [busy]: a restore, a delete or an empty is with the server. [errorCode]:
+ * why the last action failed; [loadErrorCode]: why the list did not load,
+ * cleared by the next load that works.
+ */
 data class TrashUiState(
     val rows: List<TrashRow> = emptyList(),
     val loading: Boolean = true,
     val busy: Boolean = false,
     val errorCode: String? = null,
+    val loadErrorCode: String? = null,
 )
 
 /**
@@ -37,7 +43,11 @@ data class TrashUiState(
  * writes to the server first, then the list reloads; everything is dropped
  * on lock.
  */
-class TrashViewModel(private val vault: VaultRepository, events: VaultEventsHub) : ViewModel() {
+class TrashViewModel(
+    private val vault: VaultRepository,
+    private val accounts: AccountRepository,
+    events: VaultEventsHub,
+) : ViewModel() {
     private val _state = MutableStateFlow(TrashUiState())
     val state: StateFlow<TrashUiState> = _state.asStateFlow()
 
@@ -57,8 +67,10 @@ class TrashViewModel(private val vault: VaultRepository, events: VaultEventsHub)
     fun reload() {
         viewModelScope.launch {
             when (val r = vault.listTrash()) {
-                is Outcome.Ok -> _state.update { s -> s.copy(rows = r.value.map { it.toRow() }, loading = false) }
-                is Outcome.Failed -> _state.update { it.copy(loading = false, errorCode = r.code) }
+                is Outcome.Ok -> _state.update { s ->
+                    s.copy(rows = r.value.map { it.toRow() }, loading = false, loadErrorCode = null)
+                }
+                is Outcome.Failed -> _state.update { it.copy(loading = false, loadErrorCode = r.code) }
             }
         }
     }
@@ -76,11 +88,16 @@ class TrashViewModel(private val vault: VaultRepository, events: VaultEventsHub)
         _state.update { it.copy(busy = true, errorCode = null) }
         viewModelScope.launch {
             val r = call()
-            _state.update { it.copy(busy = false, errorCode = (r as? Outcome.Failed)?.code) }
+            val failed = (r as? Outcome.Failed)?.code
+            // Restored or deleted on another device first: a sync removes it here.
+            if (failed == CONFLICT) accounts.syncNow(fresh = true)
+            _state.update { it.copy(busy = false, errorCode = failed) }
             if (r is Outcome.Ok) done()
             reload()
         }
     }
 }
+
+internal const val CONFLICT = "item_changed_elsewhere"
 
 private fun TrashSummary.toRow() = TrashRow(summary = item, trashedAt = trashedAt, daysLeft = daysLeft.toInt())

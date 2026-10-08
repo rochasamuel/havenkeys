@@ -257,6 +257,7 @@
         <item quantity="other">Deleted %1$d days ago</item>
     </plurals>
     <string name="trash_deleted_today">Deleted today</string>
+    <string name="trash_deleted_yesterday">Deleted yesterday</string>
     <plurals name="trash_removed_in">
         <item quantity="one">Removed in %1$d day</item>
         <item quantity="other">Removed in %1$d days</item>

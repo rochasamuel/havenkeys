@@ -247,6 +247,7 @@
         <item quantity="other">Excluído há %1$d dias</item>
     </plurals>
     <string name="trash_deleted_today">Excluído hoje</string>
+    <string name="trash_deleted_yesterday">Excluído ontem</string>
     <plurals name="trash_removed_in">
         <item quantity="one">Sai em %1$d dia</item>
         <item quantity="many">Sai em %1$d dias</item>

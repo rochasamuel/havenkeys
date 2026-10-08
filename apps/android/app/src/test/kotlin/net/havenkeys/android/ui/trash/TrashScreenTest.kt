@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
+import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
 import net.havenkeys.android.ui.kit.assertTouchTarget
 import net.havenkeys.android.ui.kit.hasRole
@@ -43,7 +44,7 @@ class TrashScreenTest {
     }
 
     private fun show(online: Boolean = true) {
-        val vm = TrashViewModel(vault, VaultEventsHub())
+        val vm = TrashViewModel(vault, FakeAccountRepository(), VaultEventsHub())
         rule.setKit { TrashScreen(vm, online, onBack = {}, onLock = {}) }
     }
 
@@ -77,9 +78,24 @@ class TrashScreenTest {
         more().performClick()
         button("Empty Trash").assertTouchTarget().performClick()
         rule.onNodeWithText("Delete 2 items permanently? This cannot be undone.").assertExists()
+        // GitHub has a passkey: emptying deletes it too.
+        rule.onNodeWithText("Its passkeys go too. Sites that use them will need another way to sign in.")
+            .assertExists()
         dialogButton("Delete permanently").performClick()
         rule.waitForIdle()
         assertTrue("emptyTrash" in vault.calls)
+    }
+
+    @Test
+    fun emptyTrashWithoutPasskeysDoesNotWarnOfThem() {
+        vault.trashList = Outcome.Ok(listOf(trashSummary("b", "Bank", trashedAt = now - day - 1_000)))
+        show()
+        rule.onNodeWithText("Deleted yesterday · Removed in 30 days").assertExists()
+        more().performClick()
+        button("Empty Trash").performClick()
+        rule.onNodeWithText("Delete 1 item permanently? This cannot be undone.").assertExists()
+        rule.onNodeWithText("Its passkeys go too. Sites that use them will need another way to sign in.")
+            .assertDoesNotExist()
     }
 
     @Test

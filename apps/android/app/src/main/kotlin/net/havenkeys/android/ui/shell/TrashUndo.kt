@@ -16,15 +16,20 @@ import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.kit.ToastAction
 import net.havenkeys.android.ui.kit.ToastState
 import net.havenkeys.android.ui.kit.ToastTone
+import net.havenkeys.android.ui.trash.CONFLICT
 
 /**
  * The last item Delete took away, for the screen under the item to say so
  * once: the item screen pops back as it deletes, so its own toast would go
- * with it. [restore] puts a trashed item back (Undo). Title and id only,
- * never a value.
+ * with it. [restore] puts a trashed item back (Undo); [sync] runs when the
+ * server says another device changed it first, so a copy deleted for good
+ * there leaves this phone at once. Title and id only, never a value.
  */
 @Stable
-class TrashUndo(private val restore: suspend (id: String) -> Outcome<Unit>) {
+class TrashUndo(
+    private val restore: suspend (id: String) -> Outcome<Unit>,
+    private val sync: suspend () -> Unit = {},
+) {
     var pending: Trashed? by mutableStateOf(null)
         private set
 
@@ -40,7 +45,9 @@ class TrashUndo(private val restore: suspend (id: String) -> Outcome<Unit>) {
 
     fun take(): Trashed? = pending.also { pending = null }
 
-    internal suspend fun undo(id: String): Outcome<Unit> = restore(id)
+    internal suspend fun undo(id: String): Outcome<Unit> = restore(id).also {
+        if (it is Outcome.Failed && it.code == CONFLICT) sync()
+    }
 }
 
 @Immutable

@@ -23,10 +23,14 @@ class TrashUndoTest {
 
     private val restored = mutableListOf<String>()
     private var answer: Outcome<Unit> = Outcome.Ok(Unit)
-    private val undo = TrashUndo { id ->
-        restored += id
-        answer
-    }
+    private var syncs = 0
+    private val undo = TrashUndo(
+        restore = { id ->
+            restored += id
+            answer
+        },
+        sync = { syncs++ },
+    )
 
     private fun show() {
         rule.setKit {
@@ -54,6 +58,26 @@ class TrashUndoTest {
         rule.runOnIdle { undo.offer("id-1", "GitHub") }
         rule.onNodeWithText("Undo").performClick()
         rule.onNodeWithText("HavenKeys is offline — the vault is read-only until it reconnects.").assertExists()
+    }
+
+    @Test
+    fun anUndoRefusedBecauseAnotherDeviceChangedItSyncsAndSaysSo() {
+        answer = Outcome.Failed("item_changed_elsewhere")
+        show()
+        rule.runOnIdle { undo.offer("id-1", "GitHub") }
+        rule.onNodeWithText("Undo").performClick()
+        rule.onNodeWithText("This item changed on another device.").assertExists()
+        assertEquals(1, syncs)
+    }
+
+    @Test
+    fun anUndoThatFailsOtherwiseDoesNotSync() {
+        answer = Outcome.Failed("offline")
+        show()
+        rule.runOnIdle { undo.offer("id-1", "GitHub") }
+        rule.onNodeWithText("Undo").performClick()
+        rule.waitForIdle()
+        assertEquals(0, syncs)
     }
 
     @Test

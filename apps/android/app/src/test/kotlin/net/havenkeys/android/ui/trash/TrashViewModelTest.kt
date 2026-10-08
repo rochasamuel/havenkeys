@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
+import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -43,7 +44,9 @@ class TrashViewModelTest {
     private val b = trashSummary("b", "Beta", daysLeft = 30)
     private val vault = FakeVaultRepository().apply { trashList = Outcome.Ok(listOf(b, a)) }
 
-    private fun vm() = TrashViewModel(vault, events)
+    private val accounts = FakeAccountRepository()
+
+    private fun vm() = TrashViewModel(vault, accounts, events)
 
     private fun listings() = vault.calls.count { it == "listTrash" }
 
@@ -86,6 +89,49 @@ class TrashViewModelTest {
     }
 
     @Test
+    fun aConflictSyncsSoTheStaleItemGoesAndKeepsTheMessage() {
+        val vm = vm()
+        vault.restored = Outcome.Failed("item_changed_elsewhere")
+        vm.restore("a")
+        assertEquals(listOf("syncNow"), accounts.calls)
+        assertEquals(listOf(true), accounts.freshCalls)
+        assertEquals("item_changed_elsewhere", vm.state.value.errorCode)
+        assertEquals(listOf("listTrash", "restore:a", "listTrash"), vault.calls)
+
+        vault.emptied = Outcome.Failed("item_changed_elsewhere")
+        vm.emptyTrash()
+        assertEquals(listOf("syncNow", "syncNow"), accounts.calls)
+    }
+
+    @Test
+    fun otherFailuresDoNotSync() {
+        val vm = vm()
+        vault.purged = Outcome.Failed("offline")
+        vm.purge("a")
+        assertTrue(accounts.calls.isEmpty())
+    }
+
+    @Test
+    fun aLoadThatWorksClearsAnEarlierLoadError() {
+        vault.trashList = Outcome.Failed("sync_failed")
+        val vm = vm()
+        assertEquals("sync_failed", vm.state.value.loadErrorCode)
+        vault.trashList = Outcome.Ok(emptyList())
+        vm.reload()
+        assertNull(vm.state.value.loadErrorCode)
+        assertTrue(vm.state.value.rows.isEmpty())
+    }
+
+    @Test
+    fun anActionErrorOutlivesTheReloadAfterIt() {
+        val vm = vm()
+        vault.purged = Outcome.Failed("offline")
+        vm.purge("a")
+        assertEquals("offline", vm.state.value.errorCode)
+        assertNull(vm.state.value.loadErrorCode)
+    }
+
+    @Test
     fun reloadsWhenTheVaultReportsItemsChanged() {
         vm()
         val before = listings()
@@ -104,7 +150,7 @@ class TrashViewModelTest {
     fun aFailedLoadSaysWhy() {
         vault.trashList = Outcome.Failed("locked")
         val state = vm().state.value
-        assertEquals("locked", state.errorCode)
+        assertEquals("locked", state.loadErrorCode)
         assertFalse(state.loading)
     }
 
