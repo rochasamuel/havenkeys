@@ -14,7 +14,7 @@ use crate::qr_scan;
 use crate::scan_slot::ScannedTotp;
 use crate::state::{AppState, CmdError, CmdResult};
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
-use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings};
+use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings, TrashEntry};
 use havenkeys_core::sso::SsoProvider;
 use havenkeys_core::totp::TotpCode;
 use havenkeys_core::vault::{ProviderLogin, SsoAccount, StagedWrite, VaultService, VaultStatus};
@@ -333,11 +333,49 @@ pub async fn update_item(
     .await
 }
 
+/// Delete moves the item to the Trash (spec 2026-10-08-trash). `false`: its
+/// details did not open, so it was deleted for good instead.
 #[tauri::command]
-pub async fn delete_item(app: AppHandle, id: Uuid) -> CmdResult<()> {
-    let staged = stage_write(&app, |state| Ok(state.vault()?.stage_delete(&id)?))?;
+pub async fn trash_item(app: AppHandle, id: Uuid) -> CmdResult<bool> {
+    let staged = stage_write(&app, |state| {
+        Ok(state.vault()?.stage_trash(&id, AppState::now_ms())?)
+    })?;
+    let client = app.state::<AppState>().client().clone();
+    Ok(client.push(staged).await?.is_some())
+}
+
+#[tauri::command]
+pub async fn restore_item(app: AppHandle, id: Uuid) -> CmdResult<ItemOverview> {
+    let staged = stage_write(&app, |state| {
+        Ok(state.vault()?.stage_restore_trashed(&id)?)
+    })?;
+    let client = app.state::<AppState>().client().clone();
+    client.push(staged).await?.ok_or_else(CmdError::internal)
+}
+
+#[tauri::command]
+pub async fn purge_item(app: AppHandle, id: Uuid) -> CmdResult<()> {
+    let staged = stage_write(&app, |state| Ok(state.vault()?.stage_purge(&id)?))?;
     let client = app.state::<AppState>().client().clone();
     client.push(staged).await.map(|_| ())
+}
+
+#[tauri::command]
+pub async fn empty_trash(app: AppHandle) -> CmdResult<usize> {
+    let (staged, client) = {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_online()?;
+        let staged = state.vault()?.stage_empty_trash()?;
+        (staged, state.client().clone())
+    };
+    client.push_batches(staged).await
+}
+
+/// A read like `list_items`: no `touch()`.
+#[tauri::command]
+pub fn list_trash(state: State<'_, AppState>) -> CmdResult<Vec<TrashEntry>> {
+    Ok(state.vault()?.list_trash(AppState::now_ms())?)
 }
 
 /// Stage a change for the server. Counts as activity and needs a session;
