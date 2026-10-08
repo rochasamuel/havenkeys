@@ -257,9 +257,27 @@ impl HavenClient {
             }
         }
 
+        // Items trashed more than 30 days ago go for good (spec
+        // 2026-10-08-trash §5.3). Best effort: a refused batch (another
+        // device purged first) is retried by the next sync, after its pull.
+        report.deleted += self.purge_expired_trash().await;
+
         self.mark_sync_attempt();
         self.events.synced(report);
         Ok(report)
+    }
+
+    /// Send tombstones for trash past its retention. Returns how many the
+    /// server accepted; never fails the sync it runs in.
+    async fn purge_expired_trash(&self) -> usize {
+        let due = match self.vault() {
+            Ok(vault) => vault.stage_expired_trash(now_ms()),
+            Err(_) => return 0,
+        };
+        match due {
+            Ok(due) if !due.is_empty() => self.push_batches(due).await.unwrap_or(0),
+            _ => 0,
+        }
     }
 
     /// Send one staged write, then record what the server accepted. Nothing

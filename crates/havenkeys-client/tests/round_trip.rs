@@ -447,3 +447,117 @@ async fn a_restored_server_drops_items_it_no_longer_has() {
     assert!(titles(&a).contains(&"After".to_string()));
     server.cleanup().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sync_purges_trash_older_than_30_days() {
+    let server = Server::start().await;
+    let invite = server.invite("user@example.com").await;
+    let dir = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+
+    let now = havenkeys_client::now_ms();
+    let staged = a.vault().unwrap().stage_create(login("Old"), now).unwrap();
+    let old = a.push(staged).await.unwrap().unwrap().id;
+    let staged = a
+        .vault()
+        .unwrap()
+        .stage_create(login("Recent"), now)
+        .unwrap();
+    let recent = a.push(staged).await.unwrap().unwrap().id;
+
+    let month = havenkeys_core::trash::TRASH_RETENTION_MS;
+    let t = a
+        .vault()
+        .unwrap()
+        .stage_trash(&old, now - month - 1)
+        .unwrap();
+    a.push(t).await.unwrap();
+    let t = a.vault().unwrap().stage_trash(&recent, now).unwrap();
+    a.push(t).await.unwrap();
+
+    let report = a.sync_now().await.unwrap();
+    assert_eq!(report.deleted, 1);
+    let left: Vec<Uuid> = a
+        .vault()
+        .unwrap()
+        .list_trash(now)
+        .unwrap()
+        .iter()
+        .map(|e| e.overview.id)
+        .collect();
+    assert_eq!(left, vec![recent]);
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn restoring_an_item_purged_elsewhere_conflicts() {
+    let server = Server::start().await;
+    let invite = server.invite("user@example.com").await;
+
+    let dir_a = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir_a.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+
+    let account_id = a.account_status().unwrap().unwrap().account_id;
+    let secret_key = a.device().unwrap().secret_key_text(account_id).unwrap();
+    let dir_b = tempfile::tempdir().unwrap();
+    let (b, _) = device(dir_b.path());
+    b.sign_in(
+        server.base.clone(),
+        "user@example.com".into(),
+        SecretString::from(PASSWORD),
+        Some(secret_key),
+    )
+    .await
+    .unwrap();
+
+    // A creates an item and trashes it.
+    let now = havenkeys_client::now_ms();
+    let staged = a.vault().unwrap().stage_create(login("Gone"), now).unwrap();
+    let id = a.push(staged).await.unwrap().unwrap().id;
+    let t = a.vault().unwrap().stage_trash(&id, now).unwrap();
+    a.push(t).await.unwrap();
+
+    // B syncs: the item is in B's trash.
+    b.sync_now().await.unwrap();
+    let trash_of = |c: &HavenClient| -> Vec<Uuid> {
+        c.vault()
+            .unwrap()
+            .list_trash(now)
+            .unwrap()
+            .iter()
+            .map(|e| e.overview.id)
+            .collect()
+    };
+    assert_eq!(trash_of(&b), vec![id]);
+
+    // A purges it for good.
+    let purge = a.vault().unwrap().stage_purge(&id).unwrap();
+    a.push(purge).await.unwrap();
+
+    // B restores from its stale replica: the server refuses.
+    let restore = b.vault().unwrap().stage_restore_trashed(&id).unwrap();
+    let err = b.push(restore).await.unwrap_err();
+    assert_eq!(err.code, "item_changed_elsewhere");
+    // The refused write changed nothing locally.
+    assert_eq!(trash_of(&b), vec![id]);
+
+    // B syncs: the item is gone from the trash and from the live list.
+    b.sync_now().await.unwrap();
+    assert!(trash_of(&b).is_empty());
+    assert!(b
+        .vault()
+        .unwrap()
+        .list_items()
+        .unwrap()
+        .iter()
+        .all(|o| o.id != id));
+    server.cleanup().await;
+}
