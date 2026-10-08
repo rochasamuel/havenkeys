@@ -86,7 +86,7 @@ describe("ItemEditor tags on save", () => {
     type(tagInput(), " Home ");
     await submit();
     expect(createItem).toHaveBeenCalledTimes(1);
-    expect(createItem.mock.calls[0]![0]).toMatchObject({ title: "Wi-Fi", tags: ["home"] });
+    expect(createItem.mock.calls[0]![0]).toMatchObject({ title: "Wi-Fi", tags: ["Home"] });
   });
 
   it("holds a card's save the same way", async () => {

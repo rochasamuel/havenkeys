@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { AccountStatus, HealthReport, ItemOverview, ItemType } from "../lib/types";
-import { tagCounts } from "../lib/tags";
+import { hasTag, sameTag, tagCounts } from "../lib/tags";
 import { VaultTagsProvider } from "../lib/vaultTags";
 import { totalIssues } from "../lib/health";
 import { showAccountItem } from "../lib/accountItem";
@@ -253,7 +253,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   }
 
   const visible = useMemo(() => {
-    if (tag !== null) return items.filter((i) => i.tags.includes(tag));
+    if (tag !== null) return items.filter((i) => hasTag(i.tags, tag));
     return section === "login" || section === "secure_note" || section === "card"
       ? items.filter((i) => i.itemType === section)
       : items;
@@ -327,7 +327,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   const vaultTags = useMemo(() => tagCounts(allItems), [allItems]);
   // The last item with this tag lost it (here or on another device).
   useEffect(() => {
-    if (tag !== null && !vaultTags.some((v) => v.name === tag)) setTag(null);
+    if (tag !== null && !vaultTags.some((v) => sameTag(v.name, tag))) setTag(null);
   }, [tag, vaultTags]);
   const pickSection = (s: Section) => {
     setTag(null);
@@ -395,8 +395,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
                 {vaultTags.map((v) => (
                   <button
                     key={v.name}
-                    className="nav-item"
-                    aria-current={tag === v.name ? "page" : undefined}
+                    className="nav-item nav-tag"
+                    aria-current={tag !== null && sameTag(tag, v.name) ? "page" : undefined}
                     onClick={() => openTag(v.name)}
                   >
                     <Icon name="tag" size={17} />

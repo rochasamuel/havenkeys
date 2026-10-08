@@ -162,6 +162,19 @@ describe("VaultScreen tags", () => {
     expect(navButton("All items")!.getAttribute("aria-current")).toBeNull();
   });
 
+  it("filters by a tag whatever its case on each item", async () => {
+    // Rust stores one spelling per tag; an item from before that rule may differ in case.
+    await mountWith([overview("a", "Alpha", ["Work"]), overview("b", "Bravo", ["work"]), overview("c", "Charlie", [])]);
+    expect(navButton("work")).toBeFalsy();
+    click(navButton("Work"));
+    await settle();
+    const text = host.querySelector(".list")!.textContent!;
+    expect(text).toContain("Alpha");
+    expect(text).toContain("Bravo");
+    expect(text).not.toContain("Charlie");
+    expect(navButton("Work")!.getAttribute("aria-current")).toBe("page");
+  });
+
   it("has no Tags section when no item has a tag", async () => {
     await mountWith([overview("c", "Charlie", [])]);
     expect([...host.querySelectorAll(".nav .nav-heading")].map((h) => h.textContent)).not.toContain("Tags");

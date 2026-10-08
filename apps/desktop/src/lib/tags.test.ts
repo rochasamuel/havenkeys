@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { cleanTag, tagCounts } from "./tags";
+import { cleanTag, hasTag, sameTag, tagCounts } from "./tags";
 import type { ItemOverview } from "./types";
 
 const item = (tags: string[]) => ({ tags }) as unknown as ItemOverview;
 
 describe("cleanTag", () => {
   it("previews Rust's rule", () => {
-    expect(cleanTag("  Dev   Team ")).toBe("dev team");
+    expect(cleanTag("  Dev   Team ")).toBe("Dev Team");
+    expect(cleanTag("PRODUÇÃO")).toBe("PRODUÇÃO");
     expect(cleanTag("")).toBeNull();
     expect(cleanTag("a,b")).toBeNull();
     expect(cleanTag("x".repeat(33))).toBeNull();
@@ -20,5 +21,24 @@ describe("tagCounts", () => {
       { name: "prod", count: 1 },
       { name: "work", count: 2 },
     ]);
+  });
+});
+
+describe("tagCounts without case", () => {
+  it("merges Work and work under the first spelling seen, A–Z without case", () => {
+    expect(tagCounts([item(["Work"]), item(["work", "api"]), item(["Beta"])])).toEqual([
+      { name: "api", count: 1 },
+      { name: "Beta", count: 1 },
+      { name: "Work", count: 2 },
+    ]);
+  });
+});
+
+describe("sameTag / hasTag", () => {
+  it("compares without case, so the tag filter matches every spelling", () => {
+    expect(sameTag("Work", "work")).toBe(true);
+    expect(sameTag("Work", "worker")).toBe(false);
+    expect(hasTag(["api", "Work"], "work")).toBe(true);
+    expect(hasTag(["api"], "work")).toBe(false);
   });
 });

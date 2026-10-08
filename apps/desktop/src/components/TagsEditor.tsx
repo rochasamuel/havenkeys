@@ -9,7 +9,7 @@ import {
   type Ref,
 } from "react";
 import { useI18n } from "../i18n/context";
-import { MAX_TAG_CHARS, MAX_TAGS, cleanTag, tagProblem } from "../lib/tags";
+import { MAX_TAG_CHARS, MAX_TAGS, cleanTag, compareTags, hasTag, sameTag, tagProblem } from "../lib/tags";
 import { useVaultTags } from "../lib/vaultTags";
 import { Icon } from "./Icon";
 
@@ -32,7 +32,10 @@ interface Props {
 
 type Problem = "tooLong" | "notAllowed";
 
-/** One editor row: the item's tags as pills, then a field that suggests the vault's tags. */
+/**
+ * One editor row: the item's tags as pills, then a field that suggests the vault's tags:
+ * on focus the most used ones, while typing the ones that contain the text.
+ */
 export function TagsEditor({ value, onChange, disabled, handle }: Props) {
   const { t } = useI18n();
   const vault = useVaultTags();
@@ -40,21 +43,34 @@ export function TagsEditor({ value, onChange, disabled, handle }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [active, setActive] = useState(-1); // -1: nothing picked yet, so Enter takes what was typed
+  // The suggestions show while the field has focus, until Escape closes them.
+  const [open, setOpen] = useState(false);
   // Why the typed text was not added; cleared as soon as the text changes.
   const [problem, setProblem] = useState<Problem | null>(null);
   const errorId = `${listId}-error`;
   const typed = cleanTag(text);
 
   const options = useMemo(() => {
-    if (!text.trim()) return [];
+    if (!open) return [];
+    const others = vault.filter((v) => !hasTag(value, v.name));
+    if (!text.trim()) {
+      // Before typing: the most used first, then A–Z. No "Create" row.
+      return [...others]
+        .sort((a, b) => b.count - a.count || compareTags(a.name, b.name))
+        .slice(0, 8)
+        .map((f) => ({ name: f.name, label: f.name, count: f.count as number | null }));
+    }
     const q = text.trim().toLowerCase();
-    const found = vault.filter((v) => v.name.includes(q) && !value.includes(v.name)).slice(0, 8);
-    const exact = typed !== null && (value.includes(typed) || found.some((f) => f.name === typed));
+    const found = others.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 8);
+    const exact = typed !== null && (hasTag(value, typed) || found.some((f) => sameTag(f.name, typed)));
     return [
       ...found.map((f) => ({ name: f.name, label: f.name, count: f.count as number | null })),
       ...(typed && !exact ? [{ name: typed, label: t.editor.createTag(typed), count: null }] : []),
     ];
-  }, [text, typed, vault, value, t]);
+  }, [open, text, typed, vault, value, t]);
+
+  /** `tag` as the vault already spells it ("work" when the vault has "Work"); Rust does the same on save. */
+  const spelled = (tag: string): string => vault.find((v) => sameTag(v.name, tag))?.name ?? tag;
 
   /** The tags with `raw` added, or null (and the reason shown) when Rust would refuse it. */
   const add = (raw: string): string[] | null => {
@@ -64,10 +80,11 @@ export function TagsEditor({ value, onChange, disabled, handle }: Props) {
       setProblem(refused);
       return null;
     }
-    const tag = cleanTag(raw);
+    const clean = cleanTag(raw);
+    const tag = clean === null ? null : spelled(clean);
     let next = value;
-    if (tag && !value.includes(tag) && value.length < MAX_TAGS) {
-      next = [...value, tag].sort();
+    if (tag && !hasTag(value, tag) && value.length < MAX_TAGS) {
+      next = [...value, tag].sort(compareTags);
       onChange(next);
     }
     setText("");
@@ -96,14 +113,18 @@ export function TagsEditor({ value, onChange, disabled, handle }: Props) {
       onChange(value.slice(0, -1));
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((a) => Math.min(a + 1, options.length - 1));
+      if (!open) setOpen(true);
+      else setActive((a) => Math.min(a + 1, options.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => (a <= 0 ? -1 : a - 1));
-    } else if (e.key === "Escape" && text) {
-      // Only closes the suggestions; an empty field leaves Escape to the editor.
+    } else if (e.key === "Escape" && (text || options.length > 0)) {
+      // Clears the text, then closes the suggestions; once both are gone,
+      // Escape is the editor's.
       e.stopPropagation();
-      setText("");
+      if (text) setText("");
+      else setOpen(false);
+      setActive(-1);
     }
   };
 
@@ -124,15 +145,17 @@ export function TagsEditor({ value, onChange, disabled, handle }: Props) {
           kept.push(part);
           continue;
         }
-        const tag = cleanTag(part);
-        if (tag !== null && !value.includes(tag) && !fresh.includes(tag)) fresh.push(tag);
+        const clean = cleanTag(part);
+        const tag = clean === null ? null : spelled(clean);
+        if (tag !== null && !hasTag(value, tag) && !hasTag(fresh, tag)) fresh.push(tag);
       }
       const room = MAX_TAGS - value.length;
-      if (fresh.length) onChange([...value, ...fresh.slice(0, room)].sort());
+      if (fresh.length) onChange([...value, ...fresh.slice(0, room)].sort(compareTags));
       if (kept.length) rest = [...kept, rest].join(",");
     }
     setText(rest);
     setActive(-1);
+    setOpen(true);
     setProblem(why);
   };
 
@@ -180,7 +203,11 @@ export function TagsEditor({ value, onChange, disabled, handle }: Props) {
             autoComplete="off"
             onChange={onType}
             onKeyDown={onKey}
-            onBlur={() => text && add(text)}
+            onFocus={() => setOpen(true)}
+            onBlur={() => {
+              setOpen(false);
+              if (text) add(text);
+            }}
           />
         )}
       </div>

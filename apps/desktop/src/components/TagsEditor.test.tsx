@@ -9,6 +9,7 @@ import { TagsEditor, type TagsEditorHandle } from "./TagsEditor";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const vault = [
+  { name: "api", count: 1 },
   { name: "staging", count: 3 },
   { name: "work", count: 1 },
 ];
@@ -51,15 +52,65 @@ function key(k: string) {
 const options = () => [...host.querySelectorAll('[role="option"]')].map((o) => o.textContent);
 
 describe("TagsEditor", () => {
-  it("adds a typed tag on Enter and on comma, normalised", () => {
+  it("adds a typed tag on Enter and on comma, normalised, case kept", () => {
     show([]);
     type("  Prod ");
     key("Enter");
-    expect(onChange).toHaveBeenLastCalledWith(["prod"]);
-    show(["prod"]);
+    expect(onChange).toHaveBeenLastCalledWith(["Prod"]);
+    show(["Prod"]);
     type("eu");
     key(",");
-    expect(onChange).toHaveBeenLastCalledWith(["eu", "prod"]);
+    expect(onChange).toHaveBeenLastCalledWith(["eu", "Prod"]);
+  });
+
+  it("opens the vault's other tags on focus, most used first", () => {
+    show(["work"]);
+    act(() => input().focus());
+    expect(options()).toEqual(["staging3", "api1"]);
+    expect(input().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("shows no list on focus when the vault has no other tags", () => {
+    show(["api", "staging", "work"]);
+    act(() => input().focus());
+    expect(options()).toEqual([]);
+  });
+
+  it("keeps the list open after a suggestion is clicked, for the next one", () => {
+    show([]);
+    act(() => input().focus());
+    const first = host.querySelector<HTMLElement>('[role="option"]')!;
+    act(() => void first.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
+    expect(onChange).toHaveBeenLastCalledWith(["staging"]);
+    show(["staging"]);
+    expect(options()).toEqual(["api1", "work1"]);
+  });
+
+  it("closes the open list on Escape with an empty field, and on blur", () => {
+    show([]);
+    act(() => input().focus());
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    const outer = vi.fn();
+    document.body.addEventListener("keydown", outer);
+    act(() => void input().dispatchEvent(escape));
+    expect(options()).toEqual([]);
+    expect(outer).not.toHaveBeenCalled();
+    // A second Escape, with the list closed, is the editor's.
+    key("Escape");
+    expect(outer).toHaveBeenCalled();
+    document.body.removeEventListener("keydown", outer);
+    key("ArrowDown");
+    expect(options().length).toBe(3);
+    act(() => input().blur());
+    expect(options()).toEqual([]);
+  });
+
+  it("adds the vault's spelling when the typed tag differs only in case", () => {
+    show([]);
+    type("WORK");
+    expect(options()).toEqual(["work1"]);
+    key("Enter");
+    expect(onChange).toHaveBeenLastCalledWith(["work"]);
   });
 
   it("suggests existing tags while typing and picks one with the arrow keys", () => {
@@ -196,7 +247,7 @@ describe("TagsEditor", () => {
     expect(document.activeElement).toBe(input());
     type(" Prod ");
     act(() => void (result = handle.current!.commit()));
-    expect(result).toEqual(["prod", "work"]);
-    expect(onChange).toHaveBeenLastCalledWith(["prod", "work"]);
+    expect(result).toEqual(["Prod", "work"]);
+    expect(onChange).toHaveBeenLastCalledWith(["Prod", "work"]);
   });
 });
