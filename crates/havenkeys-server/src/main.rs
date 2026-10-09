@@ -104,24 +104,38 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
             None
         },
     };
-    // Expired tombstones of deleted accounts (spec 2026-10-05-account-deletion
-    // §4.5): once at start, then daily. A failure is logged by kind and the
-    // next day tries again.
+    // Once at start, then daily: expired tombstones of deleted accounts
+    // (spec 2026-10-05 §4.5), expired signup codes, abandoned signups and
+    // the trial notices (spec 2026-10-07 §4.5, §5.6). A failure is logged by
+    // kind and the next day tries again.
     let sweeping = state.pool.clone();
+    let notifying = state.mailer.clone();
     tokio::spawn(async move {
         let mut every = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
         loop {
             every.tick().await;
-            match sweeping.get().await {
-                Ok(db) => {
-                    if havenkeys_server::erase::sweep_tombstones(&db)
-                        .await
-                        .is_err()
-                    {
-                        tracing::warn!(kind = "sweep", "database error");
-                    }
+            let db = match sweeping.get().await {
+                Ok(db) => db,
+                Err(_) => {
+                    tracing::warn!(kind = "pool", "database error");
+                    continue;
                 }
-                Err(_) => tracing::warn!(kind = "pool", "database error"),
+            };
+            if havenkeys_server::erase::sweep_tombstones(&db)
+                .await
+                .is_err()
+            {
+                tracing::warn!(kind = "sweep", "database error");
+            }
+            match havenkeys_server::billing::jobs::run_daily(&db, notifying.as_deref()).await {
+                Ok(report) => tracing::info!(
+                    codes = report.codes_swept,
+                    signups = report.signups_abandoned,
+                    ending = report.ending_notices,
+                    ended = report.ended_notices,
+                    "daily task"
+                ),
+                Err(_) => tracing::warn!(kind = "daily", "database error"),
             }
         }
     });

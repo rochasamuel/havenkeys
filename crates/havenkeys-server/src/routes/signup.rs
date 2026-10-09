@@ -32,6 +32,8 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 pub const CODE_TTL_MINUTES: i32 = 15;
+/// A signup that never activated is deleted after this many days.
+pub const ABANDONED_SIGNUP_DAYS: i32 = 7;
 pub const CODE_MAX_ATTEMPTS: i32 = 5;
 pub const STARTS_PER_IP_PER_HOUR: i32 = 5;
 pub const STARTS_PER_EMAIL_PER_HOUR: i32 = 3;
