@@ -208,6 +208,21 @@ pub struct LoginDto {
     pub token: String,
     pub expires_at: String,
     pub vault_id: Uuid,
+    #[serde(default)]
+    pub account: Option<AccountDto>,
+}
+
+/// The plan the server reports (spec 2026-10-07 §5.4). The whole object is
+/// optional on the wire: a server from before plans sends none.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountDto {
+    pub status: String,
+    pub entitlement: String,
+    #[serde(default)]
+    pub trial_ends_at: Option<String>,
+    #[serde(default)]
+    pub period_end: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -286,6 +301,8 @@ pub struct PullDto {
     pub cursor: i64,
     pub has_more: bool,
     pub changes: Vec<RemoteChangeDto>,
+    #[serde(default)]
+    pub account: Option<AccountDto>,
 }
 
 #[derive(Deserialize)]

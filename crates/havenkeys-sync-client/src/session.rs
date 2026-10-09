@@ -17,6 +17,48 @@ pub struct Session {
     pub expires_at: String,
     pub account_id: Uuid,
     pub vault_id: Uuid,
+    /// The plan the server last reported, if it reports one.
+    pub account: Option<AccountInfo>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Entitlement {
+    Full,
+    Frozen,
+}
+
+/// The account's plan as the server last reported it. Not secret.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AccountInfo {
+    pub status: String,
+    pub entitlement: Entitlement,
+    pub trial_ends_at: Option<String>,
+    pub period_end: Option<String>,
+}
+
+impl From<crate::wire::AccountDto> for AccountInfo {
+    fn from(dto: crate::wire::AccountDto) -> Self {
+        // Only the one word the client acts on freezes it; anything else,
+        // including a word a newer server might add, reads as Full.
+        let entitlement = if dto.entitlement == "frozen" {
+            Entitlement::Frozen
+        } else {
+            Entitlement::Full
+        };
+        let short = |s: String| {
+            if s.chars().count() > 32 {
+                String::new()
+            } else {
+                s
+            }
+        };
+        Self {
+            status: short(dto.status),
+            entitlement,
+            trial_ends_at: dto.trial_ends_at.map(short).filter(|s| !s.is_empty()),
+            period_end: dto.period_end.map(short).filter(|s| !s.is_empty()),
+        }
+    }
 }
 
 impl Session {
@@ -26,6 +68,7 @@ impl Session {
             expires_at,
             account_id,
             vault_id,
+            account: None,
         }
     }
 

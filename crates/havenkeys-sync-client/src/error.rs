@@ -24,6 +24,9 @@ pub enum SyncError {
     /// The account behind this session was deleted (by this or another
     /// device). The device erases its local copy.
     AccountDeleted,
+    /// The account's trial ended or payment lapsed: the server refuses
+    /// writes and new devices until it is paid or set by the operator.
+    AccountFrozen,
     /// Too many failed logins. Waiting is the only cure.
     RateLimited,
     /// The server refused the request and the client cannot fix it by
@@ -48,6 +51,7 @@ impl SyncError {
             Self::Unavailable => "unavailable",
             Self::Unauthorized => "unauthorized",
             Self::AccountDeleted => "account_deleted",
+            Self::AccountFrozen => "account_frozen",
             Self::RateLimited => "rate_limited",
             Self::Refused(_) => "refused",
             Self::Conflict(_) => "conflict",
@@ -64,6 +68,9 @@ impl std::fmt::Display for SyncError {
             Self::Unavailable => f.write_str("the server could not be reached"),
             Self::Unauthorized => f.write_str("this device is signed out"),
             Self::AccountDeleted => f.write_str("this account was deleted"),
+            Self::AccountFrozen => {
+                f.write_str("this account is frozen: the trial ended or payment lapsed")
+            }
             Self::RateLimited => f.write_str("too many attempts; try again later"),
             Self::Refused(what) => write!(f, "the server refused the request: {what}"),
             Self::Conflict(items) => {

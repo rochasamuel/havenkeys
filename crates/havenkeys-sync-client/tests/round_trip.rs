@@ -15,7 +15,7 @@ use havenkeys_core::vault::{derive_auth_key, prepare_new_account_vault, VaultSer
 use havenkeys_core::SecretString;
 use havenkeys_server::admin::{self, AdminCommand};
 use havenkeys_sync_client::{
-    Activation, CredentialChange, HttpTransport, Session, SyncClient, SyncError,
+    Activation, CredentialChange, Entitlement, HttpTransport, Session, SyncClient, SyncError,
 };
 use uuid::Uuid;
 
@@ -681,5 +681,44 @@ async fn two_devices_creating_the_identity_end_with_one() {
         "device one's copy won"
     );
 
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn login_and_pull_carry_the_account_and_a_frozen_write_is_named() {
+    let server = Server::start().await;
+    let client = server.client();
+    let device = activate(&server, "plan@example.com").await;
+    assert_eq!(
+        device.session.account.as_ref().map(|a| a.entitlement),
+        Some(Entitlement::Full)
+    );
+    let pulled = client.pull(&device.session, 0).await.unwrap();
+    assert_eq!(
+        pulled.account.as_ref().map(|a| a.status.as_str()),
+        Some("complimentary")
+    );
+
+    let staged = device
+        .vault
+        .stage_create(login_item("GitHub", "pw"), NOW)
+        .unwrap();
+    havenkeys_server::billing::set_status(
+        &server.pool.get().await.unwrap(),
+        device.account.id,
+        havenkeys_server::billing::Actor::Admin,
+        havenkeys_server::billing::Status::Frozen,
+        None,
+        "test",
+    )
+    .await
+    .unwrap();
+    let err = client.write(&device.session, &[staged]).await.unwrap_err();
+    assert_eq!(err, SyncError::AccountFrozen);
+    let pulled = client.pull(&device.session, 0).await.unwrap();
+    assert_eq!(
+        pulled.account.as_ref().map(|a| a.entitlement),
+        Some(Entitlement::Frozen)
+    );
     server.cleanup().await;
 }

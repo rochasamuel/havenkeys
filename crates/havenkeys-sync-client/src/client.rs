@@ -5,7 +5,7 @@
 //! protocol says, and it refuses rather than guesses.
 
 use crate::error::{Conflict, Result, SyncError};
-use crate::session::Session;
+use crate::session::{AccountInfo, Session};
 use crate::transport::{HttpRequest, HttpResponse, Method, Transport};
 use crate::wire::{self, MAX_CHANGES, MAX_HEADER_BYTES};
 use data_encoding::{BASE64, BASE64URL_NOPAD};
@@ -42,6 +42,8 @@ pub struct Pulled {
     pub cursor: i64,
     pub has_more: bool,
     pub changes: Vec<RemoteChange>,
+    /// The plan the server reported with this page, if it reports one.
+    pub account: Option<AccountInfo>,
 }
 
 impl std::fmt::Debug for Pulled {
@@ -51,6 +53,7 @@ impl std::fmt::Debug for Pulled {
         f.debug_struct("Pulled")
             .field("cursor", &self.cursor)
             .field("has_more", &self.has_more)
+            .field("account", &self.account)
             .field("changes", &self.changes.len())
             .field(
                 "deletions",
@@ -215,12 +218,9 @@ impl<T: Transport> SyncClient<T> {
         if dto.token.is_empty() || dto.token.len() > 128 {
             return Err(SyncError::Protocol("token"));
         }
-        Ok(Session::new(
-            dto.token,
-            dto.expires_at,
-            account_id,
-            dto.vault_id,
-        ))
+        let mut session = Session::new(dto.token, dto.expires_at, account_id, dto.vault_id);
+        session.account = dto.account.map(AccountInfo::from);
+        Ok(session)
     }
 
     pub async fn logout(&self, session: &Session) -> Result<()> {
@@ -333,6 +333,7 @@ impl<T: Transport> SyncClient<T> {
             cursor: dto.cursor,
             has_more: dto.has_more,
             changes,
+            account: dto.account.map(AccountInfo::from),
         })
     }
 
@@ -628,6 +629,12 @@ fn error_from(response: &HttpResponse) -> SyncError {
             return SyncError::AccountDeleted;
         }
     }
+    if response.status == 402 {
+        let said = serde_json::from_slice::<Body>(&response.body).ok();
+        if said.is_some_and(|b| b.error.code == "account_frozen") {
+            return SyncError::AccountFrozen;
+        }
+    }
     error_for(response.status)
 }
 
@@ -705,5 +712,43 @@ mod deletion_tests {
             SyncError::AccountDeleted
         );
         assert_eq!(error_from(&answer(401, deleted)), SyncError::Unauthorized);
+    }
+
+    #[test]
+    fn error_for_maps_402_to_frozen_only_when_the_server_says_so() {
+        let said = answer(402, r#"{"error":{"code":"account_frozen","message":"x"}}"#);
+        assert_eq!(error_from(&said), SyncError::AccountFrozen);
+        let other = answer(402, r#"{"error":{"code":"something_else","message":"x"}}"#);
+        assert_eq!(
+            error_from(&other),
+            SyncError::Refused("the request was refused")
+        );
+        assert_eq!(SyncError::AccountFrozen.code(), "account_frozen");
+    }
+
+    #[test]
+    fn an_account_object_is_read_and_its_absence_is_tolerated() {
+        use crate::session::Entitlement;
+        let with: wire::LoginDto = wire::parse(
+            br#"{"token":"t","expiresAt":"2026-10-10T00:00:00Z","vaultId":"00000000-0000-0000-0000-000000000001",
+                 "account":{"status":"trialing","entitlement":"frozen","trialEndsAt":"2026-10-09T00:00:00Z","periodEnd":null}}"#,
+        )
+        .unwrap();
+        let info = AccountInfo::from(with.account.unwrap());
+        assert_eq!(info.status, "trialing");
+        assert_eq!(info.entitlement, Entitlement::Frozen);
+        assert_eq!(info.trial_ends_at.as_deref(), Some("2026-10-09T00:00:00Z"));
+        assert_eq!(info.period_end, None);
+        let without: wire::LoginDto = wire::parse(
+            br#"{"token":"t","expiresAt":"2026-10-10T00:00:00Z","vaultId":"00000000-0000-0000-0000-000000000001"}"#,
+        )
+        .unwrap();
+        assert!(without.account.is_none());
+        // An unknown entitlement word is Full: a newer server must not freeze an older client by accident.
+        let odd: wire::AccountDto = wire::parse(
+            br#"{"status":"weird","entitlement":"paused","trialEndsAt":null,"periodEnd":null}"#,
+        )
+        .unwrap();
+        assert_eq!(AccountInfo::from(odd).entitlement, Entitlement::Full);
     }
 }

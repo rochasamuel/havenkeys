@@ -33,6 +33,10 @@ impl From<SyncError> for ClientError {
             SyncError::AccountDeleted => {
                 Self::fixed("account_deleted", "This account was deleted.")
             }
+            SyncError::AccountFrozen => Self::fixed(
+                "account_frozen",
+                "This account is frozen: the trial ended or payment lapsed. The vault is read-only.",
+            ),
             SyncError::RateLimited => Self::fixed(
                 "rate_limited",
                 "Too many attempts. Try again in a few minutes.",
@@ -136,7 +140,10 @@ impl ClientError {
     }
 
     pub fn invalid_kit() -> Self {
-        Self::fixed("invalid_kit", "That is not a HavenKeys Recovery Sheet code.")
+        Self::fixed(
+            "invalid_kit",
+            "That is not a HavenKeys Recovery Sheet code.",
+        )
     }
 
     pub fn password_changed_elsewhere() -> Self {
@@ -162,6 +169,7 @@ mod tests {
             (SyncError::InvalidServerUrl, "invalid_server_url"),
             (SyncError::TooLarge, "sync_failed"),
             (SyncError::AccountDeleted, "account_deleted"),
+            (SyncError::AccountFrozen, "account_frozen"),
         ];
         for (err, code) in cases {
             assert_eq!(ClientError::from(err).code, code);
