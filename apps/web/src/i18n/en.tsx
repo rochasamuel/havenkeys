@@ -44,6 +44,12 @@ export const en = {
     addToFirefox: "Add to Firefox",
     requestInvite: "Request an invite",
     inviteSubject: "HavenKeys invite request",
+    createAccount: "Create account",
+    beta: "Beta",
+    betaNotice:
+      "HavenKeys is a beta. It works and it is what we use every day, but expect rough edges, and keep your Emergency Kit somewhere safe.",
+    installerWarning:
+      "The installers aren’t code-signed yet, so Windows SmartScreen and macOS Gatekeeper will warn you on first run. Android verifies the APK’s signature itself.",
   },
 
   nav: {
@@ -899,6 +905,53 @@ export const en = {
     chargeBody: "When you run the server, keeping it online and backed up is up to you. HavenKeys can’t recover a vault from a server that was lost without a backup.",
     guideCta: "Read the full guide",
     inviteInstead: "Rather not run a server? Request an invite to ours.",
+  },
+
+  signup: {
+    title: "Create your HavenKeys account",
+    lede: "Three steps: confirm your email, then set up the app on your computer or phone.",
+    emailLabel: "Email",
+    emailHint: "We send a six-digit code to confirm it is yours.",
+    terms: (terms: string, privacy: string) => (
+      <>
+        I have read and accept the <Link to={terms}>Terms</Link> and the{" "}
+        <Link to={privacy}>Privacy Policy</Link>.
+      </>
+    ),
+    create: "Create account",
+    sending: "Sending…",
+    codeTitle: "Check your email",
+    codeLede: (email: string) => (
+      <>
+        We sent a six-digit code to <strong>{email}</strong>. It is valid for 15 minutes. If this address
+        already has an account, the email says so instead.
+      </>
+    ),
+    codeLabel: "Code",
+    verify: "Continue",
+    verifying: "Checking…",
+    resend: "Resend code",
+    resendIn: "Resend in {s} s",
+    changeEmail: "Use another email",
+    doneTitle: "Your setup code",
+    doneLede:
+      "Install HavenKeys, open it, choose “I have a setup code” and paste this code. Then pick a master password and keep your Emergency Kit safe.",
+    copy: "Copy",
+    copied: "Copied",
+    alsoEmailed: "We also emailed it. It is valid for 24 hours and works once.",
+    inviteAria: "Setup code",
+    downloadsTitle: "Get the app",
+    otherDownloads: "All downloads",
+    errors: {
+      email: "That does not look like an email address.",
+      terms: "Please accept the Terms and the Privacy Policy to continue.",
+      code: "Enter the six digits from the email.",
+      invalid: "That code is not valid. Check the email, or request a new code.",
+      rate_limited: "Too many attempts. Wait an hour and try again.",
+      unavailable: "We could not send the email right now. Try again in a few minutes.",
+      closed: "Sign-up is not open on this server.",
+      network: "We could not reach the server. Check your connection and try again.",
+    },
   },
 
   notFound: {

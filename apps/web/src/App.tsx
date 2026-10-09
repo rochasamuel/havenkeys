@@ -6,6 +6,7 @@ import { Footer } from "./components/Footer";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { Home } from "./pages/Home";
 import { Download } from "./pages/Download";
+import { Signup } from "./pages/Signup";
 import { Developers } from "./pages/Developers";
 import { SelfHost } from "./pages/SelfHost";
 import { Security } from "./pages/Security";
@@ -20,6 +21,7 @@ import { readPreference } from "./i18n/preference";
 const PAGES = [
   { path: "", element: <Home /> },
   { path: "download", element: <Download /> },
+  { path: "signup", element: <Signup /> },
   { path: "security", element: <Security /> },
   { path: "self-host", element: <SelfHost /> },
   { path: "developers", element: <Developers /> },

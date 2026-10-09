@@ -38,6 +38,12 @@ export const ptBR: Messages = {
     addToFirefox: "Adicionar ao Firefox",
     requestInvite: "Pedir um convite",
     inviteSubject: "Pedido de convite HavenKeys",
+    createAccount: "Criar conta",
+    beta: "Beta",
+    betaNotice:
+      "O HavenKeys está em beta. Funciona e é o que usamos todo dia, mas espere arestas, e guarde bem seu Emergency Kit.",
+    installerWarning:
+      "Os instaladores ainda não são assinados, então o Windows SmartScreen e o Gatekeeper do macOS vão avisar na primeira execução. No Android, o APK tem a assinatura verificada pelo próprio sistema.",
   },
 
   nav: {
@@ -913,6 +919,52 @@ export const ptBR: Messages = {
     chargeBody: "Quando você roda o servidor, mantê-lo no ar e com backup é com você. O HavenKeys não recupera um cofre de um servidor perdido sem backup.",
     guideCta: "Ler o guia completo",
     inviteInstead: "Prefere não rodar um servidor? Peça um convite para o nosso.",
+  },
+
+  signup: {
+    title: "Crie sua conta HavenKeys",
+    lede: "Três passos: confirme seu e-mail e depois configure o app no computador ou no celular.",
+    emailLabel: "E-mail",
+    emailHint: "Enviamos um código de seis dígitos para confirmar que ele é seu.",
+    terms: (terms: string, privacy: string) => (
+      <>
+        Li e aceito os <Link to={terms}>Termos</Link> e a <Link to={privacy}>Política de Privacidade</Link>.
+      </>
+    ),
+    create: "Criar conta",
+    sending: "Enviando…",
+    codeTitle: "Veja seu e-mail",
+    codeLede: (email: string) => (
+      <>
+        Enviamos um código de seis dígitos para <strong>{email}</strong>. Ele vale por 15 minutos. Se este
+        endereço já tem uma conta, o e-mail diz isso.
+      </>
+    ),
+    codeLabel: "Código",
+    verify: "Continuar",
+    verifying: "Verificando…",
+    resend: "Reenviar código",
+    resendIn: "Reenviar em {s} s",
+    changeEmail: "Usar outro e-mail",
+    doneTitle: "Seu código de configuração",
+    doneLede:
+      "Instale o HavenKeys, abra o app, escolha “Tenho um código de configuração” e cole este código. Depois escolha uma senha mestra e guarde bem seu Emergency Kit.",
+    copy: "Copiar",
+    copied: "Copiado",
+    alsoEmailed: "Também enviamos por e-mail. Ele vale por 24 horas e funciona uma única vez.",
+    inviteAria: "Código de configuração",
+    downloadsTitle: "Baixe o app",
+    otherDownloads: "Todos os downloads",
+    errors: {
+      email: "Isso não parece um endereço de e-mail.",
+      terms: "Aceite os Termos e a Política de Privacidade para continuar.",
+      code: "Digite os seis dígitos do e-mail.",
+      invalid: "Esse código não é válido. Confira o e-mail ou peça um novo código.",
+      rate_limited: "Muitas tentativas. Espere uma hora e tente de novo.",
+      unavailable: "Não conseguimos enviar o e-mail agora. Tente de novo em alguns minutos.",
+      closed: "O cadastro não está aberto neste servidor.",
+      network: "Não conseguimos falar com o servidor. Verifique sua conexão e tente de novo.",
+    },
   },
 
   notFound: {
