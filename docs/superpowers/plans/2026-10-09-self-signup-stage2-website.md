@@ -20,6 +20,8 @@
 - Resend is offered 60 s after a code was sent. The code field accepts six ASCII digits only.
 - `form-action 'none'` stays: forms submit through `onSubmit` with `preventDefault`, never a navigation.
 - No external UI library; plain class names in `src/styles/global.css` following `apps/web/DESIGN.md`.
+- **Beta, stated plainly (owner's instruction, 2026-10-09):** the site says HavenKeys is a beta. A `Beta` tag sits next to the brand in the nav on every page; the signup page's first step, the signup done step and the pricing page each carry one sentence saying so (`t.common.betaNotice`).
+- **Installer warning, repeated where downloads are offered (owner's instruction, 2026-10-09):** wherever the site offers an installer, including the signup done step, it says the installers are not code-signed yet and that Windows SmartScreen and macOS Gatekeeper will warn on first run (`t.common.installerWarning`, same wording as the Download page's "Expect a warning on first run" card).
 - No commit carries a `Co-Authored-By` trailer (user preference).
 - Checks: `pnpm --filter @havenkeys/web typecheck`, `pnpm --filter @havenkeys/web test`, `pnpm --filter @havenkeys/web build`, `pnpm ui:check` for screenshots.
 
@@ -525,7 +527,13 @@ describe("Signup", () => {
     expect(h).toContain("readonly");
     expect(h).toContain(ptBR.signup.copy);
     expect(h).toContain(ptBR.signup.alsoEmailed);
+    expect(h).toContain(ptBR.common.installerWarning);
+    expect(h).toContain(ptBR.common.betaNotice);
     expect(h).not.toContain("href=\"HKINV1");
+  });
+
+  it("says it is a beta on the first step", () => {
+    expect(html(<Signup />)).toContain(en.common.betaNotice);
   });
 
   it("names each failure", () => {
@@ -552,7 +560,29 @@ Expected: FAIL, cannot resolve `./Signup`.
 
 - [ ] **Step 3: Strings**
 
-In `apps/web/src/i18n/en.tsx`, add `createAccount: "Create account",` to `common`, and a new top-level section after `download`:
+In `apps/web/src/i18n/en.tsx`, add to `common`:
+
+```tsx
+    createAccount: "Create account",
+    beta: "Beta",
+    betaNotice:
+      "HavenKeys is a beta. It works and it is what we use every day, but expect rough edges, and keep your Emergency Kit somewhere safe.",
+    installerWarning:
+      "The installers aren’t code-signed yet, so Windows SmartScreen and macOS Gatekeeper will warn you on first run. Android verifies the APK’s signature itself.",
+```
+
+and in `pt-BR.tsx`:
+
+```tsx
+    createAccount: "Criar conta",
+    beta: "Beta",
+    betaNotice:
+      "O HavenKeys está em beta. Funciona e é o que usamos todo dia, mas espere arestas, e guarde bem seu Emergency Kit.",
+    installerWarning:
+      "Os instaladores ainda não são assinados, então o Windows SmartScreen e o Gatekeeper do macOS vão avisar na primeira execução. No Android, o APK tem a assinatura verificada pelo próprio sistema.",
+```
+
+Then a new top-level section after `download`:
 
 ```tsx
   signup: {
@@ -768,6 +798,7 @@ export function SignupView({
           >
             <h1>{s.title}</h1>
             <p className="signup__lede">{s.lede}</p>
+            <p className="signup__note">{t.common.betaNotice}</p>
             <label className="field">
               <span className="field__label">{s.emailLabel}</span>
               <input
@@ -891,6 +922,8 @@ function Done({ invite, t }: { invite: string; t: Messages }) {
       <p className="signup__note">{s.alsoEmailed}</p>
       <h2>{s.downloadsTitle}</h2>
       <Downloads t={t} />
+      <p className="signup__note">{t.common.installerWarning}</p>
+      <p className="signup__note">{t.common.betaNotice}</p>
     </div>
   );
 }
@@ -1143,8 +1176,24 @@ describe("Pricing", () => {
     expect(h).toContain(en.pricing.priceSoon);
     for (const line of en.pricing.afterTrial) expect(h).toContain(line);
     expect(h).toContain('href="/signup"');
+    expect(h).toContain(en.common.betaNotice);
   });
 });
+```
+
+Add to `apps/web/src/App.test.tsx` (it renders the site through `MemoryRouter`; follow its existing pattern for rendering a route):
+
+```tsx
+  it("shows the Beta tag in the nav on every page", () => {
+    for (const path of ["/", "/download", "/signup", "/pricing", "/pt-br"]) {
+      expect(render(path)).toContain('class="tag tag--beta"');
+    }
+  });
+```
+
+where `render(path)` is the file's existing helper that renders `<Site />` at a path (create one with `renderToString(<MemoryRouter initialEntries={[path]}><Site /></MemoryRouter>)` if the file has none).
+
+```tsx
 ```
 
 Replace the invite-subject test in `apps/web/src/i18n/messages.test.ts` with:
@@ -1269,6 +1318,7 @@ export function Pricing() {
           {p.cta}
         </Link>
         <p className="pricing__note">{p.subscribeSoon}</p>
+        <p className="pricing__note">{t.common.betaNotice}</p>
       </div>
       <h2 className="pricing__after">{p.afterTitle}</h2>
       <ul className="plain-list">
@@ -1340,9 +1390,9 @@ Route: `{ path: "pricing", element: <Pricing /> },` in `App.tsx` `PAGES`; `"/pri
 
 - [ ] **Step 5: Links**
 
-- `Nav.tsx`: add `<NavLink to={path("/pricing")} className="nav__hide-sm">{t.nav.pricing}</NavLink>` after Security; change the primary button to `<Link to={path("/signup")} className="btn btn--primary btn--sm">{t.common.createAccount}</Link>` and keep Download as a plain `NavLink` before it.
+- `Nav.tsx`: inside the brand link, after `<span>HavenKeys</span>`, add `<span className="tag tag--beta">{t.common.beta}</span>` (style: `.tag--beta { margin-left: 8px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }` appended to `global.css` next to `.tag--opt`); add `<NavLink to={path("/pricing")} className="nav__hide-sm">{t.nav.pricing}</NavLink>` after Security; change the primary button to `<Link to={path("/signup")} className="btn btn--primary btn--sm">{t.common.createAccount}</Link>` and keep Download as a plain `NavLink` before it.
 - `Footer.tsx`: add `<Link to={path("/pricing")}>{t.footer.pricing}</Link>` after Download.
-- `Home.tsx`: delete `inviteHref` import and `const invite`; replace both `<a href={invite} …>{t.common.requestInvite}</a>` with `<Link to={path("/signup")} className="btn btn--ghost btn--lg">{t.common.createAccount}</Link>`.
+- `Home.tsx`: after `<p className="hero__meta">{h.heroMeta}</p>` add `<p className="hero__meta">{t.common.betaNotice}</p>`; delete `inviteHref` import and `const invite`; replace both `<a href={invite} …>{t.common.requestInvite}</a>` with `<Link to={path("/signup")} className="btn btn--ghost btn--lg">{t.common.createAccount}</Link>`.
 - `SelfHost.tsx`: replace the `inviteHref` anchor with `<Link to={path("/signup")} className="btn btn--ghost">{s.inviteInstead}</Link>` and change `selfHost.inviteInstead` to `"Rather not run a server? Create an account on ours."` / `"Prefere não rodar um servidor? Crie uma conta no nosso."`.
 - `links.ts`: delete `INVITE_EMAIL` and `inviteHref`. Delete `common.requestInvite` and `common.inviteSubject` from both message files (the typecheck finds every use).
 
