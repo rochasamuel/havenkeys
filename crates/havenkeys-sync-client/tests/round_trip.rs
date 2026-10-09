@@ -62,6 +62,8 @@ impl Server {
             cors_origin: None,
             locator: None,
             max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
+            mailer: None,
+            signup_url: None,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -93,6 +95,7 @@ impl Server {
                 trial: false,
             },
             &self.pool,
+            [7u8; 32],
         )
         .await
         .unwrap()

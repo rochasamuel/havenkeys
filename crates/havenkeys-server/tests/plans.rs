@@ -12,6 +12,9 @@ async fn a_frozen_account_is_refused_every_write_and_new_device() {
     let server = TestServer::start().await;
     let (account, sess) = signed_in(&server, "user@example.com").await;
     let (item, rev) = create_item(&server, &sess, b"o", b"d").await;
+    // Two more known devices, logged in while the account is still Full.
+    let second = login(&server, &account, "Second").await;
+    let third = login(&server, &account, "Third").await;
     set_plan(&server, account.account_id, Status::Frozen).await;
 
     // Writes: 402, nothing applied.
@@ -30,9 +33,37 @@ async fn a_frozen_account_is_refused_every_write_and_new_device() {
 
     // A device the account never used: 402. A known device, even after its
     // session expired: 200.
-    let (status, body) = login_with_device(&server, &account, "New laptop", Uuid::new_v4()).await;
+    let new_device = Uuid::new_v4();
+    let (status, body) = login_with_device(&server, &account, "New laptop", new_device).await;
     assert_eq!(status, 402, "{body}");
     assert_eq!(body["error"]["code"], "account_frozen");
+    let registered: i64 = server
+        .db()
+        .await
+        .query_one("SELECT count(*) FROM devices WHERE id = $1", &[&new_device])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(registered, 0, "the refused login registered nothing");
+    // And it left no block: the same login, again, is still 402 and not 429.
+    for _ in 0..3 {
+        let (status, _) = login_with_device(&server, &account, "New laptop", new_device).await;
+        assert_eq!(status, 402);
+    }
+    // Revoking a device and signing out stay open while frozen.
+    let res = server
+        .delete(&format!("/v1/devices/{}", third.device_id))
+        .bearer_auth(&sess.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204, "revoke is never blocked");
+    let res = server
+        .post_as("/v1/auth/logout", &second)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204, "logout is never blocked");
     server
         .db()
         .await
@@ -238,6 +269,7 @@ async fn activation_starts_a_fourteen_day_trial_for_a_trialing_account() {
             trial: true,
         },
         server.pool(),
+        [7u8; 32],
     )
     .await
     .unwrap();

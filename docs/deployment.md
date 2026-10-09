@@ -288,7 +288,9 @@ trial has ended" once each (only with `SMTP_URL`).
 
 The signup code is six digits, valid 15 minutes, five attempts, stored as
 `HMAC-SHA-256(SERVER_SECRET, code)`; `start` is limited to 5 per address and
-3 per email per hour, and `verify` to 10 failures per address per hour.
+3 per email per hour, and `verify` to 10 failures per address per hour. All
+starts together are capped at 300 per hour, which bounds the mail a server
+behind `HAVENKEYS_TRUST_FORWARDED_FOR=1` can be made to send.
 Whoever reads the mailbox can create the account: that is the same trust the
 invite email already places in it.
 

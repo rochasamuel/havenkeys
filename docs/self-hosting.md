@@ -97,8 +97,8 @@ and expires in 7 days. Paste it into the first screen of the HavenKeys
 desktop app, then print the Recovery Sheet the app offers.
 
 Self-service signup is off on your server unless you set
-`HAVENKEYS_SIGNUP=open` (see deployment.md §Plans and signup); invites from
-the CLI are complimentary and never expire into a frozen account.
+`HAVENKEYS_SIGNUP=open` (see deployment.md §5a); invites from the CLI are
+complimentary unless `--trial` is passed, and never expire into a frozen account.
 
 Other admin commands:
 

@@ -185,7 +185,7 @@ pub async fn delete_account(
     if locked != stored {
         return Err(ApiError::Conflict);
     }
-    crate::erase::erase_account(&tx, session.account_id).await?;
+    crate::erase::erase_account(&tx, session.account_id, &state.server_secret).await?;
     tx.commit().await?;
 
     tracing::info!(account_id = %session.account_id, "account deleted");

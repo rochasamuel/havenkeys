@@ -40,6 +40,10 @@ pub const STARTS_PER_EMAIL_PER_HOUR: i32 = 3;
 /// Shares the address key with `start` (spec §4.4), so the threshold must
 /// leave room for one start plus a code's five attempts.
 pub const VERIFY_FAILURES_PER_IP_PER_HOUR: i32 = 10;
+/// A ceiling on all starts together. With `HAVENKEYS_TRUST_FORWARDED_FOR=1`
+/// the per-address limit is advisory (the header is the caller's to set),
+/// so this bounds the mail the server can be made to send.
+pub const STARTS_GLOBAL_PER_HOUR: i32 = 300;
 const WINDOW_MINUTES: i32 = 60;
 
 #[derive(Deserialize)]
@@ -74,7 +78,7 @@ pub fn code_hash(secret: &[u8; 32], code: &str) -> Vec<u8> {
 
 /// The per-email counter's key: keyed by the server secret, so a reader of
 /// `login_attempts` cannot confirm a guessed address with a dictionary.
-fn email_key(secret: &[u8; 32], email: &str) -> String {
+pub fn signup_email_key(secret: &[u8; 32], email: &str) -> String {
     let digest = code_hash(secret, email);
     format!(
         "signup-email:{}",
@@ -120,6 +124,7 @@ pub async fn start(
 
     let db = state.pool.get().await?;
     let ip = client_ip(&state, &headers, peer);
+    rate_limit::charge_window(&db, "signup-global", STARTS_GLOBAL_PER_HOUR, WINDOW_MINUTES).await?;
     rate_limit::charge_window(
         &db,
         &address_key(&ip),
@@ -129,7 +134,7 @@ pub async fn start(
     .await?;
     rate_limit::charge_window(
         &db,
-        &email_key(&state.server_secret, &email),
+        &signup_email_key(&state.server_secret, &email),
         STARTS_PER_EMAIL_PER_HOUR,
         WINDOW_MINUTES,
     )
@@ -180,6 +185,8 @@ pub async fn start(
             templates::already_registered(locale)
         }
     };
+    // Do not hold a connection while SMTP is slow.
+    drop(db);
     // Both branches send one mail, so a failure answers 503 in both and a
     // success 202 in both: the outcome says nothing about the account.
     if mailer
@@ -284,21 +291,30 @@ pub async fn verify(
     let account = match existing {
         None => {
             let id = Uuid::new_v4();
-            tx.execute(
-                "INSERT INTO accounts
+            // A racing `admin new-account` may have taken the address
+            // since the SELECT: answer as for a wrong code.
+            if let Err(e) = tx
+                .execute(
+                    "INSERT INTO accounts
                    (id, email_normalized, status, invite_hash, invite_expires_at, created_at,
                     created_by, terms_version, terms_accepted_at, locale)
                  VALUES ($1, $2, 'invited', $3, $4, now(), 'signup', $5, now(), $6)",
-                &[
-                    &id,
-                    &email,
-                    &invite::hash(&secret).to_vec(),
-                    &expires,
-                    &terms,
-                    &locale.as_str(),
-                ],
-            )
-            .await?;
+                    &[
+                        &id,
+                        &email,
+                        &invite::hash(&secret).to_vec(),
+                        &expires,
+                        &terms,
+                        &locale.as_str(),
+                    ],
+                )
+                .await
+            {
+                if e.code().map(|c| c.code()) == Some("23505") {
+                    return Err(BAD);
+                }
+                return Err(e.into());
+            }
             billing::set_status(&tx, id, Actor::System, Status::Trialing, None, "signup").await?;
             id
         }
@@ -335,6 +351,7 @@ pub async fn verify(
         }
     };
     tx.commit().await?;
+    drop(db);
 
     let encoded = invite::encode(&Invite {
         server: public_url.clone(),

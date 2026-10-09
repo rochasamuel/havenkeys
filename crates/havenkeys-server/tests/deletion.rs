@@ -64,6 +64,7 @@ async fn admin_delete_leaves_no_trace_of_the_account() {
             email: "gone@example.com".into(),
         },
         server.pool(),
+        [7u8; 32],
     )
     .await
     .unwrap();
@@ -332,15 +333,36 @@ async fn erasing_an_account_takes_its_signup_code_and_billing_rows() {
     support::signup(&server, &mailer, "gone@example.com").await;
     // A second start for the same still-invited address leaves a code row.
     support::start_signup_for(&server, "gone@example.com").await;
+    let db = server.db().await;
+    let before: i64 = db
+        .query_one(
+            "SELECT count(*) FROM login_attempts WHERE key LIKE 'signup-email:%'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(before, 1);
+    drop(db);
     admin::run(
         AdminCommand::DeleteAccount {
             email: "gone@example.com".into(),
         },
         server.pool(),
+        [7u8; 32],
     )
     .await
     .unwrap();
     let db = server.db().await;
+    let counters: i64 = db
+        .query_one(
+            "SELECT count(*) FROM login_attempts WHERE key LIKE 'signup-email:%'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(counters, 0, "the email counter goes with the account");
     for table in ["signup_codes", "subscriptions", "billing_events"] {
         let n: i64 = db
             .query_one(&format!("SELECT count(*) FROM {table}"), &[])

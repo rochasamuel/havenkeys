@@ -40,7 +40,8 @@ pub async fn run_daily(
         .execute(
             "DELETE FROM accounts
               WHERE status = 'invited' AND created_by = 'signup'
-                AND created_at < now() - make_interval(days => $1)",
+                AND created_at < now() - make_interval(days => $1)
+                AND (invite_expires_at IS NULL OR invite_expires_at < now())",
             &[&ABANDONED_SIGNUP_DAYS],
         )
         .await?;

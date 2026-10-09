@@ -61,6 +61,7 @@ impl Smtp {
         }
         let transport = AsyncSmtpTransport::<Tokio1Executor>::from_url(url)
             .map_err(|_| "SMTP_URL is not a valid SMTP URL".to_string())?
+            .timeout(Some(std::time::Duration::from_secs(10)))
             .build();
         let from = from
             .parse::<Mailbox>()
@@ -105,6 +106,8 @@ impl Mailer for Smtp {
 pub struct Recording {
     mails: Mutex<Vec<Mail>>,
     pub fail: AtomicBool,
+    /// When set, `send` waits for a notification before recording.
+    pub block: Mutex<Option<std::sync::Arc<tokio::sync::Notify>>>,
 }
 
 impl Recording {
@@ -116,6 +119,10 @@ impl Recording {
 impl Mailer for Recording {
     fn send(&self, mail: Mail) -> BoxFuture<'_, Result<(), MailError>> {
         Box::pin(async move {
+            let block = self.block.lock().unwrap().clone();
+            if let Some(n) = block {
+                n.notified().await;
+            }
             if self.fail.load(Ordering::SeqCst) {
                 return Err(MailError);
             }

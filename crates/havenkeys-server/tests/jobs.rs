@@ -12,6 +12,8 @@ async fn abandoned_signups_are_swept_after_seven_days_and_nothing_else_is() {
     // yesterday, and an admin invite from 8 days ago.
     signup(&server, &mailer, "stale@example.com").await;
     signup(&server, &mailer, "fresh@example.com").await;
+    // And one whose invite was just re-issued although the account is old.
+    signup(&server, &mailer, "reissued@example.com").await;
     new_invite(&server, "admin@example.com").await;
     // And one signup that activated 8 days ago.
     let invite = signup(&server, &mailer, "active@example.com").await;
@@ -29,8 +31,16 @@ async fn abandoned_signups_are_swept_after_seven_days_and_nothing_else_is() {
     assert_eq!(res.status(), 200);
     let db = server.db().await;
     db.execute(
-        "UPDATE accounts SET created_at = now() - interval '8 days'
+        "UPDATE accounts SET created_at = now() - interval '8 days',
+                invite_expires_at = now() - interval '1 day'
           WHERE email_normalized IN ('stale@example.com', 'admin@example.com', 'active@example.com')",
+        &[],
+    )
+    .await
+    .unwrap();
+    db.execute(
+        "UPDATE accounts SET created_at = now() - interval '8 days'
+          WHERE email_normalized = 'reissued@example.com'",
         &[],
     )
     .await
@@ -50,7 +60,8 @@ async fn abandoned_signups_are_swept_after_seven_days_and_nothing_else_is() {
         [
             "active@example.com",
             "admin@example.com",
-            "fresh@example.com"
+            "fresh@example.com",
+            "reissued@example.com"
         ]
     );
     let orphans: i64 = db

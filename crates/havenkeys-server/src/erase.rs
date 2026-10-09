@@ -6,10 +6,9 @@
 //! anonymous session-token and device-id hashes that expire in
 //! [`TOMBSTONE_DAYS`].
 //!
-//! One thing is not erased by address: the signup email counter
-//! (`login_attempts` rows named `signup-email:…`) is keyed by an HMAC of the email, so
-//! it cannot be matched back to an account; the daily sweep removes it
-//! within two hours.
+//! The signup email counter (`login_attempts` row `signup-email:…`) is
+//! keyed by an HMAC of the address under the server secret; the server
+//! holds that secret, so the counter is deleted here too.
 
 use deadpool_postgres::{GenericClient, Object, Transaction};
 use sha2::{Digest, Sha256};
@@ -21,6 +20,7 @@ pub const TOMBSTONE_DAYS: i32 = 30;
 pub async fn erase_account(
     tx: &Transaction<'_>,
     account_id: Uuid,
+    server_secret: &[u8; 32],
 ) -> Result<(), tokio_postgres::Error> {
     tx.execute(
         "INSERT INTO deleted_sessions (token_hash, expires_at)
@@ -53,6 +53,23 @@ pub async fn erase_account(
         &[&format!("acct:{account_id}")],
     )
     .await?;
+    let email: Option<String> = tx
+        .query_opt(
+            "SELECT email_normalized FROM accounts WHERE id = $1",
+            &[&account_id],
+        )
+        .await?
+        .map(|r| r.get(0));
+    if let Some(email) = email {
+        tx.execute(
+            "DELETE FROM login_attempts WHERE key = $1",
+            &[&crate::routes::signup::signup_email_key(
+                server_secret,
+                &email,
+            )],
+        )
+        .await?;
+    }
     // A pending pairing has no account yet but carries a device id, a
     // device name and an IP.
     tx.execute(

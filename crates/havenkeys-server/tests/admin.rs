@@ -14,7 +14,7 @@ fn new_account(email: &str) -> AdminCommand {
 #[tokio::test]
 async fn new_account_stores_only_the_invite_hash() {
     let server = support::TestServer::start().await;
-    let printed = admin::run(new_account("  User@Example.COM "), server.pool())
+    let printed = admin::run(new_account("  User@Example.COM "), server.pool(), [7u8; 32])
         .await
         .unwrap();
 
@@ -57,21 +57,25 @@ async fn new_account_stores_only_the_invite_hash() {
 #[tokio::test]
 async fn two_invites_for_the_same_email_are_refused() {
     let server = support::TestServer::start().await;
-    admin::run(new_account("dup@example.com"), server.pool())
+    admin::run(new_account("dup@example.com"), server.pool(), [7u8; 32])
         .await
         .unwrap();
-    assert!(admin::run(new_account("dup@example.com"), server.pool())
-        .await
-        .is_err());
+    assert!(
+        admin::run(new_account("dup@example.com"), server.pool(), [7u8; 32])
+            .await
+            .is_err()
+    );
     server.cleanup().await;
 }
 
 #[tokio::test]
 async fn an_invalid_email_never_reaches_the_database() {
     let server = support::TestServer::start().await;
-    assert!(admin::run(new_account("not-an-email"), server.pool())
-        .await
-        .is_err());
+    assert!(
+        admin::run(new_account("not-an-email"), server.pool(), [7u8; 32])
+            .await
+            .is_err()
+    );
     let count: i64 = server
         .db()
         .await
@@ -86,10 +90,10 @@ async fn an_invalid_email_never_reaches_the_database() {
 #[tokio::test]
 async fn accounts_can_be_listed_and_deleted() {
     let server = support::TestServer::start().await;
-    admin::run(new_account("a@example.com"), server.pool())
+    admin::run(new_account("a@example.com"), server.pool(), [7u8; 32])
         .await
         .unwrap();
-    let listed = admin::run(AdminCommand::ListAccounts, server.pool())
+    let listed = admin::run(AdminCommand::ListAccounts, server.pool(), [7u8; 32])
         .await
         .unwrap();
     assert!(listed.contains("a@example.com"));
@@ -100,7 +104,8 @@ async fn accounts_can_be_listed_and_deleted() {
             AdminCommand::DeleteAccount {
                 email: "A@Example.com".into()
             },
-            server.pool()
+            server.pool(),
+            [7u8; 32]
         )
         .await
         .unwrap(),
@@ -110,7 +115,8 @@ async fn accounts_can_be_listed_and_deleted() {
         AdminCommand::DeleteAccount {
             email: "a@example.com".into()
         },
-        server.pool()
+        server.pool(),
+        [7u8; 32]
     )
     .await
     .is_err());
@@ -120,7 +126,7 @@ async fn accounts_can_be_listed_and_deleted() {
 #[tokio::test]
 async fn new_account_is_complimentary_by_default_and_trialing_on_request() {
     let server = support::TestServer::start().await;
-    let printed = admin::run(new_account("free@example.com"), server.pool())
+    let printed = admin::run(new_account("free@example.com"), server.pool(), [7u8; 32])
         .await
         .unwrap();
     let free = invite::decode(printed.trim()).unwrap().account;
@@ -131,6 +137,7 @@ async fn new_account_is_complimentary_by_default_and_trialing_on_request() {
             trial: true,
         },
         server.pool(),
+        [7u8; 32],
     )
     .await
     .unwrap();
@@ -176,6 +183,7 @@ async fn set_plan_changes_the_status_and_records_it() {
             until: Some("2027-01-31".into()),
         },
         server.pool(),
+        [7u8; 32],
     )
     .await
     .unwrap();
@@ -206,6 +214,7 @@ async fn set_plan_changes_the_status_and_records_it() {
             until: None,
         },
         server.pool(),
+        [7u8; 32]
     )
     .await
     .is_err());
@@ -216,6 +225,7 @@ async fn set_plan_changes_the_status_and_records_it() {
             until: Some("next tuesday".into()),
         },
         server.pool(),
+        [7u8; 32]
     )
     .await
     .is_err());
@@ -227,12 +237,56 @@ async fn set_plan_changes_the_status_and_records_it() {
 async fn list_accounts_shows_the_plan() {
     let server = support::TestServer::start().await;
     support::signed_in(&server, "user@example.com").await;
-    let out = admin::run(AdminCommand::ListAccounts, server.pool())
+    let out = admin::run(AdminCommand::ListAccounts, server.pool(), [7u8; 32])
         .await
         .unwrap();
     assert!(
         out.contains("user@example.com  active  complimentary"),
         "{out}"
     );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn set_plan_trialing_defaults_to_fourteen_days_on_an_active_account() {
+    let server = support::TestServer::start().await;
+    let (account, _) = support::signed_in(&server, "user@example.com").await;
+    let out = admin::run(
+        AdminCommand::SetPlan {
+            email: "user@example.com".into(),
+            status: havenkeys_server::billing::Status::Trialing,
+            until: None,
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await
+    .unwrap();
+    assert!(out.starts_with("trialing until "), "{out}");
+    let db = server.db().await;
+    let days: f64 = db
+        .query_one(
+            "SELECT (extract(epoch FROM (trial_ends_at - now())) / 86400.0)::float8
+               FROM subscriptions WHERE account_id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get::<_, f64>(0);
+    assert!((13.9..=14.1).contains(&days), "{days}");
+    drop(db);
+    // Frozen reads no date.
+    let out = admin::run(
+        AdminCommand::SetPlan {
+            email: "user@example.com".into(),
+            status: havenkeys_server::billing::Status::Frozen,
+            until: Some("2027-01-31".into()),
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await
+    .unwrap();
+    assert_eq!(out, "frozen");
     server.cleanup().await;
 }

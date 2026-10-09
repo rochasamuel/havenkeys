@@ -482,3 +482,73 @@ async fn start_for_a_disabled_account_mails_the_notice_and_leaves_no_code() {
     assert_eq!(codes, 0);
     server.cleanup().await;
 }
+
+#[tokio::test]
+async fn starts_are_capped_globally() {
+    let (server, _) = TestServer::start_signup().await;
+    server
+        .db()
+        .await
+        .execute(
+            "INSERT INTO login_attempts (key, failures, window_start) VALUES ('signup-global', 300, now())",
+            &[],
+        )
+        .await
+        .unwrap();
+    let (status, body) = start_signup_for(&server, "one@example.com").await;
+    assert_eq!(status, 429, "{body}");
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_slow_mailer_does_not_hold_database_connections() {
+    let (server, mailer) = TestServer::start_with(Options {
+        signup: true,
+        trust_forwarded_for: true,
+        ..Options::default()
+    })
+    .await;
+    let (_, sess) = signed_in(&server, "user@example.com").await;
+    let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+    *mailer.block.lock().unwrap() = Some(gate.clone());
+
+    // More starts than the pool has connections (10), all stuck in SMTP.
+    let mut starts = Vec::new();
+    for n in 0..12 {
+        let req = server
+            .post("/v1/signup/start")
+            .header("x-forwarded-for", format!("10.0.0.{n}"))
+            .json(&json!({
+                "email": format!("slow{n}@example.com"),
+                "locale": "en",
+                "acceptedTerms": "2026-10-20"
+            }));
+        starts.push(tokio::spawn(async move {
+            req.send().await.unwrap().status().as_u16()
+        }));
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let res = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        server.get_as("/v1/vault/header", &sess).send(),
+    )
+    .await
+    .expect("the pool is not exhausted by pending mail")
+    .unwrap();
+    assert_eq!(res.status(), 200);
+
+    gate.notify_waiters();
+    // `notify_waiters` wakes only those already waiting; keep nudging until
+    // every start has answered.
+    for task in starts {
+        let status = loop {
+            if task.is_finished() {
+                break task.await.unwrap();
+            }
+            gate.notify_waiters();
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        };
+        assert_eq!(status, 202);
+    }
+    server.cleanup().await;
+}

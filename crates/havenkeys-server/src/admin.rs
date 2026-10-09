@@ -47,7 +47,11 @@ pub enum AdminCommand {
 
 /// Returns what the operator should see on stdout. Returning it rather than
 /// printing keeps the invite out of this crate's logs and lets a test read it.
-pub async fn run(cmd: AdminCommand, pool: &Pool) -> Result<String, String> {
+pub async fn run(
+    cmd: AdminCommand,
+    pool: &Pool,
+    server_secret: [u8; 32],
+) -> Result<String, String> {
     match cmd {
         AdminCommand::NewAccount {
             email,
@@ -55,7 +59,7 @@ pub async fn run(cmd: AdminCommand, pool: &Pool) -> Result<String, String> {
             trial,
         } => new_account(pool, &email, &server_url, trial).await,
         AdminCommand::ListAccounts => list_accounts(pool).await,
-        AdminCommand::DeleteAccount { email } => delete_account(pool, &email).await,
+        AdminCommand::DeleteAccount { email } => delete_account(pool, &email, &server_secret).await,
         AdminCommand::SetPlan {
             email,
             status,
@@ -153,7 +157,7 @@ async fn set_plan(
     until: Option<&str>,
 ) -> Result<String, String> {
     let email = crate::email::normalize(email)?;
-    let until = until.map(parse_until).transpose()?;
+    let mut until = until.map(parse_until).transpose()?;
     let failed = |_| "could not set the plan".to_string();
     let mut client = pool.get().await.map_err(|_| "no database".to_string())?;
     let tx = client.transaction().await.map_err(failed)?;
@@ -166,13 +170,29 @@ async fn set_plan(
         .map_err(failed)?
         .ok_or_else(|| "no such account".to_string())?
         .get(0);
+    // A trial with no end date would never end: give an active account the
+    // standard length.
+    if status == Status::Trialing && until.is_none() {
+        let active: bool = tx
+            .query_one(
+                "SELECT status = 'active' FROM accounts WHERE id = $1",
+                &[&id],
+            )
+            .await
+            .map_err(failed)?
+            .get(0);
+        if active {
+            until = Some(Utc::now() + Duration::days(billing::TRIAL_DAYS as i64));
+        }
+    }
     billing::set_status(&tx, id, Actor::Admin, status, until, "set-plan")
         .await
         .map_err(failed)?;
     tx.commit().await.map_err(failed)?;
+    let reads_date = matches!(status, Status::Trialing | Status::Active | Status::PastDue);
     Ok(match until {
-        Some(t) => format!("{} until {}", status.as_str(), t.to_rfc3339()),
-        None => status.as_str().to_string(),
+        Some(t) if reads_date => format!("{} until {}", status.as_str(), t.to_rfc3339()),
+        _ => status.as_str().to_string(),
     })
 }
 
@@ -188,7 +208,11 @@ fn parse_until(raw: &str) -> Result<DateTime<Utc>, String> {
         .ok_or_else(|| "--until must be a date (2027-01-31) or an RFC 3339 time".to_string())
 }
 
-async fn delete_account(pool: &Pool, email: &str) -> Result<String, String> {
+async fn delete_account(
+    pool: &Pool,
+    email: &str,
+    server_secret: &[u8; 32],
+) -> Result<String, String> {
     let email = crate::email::normalize(email)?;
     let failed = |_| "could not delete the account".to_string();
     let mut client = pool.get().await.map_err(|_| "no database".to_string())?;
@@ -202,7 +226,9 @@ async fn delete_account(pool: &Pool, email: &str) -> Result<String, String> {
         .map_err(failed)?
         .ok_or_else(|| "no such account".to_string())?
         .get(0);
-    crate::erase::erase_account(&tx, id).await.map_err(failed)?;
+    crate::erase::erase_account(&tx, id, server_secret)
+        .await
+        .map_err(failed)?;
     tx.commit().await.map_err(failed)?;
     Ok("deleted".into())
 }

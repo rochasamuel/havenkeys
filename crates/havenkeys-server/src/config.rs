@@ -131,8 +131,10 @@ impl Config {
 /// for development.
 pub fn check_public_url(raw: &str) -> Result<String, String> {
     let url = raw.trim().trim_end_matches('/').to_string();
-    let local = url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1");
-    if !url.starts_with("https://") && !local {
+    let parsed = url::Url::parse(&url).map_err(|_| "the server URL is not valid".to_string())?;
+    let local = parsed.scheme() == "http"
+        && matches!(parsed.host_str(), Some("localhost") | Some("127.0.0.1"));
+    if parsed.scheme() != "https" && !local {
         return Err("the server URL must be https (or http on localhost)".into());
     }
     if url.len() > 512 {
@@ -153,6 +155,9 @@ mod tests {
             "https://vault.example.com"
         );
         assert!(check_public_url("http://localhost:8080").is_ok());
+        assert!(check_public_url("http://localhost.evil.com").is_err());
+        assert!(check_public_url("http://127.0.0.1.evil.com").is_err());
+        assert!(check_public_url("http://localhost@evil.com").is_err());
     }
 
     #[test]

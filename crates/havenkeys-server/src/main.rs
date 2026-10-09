@@ -56,17 +56,19 @@ async fn main() -> std::process::ExitCode {
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(config, pool).await,
-        Command::Admin { command } => match admin::run(command, &pool).await {
-            Ok(output) => {
-                // Printed, never logged: this line can carry an invite.
-                println!("{output}");
-                std::process::ExitCode::SUCCESS
+        Command::Admin { command } => {
+            match admin::run(command, &pool, config.server_secret).await {
+                Ok(output) => {
+                    // Printed, never logged: this line can carry an invite.
+                    println!("{output}");
+                    std::process::ExitCode::SUCCESS
+                }
+                Err(message) => {
+                    eprintln!("{message}");
+                    std::process::ExitCode::FAILURE
+                }
             }
-            Err(message) => {
-                eprintln!("{message}");
-                std::process::ExitCode::FAILURE
-            }
-        },
+        }
     }
 }
 

@@ -2080,8 +2080,9 @@ carry no item content. Native messaging and the extension are not touched.
   enumeration oracle. A mail outage answers 503 for both.
 - When `HAVENKEYS_TRUST_FORWARDED_FOR=1`, the left-most `X-Forwarded-For`
   entry is client-controlled (see deployment.md §2), so the per-address
-  signup limits are advisory there; the per-email limit (3 starts per hour)
-  and the per-code limit (5 attempts) still bind.
+  signup limits are advisory there; a global ceiling of 300 starts per hour
+  bounds the mail the server can be made to send, and the per-email limit
+  (3 starts per hour) and the per-code limit (5 attempts) still bind.
 - The entitlement is computed on every request from the plan row and the
   clock. A frozen account cannot write, change its password, approve a
   pairing or add a device. Everything that reads, exports, revokes or deletes

@@ -25,6 +25,7 @@ pub struct TestServer {
 pub struct Options {
     pub max_vault_bytes: i64,
     pub signup: bool,
+    pub trust_forwarded_for: bool,
 }
 
 impl Default for Options {
@@ -32,6 +33,7 @@ impl Default for Options {
         Self {
             max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
             signup: false,
+            trust_forwarded_for: false,
         }
     }
 }
@@ -75,7 +77,7 @@ impl TestServer {
         let state = AppState {
             pool: pool.clone(),
             server_secret: [7u8; 32],
-            trust_forwarded_for: false,
+            trust_forwarded_for: opts.trust_forwarded_for,
             cors_origin: None,
             locator: None,
             max_vault_bytes: opts.max_vault_bytes,
@@ -203,6 +205,7 @@ pub async fn new_invite(server: &TestServer, email: &str) -> String {
             trial: false,
         },
         server.pool(),
+        [7u8; 32],
     )
     .await
     .unwrap()
