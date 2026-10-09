@@ -202,6 +202,20 @@ async fn the_stored_code_hash_is_keyed_by_the_server_secret() {
         stored,
         havenkeys_server::routes::signup::code_hash(&[7u8; 32], &code)
     );
+    let keys: Vec<String> = server
+        .db()
+        .await
+        .query("SELECT key FROM login_attempts", &[])
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    assert!(!keys.is_empty());
+    assert!(
+        keys.iter().all(|k| !k.contains("example.com")),
+        "no counter key holds the email: {keys:?}"
+    );
     server.cleanup().await;
 }
 
@@ -348,6 +362,17 @@ async fn an_admin_invited_account_gets_its_invite_replaced_by_signup() {
         .unwrap()
         .get(0);
     assert_eq!(plan, "complimentary", "the admin's plan row is kept");
+    let created_by: String = server
+        .db()
+        .await
+        .query_one(
+            "SELECT created_by FROM accounts WHERE email_normalized = $1",
+            &[&"both@example.com"],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(created_by, "admin", "provenance is not overwritten");
     server.cleanup().await;
 }
 
@@ -399,5 +424,61 @@ async fn malformed_signup_requests_are_refused() {
         let (status, _) = verify_signup(&server, "a@example.com", code).await;
         assert_eq!(status, 400, "{code:?}");
     }
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_code_for_an_account_activated_meanwhile_is_refused() {
+    let (server, mailer) = TestServer::start_signup().await;
+    let admin_invite = new_invite(&server, "late@example.com").await;
+    let (status, _) = start_signup_for(&server, "late@example.com").await;
+    assert_eq!(status, 202);
+    let code = code_in(mailer.sent().last().unwrap()).expect("an invited account gets a code");
+    let res = server
+        .post("/v1/accounts/activate")
+        .json(&activate_body(
+            "late@example.com",
+            &admin_invite,
+            Uuid::new_v4(),
+            &[5u8; 32],
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let (status, _) = verify_signup(&server, "late@example.com", &code).await;
+    assert_eq!(status, 400);
+    let codes: i64 = server
+        .db()
+        .await
+        .query_one("SELECT count(*) FROM signup_codes", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(codes, 0);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn start_for_a_disabled_account_mails_the_notice_and_leaves_no_code() {
+    let (server, mailer) = TestServer::start_signup().await;
+    signed_in(&server, "off@example.com").await;
+    server
+        .db()
+        .await
+        .execute("UPDATE accounts SET status = 'disabled'", &[])
+        .await
+        .unwrap();
+    let (status, _) = start_signup_for(&server, "off@example.com").await;
+    assert_eq!(status, 202);
+    assert!(code_in(mailer.sent().last().unwrap()).is_none());
+    let codes: i64 = server
+        .db()
+        .await
+        .query_one("SELECT count(*) FROM signup_codes", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(codes, 0);
     server.cleanup().await;
 }

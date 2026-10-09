@@ -25,7 +25,7 @@ use chrono::{Duration, Utc};
 use hmac::{Hmac, Mac};
 use rand::Rng;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::net::SocketAddr;
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
@@ -70,10 +70,10 @@ pub fn code_hash(secret: &[u8; 32], code: &str) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
-/// The per-email counter's key: a hash, so the email is not written into
-/// `login_attempts` in clear.
-fn email_key(email: &str) -> String {
-    let digest = Sha256::digest(email.as_bytes());
+/// The per-email counter's key: keyed by the server secret, so a reader of
+/// `login_attempts` cannot confirm a guessed address with a dictionary.
+fn email_key(secret: &[u8; 32], email: &str) -> String {
+    let digest = code_hash(secret, email);
     format!(
         "signup-email:{}",
         data_encoding::HEXLOWER.encode(&digest[..16])
@@ -127,7 +127,7 @@ pub async fn start(
     .await?;
     rate_limit::charge_window(
         &db,
-        &email_key(&email),
+        &email_key(&state.server_secret, &email),
         STARTS_PER_EMAIL_PER_HOUR,
         WINDOW_MINUTES,
     )
@@ -167,7 +167,16 @@ pub async fn start(
             .await?;
             templates::signup_code(locale, &code)
         }
-        Some(_) => templates::already_registered(locale),
+        Some(_) => {
+            // Clear a code left from when the account was still invited,
+            // so both branches do one write.
+            db.execute(
+                "DELETE FROM signup_codes WHERE email_normalized = $1",
+                &[&email],
+            )
+            .await?;
+            templates::already_registered(locale)
+        }
     };
     // Both branches send one mail, so a failure answers 503 in both and a
     // success 202 in both: the outcome says nothing about the account.
@@ -217,9 +226,12 @@ pub async fn verify(
         .await?;
     let Some(row) = row else {
         drop(tx);
-        rate_limit::charge_window(&db, &ip, VERIFY_FAILURES_PER_IP_PER_HOUR, WINDOW_MINUTES)
+        if rate_limit::charge_window(&db, &ip, VERIFY_FAILURES_PER_IP_PER_HOUR, WINDOW_MINUTES)
             .await
-            .ok();
+            .is_err()
+        {
+            tracing::warn!(kind = "rate_limit", "database error");
+        }
         return Err(BAD);
     };
     let stored: Vec<u8> = row.get(0);
@@ -244,9 +256,12 @@ pub async fn verify(
             .await?;
         }
         tx.commit().await?;
-        rate_limit::charge_window(&db, &ip, VERIFY_FAILURES_PER_IP_PER_HOUR, WINDOW_MINUTES)
+        if rate_limit::charge_window(&db, &ip, VERIFY_FAILURES_PER_IP_PER_HOUR, WINDOW_MINUTES)
             .await
-            .ok();
+            .is_err()
+        {
+            tracing::warn!(kind = "rate_limit", "database error");
+        }
         tracing::info!(outcome = "rejected", "signup verify");
         return Err(BAD);
     }
@@ -292,7 +307,7 @@ pub async fn verify(
             let id: Uuid = row.get(0);
             tx.execute(
                 "UPDATE accounts
-                    SET invite_hash = $2, invite_expires_at = $3, created_by = 'signup',
+                    SET invite_hash = $2, invite_expires_at = $3,
                         terms_version = $4, terms_accepted_at = now(), locale = $5
                   WHERE id = $1",
                 &[
