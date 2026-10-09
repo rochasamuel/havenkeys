@@ -139,6 +139,11 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
 | `show_unlock` | none | no | secret |
 
+`entitlement` (`"full"` or `"frozen"`) on the `status` and `find_matches`
+results may be absent from a desktop older than the release that added it;
+the extension reads a missing value as `"full"` (the gate itself is in Rust,
+which answers `frozen` to fills, saves and passkey creation).
+
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
 be omitted, which means null.

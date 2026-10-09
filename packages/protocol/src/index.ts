@@ -412,28 +412,31 @@ function parseResult(v: unknown): Result | null {
   if (!isObj(v)) return null;
   switch (v.type) {
     case "status":
-      if (!hasExactKeys(v, ["type", "state", "vaultExists", "entitlement"])) return null;
+      // `entitlement` is absent from desktops older than the release that
+      // added it; it reads as "full" (Rust enforces the gate, this is UI).
+      if (!hasExactKeys(v, ["type", "state", "vaultExists", "entitlement"]) && !hasExactKeys(v, ["type", "state", "vaultExists"])) return null;
       if (!LOCK_STATES.includes(v.state as LockState) || !isBool(v.vaultExists)) return null;
-      if (!ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
+      if (v.entitlement !== undefined && !ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
       return {
         type: "status",
         state: v.state as LockState,
         vaultExists: v.vaultExists,
-        entitlement: v.entitlement as Entitlement,
+        entitlement: (v.entitlement ?? "full") as Entitlement,
       };
     case "lock":
       return hasExactKeys(v, ["type"]) ? { type: "lock" } : null;
     case "find_matches": {
-      if (!hasExactKeys(v, ["type", "matches", "entitlement"]) || !Array.isArray(v.matches)) return null;
-      if (v.matches.length > MAX_MATCHES) return null;
-      if (!ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
+      // `entitlement` is absent from older desktops and reads as "full".
+      if (!hasExactKeys(v, ["type", "matches", "entitlement"]) && !hasExactKeys(v, ["type", "matches"])) return null;
+      if (!Array.isArray(v.matches) || v.matches.length > MAX_MATCHES) return null;
+      if (v.entitlement !== undefined && !ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
       const matches: Match[] = [];
       for (const m of v.matches) {
         const parsed = parseMatch(m);
         if (!parsed) return null;
         matches.push(parsed);
       }
-      return { type: "find_matches", matches, entitlement: v.entitlement as Entitlement };
+      return { type: "find_matches", matches, entitlement: (v.entitlement ?? "full") as Entitlement };
     }
     case "fill_item":
       if (!hasExactKeys(v, ["type", "username", "password", "autoSubmit"])) return null;

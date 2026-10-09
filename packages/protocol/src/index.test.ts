@@ -208,6 +208,11 @@ describe("sign in with", () => {
       { type: "check_sso", action: "add", itemId: null, accounts: ["a".repeat(255)] },
       { type: "check_sso", action: "add", itemId: null, accounts: "me@gmail.com" },
       { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }], entitlement: "full" },
+      { type: "status", state: "unlocked", vaultExists: true, entitlement: "trial" },
+      { type: "status", state: "unlocked", vaultExists: true, entitlement: null },
+      { type: "status", state: "unlocked", vaultExists: true, extra: 1 },
+      { type: "find_matches", matches: [], entitlement: "trial" },
+      { type: "find_matches", matches: [], entitlement: "full", extra: 1 },
     ];
     for (const result of bad) expect(parseIncoming({ v: 1, id: 1, result })).toBeNull();
   });
@@ -287,5 +292,25 @@ describe("card results", () => {
     ]) {
       expect(result(bad), JSON.stringify(bad)).toBeNull();
     }
+  });
+});
+
+describe("entitlement", () => {
+  const parse = (result: unknown) => parseIncoming({ v: 1, id: 1, result });
+  it("reads a missing entitlement from an older desktop as full", () => {
+    expect(parse({ type: "status", state: "unlocked", vaultExists: true })).toMatchObject({
+      result: { type: "status", entitlement: "full" },
+    });
+    expect(parse({ type: "find_matches", matches: [] })).toMatchObject({
+      result: { type: "find_matches", entitlement: "full" },
+    });
+  });
+  it("carries frozen through", () => {
+    expect(parse({ type: "status", state: "unlocked", vaultExists: true, entitlement: "frozen" })).toMatchObject({
+      result: { entitlement: "frozen" },
+    });
+    expect(parse({ type: "find_matches", matches: [], entitlement: "frozen" })).toMatchObject({
+      result: { entitlement: "frozen" },
+    });
   });
 });

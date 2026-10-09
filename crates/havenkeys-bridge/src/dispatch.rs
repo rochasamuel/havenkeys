@@ -146,8 +146,8 @@ pub fn dispatch(
     // Frozen (spec 2026-10-07 §6.3): nothing that fills, saves or creates
     // a passkey, and none of the menus' lookups. Reading stays: status,
     // the popup's list, TOTP, passkey sign-in, opening in the desktop.
-    // `fill_item` and `get_totp` check the origin first so a wrong origin
-    // is still `denied` (attack 1).
+    // `fill_item` checks the origin before the plan, so a wrong origin is
+    // still `denied` (attack 1).
     let frozen = v.entitlement().map_err(code)? == havenkeys_core::store::Entitlement::Frozen;
     if frozen && refused_when_frozen(req) {
         return Err(ErrorCode::Frozen);

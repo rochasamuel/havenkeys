@@ -2124,8 +2124,28 @@ fn a_frozen_account_refuses_autofill_and_keeps_reading() {
         serde_json::json!({"type": "find_cards", "url": "https://shop.example/"}),
         serde_json::json!({"type": "start_sso", "itemId": f.typeform, "url": "https://typeform.com/"}),
         serde_json::json!({"type": "check_passkey_create", "url": "https://github.com/", "rpId": "github.com", "userName": "octo", "excludeCredentials": [], "conditional": false}),
+        serde_json::json!({"type": "passkey_create", "url": "https://github.com/", "rpId": "github.com", "challenge": "AAAA", "userHandle": "AAAA", "userName": "octo", "displayName": null, "itemId": null, "conditional": false}),
+        serde_json::json!({"type": "check_sso", "url": "https://typeform.com/", "provider": "google", "account": "a@gmail.com"}),
+        serde_json::json!({"type": "save_sso", "url": "https://typeform.com/", "provider": "google", "account": "a@gmail.com", "itemId": null}),
+        serde_json::json!({"type": "fill_identity", "url": "https://github.com/", "roles": ["fullName"], "documents": false}),
+        serde_json::json!({"type": "fill_card", "itemId": f.github, "topUrl": "https://shop.example/", "frames": [{"url": "https://shop.example/", "roles": ["number"]}]}),
+        serde_json::json!({"type": "save_card", "url": "https://shop.example/", "number": "4111111111111111"}),
     ] {
-        assert_eq!(error_code(&call(&f, req.clone())), Some("frozen"), "{req}");
+        // A fresh fixture per request keeps the rate limiter out of the way.
+        let g = online_fixture();
+        freeze(&g);
+        let req = {
+            let mut r = req;
+            r = serde_json::from_str(
+                &r.to_string()
+                    .replace(&f.github.to_string(), &g.github.to_string())
+                    .replace(&f.typeform.to_string(), &g.typeform.to_string()),
+            )
+            .unwrap();
+            r
+        };
+        assert_eq!(error_code(&call(&g, req.clone())), Some("frozen"), "{req}");
+        assert_eq!(g.changes.load(Ordering::SeqCst), 0, "nothing was written");
     }
     assert_eq!(f.changes.load(Ordering::SeqCst), 0, "nothing was written");
     let opened = call(
@@ -2133,6 +2153,50 @@ fn a_frozen_account_refuses_autofill_and_keeps_reading() {
         serde_json::json!({"type": "open_item", "itemId": f.github, "url": "https://github.com/"}),
     );
     assert!(opened["result"].is_object(), "{opened}");
+    // The answered set still answers (a missing passkey may error, but never `frozen`).
+    for req in [
+        serde_json::json!({"type": "find_passkeys", "url": "https://github.com/", "rpId": "github.com", "allowCredentials": []}),
+        serde_json::json!({"type": "passkey_get", "itemId": f.github, "credentialId": "AAAA", "url": "https://github.com/", "rpId": "github.com", "challenge": "AAAA"}),
+        serde_json::json!({"type": "passkey_status", "url": "https://github.com/"}),
+        serde_json::json!({"type": "generator_options"}),
+        serde_json::json!({"type": "generate_password"}),
+        serde_json::json!({"type": "open_identity", "url": "https://github.com/"}),
+    ] {
+        let r = call(&f, req.clone());
+        assert_ne!(error_code(&r), Some("frozen"), "{req}: {r}");
+    }
+    for req in [
+        serde_json::json!({"type": "passkey_status", "url": "https://github.com/"}),
+        serde_json::json!({"type": "generator_options"}),
+        serde_json::json!({"type": "generate_password"}),
+    ] {
+        assert!(call(&f, req.clone())["result"].is_object(), "{req}");
+    }
+    // A wrong origin is still denied, not frozen.
+    let wrong = call(
+        &f,
+        serde_json::json!({"type": "open_item", "itemId": f.github, "url": "https://evil.com/"}),
+    );
+    assert_eq!(error_code(&wrong), Some("denied"));
+}
+
+/// Locked beats frozen: a locked vault answers `locked` whatever the plan.
+#[test]
+fn a3_locked_and_frozen_answers_locked() {
+    let f = fixture();
+    freeze(&f);
+    f.vault.lock().unwrap().lock();
+    assert_eq!(error_code(&find(&f, "https://github.com/")), Some("locked"));
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("locked")
+    );
+    for req in [
+        serde_json::json!({"type": "check_login", "url": "https://github.com/", "username": "octo", "password": "pw"}),
+        serde_json::json!({"type": "find_cards", "url": "https://shop.example/"}),
+    ] {
+        assert_eq!(error_code(&call(&f, req.clone())), Some("locked"), "{req}");
+    }
 }
 
 /// A1 holds when frozen: the wrong origin is denied, not frozen.
