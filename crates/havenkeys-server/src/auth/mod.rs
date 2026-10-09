@@ -8,6 +8,7 @@
 
 pub mod rate_limit;
 
+use crate::billing::{self, Entitlement, Subscription};
 use crate::error::ApiError;
 use crate::limits::SESSION_TTL_HOURS;
 use crate::routes::AppState;
@@ -98,12 +99,14 @@ pub async fn verify_auth_key(
         .await
         .map_err(|_| ApiError::Unavailable)?
         .map_err(|_| ApiError::Internal)?;
-    Ok(tokio::task::spawn_blocking(move || match PasswordHash::new(&stored) {
-        Ok(parsed) => hasher().verify_password(&auth_key, &parsed).is_ok(),
-        Err(_) => false,
-    })
-    .await
-    .unwrap_or(false))
+    Ok(
+        tokio::task::spawn_blocking(move || match PasswordHash::new(&stored) {
+            Ok(parsed) => hasher().verify_password(&auth_key, &parsed).is_ok(),
+            Err(_) => false,
+        })
+        .await
+        .unwrap_or(false),
+    )
 }
 
 /// A verifier for an account that does not exist, so login spends the same
@@ -154,6 +157,21 @@ pub struct Session {
     pub device_id: Uuid,
     pub vault_id: Uuid,
     pub token_hash: Vec<u8>,
+    /// The plan row, for the `account` object in answers.
+    pub subscription: Option<Subscription>,
+    /// Computed once per request from the row and the clock.
+    pub entitlement: Entitlement,
+}
+
+impl Session {
+    /// Refuse a write for a frozen account (spec 2026-10-07 §5.4). Called
+    /// first thing by every route that changes the account or its vault.
+    pub fn require_full(&self) -> Result<(), ApiError> {
+        match self.entitlement {
+            Entitlement::Full => Ok(()),
+            Entitlement::Frozen => Err(ApiError::AccountFrozen),
+        }
+    }
 }
 
 impl FromRequestParts<AppState> for Session {
@@ -176,11 +194,13 @@ impl FromRequestParts<AppState> for Session {
         // the request may touch.
         let row = db
             .query_opt(
-                "SELECT s.account_id, s.device_id, v.id
+                "SELECT s.account_id, s.device_id, v.id,
+                        p.status, p.trial_ends_at, p.current_period_end, p.grace_ends_at
                    FROM sessions s
                    JOIN accounts a ON a.id = s.account_id
                    JOIN devices  d ON d.id = s.device_id
                    JOIN vaults   v ON v.account_id = s.account_id
+                   LEFT JOIN subscriptions p ON p.account_id = s.account_id
                   WHERE s.token_hash = $1
                     AND s.expires_at > now()
                     AND a.status = 'active'
@@ -208,11 +228,15 @@ impl FromRequestParts<AppState> for Session {
             &[&device_id],
         )
         .await?;
+        let subscription = billing::from_row(&row, 3);
+        let entitlement = billing::entitlement_of(subscription.as_ref(), Utc::now());
         Ok(Session {
             account_id: row.get(0),
             device_id,
             vault_id: row.get(2),
             token_hash: hash,
+            subscription,
+            entitlement,
         })
     }
 }

@@ -244,6 +244,51 @@ pub async fn login(server: &TestServer, account: &Account, device_name: &str) ->
     }
 }
 
+/// A login with a device id the test chooses, and the raw answer.
+pub async fn login_with_device(
+    server: &TestServer,
+    account: &Account,
+    device_name: &str,
+    device_id: Uuid,
+) -> (u16, Value) {
+    let res = server
+        .post("/v1/auth/login")
+        .json(&json!({
+            "email": account.email,
+            "authKey": data_encoding::BASE64.encode(&account.auth_key),
+            "deviceId": device_id,
+            "deviceName": device_name,
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    let text = res.text().await.unwrap();
+    (
+        status,
+        serde_json::from_str(&text).unwrap_or(Value::String(text)),
+    )
+}
+
+/// Set the account's plan status directly, as `admin set-plan` would.
+pub async fn set_plan(
+    server: &TestServer,
+    account_id: Uuid,
+    status: havenkeys_server::billing::Status,
+) {
+    let db = server.db().await;
+    havenkeys_server::billing::set_status(
+        &db,
+        account_id,
+        havenkeys_server::billing::Actor::Admin,
+        status,
+        None,
+        "test",
+    )
+    .await
+    .unwrap();
+}
+
 /// An activated account with one logged-in device.
 pub async fn signed_in(server: &TestServer, email: &str) -> (Account, Sess) {
     let auth_key = {

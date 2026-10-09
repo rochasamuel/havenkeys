@@ -7,6 +7,7 @@
 //! nothing — and `login` spends the same Argon2id time on a dummy verifier.
 
 use crate::auth::{self, rate_limit};
+use crate::billing;
 use crate::error::ApiError;
 use crate::json::Json;
 use crate::limits::{MAX_DEVICES_PER_ACCOUNT, MAX_DEVICE_NAME_CHARS};
@@ -170,6 +171,23 @@ pub async fn login(
         .get(0);
 
     keys.clear(&db).await?;
+    // A frozen account keeps the devices it has and gains none (spec
+    // 2026-10-07 §5.4). Decided here, not in `register_device`, which the
+    // pairing approval also uses and which must not learn about plans.
+    let subscription = billing::load(&db, account_id).await?;
+    let now = chrono::Utc::now();
+    let known = db
+        .query_opt(
+            "SELECT 1 FROM devices WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+            &[&req.device_id, &account_id],
+        )
+        .await?
+        .is_some();
+    if !known && billing::entitlement_of(subscription.as_ref(), now) == billing::Entitlement::Frozen
+    {
+        tracing::info!(account_id = %account_id, outcome = "frozen", "login");
+        return Err(ApiError::AccountFrozen);
+    }
     register_device(&db, account_id, req.device_id, &device_name).await?;
     db.execute(
         "DELETE FROM sessions WHERE device_id = $1",
@@ -183,6 +201,7 @@ pub async fn login(
         "token": token.as_str(),
         "expiresAt": expires.to_rfc3339(),
         "vaultId": vault_id,
+        "account": billing::account_json(subscription.as_ref(), now),
     })))
 }
 

@@ -15,6 +15,7 @@
 
 use crate::auth::Session;
 use crate::b64::Blob;
+use crate::billing;
 use crate::error::ApiError;
 use crate::limits::{MAX_CHANGES_PER_BATCH, MAX_PAGE_BYTES, MAX_PULL_PAGE};
 use crate::routes::AppState;
@@ -134,6 +135,7 @@ pub async fn pull(
         "cursor": cursor,
         "hasMore": has_more,
         "changes": changes,
+        "account": billing::account_json(session.subscription.as_ref(), chrono::Utc::now()),
     })))
 }
 

@@ -23,6 +23,10 @@ pub enum ApiError {
     /// The token belonged to an account that was deleted (spec
     /// 2026-10-05-account-deletion §4.4). Only a holder of the token sees it.
     AccountDeleted,
+    /// The account's trial ended or its payment lapsed (spec 2026-10-07
+    /// §5.4). Reads, export and deletion still work; writes and new devices
+    /// do not.
+    AccountFrozen,
     /// Every database connection or every key-check slot stayed busy for the
     /// whole wait (SV-4). Nothing happened; the client may retry.
     Unavailable,
@@ -64,6 +68,11 @@ impl ApiError {
                 StatusCode::GONE,
                 "account_deleted",
                 "This account was deleted.",
+            ),
+            Self::AccountFrozen => (
+                StatusCode::PAYMENT_REQUIRED,
+                "account_frozen",
+                "This account is frozen: the trial ended or payment lapsed. Reading and export still work.",
             ),
             Self::Unavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,

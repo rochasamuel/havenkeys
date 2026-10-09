@@ -67,6 +67,7 @@ pub async fn write(
     session: Session,
     Json(req): Json<WriteRequest>,
 ) -> Result<Response, ApiError> {
+    session.require_full()?;
     check_batch(&req.changes)?;
 
     let ids: Vec<Uuid> = req.changes.iter().map(|c| c.item_id).collect();
@@ -310,4 +311,3 @@ async fn vault_bytes(
         .await?
         .get(0))
 }
-

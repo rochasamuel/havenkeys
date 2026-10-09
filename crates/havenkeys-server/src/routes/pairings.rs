@@ -83,8 +83,11 @@ pub async fn create(
     // Count and insert under one lock per address, so parallel creates from
     // one address cannot all pass the check before any of them inserts (PA5).
     let db = db.transaction().await?;
-    db.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", &[&ip])
-        .await?;
+    db.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        &[&ip],
+    )
+    .await?;
 
     // No periodic task: old rows go here, whatever their state.
     db.execute(
@@ -171,6 +174,7 @@ pub async fn approve(
     Path(raw): Path<String>,
     Json(req): Json<ApproveRequest>,
 ) -> Result<StatusCode, ApiError> {
+    session.require_full()?;
     let id = pairing_id(&raw)?;
     const BAD: ApiError = ApiError::InvalidRequest("envelope is not valid");
     if req.envelope.len() > MAX_PAIRING_ENVELOPE_BYTES / 3 * 4 + 4 {

@@ -42,6 +42,7 @@ pub async fn change_credentials(
     session: Session,
     Json(req): Json<CredentialChange>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    session.require_full()?;
     check_header(&req.header)?;
     if req.base_header_revision < 0 {
         return Err(ApiError::InvalidRequest("baseHeaderRevision is not valid"));
