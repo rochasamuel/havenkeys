@@ -177,6 +177,64 @@ impl AttemptKeys {
     }
 }
 
+/// Count one event against `key` and refuse once more than `max` happened
+/// in the last `window_minutes`. For the signup routes, where every call
+/// costs an email or a code check and no right answer clears the counter
+/// (spec 2026-10-07 §4.4). Rows older than the window are reused, and the
+/// daily task deletes stale `signup-*` rows.
+pub async fn charge_window(
+    db: &impl deadpool_postgres::GenericClient,
+    key: &str,
+    max: i32,
+    window_minutes: i32,
+) -> Result<(), ApiError> {
+    let count: i32 = db
+        .query_one(
+            "INSERT INTO login_attempts (key, failures, window_start)
+             VALUES ($1, 1, now())
+             ON CONFLICT (key) DO UPDATE SET
+               failures = CASE
+                 WHEN login_attempts.window_start < now() - make_interval(mins => $2)
+                 THEN 1 ELSE login_attempts.failures + 1 END,
+               window_start = CASE
+                 WHEN login_attempts.window_start < now() - make_interval(mins => $2)
+                 THEN now() ELSE login_attempts.window_start END
+             RETURNING failures",
+            &[&key, &window_minutes],
+        )
+        .await?
+        .get(0);
+    if count > max {
+        return Err(ApiError::RateLimited);
+    }
+    Ok(())
+}
+
+/// Refuse while `max` or more events are already in the window, without
+/// counting this one. `verify` checks before the code is compared and
+/// charges only a failure.
+pub async fn over_window(
+    db: &impl deadpool_postgres::GenericClient,
+    key: &str,
+    max: i32,
+    window_minutes: i32,
+) -> Result<(), ApiError> {
+    let over = db
+        .query_opt(
+            "SELECT 1 FROM login_attempts
+              WHERE key = $1
+                AND failures >= $2
+                AND window_start >= now() - make_interval(mins => $3)",
+            &[&key, &max, &window_minutes],
+        )
+        .await?
+        .is_some();
+    if over {
+        return Err(ApiError::RateLimited);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

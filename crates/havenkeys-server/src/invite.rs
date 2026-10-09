@@ -23,6 +23,10 @@ const MAX_INVITE_CHARS: usize = 2048;
 
 pub const INVITE_TTL_DAYS: i64 = 7;
 
+/// An invite issued by self-service signup (spec 2026-10-07 §4.2): the
+/// user is at the keyboard, so a day is plenty.
+pub const SIGNUP_INVITE_TTL_HOURS: i64 = 24;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Invite {

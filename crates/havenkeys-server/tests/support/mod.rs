@@ -423,3 +423,59 @@ pub async fn pull(server: &TestServer, sess: &Sess, since: i64) -> Value {
     assert_eq!(res.status(), 200);
     res.json().await.unwrap()
 }
+
+pub async fn start_signup_for(server: &TestServer, email: &str) -> (u16, Value) {
+    let res = server
+        .post("/v1/signup/start")
+        .json(&json!({ "email": email, "locale": "en", "acceptedTerms": "2026-10-20" }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    let text = res.text().await.unwrap();
+    (
+        status,
+        serde_json::from_str(&text).unwrap_or(Value::String(text)),
+    )
+}
+
+pub async fn verify_signup(server: &TestServer, email: &str, code: &str) -> (u16, Value) {
+    let res = server
+        .post("/v1/signup/verify")
+        .json(&json!({ "email": email, "code": code }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    let text = res.text().await.unwrap();
+    (
+        status,
+        serde_json::from_str(&text).unwrap_or(Value::String(text)),
+    )
+}
+
+/// The six-digit code in a mail body: the only word of six digits.
+pub fn code_in(mail: &havenkeys_server::mail::Mail) -> Option<String> {
+    mail.body
+        .split_whitespace()
+        .find(|w| w.len() == 6 && w.bytes().all(|b| b.is_ascii_digit()))
+        .map(str::to_string)
+}
+
+pub fn invite_in(mail: &havenkeys_server::mail::Mail) -> Option<String> {
+    mail.body
+        .split_whitespace()
+        .find(|w| w.starts_with("HKINV1-"))
+        .map(str::to_string)
+}
+
+/// Start and verify, returning the invite. The recorder's last mail is the
+/// invite mail afterwards.
+pub async fn signup(server: &TestServer, mailer: &Recording, email: &str) -> String {
+    let (status, _) = start_signup_for(server, email).await;
+    assert_eq!(status, 202);
+    let code = code_in(mailer.sent().last().unwrap()).expect("a code was mailed");
+    let (status, body) = verify_signup(server, email, &code).await;
+    assert_eq!(status, 200, "{body}");
+    body["invite"].as_str().unwrap().to_string()
+}

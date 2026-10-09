@@ -19,6 +19,7 @@ pub mod devices;
 pub mod health;
 pub mod items;
 pub mod pairings;
+pub mod signup;
 pub mod sync;
 pub mod vault;
 
@@ -62,6 +63,14 @@ pub fn router(state: AppState) -> Router {
     let router = Router::new()
         .route("/v1/health", get(health::health))
         .route("/v1/accounts/activate", post(accounts::activate))
+        .route(
+            "/v1/signup/start",
+            small(post(signup::start), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
+        .route(
+            "/v1/signup/verify",
+            small(post(signup::verify), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
         .route("/v1/account/credentials", post(account::change_credentials))
         .route("/v1/account/delete", post(account::delete_account))
         .route(
