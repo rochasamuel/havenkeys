@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -34,7 +34,11 @@ CREATE TABLE account (
     server_url     TEXT    NOT NULL,
     server_cursor  INTEGER NOT NULL DEFAULT 0,
     max_header_rev INTEGER NOT NULL DEFAULT 0,
-    last_synced_at INTEGER
+    last_synced_at INTEGER,
+    plan_status    TEXT,
+    entitlement    TEXT    NOT NULL DEFAULT 'full',
+    trial_ends_at  TEXT,
+    period_end     TEXT
 );
 CREATE TABLE settings (
     id   INTEGER PRIMARY KEY CHECK (id = 1),
@@ -52,6 +56,16 @@ CREATE TABLE local_blob (
 
 /// Schema 5 → 6: device-local encrypted values, never synced (spec
 /// 2026-10-01-android-app §5.3, §7.2).
+/// Schema 6 -> 7: the account's plan as the server last reported it (spec
+/// 2026-10-07 s6.2). Plaintext: it is not a secret and the lock screen
+/// shows it.
+const MIGRATE_6_TO_7: &str = "
+ALTER TABLE account ADD COLUMN plan_status TEXT;
+ALTER TABLE account ADD COLUMN entitlement TEXT NOT NULL DEFAULT 'full';
+ALTER TABLE account ADD COLUMN trial_ends_at TEXT;
+ALTER TABLE account ADD COLUMN period_end TEXT;
+";
+
 const MIGRATE_5_TO_6: &str = "
 CREATE TABLE local_blob (
     name TEXT PRIMARY KEY NOT NULL,
@@ -145,6 +159,52 @@ pub struct Store {
     conn: Connection,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Entitlement {
+    Full,
+    Frozen,
+}
+
+impl Entitlement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Frozen => "frozen",
+        }
+    }
+
+    fn parse(s: &str) -> Self {
+        if s == "frozen" {
+            Self::Frozen
+        } else {
+            Self::Full
+        }
+    }
+}
+
+/// The plan as the server last reported it. Plaintext on purpose (not a
+/// secret) and readable while locked. Absent (a vault that never synced
+/// against a server with plans) means Full.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanRecord {
+    pub status: Option<String>,
+    pub entitlement: Entitlement,
+    pub trial_ends_at: Option<String>,
+    pub period_end: Option<String>,
+}
+
+impl Default for PlanRecord {
+    fn default() -> Self {
+        Self {
+            status: None,
+            entitlement: Entitlement::Full,
+            trial_ends_at: None,
+            period_end: None,
+        }
+    }
+}
+
 impl Store {
     /// Open or create the vault database. On Unix a new file is created with
     /// mode 0600 before SQLite touches it.
@@ -176,6 +236,13 @@ impl Store {
             5 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(MIGRATE_5_TO_6)?;
+                tx.execute_batch(MIGRATE_6_TO_7)?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+                tx.commit()?;
+            }
+            6 => {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch(MIGRATE_6_TO_7)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -552,6 +619,36 @@ impl Store {
         Ok(())
     }
 
+    pub fn plan(&self) -> Result<PlanRecord> {
+        self.conn
+            .query_row(
+                "SELECT plan_status, entitlement, trial_ends_at, period_end FROM account WHERE id = 1",
+                [],
+                |r| {
+                    Ok(PlanRecord {
+                        status: r.get::<_, Option<String>>(0)?,
+                        entitlement: Entitlement::parse(&r.get::<_, String>(1)?),
+                        trial_ends_at: r.get(2)?,
+                        period_end: r.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map(|p| p.unwrap_or_default())
+            .map_err(Into::into)
+    }
+
+    /// Only the plan columns; the rest of the row is untouched. A vault
+    /// with no account row has no plan to record.
+    pub fn set_plan(&mut self, plan: &PlanRecord) -> Result<()> {
+        self.conn.execute(
+            "UPDATE account SET plan_status = ?1, entitlement = ?2, trial_ends_at = ?3, period_end = ?4
+              WHERE id = 1",
+            params![plan.status, plan.entitlement.as_str(), plan.trial_ends_at, plan.period_end],
+        )?;
+        Ok(())
+    }
+
     pub fn set_cursor(&mut self, cursor: i64, synced_at: i64) -> Result<()> {
         self.conn.execute(
             "UPDATE account SET server_cursor = ?1, last_synced_at = ?2 WHERE id = 1",
@@ -648,6 +745,63 @@ fn create_private_file(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
+    fn strip_plan_columns(schema: &str) -> String {
+        let stripped = schema
+            .replace("    plan_status    TEXT,\n", "")
+            .replace("    entitlement    TEXT    NOT NULL DEFAULT 'full',\n", "")
+            .replace("    trial_ends_at  TEXT,\n", "")
+            .replace(",\n    period_end     TEXT\n", "\n");
+        assert_ne!(
+            stripped, schema,
+            "the replace must have removed the new columns"
+        );
+        stripped
+    }
+
+    fn sample_account() -> AccountRecord {
+        AccountRecord {
+            account_id: Uuid::from_u128(1),
+            email: "user@example.com".into(),
+            server_url: "https://vault.example.com".into(),
+            server_cursor: 0,
+            max_header_rev: 0,
+            last_synced_at: None,
+        }
+    }
+
+    #[test]
+    fn plan_defaults_to_full_and_round_trips() {
+        let mut store = Store::open_in_memory().unwrap();
+        assert_eq!(store.plan().unwrap(), PlanRecord::default());
+        store.set_account(&sample_account()).unwrap();
+        assert_eq!(store.plan().unwrap().entitlement, Entitlement::Full);
+        let plan = PlanRecord {
+            status: Some("trialing".into()),
+            entitlement: Entitlement::Frozen,
+            trial_ends_at: Some("2026-10-09T00:00:00Z".into()),
+            period_end: None,
+        };
+        store.set_plan(&plan).unwrap();
+        assert_eq!(store.plan().unwrap(), plan);
+        // set_account keeps the plan (like the cursor).
+        store.set_account(&sample_account()).unwrap();
+        assert_eq!(store.plan().unwrap(), plan);
+    }
+
+    #[test]
+    fn a_schema_6_vault_gains_the_plan_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&strip_plan_columns(SCHEMA)).unwrap();
+        conn.pragma_update(None, "user_version", 6).unwrap();
+        let store = Store::init(conn).unwrap();
+        assert_eq!(store.plan().unwrap(), PlanRecord::default());
+        let v: i64 = store
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, SCHEMA_VERSION);
+    }
+
     #[test]
     fn schema_version_is_set() {
         let s = Store::open_in_memory().unwrap();
@@ -666,9 +820,11 @@ mod tests {
             "CREATE TABLE local_blob (\n    name TEXT PRIMARY KEY NOT NULL,\n    blob BLOB NOT NULL\n);\n",
             "",
         );
+        let schema_5 = strip_plan_columns(&schema_5);
         conn.execute_batch(&schema_5).unwrap();
         conn.pragma_update(None, "user_version", 5).unwrap();
         let store = Store::init(conn).unwrap();
+        assert_eq!(store.plan().unwrap(), PlanRecord::default());
         store.set_local_blob("x", b"y").unwrap();
         assert_eq!(store.local_blob("x").unwrap().unwrap(), b"y");
         let version: i64 = store

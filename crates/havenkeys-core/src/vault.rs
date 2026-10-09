@@ -25,7 +25,7 @@ use crate::model::{
 use crate::origin::{match_item, site_of, MatchStrength, PageUrl};
 use crate::secret::SecretString;
 use crate::sso::{SignInWith, SsoProvider};
-use crate::store::{AccountRecord, HeaderRecord, KeyScheme, Store};
+use crate::store::{AccountRecord, Entitlement, HeaderRecord, KeyScheme, PlanRecord, Store};
 use crate::totp::{self, TotpCode};
 use crate::unlock_bundle::UnlockBundle;
 use serde::Serialize;
@@ -1263,6 +1263,20 @@ impl VaultService {
     /// The account this vault belongs to, if any. Safe while locked.
     pub fn account(&self) -> Result<Option<AccountRecord>> {
         self.store.account()
+    }
+
+    /// The account's plan as last synced. Safe while locked.
+    pub fn plan(&self) -> Result<PlanRecord> {
+        self.store.plan()
+    }
+
+    pub fn set_plan(&mut self, plan: &PlanRecord) -> Result<()> {
+        self.store.set_plan(plan)
+    }
+
+    /// Full unless the server said otherwise. Safe while locked.
+    pub fn entitlement(&self) -> Result<Entitlement> {
+        Ok(self.store.plan()?.entitlement)
     }
 
     /// Re-wrap the vault key under a new master password. Items are
