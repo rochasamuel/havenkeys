@@ -543,7 +543,10 @@ export function createInlineHandler(deps: InlineDeps) {
     let locked = false;
     let items: Match[] = [];
     try {
-      items = (await deps.client.request({ type: "find_matches", ...frameFields(frame) })).matches;
+      const found = await deps.client.request({ type: "find_matches", ...frameFields(frame) });
+      // A frozen account fills nothing: no menu.
+      if (found.entitlement === "frozen") return { ok: false };
+      items = found.matches;
     } catch (e) {
       // Locked: show a small "unlock HavenKeys" menu. Anything else (app
       // not running, integration off): stay out of the page.

@@ -35,6 +35,13 @@ export const ptBR: Messages = {
       locked: "Bloqueado",
       off: "Desativado",
       unlocked: "Desbloqueado",
+      frozen: "Somente leitura",
+    },
+    frozen: {
+      title: "Seu período de teste terminou",
+      body: "O cofre fica somente leitura até você assinar. Você ainda pode ver um código de uso único aqui e abrir itens no app HavenKeys.",
+      subscribe: "Assinar",
+      code: "Código",
     },
     hostUnavailable: {
       title: "Não conectado",

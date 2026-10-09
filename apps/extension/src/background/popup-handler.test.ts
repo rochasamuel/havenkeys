@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { en } from "../i18n/en";
 import type { IdentityRole, Request } from "@havenkeys/protocol";
 import type { FillPayload } from "../messaging/inline";
 import { BridgeError } from "../messaging/native";
@@ -436,5 +437,43 @@ describe("popup cards", () => {
     expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com/x" })).toBeNull();
     expect(parsePopupRequest({ type: "popup_fill_card", itemId: "x" })).toBeNull();
     expect(parsePopupRequest({ type: "popup_fill_card", itemId: VISA, origin: "https://shop.com", extra: 1 })).toBeNull();
+  });
+});
+
+describe("popup frozen", () => {
+  const ghMatch = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host" as const, provider: null, tags: [] };
+  it("reports frozen with the site's logins when the desktop says so", async () => {
+    const c = fakeClient((r) =>
+      r.type === "status"
+        ? { type: "status", state: "unlocked", vaultExists: true, entitlement: "frozen" }
+        : r.type === "find_matches"
+          ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" }
+          : (() => { throw new BridgeError("frozen", "x"); })(),
+    );
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login" }));
+    const r = await h.handle({ type: "popup_state" });
+    expect(r).toEqual({ ok: true, value: { kind: "frozen", site: "github.com", matches: [ghMatch] } });
+    expect(c.seen.map((x) => x.type)).toEqual(["status", "find_matches"]);
+  });
+
+  it("a frozen fill is refused with the frozen message", async () => {
+    const c = fakeClient((r) =>
+      r.type === "find_matches"
+        ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" }
+        : (() => { throw new BridgeError("frozen", en.errors.bridge.frozen); })(),
+    );
+    const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login" }));
+    const r = await h.handle({ type: "popup_fill", itemId: ghMatch.id });
+    expect(r).toEqual({ ok: false, message: en.errors.bridge.frozen });
+  });
+
+  it("popup_open_pricing opens the pricing page", async () => {
+    const created: string[] = [];
+    (globalThis as { chrome?: unknown }).chrome = { tabs: { create: async (o: { url: string }) => { created.push(o.url); return {}; } } };
+    const h = createPopupHandler(fakeClient(() => unlocked), async () => undefined);
+    expect(await h.handle({ type: "popup_open_pricing" })).toEqual({ ok: true, value: null });
+    expect(created).toEqual(["https://havenkeys.net/pricing"]);
+    expect(parsePopupRequest({ type: "popup_open_pricing" })).toEqual({ type: "popup_open_pricing" });
+    expect(parsePopupRequest({ type: "popup_open_pricing", url: "https://evil.com" })).toBeNull();
   });
 });

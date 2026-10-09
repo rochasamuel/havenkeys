@@ -93,6 +93,7 @@ svg {
   color: var(--ok);
 }
 
+.pill.frozen,
 .pill.locked {
   background: var(--brass-soft);
   color: var(--brass-ink);
@@ -178,6 +179,11 @@ main {
   margin-top: 10px;
 }
 
+.notice.frozen {
+  border-left: 3px solid var(--brass-ink);
+}
+
+.notice.frozen .btn,
 .notice.locked .btn {
   margin-top: 12px;
 }

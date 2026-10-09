@@ -16,6 +16,8 @@ export interface CardAccess {
   fill(tabId: number, topUrl: string, itemId: string): Promise<number>;
 }
 
+const PRICING_URL = "https://havenkeys.net/pricing";
+
 type Client = Pick<NativeClient, "request">;
 
 /** The tab the popup was opened on (readable thanks to activeTab). */
@@ -54,6 +56,8 @@ function stateForError(e: unknown): PopupState {
       return { kind: "locked" };
     case "no_vault":
       return { kind: "no_vault" };
+    case "frozen":
+      return { kind: "frozen", site: null, matches: [] };
     case "integration_disabled":
       return { kind: "disabled" };
     default:
@@ -112,6 +116,12 @@ export function createPopupHandler(
       if (!status.vaultExists) return { kind: "no_vault" };
       if (status.state !== "unlocked") return { kind: "locked" };
       const url = pageUrlForRequest(await activeTabUrl());
+      if (status.entitlement === "frozen") {
+        // Read-only: the site's logins (metadata) for their codes; no identity lookup.
+        if (!url) return { kind: "frozen", site: null, matches: [] };
+        const found = await client.request({ type: "find_matches", url });
+        return { kind: "frozen", site: displayHost(url), matches: found.matches };
+      }
       if (!url) return { kind: "unlocked", site: null, matches: [], identity: null };
       // Both at once: the popup waits for the slower of the two, not their sum.
       const [found, identity] = await Promise.all([
@@ -214,6 +224,9 @@ export function createPopupHandler(
           return fail(e);
         }
       }
+      case "popup_open_pricing":
+        await chrome.tabs.create({ url: PRICING_URL });
+        return { ok: true, value: null };
       case "popup_show_unlock":
         // No tab, URL or item: the desktop only raises its window. The
         // master password is typed there, never in the browser.

@@ -68,6 +68,13 @@ export const en = {
       locked: "Locked",
       off: "Off",
       unlocked: "Unlocked",
+      frozen: "Read-only",
+    },
+    frozen: {
+      title: "Your trial has ended",
+      body: "The vault is read-only until you subscribe. You can still show a one-time code here, and open items in the HavenKeys app.",
+      subscribe: "Subscribe",
+      code: "Code",
     },
     hostUnavailable: {
       title: "Not connected",

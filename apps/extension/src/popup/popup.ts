@@ -189,19 +189,48 @@ function cardRow(c: CardRowView, origin: string): HTMLElement {
   );
 }
 
-function matchRow(m: Match): HTMLElement {
+/** The avatar (opens the login in the app) and the who line, shared by the live and the frozen row. */
+function rowBase(m: Match, status: HTMLElement): HTMLElement {
   const initial = (m.title.trim()[0] ?? "?").toUpperCase();
-  const status = h("div", { className: "row-status" });
   // The initial (or provider mark) opens this login in the desktop app.
   // Closes the popup on success, like a fill, since focus moves to the app.
   const open = openAvatar(initial, t.popup.open, m.provider);
   open.addEventListener("click", () => void fillFromPopup(open, { type: "popup_open_item", itemId: m.id }, status));
-  const row = h(
+  return h(
     "li",
     { className: "item" },
     open,
     h("div", { className: "who" }, truncates(h("div", { className: "title", text: m.title })), userLine(m)),
   );
+}
+
+/** The Code button for a login with TOTP: shows the code, which fills on click. */
+function codeSlot(m: Match, status: HTMLElement): HTMLElement {
+  const slot = h("span");
+  const show = smallButton(t.popup.code, t.popup.codeTitle);
+  show.addEventListener("click", async () => {
+    show.disabled = true;
+    const r = await send<TotpView>({ type: "popup_totp", itemId: m.id });
+    show.disabled = false;
+    if (!r.ok) {
+      status.replaceChildren(h("span", { className: "error", text: r.message }));
+      return;
+    }
+    const code = h("button", { className: "code", text: formatCode(r.value.code) });
+    code.type = "button";
+    code.title = t.popup.fillCodeTitle;
+    code.addEventListener("click", () => void fillFromPopup(code, { type: "popup_fill_totp", itemId: m.id }, status));
+    slot.replaceChildren(code);
+    // Remove the code when it stops being valid.
+    setTimeout(() => slot.replaceChildren(show), r.value.secondsRemaining * 1000);
+  });
+  slot.append(show);
+  return slot;
+}
+
+function matchRow(m: Match): HTMLElement {
+  const status = h("div", { className: "row-status" });
+  const row = rowBase(m, status);
   const actions = h("div", { className: "actions" });
 
   const fill = smallButton(m.provider ? t.popup.signIn : t.popup.fill, m.provider ? t.popup.signInTitle : t.popup.fillTitle);
@@ -209,30 +238,19 @@ function matchRow(m: Match): HTMLElement {
   actions.append(fill);
 
   if (m.hasTotp) {
-    const slot = h("span");
-    const show = smallButton(t.popup.code, t.popup.codeTitle);
-    show.addEventListener("click", async () => {
-      show.disabled = true;
-      const r = await send<TotpView>({ type: "popup_totp", itemId: m.id });
-      show.disabled = false;
-      if (!r.ok) {
-        status.replaceChildren(h("span", { className: "error", text: r.message }));
-        return;
-      }
-      const code = h("button", { className: "code", text: formatCode(r.value.code) });
-      code.type = "button";
-      code.title = t.popup.fillCodeTitle;
-      code.addEventListener("click", () => void fillFromPopup(code, { type: "popup_fill_totp", itemId: m.id }, status));
-      slot.replaceChildren(code);
-      // Remove the code when it stops being valid.
-      setTimeout(() => slot.replaceChildren(show), r.value.secondsRemaining * 1000);
-    });
-    slot.append(show);
-    actions.append(slot);
+    actions.append(codeSlot(m, status));
   }
   // The status line (a fill or code error) goes under the whole row, so a
   // long message gets the popup's full width instead of the text column's.
   row.append(actions, status);
+  return row;
+}
+
+/** A login while the account is read-only: Code for a login with TOTP, no Fill. */
+function frozenRow(m: Match): HTMLElement {
+  const status = h("div", { className: "row-status" });
+  const row = rowBase(m, status);
+  row.append(h("div", { className: "actions" }, ...(m.hasTotp ? [codeSlot(m, status)] : [])), status);
   return row;
 }
 
@@ -278,6 +296,20 @@ function render(state: PopupState): void {
       setPill(t.popup.pill.off);
       main.replaceChildren(notice(t.popup.disabled.title, t.popup.disabled.body));
       return;
+    case "frozen": {
+      setPill(t.popup.pill.frozen, "frozen");
+      const box = notice(t.popup.frozen.title, t.popup.frozen.body);
+      box.classList.add("frozen");
+      const subscribe = h("button", { className: "btn", text: t.popup.frozen.subscribe });
+      subscribe.type = "button";
+      subscribe.addEventListener("click", () => void send({ type: "popup_open_pricing" }));
+      box.append(subscribe);
+      const parts: Node[] = [box];
+      if (state.site) parts.push(truncates(h("div", { className: "site", text: state.site })));
+      if (state.matches.length > 0) parts.push(h("ul", { className: "list" }, ...state.matches.map(frozenRow)));
+      main.replaceChildren(...parts);
+      return;
+    }
     case "error":
       setPill(null);
       main.replaceChildren(notice(t.popup.error.title, state.message));

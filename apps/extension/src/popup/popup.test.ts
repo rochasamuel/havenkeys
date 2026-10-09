@@ -5,6 +5,7 @@
 // asked for, and no button can send a second request while one is in flight.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { en } from "../i18n/en";
 
 const asked: unknown[] = [];
 /** Replies by request type; a function reply can hold the request open. */
@@ -191,5 +192,24 @@ describe("popup tags", () => {
     await vi.waitFor(() => expect(document.querySelector(".item .who")).not.toBeNull());
     expect(document.querySelector(".user-name")!.textContent).toBe("No username");
     expect(document.querySelector(".tags")!.textContent).toBe("\u00b7 staging");
+  });
+});
+
+describe("popup frozen", () => {
+  it("shows the notice, Subscribe, and Code for a login with TOTP but no Fill", async () => {
+    replies = {
+      popup_state: async () => ({ ok: true, value: { kind: "frozen", site: "github.com", matches: [{ id: "11111111-1111-4111-8111-111111111111", title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] }] } }),
+      popup_open_pricing: async () => ({ ok: true, value: null }),
+    };
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelector(".notice.frozen")).not.toBeNull());
+    const texts = [...document.querySelectorAll("button")].map((b) => b.textContent);
+    expect(texts).toContain(en.popup.frozen.subscribe);
+    expect(texts).toContain(en.popup.frozen.code);
+    expect(texts).not.toContain(en.popup.fill);
+    expect(document.querySelector(".item.identity")).toBeNull();
+    [...document.querySelectorAll("button")].find((b) => b.textContent === en.popup.frozen.subscribe)!.click();
+    await vi.waitFor(() => expect(asked).toContainEqual({ type: "popup_open_pricing" }));
   });
 });

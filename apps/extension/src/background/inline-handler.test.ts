@@ -215,6 +215,14 @@ describe("message validation", () => {
 });
 
 describe("suggestion menus", () => {
+  it("no menu when the account is frozen", async () => {
+    const { h, requests } = setup((r) =>
+      r.type === "find_matches" ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" } : { type: "status", state: "unlocked", vaultExists: true, entitlement: "frozen" },
+    );
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
+    expect(requests.map((r) => r.type)).toEqual(["find_matches"]);
+  });
+
   it("opens with no secrets, then fills the frame the user clicked in", async () => {
     const { h, requests, sent } = setup();
     const r = await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });

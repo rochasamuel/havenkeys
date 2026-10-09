@@ -29,6 +29,8 @@ export type PopupRequest =
   | { type: "popup_open_item"; itemId: string }
   /** Bring the desktop app forward on its unlock screen (the password is typed there). */
   | { type: "popup_show_unlock" }
+  /** Open the pricing page in a new tab (a fixed URL, chosen by the background). */
+  | { type: "popup_open_pricing" }
   /**
    * Fill the page's first identity form. `documents`: null = not asked yet.
    * The answer carries the origin the question named; the background
@@ -44,6 +46,8 @@ export type PopupState =
   | { kind: "locked" }
   | { kind: "disabled" }
   | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null }
+  /** Trial over: logins are listed, codes still shown, nothing is filled. */
+  | { kind: "frozen"; site: string | null; matches: Match[] }
   | { kind: "error"; message: string };
 
 /** Reply to `popup_cards`: null = none to offer, else the cards and the origin they were listed for (the fill request must name it). */
@@ -82,6 +86,7 @@ export function parsePopupRequest(msg: unknown): PopupRequest | null {
     case "popup_cards":
     case "popup_lock":
     case "popup_show_unlock":
+    case "popup_open_pricing":
       return keys.length === 1 ? { type: o.type } : null;
     case "popup_totp":
     case "popup_fill":
