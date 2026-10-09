@@ -124,6 +124,15 @@ beyond an account on that server.
 > one transaction, keeping only anonymous session-token hashes for 30 days so
 > the user's other devices learn of the deletion and wipe their local copy.
 
+> Amended on 2026-10-09 by
+> `docs/superpowers/specs/2026-10-07-self-signup-and-plans-design.md`: the
+> hosted server accepts self-service signup (email verified with a code sent
+> over SMTP) and accounts have a plan with a 14-day trial. When an account is
+> frozen (trial over, or payment lapsed), the server refuses every write and
+> new device; the apps stay readable and can export, but autofill stops: the
+> extension's popup may only show or copy the current site's password and
+> TOTP, and signing in with an existing passkey keeps working.
+
 Do not introduce:
 
 * Cloud accounts

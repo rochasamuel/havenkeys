@@ -323,3 +323,36 @@ async fn a_device_of_a_deleted_account_signing_in_again_gets_410() {
     );
     server.cleanup().await;
 }
+
+/// A code waiting for an invited signup account is the one place the email
+/// would survive erasure; it must not.
+#[tokio::test]
+async fn erasing_an_account_takes_its_signup_code_and_billing_rows() {
+    let (server, mailer) = TestServer::start_signup().await;
+    support::signup(&server, &mailer, "gone@example.com").await;
+    // A second start for the same still-invited address leaves a code row.
+    support::start_signup_for(&server, "gone@example.com").await;
+    admin::run(
+        AdminCommand::DeleteAccount {
+            email: "gone@example.com".into(),
+        },
+        server.pool(),
+    )
+    .await
+    .unwrap();
+    let db = server.db().await;
+    for table in ["signup_codes", "subscriptions", "billing_events"] {
+        let n: i64 = db
+            .query_one(&format!("SELECT count(*) FROM {table}"), &[])
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(n, 0, "{table}");
+    }
+    drop(db);
+    assert_eq!(
+        traces_of(&server, &["gone@example.com".to_string()]).await,
+        Vec::<String>::new()
+    );
+    server.cleanup().await;
+}

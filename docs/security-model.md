@@ -2068,3 +2068,26 @@ carry no item content. Native messaging and the extension are not touched.
   on that login, and the check shows again if it later applies.
 * "Weak" is zxcvbn's estimate, not a guarantee; a passphrase it scores 3 can
   still be guessable by someone who knows the user.
+
+## 25. Self-service signup and plans
+
+- Email ownership is proved by a six-digit code sent over SMTP (15 minutes,
+  five attempts, stored keyed by the server secret). The signup invite is
+  then shown on the page and emailed. Anyone who controls the mailbox can
+  create the account; the invite email already relied on that.
+- The server answers `start` identically for new and existing addresses and
+  rate limits it per address and per email, so signup is not an account
+  enumeration oracle. A mail outage answers 503 for both.
+- When `HAVENKEYS_TRUST_FORWARDED_FOR=1`, the left-most `X-Forwarded-For`
+  entry is client-controlled (see deployment.md §2), so the per-address
+  signup limits are advisory there; the per-email limit (3 starts per hour)
+  and the per-code limit (5 attempts) still bind.
+- The entitlement is computed on every request from the plan row and the
+  clock. A frozen account cannot write, change its password, approve a
+  pairing or add a device. Everything that reads, exports, revokes or deletes
+  keeps working.
+- The freeze of reads and autofill inside the apps (spec §6.3) is enforced
+  by open-source clients; a modified build can remove it. The server
+  guarantees only the refusal of writes and of new devices.
+- The SMTP provider sees the recipient address, the code and the invite. It
+  is an operator under the LGPD and is named in the privacy policy.

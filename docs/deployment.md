@@ -34,9 +34,13 @@ docker build -t havenkeys-server .
 | `DATABASE_URL` | yes | `postgres://user:pass@host:5432/db`. TLS is used unless the URL says `sslmode=disable`, and the certificate must be signed by a public root — this client does not accept a self-signed one. Managed databases on a **private** network (Railway's among them) present exactly that, so those URLs need `?sslmode=disable`; the private network is the boundary doing the work there. |
 | `SERVER_SECRET` | yes | 32 random bytes, base64. Used only to derive the decoy account id and salt that keep `auth/params` from revealing whether an email has an account. |
 | `PORT` | no | Defaults to 8080. Railway sets it. |
-| `HAVENKEYS_CORS_ORIGIN` | no | Exactly one browser origin. Leave unset: nothing in the MVP calls this API from a browser, and there is no wildcard. |
+| `HAVENKEYS_CORS_ORIGIN` | no | Exactly one browser origin. Set it to the website's origin (`https://havenkeys.net` on the hosted server) when signup is open, because the signup page calls `/v1/signup/*` from the browser; otherwise leave it unset. There is no wildcard. |
 | `HAVENKEYS_TRUST_FORWARDED_FOR` | no | `1` only when a proxy you control sets `X-Forwarded-For`. Off by default, because a client could otherwise spread its login attempts over invented addresses and escape the per-IP rate limit. **Known weakness — read the note below before enabling it.** |
 | `HAVENKEYS_GEOIP_DATABASE` | no | Path to a MaxMind-format city database (`.mmdb`) on the server's disk. With it, the phone's "Sign in a new desktop?" confirmation shows a rough location ("City, CC") beside the IP; without it, only the IP. The lookup is local: no third party is ever called. DB-IP "IP to City Lite" (free, licensed CC BY 4.0, **which requires attribution** — credit "IP Geolocation by DB-IP" with a link to https://db-ip.com in your deployment) or MaxMind GeoLite2 City both work. An unreadable file is logged (without its path) and location is simply off. |
+| `HAVENKEYS_SIGNUP` | no | `open` lets anyone create an account at `POST /v1/signup/start` after verifying their email with a code; `off` (the default) answers both signup routes with 404 and leaves `admin new-account` as the only way in. `open` requires the three variables below. |
+| `HAVENKEYS_PUBLIC_URL` | with signup | The URL clients will talk to, carried in the invites signup issues, e.g. `https://api.havenkeys.net`. HTTPS, or `http://localhost` for development. |
+| `SMTP_URL` | with signup | `smtps://user:pass@host:465` (implicit TLS) or `smtp://user:pass@host:587?tls=required` (STARTTLS). Plain SMTP is refused: the code in the mail is a credential. Without signup it is optional and only sends the trial notices for `admin new-account --trial`. |
+| `SMTP_FROM` | with `SMTP_URL` | The sender, e.g. `HavenKeys <no-reply@havenkeys.net>`. |
 
 > **`X-Forwarded-For` is read left-to-right, which is the wrong end.** With
 > this on, the server takes the *first* entry of the header and uses it as the
@@ -256,6 +260,37 @@ It is now a cache. A server that loses data, or is made to serve a deletion,
 takes every device's copy with it — by construction, because the server is
 the authority and a deletion it serves is indistinguishable from a real one.
 The mitigation is backups and the user noticing, not cryptography.
+
+## 5a. Plans and signup
+
+Every account has a plan row (`subscriptions`). Accounts that existed before
+plans, and accounts from `admin new-account` without `--trial`, are
+`complimentary` with no end date. `admin new-account --trial` and
+self-service signup start a 14-day trial at activation.
+
+When an account is frozen (trial over, `past_due` past its grace, or set
+`frozen`), the server answers `402 account_frozen` on item writes, master
+password changes, pairing approvals and logins from a device the account
+never used. Read sync, logins from known devices, the header, the device
+list, revoke, logout and account deletion keep working: the data is never
+held hostage.
+
+```sh
+havenkeys-server admin set-plan --email you@example.com --status complimentary
+havenkeys-server admin set-plan --email you@example.com --status active --until 2027-01-31
+havenkeys-server admin set-plan --email you@example.com --status frozen
+```
+
+Every change lands in `billing_events` with who made it. A daily task
+deletes expired signup codes, signups not activated within 7 days, and stale
+signup rate-limit rows, and sends "your trial ends in 3 days" and "your
+trial has ended" once each (only with `SMTP_URL`).
+
+The signup code is six digits, valid 15 minutes, five attempts, stored as
+`HMAC-SHA-256(SERVER_SECRET, code)`; `start` is limited to 5 per address and
+3 per email per hour, and `verify` to 10 failures per address per hour.
+Whoever reads the mailbox can create the account: that is the same trust the
+invite email already places in it.
 
 ## 6. Operating notes
 

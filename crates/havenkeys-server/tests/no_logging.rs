@@ -44,7 +44,15 @@ async fn no_secret_reaches_a_log_line() {
     )
     .expect("this test owns the subscriber");
 
-    let server = support::TestServer::start().await;
+    let (server, mailer) = support::TestServer::start_signup().await;
+    let signup_email = "signup-marker@example.com";
+    let (status, _) = support::start_signup_for(&server, signup_email).await;
+    assert_eq!(status, 202);
+    let code = support::code_in(mailer.sent().last().unwrap()).unwrap();
+    let (status, body) = support::verify_signup(&server, signup_email, &code).await;
+    assert_eq!(status, 200);
+    let signup_invite = body["invite"].as_str().unwrap().to_string();
+
     let email = "user@example.com";
     let invite = support::new_invite(&server, email).await;
     let vault_id = uuid::Uuid::new_v4();
@@ -131,6 +139,9 @@ async fn no_secret_reaches_a_log_line() {
         ),
         ("the header bytes", "HEADER-MARKER".to_string()),
         ("the email address", email.to_string()),
+        ("the signup email", signup_email.to_string()),
+        ("the signup code", code.clone()),
+        ("the signup invite", signup_invite.clone()),
     ];
     for (what, value) in forbidden {
         assert!(

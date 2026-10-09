@@ -5,6 +5,11 @@
 //! for by email leaves exactly what one made in the app leaves: nothing but
 //! anonymous session-token and device-id hashes that expire in
 //! [`TOMBSTONE_DAYS`].
+//!
+//! One thing is not erased by address: the signup email counter
+//! (`login_attempts` rows named `signup-email:…`) is keyed by an HMAC of the email, so
+//! it cannot be matched back to an account; the daily sweep removes it
+//! within two hours.
 
 use deadpool_postgres::{GenericClient, Object, Transaction};
 use sha2::{Digest, Sha256};
@@ -53,6 +58,14 @@ pub async fn erase_account(
     tx.execute(
         "DELETE FROM pairings WHERE account_id = $1 OR device_id = ANY($2)",
         &[&account_id, &devices],
+    )
+    .await?;
+    // A signup code waiting for this address (the cascade cannot reach it:
+    // codes are keyed by email, not account).
+    tx.execute(
+        "DELETE FROM signup_codes
+          WHERE email_normalized = (SELECT email_normalized FROM accounts WHERE id = $1)",
+        &[&account_id],
     )
     .await?;
     // The cascade takes vaults, items, devices, sessions and linked pairings.

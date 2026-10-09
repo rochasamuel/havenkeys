@@ -345,7 +345,9 @@ The email is a typo guard; it must equal the account's (`400` otherwise).
    expiring in 30 days (no account id, email or device id is stored there);
 2. delete the account's `acct:<uuid>` rate-limit row;
 3. delete pairings linked to the account or to one of its device ids;
-4. delete the account; the cascade removes the vault, items, devices and
+4. delete a signup code waiting for the account's address (codes are keyed
+   by email, so the cascade cannot reach them);
+5. delete the account; the cascade removes the vault, items, devices and
    sessions.
 
 A request whose token is not a live session but is in `deleted_sessions`
@@ -363,6 +365,27 @@ tombstoned, `login` answers `410 account_deleted` too. Only a device that
 stays away for more than 30 days sees the ordinary signed-out state. The
 client treats a `410` as a deletion only when the body's code is
 `account_deleted`, so a proxy's `410` never erases a device.
+
+### Plans
+
+`POST /v1/auth/login` and `GET /v1/sync` carry
+`"account": { "status", "entitlement", "trialEndsAt", "periodEnd" }`
+(`status` one of `trialing`, `active`, `past_due`, `frozen`,
+`complimentary`; `entitlement` `full` or `frozen`). A frozen account gets
+`402 { "error": { "code": "account_frozen" } }` on `POST /v1/items`,
+`POST /v1/account/credentials`, `POST /v1/pairings/{id}/approve` and a
+`POST /v1/auth/login` from a device the account never used. Clients keep
+the last `account` object they saw and decide locally what to disable;
+the server guarantees only the refusals above
+(spec `2026-10-07-self-signup-and-plans-design.md` §5.4, §6.4).
+
+### Signup (`HAVENKEYS_SIGNUP=open` only)
+
+`POST /v1/signup/start { email, locale, acceptedTerms }` → `202 {}` always
+(a code is mailed, or a notice that the account exists; the answer does not
+say which). `POST /v1/signup/verify { email, code }` → `200 { invite }`,
+the same `HKINV1-…` string `admin new-account` prints, valid 24 h, also
+mailed. Activation is unchanged.
 
 ## 8. For a future mobile app
 
