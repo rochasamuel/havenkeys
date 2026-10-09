@@ -412,8 +412,8 @@ function parseResult(v: unknown): Result | null {
   if (!isObj(v)) return null;
   switch (v.type) {
     case "status":
-      // `entitlement` is absent from desktops older than the release that
-      // added it; it reads as "full" (Rust enforces the gate, this is UI).
+      // `entitlement` is sent only when frozen (and never by older
+      // desktops); absent reads as "full" (Rust enforces the gate, this is UI).
       if (!hasExactKeys(v, ["type", "state", "vaultExists", "entitlement"]) && !hasExactKeys(v, ["type", "state", "vaultExists"])) return null;
       if (!LOCK_STATES.includes(v.state as LockState) || !isBool(v.vaultExists)) return null;
       if (v.entitlement !== undefined && !ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
@@ -426,7 +426,7 @@ function parseResult(v: unknown): Result | null {
     case "lock":
       return hasExactKeys(v, ["type"]) ? { type: "lock" } : null;
     case "find_matches": {
-      // `entitlement` is absent from older desktops and reads as "full".
+      // `entitlement` is sent only when frozen; absent reads as "full".
       if (!hasExactKeys(v, ["type", "matches", "entitlement"]) && !hasExactKeys(v, ["type", "matches"])) return null;
       if (!Array.isArray(v.matches) || v.matches.length > MAX_MATCHES) return null;
       if (v.entitlement !== undefined && !ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;

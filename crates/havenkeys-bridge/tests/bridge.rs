@@ -288,7 +288,8 @@ fn legitimate_flow_works() {
     let status = call(&f, serde_json::json!({"type": "status"}));
     assert_eq!(status["result"]["state"], "unlocked");
     assert_eq!(status["result"]["vaultExists"], true);
-    assert_eq!(status["result"]["entitlement"], "full");
+    // Full is the default and is not sent, so an older extension still parses it.
+    assert!(status["result"].get("entitlement").is_none(), "{status}");
 
     let m = find(&f, "https://github.com/login");
     let matches = m["result"]["matches"].as_array().unwrap();
@@ -2178,6 +2179,19 @@ fn a_frozen_account_refuses_autofill_and_keeps_reading() {
         serde_json::json!({"type": "open_item", "itemId": f.github, "url": "https://evil.com/"}),
     );
     assert_eq!(error_code(&wrong), Some("denied"));
+}
+
+/// Frozen: the TOTP code is still answered, but never with auto-submit, so
+/// nothing presses a sign-in button for a read-only account.
+#[test]
+fn a_frozen_totp_never_auto_submits() {
+    let f = fixture();
+    let url = "https://github.com/login";
+    assert_eq!(totp(&f, f.github, url)["result"]["autoSubmit"], true);
+    freeze(&f);
+    let r = totp(&f, f.github, url);
+    assert!(r["result"]["code"].is_string(), "{r}");
+    assert_eq!(r["result"]["autoSubmit"], false);
 }
 
 /// Locked beats frozen: a locked vault answers `locked` whatever the plan.

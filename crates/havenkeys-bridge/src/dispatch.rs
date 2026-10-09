@@ -225,7 +225,8 @@ pub fn dispatch(
             let totp = v
                 .totp_for_page(item_id, url, top_url.as_deref(), unix_seconds)
                 .map_err(item_code)?;
-            let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
+            // Frozen: the code is still read, but nothing is submitted.
+            let auto_submit = !frozen && v.auto_sign_in_for(item_id).map_err(item_code)?;
             Ok(Dispatched::Done(ResultBody::GetTotp {
                 code: wire_secret(&totp.code),
                 period: totp.period,

@@ -869,6 +869,62 @@ fn too_many_or_too_long_match_tags_rejected() {
     assert!(Outgoing::parse(&one_match(vec!["x".repeat(4 * 32 + 1)])).is_none());
 }
 
+/// A Full account's replies carry no `entitlement` key (an older extension
+/// keeps parsing them); a frozen one's carry `"frozen"`. A reply without the
+/// key parses as Full.
+#[test]
+fn entitlement_key_is_sent_only_when_frozen() {
+    let status = |entitlement| {
+        Outgoing::from(Response::ok(
+            1,
+            ResultBody::Status {
+                state: LockState::Unlocked,
+                vault_exists: true,
+                entitlement,
+            },
+        ))
+        .to_bytes()
+        .unwrap()
+    };
+    let full = status(Entitlement::Full);
+    assert_eq!(
+        &*full,
+        br#"{"v":1,"id":1,"result":{"type":"status","state":"unlocked","vaultExists":true}}"#
+    );
+    let frozen = status(Entitlement::Frozen);
+    assert_eq!(
+        &*frozen,
+        br#"{"v":1,"id":1,"result":{"type":"status","state":"unlocked","vaultExists":true,"entitlement":"frozen"}}"#
+    );
+    assert!(Outgoing::parse(&full).is_some());
+    assert!(Outgoing::parse(&frozen).is_some());
+
+    let matches = |entitlement| {
+        Outgoing::from(Response::ok(
+            1,
+            ResultBody::FindMatches {
+                matches: vec![],
+                entitlement,
+            },
+        ))
+        .to_bytes()
+        .unwrap()
+    };
+    let full = matches(Entitlement::Full);
+    assert!(!std::str::from_utf8(&full).unwrap().contains("entitlement"));
+    let frozen = matches(Entitlement::Frozen);
+    assert!(std::str::from_utf8(&frozen)
+        .unwrap()
+        .contains(r#""entitlement":"frozen""#));
+
+    let absent: ResultBody =
+        serde_json::from_str(r#"{"type":"find_matches","matches":[]}"#).unwrap();
+    let ResultBody::FindMatches { entitlement, .. } = absent else {
+        panic!("find_matches");
+    };
+    assert_eq!(entitlement, Entitlement::Full);
+}
+
 #[test]
 fn a_match_without_tags_is_rejected() {
     let raw = r#"{"v":1,"id":1,"result":{"type":"find_matches","matches":[{"id":"00000000-0000-0000-0000-000000000000","title":"t","username":null,"hasTotp":false,"strength":"same_host","provider":null}]}}"#;

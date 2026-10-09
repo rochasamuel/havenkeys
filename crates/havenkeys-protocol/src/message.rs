@@ -872,11 +872,16 @@ pub enum ResultBody {
     Status {
         state: LockState,
         vault_exists: bool,
+        /// Sent only when frozen, so an older extension keeps parsing a
+        /// Full account's replies exactly as before.
+        #[serde(default, skip_serializing_if = "Entitlement::is_full")]
         entitlement: Entitlement,
     },
     Lock {},
     FindMatches {
         matches: Vec<Match>,
+        /// Sent only when frozen (see `Status`).
+        #[serde(default, skip_serializing_if = "Entitlement::is_full")]
         entitlement: Entitlement,
     },
     FillItem {
@@ -1126,11 +1131,19 @@ pub enum UpgradeHint {
 
 /// Whether the account may use autofill: `Frozen` (trial ended) keeps
 /// reading but refuses every fill, save and passkey creation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Entitlement {
+    #[default]
     Full,
     Frozen,
+}
+
+impl Entitlement {
+    /// `true` for `Full`: the wire then omits the key.
+    pub fn is_full(&self) -> bool {
+        matches!(self, Entitlement::Full)
+    }
 }
 
 // ------------------------------------------------------------------ errors

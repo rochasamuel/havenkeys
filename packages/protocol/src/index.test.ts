@@ -297,7 +297,7 @@ describe("card results", () => {
 
 describe("entitlement", () => {
   const parse = (result: unknown) => parseIncoming({ v: 1, id: 1, result });
-  it("reads a missing entitlement from an older desktop as full", () => {
+  it("reads a missing entitlement (a Full account, or an older desktop) as full", () => {
     expect(parse({ type: "status", state: "unlocked", vaultExists: true })).toMatchObject({
       result: { type: "status", entitlement: "full" },
     });
