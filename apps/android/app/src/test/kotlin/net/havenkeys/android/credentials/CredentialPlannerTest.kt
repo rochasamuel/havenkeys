@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.fakes.FakeCredentialRepository
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.havenkeys_mobile.AutofillMatch
@@ -69,5 +70,14 @@ class CredentialPlannerTest {
         }
         val offers = CredentialPlanner.plan(listOf(Asked.Password(0), Asked.Passkey(1, "{}")), caller, true, repo)
         assertEquals(listOf(CredentialOffer.Unlock), offers)
+    }
+
+    @Test
+    fun aPasskeyCreateIsOfferedOnlyWhenNotFrozen() = runTest {
+        val repo = FakeCredentialRepository()
+        assertTrue(CredentialPlanner.offersCreate(passkey = true, repo))
+        assertFalse(CredentialPlanner.offersCreate(passkey = false, repo))
+        repo.frozen = true
+        assertFalse(CredentialPlanner.offersCreate(passkey = true, repo))
     }
 }

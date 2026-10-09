@@ -13,16 +13,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.components.PRICING_URL
+import net.havenkeys.android.ui.components.openLink
 import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowText
 import net.havenkeys.android.ui.kit.HavenIcon
 import net.havenkeys.android.ui.kit.InsetGroup
+import net.havenkeys.android.ui.kit.Pill
 import net.havenkeys.android.ui.kit.PullToRefresh
 import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.shell.EmptyLine
@@ -78,6 +82,7 @@ fun HomeScreen(
             ),
         ) {
             state.errorCode?.let { code -> item(key = "error") { ErrorLine(code, Gutter) } }
+            if (state.frozen) item(key = "frozen") { FrozenNotice(Gutter.padding(bottom = 12.dp)) }
             if (!state.loading) {
                 state.identity?.let { card ->
                     item(key = "identity") { Settle(0, active = rows.settle) { IdentityCardRow(card, onOpen) } }
@@ -143,6 +148,25 @@ private fun IdentityCardRow(card: IdentityCard, onOpen: OpenItem) {
         row {
             GroupRow(onClick = { onOpen(card.id, Origins.IDENTITY) }, icon = HavenIcon.IdCard) {
                 GroupRowText(card.title, summary)
+            }
+        }
+    }
+}
+
+/** The account is read-only until the user subscribes; the row opens the pricing page. */
+@Composable
+private fun FrozenNotice(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val subscribe = stringResource(R.string.settings_subscribe)
+    InsetGroup(modifier) {
+        row {
+            GroupRow(
+                onClick = { openLink(context, PRICING_URL) },
+                onClickLabel = subscribe,
+                icon = HavenIcon.Lock,
+                trailing = { Pill(subscribe) },
+            ) {
+                GroupRowText(stringResource(R.string.home_frozen))
             }
         }
     }

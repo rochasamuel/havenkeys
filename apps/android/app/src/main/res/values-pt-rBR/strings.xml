@@ -371,6 +371,7 @@
     <string name="home_recent">Adicionados recentemente</string>
     <string name="home_frequent">Usados com frequência</string>
     <string name="home_frequent_empty">Os itens que você preencher ou copiar aparecem aqui.</string>
+    <string name="home_frozen">Seu período de teste terminou. O cofre fica somente leitura.</string>
     <string name="home_identity_empty">Adicione seus dados</string>
     <string name="items_empty">Nada aqui ainda</string>
     <string name="items_tags">Tags</string>
@@ -386,6 +387,8 @@
         <item quantity="other">Teste: %d dias restantes</item>
     </plurals>
     <string name="settings_plan_frozen">Teste encerrado. Somente leitura.</string>
+    <string name="settings_plan_active">Ativo</string>
+    <string name="settings_plan_past_due">Pagamento pendente</string>
     <string name="settings_subscribe">Assinar</string>
 
     <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
@@ -425,6 +428,7 @@
     <string name="onboarding_account_deleted">Esta conta foi excluída. Os dados dela não estão mais no servidor nem neste celular.</string>
     <string name="error_account_deleted">Esta conta foi excluída.</string>
     <string name="error_account_frozen">Esta conta está congelada: o teste terminou ou o pagamento venceu. O cofre está somente leitura.</string>
+    <string name="error_account_frozen_new_device">Esta conta está somente leitura (o teste terminou ou o pagamento venceu) e não pode adicionar um novo dispositivo. Entre por um dispositivo que já a tenha ou assine.</string>
     <string name="health_title">Saúde do cofre</string>
     <string name="health_intro">Verificado neste celular, com o cofre aberto. Nada é enviado.</string>
     <string name="health_loading">Verificando seus logins…</string>

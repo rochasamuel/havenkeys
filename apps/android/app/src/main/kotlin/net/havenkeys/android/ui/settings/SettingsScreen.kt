@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.components.PRICING_URL
 import net.havenkeys.android.ui.components.errorText
 import net.havenkeys.android.ui.components.openLink
 import net.havenkeys.android.ui.kit.GroupRow
@@ -251,14 +252,22 @@ private fun AccountGroup(state: SettingsUiState, online: Boolean, navigation: Se
 /** The plan row (and, when frozen, the way to subscribe); Rust decides, this only displays. */
 private fun InsetGroupScope.planRows(state: SettingsUiState) {
     val planStatus = state.planStatus
-    if (state.frozen || planStatus != null) {
+    val daysLeft = state.trialEndsAt?.let { trialDaysLeft(it) }
+    val plain = when {
+        state.frozen -> R.string.settings_plan_frozen
+        planStatus == "active" -> R.string.settings_plan_active
+        planStatus == "past_due" -> R.string.settings_plan_past_due
+        else -> null
+    }
+    val trialDays = daysLeft.takeIf { !state.frozen && planStatus == "trialing" }
+    // Complimentary, or a status this app does not know: no row.
+    if (plain != null || trialDays != null) {
         row {
-            val daysLeft = state.trialEndsAt?.let { trialDaysLeft(it) }
-            val detail = when {
-                state.frozen -> stringResource(R.string.settings_plan_frozen)
-                planStatus == "trialing" && daysLeft != null ->
-                    pluralStringResource(R.plurals.settings_plan_trial, daysLeft, daysLeft)
-                else -> planStatus.orEmpty()
+            val detail = if (plain != null) {
+                stringResource(plain)
+            } else {
+                val days = trialDays ?: 0
+                pluralStringResource(R.plurals.settings_plan_trial, days, days)
             }
             GroupRow { GroupRowText(stringResource(R.string.settings_plan), detail) }
         }
@@ -272,5 +281,3 @@ private fun InsetGroupScope.planRows(state: SettingsUiState) {
         }
     }
 }
-
-private const val PRICING_URL = "https://havenkeys.net/pricing"

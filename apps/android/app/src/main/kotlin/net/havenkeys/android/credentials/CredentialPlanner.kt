@@ -37,6 +37,13 @@ object CredentialPlanner {
         else -> list(asked, caller, repo)
     }
 
+    /**
+     * Whether "Save a passkey to HavenKeys" is listed: never while the
+     * account is frozen (it could not be saved; Rust refuses the plan too).
+     * Readable while locked.
+     */
+    suspend fun offersCreate(passkey: Boolean, repo: CredentialRepository): Boolean = passkey && !repo.frozen()
+
     private suspend fun list(
         asked: List<Asked>,
         caller: CredentialCaller,

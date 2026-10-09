@@ -31,6 +31,8 @@ data class HomeUiState(
     val loading: Boolean = true,
     /** Vault health's issue count for the Home card; null until known or when the check failed. */
     val healthTotal: Int? = null,
+    /** The account is read-only (trial ended or payment lapsed): Rust decides, Home only shows the notice. */
+    val frozen: Boolean = false,
 )
 
 class HomeViewModel(
@@ -52,6 +54,7 @@ class HomeViewModel(
                 when (event) {
                     is VaultEvent.Locked, VaultEvent.Removed, VaultEvent.SignedOut -> wipe()
                     VaultEvent.ItemsChanged -> load()
+                    VaultEvent.PlanChanged -> loadPlan()
                     else -> Unit
                 }
             }
@@ -87,9 +90,18 @@ class HomeViewModel(
                     loading = false,
                 )
             }
+            loadPlan()
             // After the lists: the check is slow on a large vault, and Home should not wait for it.
             val health = (vault.health() as? Outcome.Ok)?.value?.counts?.total()
             _state.update { it.copy(healthTotal = health) }
+        }
+    }
+
+    /** Whether the frozen notice shows; a failed read keeps what Home last knew. */
+    private fun loadPlan() {
+        viewModelScope.launch {
+            val status = (vault.status() as? Outcome.Ok)?.value ?: return@launch
+            _state.update { it.copy(frozen = status.entitlement == "frozen") }
         }
     }
 

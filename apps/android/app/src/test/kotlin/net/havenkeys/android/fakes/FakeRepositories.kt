@@ -502,7 +502,10 @@ class FakeCredentialRepository : CredentialRepository {
     var created: Outcome<String> = Outcome.Failed("denied")
     var signedIn: Outcome<String> = Outcome.Failed("denied")
     var passwordValues: Outcome<FillValues> = Outcome.Failed("denied")
+    var frozen = false
     val calls = mutableListOf<String>()
+
+    override suspend fun frozen() = frozen
 
     override suspend fun passkeyOffers(caller: CredentialCaller, requestJson: String): Outcome<List<PasskeyOffer>> {
         calls += "passkeyOffers"

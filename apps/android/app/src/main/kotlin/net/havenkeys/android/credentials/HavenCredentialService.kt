@@ -62,23 +62,33 @@ class HavenCredentialService : CredentialProviderService() {
         cancellationSignal.setOnCancelListener { work.cancel() }
     }
 
-    /** One entry: the activity it opens unlocks if needed and asks Rust. */
+    /**
+     * One entry: the activity it opens unlocks if needed and asks Rust.
+     * None while the account is frozen.
+     */
     override fun onBeginCreateCredentialRequest(
         request: BeginCreateCredentialRequest,
         cancellationSignal: CancellationSignal,
         callback: OutcomeReceiver<BeginCreateCredentialResponse, CreateCredentialException>,
     ) {
-        val entries = try {
-            createEntries(request)
-        } catch (@Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception) {
-            // The message is never kept: it could quote anything.
-            return callback.onError(CreateCredentialUnknownException())
+        val work = scope.launch {
+            val entries = try {
+                createEntries(request)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (@Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception) {
+                // The message is never kept: it could quote anything.
+                callback.onError(CreateCredentialUnknownException())
+                return@launch
+            }
+            callback.onResult(BeginCreateCredentialResponse(createEntries = entries))
         }
-        callback.onResult(BeginCreateCredentialResponse(createEntries = entries))
+        cancellationSignal.setOnCancelListener { work.cancel() }
     }
 
-    private fun createEntries(request: BeginCreateCredentialRequest): List<CreateEntry> =
-        if (request is BeginCreatePublicKeyCredentialRequest) {
+    private suspend fun createEntries(request: BeginCreateCredentialRequest): List<CreateEntry> {
+        val passkey = request is BeginCreatePublicKeyCredentialRequest
+        return if (CredentialPlanner.offersCreate(passkey, container.credentialRepository)) {
             listOf(
                 CreateEntry(
                     accountName = getString(R.string.app_name),
@@ -89,6 +99,7 @@ class HavenCredentialService : CredentialProviderService() {
         } else {
             emptyList()
         }
+    }
 
     override fun onClearCredentialStateRequest(
         request: ProviderClearCredentialStateRequest,

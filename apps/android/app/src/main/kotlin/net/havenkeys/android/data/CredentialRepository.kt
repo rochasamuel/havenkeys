@@ -21,6 +21,9 @@ interface CredentialRepository {
     suspend fun passkeyCreate(caller: CredentialCaller, requestJson: String, itemId: String?): Outcome<String>
     suspend fun passwordOffers(caller: CredentialCaller): Outcome<List<AutofillMatch>>
     suspend fun password(caller: CredentialCaller, itemId: String): Outcome<FillValues>
+
+    /** Trial ended: no passkey can be saved. A failed read is not frozen; Rust refuses anyway. */
+    suspend fun frozen(): Boolean
 }
 
 class RustCredentialRepository(private val vault: MobileVault) : CredentialRepository {
@@ -40,4 +43,5 @@ class RustCredentialRepository(private val vault: MobileVault) : CredentialRepos
     override suspend fun passwordOffers(caller: CredentialCaller) = rust { vault.credentialPasswordOffers(caller) }
     override suspend fun password(caller: CredentialCaller, itemId: String) =
         rust { vault.credentialPassword(caller, itemId) }
+    override suspend fun frozen() = (rust { vault.frozen() } as? Outcome.Ok)?.value ?: false
 }

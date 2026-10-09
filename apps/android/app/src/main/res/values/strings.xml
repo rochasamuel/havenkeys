@@ -380,6 +380,7 @@
     <string name="home_recent">Recently added</string>
     <string name="home_frequent">Frequently used</string>
     <string name="home_frequent_empty">Items you fill or copy will show here.</string>
+    <string name="home_frozen">Your trial has ended. The vault is read-only.</string>
     <string name="home_identity_empty">Add your details</string>
     <string name="items_empty">Nothing here yet</string>
     <string name="items_tags">Tags</string>
@@ -394,6 +395,8 @@
         <item quantity="other">Trial: %d days left</item>
     </plurals>
     <string name="settings_plan_frozen">Trial ended. Read-only.</string>
+    <string name="settings_plan_active">Active</string>
+    <string name="settings_plan_past_due">Payment pending</string>
     <string name="settings_subscribe">Subscribe</string>
 
     <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
@@ -433,6 +436,7 @@
     <string name="onboarding_account_deleted">This account was deleted. Its data is gone from the server and this phone.</string>
     <string name="error_account_deleted">This account was deleted.</string>
     <string name="error_account_frozen">This account is frozen: the trial ended or payment lapsed. The vault is read-only.</string>
+    <string name="error_account_frozen_new_device">This account is read-only (the trial ended or payment lapsed) and cannot add a new device. Sign in from a device that already has it, or subscribe.</string>
     <string name="health_title">Vault health</string>
     <string name="health_intro">Checked on this phone with the vault unlocked. Nothing is sent anywhere.</string>
     <string name="health_loading">Checking your logins…</string>

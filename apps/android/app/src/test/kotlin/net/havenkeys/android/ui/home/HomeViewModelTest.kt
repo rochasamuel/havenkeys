@@ -10,6 +10,7 @@ import net.havenkeys.android.data.Outcome
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.fakes.FakeAccountRepository
 import net.havenkeys.android.fakes.FakeVaultRepository
+import net.havenkeys.android.fakes.status
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,6 +46,19 @@ class HomeViewModelTest {
     }
 
     private fun vm() = HomeViewModel(vault, accounts, events)
+
+    @Test
+    fun aFrozenAccountShowsTheNoticeAndAPlanChangeUpdatesIt() {
+        val vm = vm()
+        vm.shown()
+        assertFalse(vm.state.value.frozen)
+        vault.nextStatus = Outcome.Ok(status(entitlement = "frozen"))
+        events.planChanged()
+        assertTrue(vm.state.value.frozen)
+        vault.nextStatus = Outcome.Ok(status(planStatus = "active"))
+        events.planChanged()
+        assertFalse(vm.state.value.frozen)
+    }
 
     @Test
     fun nothingLoadsBeforeHomeShows() {
