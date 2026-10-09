@@ -2099,16 +2099,26 @@ carry no item content. Native messaging and the extension are not touched.
   `restore_backup` and `push_restore`, and Android's passkey creation,
   before any request.
   - Stops: in the desktop, the editors, import and change of master
-    password (a banner offers Subscribe); in the extension, the inline menu,
+    password (a banner offers Subscribe; the change-password form is
+    disabled with a note); in the extension, the inline menu's logins,
     Fill, automatic sign-in and "Sign in with", save prompts, passkey
     creation, card and identity fill (the bridge answers `frozen`; see
-    `native-messaging.md`); on Android, autofill datasets, the save prompt
-    and passkey creation.
+    `native-messaging.md`); on Android, autofill datasets, the save prompt,
+    passkey creation and Credential Manager passwords. On Android the mobile
+    crate refuses each of these in Rust (`refuse_when_frozen`; list calls
+    answer empty), not only in Kotlin (`android.md`).
+  - A new device: the server refuses to add one to a frozen account after
+    it has checked the password, and the client says so
+    (`account_frozen_new_device`) instead of "incorrect password". A wrong
+    password is still the one sign-in message.
   - Stays: unlocking, search, reveal and copy in the desktop and Android,
-    TOTP, passkey sign-in, export, delete account, Open in desktop from the
-    popup, and the password generator.
+    TOTP, passkey sign-in (including the extension's passkey autofill rows
+    in the menu, the only rows it shows while frozen), export, delete
+    account, Open in desktop from the popup, and the password generator.
   - Two rulings. The popup never reveals a password when frozen: it offers
     the site's TOTP codes and Open in desktop, so no new secret path exists.
+    A code is copied to the clipboard on click, never filled into the page,
+    and Rust answers a frozen `get_totp` with `autoSubmit: false`.
     `find_matches` is still answered when frozen (id, title, username, TOTP
     flag; origin bound) because the popup needs the list; the menu honours
     its `entitlement` flag and the bridge refuses everything that would fill

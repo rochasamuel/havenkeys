@@ -3550,7 +3550,10 @@ model: `security-model.md` §25. Internal review, not an independent audit.
 | FZ1 | Low | Desktop, extension, Android | The freeze of reads and autofill is enforced by open-source clients | Accepted |
 | FZ2 | Info | Bridge `find_matches` | Metadata is listed while frozen | By design |
 | FZ3 | Info | Subscribe, Create account | They open fixed URLs only | By design |
-| FZ4 | Low | Extension protocol parser | A missing `entitlement` reads as `full` | Accepted |
+| FZ4 | Low | Protocol, extension parser | `entitlement` is sent only when frozen; a missing one reads as `full` | Accepted |
+| FZ5 | Info | Extension popup, bridge `get_totp` | A frozen popup copies the TOTP code instead of filling it | Fixed |
+| FZ6 | Info | Extension inline menu | Passkey autofill still opens the menu while frozen | By design |
+| FZ7 | Medium | Android Credential Manager, mobile autofill | Passwords were handed to Credential Manager while frozen; the gate was only in Kotlin | Fixed |
 
 ### FZ1. Client-side enforcement (Low, accepted)
 **Component:** `havenkeys-bridge` (`refused_when_frozen`), `havenkeys-client`
@@ -3579,14 +3582,59 @@ chosen URL.
 **Mitigation:** the commands take no URL; the URLs are constants.
 **Remaining limitations:** none.
 
-### FZ4. Tolerant parse of `entitlement` (Low, accepted)
-**Component:** `packages/protocol/src/index.ts` (`status`, `find_matches`).
-**Attack scenario:** an older desktop sends no `entitlement`, so the
-extension reads `full` and opens the menu.
+### FZ4. `entitlement` sent only when frozen (Low, accepted)
+**Component:** `crates/havenkeys-protocol/src/message.rs`
+(`skip_serializing_if = "Entitlement::is_full"` on `Status` and
+`FindMatches`), `packages/protocol/src/index.ts`.
+**Attack scenario:** a reply without `entitlement` (a Full account, or an
+older desktop) is read as `full`, so the extension opens the menu.
 **Mitigation:** the gate is in Rust: an older desktop has no freeze to
-enforce, and a current desktop always sends the field and answers `frozen`
-to fills and saves.
-**Remaining limitations:** ship the extension before or with the desktop;
-an old extension against a new desktop must update (its parser rejects the
-new field).
+enforce, and a current desktop sends `"frozen"` whenever the account is
+frozen and answers `frozen` to fills and saves itself. A Full account's
+replies are byte-for-byte what they were before the field, so an extension
+older than this release keeps working against a new desktop; against a
+frozen account its parser rejects the unknown field and it shows no menu
+(fails closed).
+**Remaining limitations:** the native host ships as the desktop's sidecar
+(`externalBin` in `apps/desktop/src-tauri/tauri.bundle.conf.json`), not in
+`pnpm package:extension`; a development machine registered with
+`scripts/install-native-host.sh` must rebuild it.
+
+### FZ5. Frozen popup TOTP (Info, fixed)
+**Component:** `apps/extension/src/popup/popup.ts` (`frozenCodeSlot`),
+`apps/extension/src/background/popup-handler.ts`,
+`crates/havenkeys-bridge/src/dispatch.rs` (`GetTotp`).
+**Attack scenario:** the read-only popup's code button sent
+`popup_fill_totp`, which filled the page and, with automatic sign-in on,
+pressed the sign-in button: a fill while frozen.
+**Mitigation:** while frozen, `get_totp` answers with `autoSubmit: false`;
+the popup's code button copies the code to the clipboard and sends no fill
+request; the background refuses `popup_fill` and `popup_fill_totp` with the
+frozen message when `find_matches` or a fresh `status` says frozen.
+**Remaining limitations:** the copied code stays on the clipboard until
+something replaces it (the popup closes, so it cannot clear it); a TOTP code
+expires within its period.
+
+### FZ6. Passkey autofill while frozen (Info, by design)
+**Component:** `apps/extension/src/background/inline-handler.ts`
+(`openMenu`).
+**Attack scenario:** none new: passkey sign-in is a read the spec keeps
+while frozen.
+**Mitigation:** when `find_matches` says frozen, the menu opens only for a
+site's waiting conditional `get()` in that frame, with only its passkey
+rows, never saved passwords, never from the icon or an OTP field; Rust
+answers `passkey_get` origin bound, as when full.
+**Remaining limitations:** none.
+
+### FZ7. Android fills gated only in Kotlin (Medium, fixed)
+**Component:** `crates/havenkeys-mobile/src/{credentials,autofill,cards,identity_fill}.rs`,
+`HavenCredentialService.kt`.
+**Attack scenario:** Credential Manager password requests were answered
+while frozen (`credential_password_offers`, `credential_password`), and the
+autofill calls relied on the app's `frozen()` check alone.
+**Mitigation:** Rust gates each call (`refuse_when_frozen`, `is_frozen`):
+list calls answer empty, value and bind calls refuse with `account_frozen`,
+`passkey_create_plan` refuses first, and the credential service offers no
+passkey save entry. TOTP and passkey sign-in stay. See `android.md`.
+**Remaining limitations:** as FZ1, a modified build can remove the gate.
 

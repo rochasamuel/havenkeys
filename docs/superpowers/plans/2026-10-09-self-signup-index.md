@@ -70,8 +70,12 @@ Read first: `crates/havenkeys-sync-client/src/wire.rs` (`LoginDto`,
 ### Bridge (extension requests)
 
 - `ResultBody::Status` gains `entitlement: "full" | "frozen"` (Rust and
-  `packages/protocol`; the parser's `hasExactKeys` list; the native host is
-  relay-only but must be rebuilt and re-packaged).
+  `packages/protocol`; the parser's `hasExactKeys` list). It is sent only
+  when frozen, so an older extension keeps working for Full accounts. The
+  native host is relay-only; it ships as the desktop's sidecar
+  (`externalBin` in `apps/desktop/src-tauri/tauri.bundle.conf.json`), not in
+  `pnpm package:extension`, and a dev machine set up with
+  `scripts/install-native-host.sh` must rebuild it.
 - `ErrorCode::Frozen` (snake_case `frozen`), with its fixed English message
   mirrored in the extension's `bridge-parity.test.ts`.
 - When frozen, `dispatch` refuses with `Frozen`: `find_matches` (so no menu

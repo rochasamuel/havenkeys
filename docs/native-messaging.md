@@ -139,10 +139,22 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
 | `show_unlock` | none | no | secret |
 
-`entitlement` (`"full"` or `"frozen"`) on the `status` and `find_matches`
-results may be absent from a desktop older than the release that added it;
-the extension reads a missing value as `"full"` (the gate itself is in Rust,
-which answers `frozen` to fills, saves and passkey creation).
+`entitlement` on the `status` and `find_matches` results is sent only when
+the account is frozen (`"frozen"`); a Full account's results carry no such
+key, exactly as before the field existed, so an older extension keeps
+working for Full accounts (`skip_serializing_if = "Entitlement::is_full"` in
+`crates/havenkeys-protocol/src/message.rs`). The extension reads a missing
+value as `"full"` (the gate itself is in Rust, which answers `frozen` to
+fills, saves and passkey creation). An older extension rejects a frozen
+account's `status` and `find_matches` results as unknown fields, so it
+shows no menu and an error in the popup; that fails closed.
+
+The native host is the desktop's sidecar (`externalBin` in
+`apps/desktop/src-tauri/tauri.bundle.conf.json`), shipped and updated with
+the desktop app; it is not part of `pnpm package:extension`. A development
+machine registered with `scripts/install-native-host.sh` keeps running the
+binary it was pointed at, so rebuild it (`cargo build --release -p
+havenkeys-native-host`) after a protocol change.
 
 When the account is frozen (the trial ended and nobody subscribed), the
 bridge (`refused_when_frozen` in `crates/havenkeys-bridge/src/dispatch.rs`)
@@ -153,11 +165,17 @@ and `save_card`, and to `fill_item` after the origin check (a page that
 does not match the login still gets `denied`, never `frozen`). Still
 answered: `status`, `lock`, `show_unlock`, `find_matches` (metadata only,
 origin bound; the popup lists the site's logins for their codes),
-`get_totp`, `generator_options`, `generate_password` (it touches no item),
+`get_totp` (always with `autoSubmit: false` while frozen),
+`generator_options`, `generate_password` (it touches no item),
 `find_passkeys`, `passkey_get`, `passkey_status`, `open_item` and
-`open_identity`. The inline menu reads `entitlement` from `find_matches` and
-does not open when it is `frozen`. No request reveals a password to the
-popup.
+`open_identity`. The inline menu reads `entitlement` from `find_matches`:
+when it is `frozen` the menu opens only for a site's passkey autofill (a
+conditional `get()` waiting in that frame), with only those passkey rows,
+as when the menu under login fields is turned off. The popup shows a
+login's TOTP code and copies it to the clipboard on click; it never fills
+it into the page, and the background refuses `popup_fill` and
+`popup_fill_totp` with the frozen message when the desktop says frozen. No
+request reveals a password to the popup.
 
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may

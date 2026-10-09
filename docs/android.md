@@ -36,13 +36,35 @@ Minimum Android 9 (API 28); compiled against and targeting API 36.
 ## Plan, frozen accounts and the setup code
 
 * **Plan row:** Settings shows the plan ("Trial: N days left" while
-  trialing, "Trial ended. Read-only." when frozen). When frozen it also has a
-  Subscribe row that opens `https://havenkeys.net/pricing`. Rust decides
-  (`plan_status`, `entitlement` and `trial_ends_at` in `Status`,
+  trialing, "Trial ended. Read-only." when frozen, "Active" or "Payment
+  pending" for those plan words; a complimentary plan shows no row). When
+  frozen it also has a Subscribe row that opens
+  `https://havenkeys.net/pricing`. Rust decides (`plan_status`,
+  `entitlement` and `trial_ends_at` in `Status`,
   `crates/havenkeys-mobile/src/vault.rs`); the app only displays.
-* **Frozen autofill:** `HavenAutofillService` offers no datasets and no save
-  prompt, and passkey creation answers `account_frozen`. Unlocking, search,
-  reveal, copy and TOTP keep working.
+* **Home notice:** while frozen, the Home screen keeps a "Your trial has
+  ended. The vault is read-only." notice with Subscribe (the same pricing
+  URL). It follows `PlanChanged`.
+* **Frozen autofill, enforced in Rust:** the mobile crate gates every
+  autofill and Credential Manager export itself (`refuse_when_frozen` and
+  `is_frozen` in `crates/havenkeys-mobile/src/vault.rs`); the app's
+  `frozen()` check is only the fast path. The list calls answer empty
+  (`autofill_matches`, `autofill_search`, `autofill_cards`,
+  `autofill_identity`, and `credential_password_offers`, empty rather than
+  an error so passkey offers in the same request still show). The calls that
+  return values or bind refuse with `account_frozen` (`autofill_fill`,
+  `autofill_bind_and_fill` with no "fill once" fallback,
+  `autofill_card_values`, `autofill_identity_values`,
+  `credential_password`). `passkey_create_plan` refuses before anything
+  else, and the credential service offers no passkey save entry.
+  `HavenAutofillService` offers no datasets and no save prompt.
+* **Still works while frozen:** unlocking, search, reveal, copy, TOTP
+  (`autofill_totp` still answers; Android never submits on its own) and
+  passkey sign-in.
+* **A new device:** signing in to a frozen account from a phone that never
+  had it answers `account_frozen_new_device` ("cannot add a new device"),
+  not "incorrect password"; the server says so only after it checked the
+  password.
 * **Onboarding:** Create account opens the sign-up page in the browser; "I
   have a setup code" is the invite choice, and its step shows the decoded
   email and server before the master password (`preview_invite`, no
