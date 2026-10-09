@@ -61,7 +61,9 @@ const codes: Record<ErrorCode, string | null> = {
   signed_out: "O HavenKeys foi desconectado desta conta. Desbloqueie de novo para reconectar.",
   account_deleted: "Esta conta foi excluída.",
   rate_limited: "Tentativas demais. Tente novamente em alguns minutos.",
-  account_frozen: "Esta conta está congelada: o teste terminou ou o pagamento falhou. O cofre fica somente leitura.",
+  account_frozen: "Esta conta está congelada: o teste terminou ou o pagamento venceu. O cofre fica somente leitura.",
+  account_frozen_new_device:
+    "Esta conta está somente leitura (o teste terminou ou o pagamento venceu) e não pode receber um novo dispositivo. Entre por um dispositivo que já a tenha, ou assine.",
   invalid_server_url: "Esse endereço de servidor não pode ser usado. Ele precisa começar com https://.",
   // Two different Rust messages ("did not accept that request", "did not
   // acknowledge that item" — the write may have been applied), so Rust's own.
@@ -279,6 +281,7 @@ export const ptBR: Messages = {
     frozenBody: "O cofre fica somente leitura. Você ainda pode abrir, copiar, exportar e entrar com passkeys.",
     subscribe: "Assinar",
     frozenImport: "Importar precisa de um plano ativo.",
+    frozenPassword: "Trocar a senha mestra precisa de um plano ativo.",
     lockTitle: (shortcut: string) => `Bloquear agora (${shortcut})`,
     unlocked: "Desbloqueado",
     lockNow: "Bloquear agora",

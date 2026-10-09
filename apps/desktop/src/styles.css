@@ -842,6 +842,10 @@ input::-ms-clear {
   color: var(--danger);
 }
 
+.conn.is-frozen svg {
+  color: var(--side-muted);
+}
+
 .lock-btn {
   display: flex;
   align-items: center;

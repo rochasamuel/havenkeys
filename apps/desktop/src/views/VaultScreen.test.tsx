@@ -325,4 +325,43 @@ describe("VaultScreen plan", () => {
     const newButton = host.querySelector<HTMLButtonElement>(".list-head button");
     expect(newButton?.disabled).toBe(true);
   });
+
+  it("a trial that ended reads frozen, not zero days left, and is not styled offline", async () => {
+    accountStatus.mockResolvedValue(
+      account({ planStatus: "trialing", entitlement: "frozen", trialEndsAt: new Date(Date.now() - 86_400_000).toISOString() }),
+    );
+    listItems.mockResolvedValue([]);
+    act(() =>
+      root.render(
+        <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly frozen offline={false} onLock={() => undefined} />,
+      ),
+    );
+    await settle();
+    expect(foot()).toBe("Read-only (trial ended)");
+    const conn = host.querySelector(".sidebar-foot .conn")!;
+    expect(conn.classList.contains("is-offline")).toBe(false);
+    expect(conn.classList.contains("is-frozen")).toBe(true);
+  });
+
+  it("offline while frozen keeps the frozen line and the offline styling", async () => {
+    accountStatus.mockResolvedValue(account({ planStatus: "past_due", entitlement: "frozen" }));
+    listItems.mockResolvedValue([]);
+    act(() =>
+      root.render(
+        <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly frozen offline onLock={() => undefined} />,
+      ),
+    );
+    await settle();
+    expect(foot()).toBe("Read-only (trial ended)");
+    expect(host.querySelector(".sidebar-foot .conn")!.classList.contains("is-offline")).toBe(true);
+  });
+
+  it("an active trial counts down and is not styled offline", async () => {
+    accountStatus.mockResolvedValue(
+      account({ planStatus: "trialing", trialEndsAt: new Date(Date.now() + 1.2 * 86_400_000).toISOString() }),
+    );
+    await mountWith([]);
+    expect(foot()).toBe("Trial: 2 days left");
+    expect(host.querySelector(".sidebar-foot .conn")!.className).toBe("conn");
+  });
 });

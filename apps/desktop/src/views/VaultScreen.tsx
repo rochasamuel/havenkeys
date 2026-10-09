@@ -98,16 +98,18 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
     return () => void unlisten.then((f) => f());
   }, []);
 
-  // The sidebar line: the trial countdown, then why the vault is read-only,
-  // then plain connectivity.
+  // The sidebar line: why the vault is read-only (a frozen trial still says
+  // "trialing"), then the trial countdown, then plain connectivity.
   const trialEnd = account?.planStatus === "trialing" && account.trialEndsAt ? Date.parse(account.trialEndsAt) : NaN;
-  const connLine = Number.isFinite(trialEnd)
-    ? t.vault.trialDays(Math.max(0, Math.ceil((trialEnd - Date.now()) / 86_400_000)))
-    : frozen
-      ? t.vault.readOnlyFrozen
-      : readOnly
+  const connLine = frozen
+    ? t.vault.readOnlyFrozen
+    : Number.isFinite(trialEnd)
+      ? t.vault.trialDays(Math.max(0, Math.ceil((trialEnd - Date.now()) / 86_400_000)))
+      : offline
         ? t.vault.offline
         : t.vault.connected;
+  const connClass = offline ? " is-offline" : frozen ? " is-frozen" : "";
+  const connIcon: IconName = offline ? "cloudOff" : frozen ? "lock" : "cloud";
 
   const sectionRef = useRef(section);
   sectionRef.current = section;
@@ -502,8 +504,8 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
           </nav>
 
           <footer className="sidebar-foot">
-            <div className={`conn${readOnly ? " is-offline" : ""}`} role="status">
-              <Icon name={readOnly ? "cloudOff" : "cloud"} size={15} />
+            <div className={`conn${connClass}`} role="status">
+              <Icon name={connIcon} size={15} />
               <span>{connLine}</span>
             </div>
             <button className="lock-btn" onClick={() => void lock()} title={t.vault.lockTitle(isMac ? "⌘L" : "Ctrl+L")}>

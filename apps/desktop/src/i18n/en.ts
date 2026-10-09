@@ -53,6 +53,7 @@ export type ErrorCode =
   | "account_deleted"
   | "rate_limited"
   | "account_frozen"
+  | "account_frozen_new_device"
   | "invalid_server_url"
   | "sync_failed"
   | "update_unavailable"
@@ -116,6 +117,8 @@ const codes: Record<ErrorCode, string | null> = {
   account_deleted: "This account was deleted.",
   rate_limited: "Too many attempts. Try again in a few minutes.",
   account_frozen: "This account is frozen: the trial ended or payment lapsed. The vault is read-only.",
+  account_frozen_new_device:
+    "This account is read-only (the trial ended or payment lapsed) and cannot add a new device. Sign in from a device that already has it, or subscribe.",
   invalid_server_url: "That server address cannot be used. It must start with https://.",
   sync_failed: null,
 };
@@ -256,6 +259,7 @@ export const en = {
     frozenBody: "The vault is read-only. You can still open, copy, export and sign in with passkeys.",
     subscribe: "Subscribe",
     frozenImport: "Importing needs an active plan.",
+    frozenPassword: "Changing the master password needs an active plan.",
     lockTitle: (shortcut: string) => `Lock now (${shortcut})`,
     unlocked: "Unlocked",
     lockNow: "Lock now",

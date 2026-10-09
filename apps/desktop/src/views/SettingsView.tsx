@@ -20,7 +20,8 @@ import { isPreference, LANGUAGE_NAMES, PREFERENCES } from "../i18n/locale";
 const autoLockChoices = [5, 15, 30, 60, 0];
 const clipboardChoices = [10, 20, 30, 60, 90, 120];
 
-function ChangePassword() {
+/** `frozen`: the form stays visible but disabled; Rust refuses the change anyway. */
+function ChangePassword({ frozen }: { frozen: boolean }) {
   const toast = useToast();
   const { t } = useI18n();
   const [current, setCurrent] = useState("");
@@ -33,7 +34,7 @@ function ChangePassword() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (busy || mismatch || !current || !next) return;
+    if (frozen || busy || mismatch || !current || !next) return;
     setBusy(true);
     setError(null);
     try {
@@ -58,7 +59,7 @@ function ChangePassword() {
         onChange={(e) => set(e.target.value)}
         autoComplete="off"
         spellCheck={false}
-        disabled={busy}
+        disabled={busy || frozen}
       />
     </label>
   );
@@ -71,7 +72,7 @@ function ChangePassword() {
         {input(next, setNext, t.changePassword.new)}
         {input(confirm, setConfirm, t.changePassword.confirm)}
       </div>
-      <p className="group-note">{t.changePassword.note}</p>
+      <p className="group-note">{frozen ? t.vault.frozenPassword : t.changePassword.note}</p>
       {mismatch && <p className="form-error">{t.changePassword.mismatch}</p>}
       {error && (
         <p className="form-error" role="alert">
@@ -79,7 +80,7 @@ function ChangePassword() {
         </p>
       )}
       <div className="group-actions">
-        <button className="btn btn-primary" type="submit" disabled={busy || mismatch || !current || !next || !confirm}>
+        <button className="btn btn-primary" type="submit" disabled={frozen || busy || mismatch || !current || !next || !confirm}>
           {busy ? t.changePassword.submitting : t.changePassword.submit}
         </button>
       </div>
@@ -288,7 +289,7 @@ export function SettingsView({
         </Disclosure>
       </div>
 
-      <ChangePassword />
+      <ChangePassword frozen={frozen} />
 
       <UpdatesSection />
       <DeleteAccountSection online={online} />
