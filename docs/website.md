@@ -22,14 +22,16 @@ declared once in `apps/web/src/App.tsx`.
 | --- | --- |
 | `/` | Home: what HavenKeys is, written for everyday users |
 | `/download` | Download: an account step first, then desktop, Android and the browser extension |
+| `/signup` | Create account: email and terms, a six-digit code, then the setup code (kept in page memory only) with Copy and downloads |
+| `/pricing` | Pricing: the Personal plan, the 14-day trial and what a frozen account keeps (price "coming soon") |
 | `/security` | Security: what is protected and what is not, in plain language |
 | `/self-host` | Self-host: run `havenkeys-server` yourself (Compose bundle, Railway) |
 | `/developers` | Developers: the technical material (architecture, crypto, protocol) |
 | `/privacy`, `/terms`, `/delete-account` | Legal pages |
 
-* **Request an invite.** The hosted server is invite-only. The buttons open a
-  `mailto:` to `invite@havenkeys.net` (`INVITE_EMAIL` in `src/lib/links.ts`),
-  which ImprovMX forwards to the owner's inbox.
+* **Create account.** `/signup` is the only page that calls
+  `api.havenkeys.net` (allowed in the CSP `connect-src`); every other page
+  talks only to GitHub's public API and Vercel Analytics.
 * **Railway button.** `RAILWAY_TEMPLATE_URL` in `apps/web/src/lib/links.ts` is
   empty until the Railway template is published (`deploy/railway/README.md`).
   Setting it to the template's URL turns the "Deploy on Railway" button on.

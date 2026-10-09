@@ -18,6 +18,7 @@ export function Footer() {
         </div>
         <nav className="footer__links" aria-label={t.footer.aria}>
           <Link to={path("/download")}>{t.footer.download}</Link>
+          <Link to={path("/pricing")}>{t.footer.pricing}</Link>
           <Link to={path("/security")}>{t.footer.security}</Link>
           <Link to={path("/self-host")}>{t.footer.selfHost}</Link>
           <Link to={path("/developers")}>{t.footer.developers}</Link>

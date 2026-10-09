@@ -15,8 +15,20 @@ describe("messages", () => {
       expect(plain).not.toMatch(TECH);
     }
   });
-  it("uses the invite subjects from the spec", () => {
-    expect(en.common.inviteSubject).toBe("HavenKeys invite request");
-    expect(ptBR.common.inviteSubject).toBe("Pedido de convite HavenKeys");
+  it("sends the terms version that is on the Terms page", async () => {
+    const { TERMS_VERSION, TERMS_UPDATED, PRIVACY_UPDATED } = await import("../lib/legal");
+    expect(TERMS_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(en.terms.updated).toBe(TERMS_UPDATED.en);
+    expect(ptBR.terms.updated).toBe(TERMS_UPDATED["pt-BR"]);
+    expect(en.privacy.updated).toBe(PRIVACY_UPDATED.en);
+    expect(ptBR.privacy.updated).toBe(PRIVACY_UPDATED["pt-BR"]);
+    // "October 20, 2026" <-> "2026-10-20": the day and year must appear.
+    const [y, , d] = TERMS_VERSION.split("-");
+    expect(en.terms.updated).toContain(`${Number(d)}, ${y}`);
+  });
+  it("has no request-an-invite copy left", () => {
+    for (const m of [en, ptBR]) {
+      expect(JSON.stringify(m)).not.toMatch(/invite@havenkeys\.net|Request an invite|Pedir um convite/);
+    }
   });
 });

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
-import { inviteHref } from "../lib/links";
 import type { IconName } from "../components/Icon";
 
 /*
@@ -42,8 +41,6 @@ export const en = {
     downloadCta: "Download HavenKeys",
     addToChrome: "Add to Chrome",
     addToFirefox: "Add to Firefox",
-    requestInvite: "Request an invite",
-    inviteSubject: "HavenKeys invite request",
     createAccount: "Create account",
     beta: "Beta",
     betaNotice:
@@ -58,6 +55,7 @@ export const en = {
     security: "Security",
     selfHost: "Self-host",
     developers: "Developers",
+    pricing: "Pricing",
     githubAria: "HavenKeys on GitHub",
     download: "Download",
     switchShort: "PT",
@@ -71,6 +69,7 @@ export const en = {
     security: "Security",
     selfHost: "Self-host",
     developers: "Developers",
+    pricing: "Pricing",
     github: "GitHub",
     privacy: "Privacy",
     terms: "Terms & license",
@@ -112,7 +111,7 @@ export const en = {
     stepsTitle: "Start in five steps.",
     steps: [
       { title: "Install the app", text: "Get HavenKeys for Windows, macOS, Linux or Android." },
-      { title: "Get your account", text: "Request an invite to our server, or run your own." },
+      { title: "Get your account", text: "Create an account on our server, or run your own." },
       { title: "Print your Recovery Sheet", text: "It holds your Secret Key. Keep it somewhere safe: it’s how you get back in on a new device." },
       { title: "Bring your passwords", text: "Import them from your old password manager, or add them as you go: HavenKeys offers to save new ones." },
       { title: "Add the extension, then click", text: "Install it in Chrome or Firefox. On a sign-in page, click the field and pick your login." },
@@ -128,7 +127,7 @@ export const en = {
         Bring your passwords <em>home</em>.
       </>
     ),
-    closerLede: "Install the app, request an invite, and add the extension.",
+    closerLede: "Install the app, create an account, and add the extension.",
     readSource: "Read the source",
   },
 
@@ -168,7 +167,7 @@ export const en = {
         body: [
           <>
             HavenKeys syncs through <code>havenkeys-server</code>, a small server you run yourself,
-            or ours if you have an invite. Whoever runs it holds only locked data it can’t open.
+            or ours if you create an account. Whoever runs it holds only locked data it can’t open.
           </>,
           "The server is the one place changes are written. Every computer keeps its own encrypted copy, so unlocking, search, one-time codes and autofill keep working offline.",
         ],
@@ -576,7 +575,7 @@ export const en = {
       stepsTitle: "Installing on Android",
       steps: [
         { title: "Install the APK", body: "Download it and open it. Android asks once to allow installing apps from your browser." },
-        { title: "Sign in", body: "Open HavenKeys and scan your Recovery Sheet, or use an invite." },
+        { title: "Sign in", body: "Open HavenKeys and scan your Recovery Sheet, or use your setup code." },
         { title: "Turn on autofill", body: "In HavenKeys, open Settings → Autofill setup." },
         { title: "Use it in Chrome", body: "Open Settings → Autofill services and choose “Autofill using another service”." },
       ],
@@ -595,15 +594,15 @@ export const en = {
         title: "Get an account",
         body: (
           <>
-            HavenKeys keeps your locked vault on a server. Request an invite to ours, or{" "}
+            HavenKeys keeps your locked vault on a server. Create an account on ours, or{" "}
             <Link to="/self-host">run your own server</Link>. Then print your Recovery Sheet: it’s how you
             sign in on a new device.
           </>
         ),
         actions: (
-          <a className="btn btn--ghost btn--sm" href={inviteHref("HavenKeys invite request")}>
-            Request an invite
-          </a>
+          <Link className="btn btn--ghost btn--sm" to="/signup">
+            Create account
+          </Link>
         ),
       },
       {
@@ -642,7 +641,7 @@ export const en = {
 
   privacy: {
     title: "Privacy Policy",
-    updated: "Last updated October 6, 2026.",
+    updated: "Last updated October 20, 2026.",
     body: (
       <>
         <h2>This website</h2>
@@ -653,15 +652,17 @@ export const en = {
           The Download page asks GitHub's public API for the latest release directly from your
           browser, so GitHub also sees that request. If you pick a language with the switcher, the
           site remembers that choice in your browser's local storage; it is never sent anywhere.
-          There is no advertising and no other third-party script on the site. The only other
-          third party involved is ImprovMX, and only for invite emails (see below).
+          There is no advertising and no other third-party script on the site.
         </p>
         <p>
-          If you email invite@havenkeys.net, ImprovMX, an email-forwarding service, forwards your
-          message to the mailbox of SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA, which
-          receives your email address and message. We use them only to answer you and send an
-          invite, and delete them when you ask. ImprovMX handles the message in transit under its
-          own privacy policy.
+          The Create account page sends your email address, your language and the version of the
+          Terms you accepted to our server at api.havenkeys.net, which emails you a code and, once
+          you confirm it, a setup code. The setup code is shown on the page and kept only in the
+          page's memory; it is not stored in your browser or in our analytics. Our server records
+          your email address and when you accepted the Terms, and sends account notices (the code,
+          the setup code, and when a trial is about to end or has ended) through an email provider
+          acting as an operator for us; your address is used for nothing else. We never send
+          marketing email.
         </p>
 
         <h2>The desktop app and browser extension</h2>
@@ -678,7 +679,7 @@ export const en = {
           invited you, runs. That server stores your vault encrypted, which it cannot decrypt, plus
           the metadata it needs to serve it: the vault ID, your account's email address, the
           key-derivation parameters and salt, the wrapped vault key, item revisions, and the number
-          and rough size of your items. To rate-limit sign-in, it also counts failed attempts per
+          and rough size of your items. It also stores your account's plan status (trial, active, frozen) and when it changed. To rate-limit sign-in, it also counts failed attempts per
           account and per network address, and clears them after a successful sign-in. The{" "}
           <Ext href={`${DOCS}server-sync.md`}>server-sync design</Ext> describes this in full. The
           developers also operate a server for other people, run by SAMUEL DA SILVA ROCHA
@@ -768,7 +769,7 @@ export const en = {
           device" in the desktop app signs the computer out and sets its copy of the vault aside;
           you can then delete that file. You can delete your account yourself from the app;{" "}
           <a href="/delete-account">Delete your account</a> says what is erased and when. Uninstalling the extension removes it completely,
-          since it keeps no data of its own.
+          since it keeps no data of its own. Accounts never activated within 7 days of sign-up are deleted automatically.
         </p>
 
         <h2>Contact</h2>
@@ -833,7 +834,7 @@ export const en = {
 
   terms: {
     title: "Terms of Service",
-    updated: "Last updated October 7, 2026.",
+    updated: "Last updated October 20, 2026.",
     body: (
       <>
         <h2>License</h2>
@@ -870,13 +871,55 @@ export const en = {
 
         <h2>Our server and yours</h2>
         <p>
-          SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA (“we”) runs a <code>havenkeys-server</code> for the people we
-          invite, on a best-effort basis: there is no subscription, no service-level agreement and no support obligation, and
-          the service may change or end with notice. Anyone can instead run their own server;
-          downloading the software creates no account with us.
+          SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA (“we”) runs a{" "}
+          <code>havenkeys-server</code> at api.havenkeys.net. Anyone can instead run their own
+          server; downloading the software creates no account with us.
+        </p>
+
+        <h2>Accounts, trial and plans</h2>
+        <p>
+          Creating an account on our server starts a 14-day free trial with no card. After it, the
+          account continues on the Personal plan once you subscribe; until subscriptions open, we
+          keep accounts open on request. Accounts we invited directly are complimentary with no end
+          date unless we tell you otherwise.
+        </p>
+        <p>
+          An account whose trial has ended, or whose payment has lapsed, is <strong>frozen</strong>:
+          the server refuses changes, new devices and new passkeys, and the apps stop filling. You
+          keep reading your vault on every device, signing in with saved passkeys, and exporting it,
+          in plain or encrypted form, at any time. We never delete a frozen vault for being frozen;
+          you can delete the account yourself from the app at any time.
+        </p>
+        <p>
+          The service is provided on a best-effort basis, with no service-level agreement, and may
+          change or end with notice. Nothing here limits your right to export and leave.
         </p>
       </>
     ),
+  },
+
+  pricing: {
+    title: "One plan, your keys",
+    lede: "HavenKeys is open source and free to self-host. The hosted service pays for the server and the work.",
+    plan: "Personal",
+    priceSoon: "Price coming soon",
+    trial: "14 days free, no card",
+    includes: [
+      "Unlimited logins, cards, identities, notes and passkeys",
+      "Desktop, browser extension and Android",
+      "Phone-approved sign-in on a new computer",
+      "Export at any time, in plain or encrypted form",
+    ],
+    afterTitle: "After the trial",
+    afterTrial: [
+      "Your vault stays readable on every device.",
+      "Export keeps working, in plain or encrypted form.",
+      "Changes, new devices and autofill pause until you subscribe.",
+      "Signing in with an existing passkey keeps working.",
+    ],
+    subscribeSoon: "Subscriptions open soon. Until then, write to samuelsilv.rocha@gmail.com and we will keep your account open.",
+    cta: "Create account",
+    selfHost: "Or run your own server for free",
   },
 
   selfHost: {
@@ -904,7 +947,7 @@ export const en = {
     chargeTitle: "You’re in charge",
     chargeBody: "When you run the server, keeping it online and backed up is up to you. HavenKeys can’t recover a vault from a server that was lost without a backup.",
     guideCta: "Read the full guide",
-    inviteInstead: "Rather not run a server? Request an invite to ours.",
+    inviteInstead: "Rather not run a server? Create an account on ours.",
   },
 
   signup: {

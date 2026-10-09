@@ -5,12 +5,11 @@ import desktopVault from "../assets/shots/desktop-vault.png";
 import { Guilloche } from "../components/Guilloche";
 import { Icon } from "../components/Icon";
 import { useI18n } from "../i18n/context";
-import { CHROME_STORE, FIREFOX_STORE, GITHUB, inviteHref } from "../lib/links";
+import { CHROME_STORE, FIREFOX_STORE, GITHUB } from "../lib/links";
 
 export function Home() {
   const { t, path } = useI18n();
   const h = t.home;
-  const invite = inviteHref(t.common.inviteSubject);
   return (
     <>
       <section className="hero">
@@ -23,11 +22,12 @@ export function Home() {
               <Icon name="download" />
               {t.common.downloadCta}
             </Link>
-            <a href={invite} className="btn btn--ghost btn--lg">
-              {t.common.requestInvite}
-            </a>
+            <Link to={path("/signup")} className="btn btn--ghost btn--lg">
+              {t.common.createAccount}
+            </Link>
           </div>
           <p className="hero__meta">{h.heroMeta}</p>
+          <p className="hero__meta">{t.common.betaNotice}</p>
         </div>
 
         <div className="hero__stage">
@@ -108,9 +108,9 @@ export function Home() {
             <Icon name="download" />
             {t.common.downloadCta}
           </Link>
-          <a href={invite} className="btn btn--ghost btn--lg">
-            {t.common.requestInvite}
-          </a>
+          <Link to={path("/signup")} className="btn btn--ghost btn--lg">
+            {t.common.createAccount}
+          </Link>
           <a className="btn btn--ghost btn--lg" href={CHROME_STORE} target="_blank" rel="noopener noreferrer">
             <Icon name="external" size={15} />
             {t.common.addToChrome}

@@ -1,11 +1,12 @@
+import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { useI18n } from "../i18n/context";
-import { GITHUB, inviteHref, RAILWAY_TEMPLATE_URL } from "../lib/links";
+import { GITHUB, RAILWAY_TEMPLATE_URL } from "../lib/links";
 
 const GUIDE = `${GITHUB}/blob/main/docs/self-hosting.md`;
 
 export function SelfHost() {
-  const { t } = useI18n();
+  const { t, path } = useI18n();
   const s = t.selfHost;
   return (
     <div className="selfhost">
@@ -63,7 +64,7 @@ export function SelfHost() {
             <a className="btn btn--ghost" href={GUIDE} target="_blank" rel="noreferrer">
               {s.guideCta} <Icon name="external" size={15} />
             </a>
-            <a className="btn btn--ghost" href={inviteHref(t.common.inviteSubject)}>{s.inviteInstead}</a>
+            <Link to={path("/signup")} className="btn btn--ghost">{s.inviteInstead}</Link>
           </div>
         </div>
       </section>

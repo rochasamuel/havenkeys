@@ -14,9 +14,13 @@ export function Nav() {
         <Link to={home} className="nav__brand" aria-label={t.nav.homeAria}>
           <Mark size={26} />
           <span>HavenKeys</span>
+          <span className="tag tag--beta">{t.common.beta}</span>
         </Link>
         <nav className="nav__links" aria-label={t.nav.mainAria}>
           <NavLink to={path("/security")}>{t.nav.security}</NavLink>
+          <NavLink to={path("/pricing")} className="nav__hide-sm">
+            {t.nav.pricing}
+          </NavLink>
           <NavLink to={path("/self-host")} className="nav__hide-sm">
             {t.nav.selfHost}
           </NavLink>
@@ -33,8 +37,11 @@ export function Nav() {
             <Icon name="github" size={19} />
           </a>
           <LanguageToggle />
-          <Link to={path("/download")} className="btn btn--primary btn--sm">
+          <NavLink to={path("/download")} className="nav__hide-sm">
             {t.nav.download}
+          </NavLink>
+          <Link to={path("/signup")} className="btn btn--primary btn--sm">
+            {t.common.createAccount}
           </Link>
         </nav>
       </div>

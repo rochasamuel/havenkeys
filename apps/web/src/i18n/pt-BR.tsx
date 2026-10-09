@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
-import { inviteHref } from "../lib/links";
 import type { Messages } from "./en";
 
 /*
@@ -36,8 +35,6 @@ export const ptBR: Messages = {
     downloadCta: "Baixar o HavenKeys",
     addToChrome: "Adicionar ao Chrome",
     addToFirefox: "Adicionar ao Firefox",
-    requestInvite: "Pedir um convite",
-    inviteSubject: "Pedido de convite HavenKeys",
     createAccount: "Criar conta",
     beta: "Beta",
     betaNotice:
@@ -52,6 +49,7 @@ export const ptBR: Messages = {
     security: "Segurança",
     selfHost: "Auto-hospedar",
     developers: "Desenvolvedores",
+    pricing: "Planos",
     githubAria: "HavenKeys no GitHub",
     download: "Baixar",
     switchShort: "EN",
@@ -65,6 +63,7 @@ export const ptBR: Messages = {
     security: "Segurança",
     selfHost: "Auto-hospedar",
     developers: "Desenvolvedores",
+    pricing: "Planos",
     github: "GitHub",
     privacy: "Privacidade",
     terms: "Termos e licença",
@@ -106,7 +105,7 @@ export const ptBR: Messages = {
     stepsTitle: "Comece em cinco passos.",
     steps: [
       { title: "Instale o app", text: "Baixe o HavenKeys para Windows, macOS, Linux ou Android." },
-      { title: "Tenha sua conta", text: "Peça um convite para o nosso servidor, ou rode o seu." },
+      { title: "Tenha sua conta", text: "Crie uma conta no nosso servidor, ou rode o seu." },
       { title: "Imprima sua Folha de Recuperação", text: "Ela guarda sua Secret Key. Deixe-a em lugar seguro: é com ela que você entra num dispositivo novo." },
       { title: "Traga suas senhas", text: "Importe do seu gerenciador antigo, ou adicione aos poucos: o HavenKeys oferece para salvar as novas." },
       { title: "Adicione a extensão e clique", text: "Instale no Chrome ou no Firefox. Numa página de login, clique no campo e escolha seu login." },
@@ -122,7 +121,7 @@ export const ptBR: Messages = {
         Leve suas senhas para <em>casa</em>.
       </>
     ),
-    closerLede: "Instale o app, peça um convite e adicione a extensão.",
+    closerLede: "Instale o app, crie uma conta e adicione a extensão.",
     readSource: "Ler o código-fonte",
   },
 
@@ -162,7 +161,7 @@ export const ptBR: Messages = {
         body: [
           <>
             O HavenKeys sincroniza pelo <code>havenkeys-server</code>, um servidor pequeno que você
-            mesmo roda, ou o nosso, se você tiver um convite. Quem o roda guarda só dados
+            mesmo roda, ou o nosso, se você criar uma conta. Quem o roda guarda só dados
             trancados que não consegue abrir.
           </>,
           "O servidor é o único lugar onde as alterações são gravadas. Cada computador mantém sua própria cópia cifrada, então desbloqueio, busca, códigos de uso único e preenchimento continuam funcionando offline.",
@@ -584,7 +583,7 @@ export const ptBR: Messages = {
       stepsTitle: "Instalando no Android",
       steps: [
         { title: "Instale o APK", body: "Baixe e abra. O Android pede uma vez para permitir instalar apps pelo navegador." },
-        { title: "Entre", body: "Abra o HavenKeys e escaneie a sua Folha de Recuperação, ou use um convite." },
+        { title: "Entre", body: "Abra o HavenKeys e escaneie a sua Folha de Recuperação, ou use seu código de configuração." },
         { title: "Ative o preenchimento automático", body: "No HavenKeys, abra Configurações → Configurar preenchimento automático." },
         { title: "Use no Chrome", body: "Abra Configurações → Serviços de preenchimento automático e escolha “Preenchimento automático com outro serviço”." },
       ],
@@ -603,15 +602,15 @@ export const ptBR: Messages = {
         title: "Tenha sua conta",
         body: (
           <>
-            O HavenKeys guarda seu cofre trancado num servidor. Peça um convite para o nosso, ou{" "}
+            O HavenKeys guarda seu cofre trancado num servidor. Crie uma conta no nosso, ou{" "}
             <Link to="/pt-br/self-host">rode seu próprio servidor</Link>. Depois imprima sua Folha de Recuperação:
             é com ele que você entra num dispositivo novo.
           </>
         ),
         actions: (
-          <a className="btn btn--ghost btn--sm" href={inviteHref("Pedido de convite HavenKeys")}>
-            Pedir um convite
-          </a>
+          <Link className="btn btn--ghost btn--sm" to="/pt-br/signup">
+            Criar conta
+          </Link>
         ),
       },
       {
@@ -650,7 +649,7 @@ export const ptBR: Messages = {
 
   privacy: {
     title: "Política de Privacidade",
-    updated: "Atualizada em 6 de outubro de 2026.",
+    updated: "Atualizada em 20 de outubro de 2026.",
     body: (
       <>
         <h2>Este site</h2>
@@ -662,15 +661,17 @@ export const ptBR: Messages = {
           saber qual é a versão mais recente diretamente do seu navegador, então o GitHub também vê
           essa requisição. Se você escolher um idioma no seletor, o site guarda essa escolha no
           armazenamento local do seu navegador; ela nunca é enviada a lugar nenhum. Não há
-          publicidade nem nenhum outro script de terceiros no site. O único outro terceiro
-          envolvido é o ImprovMX, e só para e-mails de convite (veja abaixo).
+          publicidade nem nenhum outro script de terceiros no site.
         </p>
         <p>
-          Se você escrever para invite@havenkeys.net, o ImprovMX, um serviço de encaminhamento de
-          e-mail, encaminha a sua mensagem para a caixa de entrada de SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA,
-          que recebe seu e-mail e sua mensagem. Nós os usamos apenas para responder e enviar o
-          convite, e os apagamos quando você pedir. O ImprovMX trata a mensagem em trânsito, sob a
-          política de privacidade dele.
+          A página Criar conta envia seu endereço de e-mail, seu idioma e a versão dos Termos que
+          você aceitou ao nosso servidor em api.havenkeys.net, que envia a você um código e, depois
+          que você o confirma, um código de configuração. O código de configuração aparece na página
+          e fica apenas na memória dela; não é guardado no seu navegador nem no nosso analytics. O
+          nosso servidor registra seu endereço de e-mail e quando você aceitou os Termos, e envia
+          avisos da conta (o código, o código de configuração e quando um período de teste está para
+          acabar ou acabou) por meio de um provedor de e-mail que atua como operador por nós; seu
+          endereço não é usado para mais nada. Nunca enviamos e-mail de marketing.
         </p>
 
         <h2>O app de desktop e a extensão do navegador</h2>
@@ -687,7 +688,7 @@ export const ptBR: Messages = {
           por quem convidou você. Esse servidor guarda o seu cofre cifrado, que ele não consegue
           decifrar, além dos metadados de que precisa para servi-lo: o ID do cofre, o e-mail da sua
           conta, os parâmetros e o salt da derivação de chaves, a chave do cofre cifrada, as revisões
-          dos itens e a quantidade e o tamanho aproximado dos seus itens. Para limitar tentativas de
+          dos itens e a quantidade e o tamanho aproximado dos seus itens. Ele também guarda o status do plano da sua conta (teste, ativa, congelada) e quando ele mudou. Para limitar tentativas de
           login, ele também conta as tentativas que falharam por conta e por endereço de rede, e
           zera essa contagem depois de um login bem-sucedido. O{" "}
           <Ext href={`${DOCS}server-sync.md`}>projeto de sincronização com o servidor</Ext> (em
@@ -781,7 +782,7 @@ export const ptBR: Messages = {
           desktop, desconecta o computador e deixa a cópia local do cofre de lado; depois disso você
           pode excluir esse arquivo. Você pode excluir a sua conta pelo próprio app;{" "}
           <a href="/pt-br/delete-account">Excluir a sua conta</a> diz o que é apagado e quando. Desinstalar a extensão a remove por completo, já que ela não guarda dados
-          próprios.
+          próprios. Contas nunca ativadas em até 7 dias após o cadastro são apagadas automaticamente.
         </p>
 
         <h2>Contato</h2>
@@ -848,7 +849,7 @@ export const ptBR: Messages = {
 
   terms: {
     title: "Termos de Serviço",
-    updated: "Atualizados em 7 de outubro de 2026.",
+    updated: "Atualizados em 20 de outubro de 2026.",
     body: (
       <>
         <h2>Licença</h2>
@@ -884,13 +885,56 @@ export const ptBR: Messages = {
 
         <h2>Nosso servidor e o seu</h2>
         <p>
-          SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA (“nós”) opera um <code>havenkeys-server</code> para as pessoas que
-          convidamos, na base do melhor esforço: não há assinatura, acordo de nível de serviço nem obrigação de suporte, e o serviço pode
-          mudar ou acabar mediante aviso. Qualquer pessoa pode, em vez disso, rodar o próprio servidor;
-          baixar o software não cria conta nenhuma conosco.
+          SAMUEL DA SILVA ROCHA DESENVOLVIMENTO DE SOFTWARE LTDA (“nós”) mantém um{" "}
+          <code>havenkeys-server</code> em api.havenkeys.net. Qualquer pessoa pode, em vez disso,
+          rodar o próprio servidor; baixar o software não cria conta conosco.
+        </p>
+
+        <h2>Contas, período de teste e planos</h2>
+        <p>
+          Criar uma conta no nosso servidor inicia um período de teste gratuito de 14 dias, sem
+          cartão. Depois dele, a conta continua no plano Pessoal quando você assina; até as
+          assinaturas abrirem, mantemos contas abertas a pedido. Contas que convidamos diretamente
+          são cortesia sem data de término, salvo aviso.
+        </p>
+        <p>
+          Uma conta cujo período de teste terminou, ou cujo pagamento falhou, fica{" "}
+          <strong>congelada</strong>: o servidor recusa alterações, dispositivos novos e passkeys
+          novas, e os apps param de preencher. Você continua lendo seu cofre em todos os
+          dispositivos, entrando com passkeys já salvas e exportando, aberto ou criptografado, a
+          qualquer momento. Nunca apagamos um cofre por estar congelado; você pode apagar a conta
+          pelo app quando quiser.
+        </p>
+        <p>
+          O serviço é prestado com o melhor esforço, sem acordo de nível de serviço, e pode mudar
+          ou terminar com aviso. Nada aqui limita seu direito de exportar e sair.
         </p>
       </>
     ),
+  },
+
+  pricing: {
+    title: "Um plano, suas chaves",
+    lede: "O HavenKeys é código aberto e gratuito para hospedar por conta própria. O serviço hospedado paga o servidor e o trabalho.",
+    plan: "Pessoal",
+    priceSoon: "Preço em breve",
+    trial: "14 dias grátis, sem cartão",
+    includes: [
+      "Logins, cartões, identidades, notas e passkeys sem limite",
+      "Desktop, extensão do navegador e Android",
+      "Entrada em um computador novo aprovada pelo celular",
+      "Exportação a qualquer momento, aberta ou criptografada",
+    ],
+    afterTitle: "Depois do período de teste",
+    afterTrial: [
+      "Seu cofre continua legível em todos os dispositivos.",
+      "A exportação continua funcionando, aberta ou criptografada.",
+      "Alterações, dispositivos novos e preenchimento automático ficam pausados até você assinar.",
+      "Entrar com uma passkey já salva continua funcionando.",
+    ],
+    subscribeSoon: "As assinaturas abrem em breve. Até lá, escreva para samuelsilv.rocha@gmail.com e mantemos sua conta aberta.",
+    cta: "Criar conta",
+    selfHost: "Ou rode seu próprio servidor de graça",
   },
 
   selfHost: {
@@ -918,7 +962,7 @@ export const ptBR: Messages = {
     chargeTitle: "A responsabilidade é sua",
     chargeBody: "Quando você roda o servidor, mantê-lo no ar e com backup é com você. O HavenKeys não recupera um cofre de um servidor perdido sem backup.",
     guideCta: "Ler o guia completo",
-    inviteInstead: "Prefere não rodar um servidor? Peça um convite para o nosso.",
+    inviteInstead: "Prefere não rodar um servidor? Crie uma conta no nosso.",
   },
 
   signup: {

@@ -31,8 +31,13 @@ describe("routes", () => {
     expect(home).toContain('id="journey"');
     expect(home).toContain('id="browser"');
   });
-  it("offers the invite on Home", () => {
-    expect(html("/")).toContain("mailto:invite@havenkeys.net?subject=HavenKeys%20invite%20request");
+  it("links Home to the signup page", () => {
+    expect(html("/")).toContain('href="/signup"');
+  });
+  it("shows the Beta tag in the nav on every page", () => {
+    for (const path of ["/", "/download", "/signup", "/pricing", "/pt-br"]) {
+      expect(html(path), path).toContain('class="tag tag--beta"');
+    }
   });
   it("still renders every existing page", () => {
     for (const p of ["/", "/download", "/security", "/self-host", "/privacy", "/terms", "/delete-account"]) {
