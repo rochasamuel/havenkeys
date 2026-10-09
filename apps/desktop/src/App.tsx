@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api";
-import type { DeviceStatus, VaultStatus } from "./lib/types";
+import type { AccountStatus, DeviceStatus, VaultStatus } from "./lib/types";
 import { useActivityReporter } from "./lib/hooks";
 import { applyTheme } from "./lib/theme";
 import { EmergencyKit } from "./components/EmergencyKit";
@@ -24,6 +24,7 @@ export function App() {
   // message names the folder it is in.
   const [fatal, setFatal] = useState<{ cause: unknown } | null>(null);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
   // Shown once, right after activation: the kit is the only copy of the
   // Secret Key, so the vault waits behind an explicit confirmation.
   const [showKit, setShowKit] = useState(false);
@@ -108,6 +109,16 @@ export function App() {
   useEffect(() => {
     api.deviceStatus().then(setDevice, () => setDevice(null));
   }, [unlocked, session]);
+
+  // The plan (trial, frozen) is no secret either; it follows the server's
+  // word live, so a subscription or a lapse shows without a restart.
+  useEffect(() => {
+    const load = () => api.accountStatus().then(setAccount, () => setAccount(null));
+    load();
+    const unlisten = api.onPlanChanged(load);
+    return () => void unlisten.then((f) => f());
+  }, [unlocked, session]);
+  const frozen = account?.entitlement === "frozen";
 
   // The session is opened in the background after an unlock, and can be lost
   // at any time; the banner and the read-only state follow it live.
@@ -248,6 +259,16 @@ export function App() {
           </button>
         </div>
       )}
+      {frozen && (
+        <div className="banner banner-warn" role="status">
+          <span>
+            <strong>{t.vault.frozenTitle}</strong> {t.vault.frozenBody}
+          </span>
+          <button className="btn btn-quiet" type="button" onClick={() => void api.openPricing()}>
+            {t.vault.subscribe}
+          </button>
+        </div>
+      )}
       {signedOut ? (
         <div className="banner" role="status">
           {t.app.signedOut}
@@ -264,7 +285,9 @@ export function App() {
         damagedItems={status.damagedItems}
         damagedSettings={status.damagedSettings}
         unreadableItems={status.unreadableItems}
-        readOnly={!device?.online}
+        readOnly={!device?.online || frozen}
+        frozen={frozen}
+        offline={!device?.online}
         onLock={() => {
           setLockReason("user");
           setSignedOut(false);

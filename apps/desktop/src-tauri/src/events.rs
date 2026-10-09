@@ -8,6 +8,10 @@ use havenkeys_core::sync::SyncReport;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+/// The account's plan changed (trial ended, subscribed, payment lapsed): the
+/// UI reloads the account status. Carries nothing.
+pub const PLAN_CHANGED_EVENT: &str = "plan_changed";
+
 /// This vault reopened empty after "remove this device": the UI returns to
 /// the first-run screen. Carries `Removed`.
 pub const REMOVED_EVENT: &str = "vault://removed";
@@ -65,6 +69,10 @@ impl ClientEvents for DesktopEvents {
 
     fn synced(&self, report: SyncReport) {
         let _ = self.app.emit(SYNCED_EVENT, report);
+    }
+
+    fn plan_changed(&self) {
+        let _ = self.app.emit(PLAN_CHANGED_EVENT, ());
     }
 
     fn items_changed(&self) {

@@ -92,7 +92,7 @@ describe("VaultScreen health report", () => {
   it("is not recomputed on search keystrokes, only when the items change", async () => {
     act(() =>
       root.render(
-        <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} onLock={() => undefined} />,
+        <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} frozen={false} onLock={() => undefined} />,
       ),
     );
     await settle();
@@ -134,7 +134,7 @@ async function mountWith(items: ReturnType<typeof overview>[]) {
   listItems.mockResolvedValue(items);
   act(() =>
     root.render(
-      <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} onLock={() => undefined} />,
+      <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} frozen={false} onLock={() => undefined} />,
     ),
   );
   await settle();
@@ -241,7 +241,7 @@ describe("VaultScreen Trash", () => {
     act(() =>
       root.render(
         <ToastProvider>
-          <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} onLock={() => undefined} />
+          <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly={false} frozen={false} onLock={() => undefined} />
         </ToastProvider>,
       ),
     );
@@ -286,5 +286,43 @@ describe("VaultScreen Trash", () => {
     click(host.querySelector(".item-foot .btn-quiet-danger"));
     await settle();
     expect(navButton("Trash")!.querySelector(".nav-count")?.textContent).toBe("1");
+  });
+});
+
+describe("VaultScreen plan", () => {
+  const account = (extra: Record<string, unknown>) => ({
+    email: "me@example.com",
+    serverUrl: "https://api.havenkeys.net",
+    accountId: "3f1c0000-0000-0000-0000-000000000000",
+    online: true,
+    lastSyncedAt: null,
+    planStatus: null,
+    entitlement: "full",
+    trialEndsAt: null,
+    periodEnd: null,
+    ...extra,
+  });
+  const foot = () => host.querySelector(".sidebar-foot .conn")?.textContent;
+
+  it("counts the trial days left in the sidebar", async () => {
+    accountStatus.mockResolvedValue(
+      account({ planStatus: "trialing", trialEndsAt: new Date(Date.now() + 4.5 * 86_400_000).toISOString() }),
+    );
+    await mountWith([]);
+    expect(foot()).toBe("Trial: 5 days left");
+  });
+
+  it("says read-only and disables New while frozen", async () => {
+    accountStatus.mockResolvedValue(account({ planStatus: "past_due", entitlement: "frozen" }));
+    listItems.mockResolvedValue([]);
+    act(() =>
+      root.render(
+        <VaultScreen damagedItems={0} damagedSettings={false} unreadableItems={0} readOnly frozen onLock={() => undefined} />,
+      ),
+    );
+    await settle();
+    expect(foot()).toBe("Read-only (trial ended)");
+    const newButton = host.querySelector<HTMLButtonElement>(".list-head button");
+    expect(newButton?.disabled).toBe(true);
   });
 });

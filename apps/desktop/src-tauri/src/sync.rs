@@ -23,6 +23,7 @@ pub fn bridge_error(err: CmdError) -> havenkeys_protocol::ErrorCode {
         "not_found" | "item_changed_elsewhere" => ErrorCode::NotFound,
         "invalid_input" => ErrorCode::InvalidInput,
         "rate_limited" => ErrorCode::RateLimited,
+        "account_frozen" => ErrorCode::Frozen,
         _ => ErrorCode::Internal,
     }
 }

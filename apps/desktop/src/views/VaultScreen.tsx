@@ -41,6 +41,10 @@ interface Props {
   unreadableItems: number;
   /** Offline: writes would fail, so the mutating controls are disabled up front. */
   readOnly: boolean;
+  /** The account is frozen: read-only for a plan reason, not a connection one. */
+  frozen: boolean;
+  /** No session with the server; export and account deletion need one. */
+  offline?: boolean;
   onLock: () => void;
 }
 
@@ -51,9 +55,10 @@ const sections: Array<{ id: Section; label: (t: Messages) => string; icon: IconN
   { id: "card", label: (t) => t.card.nav, icon: "card" },
 ];
 
-export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, readOnly, onLock }: Props) {
+export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, readOnly, frozen, offline: offlineProp, onLock }: Props) {
   const toast = useToast();
   const { t } = useI18n();
+  const offline = offlineProp ?? (readOnly && !frozen);
   const [section, setSection] = useState<Section>("all");
   // A tag filter narrows All items; picking any other place clears it.
   const [tag, setTag] = useState<string | null>(null);
@@ -87,8 +92,22 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
   // The HavenKeys Account item is built from the account record; no secret
   // is fetched until the user reveals or copies the Secret Key.
   useEffect(() => {
-    api.accountStatus().then(setAccount, () => setAccount(null));
+    const load = () => api.accountStatus().then(setAccount, () => setAccount(null));
+    load();
+    const unlisten = api.onPlanChanged(load);
+    return () => void unlisten.then((f) => f());
   }, []);
+
+  // The sidebar line: the trial countdown, then why the vault is read-only,
+  // then plain connectivity.
+  const trialEnd = account?.planStatus === "trialing" && account.trialEndsAt ? Date.parse(account.trialEndsAt) : NaN;
+  const connLine = Number.isFinite(trialEnd)
+    ? t.vault.trialDays(Math.max(0, Math.ceil((trialEnd - Date.now()) / 86_400_000)))
+    : frozen
+      ? t.vault.readOnlyFrozen
+      : readOnly
+        ? t.vault.offline
+        : t.vault.connected;
 
   const sectionRef = useRef(section);
   sectionRef.current = section;
@@ -485,7 +504,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
           <footer className="sidebar-foot">
             <div className={`conn${readOnly ? " is-offline" : ""}`} role="status">
               <Icon name={readOnly ? "cloudOff" : "cloud"} size={15} />
-              <span>{readOnly ? t.vault.offline : t.vault.connected}</span>
+              <span>{connLine}</span>
             </div>
             <button className="lock-btn" onClick={() => void lock()} title={t.vault.lockTitle(isMac ? "⌘L" : "Ctrl+L")}>
               <span className="lock-btn-icon" aria-hidden="true">
@@ -520,7 +539,7 @@ export function VaultScreen({ damagedItems, damagedSettings, unreadableItems, re
           />
         )}
         {section === "generator" && <GeneratorView />}
-        {section === "settings" && <SettingsView onImported={itemsChanged} online={!readOnly} />}
+        {section === "settings" && <SettingsView onImported={itemsChanged} online={!offline} frozen={frozen} />}
         {section === "trash" && <TrashView readOnly={readOnly} revision={revision} onChanged={itemsChanged} />}
 
         {!isToolSection && (

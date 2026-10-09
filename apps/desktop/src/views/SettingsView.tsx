@@ -87,7 +87,15 @@ function ChangePassword() {
   );
 }
 
-export function SettingsView({ onImported, online }: { onImported: () => void; online: boolean }) {
+export function SettingsView({
+  onImported,
+  online,
+  frozen,
+}: {
+  onImported: () => void;
+  online: boolean;
+  frozen: boolean;
+}) {
   const toast = useToast();
   const { t, preference, setPreference } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -273,7 +281,7 @@ export function SettingsView({ onImported, online }: { onImported: () => void; o
       <div className="settings-block">
         <h3 className="group-title">{t.settings.data}</h3>
         <Disclosure id="import" title={t.import.title} summary={t.import.overview}>
-          <ImportSection onImported={onImported} />
+          {frozen ? <p className="group-note">{t.vault.frozenImport}</p> : <ImportSection onImported={onImported} />}
         </Disclosure>
         <Disclosure id="export" title={t.export.title} summary={t.export.note}>
           <ExportSection />

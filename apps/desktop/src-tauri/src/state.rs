@@ -96,6 +96,12 @@ impl AppState {
         self.client.require_online()
     }
 
+    /// Refuses writes while the account is frozen (trial ended or payment
+    /// lapsed). Reads, export and sign-in are not gated.
+    pub fn require_full(&self) -> CmdResult<()> {
+        self.client.require_full()
+    }
+
     /// Monotonic time since start (does not advance during suspend on Linux/macOS).
     pub fn mono(&self) -> Duration {
         self.origin.elapsed()

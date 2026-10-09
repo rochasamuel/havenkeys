@@ -8,6 +8,10 @@ const account: AccountStatus = {
   accountId: "3f1c0000-0000-0000-0000-000000000000",
   online: true,
   lastSyncedAt: null,
+  planStatus: null,
+  entitlement: "full",
+  trialEndsAt: null,
+  periodEnd: null,
 };
 
 describe("showAccountItem", () => {

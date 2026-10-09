@@ -2,7 +2,7 @@
 
 use crate::commands::{copy_to_clipboard, CopyResult};
 use crate::state::{AppState, CmdError, CmdResult};
-use havenkeys_client::{AccountField, AccountStatus, DeviceEntry, DeviceStatus};
+use havenkeys_client::{AccountField, AccountStatus, DeviceEntry, DeviceStatus, InvitePreview};
 use havenkeys_core::vault::VaultStatus;
 use havenkeys_core::SecretString;
 use tauri::{AppHandle, Manager, State};
@@ -30,6 +30,27 @@ pub async fn device_status(app: AppHandle) -> CmdResult<DeviceStatus> {
 #[tauri::command]
 pub fn account_status(state: State<'_, AppState>) -> CmdResult<Option<AccountStatus>> {
     state.client().account_status()
+}
+
+/// What a setup code is for (the email and server inside it), so the
+/// welcome screen can say so before the user commits. No secrets.
+#[tauri::command]
+pub fn preview_invite(state: State<'_, AppState>, invite: String) -> CmdResult<InvitePreview> {
+    state.client().preview_invite(&invite)
+}
+
+pub const SIGNUP_URL: &str = "https://havenkeys.net/signup";
+pub const PRICING_URL: &str = "https://havenkeys.net/pricing";
+
+/// Fixed addresses only: the renderer cannot hand the OS a URL.
+#[tauri::command]
+pub fn open_signup() -> CmdResult<()> {
+    tauri_plugin_opener::open_url(SIGNUP_URL, None::<&str>).map_err(|_| CmdError::open_website())
+}
+
+#[tauri::command]
+pub fn open_pricing() -> CmdResult<()> {
+    tauri_plugin_opener::open_url(PRICING_URL, None::<&str>).map_err(|_| CmdError::open_website())
 }
 
 /// First run: the user pastes the invite and chooses a master password.
@@ -106,4 +127,15 @@ pub async fn copy_account_field(app: AppHandle, field: AccountField) -> CmdResul
         copy_to_clipboard(state, &value, seconds)
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_urls_point_at_the_website() {
+        assert!(SIGNUP_URL.starts_with("https://havenkeys.net/"));
+        assert!(PRICING_URL.starts_with("https://havenkeys.net/"));
+    }
 }

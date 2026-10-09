@@ -52,6 +52,7 @@ export type ErrorCode =
   | "signed_out"
   | "account_deleted"
   | "rate_limited"
+  | "account_frozen"
   | "invalid_server_url"
   | "sync_failed"
   | "update_unavailable"
@@ -114,6 +115,7 @@ const codes: Record<ErrorCode, string | null> = {
   signed_out: "HavenKeys is signed out of this account. Unlock again to reconnect.",
   account_deleted: "This account was deleted.",
   rate_limited: "Too many attempts. Try again in a few minutes.",
+  account_frozen: "This account is frozen: the trial ended or payment lapsed. The vault is read-only.",
   invalid_server_url: "That server address cannot be used. It must start with https://.",
   sync_failed: null,
 };
@@ -171,13 +173,16 @@ export const en = {
 
   welcome: {
     title: "Welcome to HavenKeys",
-    subInvite: "Set up this computer with your invite.",
+    createAccount: "Create account",
+    createAccountNote: "Opens havenkeys.net in your browser. You come back here with a setup code.",
+    creatingFor: (email: string, server: string) => `Creating an account for ${email} on ${server}.`,
+    subInvite: "Set up this computer with the code from your email.",
     subSignIn: "Add this computer to an account you already have.",
     howToSetUp: "How to set up",
-    tabInvite: "I have an invite",
+    tabInvite: "I have a setup code",
     tabSignIn: "I have an account",
-    invite: "Invite",
-    inviteHint: "One line, from whoever runs your HavenKeys server. It works once and expires after seven days.",
+    invite: "Setup code",
+    inviteHint: "One line, from your sign-up email or from whoever runs your server. It works once.",
     passwordHint: "At least 10 characters. Nobody can reset it for you — not the server, not us.",
     repeatPassword: "Repeat master password",
     tooShort: "Use at least 10 characters.",
@@ -245,6 +250,12 @@ export const en = {
     settings: "Settings",
     offline: "Offline, read-only",
     connected: "Connected",
+    trialDays: (n: number) => (n === 1 ? "Trial: 1 day left" : `Trial: ${n} days left`),
+    readOnlyFrozen: "Read-only (trial ended)",
+    frozenTitle: "Your trial has ended.",
+    frozenBody: "The vault is read-only. You can still open, copy, export and sign in with passkeys.",
+    subscribe: "Subscribe",
+    frozenImport: "Importing needs an active plan.",
     lockTitle: (shortcut: string) => `Lock now (${shortcut})`,
     unlocked: "Unlocked",
     lockNow: "Lock now",

@@ -384,6 +384,20 @@ export interface AccountStatus {
   online: boolean;
   /** Unix ms of the last successful pull, or null if none yet. */
   lastSyncedAt: number | null;
+  /** The server's plan state, e.g. "trialing"; null on a server without plans. */
+  planStatus: string | null;
+  /** "frozen" means the vault is read-only until the plan is active. */
+  entitlement: "full" | "frozen";
+  /** RFC 3339. */
+  trialEndsAt: string | null;
+  /** RFC 3339. */
+  periodEnd: string | null;
+}
+
+/** What a setup code is for, read from the code itself (no secrets). */
+export interface InvitePreview {
+  email: string;
+  serverUrl: string;
 }
 
 /** A device signed in to the account. Timestamps are RFC 3339 from the server. */

@@ -366,6 +366,7 @@ pub async fn empty_trash(app: AppHandle) -> CmdResult<usize> {
         let state = app.state::<AppState>();
         state.touch();
         state.require_online()?;
+        state.require_full()?;
         let staged = state.vault()?.stage_empty_trash()?;
         (staged, state.client().clone())
     };
@@ -387,6 +388,7 @@ fn stage_write(
     let state = app.state::<AppState>();
     state.touch();
     state.require_online()?;
+    state.require_full()?;
     stage(&state)
 }
 

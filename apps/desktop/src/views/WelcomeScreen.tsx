@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api } from "../lib/api";
-import type { VaultStatus } from "../lib/types";
+import type { InvitePreview, VaultStatus } from "../lib/types";
 import { Guilloche } from "../components/Guilloche";
 import { Seal } from "../components/Seal";
 import { useI18n } from "../i18n/context";
@@ -67,9 +67,31 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<InvitePreview | null>(null);
   const first = useRef<HTMLInputElement>(null);
 
   useEffect(() => first.current?.focus(), []);
+
+  // Say who the code is for before the user commits. Only a setup code is
+  // sent to Rust; a failure (a typo, half a paste) just clears the line.
+  useEffect(() => {
+    const code = invite.trim();
+    if (!code.startsWith("HKINV1-")) {
+      setPreview(null);
+      return;
+    }
+    let live = true;
+    const timer = window.setTimeout(() => {
+      api.previewInvite(code).then(
+        (p) => live && setPreview(p),
+        () => live && setPreview(null),
+      );
+    }, 300);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [invite]);
 
   const mismatch = confirm.length > 0 && confirm !== password;
   const tooShort = password.length > 0 && password.length < 10;
@@ -110,6 +132,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
           ref={first as unknown as React.Ref<HTMLTextAreaElement>}
         />
         <span className="wf-hint">{t.welcome.inviteHint}</span>
+        {preview && <p className="wf-hint">{t.welcome.creatingFor(preview.email, preview.serverUrl)}</p>}
       </label>
 
       <Field
@@ -235,6 +258,11 @@ export function WelcomeScreen({ onActivated, onSignedIn, onPaired }: Props) {
             {path === "invite" ? t.welcome.subInvite : path === "phone" ? t.welcome.subPhone : t.welcome.subSignIn}
           </p>
         </header>
+
+        <button className="btn btn-primary btn-lg" type="button" onClick={() => void api.openSignup()}>
+          {t.welcome.createAccount}
+        </button>
+        <p className="welcome-note">{t.welcome.createAccountNote}</p>
 
         <div className="segmented" role="tablist" aria-label={t.welcome.howToSetUp}>
           <button

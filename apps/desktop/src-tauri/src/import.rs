@@ -52,6 +52,7 @@ pub async fn import_file(app: AppHandle, source: ImportSource) -> CmdResult<Opti
         // refusing to store it would waste the user's time and leave a
         // plaintext export sitting on disk for nothing.
         state.require_online()?;
+        state.require_full()?;
     }
 
     let handle = app.clone();
@@ -138,6 +139,7 @@ pub async fn restore_backup(
         state.touch();
         state.require_unlocked()?;
         state.require_online()?;
+        state.require_full()?;
     }
     let handle = app.clone();
     let picked = tauri::async_runtime::spawn_blocking(move || {

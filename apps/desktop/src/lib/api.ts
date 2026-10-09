@@ -9,6 +9,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AccountField,
   AccountStatus,
+  InvitePreview,
   AddressPart,
   CardCopyField,
   CardNumberCheck,
@@ -187,6 +188,10 @@ export const api = {
   /** Ends the server session and locks the vault. The vault stays on disk. */
   signOut: () => call<void>("sign_out"),
   accountStatus: () => call<AccountStatus | null>("account_status"),
+  previewInvite: (invite: string) => call<InvitePreview>("preview_invite", { invite: invite.trim() }),
+  /** Opens the fixed sign-up page; the renderer never supplies a URL. */
+  openSignup: () => call<void>("open_signup"),
+  openPricing: () => call<void>("open_pricing"),
   pairingStart: (serverUrl: string) => call<PairingCode>("pairing_start", { serverUrl: serverUrl.trim() }),
   pairingPoll: () => call<PairingState>("pairing_poll"),
   pairingCancel: () => call<void>("pairing_cancel"),
@@ -231,6 +236,8 @@ export const api = {
     listen<boolean>("vault://connectivity", (e) => handler(e.payload)),
   /** The server refused this computer's sign-in after an unlock. */
   onSignedOut: (handler: () => void): Promise<UnlistenFn> => listen("vault://signed-out", () => handler()),
+  /** The account's plan changed (trial ended, subscribed, lapsed). */
+  onPlanChanged: (handler: () => void): Promise<UnlistenFn> => listen("plan_changed", () => handler()),
   /** A pull finished; carries counts only. */
   onSynced: (handler: (report: SyncReport) => void): Promise<UnlistenFn> =>
     listen<SyncReport>("vault://synced", (e) => handler(e.payload)),
