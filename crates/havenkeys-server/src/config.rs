@@ -1,7 +1,7 @@
 //! Configuration from the environment.
 
 use data_encoding::BASE64;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 pub struct SmtpConfig {
     pub url: Zeroizing<String>,
@@ -12,8 +12,14 @@ pub struct Config {
     pub database_url: Zeroizing<String>,
     pub server_secret: [u8; 32],
     pub port: u16,
+    /// Exactly one browser origin, or none at all. There is no wildcard.
     pub cors_origin: Option<String>,
+    /// Whether to believe the left-most `X-Forwarded-For` entry. Off unless
+    /// the service is known to sit behind a proxy that sets it, because a
+    /// client-supplied header would otherwise defeat per-IP rate limiting.
     pub trust_forwarded_for: bool,
+    /// A MaxMind-format city database for the pairing confirmation's
+    /// location. Optional; without it the phone sees the IP only.
     pub geoip_database: Option<std::path::PathBuf>,
     /// `HAVENKEYS_SIGNUP=open`. Off by default: a self-hosted server keeps
     /// admin invites only (spec 2026-10-07 §4.1).
@@ -26,8 +32,13 @@ pub struct Config {
 }
 
 impl Config {
+    /// Reads the environment. The collected values (the database URL, the
+    /// server secret and the SMTP URL among them) are wiped once parsed.
+    /// Fails loudly rather than inventing a default secret: a predictable
+    /// `SERVER_SECRET` would make the `auth/params` salts guessable and
+    /// bring account enumeration back.
     pub fn from_env() -> Result<Self, String> {
-        let vars: Vec<(&str, String)> = [
+        let mut vars: Vec<(&str, String)> = [
             "DATABASE_URL",
             "SERVER_SECRET",
             "PORT",
@@ -42,25 +53,25 @@ impl Config {
         .into_iter()
         .filter_map(|name| std::env::var(name).ok().map(|v| (name, v)))
         .collect();
-        Self::from_vars(&vars)
+        let config = Self::from_vars(&vars);
+        for (_, value) in vars.iter_mut() {
+            value.zeroize();
+        }
+        config
     }
 
-    /// Reads a set of variables. Fails loudly rather than inventing a
-    /// default secret: a predictable `SERVER_SECRET` would make the
-    /// `auth/params` salts guessable and bring account enumeration back.
+    /// Reads a set of variables, as `from_env` does. The trimmed copies it
+    /// makes are wiped when dropped.
     pub fn from_vars(vars: &[(&str, String)]) -> Result<Self, String> {
-        let get = |name: &str| -> Option<String> {
+        let get = |name: &str| -> Option<Zeroizing<String>> {
             vars.iter()
                 .find(|(n, _)| *n == name)
-                .map(|(_, v)| v.trim().to_string())
+                .map(|(_, v)| Zeroizing::new(v.trim().to_string()))
                 .filter(|v| !v.is_empty())
         };
-        let database_url =
-            Zeroizing::new(get("DATABASE_URL").ok_or("DATABASE_URL is not set".to_string())?);
-        let raw = Zeroizing::new(
-            get("SERVER_SECRET")
-                .ok_or("SERVER_SECRET is not set (32 random bytes, base64)".to_string())?,
-        );
+        let database_url = get("DATABASE_URL").ok_or("DATABASE_URL is not set".to_string())?;
+        let raw = get("SERVER_SECRET")
+            .ok_or("SERVER_SECRET is not set (32 random bytes, base64)".to_string())?;
         let decoded = Zeroizing::new(
             BASE64
                 .decode(raw.as_bytes())
@@ -74,15 +85,15 @@ impl Config {
             Some(p) => p.parse().map_err(|_| "PORT is not a number".to_string())?,
             None => 8080,
         };
-        let signup_open = match get("HAVENKEYS_SIGNUP").as_deref() {
+        let signup_open = match get("HAVENKEYS_SIGNUP").as_deref().map(String::as_str) {
             None | Some("off") => false,
             Some("open") => true,
             Some(_) => return Err("HAVENKEYS_SIGNUP must be open or off".into()),
         };
         let smtp = match (get("SMTP_URL"), get("SMTP_FROM")) {
             (Some(url), Some(from)) => Some(SmtpConfig {
-                url: Zeroizing::new(url),
-                from,
+                url,
+                from: from.to_string(),
             }),
             (None, None) => None,
             _ => return Err("SMTP_URL and SMTP_FROM must be set together".into()),
@@ -100,12 +111,14 @@ impl Config {
             database_url,
             server_secret,
             port,
-            cors_origin: get("HAVENKEYS_CORS_ORIGIN"),
+            cors_origin: get("HAVENKEYS_CORS_ORIGIN").map(|v| v.to_string()),
             trust_forwarded_for: matches!(
-                get("HAVENKEYS_TRUST_FORWARDED_FOR").as_deref(),
+                get("HAVENKEYS_TRUST_FORWARDED_FOR")
+                    .as_deref()
+                    .map(String::as_str),
                 Some("1") | Some("true")
             ),
-            geoip_database: get("HAVENKEYS_GEOIP_DATABASE").map(Into::into),
+            geoip_database: get("HAVENKEYS_GEOIP_DATABASE").map(|v| v.to_string().into()),
             signup_open,
             public_url,
             smtp,

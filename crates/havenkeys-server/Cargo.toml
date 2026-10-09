@@ -51,6 +51,8 @@ lettre = { version = "0.11", default-features = false, features = [
 ] }
 # HMAC-SHA-256 keys the stored signup code with the server secret.
 hmac = "0.12"
+# Parses SMTP_URL to decide on its scheme and tls= parameter.
+url = "2"
 unicode-normalization = "0.1"
 # Already in the tree (postgres-protocol); for dropping bidi and zero-width
 # characters from names shown on a security confirmation (PA4).

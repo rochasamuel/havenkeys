@@ -44,8 +44,19 @@ impl Smtp {
     /// STARTTLS. Plain `smtp://` without `tls=` is refused: the code it
     /// carries is a credential for the account.
     pub fn new(url: &str, from: &str) -> Result<Self, String> {
-        let plain = url.starts_with("smtp://") && !url.contains("tls=required");
-        if plain {
+        // Decided on the parsed URL, as lettre will read it: the parser
+        // lowercases the scheme, and only a real `tls` query pair counts.
+        let encrypted = match url::Url::parse(url) {
+            Ok(parsed) => match parsed.scheme() {
+                "smtps" => true,
+                "smtp" => parsed
+                    .query_pairs()
+                    .any(|(key, value)| key == "tls" && value == "required"),
+                _ => false,
+            },
+            Err(_) => false,
+        };
+        if !encrypted {
             return Err("SMTP_URL must use smtps:// or smtp://…?tls=required".into());
         }
         let transport = AsyncSmtpTransport::<Tokio1Executor>::from_url(url)
@@ -111,5 +122,31 @@ impl Mailer for Recording {
             self.mails.lock().unwrap().push(mail);
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Smtp;
+
+    const FROM: &str = "HavenKeys <no-reply@havenkeys.net>";
+
+    #[test]
+    fn smtp_without_tls_is_refused_in_any_spelling() {
+        assert!(Smtp::new("smtp://u:p@host:587", FROM).is_err());
+        assert!(Smtp::new("SMTP://u:p@host:587", FROM).is_err());
+        assert!(Smtp::new("smtp://u:tls=required@host", FROM).is_err());
+        assert!(Smtp::new("not a url", FROM).is_err());
+    }
+
+    #[test]
+    fn encrypted_smtp_is_accepted() {
+        assert!(Smtp::new("smtp://u:p@host:587?tls=required", FROM).is_ok());
+        assert!(Smtp::new("smtps://u:p@host:465", FROM).is_ok());
+    }
+
+    #[test]
+    fn a_bad_sender_address_is_refused() {
+        assert!(Smtp::new("smtps://u:p@host:465", "not an address").is_err());
     }
 }

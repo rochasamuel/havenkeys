@@ -2870,6 +2870,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-normalization",
  "unicode-properties",
+ "url",
  "uuid",
  "webpki-roots",
  "zeroize",
