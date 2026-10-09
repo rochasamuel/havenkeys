@@ -144,6 +144,21 @@ results may be absent from a desktop older than the release that added it;
 the extension reads a missing value as `"full"` (the gate itself is in Rust,
 which answers `frozen` to fills, saves and passkey creation).
 
+When the account is frozen (the trial ended and nobody subscribed), the
+bridge (`refused_when_frozen` in `crates/havenkeys-bridge/src/dispatch.rs`)
+answers the error code `frozen` to: `check_login`, `save_login`,
+`check_passkey_create`, `passkey_create`, `start_sso`, `check_sso`,
+`save_sso`, `find_identity`, `fill_identity`, `find_cards`, `fill_card`
+and `save_card`, and to `fill_item` after the origin check (a page that
+does not match the login still gets `denied`, never `frozen`). Still
+answered: `status`, `lock`, `show_unlock`, `find_matches` (metadata only,
+origin bound; the popup lists the site's logins for their codes),
+`get_totp`, `generator_options`, `generate_password` (it touches no item),
+`find_passkeys`, `passkey_get`, `passkey_status`, `open_item` and
+`open_identity`. The inline menu reads `entitlement` from `find_matches` and
+does not open when it is `frozen`. No request reveals a password to the
+popup.
+
 `topUrl` is present only when `url` is an iframe. It is the tab's top-level
 page, and items must match both (`autofill.md`, Frames). Optional fields may
 be omitted, which means null.

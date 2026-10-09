@@ -3536,3 +3536,57 @@ overview says, and purge, empty and expiry skip it. Covered by
 (`crates/havenkeys-core/tests/trash.rs`), across a lock and unlock.
 **Remaining limitations:** the stray `trashedAt` stays in that overview until
 the Identity is next saved, which clears it.
+
+---
+
+# Security Review: Frozen accounts in the apps (2026-10-09)
+
+Branch `feat/self-signup-server`, stage 3. Spec:
+`docs/superpowers/specs/2026-10-07-self-signup-and-plans-design.md` §6.3, §8;
+model: `security-model.md` §25. Internal review, not an independent audit.
+
+| # | Severity | Component | Finding | Status |
+|---|---|---|---|---|
+| FZ1 | Low | Desktop, extension, Android | The freeze of reads and autofill is enforced by open-source clients | Accepted |
+| FZ2 | Info | Bridge `find_matches` | Metadata is listed while frozen | By design |
+| FZ3 | Info | Subscribe, Create account | They open fixed URLs only | By design |
+| FZ4 | Low | Extension protocol parser | A missing `entitlement` reads as `full` | Accepted |
+
+### FZ1. Client-side enforcement (Low, accepted)
+**Component:** `havenkeys-bridge` (`refused_when_frozen`), `havenkeys-client`
+(`require_full`), the extension, the Android autofill service.
+**Attack scenario:** the user edits the open-source client, or the local
+`account` row, to stay `full` after the trial and keep filling or saving.
+**Mitigation:** the server refuses writes and new devices on its own (stage
+1), so a modified client keeps only what it could already read.
+**Remaining limitations:** the freeze of reads and autofill is not a
+security boundary; it is the plan, enforced where the data is used.
+
+### FZ2. `find_matches` while frozen (Info, by design)
+**Component:** `crates/havenkeys-bridge/src/dispatch.rs`.
+**Attack scenario:** a page that matches a saved login learns, through the
+extension, nothing it could not learn before the trial ended.
+**Mitigation:** the answer is the same metadata as when full (id, title,
+username, TOTP flag), origin bound in Rust; `fill_item` checks the origin
+first and then answers `frozen`; no password is returned.
+**Remaining limitations:** none beyond the normal `find_matches` exposure.
+
+### FZ3. Fixed URLs (Info, by design)
+**Component:** desktop `open_signup` and `open_pricing`; the popup's
+`popup_open_pricing`; Android's `PRICING_URL`.
+**Attack scenario:** a page or a forged message steers the button to a
+chosen URL.
+**Mitigation:** the commands take no URL; the URLs are constants.
+**Remaining limitations:** none.
+
+### FZ4. Tolerant parse of `entitlement` (Low, accepted)
+**Component:** `packages/protocol/src/index.ts` (`status`, `find_matches`).
+**Attack scenario:** an older desktop sends no `entitlement`, so the
+extension reads `full` and opens the menu.
+**Mitigation:** the gate is in Rust: an older desktop has no freeze to
+enforce, and a current desktop always sends the field and answers `frozen`
+to fills and saves.
+**Remaining limitations:** ship the extension before or with the desktop;
+an old extension against a new desktop must update (its parser rejects the
+new field).
+

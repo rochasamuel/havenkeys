@@ -2090,5 +2090,30 @@ carry no item content. Native messaging and the extension are not touched.
 - The freeze of reads and autofill inside the apps (spec §6.3) is enforced
   by open-source clients; a modified build can remove it. The server
   guarantees only the refusal of writes and of new devices.
+- What the clients do when frozen. The plan lives in plaintext columns of the
+  local `account` table (schema 7; `PlanRecord`, kept apart from
+  `AccountRecord`; a vault that never saw a plan reads as `full`). A `402`
+  from the server flips the stored entitlement at once (`mark_frozen`); the
+  next sync's `account` object is authoritative. `require_full` stops the
+  client's `push`, `push_batches`, `change_master_password`,
+  `restore_backup` and `push_restore`, and Android's passkey creation,
+  before any request.
+  - Stops: in the desktop, the editors, import and change of master
+    password (a banner offers Subscribe); in the extension, the inline menu,
+    Fill, automatic sign-in and "Sign in with", save prompts, passkey
+    creation, card and identity fill (the bridge answers `frozen`; see
+    `native-messaging.md`); on Android, autofill datasets, the save prompt
+    and passkey creation.
+  - Stays: unlocking, search, reveal and copy in the desktop and Android,
+    TOTP, passkey sign-in, export, delete account, Open in desktop from the
+    popup, and the password generator.
+  - Two rulings. The popup never reveals a password when frozen: it offers
+    the site's TOTP codes and Open in desktop, so no new secret path exists.
+    `find_matches` is still answered when frozen (id, title, username, TOTP
+    flag; origin bound) because the popup needs the list; the menu honours
+    its `entitlement` flag and the bridge refuses everything that would fill
+    or save.
+  - Subscribe and Create account open fixed `havenkeys.net` URLs
+    (`/pricing`, `/signup`); no vault data goes into them.
 - The SMTP provider sees the recipient address, the code and the invite. It
   is an operator under the LGPD and is named in the privacy policy.

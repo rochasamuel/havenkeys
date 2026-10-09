@@ -33,6 +33,21 @@ run. The manual checklist at the end of this file is what remains.
 
 Minimum Android 9 (API 28); compiled against and targeting API 36.
 
+## Plan, frozen accounts and the setup code
+
+* **Plan row:** Settings shows the plan ("Trial: N days left" while
+  trialing, "Trial ended. Read-only." when frozen). When frozen it also has a
+  Subscribe row that opens `https://havenkeys.net/pricing`. Rust decides
+  (`plan_status`, `entitlement` and `trial_ends_at` in `Status`,
+  `crates/havenkeys-mobile/src/vault.rs`); the app only displays.
+* **Frozen autofill:** `HavenAutofillService` offers no datasets and no save
+  prompt, and passkey creation answers `account_frozen`. Unlocking, search,
+  reveal, copy and TOTP keep working.
+* **Onboarding:** Create account opens the sign-up page in the browser; "I
+  have a setup code" is the invite choice, and its step shows the decoded
+  email and server before the master password (`preview_invite`, no
+  network).
+
 ## Passkeys (Android M3)
 
 HavenKeys is a passkey and password provider for Android's Credential

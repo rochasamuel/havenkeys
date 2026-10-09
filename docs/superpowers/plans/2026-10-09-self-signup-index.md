@@ -14,7 +14,7 @@ the day.
 |---|---|---|---|
 | 1. Server: plans, entitlement, signup, emails | `2026-10-09-self-signup-stage1-server.md` | Planned | — |
 | 2. Website: `/signup`, `/pricing`, legal | `2026-10-09-self-signup-stage2-website.md` | Planned | Stage 1's routes on `api.havenkeys.net` to work live; can be built and tested before |
-| 3. Apps: account status, frozen behaviour, onboarding | to write | Not planned | Stage 1 |
+| 3. Apps: account status, frozen behaviour, onboarding | `2026-10-09-self-signup-stage3-apps.md` | Done (commits `c7d2916..ae1228e`) | Stage 1 |
 
 Stage 1 can ship alone: with `HAVENKEYS_SIGNUP=off` (the default) nothing
 changes for users; every existing account becomes `complimentary` and the
@@ -147,3 +147,24 @@ Read first: `crates/havenkeys-sync-client/src/wire.rs` (`LoginDto`,
 - `docs/native-messaging.md`: the `entitlement` field and the `frozen` code.
 - `docs/security-review.md`: an entry for the new reveal request if (a).
 - `docs/ideas.md` item 13 closed.
+
+## Stage 3 outcome
+
+Done. Decisions taken while building, which settle the open questions above:
+
+- Subscribe opens `https://havenkeys.net/pricing`; Create account opens
+  `/signup`. Both are fixed URLs.
+- No `reveal_item` request: the frozen popup offers TOTP and Open in desktop.
+- `find_matches` is answered while frozen (metadata, origin bound) and
+  carries `entitlement`; the inline menu honours it. `generate_password` is
+  still answered. The refused list is `refused_when_frozen` in
+  `crates/havenkeys-bridge/src/dispatch.rs`; `fill_item` checks the origin
+  first, then the plan.
+- The store keeps the plan in `PlanRecord`, separate from `AccountRecord`; a
+  missing plan reads as `full`. `plan_changed` is a default no-op method on
+  the client events, so shells that do not show the plan need no change.
+- Release order: ship the extension (its parser tolerates a missing
+  `entitlement`) before or with the desktop. An old extension against a new
+  desktop must update.
+- Docs updated: `native-messaging.md`, `security-model.md` §25,
+  `security-review.md` (FZ1 to FZ4), `android.md`.
