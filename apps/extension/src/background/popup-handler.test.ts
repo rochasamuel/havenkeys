@@ -213,7 +213,8 @@ describe("popup handler", () => {
     });
     const h2 = createPopupHandler(c, async () => ({ id: 7, url: "about:blank" }), async () => 1);
     expect((await h2.handle({ type: "popup_fill", itemId: ID })).ok).toBe(false);
-    expect(c.seen).toHaveLength(1);
+    // status (the frozen check) and get_totp for the first; nothing for about:blank.
+    expect(c.seen.map((x) => x.type)).toEqual(["status", "get_totp"]);
   });
 
   it("asks the desktop to open the login, using the tab's URL", async () => {
@@ -465,6 +466,35 @@ describe("popup frozen", () => {
     const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login" }));
     const r = await h.handle({ type: "popup_fill", itemId: ghMatch.id });
     expect(r).toEqual({ ok: false, message: en.errors.bridge.frozen });
+  });
+
+  it("refuses popup_fill and popup_fill_totp when the desktop says frozen, before asking for any secret", async () => {
+    for (const [type, asked] of [
+      ["popup_fill", ["find_matches"]],
+      ["popup_fill_totp", ["status"]],
+    ] as const) {
+      const filled: FillPayload[] = [];
+      const c = fakeClient((r) =>
+        r.type === "status"
+          ? { type: "status", state: "unlocked", vaultExists: true, entitlement: "frozen" }
+          : r.type === "find_matches"
+            ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" }
+            : { type: "get_totp", code: "123456", period: 30, secondsRemaining: 20, autoSubmit: false },
+      );
+      const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login" }), async (_t, _u, p) => {
+        filled.push(p);
+        return 1;
+      });
+      expect(await h.handle({ type, itemId: ghMatch.id })).toEqual({ ok: false, message: en.errors.bridge.frozen });
+      expect(c.seen.map((x) => x.type)).toEqual(asked);
+      expect(filled).toEqual([]);
+    }
+  });
+
+  it("popup_open_pricing reports a failure to open the tab", async () => {
+    (globalThis as { chrome?: unknown }).chrome = { tabs: { create: async () => { throw new Error("no"); } } };
+    const h = createPopupHandler(fakeClient(() => unlocked), async () => undefined);
+    expect(await h.handle({ type: "popup_open_pricing" })).toEqual({ ok: false, message: en.errors.generic });
   });
 
   it("popup_open_pricing opens the pricing page", async () => {

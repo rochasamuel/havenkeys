@@ -87,15 +87,22 @@ export function createPopupHandler(
     const tab = await activeTab();
     const url = pageUrlForRequest(tab?.url);
     if (!tab || !url) return { ok: false, message: t.errors.pageNotSupported };
+    // Read-only account: nothing is put into the page, whatever the popup
+    // asks. The entitlement is asked fresh here, never cached (Rust also
+    // refuses `fill_item`, and answers a frozen TOTP without auto-submit).
+    const frozen = { ok: false as const, message: t.errors.bridge.frozen };
     try {
       let filled: number;
       if (totp) {
+        const status = await client.request({ type: "status" });
+        if (status.entitlement === "frozen") return frozen;
         const otp = await client.request({ type: "get_totp", itemId, url });
         filled = await fillTab(tab.id, url, { kind: "otp", code: otp.code }, otp.autoSubmit ? { itemId, hasTotp: true } : null);
       } else {
         // One lookup, no secrets: whether the login signs in with a
         // provider, and whether a run needs its OTP step.
-        const { matches } = await client.request({ type: "find_matches", url });
+        const { matches, entitlement } = await client.request({ type: "find_matches", url });
+        if (entitlement === "frozen") return frozen;
         const m = matches.find((x) => x.id === itemId);
         const c = await client.request({ type: "fill_item", itemId, url });
         // A saved password is filled even when the login also signs in with
@@ -225,7 +232,11 @@ export function createPopupHandler(
         }
       }
       case "popup_open_pricing":
-        await chrome.tabs.create({ url: PRICING_URL });
+        try {
+          await chrome.tabs.create({ url: PRICING_URL });
+        } catch {
+          return { ok: false, message: t.errors.generic };
+        }
         return { ok: true, value: null };
       case "popup_show_unlock":
         // No tab, URL or item: the desktop only raises its window. The

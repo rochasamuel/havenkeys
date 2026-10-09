@@ -212,4 +212,28 @@ describe("popup frozen", () => {
     [...document.querySelectorAll("button")].find((b) => b.textContent === en.popup.frozen.subscribe)!.click();
     await vi.waitFor(() => expect(asked).toContainEqual({ type: "popup_open_pricing" }));
   });
+
+  it("the code copies to the clipboard and never asks to fill the page", async () => {
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (s: string) => void copied.push(s) },
+    });
+    replies = {
+      popup_state: async () => ({ ok: true, value: { kind: "frozen", site: "github.com", matches: [{ id: "11111111-1111-4111-8111-111111111111", title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] }] } }),
+      popup_totp: async () => ({ ok: true, value: { code: "123456", secondsRemaining: 20 } }),
+    };
+    vi.resetModules();
+    await import("./popup");
+    await vi.waitFor(() => expect(document.querySelector(".notice.frozen")).not.toBeNull());
+    [...document.querySelectorAll("button")].find((b) => b.textContent === en.popup.frozen.code)!.click();
+    await vi.waitFor(() => expect(document.querySelector("button.code")).not.toBeNull());
+    const code = document.querySelector<HTMLButtonElement>("button.code")!;
+    expect(code.title).toBe(en.popup.frozen.copyTitle);
+    code.click();
+    await vi.waitFor(() => expect(copied).toEqual(["123456"]));
+    await vi.waitFor(() => expect(code.textContent).toBe(en.popup.frozen.copied));
+    expect(asked.map((m) => (m as { type: string }).type)).not.toContain("popup_fill_totp");
+    expect(asked.map((m) => (m as { type: string }).type)).not.toContain("popup_fill");
+  });
 });

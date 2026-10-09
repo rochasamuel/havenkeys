@@ -246,11 +246,50 @@ function matchRow(m: Match): HTMLElement {
   return row;
 }
 
-/** A login while the account is read-only: Code for a login with TOTP, no Fill. */
+/**
+ * The Code button while the account is read-only: shows the code, which
+ * copies to the clipboard on click. Nothing is put into the page.
+ */
+function frozenCodeSlot(m: Match, status: HTMLElement): HTMLElement {
+  const slot = h("span");
+  const show = smallButton(t.popup.frozen.code, t.popup.codeTitle);
+  show.addEventListener("click", async () => {
+    show.disabled = true;
+    const r = await send<TotpView>({ type: "popup_totp", itemId: m.id });
+    show.disabled = false;
+    if (!r.ok) {
+      status.replaceChildren(h("span", { className: "error", text: r.message }));
+      return;
+    }
+    const shown = formatCode(r.value.code);
+    const code = h("button", { className: "code", text: shown });
+    code.type = "button";
+    code.title = t.popup.frozen.copyTitle;
+    code.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(r.value.code);
+      } catch {
+        status.replaceChildren(h("span", { className: "error", text: t.errors.generic }));
+        return;
+      }
+      code.textContent = t.popup.frozen.copied;
+      setTimeout(() => {
+        if (code.isConnected) code.textContent = shown;
+      }, 2000);
+    });
+    slot.replaceChildren(code);
+    // Remove the code when it stops being valid.
+    setTimeout(() => slot.replaceChildren(show), r.value.secondsRemaining * 1000);
+  });
+  slot.append(show);
+  return slot;
+}
+
+/** A login while the account is read-only: Code (copy) for a login with TOTP, no Fill. */
 function frozenRow(m: Match): HTMLElement {
   const status = h("div", { className: "row-status" });
   const row = rowBase(m, status);
-  row.append(h("div", { className: "actions" }, ...(m.hasTotp ? [codeSlot(m, status)] : [])), status);
+  row.append(h("div", { className: "actions" }, ...(m.hasTotp ? [frozenCodeSlot(m, status)] : [])), status);
   return row;
 }
 

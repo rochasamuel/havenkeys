@@ -544,8 +544,13 @@ export function createInlineHandler(deps: InlineDeps) {
     let items: Match[] = [];
     try {
       const found = await deps.client.request({ type: "find_matches", ...frameFields(frame) });
-      // A frozen account fills nothing: no menu.
-      if (found.entitlement === "frozen") return { ok: false };
+      // A frozen account fills nothing. A site's passkey autofill (a
+      // conditional get() waiting in this frame) still gets its rows, as
+      // with the menu turned off: passkey sign-in stays while frozen.
+      if (found.entitlement === "frozen") {
+        const waiting = kind === "login" && !explicit ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
+        return waiting.length === 0 ? { ok: false } : register(frame, kind, false, [], waiting, { hint: null, help: null });
+      }
       items = found.matches;
     } catch (e) {
       // Locked: show a small "unlock HavenKeys" menu. Anything else (app

@@ -223,6 +223,28 @@ describe("suggestion menus", () => {
     expect(requests.map((r) => r.type)).toEqual(["find_matches"]);
   });
 
+  it("frozen with a site's passkey autofill waiting: the menu offers only the passkey", async () => {
+    const CRED = "AQEBAQEBAQEBAQEBAQEBAQ";
+    const row = { itemId: GH, credentialId: CRED, title: "GitHub", userName: "octo" };
+    const frozen = (r: Request) =>
+      r.type === "find_matches" ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" } : defaultAnswer(r);
+    const passkeys = (rows: (typeof row)[]) => ({
+      passkeys: { conditionalFor: () => rows, pickConditional: async () => ({ ok: true as const, value: null }) },
+    });
+    const { h, requests } = setup(frozen, passkeys([row]));
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+    const view = await h.handleInline(1, { type: "menu_state", token: T1 });
+    expect(view).toMatchObject({ ok: true, value: { state: "ready", passkeys: [row], items: [], hint: null } });
+    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
+    expect(requests.map((r) => r.type)).toEqual(["find_matches"]);
+    // From the icon (explicit) or an OTP field: nothing, even with a passkey waiting.
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "login", explicit: true })).toEqual({ ok: false });
+    expect(await h.handleContent(frame(), { type: "cs_open_menu", kind: "otp" })).toEqual({ ok: false });
+    // No passkey waiting: no menu.
+    const { h: none } = setup(frozen, passkeys([]));
+    expect(await none.handleContent(frame(), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
+  });
+
   it("opens with no secrets, then fills the frame the user clicked in", async () => {
     const { h, requests, sent } = setup();
     const r = await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });

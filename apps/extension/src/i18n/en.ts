@@ -72,9 +72,11 @@ export const en = {
     },
     frozen: {
       title: "Your trial has ended",
-      body: "The vault is read-only until you subscribe. You can still show a one-time code here, and open items in the HavenKeys app.",
+      body: "The vault is read-only until you subscribe. You can still copy a one-time code here, and open items in the HavenKeys app.",
       subscribe: "Subscribe",
       code: "Code",
+      copyTitle: "Copy this code",
+      copied: "Copied",
     },
     hostUnavailable: {
       title: "Not connected",

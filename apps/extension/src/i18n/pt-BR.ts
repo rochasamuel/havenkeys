@@ -39,9 +39,11 @@ export const ptBR: Messages = {
     },
     frozen: {
       title: "Seu período de teste terminou",
-      body: "O cofre fica somente leitura até você assinar. Você ainda pode ver um código de uso único aqui e abrir itens no app HavenKeys.",
+      body: "O cofre fica somente leitura até você assinar. Você ainda pode copiar um código de uso único aqui e abrir itens no app HavenKeys.",
       subscribe: "Assinar",
       code: "Código",
+      copyTitle: "Copiar este código",
+      copied: "Copiado",
     },
     hostUnavailable: {
       title: "Não conectado",
