@@ -18,6 +18,7 @@ import org.junit.Before
 import org.junit.Test
 import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LumaFrame
+import uniffi.havenkeys_mobile.InvitePreview
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingViewModelTest {
@@ -133,5 +134,29 @@ class OnboardingViewModelTest {
         vm.activate("invite", "correct horse battery staple")
         vm.choose(OnboardingUiState.Mode.TYPE)
         assertNull(vm.state.value.errorCode)
+    }
+
+    @Test
+    fun previewShowsTheEmailAndServer() = runTest {
+        val accounts = FakeAccountRepository().apply {
+            invitePreview = Outcome.Ok(InvitePreview("me@example.com", "https://v.example.com"))
+        }
+        val vm = OnboardingViewModel(accounts)
+        vm.previewInvite("  HKINV1-abc  ")
+        assertEquals(listOf("HKINV1-abc"), accounts.previewed)
+        assertEquals("me@example.com", vm.state.value.invitePreview?.email)
+        assertEquals("https://v.example.com", vm.state.value.invitePreview?.serverUrl)
+
+        vm.previewInvite("something else")
+        assertNull(vm.state.value.invitePreview)
+        assertEquals("only a setup code reaches Rust", 1, accounts.previewed.size)
+    }
+
+    @Test
+    fun aRefusedPreviewShowsNothing() = runTest {
+        val accounts = FakeAccountRepository().apply { invitePreview = Outcome.Failed("invalid_input") }
+        val vm = OnboardingViewModel(accounts)
+        vm.previewInvite("HKINV1-nope")
+        assertNull(vm.state.value.invitePreview)
     }
 }

@@ -31,12 +31,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import net.havenkeys.android.R
+import net.havenkeys.android.ui.components.openLink
 import net.havenkeys.android.ui.kit.ButtonStyle
 import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowField
@@ -55,10 +58,13 @@ import net.havenkeys.android.ui.shell.LargeTitle
 import net.havenkeys.android.ui.theme.HavenShape
 import net.havenkeys.android.ui.theme.HavenSpacing
 import net.havenkeys.android.ui.theme.HavenTheme
+import uniffi.havenkeys_mobile.InvitePreview
 import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LumaFrame
 
 private const val MIN_PASSWORD_LENGTH = 10
+private const val SIGNUP_URL = "https://havenkeys.net/signup"
+private const val PREVIEW_DEBOUNCE_MS = 300L
 
 /**
  * First run: scan the Recovery Sheet, type it, or activate an invite.
@@ -96,7 +102,8 @@ fun OnboardingScreen(
             )
             OnboardingUiState.Mode.SCAN -> ScanStep(state.errorCode, viewModel::onFrame, viewModel::back, content)
             OnboardingUiState.Mode.TYPE -> TypeStep(state, viewModel::signIn, content)
-            OnboardingUiState.Mode.INVITE -> InviteStep(state, viewModel::activate, content)
+            OnboardingUiState.Mode.INVITE ->
+                InviteStep(state, viewModel::activate, viewModel::previewInvite, content)
             OnboardingUiState.Mode.PASSWORD -> KitPasswordStep(state, viewModel::signInWithKit, content)
         }
     }
@@ -134,7 +141,13 @@ private fun ChooseStep(onChoose: (OnboardingUiState.Mode) -> Unit, modifier: Mod
             style = HavenTheme.type.titleSmall,
             color = HavenTheme.colors.textStrong,
         )
+        val context = LocalContext.current
         InsetGroup {
+            row {
+                Choice(HavenIcon.Globe, R.string.onboarding_create_account, R.string.onboarding_create_account_sub) {
+                    openLink(context, SIGNUP_URL)
+                }
+            }
             row {
                 Choice(HavenIcon.Qr, R.string.onboarding_scan_kit, R.string.onboarding_scan_kit_sub) {
                     onChoose(OnboardingUiState.Mode.SCAN)
@@ -146,7 +159,7 @@ private fun ChooseStep(onChoose: (OnboardingUiState.Mode) -> Unit, modifier: Mod
                 }
             }
             row {
-                Choice(HavenIcon.Plus, R.string.onboarding_invite_choice, R.string.onboarding_invite_sub) {
+                Choice(HavenIcon.Plus, R.string.onboarding_setup_code_choice, R.string.onboarding_setup_code_sub) {
                     onChoose(OnboardingUiState.Mode.INVITE)
                 }
             }
@@ -290,9 +303,16 @@ private fun TypeStep(
 private fun InviteStep(
     state: OnboardingUiState,
     onActivate: (invite: String, password: String) -> Unit,
+    onPreview: (invite: String) -> Unit,
     modifier: Modifier,
 ) {
     val invite = rememberSecret()
+    val typed = invite.text.text.toString()
+    // Debounced: a pasted code settles before Rust is asked to read it.
+    LaunchedEffect(typed) {
+        delay(PREVIEW_DEBOUNCE_MS)
+        onPreview(typed)
+    }
     val password = rememberSecret()
     val repeat = rememberSecret()
     val tooShort = password.text.text.isNotEmpty() && password.text.text.length < MIN_PASSWORD_LENGTH
@@ -304,9 +324,9 @@ private fun InviteStep(
             row {
                 SecretRow(
                     invite,
-                    R.string.onboarding_invite,
+                    R.string.onboarding_setup_code,
                     !state.busy,
-                    hint = stringResource(R.string.onboarding_invite_hint),
+                    hint = stringResource(R.string.onboarding_setup_code_hint),
                 )
             }
             row {
@@ -328,6 +348,7 @@ private fun InviteStep(
                 )
             }
         }
+        state.invitePreview?.let { InviteSummary(it) }
         MaybeError(state.errorCode)
         SubmitButton(
             text = stringResource(if (state.busy) R.string.onboarding_creating else R.string.onboarding_create),
@@ -375,6 +396,17 @@ private fun KitPasswordStep(state: OnboardingUiState, onSignIn: (password: Strin
 private fun KitSummary(preview: KitPreview) {
     Column {
         SectionHeader(stringResource(R.string.onboarding_kit_found))
+        InsetGroup {
+            row { GroupRow { GroupRowField(stringResource(R.string.onboarding_email), preview.email) } }
+            row { GroupRow { GroupRowField(stringResource(R.string.onboarding_server), preview.serverUrl) } }
+        }
+    }
+}
+
+@Composable
+private fun InviteSummary(preview: InvitePreview) {
+    Column {
+        SectionHeader(stringResource(R.string.onboarding_creating_for))
         InsetGroup {
             row { GroupRow { GroupRowField(stringResource(R.string.onboarding_email), preview.email) } }
             row { GroupRow { GroupRowField(stringResource(R.string.onboarding_server), preview.serverUrl) } }

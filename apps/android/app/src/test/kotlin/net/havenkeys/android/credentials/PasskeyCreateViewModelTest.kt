@@ -133,4 +133,17 @@ class PasskeyCreateViewModelTest {
         assertTrue(s.planFailed)
         assertTrue(repo.calls.isEmpty())
     }
+
+    @Test
+    fun aFrozenAccountSurfacesAsTheError() = runTest {
+        val repo = FakeCredentialRepository().apply {
+            plan = Outcome.Ok(PasskeyCreatePlan("github.com", "octo", false, listOf(home)))
+            created = Outcome.Failed("account_frozen")
+        }
+        val vm = vm(repo)
+        vm.create()
+        assertEquals("account_frozen", vm.state.value.error)
+        assertFalse(vm.state.value.busy)
+        assertNull(vm.state.value.response)
+    }
 }

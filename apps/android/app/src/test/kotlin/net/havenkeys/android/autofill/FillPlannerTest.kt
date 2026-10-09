@@ -195,4 +195,16 @@ class FillPlannerTest {
         assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, repo))
         assertEquals(FillPlan.Nothing, FillPlanner.plan(null, target, unlocked = true, repo))
     }
+
+    @Test
+    fun aFrozenAccountOffersNothingAndSavesNothing() = runTest {
+        val form = Routed.Login(null, null)
+        val repo = FakeAutofillRepository()
+        assertEquals(form, offered(form, "com.android.chrome", repo))
+        repo.frozen = true
+        assertNull(offered(form, "com.android.chrome", repo))
+        repo.frozen = false
+        assertNull(offered(null, "com.android.chrome", repo))
+        assertNull(offered(form, "", repo))
+    }
 }

@@ -303,6 +303,7 @@ impl MobileVault {
         let item = item_id.as_deref().map(parse_id).transpose()?;
         self.unlocked()?;
         self.client.require_online()?;
+        self.client.require_full()?;
         let caller = self.credential_caller(&caller)?;
         let opts = parse_creation(&request_json)?;
         let rp = rp_for(&caller, opts.rp_id.clone())?;

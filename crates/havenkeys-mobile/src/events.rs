@@ -16,6 +16,8 @@ pub trait VaultEvents: Send + Sync {
     /// The account was deleted (here or on another device) and this phone's
     /// copy erased. The app deletes its Keystore keys, as for `removed`.
     fn account_deleted(&self);
+    /// The plan or entitlement changed (trial ended, subscribed, frozen).
+    fn plan_changed(&self);
 }
 
 enum Event {
@@ -26,6 +28,7 @@ enum Event {
     ItemsChanged,
     Removed,
     AccountDeleted,
+    PlanChanged,
 }
 
 /// Hands the client's events to the app from a thread of their own:
@@ -48,6 +51,7 @@ impl EventPump {
                         Event::ItemsChanged => app.items_changed(),
                         Event::Removed => app.removed(),
                         Event::AccountDeleted => app.account_deleted(),
+                        Event::PlanChanged => app.plan_changed(),
                     }
                 }
             });
@@ -162,5 +166,9 @@ impl ClientEvents for MobileEvents {
 
     fn account_deleted(&self, _keychain_cleared: bool) {
         self.pump.send(Event::AccountDeleted);
+    }
+
+    fn plan_changed(&self) {
+        self.pump.send(Event::PlanChanged);
     }
 }

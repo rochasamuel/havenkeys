@@ -1,9 +1,6 @@
 package net.havenkeys.android.ui.health
 
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
-import androidx.core.net.toUri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.components.ScreenBar
+import net.havenkeys.android.ui.components.openLink
 import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowText
 import net.havenkeys.android.ui.kit.HavenIcon
@@ -288,13 +286,4 @@ private fun rowActions(
     }
     val writes = if (online) changes else emptyList()
     return listOfNotNull(open, change.takeIf { online && offer.passwordFix }, help) + writes
-}
-
-/** Opens Rust's link exactly as given; a phone with no browser simply does nothing. */
-private fun openLink(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-    } catch (@Suppress("SwallowedException") e: ActivityNotFoundException) {
-        // Nothing to open it with.
-    }
 }

@@ -12,6 +12,7 @@ impl VaultEvents for Quiet {
     fn items_changed(&self) {}
     fn removed(&self) {}
     fn account_deleted(&self) {}
+    fn plan_changed(&self) {}
 }
 
 struct Xor;

@@ -96,7 +96,7 @@ class OnboardingScreenTest {
         choose(R.string.onboarding_type_kit)
         field(R.string.onboarding_server).assertExists()
         back()
-        rule.onNode(hasText(text(R.string.onboarding_invite_choice)) and hasClickAction()).assertExists()
+        rule.onNode(hasText(text(R.string.onboarding_setup_code_choice)) and hasClickAction()).assertExists()
     }
 
     @Test
@@ -125,8 +125,8 @@ class OnboardingScreenTest {
     @Test
     fun theInviteAndBothPasswordsAreTypedAsPasswords() {
         show()
-        choose(R.string.onboarding_invite_choice)
-        listOf(R.string.onboarding_invite, R.string.onboarding_master_password, R.string.onboarding_repeat_password)
+        choose(R.string.onboarding_setup_code_choice)
+        listOf(R.string.onboarding_setup_code, R.string.onboarding_master_password, R.string.onboarding_repeat_password)
             .forEach { field(it).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)) }
     }
 
@@ -141,8 +141,8 @@ class OnboardingScreenTest {
     @Test
     fun aNewAccountNeedsALongPasswordTypedTwice() {
         show()
-        choose(R.string.onboarding_invite_choice)
-        field(R.string.onboarding_invite).performTextInput("invite-token")
+        choose(R.string.onboarding_setup_code_choice)
+        field(R.string.onboarding_setup_code).performTextInput("invite-token")
         field(R.string.onboarding_master_password).performTextInput("short")
         field(R.string.onboarding_master_password)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, text(R.string.onboarding_too_short)))
@@ -173,12 +173,12 @@ class OnboardingScreenTest {
         val restoration = StateRestorationTester(rule)
         val vm = OnboardingViewModel(accounts)
         restoration.setContent { HavenTheme { OnboardingScreen(vm, onDone = {}) } }
-        choose(R.string.onboarding_invite_choice)
-        field(R.string.onboarding_invite).performTextInput("invite-token")
+        choose(R.string.onboarding_setup_code_choice)
+        field(R.string.onboarding_setup_code).performTextInput("invite-token")
         field(R.string.onboarding_master_password).performTextInput("long enough password")
         field(R.string.onboarding_repeat_password).performTextInput("long enough password")
         restoration.emulateSavedInstanceStateRestore()
-        listOf(R.string.onboarding_invite, R.string.onboarding_master_password, R.string.onboarding_repeat_password)
+        listOf(R.string.onboarding_setup_code, R.string.onboarding_master_password, R.string.onboarding_repeat_password)
             .forEach { assertTrue(typed(it).isEmpty()) }
     }
 
@@ -204,12 +204,12 @@ class OnboardingScreenTest {
         assertTrue(typed(R.string.onboarding_secret_key).isEmpty())
         assertTrue(typed(R.string.onboarding_master_password).isEmpty())
         back()
-        choose(R.string.onboarding_invite_choice)
-        field(R.string.onboarding_invite).performTextInput("invite-token")
+        choose(R.string.onboarding_setup_code_choice)
+        field(R.string.onboarding_setup_code).performTextInput("invite-token")
         field(R.string.onboarding_master_password).performTextInput("long enough password")
         back()
-        choose(R.string.onboarding_invite_choice)
-        assertTrue(typed(R.string.onboarding_invite).isEmpty())
+        choose(R.string.onboarding_setup_code_choice)
+        assertTrue(typed(R.string.onboarding_setup_code).isEmpty())
         assertTrue(typed(R.string.onboarding_master_password).isEmpty())
     }
 
@@ -233,14 +233,14 @@ class OnboardingScreenTest {
     @Test
     fun activatingEmptiesThePasswordsAndKeepsTheInvite() {
         show()
-        choose(R.string.onboarding_invite_choice)
-        field(R.string.onboarding_invite).performTextInput("invite-token")
+        choose(R.string.onboarding_setup_code_choice)
+        field(R.string.onboarding_setup_code).performTextInput("invite-token")
         field(R.string.onboarding_master_password).performTextInput("long enough password")
         field(R.string.onboarding_repeat_password).performTextInput("long enough password")
         rule.onNode(hasText(text(R.string.onboarding_create)) and hasClickAction()).performClick()
         rule.waitForIdle()
         assertTrue("activate" in accounts.calls)
-        assertEquals("invite-token", typed(R.string.onboarding_invite))
+        assertEquals("invite-token", typed(R.string.onboarding_setup_code))
         assertTrue(typed(R.string.onboarding_master_password).isEmpty())
         assertTrue(typed(R.string.onboarding_repeat_password).isEmpty())
     }

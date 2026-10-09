@@ -20,6 +20,13 @@ pub struct KitPreview {
     pub server_url: String,
 }
 
+/// What the app shows for a typed setup code: the address and the server.
+#[derive(uniffi::Record)]
+pub struct InvitePreview {
+    pub email: String,
+    pub server_url: String,
+}
+
 #[uniffi::export]
 impl MobileVault {
     /// Decode a camera frame. A HavenKeys kit is kept here, in Rust, until
@@ -75,6 +82,15 @@ impl MobileVault {
             Some(SecretString::new(secret_key)),
         ))?;
         self.status()
+    }
+
+    /// Decodes a setup code without touching the network or the secret in it.
+    pub fn preview_invite(&self, invite: String) -> MobileResult<InvitePreview> {
+        let p = self.client.preview_invite(&invite)?;
+        Ok(InvitePreview {
+            email: p.email,
+            server_url: p.server_url,
+        })
     }
 
     pub fn activate(&self, invite: String, password: String) -> MobileResult<Status> {

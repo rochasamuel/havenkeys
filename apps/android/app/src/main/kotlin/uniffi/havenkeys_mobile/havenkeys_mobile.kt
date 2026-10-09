@@ -673,13 +673,16 @@ internal interface UniffiCallbackInterfaceVaultEventsMethod5 : com.sun.jna.Callb
 internal interface UniffiCallbackInterfaceVaultEventsMethod6 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceVaultEventsMethod7 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceKeystoreCipherMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`plaintext`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceKeystoreCipherMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`sealed`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "locked", "unlocked", "connectivity", "signedOut", "itemsChanged", "removed", "accountDeleted")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "locked", "unlocked", "connectivity", "signedOut", "itemsChanged", "removed", "accountDeleted", "planChanged")
 internal open class UniffiVTableCallbackInterfaceVaultEvents(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -690,6 +693,7 @@ internal open class UniffiVTableCallbackInterfaceVaultEvents(
     @JvmField internal var `itemsChanged`: UniffiCallbackInterfaceVaultEventsMethod4? = null,
     @JvmField internal var `removed`: UniffiCallbackInterfaceVaultEventsMethod5? = null,
     @JvmField internal var `accountDeleted`: UniffiCallbackInterfaceVaultEventsMethod6? = null,
+    @JvmField internal var `planChanged`: UniffiCallbackInterfaceVaultEventsMethod7? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -701,7 +705,8 @@ internal open class UniffiVTableCallbackInterfaceVaultEvents(
         `itemsChanged`: UniffiCallbackInterfaceVaultEventsMethod4? = null,
         `removed`: UniffiCallbackInterfaceVaultEventsMethod5? = null,
         `accountDeleted`: UniffiCallbackInterfaceVaultEventsMethod6? = null,
-    ): UniffiVTableCallbackInterfaceVaultEvents(`uniffiFree`,`uniffiClone`,`locked`,`unlocked`,`connectivity`,`signedOut`,`itemsChanged`,`removed`,`accountDeleted`,), Structure.ByValue
+        `planChanged`: UniffiCallbackInterfaceVaultEventsMethod7? = null,
+    ): UniffiVTableCallbackInterfaceVaultEvents(`uniffiFree`,`uniffiClone`,`locked`,`unlocked`,`connectivity`,`signedOut`,`itemsChanged`,`removed`,`accountDeleted`,`planChanged`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceVaultEvents) {
         `uniffiFree` = other.`uniffiFree`
@@ -713,6 +718,7 @@ internal open class UniffiVTableCallbackInterfaceVaultEvents(
         `itemsChanged` = other.`itemsChanged`
         `removed` = other.`removed`
         `accountDeleted` = other.`accountDeleted`
+        `planChanged` = other.`planChanged`
     }
 
 }
@@ -778,6 +784,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_removed(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_account_deleted(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_vaultevents_plan_changed(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_keystorecipher_seal(
     ): Int
@@ -875,6 +883,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_activate(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_preview_invite(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_kit(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_sign_in(
@@ -912,6 +922,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_unlock_with_bundle(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_forget_kit(
+    ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_frozen(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_lock(
     ): Int
@@ -966,6 +978,8 @@ internal object UniffiLib {
     external fun uniffi_havenkeys_mobile_fn_method_vaultevents_removed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_vaultevents_account_deleted(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_vaultevents_plan_changed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_clone_keystorecipher(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
@@ -1075,6 +1089,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_activate(`ptr`: Long,`invite`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_preview_invite(`ptr`: Long,`invite`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_scan_kit(`ptr`: Long,`frame`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_sign_in(`ptr`: Long,`serverUrl`: RustBuffer.ByValue,`email`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1113,6 +1129,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_forget_kit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_frozen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_lock(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_screen_turned_off(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1268,6 +1286,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_vaultevents_account_deleted() and 0xFFFF) != 12606) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_vaultevents_plan_changed() and 0xFFFF) != 52091) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_keystorecipher_seal() and 0xFFFF) != 9986) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1412,6 +1433,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_activate() and 0xFFFF) != 26436) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_preview_invite() and 0xFFFF) != 5000) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_scan_kit() and 0xFFFF) != 1769) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1467,6 +1491,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_forget_kit() and 0xFFFF) != 42680) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_frozen() and 0xFFFF) != 7352) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_lock() and 0xFFFF) != 48662) {
@@ -2486,6 +2513,11 @@ public interface MobileVaultInterface {
     fun `activate`(`invite`: kotlin.String, `password`: kotlin.String): Status
     
     /**
+     * Decodes a setup code without touching the network or the secret in it.
+     */
+    fun `previewInvite`(`invite`: kotlin.String): InvitePreview
+    
+    /**
      * Decode a camera frame. A HavenKeys kit is kept here, in Rust, until
      * `sign_in_with_kit`; the app only learns the address and the server.
      */
@@ -2553,6 +2585,12 @@ public interface MobileVaultInterface {
     fun `unlockWithBundle`(`bundle`: kotlin.ByteArray, `bootCount`: kotlin.Long): Status
     
     fun `forgetKit`()
+    
+    /**
+     * Safe while locked. Any failure reads as not frozen: a damaged store
+     * must not turn Autofill off for good.
+     */
+    fun `frozen`(): kotlin.Boolean
     
     fun `lock`()
     
@@ -3487,6 +3525,24 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
+     * Decodes a setup code without touching the network or the secret in it.
+     */
+    @Throws(MobileException::class)override fun `previewInvite`(`invite`: kotlin.String): InvitePreview {
+            return FfiConverterTypeInvitePreview.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_preview_invite(
+        it,
+        
+        FfiConverterString.lower(`invite`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Decode a camera frame. A HavenKeys kit is kept here, in Rust, until
      * `sign_in_with_kit`; the app only learns the address and the server.
      */
@@ -3797,6 +3853,23 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
     
 
+    
+    /**
+     * Safe while locked. Any failure reads as not frozen: a damaged store
+     * must not turn Autofill off for good.
+     */override fun `frozen`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_frozen(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
     override fun `lock`()
         = 
     callWithHandle {
@@ -4024,6 +4097,11 @@ public interface VaultEvents {
      */
     fun `accountDeleted`()
     
+    /**
+     * The plan or entitlement changed (trial ended, subscribed, frozen).
+     */
+    fun `planChanged`()
+    
     companion object
 }
 
@@ -4219,6 +4297,21 @@ open class VaultEventsImpl: Disposable, AutoCloseable, VaultEvents
     
 
     
+    /**
+     * The plan or entitlement changed (trial ended, subscribed, frozen).
+     */override fun `planChanged`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_vaultevents_plan_changed(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
 
     
 
@@ -4315,6 +4408,17 @@ internal object uniffiCallbackInterfaceVaultEvents {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
+    internal object `planChanged`: UniffiCallbackInterfaceVaultEventsMethod7 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeVaultEvents.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`planChanged`(
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
 
     internal object uniffiFree: UniffiCallbackInterfaceFree {
         override fun callback(handle: Long) {
@@ -4338,6 +4442,7 @@ internal object uniffiCallbackInterfaceVaultEvents {
         `itemsChanged`,
         `removed`,
         `accountDeleted`,
+        `planChanged`,
     )
 
     // Registers the foreign callback with the Rust side.
@@ -5273,6 +5378,47 @@ public object FfiConverterTypeIdentityValue: FfiConverterRustBuffer<IdentityValu
 
 
 /**
+ * What the app shows for a typed setup code: the address and the server.
+ */
+data class InvitePreview (
+    var `email`: kotlin.String
+    , 
+    var `serverUrl`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeInvitePreview: FfiConverterRustBuffer<InvitePreview> {
+    override fun read(buf: ByteBuffer): InvitePreview {
+        return InvitePreview(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: InvitePreview) = (
+            FfiConverterString.allocationSize(value.`email`) +
+            FfiConverterString.allocationSize(value.`serverUrl`)
+    )
+
+    override fun write(value: InvitePreview, buf: ByteBuffer) {
+            FfiConverterString.write(value.`email`, buf)
+            FfiConverterString.write(value.`serverUrl`, buf)
+    }
+}
+
+
+
+/**
  * `websites` replaces a login's list; it is ignored for other kinds.
  * `base_revision` is the `revision` of the `ItemEdit` the draft was made
  * from.
@@ -6009,6 +6155,15 @@ data class Status (
     var `lastSyncedAt`: kotlin.Long?
     , 
     var `unreadableItems`: kotlin.UInt
+    , 
+    var `planStatus`: kotlin.String?
+    , 
+    /**
+     * `"full"` or `"frozen"`; Rust decides, the app only displays.
+     */
+    var `entitlement`: kotlin.String
+    , 
+    var `trialEndsAt`: kotlin.String?
     
 ){
     
@@ -6033,6 +6188,9 @@ public object FfiConverterTypeStatus: FfiConverterRustBuffer<Status> {
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalLong.read(buf),
             FfiConverterUInt.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -6044,7 +6202,10 @@ public object FfiConverterTypeStatus: FfiConverterRustBuffer<Status> {
             FfiConverterOptionalString.allocationSize(value.`email`) +
             FfiConverterOptionalString.allocationSize(value.`serverUrl`) +
             FfiConverterOptionalLong.allocationSize(value.`lastSyncedAt`) +
-            FfiConverterUInt.allocationSize(value.`unreadableItems`)
+            FfiConverterUInt.allocationSize(value.`unreadableItems`) +
+            FfiConverterOptionalString.allocationSize(value.`planStatus`) +
+            FfiConverterString.allocationSize(value.`entitlement`) +
+            FfiConverterOptionalString.allocationSize(value.`trialEndsAt`)
     )
 
     override fun write(value: Status, buf: ByteBuffer) {
@@ -6056,6 +6217,9 @@ public object FfiConverterTypeStatus: FfiConverterRustBuffer<Status> {
             FfiConverterOptionalString.write(value.`serverUrl`, buf)
             FfiConverterOptionalLong.write(value.`lastSyncedAt`, buf)
             FfiConverterUInt.write(value.`unreadableItems`, buf)
+            FfiConverterOptionalString.write(value.`planStatus`, buf)
+            FfiConverterString.write(value.`entitlement`, buf)
+            FfiConverterOptionalString.write(value.`trialEndsAt`, buf)
     }
 }
 

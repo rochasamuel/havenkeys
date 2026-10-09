@@ -16,6 +16,7 @@ import uniffi.havenkeys_mobile.GeneratorOptions
 import uniffi.havenkeys_mobile.HealthCountsView
 import uniffi.havenkeys_mobile.HealthKind
 import uniffi.havenkeys_mobile.HealthView
+import uniffi.havenkeys_mobile.InvitePreview
 import uniffi.havenkeys_mobile.ItemDraft
 import uniffi.havenkeys_mobile.ItemEdit
 import uniffi.havenkeys_mobile.ItemKind
@@ -44,8 +45,16 @@ import uniffi.havenkeys_mobile.TargetKind
 import uniffi.havenkeys_mobile.TotpNow
 import uniffi.havenkeys_mobile.TrashSummary
 
-fun status(state: LockState = LockState.UNLOCKED, exists: Boolean = true) =
-    Status(state, exists, false, false, "user@example.com", "https://vault.example.com", null, 0u)
+fun status(
+    state: LockState = LockState.UNLOCKED,
+    exists: Boolean = true,
+    planStatus: String? = null,
+    entitlement: String = "full",
+    trialEndsAt: String? = null,
+) = Status(
+    state, exists, false, false, "user@example.com", "https://vault.example.com", null, 0u,
+    planStatus, entitlement, trialEndsAt,
+)
 
 fun settings() = MobileSettings(
     autoLockMinutes = 15u,
@@ -317,6 +326,14 @@ class FakeAccountRepository : AccountRepository {
         return nextStatus
     }
 
+    var invitePreview: Outcome<InvitePreview> = Outcome.Failed("invalid_input")
+    val previewed = mutableListOf<String>()
+
+    override suspend fun previewInvite(invite: String): Outcome<InvitePreview> {
+        previewed += invite
+        return invitePreview
+    }
+
     override suspend fun activate(invite: String, password: String): Outcome<Status> {
         calls += "activate"
         return nextStatus
@@ -378,6 +395,7 @@ class FakeSettingsRepository : SettingsRepository {
 class FakeAutofillRepository : AutofillRepository {
     var kind: Outcome<TargetKind> = Outcome.Ok(TargetKind.BROWSER)
     var confirm = false
+    var frozen = false
     var matchList: Outcome<List<AutofillMatch>> = Outcome.Ok(emptyList())
     var values: Outcome<FillValues> = Outcome.Failed("not_found")
     var code: Outcome<String> = Outcome.Failed("not_found")
@@ -393,6 +411,8 @@ class FakeAutofillRepository : AutofillRepository {
     override suspend fun targetKind(target: TargetFacts) = kind
 
     override suspend fun confirmBeforeFilling() = confirm
+
+    override suspend fun frozen() = frozen
 
     override suspend fun matches(target: TargetFacts): Outcome<List<AutofillMatch>> {
         calls += "matches"

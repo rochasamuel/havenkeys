@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.havenkeys.android.data.AccountRepository
 import net.havenkeys.android.data.Outcome
+import uniffi.havenkeys_mobile.InvitePreview
 import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.Status
@@ -18,6 +19,8 @@ import uniffi.havenkeys_mobile.Status
 data class OnboardingUiState(
     val mode: Mode = Mode.CHOOSE,
     val preview: KitPreview? = null,
+    /** The typed setup code's address and server; never the secret in it. */
+    val invitePreview: InvitePreview? = null,
     val busy: Boolean = false,
     val errorCode: String? = null,
     val done: Boolean = false,
@@ -64,6 +67,19 @@ class OnboardingViewModel(private val accounts: AccountRepository) : ViewModel()
 
     fun activate(invite: String, password: String) = submit { accounts.activate(invite.trim(), password) }
 
+    /** Only a value that looks like a setup code is sent to Rust; anything else clears the preview. */
+    fun previewInvite(invite: String) {
+        val value = invite.trim()
+        if (!value.startsWith(INVITE_PREFIX)) {
+            _state.update { it.copy(invitePreview = null) }
+            return
+        }
+        viewModelScope.launch {
+            val preview = (accounts.previewInvite(value) as? Outcome.Ok)?.value
+            _state.update { it.copy(invitePreview = preview) }
+        }
+    }
+
     private fun showKit(preview: KitPreview) {
         var shown = false
         _state.update {
@@ -86,4 +102,8 @@ class OnboardingViewModel(private val accounts: AccountRepository) : ViewModel()
 
     // The frame is a picture of the kit, Secret Key included; Rust has its own copy.
     private fun wipe(frame: LumaFrame) = frame.bytes.fill(0)
+
+    private companion object {
+        const val INVITE_PREFIX = "HKINV1-"
+    }
 }

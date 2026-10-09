@@ -22,6 +22,7 @@ impl VaultEvents for Quiet {
     fn items_changed(&self) {}
     fn removed(&self) {}
     fn account_deleted(&self) {}
+    fn plan_changed(&self) {}
 }
 
 struct Xor;
@@ -149,6 +150,7 @@ impl VaultEvents for ItemsChanged {
     }
     fn removed(&self) {}
     fn account_deleted(&self) {}
+    fn plan_changed(&self) {}
 }
 
 fn phone(dir: &std::path::Path) -> Arc<MobileVault> {
@@ -605,4 +607,55 @@ fn tags_round_trip_through_the_draft_and_the_summary() {
     )
     .unwrap();
     assert!(tags_of(&a).is_empty());
+}
+
+#[test]
+fn a_frozen_account_is_read_only_on_the_phone() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let server = rt.block_on(Server::start());
+    let invite = rt.block_on(server.invite());
+
+    let dir = tempfile::tempdir().unwrap();
+    let a = phone(dir.path());
+    a.activate(invite, PASSWORD.into()).unwrap();
+    online(&a);
+    assert!(!a.frozen());
+    assert_eq!(a.status().unwrap().entitlement, "full");
+
+    rt.block_on(async {
+        let conn = server.pool.get().await.unwrap();
+        let row = conn
+            .query_one("SELECT id FROM accounts", &[])
+            .await
+            .unwrap();
+        let account_id: Uuid = row.get(0);
+        havenkeys_server::billing::set_status(
+            &conn,
+            account_id,
+            havenkeys_server::billing::Actor::Admin,
+            havenkeys_server::billing::Status::Frozen,
+            None,
+            "test",
+        )
+        .await
+        .unwrap();
+    });
+    a.sync_now().unwrap();
+    assert!(a.frozen());
+    assert_eq!(a.status().unwrap().entitlement, "frozen");
+
+    let err = a
+        .autofill_save(
+            chrome("example.com"),
+            SaveLogin {
+                username: Some("ana".into()),
+                password: "first-pass".into(),
+                current_password: None,
+                title: None,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(code(err), "account_frozen");
+
+    rt.block_on(server.cleanup());
 }

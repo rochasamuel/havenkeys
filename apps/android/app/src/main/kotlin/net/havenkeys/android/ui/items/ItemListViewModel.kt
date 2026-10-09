@@ -102,7 +102,7 @@ class ItemListViewModel(
                 when (event) {
                     is VaultEvent.Locked, VaultEvent.Removed, VaultEvent.SignedOut -> wipe()
                     VaultEvent.Unlocked, VaultEvent.ItemsChanged -> load()
-                    is VaultEvent.Connectivity -> Unit
+                    is VaultEvent.Connectivity, VaultEvent.PlanChanged -> Unit
                 }
             }
         }

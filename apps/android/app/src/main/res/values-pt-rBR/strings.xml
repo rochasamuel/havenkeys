@@ -109,8 +109,10 @@
     <string name="onboarding_scan_kit_sub">Aponte a câmera para o QR code da sua Folha de Recuperação.</string>
     <string name="onboarding_type_kit">Digitar minha Folha de Recuperação</string>
     <string name="onboarding_type_kit_sub">Adicione este celular a uma conta que você já tem.</string>
-    <string name="onboarding_invite_choice">Tenho um convite</string>
-    <string name="onboarding_invite_sub">Configure este celular com o seu convite.</string>
+    <string name="onboarding_create_account">Criar conta</string>
+    <string name="onboarding_create_account_sub">Abre havenkeys.net. Você volta aqui com um código de configuração.</string>
+    <string name="onboarding_setup_code_choice">Tenho um código de configuração</string>
+    <string name="onboarding_setup_code_sub">Configure este celular com o código que chegou no seu e-mail.</string>
     <string name="onboarding_back">Voltar</string>
     <string name="onboarding_cancel">Cancelar</string>
     <string name="onboarding_scanning">Procurando um QR code…</string>
@@ -128,8 +130,9 @@
     <string name="onboarding_repeat_password">Repita a senha mestra</string>
     <string name="onboarding_too_short">Use pelo menos 10 caracteres.</string>
     <string name="onboarding_mismatch">As duas senhas não coincidem.</string>
-    <string name="onboarding_invite">Convite</string>
-    <string name="onboarding_invite_hint">Uma linha, de quem administra o seu servidor HavenKeys. Funciona uma vez e expira em sete dias.</string>
+    <string name="onboarding_setup_code">Código de configuração</string>
+    <string name="onboarding_setup_code_hint">Uma linha, do e-mail de cadastro ou de quem administra o seu servidor. Funciona uma vez.</string>
+    <string name="onboarding_creating_for">Criando uma conta para</string>
     <string name="onboarding_create">Criar meu cofre</string>
     <string name="onboarding_creating">Configurando…</string>
     <string name="onboarding_create_note">Sua senha mestra e sua Secret Key nunca saem deste celular. O servidor guarda apenas dados criptografados.</string>
@@ -300,6 +303,7 @@
     <string name="edit_discard">Descartar</string>
     <string name="autofill_save_offline">O HavenKeys está offline. O login não foi salvo.</string>
     <string name="autofill_save_locked">O HavenKeys foi bloqueado antes de salvar. O login não foi salvo.</string>
+    <string name="autofill_save_frozen">Não salvo: o teste terminou e o cofre está somente leitura.</string>
     <string name="autofill_save_failed">O HavenKeys não conseguiu salvar este login.</string>
     <string name="credential_provider_subtitle">Senhas e chaves de acesso do seu cofre HavenKeys</string>
     <string name="credential_create_entry">Salva no seu cofre e sincronizada com seus dispositivos</string>
@@ -339,6 +343,7 @@
     <string name="autofill_doc_drivers_license">CNH</string>
     <string name="autofill_card_save_offline">O HavenKeys está offline. O cartão não foi salvo.</string>
     <string name="autofill_card_save_locked">O HavenKeys foi bloqueado antes de salvar. O cartão não foi salvo.</string>
+    <string name="autofill_card_save_frozen">Cartão não salvo: o teste terminou e o cofre está somente leitura.</string>
     <string name="autofill_card_save_failed">O HavenKeys não conseguiu salvar este cartão.</string>
     <!-- ui/kit (spec 2026-10-03 §5.2) -->
     <string name="kit_copied">Copiado</string>
@@ -374,6 +379,14 @@
     <string name="search_cancel">Cancelar</string>
     <string name="search_clear_field">Limpar busca</string>
     <string name="settings_signed_in_as">Conectado como</string>
+    <string name="settings_plan">Plano</string>
+    <plurals name="settings_plan_trial">
+        <item quantity="one">Teste: %d dia restante</item>
+        <item quantity="many">Teste: %d dias restantes</item>
+        <item quantity="other">Teste: %d dias restantes</item>
+    </plurals>
+    <string name="settings_plan_frozen">Teste encerrado. Somente leitura.</string>
+    <string name="settings_subscribe">Assinar</string>
 
     <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
     <string name="edit_match">Corresponde a</string>
@@ -411,6 +424,7 @@
     <string name="settings_delete_failed">Não foi possível excluir a conta.</string>
     <string name="onboarding_account_deleted">Esta conta foi excluída. Os dados dela não estão mais no servidor nem neste celular.</string>
     <string name="error_account_deleted">Esta conta foi excluída.</string>
+    <string name="error_account_frozen">Esta conta está congelada: o teste terminou ou o pagamento venceu. O cofre está somente leitura.</string>
     <string name="health_title">Saúde do cofre</string>
     <string name="health_intro">Verificado neste celular, com o cofre aberto. Nada é enviado.</string>
     <string name="health_loading">Verificando seus logins…</string>

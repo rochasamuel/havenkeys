@@ -14,6 +14,7 @@ sealed interface VaultEvent {
     data object SignedOut : VaultEvent
     data object ItemsChanged : VaultEvent
     data object Removed : VaultEvent
+    data object PlanChanged : VaultEvent
 }
 
 /**
@@ -75,6 +76,10 @@ class VaultEventsHub : VaultEvents {
     override fun accountDeleted() {
         _accountDeleted.value = true
         removed()
+    }
+
+    override fun planChanged() {
+        _events.tryEmit(VaultEvent.PlanChanged)
     }
 
     fun accountDeletedSeen() {

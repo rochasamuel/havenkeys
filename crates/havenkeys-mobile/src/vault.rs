@@ -40,6 +40,10 @@ pub struct Status {
     pub server_url: Option<String>,
     pub last_synced_at: Option<i64>,
     pub unreadable_items: u32,
+    pub plan_status: Option<String>,
+    /// `"full"` or `"frozen"`; Rust decides, the app only displays.
+    pub entitlement: String,
+    pub trial_ends_at: Option<String>,
 }
 
 #[derive(uniffi::Object)]
@@ -175,9 +179,25 @@ impl MobileVault {
             needs_secret_key: device.needs_secret_key,
             email: account.as_ref().map(|a| a.email.clone()),
             server_url: account.as_ref().map(|a| a.server_url.clone()),
-            last_synced_at: account.and_then(|a| a.last_synced_at),
+            last_synced_at: account.as_ref().and_then(|a| a.last_synced_at),
             unreadable_items: u32::try_from(vs.unreadable_items).unwrap_or(u32::MAX),
+            plan_status: account.as_ref().and_then(|a| a.plan_status.clone()),
+            entitlement: account
+                .as_ref()
+                .map_or("full", |a| a.entitlement.as_str())
+                .to_string(),
+            trial_ends_at: account.and_then(|a| a.trial_ends_at),
         })
+    }
+
+    /// Safe while locked. Any failure reads as not frozen: a damaged store
+    /// must not turn Autofill off for good.
+    pub fn frozen(&self) -> bool {
+        self.client
+            .vault()
+            .and_then(|v| Ok(v.entitlement()?))
+            .map(|e| e == havenkeys_core::store::Entitlement::Frozen)
+            .unwrap_or(false)
     }
 
     pub fn lock(&self) {
@@ -253,6 +273,9 @@ pub(crate) mod tests {
         }
         fn account_deleted(&self) {
             self.0.lock().unwrap().push("account_deleted".into())
+        }
+        fn plan_changed(&self) {
+            self.0.lock().unwrap().push("plan_changed".into())
         }
     }
 

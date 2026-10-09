@@ -14,6 +14,9 @@ import net.havenkeys.android.data.VaultEvent
 import net.havenkeys.android.data.VaultEventsHub
 import net.havenkeys.android.data.VaultRepository
 import uniffi.havenkeys_mobile.MobileSettings
+import java.time.Instant
+import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 
 /** [biometricEnrolled] is whether a bundle exists, never the bundle. */
 data class SettingsUiState(
@@ -32,7 +35,29 @@ data class SettingsUiState(
     val deleteFailures: Int = 0,
     /** How many items are in the Trash, for its row; null until known. */
     val trashCount: Int? = null,
-)
+    /** Rust's plan status (for example "trialing"); null for an account without one. */
+    val planStatus: String? = null,
+    /** "full" or "frozen": Rust decides, this only displays. */
+    val entitlement: String = "full",
+    /** RFC 3339 end of the trial, when there is one. */
+    val trialEndsAt: String? = null,
+) {
+    val frozen: Boolean get() = entitlement == "frozen"
+}
+
+/** Whole days left, rounded up, never below zero; null when [trialEndsAt] is unreadable. */
+fun trialDaysLeft(trialEndsAt: String, now: Instant = Instant.now()): Int? {
+    val end = try {
+        Instant.parse(trialEndsAt)
+    } catch (@Suppress("SwallowedException") e: DateTimeParseException) {
+        return null
+    }
+    val seconds = ChronoUnit.SECONDS.between(now, end)
+    val days = Math.floorDiv(seconds + SECONDS_PER_DAY - 1, SECONDS_PER_DAY)
+    return days.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
+}
+
+private const val SECONDS_PER_DAY = 86_400L
 
 @Suppress("TooManyFunctions") // one setter per setting, plus the account actions
 class SettingsViewModel(
@@ -53,9 +78,26 @@ class SettingsViewModel(
                 is Outcome.Failed -> _state.update { it.copy(errorCode = r.code, email = email) }
             }
         }
+        loadPlan()
         loadTrashCount()
         viewModelScope.launch {
-            events.events.collect { if (it == VaultEvent.ItemsChanged) loadTrashCount() }
+            events.events.collect {
+                when (it) {
+                    VaultEvent.ItemsChanged -> loadTrashCount()
+                    VaultEvent.PlanChanged -> loadPlan()
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    /** A failed read keeps what is shown; Rust refuses the writes either way. */
+    private fun loadPlan() {
+        viewModelScope.launch {
+            val s = (vault.status() as? Outcome.Ok)?.value ?: return@launch
+            _state.update {
+                it.copy(planStatus = s.planStatus, entitlement = s.entitlement, trialEndsAt = s.trialEndsAt)
+            }
         }
     }
 

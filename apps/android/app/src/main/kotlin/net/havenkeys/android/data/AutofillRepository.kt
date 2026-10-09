@@ -21,6 +21,9 @@ interface AutofillRepository {
     suspend fun recordUse(id: String): Outcome<Unit>
     suspend fun targetKind(target: TargetFacts): Outcome<TargetKind>
     suspend fun confirmBeforeFilling(): Boolean
+
+    /** Trial ended: Autofill offers nothing and saves nothing. A failed read is not frozen. */
+    suspend fun frozen(): Boolean
     suspend fun matches(target: TargetFacts): Outcome<List<AutofillMatch>>
     suspend fun fill(id: String, target: TargetFacts): Outcome<FillValues>
     suspend fun totp(id: String, target: TargetFacts): Outcome<String>
@@ -50,6 +53,7 @@ class RustAutofillRepository(private val vault: MobileVault) : AutofillRepositor
     // A failed read asks for confirmation: the safe side.
     override suspend fun confirmBeforeFilling() =
         (rust { vault.confirmBeforeFilling() } as? Outcome.Ok)?.value ?: true
+    override suspend fun frozen() = (rust { vault.frozen() } as? Outcome.Ok)?.value ?: false
     override suspend fun matches(target: TargetFacts) = rust { vault.autofillMatches(target) }
     override suspend fun fill(id: String, target: TargetFacts) = rust { vault.autofillFill(id, target) }
     override suspend fun totp(id: String, target: TargetFacts) = rust { vault.autofillTotp(id, target) }

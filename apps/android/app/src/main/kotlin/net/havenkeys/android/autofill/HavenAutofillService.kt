@@ -104,11 +104,9 @@ class HavenAutofillService : AutofillService() {
 
     private suspend fun respond(structure: AssistStructure, inlineRequest: InlineSuggestionsRequest?): FillResponse? {
         val screen = StructureParser().parse(structure)
-        val routed = FormRouter.route(screen.fields)
-        // No activity component: nobody to check the caller against.
-        if (routed == null || screen.packageName.isEmpty()) return null
-        val unlocked = container.events.unlocked.value
         val repo = container.autofillRepository
+        val routed = offered(FormRouter.route(screen.fields), screen.packageName, repo) ?: return null
+        val unlocked = container.events.unlocked.value
         return when (routed) {
             is Routed.Login -> loginResponse(screen, routed.form, routed.save, unlocked, repo, inlineRequest)
             else -> {
@@ -181,6 +179,14 @@ class HavenAutofillService : AutofillService() {
     }
 }
 
+/**
+ * [routed], or null when there is nothing to offer: no form, no caller to check (no
+ * activity component), or a frozen account (no datasets and no save prompt; Rust
+ * decides, this only asks).
+ */
+internal suspend fun offered(routed: Routed?, packageName: String, repo: AutofillRepository): Routed? =
+    routed.takeIf { it != null && packageName.isNotEmpty() && !repo.frozen() }
+
 /** Null when saved or already saved; otherwise the message Android shows. */
 @StringRes
 internal fun saveMessage(outcome: Outcome<SaveResult>?, card: Boolean = false): Int? = when (outcome) {
@@ -188,6 +194,7 @@ internal fun saveMessage(outcome: Outcome<SaveResult>?, card: Boolean = false): 
     is Outcome.Failed -> when (outcome.code) {
         "offline" -> if (card) R.string.autofill_card_save_offline else R.string.autofill_save_offline
         "locked" -> if (card) R.string.autofill_card_save_locked else R.string.autofill_save_locked
+        "account_frozen" -> if (card) R.string.autofill_card_save_frozen else R.string.autofill_save_frozen
         else -> if (card) R.string.autofill_card_save_failed else R.string.autofill_save_failed
     }
 }

@@ -13,6 +13,7 @@ private val texts = mapOf(
     "secret_key_required" to R.string.error_secret_key_required,
     "rate_limited" to R.string.error_rate_limited,
     "account_deleted" to R.string.error_account_deleted,
+    "account_frozen" to R.string.error_account_frozen,
     "invalid_server_url" to R.string.error_invalid_server_url,
     "denied" to R.string.error_denied,
     "not_found" to R.string.error_not_found,

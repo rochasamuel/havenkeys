@@ -1,6 +1,7 @@
 package net.havenkeys.android.data
 
 import uniffi.havenkeys_mobile.DeviceInfo
+import uniffi.havenkeys_mobile.InvitePreview
 import uniffi.havenkeys_mobile.KitPreview
 import uniffi.havenkeys_mobile.LumaFrame
 import uniffi.havenkeys_mobile.MobileVault
@@ -13,6 +14,9 @@ interface AccountRepository {
     suspend fun signInWithKit(password: String): Outcome<Status>
     suspend fun signIn(server: String, email: String, password: String, secretKey: String): Outcome<Status>
     suspend fun activate(invite: String, password: String): Outcome<Status>
+
+    /** The address and server in a setup code; nothing leaves the phone. */
+    suspend fun previewInvite(invite: String): Outcome<InvitePreview>
     /** [fresh]: the sync must start after this call, not join one already running (see [Coalescer]). */
     suspend fun syncNow(fresh: Boolean = false): Outcome<Unit>
     suspend fun syncIfDue(): Outcome<Unit>
@@ -50,6 +54,7 @@ class RustAccountRepository(private val vault: MobileVault) : AccountRepository 
     override suspend fun signIn(server: String, email: String, password: String, secretKey: String) =
         rust { vault.signIn(server, email, password, secretKey) }
     override suspend fun activate(invite: String, password: String) = rust { vault.activate(invite, password) }
+    override suspend fun previewInvite(invite: String) = rust { vault.previewInvite(invite.trim()) }
     private val syncing = Coalescer<Unit>()
 
     /** One owner of the sync: concurrent requests share the run in flight. */

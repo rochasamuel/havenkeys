@@ -15,16 +15,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import net.havenkeys.android.R
 import net.havenkeys.android.ui.components.errorText
+import net.havenkeys.android.ui.components.openLink
 import net.havenkeys.android.ui.kit.GroupRow
 import net.havenkeys.android.ui.kit.GroupRowText
 import net.havenkeys.android.ui.kit.HavenText
 import net.havenkeys.android.ui.kit.InsetGroup
+import net.havenkeys.android.ui.kit.InsetGroupScope
 import net.havenkeys.android.ui.kit.SectionHeader
 import net.havenkeys.android.ui.kit.ToggleRow
 import net.havenkeys.android.ui.kit.TrailingText
@@ -73,7 +77,7 @@ fun SettingsScreen(
             AutofillGroup(settings, viewModel, navigation.onAutofillSetup)
         }
         VaultGroup(state.trashCount, navigation.onTrash)
-        AccountGroup(state.email, online, navigation, open)
+        AccountGroup(state, online, navigation, open)
     }
     val settings = state.settings
     val choice = choosing
@@ -191,11 +195,13 @@ private fun VaultGroup(trashCount: Int?, onTrash: () -> Unit) {
 }
 
 @Composable
-private fun AccountGroup(email: String?, online: Boolean, navigation: SettingsNavigation, open: SettingsOpen) {
+private fun AccountGroup(state: SettingsUiState, online: Boolean, navigation: SettingsNavigation, open: SettingsOpen) {
+    val email = state.email
     val offline = if (online) null else stringResource(R.string.error_offline)
     SectionHeader(stringResource(R.string.settings_account), Modifier.padding(top = 16.dp))
     InsetGroup {
         if (email != null) row { GroupRow { GroupRowText(stringResource(R.string.settings_signed_in_as), email) } }
+        planRows(state)
         row { GroupRow(onClick = navigation.onDevices) { GroupRowText(stringResource(R.string.settings_devices)) } }
         row {
             GroupRow(onClick = navigation.onPairing) {
@@ -241,3 +247,30 @@ private fun AccountGroup(email: String?, online: Boolean, navigation: SettingsNa
         }
     }
 }
+
+/** The plan row (and, when frozen, the way to subscribe); Rust decides, this only displays. */
+private fun InsetGroupScope.planRows(state: SettingsUiState) {
+    val planStatus = state.planStatus
+    if (state.frozen || planStatus != null) {
+        row {
+            val daysLeft = state.trialEndsAt?.let { trialDaysLeft(it) }
+            val detail = when {
+                state.frozen -> stringResource(R.string.settings_plan_frozen)
+                planStatus == "trialing" && daysLeft != null ->
+                    pluralStringResource(R.plurals.settings_plan_trial, daysLeft, daysLeft)
+                else -> planStatus.orEmpty()
+            }
+            GroupRow { GroupRowText(stringResource(R.string.settings_plan), detail) }
+        }
+    }
+    if (state.frozen) {
+        row {
+            val context = LocalContext.current
+            GroupRow(onClick = { openLink(context, PRICING_URL) }) {
+                GroupRowText(stringResource(R.string.settings_subscribe))
+            }
+        }
+    }
+}
+
+private const val PRICING_URL = "https://havenkeys.net/pricing"

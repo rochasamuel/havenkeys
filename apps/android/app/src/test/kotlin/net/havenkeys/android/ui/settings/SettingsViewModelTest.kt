@@ -176,4 +176,30 @@ class SettingsViewModelTest {
         events.itemsChanged()
         assertEquals(0, vm.state.value.trashCount)
     }
+
+    @Test
+    fun showsTheTrialAndTheFrozenState() = runTest {
+        vault.nextStatus = Outcome.Ok(
+            net.havenkeys.android.fakes.status(planStatus = "trialing", trialEndsAt = "2026-10-12T10:00:00Z"),
+        )
+        val vm = vm()
+        assertEquals("trialing", vm.state.value.planStatus)
+        assertEquals("2026-10-12T10:00:00Z", vm.state.value.trialEndsAt)
+        assertFalse(vm.state.value.frozen)
+
+        vault.nextStatus = Outcome.Ok(net.havenkeys.android.fakes.status(planStatus = "frozen", entitlement = "frozen"))
+        events.planChanged()
+        assertTrue(vm.state.value.frozen)
+        assertEquals("frozen", vm.state.value.planStatus)
+    }
+
+    @Test
+    fun theDaysLeftRoundUpAndStopAtZero() {
+        val now = java.time.Instant.parse("2026-10-09T10:00:00Z")
+        assertEquals(3, trialDaysLeft("2026-10-12T10:00:00Z", now))
+        assertEquals(3, trialDaysLeft("2026-10-11T10:00:01Z", now))
+        assertEquals(1, trialDaysLeft("2026-10-09T10:00:01Z", now))
+        assertEquals(0, trialDaysLeft("2026-10-01T00:00:00Z", now))
+        assertNull(trialDaysLeft("not a date", now))
+    }
 }

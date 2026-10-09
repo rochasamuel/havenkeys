@@ -117,8 +117,10 @@
     <string name="onboarding_scan_kit_sub">Point the camera at the QR code on your Recovery Sheet.</string>
     <string name="onboarding_type_kit">Type my Recovery Sheet</string>
     <string name="onboarding_type_kit_sub">Add this phone to an account you already have.</string>
-    <string name="onboarding_invite_choice">I have an invite</string>
-    <string name="onboarding_invite_sub">Set up this phone with your invite.</string>
+    <string name="onboarding_create_account">Create account</string>
+    <string name="onboarding_create_account_sub">Opens havenkeys.net. You come back here with a setup code.</string>
+    <string name="onboarding_setup_code_choice">I have a setup code</string>
+    <string name="onboarding_setup_code_sub">Set up this phone with the code from your email.</string>
     <string name="onboarding_back">Back</string>
     <string name="onboarding_cancel">Cancel</string>
     <string name="onboarding_scanning">Looking for a QR code…</string>
@@ -136,8 +138,9 @@
     <string name="onboarding_repeat_password">Repeat master password</string>
     <string name="onboarding_too_short">Use at least 10 characters.</string>
     <string name="onboarding_mismatch">The two passwords don’t match.</string>
-    <string name="onboarding_invite">Invite</string>
-    <string name="onboarding_invite_hint">One line, from whoever runs your HavenKeys server. It works once and expires after seven days.</string>
+    <string name="onboarding_setup_code">Setup code</string>
+    <string name="onboarding_setup_code_hint">One line, from your sign-up email or from whoever runs your server. It works once.</string>
+    <string name="onboarding_creating_for">Creating an account for</string>
     <string name="onboarding_create">Create my vault</string>
     <string name="onboarding_creating">Setting up…</string>
     <string name="onboarding_create_note">Your master password and Secret Key never leave this phone. The server stores only encrypted data.</string>
@@ -309,6 +312,7 @@
     <string name="edit_discard">Discard</string>
     <string name="autofill_save_offline">HavenKeys is offline. The login was not saved.</string>
     <string name="autofill_save_locked">HavenKeys locked before saving. The login was not saved.</string>
+    <string name="autofill_save_frozen">Not saved: the trial ended and the vault is read-only.</string>
     <string name="autofill_save_failed">HavenKeys could not save this login.</string>
     <string name="credential_provider_subtitle">Passwords and passkeys from your HavenKeys vault</string>
     <string name="credential_create_entry">Saved in your vault and synced to your devices</string>
@@ -348,6 +352,7 @@
     <string name="autofill_doc_drivers_license">driver’s license</string>
     <string name="autofill_card_save_offline">HavenKeys is offline. The card was not saved.</string>
     <string name="autofill_card_save_locked">HavenKeys locked before saving. The card was not saved.</string>
+    <string name="autofill_card_save_frozen">Card not saved: the trial ended and the vault is read-only.</string>
     <string name="autofill_card_save_failed">HavenKeys could not save this card.</string>
     <!-- ui/kit (spec 2026-10-03 §5.2) -->
     <string name="kit_copied">Copied</string>
@@ -383,6 +388,13 @@
     <string name="search_cancel">Cancel</string>
     <string name="search_clear_field">Clear search</string>
     <string name="settings_signed_in_as">Signed in as</string>
+    <string name="settings_plan">Plan</string>
+    <plurals name="settings_plan_trial">
+        <item quantity="one">Trial: 1 day left</item>
+        <item quantity="other">Trial: %d days left</item>
+    </plurals>
+    <string name="settings_plan_frozen">Trial ended. Read-only.</string>
+    <string name="settings_subscribe">Subscribe</string>
 
     <!-- Existing screens rebuilt (spec 2026-10-03 §6.9) -->
     <string name="edit_match">Matches</string>
@@ -420,6 +432,7 @@
     <string name="settings_delete_failed">The account could not be deleted.</string>
     <string name="onboarding_account_deleted">This account was deleted. Its data is gone from the server and this phone.</string>
     <string name="error_account_deleted">This account was deleted.</string>
+    <string name="error_account_frozen">This account is frozen: the trial ended or payment lapsed. The vault is read-only.</string>
     <string name="health_title">Vault health</string>
     <string name="health_intro">Checked on this phone with the vault unlocked. Nothing is sent anywhere.</string>
     <string name="health_loading">Checking your logins…</string>

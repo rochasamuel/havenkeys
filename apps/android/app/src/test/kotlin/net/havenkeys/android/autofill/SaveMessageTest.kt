@@ -24,4 +24,10 @@ class SaveMessageTest {
         assertEquals(R.string.autofill_card_save_failed, saveMessage(Outcome.Failed("invalid_input"), card = true))
         assertEquals(null, saveMessage(Outcome.Ok(SaveResult.UNCHANGED), card = true))
     }
+
+    @Test
+    fun aFrozenAccountSaysTheTrialEnded() {
+        assertEquals(R.string.autofill_save_frozen, saveMessage(Outcome.Failed("account_frozen")))
+        assertEquals(R.string.autofill_card_save_frozen, saveMessage(Outcome.Failed("account_frozen"), card = true))
+    }
 }
