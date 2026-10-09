@@ -734,3 +734,70 @@ async fn a_frozen_account_still_syncs_and_reads_but_refuses_writes() {
     assert_eq!(err.code, "account_frozen");
     fx.server.cleanup().await;
 }
+
+async fn server_items(fx: &Fixture) -> i64 {
+    fx.server
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one("SELECT count(*) FROM items", &[])
+        .await
+        .unwrap()
+        .get(0)
+}
+
+fn set_client_entitlement(fx: &Fixture, entitlement: havenkeys_core::store::Entitlement) {
+    let mut vault = fx.client.vault().unwrap();
+    let mut plan = vault.plan().unwrap();
+    plan.entitlement = entitlement;
+    vault.set_plan(&plan).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frozen_client_refuses_a_restore_before_any_request() {
+    use havenkeys_core::store::Entitlement;
+    let fx = fixture().await;
+    fx.client.push(fx.staged_login()).await.unwrap();
+    let before = settled_server_items(&fx).await;
+
+    // Only the client believes it is frozen; the server would accept.
+    set_client_entitlement(&fx, Entitlement::Frozen);
+    let staged = havenkeys_core::vault::StagedImport {
+        writes: vec![fx.staged_login()],
+        report: Default::default(),
+    };
+    let err = fx.client.push_restore(staged).await.unwrap_err();
+    assert_eq!(err.code, "account_frozen");
+    let backup = havenkeys_core::export::backup::OpenedBackup {
+        items: vec![],
+        unreadable: 0,
+    };
+    let err = fx.client.restore_backup(backup).await.unwrap_err();
+    assert_eq!(err.code, "account_frozen");
+    assert_eq!(server_items(&fx).await, before);
+
+    // Without the freeze the same write goes through: the guard decided.
+    set_client_entitlement(&fx, Entitlement::Full);
+    let staged = havenkeys_core::vault::StagedImport {
+        writes: vec![fx.staged_login()],
+        report: Default::default(),
+    };
+    fx.client.push_restore(staged).await.unwrap();
+    assert_eq!(server_items(&fx).await, before + 1);
+    fx.server.cleanup().await;
+}
+
+/// The count once the device's background identity creation (after login)
+/// has landed: unchanged over a quarter second.
+async fn settled_server_items(fx: &Fixture) -> i64 {
+    let mut last = server_items(fx).await;
+    let mut stable = 0;
+    while stable < 5 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let now = server_items(fx).await;
+        stable = if now == last { stable + 1 } else { 0 };
+        last = now;
+    }
+    last
+}
