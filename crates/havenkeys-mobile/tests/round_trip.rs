@@ -88,6 +88,7 @@ impl Server {
             AdminCommand::NewAccount {
                 email: EMAIL.into(),
                 server_url: self.base.clone(),
+                trial: false,
             },
             &self.pool,
         )
