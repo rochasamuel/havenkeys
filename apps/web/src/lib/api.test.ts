@@ -17,7 +17,7 @@ describe("signup api", () => {
   it("posts start to the fixed base URL with exactly the three fields", async () => {
     const calls: Call[] = [];
     const result = await startSignup(
-      { email: "a@example.com", locale: "pt-BR", acceptedTerms: "2026-10-20" },
+      { email: "a@example.com", locale: "pt-BR", acceptedTerms: "2026-10-09" },
       fakeFetch(202, {}, calls),
     );
     expect(result).toEqual({ ok: true });
@@ -26,9 +26,31 @@ describe("signup api", () => {
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       email: "a@example.com",
       locale: "pt-BR",
-      acceptedTerms: "2026-10-20",
+      acceptedTerms: "2026-10-09",
     });
     expect(calls[0]?.init.credentials).toBe("omit");
+    expect(calls[0]?.init.referrerPolicy).toBe("no-referrer");
+    expect((calls[0]?.init.headers as Record<string, string>)["content-type"]).toBe("application/json");
+  });
+
+  it("posts verify with exactly the email and the code", async () => {
+    const calls: Call[] = [];
+    await verifySignup({ email: "a@example.com", code: "123456" }, fakeFetch(200, { invite: "HKINV1-abcdefghijklmnop0123456789" }, calls));
+    expect(calls[0]?.url).toBe(`${API_BASE}/v1/signup/verify`);
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ email: "a@example.com", code: "123456" });
+    expect(calls[0]?.init.referrerPolicy).toBe("no-referrer");
+  });
+
+  it("classifies verify failures by status", async () => {
+    const cases: Array<[number, string]> = [
+      [400, "invalid"],
+      [429, "rate_limited"],
+      [503, "unavailable"],
+    ];
+    for (const [status, kind] of cases) {
+      const r = await verifySignup({ email: "a@example.com", code: "123456" }, fakeFetch(status, {}));
+      expect(r).toEqual({ ok: false, failure: { kind } });
+    }
   });
 
   it("returns the invite from verify and rejects a malformed one", async () => {
@@ -50,7 +72,7 @@ describe("signup api", () => {
     ];
     for (const [status, kind] of cases) {
       const r = await startSignup(
-        { email: "a@example.com", locale: "en", acceptedTerms: "2026-10-20" },
+        { email: "a@example.com", locale: "en", acceptedTerms: "2026-10-09" },
         fakeFetch(status, { error: { code: "x", message: "y" } }),
       );
       expect(r).toEqual({ ok: false, failure: { kind } });
@@ -58,7 +80,7 @@ describe("signup api", () => {
     const thrown = (async () => {
       throw new TypeError("offline");
     }) as unknown as typeof fetch;
-    const r = await startSignup({ email: "a@example.com", locale: "en", acceptedTerms: "2026-10-20" }, thrown);
+    const r = await startSignup({ email: "a@example.com", locale: "en", acceptedTerms: "2026-10-09" }, thrown);
     expect(r).toEqual({ ok: false, failure: { kind: "network" } });
   });
 });

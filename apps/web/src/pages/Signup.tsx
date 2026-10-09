@@ -13,15 +13,23 @@ import { canResend, initialSignup, RESEND_AFTER_MS, signupReducer, type SignupAc
 /*
  * The invite is React state and nothing else. It is never written to
  * storage, the URL, the title or analytics, and it goes when this component
- * unmounts (a language switch remounts the page: App keys it by locale).
+ * unmounts. A language switch changes the key below, which unmounts the flow
+ * and drops it: react-router does not remount a route on its own, so the key
+ * is what makes the switch start over instead of re-sending the code.
  */
 export function Signup() {
+  const { locale } = useI18n();
+  return <SignupFlow key={locale} />;
+}
+
+function SignupFlow() {
   const { t, locale } = useI18n();
   const [state, dispatch] = useReducer(signupReducer, undefined, initialSignup);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (state.step !== "code") return;
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [state.step]);
@@ -58,7 +66,8 @@ export function Signup() {
       };
     }
     return undefined;
-  }, [state, locale]);
+    // The locale is fixed for the life of this component (see Signup).
+  }, [state]);
 
   return <SignupView state={state} now={now} dispatch={dispatch} t={t} locale={locale} />;
 }
@@ -116,7 +125,7 @@ export function SignupView({
             </label>
             {state.error && (
               <p className="field__error" role="alert">
-                {s.errors[state.error]}
+                {state.error === "invalid" ? s.errors.emailRejected : s.errors[state.error]}
               </p>
             )}
             <button className="btn btn--primary btn--lg" type="submit" disabled={state.busy}>
@@ -175,13 +184,13 @@ export function SignupView({
           </form>
         )}
 
-        {state.step === "done" && <Done invite={state.invite} t={t} />}
+        {state.step === "done" && <Done invite={state.invite} t={t} downloadPath={path("/download")} />}
       </div>
     </section>
   );
 }
 
-function Done({ invite, t }: { invite: string; t: Messages }) {
+function Done({ invite, t, downloadPath }: { invite: string; t: Messages; downloadPath: string }) {
   const s = t.signup;
   const [copied, setCopied] = useState(false);
   const field = useRef<HTMLInputElement>(null);
@@ -213,8 +222,9 @@ function Done({ invite, t }: { invite: string; t: Messages }) {
         </button>
       </div>
       <p className="signup__note">{s.alsoEmailed}</p>
+      <p className="signup__note">{s.keepTab}</p>
       <h2>{s.downloadsTitle}</h2>
-      <Downloads t={t} />
+      <Downloads t={t} downloadPath={downloadPath} />
       <p className="signup__note">{t.common.installerWarning}</p>
       <p className="signup__note">{t.common.betaNotice}</p>
     </div>
@@ -227,7 +237,7 @@ const DESKTOP: Array<{ id: Platform; os: Os }> = [
   { id: "linux-appimage", os: "linux" },
 ];
 
-function Downloads({ t }: { t: Messages }) {
+function Downloads({ t, downloadPath }: { t: Messages; downloadPath: string }) {
   const [release, setRelease] = useState<LatestRelease | null>(null);
   const [os] = useState(() => (typeof navigator === "undefined" ? null : detectOs(navigator.userAgent)));
   useEffect(() => {
@@ -258,7 +268,7 @@ function Downloads({ t }: { t: Messages }) {
         );
       })}
       {os === "android" && <AndroidDownload yours />}
-      <a className="text-link" href={RELEASES_PAGE_URL} target="_blank" rel="noreferrer">
+      <a className="text-link" href={downloadPath} target="_blank" rel="noreferrer">
         {t.signup.otherDownloads}
       </a>
     </div>

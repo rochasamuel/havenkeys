@@ -1,7 +1,8 @@
 # The HavenKeys website (`apps/web`)
 
-A static marketing/download site — no backend, no database. It talks only to
-the public GitHub API (to find the latest release) and, once deployed, to
+A static marketing/download site — no backend, no database of its own. It talks
+to the public GitHub API (to find the latest release), to `api.havenkeys.net`
+from `/signup` (the only other host its CSP allows) and, once deployed, to
 Vercel Analytics.
 
 ## Local development

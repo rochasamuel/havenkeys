@@ -24,14 +24,16 @@ and stage 3 (the apps show the trial and honour a freeze).
 
 ## Order of deployment
 
-1. Merge stage 1; deploy the server with `HAVENKEYS_SIGNUP=off`. Run
-   `admin list-accounts` and confirm every account shows `complimentary`.
-2. Merge stage 2; deploy the site. `/signup` answers "Sign-up is not open on
-   this server" until step 4.
+1. Merge stage 1; deploy the server with `HAVENKEYS_SIGNUP=off` and
+   `HAVENKEYS_CORS_ORIGIN=https://havenkeys.net` (harmless with signup off; it
+   lets the page show the sign-up-closed message instead of a network error).
+   Run `admin list-accounts` and confirm every account shows `complimentary`.
+2. Merge stage 2; deploy the site. `/signup` answers "Sign-up opens soon" (the
+   closed message) until step 4.
 3. Merge stage 3; release desktop, extension and Android.
-4. Set `HAVENKEYS_SIGNUP=open`, `HAVENKEYS_PUBLIC_URL`, `SMTP_URL`,
-   `SMTP_FROM` and `HAVENKEYS_CORS_ORIGIN=https://havenkeys.net` on the
-   hosted server. Create one account through the page end to end.
+4. Set `HAVENKEYS_SIGNUP=open`, `HAVENKEYS_PUBLIC_URL`, `SMTP_URL`
+   and `SMTP_FROM` on the hosted server. Create one account through the page
+   end to end.
 
 ## What the stage 3 plan must cover (spec §6, §8 client bullets, §3)
 

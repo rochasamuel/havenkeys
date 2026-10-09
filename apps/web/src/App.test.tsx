@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToString } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -38,6 +40,18 @@ describe("routes", () => {
     for (const path of ["/", "/download", "/signup", "/pricing", "/pt-br"]) {
       expect(html(path), path).toContain('class="tag tag--beta"');
     }
+  });
+  it("keeps the Beta tag beside the wordmark and names it in the link label", () => {
+    const h = html("/");
+    expect(h).toContain('class="nav__wordmark"');
+    expect(h).toContain('class="tag tag--beta"');
+    expect(h).toContain(`aria-label="${en.nav.homeAria}"`);
+    expect(en.nav.homeAria.toLowerCase()).toContain("beta");
+    expect(ptBR.nav.homeAria.toLowerCase()).toContain("beta");
+  });
+  it("never hides the brand's descendants with a blanket selector", () => {
+    const css = readFileSync(fileURLToPath(new URL("./styles/global.css", import.meta.url)), "utf8");
+    expect(css).not.toMatch(/\.nav__brand\s+span/);
   });
   it("still renders every existing page", () => {
     for (const p of ["/", "/download", "/security", "/self-host", "/privacy", "/terms", "/delete-account"]) {

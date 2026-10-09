@@ -38,13 +38,13 @@ export const ptBR: Messages = {
     createAccount: "Criar conta",
     beta: "Beta",
     betaNotice:
-      "O HavenKeys está em beta. Funciona e é o que usamos todo dia, mas espere arestas, e guarde bem seu Emergency Kit.",
+      "O HavenKeys está em beta. Funciona e é o que usamos todo dia, mas espere arestas, e guarde bem sua Folha de Recuperação.",
     installerWarning:
       "Os instaladores ainda não são assinados, então o Windows SmartScreen e o Gatekeeper do macOS vão avisar na primeira execução. No Android, o APK tem a assinatura verificada pelo próprio sistema.",
   },
 
   nav: {
-    homeAria: "Início do HavenKeys",
+    homeAria: "Início do HavenKeys (beta)",
     mainAria: "Principal",
     security: "Segurança",
     selfHost: "Auto-hospedar",
@@ -649,7 +649,7 @@ export const ptBR: Messages = {
 
   privacy: {
     title: "Política de Privacidade",
-    updated: "Atualizada em 20 de outubro de 2026.",
+    updated: "Atualizada em 9 de outubro de 2026.",
     body: (
       <>
         <h2>Este site</h2>
@@ -668,10 +668,14 @@ export const ptBR: Messages = {
           você aceitou ao nosso servidor em api.havenkeys.net, que envia a você um código e, depois
           que você o confirma, um código de configuração. O código de configuração aparece na página
           e fica apenas na memória dela; não é guardado no seu navegador nem no nosso analytics. O
-          nosso servidor registra seu endereço de e-mail e quando você aceitou os Termos, e envia
-          avisos da conta (o código, o código de configuração e quando um período de teste está para
-          acabar ou acabou) por meio de um provedor de e-mail que atua como operador por nós; seu
-          endereço não é usado para mais nada. Nunca enviamos e-mail de marketing.
+          nosso servidor registra seu endereço de e-mail, o idioma que você escolheu (para escrever
+          a você nele) e a versão dos Termos que você aceitou, e envia avisos da conta (o código, o
+          código de configuração e quando um período de teste está para acabar ou acabou) por meio
+          de um provedor de e-mail que atua como operador por nós; seu endereço não é usado para
+          mais nada além dos avisos da conta. O código de cadastro é guardado apenas como um hash
+          com chave, por 15 minutos. Para limitar abusos, as tentativas de cadastro são contadas por
+          endereço de rede e por endereço de e-mail durante uma hora. Nunca enviamos e-mail de
+          marketing.
         </p>
 
         <h2>O app de desktop e a extensão do navegador</h2>
@@ -684,8 +688,8 @@ export const ptBR: Messages = {
           sem estarem cifradas.
         </p>
         <p>
-          Todo cofre pertence a uma conta em um <code>havenkeys-server</code> operado por você ou
-          por quem convidou você. Esse servidor guarda o seu cofre cifrado, que ele não consegue
+          Todo cofre pertence a uma conta em um <code>havenkeys-server</code> operado por você, pelo
+          servidor em que você criou sua conta, ou o seu próprio. Esse servidor guarda o seu cofre cifrado, que ele não consegue
           decifrar, além dos metadados de que precisa para servi-lo: o ID do cofre, o e-mail da sua
           conta, os parâmetros e o salt da derivação de chaves, a chave do cofre cifrada, as revisões
           dos itens e a quantidade e o tamanho aproximado dos seus itens. Ele também guarda o status do plano da sua conta (teste, ativa, congelada) e quando ele mudou. Para limitar tentativas de
@@ -849,7 +853,7 @@ export const ptBR: Messages = {
 
   terms: {
     title: "Termos de Serviço",
-    updated: "Atualizados em 20 de outubro de 2026.",
+    updated: "Atualizados em 9 de outubro de 2026.",
     body: (
       <>
         <h2>Licença</h2>
@@ -920,19 +924,32 @@ export const ptBR: Messages = {
     priceSoon: "Preço em breve",
     trial: "14 dias grátis, sem cartão",
     includes: [
-      "Logins, cartões, identidades, notas e passkeys sem limite",
+      "Sem limite de logins, cartões, identidades, notas e passkeys",
       "Desktop, extensão do navegador e Android",
       "Entrada em um computador novo aprovada pelo celular",
       "Exportação a qualquer momento, aberta ou criptografada",
     ],
     afterTitle: "Depois do período de teste",
-    afterTrial: [
-      "Seu cofre continua legível em todos os dispositivos.",
-      "A exportação continua funcionando, aberta ou criptografada.",
-      "Alterações, dispositivos novos e preenchimento automático ficam pausados até você assinar.",
-      "Entrar com uma passkey já salva continua funcionando.",
+    keepsTitle: "Continua funcionando",
+    keeps: [
+      "Seu cofre continua legível em todos os dispositivos",
+      "Exportação, aberta ou criptografada",
+      "Entrar com uma passkey que você já salvou",
     ],
-    subscribeSoon: "As assinaturas abrem em breve. Até lá, escreva para samuelsilv.rocha@gmail.com e mantemos sua conta aberta.",
+    pausesTitle: "Fica pausado até você assinar",
+    pauses: [
+      "Alterações no cofre",
+      "Dispositivos novos",
+      "Preenchimento automático",
+      "Salvar passkeys novas",
+    ],
+    subscribeSoon: (
+      <>
+        As assinaturas abrem em breve. Até lá, escreva para{" "}
+        <a href="mailto:samuelsilv.rocha@gmail.com">samuelsilv.rocha@gmail.com</a> e mantemos sua
+        conta aberta.
+      </>
+    ),
     cta: "Criar conta",
     selfHost: "Ou rode seu próprio servidor de graça",
   },
@@ -992,13 +1009,14 @@ export const ptBR: Messages = {
     changeEmail: "Usar outro e-mail",
     doneTitle: "Seu código de configuração",
     doneLede:
-      "Instale o HavenKeys, abra o app, escolha “Tenho um código de configuração” e cole este código. Depois escolha uma senha mestra e guarde bem seu Emergency Kit.",
+      "Instale o HavenKeys, abra o app, escolha “Tenho um código de configuração” e cole este código. Depois escolha uma senha mestra e guarde bem sua Folha de Recuperação.",
     copy: "Copiar",
     copied: "Copiado",
     alsoEmailed: "Também enviamos por e-mail. Ele vale por 24 horas e funciona uma única vez.",
     inviteAria: "Código de configuração",
     downloadsTitle: "Baixe o app",
     otherDownloads: "Todos os downloads",
+    keepTab: "Mantenha esta aba aberta até colar o código no app.",
     errors: {
       email: "Isso não parece um endereço de e-mail.",
       terms: "Aceite os Termos e a Política de Privacidade para continuar.",
@@ -1006,7 +1024,8 @@ export const ptBR: Messages = {
       invalid: "Esse código não é válido. Confira o e-mail ou peça um novo código.",
       rate_limited: "Muitas tentativas. Espere uma hora e tente de novo.",
       unavailable: "Não conseguimos enviar o e-mail agora. Tente de novo em alguns minutos.",
-      closed: "O cadastro não está aberto neste servidor.",
+      closed: "O cadastro abre em breve. Escreva para samuelsilv.rocha@gmail.com e cuidamos disso enquanto isso.",
+      emailRejected: "Esse endereço de e-mail não foi aceito.",
       network: "Não conseguimos falar com o servidor. Verifique sua conexão e tente de novo.",
     },
   },

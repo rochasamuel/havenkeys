@@ -30,10 +30,20 @@ export function Pricing() {
         <p className="pricing__note">{t.common.betaNotice}</p>
       </div>
       <h2 className="pricing__after">{p.afterTitle}</h2>
+      <h3 className="pricing__sub">{p.keepsTitle}</h3>
       <ul className="plain-list plain-list--ok">
-        {p.afterTrial.map((line) => (
+        {p.keeps.map((line) => (
           <li key={line}>
             <Icon name="check" size={16} />
+            {line}
+          </li>
+        ))}
+      </ul>
+      <h3 className="pricing__sub">{p.pausesTitle}</h3>
+      <ul className="plain-list plain-list--neutral">
+        {p.pauses.map((line) => (
+          <li key={line}>
+            <span className="plain-list__dot" aria-hidden="true" />
             {line}
           </li>
         ))}

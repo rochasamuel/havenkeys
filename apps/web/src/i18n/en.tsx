@@ -44,13 +44,13 @@ export const en = {
     createAccount: "Create account",
     beta: "Beta",
     betaNotice:
-      "HavenKeys is a beta. It works and it is what we use every day, but expect rough edges, and keep your Emergency Kit somewhere safe.",
+      "HavenKeys is a beta. It works and it is what we use every day, but expect rough edges, and keep your Recovery Sheet somewhere safe.",
     installerWarning:
       "The installers aren’t code-signed yet, so Windows SmartScreen and macOS Gatekeeper will warn you on first run. Android verifies the APK’s signature itself.",
   },
 
   nav: {
-    homeAria: "HavenKeys home",
+    homeAria: "HavenKeys home (beta)",
     mainAria: "Main",
     security: "Security",
     selfHost: "Self-host",
@@ -641,7 +641,7 @@ export const en = {
 
   privacy: {
     title: "Privacy Policy",
-    updated: "Last updated October 20, 2026.",
+    updated: "Last updated October 9, 2026.",
     body: (
       <>
         <h2>This website</h2>
@@ -659,9 +659,12 @@ export const en = {
           Terms you accepted to our server at api.havenkeys.net, which emails you a code and, once
           you confirm it, a setup code. The setup code is shown on the page and kept only in the
           page's memory; it is not stored in your browser or in our analytics. Our server records
-          your email address and when you accepted the Terms, and sends account notices (the code,
-          the setup code, and when a trial is about to end or has ended) through an email provider
-          acting as an operator for us; your address is used for nothing else. We never send
+          your email address, the language you chose (to write to you in it) and the version of the
+          Terms you accepted, and sends account notices (the code, the setup code, and when a trial
+          is about to end or has ended) through an email provider acting as an operator for us; your
+          address is used for nothing else beyond account notices. The sign-up code is kept only as
+          a keyed hash, for 15 minutes. To limit abuse, sign-up attempts are counted per network
+          address and per email address for one hour. We never send
           marketing email.
         </p>
 
@@ -675,8 +678,8 @@ export const en = {
           unencrypted.
         </p>
         <p>
-          Every vault belongs to an account on a <code>havenkeys-server</code> that you, or whoever
-          invited you, runs. That server stores your vault encrypted, which it cannot decrypt, plus
+          Every vault belongs to an account on a <code>havenkeys-server</code> that you, or the server you
+          created your account on, or your own, runs. That server stores your vault encrypted, which it cannot decrypt, plus
           the metadata it needs to serve it: the vault ID, your account's email address, the
           key-derivation parameters and salt, the wrapped vault key, item revisions, and the number
           and rough size of your items. It also stores your account's plan status (trial, active, frozen) and when it changed. To rate-limit sign-in, it also counts failed attempts per
@@ -834,7 +837,7 @@ export const en = {
 
   terms: {
     title: "Terms of Service",
-    updated: "Last updated October 20, 2026.",
+    updated: "Last updated October 9, 2026.",
     body: (
       <>
         <h2>License</h2>
@@ -905,19 +908,32 @@ export const en = {
     priceSoon: "Price coming soon",
     trial: "14 days free, no card",
     includes: [
-      "Unlimited logins, cards, identities, notes and passkeys",
+      "No limit on logins, cards, identities, notes and passkeys",
       "Desktop, browser extension and Android",
       "Phone-approved sign-in on a new computer",
       "Export at any time, in plain or encrypted form",
     ],
     afterTitle: "After the trial",
-    afterTrial: [
-      "Your vault stays readable on every device.",
-      "Export keeps working, in plain or encrypted form.",
-      "Changes, new devices and autofill pause until you subscribe.",
-      "Signing in with an existing passkey keeps working.",
+    keepsTitle: "Keeps working",
+    keeps: [
+      "Your vault stays readable on every device",
+      "Export, in plain or encrypted form",
+      "Signing in with a passkey you already saved",
     ],
-    subscribeSoon: "Subscriptions open soon. Until then, write to samuelsilv.rocha@gmail.com and we will keep your account open.",
+    pausesTitle: "Pauses until you subscribe",
+    pauses: [
+      "Changes to your vault",
+      "New devices",
+      "Autofill",
+      "Saving new passkeys",
+    ],
+    subscribeSoon: (
+      <>
+        Subscriptions open soon. Until then, write to{" "}
+        <a href="mailto:samuelsilv.rocha@gmail.com">samuelsilv.rocha@gmail.com</a> and we will keep
+        your account open.
+      </>
+    ),
     cta: "Create account",
     selfHost: "Or run your own server for free",
   },
@@ -978,13 +994,14 @@ export const en = {
     changeEmail: "Use another email",
     doneTitle: "Your setup code",
     doneLede:
-      "Install HavenKeys, open it, choose “I have a setup code” and paste this code. Then pick a master password and keep your Emergency Kit safe.",
+      "Install HavenKeys, open it, choose “I have a setup code” and paste this code. Then pick a master password and keep your Recovery Sheet safe.",
     copy: "Copy",
     copied: "Copied",
     alsoEmailed: "We also emailed it. It is valid for 24 hours and works once.",
     inviteAria: "Setup code",
     downloadsTitle: "Get the app",
     otherDownloads: "All downloads",
+    keepTab: "Keep this tab open until you have pasted the code into the app.",
     errors: {
       email: "That does not look like an email address.",
       terms: "Please accept the Terms and the Privacy Policy to continue.",
@@ -992,7 +1009,8 @@ export const en = {
       invalid: "That code is not valid. Check the email, or request a new code.",
       rate_limited: "Too many attempts. Wait an hour and try again.",
       unavailable: "We could not send the email right now. Try again in a few minutes.",
-      closed: "Sign-up is not open on this server.",
+      closed: "Sign-up opens soon. Write to samuelsilv.rocha@gmail.com and we will set you up meanwhile.",
+      emailRejected: "That email address was not accepted.",
       network: "We could not reach the server. Check your connection and try again.",
     },
   },

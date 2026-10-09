@@ -22,9 +22,21 @@ describe("messages", () => {
     expect(ptBR.terms.updated).toBe(TERMS_UPDATED["pt-BR"]);
     expect(en.privacy.updated).toBe(PRIVACY_UPDATED.en);
     expect(ptBR.privacy.updated).toBe(PRIVACY_UPDATED["pt-BR"]);
-    // "October 20, 2026" <-> "2026-10-20": the day and year must appear.
-    const [y, , d] = TERMS_VERSION.split("-");
-    expect(en.terms.updated).toContain(`${Number(d)}, ${y}`);
+    // The version is the date the text first goes public, never later.
+    expect(TERMS_VERSION <= new Date().toISOString().slice(0, 10)).toBe(true);
+    const date = new Date(`${TERMS_VERSION}T00:00:00Z`);
+    const fmt = (locale: string) =>
+      new Intl.DateTimeFormat(locale, { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
+    const enDate = fmt("en-US");
+    const ptDate = fmt("pt-BR");
+    expect(ptDate).toBe("9 de outubro de 2026");
+    for (const line of [en.terms.updated, en.privacy.updated]) expect(line).toContain(enDate);
+    for (const line of [ptBR.terms.updated, ptBR.privacy.updated]) expect(line).toContain(ptDate);
+  });
+  it("calls the recovery document the Recovery Sheet", () => {
+    for (const m of [en, ptBR]) {
+      expect(JSON.stringify(m)).not.toMatch(/Emergency Kit|Kit de Emerg/);
+    }
   });
   it("has no request-an-invite copy left", () => {
     for (const m of [en, ptBR]) {

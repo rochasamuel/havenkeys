@@ -240,7 +240,7 @@ p {
 
 .field__error {
   margin: 0 0 16px;
-  color: var(--danger, #d85a4a);
+  color: var(--danger);
   font-size: 14px;
 }
 
@@ -2485,8 +2485,21 @@ main > .download:last-child {
     display: none;
   }
 
-  .nav__brand span {
+  /* The wordmark gives way to the logo; the Beta tag stays at every width. */
+  .nav__wordmark {
     display: none;
+  }
+
+  .nav__inner {
+    gap: 8px;
+  }
+
+  .nav__links {
+    gap: 10px;
+  }
+
+  .nav__brand .tag--beta {
+    margin-left: 0;
   }
 
   .hero__actions .btn {
@@ -2716,6 +2729,17 @@ main > .download:last-child {
 .code { margin: 0; padding: 14px 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--ink); font-family: "JetBrains Mono", monospace; font-size: 0.86rem; line-height: 1.55; color: var(--text); white-space: pre; }
 .code code { padding: 0; border: 0; background: none; border-radius: 0; font-size: inherit; color: inherit; }
 .plain-list--ok svg { color: var(--ok); }
+.plain-list__dot {
+  width: 6px;
+  height: 6px;
+  margin: 10px 0 0 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.pricing__sub {
+  margin: 20px 0 10px;
+  font-size: 16px;
+}
 .selfhost .plain-list { max-width: 820px; margin: 0 auto; }
 .selfhost .section__head p + h2 { margin-top: 56px; }
 

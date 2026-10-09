@@ -13,7 +13,7 @@ export function Nav() {
       <div className="nav__inner">
         <Link to={home} className="nav__brand" aria-label={t.nav.homeAria}>
           <Mark size={26} />
-          <span>HavenKeys</span>
+          <span className="nav__wordmark">HavenKeys</span>
           <span className="tag tag--beta">{t.common.beta}</span>
         </Link>
         <nav className="nav__links" aria-label={t.nav.mainAria}>

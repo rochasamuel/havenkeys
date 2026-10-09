@@ -30,8 +30,7 @@ describe("Signup", () => {
     expect(h).toContain('inputMode="numeric"');
     expect(h).toContain('maxLength="6"');
     expect(h).toContain("a@example.com");
-    expect(h).toContain("disabled");
-    expect(h).toContain(en.signup.resendIn.replace("{s}", "60"));
+    expect(h).toMatch(new RegExp(`<button[^>]*disabled[^>]*>${en.signup.resendIn.replace("{s}", "60")}`));
   });
 
   it("renders the invite on the done step in a read-only field with Copy", () => {
@@ -47,12 +46,34 @@ describe("Signup", () => {
     expect(h).not.toContain("href=\"HKINV1");
   });
 
+  it("words a 400 on the email step as a rejected address, not a bad code", () => {
+    const h = html(
+      <SignupView
+        state={{ step: "email", email: "a@example.com", accepted: true, busy: false, error: "invalid" }}
+        now={0}
+        dispatch={() => {}}
+        t={en}
+        locale="en"
+      />,
+    );
+    expect(h).toContain(en.signup.errors.emailRejected);
+    expect(h).not.toContain(en.signup.errors.invalid);
+  });
+
+  it("opens all downloads in a new tab on the localized download page and asks to keep the tab", () => {
+    const h = html(
+      <SignupView state={{ step: "done", invite: "HKINV1-abcdef" }} now={0} dispatch={() => {}} t={ptBR} locale="pt-BR" />,
+    );
+    expect(h).toMatch(/<a[^>]*href="\/pt-br\/download"[^>]*target="_blank"[^>]*rel="noreferrer"/);
+    expect(h).toContain(ptBR.signup.keepTab);
+  });
+
   it("says it is a beta on the first step", () => {
     expect(html(<Signup />)).toContain(en.common.betaNotice);
   });
 
   it("names each failure", () => {
-    for (const error of ["rate_limited", "unavailable", "closed", "invalid", "network"] as const) {
+    for (const error of ["rate_limited", "unavailable", "closed", "network"] as const) {
       const h = html(
         <SignupView
           state={{ step: "email", email: "a@example.com", accepted: true, busy: false, error }}
