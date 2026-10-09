@@ -15,6 +15,7 @@
 pub mod admin;
 pub mod auth;
 pub mod b64;
+pub mod billing;
 pub mod config;
 pub mod db;
 pub mod email;
