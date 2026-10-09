@@ -161,6 +161,7 @@ pub async fn new_invite(server: &TestServer, email: &str) -> String {
         AdminCommand::NewAccount {
             email: email.into(),
             server_url: "https://vault.example.com".into(),
+            trial: false,
         },
         server.pool(),
     )

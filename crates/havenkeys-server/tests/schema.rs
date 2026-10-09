@@ -89,3 +89,38 @@ async fn migrations_are_idempotent() {
     assert_eq!(applied, 4);
     server.cleanup().await;
 }
+
+/// Every account that existed before plans is complimentary (the migration
+/// for old rows, the admin CLI for new ones), and an unknown plan status or
+/// origin is impossible.
+#[tokio::test]
+async fn plans_schema_is_constrained_and_existing_accounts_are_complimentary() {
+    let server = support::TestServer::start().await;
+    let (account, _) = support::signed_in(&server, "old@example.com").await;
+    let db = server.db().await;
+    let status: String = db
+        .query_one(
+            "SELECT status FROM subscriptions WHERE account_id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(status, "complimentary");
+    let bad = db
+        .execute(
+            "UPDATE subscriptions SET status = 'gold' WHERE account_id = $1",
+            &[&account.account_id],
+        )
+        .await;
+    assert!(bad.is_err(), "the status list is closed");
+    let bad = db
+        .execute(
+            "UPDATE accounts SET created_by = 'robot' WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await;
+    assert!(bad.is_err());
+    drop(db);
+    server.cleanup().await;
+}

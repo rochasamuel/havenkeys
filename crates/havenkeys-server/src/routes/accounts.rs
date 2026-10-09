@@ -203,6 +203,16 @@ pub async fn activate(
     )
     .await?;
 
+    // The trial starts now, not when the invite was made (spec 2026-10-07
+    // §5.1). A complimentary row is left alone.
+    tx.execute(
+        "UPDATE subscriptions
+            SET trial_ends_at = now() + make_interval(days => $2), updated_at = now()
+          WHERE account_id = $1 AND status = 'trialing' AND trial_ends_at IS NULL",
+        &[&parsed.account, &crate::billing::TRIAL_DAYS],
+    )
+    .await?;
+
     let inserted = tx
         .execute(
             "INSERT INTO vaults

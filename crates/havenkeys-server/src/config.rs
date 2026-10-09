@@ -66,3 +66,33 @@ impl Config {
         })
     }
 }
+
+/// A URL clients will be told to trust: an invite carries it and a client
+/// sends its master-password proof there. HTTPS, or an explicit localhost
+/// for development.
+pub fn check_public_url(raw: &str) -> Result<String, String> {
+    let url = raw.trim().trim_end_matches('/').to_string();
+    let local = url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1");
+    if !url.starts_with("https://") && !local {
+        return Err("the server URL must be https (or http on localhost)".into());
+    }
+    if url.len() > 512 {
+        return Err("the server URL is too long".into());
+    }
+    Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_public_url;
+
+    #[test]
+    fn a_plain_http_server_url_is_refused() {
+        assert!(check_public_url("http://vault.example.com").is_err());
+        assert_eq!(
+            check_public_url("https://vault.example.com/").unwrap(),
+            "https://vault.example.com"
+        );
+        assert!(check_public_url("http://localhost:8080").is_ok());
+    }
+}

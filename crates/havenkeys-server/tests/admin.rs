@@ -7,6 +7,7 @@ fn new_account(email: &str) -> AdminCommand {
     AdminCommand::NewAccount {
         email: email.into(),
         server_url: "https://vault.example.com".into(),
+        trial: false,
     }
 }
 
@@ -113,5 +114,125 @@ async fn accounts_can_be_listed_and_deleted() {
     )
     .await
     .is_err());
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn new_account_is_complimentary_by_default_and_trialing_on_request() {
+    let server = support::TestServer::start().await;
+    let printed = admin::run(new_account("free@example.com"), server.pool())
+        .await
+        .unwrap();
+    let free = invite::decode(printed.trim()).unwrap().account;
+    let printed = admin::run(
+        AdminCommand::NewAccount {
+            email: "trial@example.com".into(),
+            server_url: "https://vault.example.com".into(),
+            trial: true,
+        },
+        server.pool(),
+    )
+    .await
+    .unwrap();
+    let trial = invite::decode(printed.trim()).unwrap().account;
+
+    let db = server.db().await;
+    for (id, expected) in [(free, "complimentary"), (trial, "trialing")] {
+        let row = db
+            .query_one(
+                "SELECT status, trial_ends_at FROM subscriptions WHERE account_id = $1",
+                &[&id],
+            )
+            .await
+            .unwrap();
+        assert_eq!(row.get::<_, String>(0), expected);
+        assert!(
+            row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(1)
+                .is_none(),
+            "the trial starts at activation, not at invitation"
+        );
+        let events: i64 = db
+            .query_one(
+                "SELECT count(*) FROM billing_events WHERE account_id = $1 AND actor = 'admin'",
+                &[&id],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(events, 1);
+    }
+    drop(db);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn set_plan_changes_the_status_and_records_it() {
+    let server = support::TestServer::start().await;
+    let (account, _) = support::signed_in(&server, "user@example.com").await;
+    let out = admin::run(
+        AdminCommand::SetPlan {
+            email: "User@Example.com".into(),
+            status: havenkeys_server::billing::Status::Active,
+            until: Some("2027-01-31".into()),
+        },
+        server.pool(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(out, "active until 2027-01-31T00:00:00+00:00");
+    let db = server.db().await;
+    let row = db
+        .query_one(
+            "SELECT status, current_period_end::text FROM subscriptions WHERE account_id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(row.get::<_, String>(0), "active");
+    assert!(row.get::<_, String>(1).starts_with("2027-01-31"));
+    let last: (Option<String>, String) = db
+        .query_one(
+            "SELECT old_status, new_status FROM billing_events WHERE account_id = $1 ORDER BY id DESC LIMIT 1",
+            &[&account.account_id],
+        )
+        .await
+        .map(|r| (r.get(0), r.get(1)))
+        .unwrap();
+    assert_eq!(last, (Some("complimentary".into()), "active".into()));
+    assert!(admin::run(
+        AdminCommand::SetPlan {
+            email: "nobody@example.com".into(),
+            status: havenkeys_server::billing::Status::Frozen,
+            until: None,
+        },
+        server.pool(),
+    )
+    .await
+    .is_err());
+    assert!(admin::run(
+        AdminCommand::SetPlan {
+            email: "user@example.com".into(),
+            status: havenkeys_server::billing::Status::Active,
+            until: Some("next tuesday".into()),
+        },
+        server.pool(),
+    )
+    .await
+    .is_err());
+    drop(db);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn list_accounts_shows_the_plan() {
+    let server = support::TestServer::start().await;
+    support::signed_in(&server, "user@example.com").await;
+    let out = admin::run(AdminCommand::ListAccounts, server.pool())
+        .await
+        .unwrap();
+    assert!(
+        out.contains("user@example.com  active  complimentary"),
+        "{out}"
+    );
     server.cleanup().await;
 }
