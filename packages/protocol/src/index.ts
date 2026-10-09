@@ -176,9 +176,9 @@ export interface PasskeyCandidate {
 }
 
 export type Result =
-  | { type: "status"; state: LockState; vaultExists: boolean }
+  | { type: "status"; state: LockState; vaultExists: boolean; entitlement: Entitlement }
   | { type: "lock" }
-  | { type: "find_matches"; matches: Match[] }
+  | { type: "find_matches"; matches: Match[]; entitlement: Entitlement }
   | { type: "fill_item"; username: string | null; password: string | null; autoSubmit: boolean }
   | { type: "get_totp"; code: string; period: number; secondsRemaining: number; autoSubmit: boolean }
   | { type: "generator_options"; options: PasswordOptions }
@@ -229,6 +229,7 @@ export const ERROR_CODES = [
   "integration_disabled",
   "desktop_unavailable",
   "offline",
+  "frozen",
   "internal",
 ] as const;
 
@@ -389,6 +390,9 @@ function parseList<T>(v: unknown, one: (x: unknown) => T | null): T[] | null {
   return out;
 }
 
+/** `frozen`: the trial ended; reading stays, fills and saves are refused. */
+export type Entitlement = "full" | "frozen";
+const ENTITLEMENTS: readonly Entitlement[] = ["full", "frozen"];
 const LOCK_STATES: readonly LockState[] = ["locked", "unlocking", "unlocked", "locking"];
 const STRENGTHS: readonly MatchStrength[] = ["exact_url", "same_host", "same_site"];
 const SAVE_ACTIONS: readonly SaveAction[] = ["add", "update", "unchanged"];
@@ -408,21 +412,28 @@ function parseResult(v: unknown): Result | null {
   if (!isObj(v)) return null;
   switch (v.type) {
     case "status":
-      if (!hasExactKeys(v, ["type", "state", "vaultExists"])) return null;
+      if (!hasExactKeys(v, ["type", "state", "vaultExists", "entitlement"])) return null;
       if (!LOCK_STATES.includes(v.state as LockState) || !isBool(v.vaultExists)) return null;
-      return { type: "status", state: v.state as LockState, vaultExists: v.vaultExists };
+      if (!ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
+      return {
+        type: "status",
+        state: v.state as LockState,
+        vaultExists: v.vaultExists,
+        entitlement: v.entitlement as Entitlement,
+      };
     case "lock":
       return hasExactKeys(v, ["type"]) ? { type: "lock" } : null;
     case "find_matches": {
-      if (!hasExactKeys(v, ["type", "matches"]) || !Array.isArray(v.matches)) return null;
+      if (!hasExactKeys(v, ["type", "matches", "entitlement"]) || !Array.isArray(v.matches)) return null;
       if (v.matches.length > MAX_MATCHES) return null;
+      if (!ENTITLEMENTS.includes(v.entitlement as Entitlement)) return null;
       const matches: Match[] = [];
       for (const m of v.matches) {
         const parsed = parseMatch(m);
         if (!parsed) return null;
         matches.push(parsed);
       }
-      return { type: "find_matches", matches };
+      return { type: "find_matches", matches, entitlement: v.entitlement as Entitlement };
     }
     case "fill_item":
       if (!hasExactKeys(v, ["type", "username", "password", "autoSubmit"])) return null;

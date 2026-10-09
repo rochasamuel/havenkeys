@@ -761,7 +761,7 @@ impl Response {
             return false;
         }
         match &self.result {
-            Some(ResultBody::FindMatches { matches }) => {
+            Some(ResultBody::FindMatches { matches, .. }) => {
                 matches.len() <= MAX_MATCHES
                     && matches.iter().all(|m| {
                         m.tags.len() <= MAX_MATCH_TAGS
@@ -872,10 +872,12 @@ pub enum ResultBody {
     Status {
         state: LockState,
         vault_exists: bool,
+        entitlement: Entitlement,
     },
     Lock {},
     FindMatches {
         matches: Vec<Match>,
+        entitlement: Entitlement,
     },
     FillItem {
         username: Option<String>,
@@ -1122,6 +1124,15 @@ pub enum UpgradeHint {
     Auto { item_id: Uuid },
 }
 
+/// Whether the account may use autofill: `Frozen` (trial ended) keeps
+/// reading but refuses every fill, save and passkey creation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Entitlement {
+    Full,
+    Frozen,
+}
+
 // ------------------------------------------------------------------ errors
 
 /// Stable error codes. Messages are fixed strings chosen here, never text
@@ -1144,6 +1155,7 @@ pub enum ErrorCode {
     IntegrationDisabled,
     DesktopUnavailable,
     Offline,
+    Frozen,
     Internal,
 }
 
@@ -1168,6 +1180,9 @@ impl ErrorCode {
             ErrorCode::DesktopUnavailable => "The HavenKeys app is not running.",
             ErrorCode::Offline => {
                 "HavenKeys is offline. The vault is read-only until it reconnects."
+            }
+            ErrorCode::Frozen => {
+                "Your HavenKeys trial has ended. The vault is read-only until you subscribe."
             }
             ErrorCode::Internal => "Internal error.",
         }

@@ -354,6 +354,7 @@ fn too_many_matches_rejected() {
         1,
         ResultBody::FindMatches {
             matches: vec![m; MAX_MATCHES + 1],
+            entitlement: Entitlement::Full,
         },
     );
     let bytes = Outgoing::from(r).to_bytes().unwrap();
@@ -608,7 +609,7 @@ fn sso_results_validate() {
     let empty = r#"{"v":1,"id":1,"result":{"type":"check_sso","action":"add","itemId":null,"accounts":[""]}}"#;
     assert!(Outgoing::parse(empty.as_bytes()).is_none());
     let m = format!(
-        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github","tags":[]}}]}}}}"#
+        r#"{{"v":1,"id":1,"result":{{"type":"find_matches","matches":[{{"id":"{ITEM}","title":"t","username":null,"hasTotp":false,"strength":"same_site","provider":"github","tags":[]}}],"entitlement":"full"}}}}"#
     );
     assert!(Outgoing::parse(m.as_bytes()).is_some());
     // `provider` is required, like `account`: a Match missing the key (not
@@ -845,7 +846,10 @@ fn one_match(tags: Vec<String>) -> Vec<u8> {
     };
     Outgoing::from(Response::ok(
         1,
-        ResultBody::FindMatches { matches: vec![m] },
+        ResultBody::FindMatches {
+            matches: vec![m],
+            entitlement: Entitlement::Full,
+        },
     ))
     .to_bytes()
     .unwrap()

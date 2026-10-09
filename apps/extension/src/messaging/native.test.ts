@@ -56,8 +56,8 @@ describe("NativeClient", () => {
     const c = client();
     const p = c.request({ type: "status" });
     expect(port.sent[0]).toEqual({ v: 1, id: 1, request: { type: "status" } });
-    port.deliver({ v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true } });
-    await expect(p).resolves.toEqual({ type: "status", state: "unlocked", vaultExists: true });
+    port.deliver({ v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" } });
+    await expect(p).resolves.toEqual({ type: "status", state: "unlocked", vaultExists: true, entitlement: "full" });
   });
 
   it("maps protocol errors to BridgeError", async () => {
@@ -80,10 +80,10 @@ describe("NativeClient", () => {
     const p = c.request({ type: "find_matches", url: "https://github.com/" });
     const id = port.lastId();
     // Invalid shapes are dropped silently.
-    port.deliver({ v: 1, id, result: { type: "find_matches", matches: [{ id: ID, password: "x" }] } });
+    port.deliver({ v: 1, id, result: { type: "find_matches", matches: [{ id: ID, password: "x" }], entitlement: "full" } });
     port.deliver("garbage");
     // Unknown IDs are dropped.
-    port.deliver({ v: 1, id: id + 100, result: { type: "find_matches", matches: [] } });
+    port.deliver({ v: 1, id: id + 100, result: { type: "find_matches", matches: [], entitlement: "full" } });
     // A result of the wrong type fails the request.
     port.deliver({ v: 1, id, result: { type: "fill_item", username: "u", password: "p", autoSubmit: false } });
     await expect(p).rejects.toMatchObject({ code: "malformed" });
@@ -128,7 +128,7 @@ describe("NativeClient", () => {
     vi.useFakeTimers();
     const c = client({ idleMs: 1000 });
     const p = c.request({ type: "status" });
-    port.deliver({ v: 1, id: port.lastId(), result: { type: "status", state: "locked", vaultExists: true } });
+    port.deliver({ v: 1, id: port.lastId(), result: { type: "status", state: "locked", vaultExists: true, entitlement: "full" } });
     await p;
     vi.advanceTimersByTime(999);
     expect(port.disconnected).toBe(false);

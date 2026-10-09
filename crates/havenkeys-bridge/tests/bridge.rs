@@ -288,6 +288,7 @@ fn legitimate_flow_works() {
     let status = call(&f, serde_json::json!({"type": "status"}));
     assert_eq!(status["result"]["state"], "unlocked");
     assert_eq!(status["result"]["vaultExists"], true);
+    assert_eq!(status["result"]["entitlement"], "full");
 
     let m = find(&f, "https://github.com/login");
     let matches = m["result"]["matches"].as_array().unwrap();
@@ -2085,4 +2086,66 @@ fn fill_identity_with_too_many_roles_is_rejected() {
         error_code(&r),
         Some("invalid_input") | Some("malformed") | Some("too_large")
     ));
+}
+
+fn freeze(f: &Fixture) {
+    let mut v = f.vault.lock().unwrap();
+    let mut plan = v.plan().unwrap();
+    plan.status = Some("trialing".into());
+    plan.entitlement = havenkeys_core::store::Entitlement::Frozen;
+    v.set_plan(&plan).unwrap();
+}
+
+/// Frozen (spec 2026-10-07 §6.3): the menu's lookups and every fill, save
+/// and passkey creation are refused; status, TOTP and passkey sign-in stay.
+#[test]
+fn a_frozen_account_refuses_autofill_and_keeps_reading() {
+    let f = online_fixture();
+    freeze(&f);
+    let status = call(&f, serde_json::json!({"type": "status"}));
+    assert_eq!(status["result"]["state"], "unlocked");
+    assert_eq!(status["result"]["entitlement"], "frozen");
+    let found = find(&f, "https://github.com/");
+    assert_eq!(found["result"]["entitlement"], "frozen");
+    assert_eq!(
+        found["result"]["matches"].as_array().unwrap().len(),
+        1,
+        "metadata still lists the site's logins"
+    );
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("frozen")
+    );
+    assert!(totp(&f, f.github, "https://github.com/")["result"]["code"].is_string());
+    for req in [
+        serde_json::json!({"type": "check_login", "url": "https://github.com/", "username": "octo", "password": "pw"}),
+        serde_json::json!({"type": "save_login", "url": "https://github.com/", "username": "octo", "password": "pw", "itemId": null}),
+        serde_json::json!({"type": "find_identity", "url": "https://github.com/"}),
+        serde_json::json!({"type": "find_cards", "url": "https://shop.example/"}),
+        serde_json::json!({"type": "start_sso", "itemId": f.typeform, "url": "https://typeform.com/"}),
+        serde_json::json!({"type": "check_passkey_create", "url": "https://github.com/", "rpId": "github.com", "userName": "octo", "excludeCredentials": [], "conditional": false}),
+    ] {
+        assert_eq!(error_code(&call(&f, req.clone())), Some("frozen"), "{req}");
+    }
+    assert_eq!(f.changes.load(Ordering::SeqCst), 0, "nothing was written");
+    let opened = call(
+        &f,
+        serde_json::json!({"type": "open_item", "itemId": f.github, "url": "https://github.com/"}),
+    );
+    assert!(opened["result"].is_object(), "{opened}");
+}
+
+/// A1 holds when frozen: the wrong origin is denied, not frozen.
+#[test]
+fn a1_wrong_origin_is_still_denied_when_frozen() {
+    let f = fixture();
+    freeze(&f);
+    assert_eq!(
+        error_code(&fill(&f, f.github, "https://evil.com/")),
+        Some("denied")
+    );
+    assert_eq!(
+        error_code(&totp(&f, f.github, "https://evil.com/")),
+        Some("denied")
+    );
 }

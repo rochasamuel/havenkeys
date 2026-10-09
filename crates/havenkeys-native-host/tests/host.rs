@@ -248,7 +248,7 @@ fn desktop_messages_validated_and_disconnect_reported() {
         let req: serde_json::Value = serde_json::from_slice(&req).unwrap();
         assert_eq!(req["request"]["type"], "status");
         for bad in [
-            &br#"{"v":1,"id":1,"result":{"type":"status","state":"unlocked","vaultExists":true},"x":1}"#[..],
+            &br#"{"v":1,"id":1,"result":{"type":"status","state":"unlocked","vaultExists":true,"entitlement":"full"},"x":1}"#[..],
             br#"{"v":1,"id":1,"result":{"type":"dump","everything":true}}"#,
             br#"not json"#,
         ] {

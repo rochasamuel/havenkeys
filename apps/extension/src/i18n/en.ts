@@ -34,6 +34,7 @@ const bridge = {
   integration_disabled: "Browser integration is turned off in HavenKeys settings.",
   desktop_unavailable: "The HavenKeys app is not running.",
   offline: "HavenKeys is offline. The vault is read-only until it reconnects.",
+  frozen: "Your HavenKeys trial has ended. The vault is read-only until you subscribe.",
   internal: "Internal error.",
 } satisfies Record<ErrorCode, string>;
 

@@ -18,9 +18,9 @@ use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate,
 use havenkeys_core::vault::{SaveTarget, StagedWrite, VaultService};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
-    CardFrameValues, CardMatch, CardValue, ErrorCode, IdentityValue, Match, PasskeyCandidate,
-    PasskeyMatch, PasswordOptions, Request, ResultBody, SaveAction, UpgradeHint, WireSecret,
-    MAX_MATCHES,
+    CardFrameValues, CardMatch, CardValue, Entitlement, ErrorCode, IdentityValue, Match,
+    PasskeyCandidate, PasskeyMatch, PasswordOptions, Request, ResultBody, SaveAction, UpgradeHint,
+    WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -111,6 +111,24 @@ pub enum Dispatched {
     Open { item: Uuid, result: ResultBody },
 }
 
+fn refused_when_frozen(req: &Request) -> bool {
+    matches!(
+        req,
+        Request::CheckLogin { .. }
+            | Request::SaveLogin { .. }
+            | Request::CheckPasskeyCreate { .. }
+            | Request::PasskeyCreate { .. }
+            | Request::StartSso { .. }
+            | Request::CheckSso { .. }
+            | Request::SaveSso { .. }
+            | Request::FindIdentity { .. }
+            | Request::FillIdentity { .. }
+            | Request::FindCards { .. }
+            | Request::FillCard { .. }
+            | Request::SaveCard { .. }
+    )
+}
+
 /// Answer a request. `lock` and `show_unlock` are handled by the caller, which must not hold
 /// the vault while locking.
 pub fn dispatch(
@@ -125,12 +143,27 @@ pub fn dispatch(
     ) {
         require_enabled(v)?;
     }
+    // Frozen (spec 2026-10-07 §6.3): nothing that fills, saves or creates
+    // a passkey, and none of the menus' lookups. Reading stays: status,
+    // the popup's list, TOTP, passkey sign-in, opening in the desktop.
+    // `fill_item` and `get_totp` check the origin first so a wrong origin
+    // is still `denied` (attack 1).
+    let frozen = v.entitlement().map_err(code)? == havenkeys_core::store::Entitlement::Frozen;
+    if frozen && refused_when_frozen(req) {
+        return Err(ErrorCode::Frozen);
+    }
+    let entitlement = if frozen {
+        Entitlement::Frozen
+    } else {
+        Entitlement::Full
+    };
     match req {
         Request::Status {} => {
             let s = v.status().map_err(code)?;
             Ok(Dispatched::Done(ResultBody::Status {
                 state: lock_state(s.state),
                 vault_exists: s.vault_exists,
+                entitlement,
             }))
         }
         // Handled by the caller, without the vault.
@@ -152,13 +185,28 @@ pub fn dispatch(
                     tags: s.tags,
                 })
                 .collect();
-            Ok(Dispatched::Done(ResultBody::FindMatches { matches }))
+            Ok(Dispatched::Done(ResultBody::FindMatches {
+                matches,
+                entitlement,
+            }))
         }
         Request::FillItem {
             item_id,
             url,
             top_url,
         } => {
+            // Origin first (attack 1), then the plan.
+            let matched = v
+                .find_matches(url, top_url.as_deref())
+                .map_err(code)?
+                .iter()
+                .any(|s| s.id == *item_id);
+            if !matched {
+                return Err(ErrorCode::Denied);
+            }
+            if frozen {
+                return Err(ErrorCode::Frozen);
+            }
             let creds = v
                 .fill_for_page(item_id, url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(item_code)?;

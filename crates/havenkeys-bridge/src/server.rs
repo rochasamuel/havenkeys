@@ -386,7 +386,7 @@ fn fit_frame(mut response: Response) -> Response {
         return response;
     }
     while wire_len(&response) > MAX_RESPONSE_BYTES {
-        let Some(ResultBody::FindMatches { matches }) = &mut response.result else {
+        let Some(ResultBody::FindMatches { matches, .. }) = &mut response.result else {
             break;
         };
         match matches.iter_mut().rev().find(|m| !m.tags.is_empty()) {

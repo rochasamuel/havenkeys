@@ -373,7 +373,7 @@ describe("card pick", () => {
   });
 
   it("does not fill a card from a login menu", async () => {
-    const { h, requests } = setup((r) => (r.type === "find_matches" ? { type: "find_matches", matches: [] } : findCards(r)));
+    const { h, requests } = setup((r) => (r.type === "find_matches" ? { type: "find_matches", matches: [], entitlement: "full" } : findCards(r)));
     const open = (await h.handleContent(top, { type: "cs_open_menu", kind: "login", explicit: true })) as { token: string };
     expect(await h.handleInline(1, { type: "menu_pick_card", token: open.token, itemId: VISA })).toMatchObject({ ok: false });
     expect(requests.some((r) => r.type === "fill_card")).toBe(false);

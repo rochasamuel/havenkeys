@@ -289,7 +289,7 @@ describe("save", () => {
     expect(sent.filter((s) => s.msg.type === "bg_sso_show")).toHaveLength(2);
   });
   it("does not show an offer again on the next page", async () => {
-    const { h, sent } = setup({ find_matches: { type: "find_matches", matches: [match] } });
+    const { h, sent } = setup({ find_matches: { type: "find_matches", matches: [match], entitlement: "full" } });
     expect(await h.handleContent(top, { tabId: 1 }, { type: "cs_sso_buttons", providers: ["google"] })).toMatchObject({ ok: true });
     h.ready(top, { tabId: 1 });
     expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(false);

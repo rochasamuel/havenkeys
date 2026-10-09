@@ -7,9 +7,9 @@ const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, streng
 describe("parseIncoming", () => {
   it("accepts every valid message shape", () => {
     const ok = [
-      { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true } },
+      { v: 1, id: 1, result: { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" } },
       { v: 1, id: 2, result: { type: "lock" } },
-      { v: 1, id: 3, result: { type: "find_matches", matches: [match] } },
+      { v: 1, id: 3, result: { type: "find_matches", matches: [match], entitlement: "full" } },
       { v: 1, id: 4, result: { type: "fill_item", username: "octo", password: "pw", autoSubmit: false } },
       { v: 1, id: 5, result: { type: "fill_item", username: null, password: null, autoSubmit: true } },
       { v: 1, id: 6, result: { type: "get_totp", code: "123456", period: 30, secondsRemaining: 12, autoSubmit: false } },
@@ -44,10 +44,10 @@ describe("parseIncoming", () => {
       { v: 1, id: -1, result: { type: "lock" } },
       { v: 1, id: 1.5, result: { type: "lock" } },
       { v: 1, id: null, result: { type: "lock" } },
-      { v: 1, id: 1, result: { type: "status", state: "open", vaultExists: true } },
-      { v: 1, id: 1, result: { type: "find_matches", matches: [{ ...match, password: "pw" }] } },
-      { v: 1, id: 1, result: { type: "find_matches", matches: [{ ...match, id: "../../etc" }] } },
-      { v: 1, id: 1, result: { type: "find_matches", matches: Array(MAX_MATCHES + 1).fill(match) } },
+      { v: 1, id: 1, result: { type: "status", state: "open", vaultExists: true, entitlement: "full" } },
+      { v: 1, id: 1, result: { type: "find_matches", matches: [{ ...match, password: "pw" }], entitlement: "full" } },
+      { v: 1, id: 1, result: { type: "find_matches", matches: [{ ...match, id: "../../etc" }], entitlement: "full" } },
+      { v: 1, id: 1, result: { type: "find_matches", matches: Array(MAX_MATCHES + 1).fill(match), entitlement: "full" } },
       { v: 1, id: 1, result: { type: "get_totp", code: "<img>", period: 30, secondsRemaining: 1 } },
       { v: 1, id: 1, error: { code: "pwned", message: "x" } },
       { v: 1, event: { type: "locked", extra: true } },
@@ -180,14 +180,14 @@ describe("sign in with", () => {
       result: { type: "check_sso", action: "add", itemId: null, accounts: ["me@gmail.com"] },
     });
     const m = { id: ID, title: "t", username: null, hasTotp: false, strength: "same_site", provider: "github", tags: [] };
-    expect(parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m] } })?.kind).toBe("result");
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m], entitlement: "full" } })?.kind).toBe("result");
   });
   it("parses Match.tags within limits and rejects the rest", () => {
     const match = (tags: unknown) => ({
       id: ID, title: "t", username: null,
       hasTotp: false, strength: "same_host", provider: null, tags,
     });
-    const res = (m: unknown) => parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m] } });
+    const res = (m: unknown) => parseIncoming({ v: 1, id: 1, result: { type: "find_matches", matches: [m], entitlement: "full" } });
     expect(res(match(["staging", "work"]))).not.toBeNull();
     expect(res(match([]))).not.toBeNull();
     expect(res(match(Array.from({ length: 21 }, (_, i) => String(i))))).toBeNull();
@@ -207,7 +207,7 @@ describe("sign in with", () => {
       { type: "check_sso", action: "add", itemId: null, accounts: [""] },
       { type: "check_sso", action: "add", itemId: null, accounts: ["a".repeat(255)] },
       { type: "check_sso", action: "add", itemId: null, accounts: "me@gmail.com" },
-      { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }] },
+      { type: "find_matches", matches: [{ id: ID, title: "t", username: null, hasTotp: false, strength: "same_site" }], entitlement: "full" },
     ];
     for (const result of bad) expect(parseIncoming({ v: 1, id: 1, result })).toBeNull();
   });

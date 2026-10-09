@@ -71,8 +71,8 @@ describe("popup handler", () => {
   it("looks up matches for the active tab, without query or fragment", async () => {
     const c = fakeClient((r) =>
       r.type === "status"
-        ? { type: "status", state: "unlocked", vaultExists: true }
-        : { type: "find_matches", matches: [] },
+        ? { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" }
+        : { type: "find_matches", matches: [], entitlement: "full" },
     );
     const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login?next=x#y" }));
     const r = await h.handle({ type: "popup_state" });
@@ -81,7 +81,7 @@ describe("popup handler", () => {
   });
 
   it("does not query matches while locked", async () => {
-    const c = fakeClient(() => ({ type: "status", state: "locked", vaultExists: true }));
+    const c = fakeClient(() => ({ type: "status", state: "locked", vaultExists: true, entitlement: "full" }));
     const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/" }));
     expect(await h.handle({ type: "popup_state" })).toEqual({ ok: true, value: { kind: "locked" } });
     expect(c.seen).toHaveLength(1);
@@ -121,7 +121,7 @@ describe("popup handler", () => {
   it("fills the active tab using the tab's own URL", async () => {
     const c = fakeClient((r) =>
       r.type === "find_matches"
-        ? { type: "find_matches", matches: [] }
+        ? { type: "find_matches", matches: [], entitlement: "full" }
         : { type: "fill_item", username: "octo", password: "pw", autoSubmit: false },
     );
     const fills: unknown[] = [];
@@ -139,7 +139,7 @@ describe("popup handler", () => {
     const c = fakeClient((r) =>
       r.type === "fill_item"
         ? { type: "fill_item", username: "octo", password: "pw", autoSubmit: true }
-        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] }] },
+        : { type: "find_matches", matches: [{ id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] }], entitlement: "full" },
     );
     const fills: unknown[][] = [];
     const h = createPopupHandler(c, async () => ({ id: 7, url: "https://github.com/login" }), async (...a) => {
@@ -157,7 +157,7 @@ describe("popup handler", () => {
         ? { type: "fill_item", username: password === null ? null : "me", password, autoSubmit: false }
         : {
             type: "find_matches",
-            matches: [{ id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google", tags: [] }],
+            matches: [{ id: ID, title: "Typeform", username: "me@gmail.com", hasTotp: false, strength: "same_site", provider: "google", tags: [] }], entitlement: "full",
           },
     );
     const fills: unknown[] = [];
@@ -259,7 +259,7 @@ describe("popup handler", () => {
   });
 });
 
-const unlocked = { type: "status", state: "unlocked", vaultExists: true };
+const unlocked = { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" };
 
 function handlerWith(answers: Record<string, unknown>, url = "https://shop.com/") {
   const requests: Request[] = [];
@@ -301,7 +301,7 @@ function identitySetup(pageRoles: IdentityRole[], summary: { roles: IdentityRole
 
 describe("popup identity fill", () => {
   it("offers the identity when it has values", async () => {
-    const { h } = handlerWith({ status: unlocked, find_matches: { type: "find_matches", matches: [] }, find_identity: { type: "find_identity", title: "Samuel", email: null, roles: ["fullName"] } });
+    const { h } = handlerWith({ status: unlocked, find_matches: { type: "find_matches", matches: [], entitlement: "full" }, find_identity: { type: "find_identity", title: "Samuel", email: null, roles: ["fullName"] } });
     const r = await h.handle({ type: "popup_state" });
     expect(r).toMatchObject({ ok: true, value: { kind: "unlocked", identity: { title: "Samuel" } } });
   });
@@ -375,9 +375,9 @@ describe("popup cards", () => {
         requests.push(r);
         switch (r.type) {
           case "status":
-            return { type: "status", state: "unlocked", vaultExists: true };
+            return { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" };
           case "find_matches":
-            return { type: "find_matches", matches: [] };
+            return { type: "find_matches", matches: [], entitlement: "full" };
           case "find_identity":
             throw new BridgeError("not_found", "x");
           case "find_cards":

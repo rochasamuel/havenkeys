@@ -56,7 +56,7 @@ function setup(
 function defaultAnswer(r: Request): unknown {
   switch (r.type) {
     case "find_matches":
-      return { type: "find_matches", matches: r.url.startsWith("https://github.com") ? [ghMatch] : [] };
+      return { type: "find_matches", matches: r.url.startsWith("https://github.com") ? [ghMatch] : [], entitlement: "full" };
     case "fill_item":
       return { type: "fill_item", username: "octo", password: "pw", autoSubmit: false };
     case "get_totp":
@@ -329,7 +329,7 @@ describe("suggestion menus", () => {
     (password: string | null) =>
     (r: Request): unknown =>
       r.type === "find_matches"
-        ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }] }
+        ? { type: "find_matches", matches: [{ ...ghMatch, provider: "google" }], entitlement: "full" }
         : r.type === "fill_item"
           ? { type: "fill_item", username: password === null ? null : "octo", password, autoSubmit: false }
           : defaultAnswer(r);
@@ -610,7 +610,7 @@ describe("passkeys in the field menu", () => {
   function withPasskeys(rows = [row]) {
     const picks: unknown[] = [];
     const h = createInlineHandler({
-      client: { request: (async () => ({ type: "find_matches", matches: [] })) as never },
+      client: { request: (async () => ({ type: "find_matches", matches: [], entitlement: "full" })) as never },
       sendToFrame: async () => undefined,
       now: () => 1,
       newToken: () => T1,
@@ -852,7 +852,7 @@ describe("automatic sign-in", () => {
 
     // Final password step of a login without TOTP, pressed by the content script.
     const noTotp = (r: Request): unknown =>
-      r.type === "find_matches" ? { type: "find_matches", matches: [{ ...ghMatch, hasTotp: false }] } : auto(r);
+      r.type === "find_matches" ? { type: "find_matches", matches: [{ ...ghMatch, hasTotp: false }], entitlement: "full" } : auto(r);
     const b = setup(noTotp, {}, pressWhenSubmit);
     await pick(b.h); // username pressed
     await b.h.handleContent(frame(), { type: "cs_run_step", kind: "password" }); // last step
@@ -1051,7 +1051,7 @@ describe("identity menu", () => {
   });
 
   it("adds the identity row under a sign-up form's logins", async () => {
-    const { h } = setup(answerWith({ find_matches: { type: "find_matches", matches: [] }, find_identity: summary }));
+    const { h } = setup(answerWith({ find_matches: { type: "find_matches", matches: [], entitlement: "full" }, find_identity: summary }));
     const open = (await h.handleContent(idFrame("https://shop.com/signup"), { type: "cs_open_menu", kind: "login", roles: ["email", "fullName"] })) as { ok: boolean; token: string };
     expect(open.ok).toBe(true);
     const view = await h.handleInline(TAB, { type: "menu_state", token: open.token });
@@ -1084,7 +1084,7 @@ describe("identity menu", () => {
   });
 
   it("adds no identity row under a sign-up form when there is no identity", async () => {
-    const { h } = setup(answerWith({ find_matches: { type: "find_matches", matches: [] }, find_identity: new BridgeError("not_found", "x") }));
+    const { h } = setup(answerWith({ find_matches: { type: "find_matches", matches: [], entitlement: "full" }, find_identity: new BridgeError("not_found", "x") }));
     const open = await h.handleContent(idFrame("https://shop.com/signup"), { type: "cs_open_menu", kind: "login", roles: ["email", "fullName"] });
     expect(open).toEqual({ ok: false });
   });

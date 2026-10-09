@@ -253,6 +253,7 @@ export const ptBR: Messages = {
       integration_disabled: "A integração com o navegador está desativada nas configurações do HavenKeys.",
       desktop_unavailable: "O app HavenKeys não está aberto.",
       offline: "O HavenKeys está offline. O cofre fica somente leitura até reconectar.",
+      frozen: "Seu período de teste do HavenKeys terminou. O cofre fica somente leitura até você assinar.",
       internal: "Erro interno.",
     },
   },
