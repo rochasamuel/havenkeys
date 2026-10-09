@@ -455,8 +455,7 @@ fn a_refused_empty_trash_still_tells_the_app_to_reload() {
     while events.arrives() {}
     let refused = a
         .empty_trash()
-        .err()
-        .expect("the server refuses A's stale tombstone");
+        .expect_err("the server refuses A's stale tombstone");
     assert_eq!(code(refused), "item_changed_elsewhere");
     assert!(events.arrives(), "the app is told to reload its counts");
 
@@ -594,9 +593,9 @@ fn tags_round_trip_through_the_draft_and_the_summary() {
             .unwrap()
             .tags
     };
-    assert_eq!(tags_of(&a), vec!["work".to_string()]);
+    assert_eq!(tags_of(&a), vec!["Work".to_string()]);
     let edit = a.item_edit(id.clone()).unwrap();
-    assert_eq!(edit.tags, vec!["work".to_string()]);
+    assert_eq!(edit.tags, vec!["Work".to_string()]);
 
     a.update_item(
         id.clone(),

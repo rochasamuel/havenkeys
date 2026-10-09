@@ -177,6 +177,7 @@ impl MobileVault {
 #[uniffi::export]
 impl MobileVault {
     /// The cards a form may be offered, and which of its frames may get one.
+    /// None while the account is frozen.
     pub fn autofill_cards(
         &self,
         target: TargetFacts,
@@ -184,6 +185,13 @@ impl MobileVault {
     ) -> MobileResult<CardChoices> {
         bounded(&frames)?;
         self.unlocked()?;
+        if self.is_frozen()? {
+            return Ok(CardChoices {
+                insecure: false,
+                cards: Vec::new(),
+                frames: vec![false; frames.len()],
+            });
+        }
         let vault = self.client.vault()?;
         Ok(match self.target(&target)? {
             FillTarget::Browser { page_url } => {
@@ -221,6 +229,7 @@ impl MobileVault {
         bounded(&frames)?;
         let id = parse_id(&id)?;
         self.unlocked()?;
+        self.refuse_when_frozen()?;
         let roles: Vec<Vec<CoreRole>> = frames
             .iter()
             .map(|f| f.roles.iter().map(|r| r.core()).collect())
@@ -271,7 +280,7 @@ mod tests {
     use super::*;
     use crate::autofill::{FrameFacts, TargetFacts};
     use crate::testing::seed_card;
-    use crate::vault::tests::{code, overdue_refuses, unlocked};
+    use crate::vault::tests::{code, freeze, overdue_refuses, unlocked};
 
     const CHROME: &str = "F0:FD:6C:5B:41:0F:25:CB:25:C3:B5:33:46:C8:97:2F:AE:30:F8:EE:74:11:DF:91:04:80:AD:6B:2D:60:DB:83";
     const VISA: &str = "4111111111111111";
@@ -552,5 +561,26 @@ mod tests {
             .stage_card_save(&app(), &page(), card("4000 0566 5566 5557"))
             .unwrap_err();
         assert_eq!(code(err), "invalid_input");
+    }
+
+    #[test]
+    fn a_frozen_account_is_offered_no_card() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = seed_card(&v, "Visa", VISA);
+        freeze(&v);
+        let choices = v
+            .autofill_cards(chrome("shop.example.com", "https"), vec![page()])
+            .unwrap();
+        assert!(choices.cards.is_empty());
+        assert_eq!(choices.frames, vec![false]);
+        let err = v
+            .autofill_card_values(
+                id,
+                chrome("shop.example.com", "https"),
+                vec![roles(page(), &[CardRole::Number])],
+            )
+            .unwrap_err();
+        assert_eq!(code(err), "account_frozen");
     }
 }

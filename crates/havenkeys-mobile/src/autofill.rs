@@ -190,8 +190,12 @@ impl MobileVault {
         self.device_settings().confirm_before_filling
     }
 
+    /// Empty while the account is frozen: nothing is offered.
     pub fn autofill_matches(&self, target: TargetFacts) -> MobileResult<Vec<AutofillMatch>> {
         self.unlocked()?;
+        if self.is_frozen()? {
+            return Ok(Vec::new());
+        }
         let found = match self.target(&target)? {
             FillTarget::Browser { page_url } => {
                 self.client.vault()?.find_matches(&page_url, None)?
@@ -207,6 +211,7 @@ impl MobileVault {
     pub fn autofill_fill(&self, id: String, target: TargetFacts) -> MobileResult<FillValues> {
         let id = parse_id(&id)?;
         self.unlocked()?;
+        self.refuse_when_frozen()?;
         let creds = match self.target(&target)? {
             FillTarget::Browser { page_url } => self.client.vault()?.fill_for_page(
                 &id,
@@ -222,6 +227,8 @@ impl MobileVault {
         Ok(to_values(creds))
     }
 
+    /// Answered while frozen too: the code is the user's way in, and Android
+    /// never submits on its own (there is no auto-submit here).
     pub fn autofill_totp(&self, id: String, target: TargetFacts) -> MobileResult<String> {
         let id = parse_id(&id)?;
         self.unlocked()?;
@@ -243,8 +250,12 @@ impl MobileVault {
 
     /// "Search HavenKeys…": any login, by title, username or website. No
     /// secrets; filling one goes through `autofill_bind_and_fill`.
+    /// Empty while the account is frozen.
     pub fn autofill_search(&self, query: String) -> MobileResult<Vec<AutofillMatch>> {
         self.unlocked()?;
+        if self.is_frozen()? {
+            return Ok(Vec::new());
+        }
         Ok(self
             .client
             .vault()?
@@ -257,6 +268,7 @@ impl MobileVault {
     /// The user confirmed "Use <login> in <app>?". Stores the binding when
     /// online (an item write); offline, fills this once and stores nothing.
     /// Never for a browser: a site that does not match is never filled.
+    /// Refused while frozen (no "fill once" fallback).
     pub fn autofill_bind_and_fill(
         &self,
         id: String,
@@ -264,6 +276,7 @@ impl MobileVault {
     ) -> MobileResult<BoundFill> {
         let item = parse_id(&id)?;
         self.unlocked()?;
+        self.refuse_when_frozen()?;
         let FillTarget::App(app) = self.target(&target)? else {
             return Err(Error::Denied.into());
         };
@@ -299,7 +312,7 @@ impl MobileVault {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vault::tests::{overdue_refuses, unlocked};
+    use crate::vault::tests::{code, freeze, overdue_refuses, unlocked};
     use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
     use havenkeys_core::SecretString;
 
@@ -528,5 +541,26 @@ mod tests {
             v.autofill_target_kind(app(1)).unwrap(),
             TargetKind::App
         ));
+    }
+
+    #[test]
+    fn a_frozen_account_is_offered_nothing_but_the_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = add_login(&v, "https://github.com");
+        let page = || chrome("github.com", Some("https"));
+        let mut s = v.settings().unwrap();
+        s.asset_links = false;
+        v.update_settings(s).unwrap();
+        freeze(&v);
+        assert!(v.autofill_matches(page()).unwrap().is_empty());
+        assert!(v.autofill_search("git".into()).unwrap().is_empty());
+        let err = v.autofill_fill(id.clone(), page()).err().unwrap();
+        assert_eq!(code(err), "account_frozen");
+        // No "fill once" fallback while frozen, even offline.
+        let err = v.autofill_bind_and_fill(id.clone(), app(1)).err().unwrap();
+        assert_eq!(code(err), "account_frozen");
+        assert!(v.frequently_used(6).unwrap().is_empty());
+        assert_eq!(v.autofill_totp(id, page()).unwrap().len(), 6);
     }
 }

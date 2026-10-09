@@ -1334,22 +1334,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_record_use() and 0xFFFF) != 7469) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_bind_and_fill() and 0xFFFF) != 37703) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_bind_and_fill() and 0xFFFF) != 52714) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_fill() and 0xFFFF) != 61554) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_matches() and 0xFFFF) != 32352) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_matches() and 0xFFFF) != 20194) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_search() and 0xFFFF) != 2295) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_search() and 0xFFFF) != 30281) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_target_kind() and 0xFFFF) != 33114) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_totp() and 0xFFFF) != 23407) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_totp() and 0xFFFF) != 36780) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling() and 0xFFFF) != 26529) {
@@ -1358,7 +1358,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_card_values() and 0xFFFF) != 37266) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_cards() and 0xFFFF) != 44817) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_cards() and 0xFFFF) != 31225) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_save_card() and 0xFFFF) != 28245) {
@@ -1367,13 +1367,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password() and 0xFFFF) != 12506) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password_offers() and 0xFFFF) != 23780) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_credential_password_offers() and 0xFFFF) != 15132) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create() and 0xFFFF) != 6934) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create_plan() and 0xFFFF) != 1399) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_create_plan() and 0xFFFF) != 36679) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_passkey_offers() and 0xFFFF) != 51091) {
@@ -1406,7 +1406,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_set_health_ignored() and 0xFFFF) != 38629) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity() and 0xFFFF) != 64409) {
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity() and 0xFFFF) != 59700) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_identity_values() and 0xFFFF) != 3636) {
@@ -2371,16 +2371,21 @@ public interface MobileVaultInterface {
      * The user confirmed "Use <login> in <app>?". Stores the binding when
      * online (an item write); offline, fills this once and stores nothing.
      * Never for a browser: a site that does not match is never filled.
+     * Refused while frozen (no "fill once" fallback).
      */
     fun `autofillBindAndFill`(`id`: kotlin.String, `target`: TargetFacts): BoundFill
     
     fun `autofillFill`(`id`: kotlin.String, `target`: TargetFacts): FillValues
     
+    /**
+     * Empty while the account is frozen: nothing is offered.
+     */
     fun `autofillMatches`(`target`: TargetFacts): List<AutofillMatch>
     
     /**
      * "Search HavenKeys…": any login, by title, username or website. No
      * secrets; filling one goes through `autofill_bind_and_fill`.
+     * Empty while the account is frozen.
      */
     fun `autofillSearch`(`query`: kotlin.String): List<AutofillMatch>
     
@@ -2389,6 +2394,10 @@ public interface MobileVaultInterface {
      */
     fun `autofillTargetKind`(`target`: TargetFacts): TargetKind
     
+    /**
+     * Answered while frozen too: the code is the user's way in, and Android
+     * never submits on its own (there is no auto-submit here).
+     */
     fun `autofillTotp`(`id`: kotlin.String, `target`: TargetFacts): kotlin.String
     
     fun `confirmBeforeFilling`(): kotlin.Boolean
@@ -2401,6 +2410,7 @@ public interface MobileVaultInterface {
     
     /**
      * The cards a form may be offered, and which of its frames may get one.
+     * None while the account is frozen.
      */
     fun `autofillCards`(`target`: TargetFacts, `frames`: List<FrameFacts>): CardChoices
     
@@ -2418,7 +2428,8 @@ public interface MobileVaultInterface {
     
     /**
      * Logins for a Credential Manager password request, by the M1 target
-     * rules. Only logins with a username. No secrets.
+     * rules. Only logins with a username. No secrets. Empty while frozen
+     * (not an error, so passkey offers in the same request still show).
      */
     fun `credentialPasswordOffers`(`caller`: CredentialCaller): List<AutofillMatch>
     
@@ -2430,7 +2441,8 @@ public interface MobileVaultInterface {
     fun `passkeyCreate`(`caller`: CredentialCaller, `requestJson`: kotlin.String, `itemId`: kotlin.String?): kotlin.String
     
     /**
-     * What "Save a passkey to HavenKeys?" shows. Works offline.
+     * What "Save a passkey to HavenKeys?" shows. Works offline. Refused
+     * while frozen: the passkey could never be saved.
      */
     fun `passkeyCreatePlan`(`caller`: CredentialCaller, `requestJson`: kotlin.String): PasskeyCreatePlan
     
@@ -2485,7 +2497,7 @@ public interface MobileVaultInterface {
     
     /**
      * The identity a form may be offered. `None`: no identity, or nothing
-     * in it that can be filled here.
+     * in it that can be filled here, or the account is frozen.
      */
     fun `autofillIdentity`(`target`: TargetFacts, `frame`: FrameFacts): IdentityChoice?
     
@@ -2934,6 +2946,7 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
      * The user confirmed "Use <login> in <app>?". Stores the binding when
      * online (an item write); offline, fills this once and stores nothing.
      * Never for a browser: a site that does not match is never filled.
+     * Refused while frozen (no "fill once" fallback).
      */
     @Throws(MobileException::class)override fun `autofillBindAndFill`(`id`: kotlin.String, `target`: TargetFacts): BoundFill {
             return FfiConverterTypeBoundFill.lift(
@@ -2967,6 +2980,9 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
 
     
+    /**
+     * Empty while the account is frozen: nothing is offered.
+     */
     @Throws(MobileException::class)override fun `autofillMatches`(`target`: TargetFacts): List<AutofillMatch> {
             return FfiConverterSequenceTypeAutofillMatch.lift(
     callWithHandle {
@@ -2985,6 +3001,7 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     /**
      * "Search HavenKeys…": any login, by title, username or website. No
      * secrets; filling one goes through `autofill_bind_and_fill`.
+     * Empty while the account is frozen.
      */
     @Throws(MobileException::class)override fun `autofillSearch`(`query`: kotlin.String): List<AutofillMatch> {
             return FfiConverterSequenceTypeAutofillMatch.lift(
@@ -3019,6 +3036,10 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
 
     
+    /**
+     * Answered while frozen too: the code is the user's way in, and Android
+     * never submits on its own (there is no auto-submit here).
+     */
     @Throws(MobileException::class)override fun `autofillTotp`(`id`: kotlin.String, `target`: TargetFacts): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -3071,6 +3092,7 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
     /**
      * The cards a form may be offered, and which of its frames may get one.
+     * None while the account is frozen.
      */
     @Throws(MobileException::class)override fun `autofillCards`(`target`: TargetFacts, `frames`: List<FrameFacts>): CardChoices {
             return FfiConverterTypeCardChoices.lift(
@@ -3131,7 +3153,8 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
     /**
      * Logins for a Credential Manager password request, by the M1 target
-     * rules. Only logins with a username. No secrets.
+     * rules. Only logins with a username. No secrets. Empty while frozen
+     * (not an error, so passkey offers in the same request still show).
      */
     @Throws(MobileException::class)override fun `credentialPasswordOffers`(`caller`: CredentialCaller): List<AutofillMatch> {
             return FfiConverterSequenceTypeAutofillMatch.lift(
@@ -3171,7 +3194,8 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
 
     
     /**
-     * What "Save a passkey to HavenKeys?" shows. Works offline.
+     * What "Save a passkey to HavenKeys?" shows. Works offline. Refused
+     * while frozen: the passkey could never be saved.
      */
     @Throws(MobileException::class)override fun `passkeyCreatePlan`(`caller`: CredentialCaller, `requestJson`: kotlin.String): PasskeyCreatePlan {
             return FfiConverterTypePasskeyCreatePlan.lift(
@@ -3375,7 +3399,7 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     
     /**
      * The identity a form may be offered. `None`: no identity, or nothing
-     * in it that can be filled here.
+     * in it that can be filled here, or the account is frozen.
      */
     @Throws(MobileException::class)override fun `autofillIdentity`(`target`: TargetFacts, `frame`: FrameFacts): IdentityChoice? {
             return FfiConverterOptionalTypeIdentityChoice.lift(

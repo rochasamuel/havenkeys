@@ -164,13 +164,16 @@ fn choice(summary: IdentitySummary, documents_allowed: bool) -> Option<IdentityC
 #[uniffi::export]
 impl MobileVault {
     /// The identity a form may be offered. `None`: no identity, or nothing
-    /// in it that can be filled here.
+    /// in it that can be filled here, or the account is frozen.
     pub fn autofill_identity(
         &self,
         target: TargetFacts,
         frame: FrameFacts,
     ) -> MobileResult<Option<IdentityChoice>> {
         self.unlocked()?;
+        if self.is_frozen()? {
+            return Ok(None);
+        }
         let place = self.place(&target, &frame)?;
         let vault = self.client.vault()?;
         let found = match &place {
@@ -201,6 +204,7 @@ impl MobileVault {
             return Err(Error::InvalidInput("too many roles").into());
         }
         self.unlocked()?;
+        self.refuse_when_frozen()?;
         let core: Vec<FillRole> = roles.iter().map(|r| r.core()).collect();
         let place = self.place(&target, &frame)?;
         let vault = self.client.vault()?;
@@ -225,7 +229,7 @@ mod tests {
     use super::*;
     use crate::autofill::{FrameFacts, TargetFacts};
     use crate::testing::seed_identity;
-    use crate::vault::tests::{code, overdue_refuses, unlocked};
+    use crate::vault::tests::{code, freeze, overdue_refuses, unlocked};
 
     const CHROME: &str = "F0:FD:6C:5B:41:0F:25:CB:25:C3:B5:33:46:C8:97:2F:AE:30:F8:EE:74:11:DF:91:04:80:AD:6B:2D:60:DB:83";
 
@@ -400,5 +404,20 @@ mod tests {
         );
         assert!(is_document_role(IdentityRole::Rg));
         assert!(!is_document_role(IdentityRole::Email));
+    }
+
+    #[test]
+    fn a_frozen_account_is_offered_no_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        seed_identity(&v);
+        let https = || chrome("shop.example.com", "https");
+        freeze(&v);
+        assert!(v.autofill_identity(https(), page()).unwrap().is_none());
+        let err = v
+            .autofill_identity_values(https(), page(), ASKED.to_vec(), false)
+            .err()
+            .unwrap();
+        assert_eq!(code(err), "account_frozen");
     }
 }

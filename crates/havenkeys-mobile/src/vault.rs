@@ -99,6 +99,19 @@ impl MobileVault {
         Self::auto_lock_tick(&self.client, &self.clock);
         Ok(self.client.require_unlocked()?)
     }
+
+    /// Refuse a fill while the account is frozen (spec 2026-10-07 §6.3):
+    /// `account_frozen`. Rust decides; the app's `frozen()` check is only a
+    /// fast path.
+    pub(crate) fn refuse_when_frozen(&self) -> MobileResult<()> {
+        Ok(self.client.require_full()?)
+    }
+
+    /// For the list calls, which answer an empty list while frozen. A store
+    /// error is an error, not "nothing to offer".
+    pub(crate) fn is_frozen(&self) -> MobileResult<bool> {
+        Ok(self.client.vault()?.entitlement()? == havenkeys_core::store::Entitlement::Frozen)
+    }
 }
 
 #[uniffi::export]
@@ -348,6 +361,20 @@ pub(crate) mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         panic!("the app was never told");
+    }
+
+    /// Marks the stored plan frozen, as a sync answering 402 would.
+    pub(crate) fn freeze(vault: &MobileVault) {
+        vault
+            .client
+            .vault()
+            .unwrap()
+            .set_plan(&havenkeys_core::store::PlanRecord {
+                entitlement: havenkeys_core::store::Entitlement::Frozen,
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(vault.frozen());
     }
 
     pub(crate) fn code(e: crate::MobileError) -> String {

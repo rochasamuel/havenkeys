@@ -267,13 +267,15 @@ impl MobileVault {
         Ok(assertion_json(&assertion))
     }
 
-    /// What "Save a passkey to HavenKeys?" shows. Works offline.
+    /// What "Save a passkey to HavenKeys?" shows. Works offline. Refused
+    /// while frozen: the passkey could never be saved.
     pub fn passkey_create_plan(
         &self,
         caller: CredentialCaller,
         request_json: String,
     ) -> MobileResult<PasskeyCreatePlan> {
         self.unlocked()?;
+        self.client.require_full()?;
         let caller = self.credential_caller(&caller)?;
         let opts = parse_creation(&request_json)?;
         let rp = rp_for(&caller, opts.rp_id.clone())?;
@@ -353,12 +355,16 @@ impl MobileVault {
     }
 
     /// Logins for a Credential Manager password request, by the M1 target
-    /// rules. Only logins with a username. No secrets.
+    /// rules. Only logins with a username. No secrets. Empty while frozen
+    /// (not an error, so passkey offers in the same request still show).
     pub fn credential_password_offers(
         &self,
         caller: CredentialCaller,
     ) -> MobileResult<Vec<AutofillMatch>> {
         self.unlocked()?;
+        if self.is_frozen()? {
+            return Ok(Vec::new());
+        }
         let found = match self.credential_caller(&caller)? {
             Caller::Browser { page_url } => self.client.vault()?.find_matches(&page_url, None)?,
             Caller::App(app) => {
@@ -377,6 +383,7 @@ impl MobileVault {
     ) -> MobileResult<FillValues> {
         let id = parse_id(&item_id)?;
         self.unlocked()?;
+        self.refuse_when_frozen()?;
         let creds = match self.credential_caller(&caller)? {
             Caller::Browser { page_url } => self.client.vault()?.fill_for_page(
                 &id,
@@ -401,7 +408,7 @@ impl MobileVault {
 mod tests {
     use super::*;
     use crate::testing::{seed_github_passkey, vouch};
-    use crate::vault::tests::{code, overdue_refuses, unlocked};
+    use crate::vault::tests::{code, freeze, overdue_refuses, unlocked};
     use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
     use havenkeys_core::SecretString;
     use p256::ecdsa::signature::Verifier;
@@ -805,5 +812,38 @@ mod tests {
     #[test]
     fn the_allowlist_is_the_vendored_one() {
         assert!(privileged_browsers_json().contains("com.android.chrome"));
+    }
+
+    #[test]
+    fn a_frozen_account_offers_no_password_and_saves_no_passkey() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        add_github_login(&v);
+        let (item, _, _) = seed_github_passkey(&v);
+        let offers = v
+            .credential_password_offers(chrome("https://github.com"))
+            .unwrap();
+        assert!(!offers.is_empty());
+        let login = offers[0].id.clone();
+        freeze(&v);
+        assert!(v
+            .credential_password_offers(chrome("https://github.com"))
+            .unwrap()
+            .is_empty());
+        let err = v
+            .credential_password(chrome("https://github.com"), login)
+            .err()
+            .unwrap();
+        assert_eq!(code(err), "account_frozen");
+        let err = v
+            .passkey_create_plan(chrome("https://github.com"), CREATE.into())
+            .err()
+            .unwrap();
+        assert_eq!(code(err), "account_frozen");
+        // Signing in with a saved passkey still works.
+        let offers = v
+            .passkey_offers(chrome("https://github.com"), GET.into())
+            .unwrap();
+        assert_eq!(offers[0].item_id, item);
     }
 }
