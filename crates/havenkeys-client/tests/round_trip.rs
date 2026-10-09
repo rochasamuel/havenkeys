@@ -10,6 +10,7 @@ use havenkeys_core::sync::SyncReport;
 use havenkeys_core::vault::VaultService;
 use havenkeys_core::SecretString;
 use havenkeys_server::admin::{self, AdminCommand};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
@@ -110,6 +111,7 @@ async fn exec(url: &str, sql: &str) -> Result<(), tokio_postgres::Error> {
 struct Probe {
     vault: Arc<Mutex<VaultService>>,
     seen: Mutex<Vec<String>>,
+    plan: AtomicUsize,
 }
 
 impl ClientEvents for Probe {
@@ -135,6 +137,9 @@ impl ClientEvents for Probe {
     fn signed_out(&self) {}
     fn synced(&self, _: SyncReport) {}
     fn items_changed(&self) {}
+    fn plan_changed(&self) {
+        self.plan.fetch_add(1, Ordering::SeqCst);
+    }
     fn removed(&self, _: bool) {}
     fn account_deleted(&self, keychain_cleared: bool) {
         self.seen
@@ -151,6 +156,7 @@ fn device(dir: &std::path::Path) -> (Arc<HavenClient>, Arc<Probe>) {
     let probe = Arc::new(Probe {
         vault: vault.clone(),
         seen: Mutex::new(Vec::new()),
+        plan: AtomicUsize::new(0),
     });
     let client = HavenClient::new(
         vault,
@@ -576,4 +582,134 @@ async fn restoring_an_item_purged_elsewhere_conflicts() {
         .iter()
         .all(|o| o.id != id));
     server.cleanup().await;
+}
+
+struct Fixture {
+    server: Server,
+    client: Arc<HavenClient>,
+    events: Arc<Probe>,
+    _dir: tempfile::TempDir,
+}
+
+impl Fixture {
+    fn staged_login(&self) -> havenkeys_core::vault::StagedWrite {
+        self.client
+            .vault()
+            .unwrap()
+            .stage_create(login("Another"), havenkeys_client::now_ms())
+            .unwrap()
+    }
+
+    fn password(&self) -> SecretString {
+        SecretString::from(PASSWORD)
+    }
+}
+
+impl Probe {
+    fn plan_changes(&self) -> usize {
+        self.plan.load(Ordering::SeqCst)
+    }
+}
+
+async fn fixture() -> Fixture {
+    let server = Server::start().await;
+    let invite = server.invite("plan@example.com").await;
+    let dir = tempfile::tempdir().unwrap();
+    let (client, events) = device(dir.path());
+    client
+        .activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| client.is_online()).await;
+    // Count only what happens from here on.
+    events.plan.store(0, Ordering::SeqCst);
+    Fixture {
+        server,
+        client,
+        events,
+        _dir: dir,
+    }
+}
+
+async fn set_plan_status(fx: &Fixture, status: havenkeys_server::billing::Status) {
+    let account_id = fx.client.account_status().unwrap().unwrap().account_id;
+    havenkeys_server::billing::set_status(
+        &fx.server.pool.get().await.unwrap(),
+        account_id,
+        havenkeys_server::billing::Actor::Admin,
+        status,
+        None,
+        "test",
+    )
+    .await
+    .unwrap();
+}
+
+async fn freeze(fx: &Fixture) {
+    set_plan_status(fx, havenkeys_server::billing::Status::Frozen).await;
+}
+
+async fn unfreeze(fx: &Fixture) {
+    set_plan_status(fx, havenkeys_server::billing::Status::Complimentary).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_plan_is_stored_on_login_and_sync_and_a_402_freezes_at_once() {
+    use havenkeys_core::store::Entitlement;
+    let fx = fixture().await;
+    let status = fx.client.account_status().unwrap().unwrap();
+    assert_eq!(status.entitlement, Entitlement::Full);
+    assert_eq!(status.plan_status.as_deref(), Some("complimentary"));
+
+    freeze(&fx).await;
+    let err = fx.client.push(fx.staged_login()).await.unwrap_err();
+    assert_eq!(err.code, "account_frozen");
+    assert_eq!(
+        fx.client.account_status().unwrap().unwrap().entitlement,
+        Entitlement::Frozen
+    );
+    assert_eq!(fx.events.plan_changes(), 1);
+
+    assert_eq!(fx.client.require_full().unwrap_err().code, "account_frozen");
+    assert_eq!(
+        fx.client.push(fx.staged_login()).await.unwrap_err().code,
+        "account_frozen"
+    );
+    fx.server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sync_that_says_full_unfreezes() {
+    use havenkeys_core::store::Entitlement;
+    let fx = fixture().await;
+    freeze(&fx).await;
+    fx.client.sync_now().await.unwrap();
+    assert_eq!(
+        fx.client.account_status().unwrap().unwrap().entitlement,
+        Entitlement::Frozen
+    );
+    unfreeze(&fx).await;
+    fx.client.sync_now().await.unwrap();
+    assert_eq!(
+        fx.client.account_status().unwrap().unwrap().entitlement,
+        Entitlement::Full
+    );
+    fx.client.push(fx.staged_login()).await.unwrap();
+    fx.server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frozen_account_still_syncs_reads_and_can_delete_itself() {
+    let fx = fixture().await;
+    fx.client.push(fx.staged_login()).await.unwrap();
+    freeze(&fx).await;
+    fx.client.sync_now().await.unwrap();
+    assert!(!fx.client.vault().unwrap().list_items().unwrap().is_empty());
+    let err = fx
+        .client
+        .change_master_password(fx.password(), fx.password())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "account_frozen");
+    fx.server.cleanup().await;
 }

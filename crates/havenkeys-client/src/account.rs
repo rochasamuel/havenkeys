@@ -56,6 +56,19 @@ pub struct AccountStatus {
     pub online: bool,
     /// Unix ms of the last successful pull, or null if none yet.
     pub last_synced_at: Option<i64>,
+    /// The server's plan status (`trialing`, `active`, ...), once known.
+    pub plan_status: Option<String>,
+    /// `"full"` or `"frozen"`; a frozen account is read-only.
+    pub entitlement: havenkeys_core::store::Entitlement,
+    pub trial_ends_at: Option<String>,
+    pub period_end: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvitePreview {
+    pub email: String,
+    pub server_url: String,
 }
 
 #[derive(Serialize)]
@@ -109,7 +122,11 @@ impl HavenClient {
 
     /// The account this vault belongs to. No secrets; safe while locked.
     pub fn account_status(&self) -> ClientResult<Option<AccountStatus>> {
-        let Some(account) = self.vault()?.account()? else {
+        let (account, plan) = {
+            let vault = self.vault()?;
+            (vault.account()?, vault.plan()?)
+        };
+        let Some(account) = account else {
             return Ok(None);
         };
         Ok(Some(AccountStatus {
@@ -118,7 +135,23 @@ impl HavenClient {
             account_id: account.account_id,
             online: self.is_online(),
             last_synced_at: account.last_synced_at,
+            plan_status: plan.status,
+            entitlement: plan.entitlement,
+            trial_ends_at: plan.trial_ends_at,
+            period_end: plan.period_end,
         }))
+    }
+
+    /// What an invite says, before anything is typed or sent: the account's
+    /// email and the server it points at. Pure decoding, no network.
+    pub fn preview_invite(&self, invite: &str) -> ClientResult<InvitePreview> {
+        let invite = invite_parser::decode(invite.trim())
+            .map_err(|_| havenkeys_core::Error::InvalidInput("that invite is not valid"))?;
+        let email = NormalizedEmail::parse(&invite.email)?;
+        Ok(InvitePreview {
+            email: email.as_str().to_string(),
+            server_url: invite.server.clone(),
+        })
     }
 
     /// First run: the invite and a new master password.
@@ -605,6 +638,7 @@ impl HavenClient {
         new: SecretString,
     ) -> ClientResult<()> {
         self.require_online()?;
+        self.require_full()?;
         vault::check_new_master_password(&new)?;
         // Adopt a change made elsewhere first, so the base revision is
         // current.
@@ -1074,6 +1108,23 @@ mod tests {
             ] {
                 assert!(credential_change_conflict(&e).is_none());
             }
+        }
+    }
+
+    mod invite_preview {
+        #[test]
+        fn preview_invite_decodes_without_touching_the_network() {
+            let json = br#"{"server":"https://vault.example.com","email":"Me@Example.com","account":"00000000-0000-0000-0000-000000000001","secret":"AAAAAAAAAAAAAAAAAAAAAA"}"#;
+            let raw = format!("HKINV1-{}", data_encoding::BASE64URL_NOPAD.encode(json));
+            let dir = tempfile::tempdir().unwrap();
+            let (client, _) = crate::client::tests::client_in(dir.path());
+            let preview = client.preview_invite(&raw).unwrap();
+            assert_eq!(preview.email, "me@example.com");
+            assert_eq!(preview.server_url, "https://vault.example.com");
+            assert_eq!(
+                client.preview_invite("HKINV1-nope").err().unwrap().code,
+                "invalid_input"
+            );
         }
     }
 }

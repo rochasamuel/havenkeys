@@ -46,9 +46,60 @@ impl HavenClient {
                 }
             }
             SyncError::Unavailable => self.mark_unreachable(),
+            SyncError::AccountFrozen => self.mark_frozen(),
             _ => {}
         }
         err.into()
+    }
+
+    /// Store what the server said about the plan. `None` (a server from
+    /// before plans) changes nothing. Announces a change to the shells.
+    pub(crate) fn record_plan(
+        &self,
+        info: Option<&havenkeys_sync_client::AccountInfo>,
+    ) -> ClientResult<()> {
+        let Some(info) = info else { return Ok(()) };
+        let plan = havenkeys_core::store::PlanRecord {
+            status: Some(info.status.clone()),
+            entitlement: match info.entitlement {
+                havenkeys_sync_client::Entitlement::Full => {
+                    havenkeys_core::store::Entitlement::Full
+                }
+                havenkeys_sync_client::Entitlement::Frozen => {
+                    havenkeys_core::store::Entitlement::Frozen
+                }
+            },
+            trial_ends_at: info.trial_ends_at.clone(),
+            period_end: info.period_end.clone(),
+        };
+        let changed = {
+            let mut vault = self.vault()?;
+            let before = vault.plan()?;
+            if before != plan {
+                vault.set_plan(&plan)?;
+            }
+            before != plan
+        };
+        if changed {
+            self.events.plan_changed();
+        }
+        Ok(())
+    }
+
+    /// A refused write: the server's word is final until the next sync says
+    /// otherwise, so the stored entitlement flips now.
+    fn mark_frozen(&self) {
+        let flipped = self.vault().ok().and_then(|mut v| {
+            let mut plan = v.plan().ok()?;
+            if plan.entitlement == havenkeys_core::store::Entitlement::Frozen {
+                return None;
+            }
+            plan.entitlement = havenkeys_core::store::Entitlement::Frozen;
+            v.set_plan(&plan).ok()
+        });
+        if flipped.is_some() {
+            self.events.plan_changed();
+        }
     }
 
     /// Sign in to the account with a freshly derived auth key, then catch up.
@@ -96,6 +147,7 @@ impl HavenClient {
         // A lock that landed while signing in wins: the session is dropped
         // unused rather than left on a locked vault, or on a later unlock
         // that started its own sign-in (DT1).
+        let plan = session.account.clone();
         {
             let vault = self.vault()?;
             if !vault.is_unlocked() || vault.epoch() != epoch {
@@ -103,6 +155,7 @@ impl HavenClient {
             }
             self.set_online(session);
         }
+        let _ = self.record_plan(plan.as_ref());
         self.events.connectivity(true);
         self.sync_now().await?;
         self.ensure_identity().await;
@@ -183,6 +236,7 @@ impl HavenClient {
                 .map_err(|e| self.failed(e))?;
             let has_more = pulled.has_more;
             let next = pulled.cursor;
+            let plan = pulled.account.clone();
             if next < cursor {
                 // The server is behind what this device already pulled: it
                 // was restored from a backup. Start again from 0, once, so
@@ -207,6 +261,7 @@ impl HavenClient {
             let page = self
                 .vault()?
                 .apply_remote_changes(next, pulled.changes, now_ms())?;
+            let _ = self.record_plan(plan.as_ref());
             report.added += page.added;
             report.updated += page.updated;
             report.deleted += page.deleted;
@@ -290,6 +345,7 @@ impl HavenClient {
     /// is written locally until the server has assigned the revision, so the
     /// replica can never be ahead of the authority.
     pub async fn push(&self, staged: StagedWrite) -> ClientResult<Option<ItemOverview>> {
+        self.require_full()?;
         let (session, server) = (self.session()?, self.server()?);
         let item_id = staged.item_id;
         let ack = server
@@ -305,6 +361,7 @@ impl HavenClient {
     /// refused batch stops the run, and earlier batches are already on the
     /// server.
     pub async fn push_batches(&self, staged: Vec<StagedWrite>) -> ClientResult<usize> {
+        self.require_full()?;
         let (session, server) = (self.session()?, self.server()?);
         let mut committed = 0usize;
         let mut queue = staged;

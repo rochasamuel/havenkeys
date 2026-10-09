@@ -290,6 +290,15 @@ impl HavenClient {
         }
     }
 
+    /// Refuse a write while the account is frozen (spec 2026-10-07 §6.3).
+    /// Decided from the stored entitlement, so it answers offline too.
+    pub fn require_full(&self) -> ClientResult<()> {
+        match self.vault()?.entitlement()? {
+            havenkeys_core::store::Entitlement::Full => Ok(()),
+            havenkeys_core::store::Entitlement::Frozen => Err(ClientError::account_frozen()),
+        }
+    }
+
     pub fn require_online(&self) -> ClientResult<()> {
         if self.is_online() {
             Ok(())

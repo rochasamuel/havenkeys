@@ -23,4 +23,7 @@ pub trait ClientEvents: Send + Sync {
     /// The account no longer exists (deleted here or on another device) and
     /// this device erased its copy; `keychain_cleared` as for `removed`.
     fn account_deleted(&self, keychain_cleared: bool);
+    /// The stored plan changed (a sync or a login said so, or a write was
+    /// refused as frozen). Shells re-read `account_status`.
+    fn plan_changed(&self) {}
 }

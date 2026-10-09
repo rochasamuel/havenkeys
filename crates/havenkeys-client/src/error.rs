@@ -33,10 +33,7 @@ impl From<SyncError> for ClientError {
             SyncError::AccountDeleted => {
                 Self::fixed("account_deleted", "This account was deleted.")
             }
-            SyncError::AccountFrozen => Self::fixed(
-                "account_frozen",
-                "This account is frozen: the trial ended or payment lapsed. The vault is read-only.",
-            ),
+            SyncError::AccountFrozen => Self::account_frozen(),
             SyncError::RateLimited => Self::fixed(
                 "rate_limited",
                 "Too many attempts. Try again in a few minutes.",
@@ -118,6 +115,13 @@ impl ClientError {
 
     pub fn clipboard() -> Self {
         Self::fixed("clipboard", "Could not access the clipboard.")
+    }
+
+    pub fn account_frozen() -> Self {
+        Self::fixed(
+            "account_frozen",
+            "This account is frozen: the trial ended or payment lapsed. The vault is read-only.",
+        )
     }
 
     pub fn open_website() -> Self {
