@@ -735,6 +735,50 @@ async fn a_frozen_account_still_syncs_and_reads_but_refuses_writes() {
     fx.server.cleanup().await;
 }
 
+/// A frozen account gains no device: a brand-new device that signs in with
+/// the right password hears why, not "wrong password". A wrong password is
+/// still the one sign-in message (the server checks it first).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frozen_account_refuses_a_new_device_with_its_own_code() {
+    let fx = fixture().await;
+    freeze(&fx).await;
+    let account_id = fx.client.account_status().unwrap().unwrap().account_id;
+    let secret_key = fx
+        .client
+        .device()
+        .unwrap()
+        .secret_key_text(account_id)
+        .unwrap();
+
+    let dir_b = tempfile::tempdir().unwrap();
+    let (b, _) = device(dir_b.path());
+    let err = b
+        .sign_in(
+            fx.server.base.clone(),
+            "plan@example.com".into(),
+            SecretString::from("not the password at all"),
+            Some(secret_key.clone()),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "sign_in_failed");
+
+    let dir_c = tempfile::tempdir().unwrap();
+    let (c, _) = device(dir_c.path());
+    let err = c
+        .sign_in(
+            fx.server.base.clone(),
+            "plan@example.com".into(),
+            fx.password(),
+            Some(secret_key),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "account_frozen_new_device");
+    assert!(c.account_status().unwrap().is_none(), "nothing was set up");
+    fx.server.cleanup().await;
+}
+
 async fn server_items(fx: &Fixture) -> i64 {
     fx.server
         .pool

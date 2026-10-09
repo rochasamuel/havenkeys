@@ -54,10 +54,8 @@ CREATE TABLE local_blob (
 );
 ";
 
-/// Schema 5 → 6: device-local encrypted values, never synced (spec
-/// 2026-10-01-android-app §5.3, §7.2).
-/// Schema 6 -> 7: the account's plan as the server last reported it (spec
-/// 2026-10-07 s6.2). Plaintext: it is not a secret and the lock screen
+/// Schema 6 → 7: the account's plan as the server last reported it (spec
+/// 2026-10-07 §6.2). Plaintext: it is not a secret and the lock screen
 /// shows it.
 const MIGRATE_6_TO_7: &str = "
 ALTER TABLE account ADD COLUMN plan_status TEXT;
@@ -66,6 +64,8 @@ ALTER TABLE account ADD COLUMN trial_ends_at TEXT;
 ALTER TABLE account ADD COLUMN period_end TEXT;
 ";
 
+/// Schema 5 → 6: device-local encrypted values, never synced (spec
+/// 2026-10-01-android-app §5.3, §7.2).
 const MIGRATE_5_TO_6: &str = "
 CREATE TABLE local_blob (
     name TEXT PRIMARY KEY NOT NULL,

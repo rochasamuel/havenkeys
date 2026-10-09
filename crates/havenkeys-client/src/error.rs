@@ -124,6 +124,15 @@ impl ClientError {
         )
     }
 
+    /// The server checked the password, then refused to add this device:
+    /// a frozen account keeps the devices it has and gains none.
+    pub fn account_frozen_new_device() -> Self {
+        Self::fixed(
+            "account_frozen_new_device",
+            "This account is read-only (the trial ended or payment lapsed) and cannot add a new device. Sign in from a device that already has it, or subscribe.",
+        )
+    }
+
     pub fn open_website() -> Self {
         Self::fixed("open_website", "Could not open the website.")
     }
@@ -188,6 +197,10 @@ mod tests {
             (ClientError::sign_in_failed(), "sign_in_failed"),
             (ClientError::clipboard(), "clipboard"),
             (ClientError::open_website(), "open_website"),
+            (
+                ClientError::account_frozen_new_device(),
+                "account_frozen_new_device",
+            ),
             (ClientError::keychain_unavailable(), "keychain_unavailable"),
             (
                 ClientError::password_change_unknown(),

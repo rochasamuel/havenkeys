@@ -368,6 +368,9 @@ pub(crate) mod tests {
         fn account_deleted(&self, keychain_cleared: bool) {
             self.push(format!("account_deleted:{keychain_cleared}"));
         }
+        fn plan_changed(&self) {
+            self.push("plan_changed".into());
+        }
     }
 
     pub(crate) fn client_in(dir: &std::path::Path) -> (Arc<HavenClient>, Arc<RecordingEvents>) {

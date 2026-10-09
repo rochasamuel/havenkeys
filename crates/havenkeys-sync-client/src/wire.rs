@@ -217,7 +217,11 @@ pub struct LoginDto {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountDto {
+    // Missing words read as empty: `"account": {}` must not fail the whole
+    // reply, and an empty entitlement is Full (`AccountInfo::from`).
+    #[serde(default)]
     pub status: String,
+    #[serde(default)]
     pub entitlement: String,
     #[serde(default)]
     pub trial_ends_at: Option<String>,

@@ -750,5 +750,14 @@ mod deletion_tests {
         )
         .unwrap();
         assert_eq!(AccountInfo::from(odd).entitlement, Entitlement::Full);
+        // An empty account object parses, and reads as Full.
+        let empty: wire::LoginDto = wire::parse(
+            br#"{"token":"t","expiresAt":"2026-10-10T00:00:00Z","vaultId":"00000000-0000-0000-0000-000000000001","account":{}}"#,
+        )
+        .unwrap();
+        let info = AccountInfo::from(empty.account.unwrap());
+        assert_eq!(info.entitlement, Entitlement::Full);
+        assert_eq!(info.status, "");
+        assert_eq!(info.trial_ends_at, None);
     }
 }

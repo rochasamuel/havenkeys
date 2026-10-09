@@ -90,6 +90,9 @@ impl HavenClient {
     /// otherwise, so the stored entitlement flips now.
     fn mark_frozen(&self) {
         let flipped = self.vault().ok().and_then(|mut v| {
+            // No account row: the UPDATE would change nothing, so nothing
+            // is announced.
+            v.account().ok()??;
             let mut plan = v.plan().ok()?;
             if plan.entitlement == havenkeys_core::store::Entitlement::Frozen {
                 return None;
@@ -449,6 +452,30 @@ mod tests {
 
     fn open_account_vault(client: &HavenClient, server_url: &str) -> AuthKey {
         open_account_vault_with_key(client, server_url).0
+    }
+
+    /// A 402 on a device with no account row changes nothing, so nothing is
+    /// announced; with an account it flips once, and only once.
+    #[test]
+    fn mark_frozen_announces_only_a_real_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let (client, events) = client_in(dir.path());
+        client.mark_frozen();
+        assert!(!events.seen().contains(&"plan_changed".to_string()));
+
+        open_account_vault(&client, "http://127.0.0.1:9");
+        client.mark_frozen();
+        client.mark_frozen();
+        let changes = events
+            .seen()
+            .iter()
+            .filter(|s| *s == "plan_changed")
+            .count();
+        assert_eq!(changes, 1);
+        assert_eq!(
+            client.vault().unwrap().entitlement().unwrap(),
+            havenkeys_core::store::Entitlement::Frozen
+        );
     }
 
     #[tokio::test]

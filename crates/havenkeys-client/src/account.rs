@@ -293,7 +293,12 @@ impl HavenClient {
                 &self.config.device_name,
             )
             .await
-            .map_err(|_| ClientError::sign_in_failed())?;
+            .map_err(|e| match e {
+                // Said only after the server checked the password: a frozen
+                // account keeps its devices and gains none.
+                SyncError::AccountFrozen => ClientError::account_frozen_new_device(),
+                _ => ClientError::sign_in_failed(),
+            })?;
         let header = server
             .header(&session)
             .await
