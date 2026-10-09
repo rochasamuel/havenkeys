@@ -621,6 +621,17 @@ async fn fixture() -> Fixture {
         .await
         .unwrap();
     until(|| client.is_online()).await;
+    // Login records the plan just after going online; wait for it so the
+    // reset below cannot race its announcement.
+    until(|| {
+        client
+            .account_status()
+            .ok()
+            .flatten()
+            .and_then(|a| a.plan_status)
+            .is_some()
+    })
+    .await;
     // Count only what happens from here on.
     events.plan.store(0, Ordering::SeqCst);
     Fixture {
@@ -694,12 +705,14 @@ async fn a_sync_that_says_full_unfreezes() {
         fx.client.account_status().unwrap().unwrap().entitlement,
         Entitlement::Full
     );
+    // Freeze and unfreeze, each announced once through the pull path.
+    assert_eq!(fx.events.plan_changes(), 2);
     fx.client.push(fx.staged_login()).await.unwrap();
     fx.server.cleanup().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_frozen_account_still_syncs_reads_and_can_delete_itself() {
+async fn a_frozen_account_still_syncs_and_reads_but_refuses_writes() {
     let fx = fixture().await;
     fx.client.push(fx.staged_login()).await.unwrap();
     freeze(&fx).await;
@@ -710,6 +723,14 @@ async fn a_frozen_account_still_syncs_reads_and_can_delete_itself() {
         .change_master_password(fx.password(), fx.password())
         .await
         .unwrap_err();
+    assert_eq!(err.code, "account_frozen");
+
+    // A restore is refused before any staging or request.
+    let staged = havenkeys_core::vault::StagedImport {
+        writes: vec![fx.staged_login()],
+        report: Default::default(),
+    };
+    let err = fx.client.push_restore(staged).await.unwrap_err();
     assert_eq!(err.code, "account_frozen");
     fx.server.cleanup().await;
 }

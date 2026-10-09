@@ -32,6 +32,7 @@ impl HavenClient {
     /// Pull, stage every backup item not already here, and send them. The
     /// report counts what the server accepted.
     pub async fn restore_backup(&self, backup: OpenedBackup) -> ClientResult<ImportReport> {
+        self.require_full()?;
         // Fresh first: "already here" is decided against the replica.
         self.sync_now().await?;
         let staged = self.vault()?.stage_restore(backup, now_ms())?;
@@ -42,6 +43,7 @@ impl HavenClient {
     /// (see the module docs). A failure other than a conflict stops the run;
     /// earlier batches are already on the server and in the replica.
     pub async fn push_restore(&self, staged: StagedImport) -> ClientResult<ImportReport> {
+        self.require_full()?;
         let StagedImport { writes, mut report } = staged;
         if writes.is_empty() {
             report.imported = 0;

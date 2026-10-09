@@ -57,6 +57,7 @@ pub struct AccountStatus {
     /// Unix ms of the last successful pull, or null if none yet.
     pub last_synced_at: Option<i64>,
     /// The server's plan status (`trialing`, `active`, ...), once known.
+    /// May lag `entitlement` after a refused write, until the next sync.
     pub plan_status: Option<String>,
     /// `"full"` or `"frozen"`; a frozen account is read-only.
     pub entitlement: havenkeys_core::store::Entitlement,
