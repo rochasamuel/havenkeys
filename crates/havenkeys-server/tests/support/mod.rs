@@ -7,7 +7,9 @@
 //! locks and one transaction per write. A mocked store would test none of it.
 
 use deadpool_postgres::{Object, Pool};
+use havenkeys_server::mail::Recording;
 use havenkeys_server::{router, AppState};
+use std::sync::Arc;
 use uuid::Uuid;
 
 const DEFAULT_URL: &str = "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable";
@@ -20,13 +22,46 @@ pub struct TestServer {
     client: reqwest::Client,
 }
 
+pub struct Options {
+    pub max_vault_bytes: i64,
+    pub signup: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
+            signup: false,
+        }
+    }
+}
+
 impl TestServer {
     pub async fn start() -> Self {
-        Self::start_with_vault_limit(havenkeys_server::limits::MAX_VAULT_BYTES).await
+        Self::start_with(Options::default()).await.0
     }
 
     /// A server whose vaults may hold at most `max_vault_bytes` of blobs.
     pub async fn start_with_vault_limit(max_vault_bytes: i64) -> Self {
+        Self::start_with(Options {
+            max_vault_bytes,
+            ..Options::default()
+        })
+        .await
+        .0
+    }
+
+    /// Signup open with the public URL `https://vault.example.com`; every
+    /// mail lands in the returned recorder.
+    pub async fn start_signup() -> (Self, Arc<Recording>) {
+        Self::start_with(Options {
+            signup: true,
+            ..Options::default()
+        })
+        .await
+    }
+
+    pub async fn start_with(opts: Options) -> (Self, Arc<Recording>) {
         let admin_url =
             std::env::var("HAVENKEYS_TEST_DATABASE_URL").unwrap_or_else(|_| DEFAULT_URL.into());
         let db_name = format!("hk_test_{}", Uuid::new_v4().simple());
@@ -36,13 +71,16 @@ impl TestServer {
         let pool = havenkeys_server::db::connect(&url).await.expect("pool");
         havenkeys_server::db::migrate(&pool).await.expect("migrate");
 
+        let mailer = Arc::new(Recording::default());
         let state = AppState {
             pool: pool.clone(),
             server_secret: [7u8; 32],
             trust_forwarded_for: false,
             cors_origin: None,
             locator: None,
-            max_vault_bytes,
+            max_vault_bytes: opts.max_vault_bytes,
+            mailer: Some(mailer.clone()),
+            signup_url: opts.signup.then(|| "https://vault.example.com".to_string()),
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -54,13 +92,14 @@ impl TestServer {
             .await;
         });
 
-        Self {
+        let server = Self {
             base: format!("http://{addr}"),
             pool,
             admin_url,
             db_name,
             client: reqwest::Client::new(),
-        }
+        };
+        (server, mailer)
     }
 
     /// A pooled connection, for tests that assert on stored rows.

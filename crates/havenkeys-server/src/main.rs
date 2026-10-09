@@ -71,6 +71,16 @@ async fn main() -> std::process::ExitCode {
 }
 
 async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::ExitCode {
+    let mailer: Option<std::sync::Arc<dyn havenkeys_server::mail::Mailer>> = match &config.smtp {
+        Some(smtp) => match havenkeys_server::mail::Smtp::new(&smtp.url, &smtp.from) {
+            Ok(sender) => Some(std::sync::Arc::new(sender)),
+            Err(message) => {
+                eprintln!("configuration error: {message}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        None => None,
+    };
     let state = AppState {
         pool,
         server_secret: config.server_secret,
@@ -87,6 +97,12 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
             None => None,
         },
         max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
+        mailer,
+        signup_url: if config.signup_open {
+            config.public_url.clone()
+        } else {
+            None
+        },
     };
     // Expired tombstones of deleted accounts (spec 2026-10-05-account-deletion
     // §4.5): once at start, then daily. A failure is logged by kind and the

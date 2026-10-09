@@ -41,6 +41,12 @@ pub struct AppState {
     /// The most blob bytes one vault may hold: `limits::MAX_VAULT_BYTES`,
     /// smaller in tests.
     pub max_vault_bytes: i64,
+    /// Sends the signup and trial emails; none when SMTP is not configured.
+    pub mailer: Option<std::sync::Arc<dyn crate::mail::Mailer>>,
+    /// The server's public URL when signup is open (`HAVENKEYS_SIGNUP=open`),
+    /// carried in the invites it issues; `None` answers the signup routes
+    /// with 404.
+    pub signup_url: Option<String>,
 }
 
 /// A route anyone may call, without a session: its own, much smaller body
