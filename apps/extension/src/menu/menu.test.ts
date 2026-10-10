@@ -583,13 +583,14 @@ describe("field menu tags", () => {
   const items = (tags: string[]) => [{ id: ITEM, title: "Acme", username: "a-very-long-admin-name@acme.example.com", provider: null, tags }];
   const ready = (tags: string[]) => ({ ok: true, value: { state: "ready", kind: "login", site: "acme.example.com", items: items(tags), passkeys: [], hint: null } });
 
-  it("puts the username first and the tags after it, as text", async () => {
+  it("puts the title first and the tags after it on the title line, as text", async () => {
     replies = [ready(["staging", "work", "eu"])];
     await load();
-    const user = document.querySelector("button.row .user")!;
-    expect(user.querySelector(".user-name")!.textContent).toBe("a-very-long-admin-name@acme.example.com");
-    expect(user.querySelector(".tags")!.textContent).toBe("\u00b7 staging, work +1");
-    expect(user.firstElementChild!.className).toContain("user-name");
+    const title = document.querySelector("button.row .title")!;
+    expect(title.querySelector(".title-name")!.textContent).toBe("Acme");
+    expect(title.querySelector(".tags")!.textContent).toBe("staging, work +1");
+    expect(title.firstElementChild!.className).toContain("title-name");
+    expect(document.querySelector("button.row .user")!.textContent).toBe("a-very-long-admin-name@acme.example.com");
   });
 
   it("renders no tags element without tags", async () => {

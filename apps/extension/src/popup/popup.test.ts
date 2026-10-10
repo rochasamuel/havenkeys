@@ -168,16 +168,18 @@ describe("popup tags", () => {
     await vi.waitFor(() => expect(document.querySelector(".item .who")).not.toBeNull());
   };
 
-  it("shows the username first and the tags after it", async () => {
+  it("shows the title first and the tags after it, on the title line", async () => {
     await open(["staging"]);
-    const user = document.querySelector(".item .who .user")!;
-    expect(user.querySelector(".user-name")!.textContent).toBe("admin@acme.example.com");
-    expect(user.querySelector(".tags")!.textContent).toBe("\u00b7 staging");
-    expect(user.firstElementChild!.className).toContain("user-name");
+    const title = document.querySelector(".item .who .title")!;
+    expect(title.querySelector(".title-name")!.textContent).toBe("Acme");
+    expect(title.querySelector(".tags")!.textContent).toBe("staging");
+    expect(title.firstElementChild!.className).toContain("title-name");
+    expect(document.querySelector(".item .who .user")!.textContent).toBe("admin@acme.example.com");
   });
 
   it("renders no tags element without tags", async () => {
     await open([]);
+    expect(document.querySelector(".item .who .title")!.textContent).toBe("Acme");
     expect(document.querySelector(".item .who .user")!.textContent).toBe("admin@acme.example.com");
     expect(document.querySelector(".tags")).toBeNull();
   });
@@ -190,8 +192,8 @@ describe("popup tags", () => {
     vi.resetModules();
     await import("./popup");
     await vi.waitFor(() => expect(document.querySelector(".item .who")).not.toBeNull());
-    expect(document.querySelector(".user-name")!.textContent).toBe("No username");
-    expect(document.querySelector(".tags")!.textContent).toBe("\u00b7 staging");
+    expect(document.querySelector(".user")!.textContent).toBe("No username");
+    expect(document.querySelector(".title .tags")!.textContent).toBe("staging");
   });
 });
 

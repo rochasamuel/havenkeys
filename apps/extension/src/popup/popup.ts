@@ -119,11 +119,17 @@ async function fillFromPopup(btn: HTMLButtonElement, req: PopupRequest, status: 
  */
 function userLine(m: Match): HTMLElement {
   const text = m.provider ? t.menu.ssoRow(SSO_PROVIDERS[m.provider].name, m.username) : (m.username ?? t.common.noUsername);
-  const data = m.username !== null;
+  return m.username !== null ? truncates(h("div", { className: "user", text })) : h("div", { className: "user copy", text });
+}
+
+/**
+ * A login's title line. With tags, the title comes first and the tags
+ * follow it in brass, small; the tags are what shrink when the row is full.
+ */
+function titleLine(m: Match): HTMLElement {
   const tags = tagLine(m.tags);
-  if (!tags) return data ? truncates(h("div", { className: "user", text })) : h("div", { className: "user copy", text });
-  const name = h("span", { className: data ? "user-name" : "user-name copy", text });
-  return h("div", { className: "user with-tags" }, data ? truncates(name) : name, truncates(h("span", { className: "tags", text: `\u00b7 ${tags}` })));
+  if (!tags) return truncates(h("div", { className: "title", text: m.title }));
+  return h("div", { className: "title with-tags" }, truncates(h("span", { className: "title-name", text: m.title })), truncates(h("span", { className: "tags", text: tags })));
 }
 
 function identityRow(title: string): HTMLElement {
@@ -200,7 +206,7 @@ function rowBase(m: Match, status: HTMLElement): HTMLElement {
     "li",
     { className: "item" },
     open,
-    h("div", { className: "who" }, truncates(h("div", { className: "title", text: m.title })), userLine(m)),
+    h("div", { className: "who" }, titleLine(m), userLine(m)),
   );
 }
 

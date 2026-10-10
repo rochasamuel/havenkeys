@@ -310,15 +310,18 @@ main {
   font-size: 12px;
 }
 
-/* With tags the line is a flex row: the username first, the tags shrink first. */
-.user.with-tags {
+/* With tags the title is a flex row: the title first, then the tags in
+   brass, small, as text (no pill: Fill is the row's one brass control).
+   The tags shrink first. */
+.title.with-tags {
   display: flex;
+  align-items: baseline;
   min-width: 0;
   overflow: hidden;
-  gap: 4px;
+  gap: 6px;
 }
 
-.user-name {
+.title-name {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -326,7 +329,7 @@ main {
   white-space: nowrap;
 }
 
-.user-name.copy {
+.title-name.copy {
   white-space: normal;
 }
 
@@ -337,7 +340,24 @@ main {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10.5px;
-  opacity: 0.75;
+  font-weight: 600;
+  color: var(--tag-ink);
+}
+
+/* Tag ink: brass that carries 10.5px text. Light theme darkens it past the
+   shared brass-ink (#8f7236 is only 4.0:1 on white at this size). */
+:root {
+  --tag-ink: var(--brass-ink);
+}
+
+:root[data-theme="light"] {
+  --tag-ink: #6f5728;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --tag-ink: #6f5728;
+  }
 }
 
 .actions {

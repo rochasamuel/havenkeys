@@ -228,13 +228,15 @@ without case.
 
 ### 4.4 Extension — in-page menu and popup
 
-* Tags go on the **username line**, after a thin middot, as the smallest and
-  faintest text on the row: one step below the username's size, muted ink.
-  The row reads as the username first: `admin@acme.com · staging`.
-* At most 2 tags, then "+N". Text, not pills.
+* Tags go on the **title line**, after the title, as the smallest text on
+  the row in brass ink (10.5px, 600): `Acme  staging`. The username line
+  stays plain. (Revised 2026-10-10 at the owner's request; they were faint
+  muted text after the username.)
+* At most 2 tags, then "+N". Text, not pills: Fill is the row's one brass
+  control.
 * Frame geometry does not change (Fixed Frame Rule: rows stay 46px; no
   change to `content/frames.ts`). On overflow the tag text is what gets
-  truncated, never the username.
+  truncated, never the title.
 * The popup's site rows do the same. (The popup has no search box.)
 * Tags show on login rows only, not on one-time-code rows.
 * The extension only receives the tags of logins already matched to the

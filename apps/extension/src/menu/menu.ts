@@ -29,14 +29,14 @@ function line(className: "title" | "user", text: string, copy: boolean): HTMLEle
 }
 
 /**
- * A login's user line. With tags, the username comes first and the tags
- * follow, very small and faint; the tags are what shrink when the row is full.
+ * A login's title line. With tags, the title comes first and the tags
+ * follow it in brass, small; the tags are what shrink when the row is full.
  */
-function userLine(detail: string, copy: boolean, tags: readonly string[]): HTMLElement {
+function titleLine(title: string, copy: boolean, tags: readonly string[]): HTMLElement {
   const text = tagLine(tags);
-  if (!text) return line("user", detail, copy);
-  const name = copy ? h("span", { className: "user-name copy", text: detail }) : userData(h("span", { className: "user-name", text: detail }));
-  return h("span", { className: "user with-tags" }, name, userData(h("span", { className: "tags", text: `\u00b7 ${text}` })));
+  if (!text) return line("title", title, copy);
+  const name = copy ? h("span", { className: "title-name copy", text: title }) : userData(h("span", { className: "title-name", text: title }));
+  return h("span", { className: "title with-tags" }, name, userData(h("span", { className: "tags", text })));
 }
 
 /** The generate row's glyph: a sparkle drawn in the app's 1.6-stroke icon set. */
@@ -66,7 +66,7 @@ function row(avatar: string | Node, title: string, detail: string, onPick: () =>
     "button",
     { className: "row" },
     typeof avatar === "string" ? h("span", { className: "avatar", text: avatar }) : h("span", { className: "avatar avatar-icon" }, avatar),
-    h("span", { className: "who" }, line("title", title, copy.title), userLine(detail, copy.detail, tags)),
+    h("span", { className: "who" }, titleLine(title, copy.title, tags), line("user", detail, copy.detail)),
   );
   b.type = "button";
   b.addEventListener("click", (e) => {
