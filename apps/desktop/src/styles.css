@@ -3247,8 +3247,23 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   color: var(--muted);
 }
 
-.wf-input {
+.wf-input:not(.wf-area) {
   height: 40px;
+}
+
+/* The setup code box starts at three rows and grows to fit what is
+   pasted (WelcomeScreen sets its height), so a code never scrolls. */
+.wf-area {
+  overflow: hidden;
+}
+
+/* The master password gauge sits between the field and its hint. */
+.wf-strength {
+  min-height: 18px;
+}
+
+.wf-strength .strength-bar {
+  flex-basis: 120px;
 }
 
 .wf-hint {

@@ -251,6 +251,7 @@ means a live server session, which a locked vault does not have.
 | `delete_item` | yes (online) | no |
 | `generate_password` | no | a fresh password (not stored) |
 | `copy_generated_password` | no | no |
+| `estimate_master_password` | no | no. zxcvbn score (0–4) and guess estimate for a master password being chosen on the welcome screen; the draft is scored in Rust and dropped, with the setup code's email counted as an easy guess |
 | `get_settings`, `update_settings` | yes | no. `update_settings` keeps the stored generator policy |
 | `set_generator_options` | yes | no. Saves the generator tab's policy (encrypted settings); the extension's "Generate strong password" uses it |
 | `import_file` | yes (online) | no. Takes only the source (a closed enum: 1Password, Bitwarden JSON/CSV, Chrome, Firefox, KeePassXC, LastPass); Rust opens the native file picker and the renderer never supplies a path |

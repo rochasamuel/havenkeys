@@ -10,6 +10,7 @@ import type {
   AccountField,
   AccountStatus,
   InvitePreview,
+  PasswordStrength,
   AddressPart,
   CardCopyField,
   CardNumberCheck,
@@ -189,6 +190,9 @@ export const api = {
   signOut: () => call<void>("sign_out"),
   accountStatus: () => call<AccountStatus | null>("account_status"),
   previewInvite: (invite: string) => call<InvitePreview>("preview_invite", { invite: invite.trim() }),
+  /** Scores a master password draft in Rust; `userInputs` (the email) count as easy guesses. */
+  estimateMasterPassword: (password: string, userInputs: string[]) =>
+    call<PasswordStrength>("estimate_master_password", { password, userInputs }),
   /** Opens the fixed sign-up page; the renderer never supplies a URL. */
   openSignup: () => call<void>("open_signup"),
   openPricing: () => call<void>("open_pricing"),

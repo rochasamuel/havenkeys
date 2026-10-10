@@ -18,6 +18,7 @@ const COMMANDS: &[&str] = &[
     "device_status",
     "account_status",
     "preview_invite",
+    "estimate_master_password",
     "open_signup",
     "open_pricing",
     "activate_account",

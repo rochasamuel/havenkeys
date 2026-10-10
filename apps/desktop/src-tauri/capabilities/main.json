@@ -25,6 +25,7 @@
     "allow-device-status",
     "allow-account-status",
     "allow-preview-invite",
+    "allow-estimate-master-password",
     "allow-open-signup",
     "allow-open-pricing",
     "allow-activate-account",

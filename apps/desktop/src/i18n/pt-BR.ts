@@ -209,6 +209,12 @@ export const ptBR: Messages = {
     invite: "Código de configuração",
     inviteHint: "Uma linha, do seu e-mail de cadastro ou de quem administra o seu servidor. Funciona uma vez.",
     passwordHint: "Pelo menos 10 caracteres. Ninguém pode redefini-la para você — nem o servidor, nem nós.",
+    strengthNote: {
+      weak: "Fácil de adivinhar.",
+      fair: "Adivinhável com algum esforço.",
+      strong: "Difícil de adivinhar.",
+      excellent: "Muito difícil de adivinhar.",
+    },
     repeatPassword: "Repita a senha mestra",
     tooShort: "Use pelo menos 10 caracteres.",
     mismatch: "As duas senhas não coincidem.",

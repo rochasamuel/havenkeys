@@ -282,6 +282,14 @@ export interface GeneratedPassword {
   entropyBits: number;
 }
 
+/** zxcvbn's verdict on a master password being chosen (see `estimate_master_password`). */
+export interface PasswordStrength {
+  /** 0 (guessed at once) to 4 (very hard to guess). */
+  score: 0 | 1 | 2 | 3 | 4;
+  /** log10 of the estimated guesses, for a gauge. */
+  guessesLog10: number;
+}
+
 export type Theme = "dark" | "light" | "system";
 
 export interface Settings {

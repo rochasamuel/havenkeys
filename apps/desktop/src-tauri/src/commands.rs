@@ -15,6 +15,7 @@ use crate::scan_slot::ScannedTotp;
 use crate::state::{AppState, CmdError, CmdResult};
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
 use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings, TrashEntry};
+use havenkeys_core::password_strength::{self, PasswordStrength};
 use havenkeys_core::sso::SsoProvider;
 use havenkeys_core::totp::TotpCode;
 use havenkeys_core::vault::{ProviderLogin, SsoAccount, StagedWrite, VaultService, VaultStatus};
@@ -438,6 +439,22 @@ pub fn generate_password(
 ) -> CmdResult<GeneratedPassword> {
     state.touch();
     Ok(generator::generate(&options)?)
+}
+
+/// Strength of a master password being chosen, scored by zxcvbn in the
+/// core. The renderer sends the draft after each pause in typing; the core
+/// scores it and drops it. `user_inputs` (the account's email) count as
+/// easy guesses. No `touch()`: there is no vault yet.
+#[tauri::command]
+pub fn estimate_master_password(
+    password: SecretString,
+    user_inputs: Vec<String>,
+) -> CmdResult<PasswordStrength> {
+    if user_inputs.len() > 4 || user_inputs.iter().any(|s| s.len() > 254) {
+        return Err(havenkeys_core::Error::InvalidInput("too many user inputs").into());
+    }
+    let inputs: Vec<&str> = user_inputs.iter().map(String::as_str).collect();
+    Ok(password_strength::estimate(password.expose(), &inputs))
 }
 
 /// Copy a value the renderer already holds (a freshly generated password)

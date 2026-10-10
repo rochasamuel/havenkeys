@@ -28,6 +28,7 @@ pub mod model;
 pub mod origin;
 pub mod pairing;
 pub mod passkey;
+pub mod password_strength;
 pub mod secret;
 pub mod sso;
 pub mod store;

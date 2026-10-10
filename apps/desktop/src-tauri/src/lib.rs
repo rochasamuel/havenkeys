@@ -338,6 +338,7 @@ pub fn run() {
             commands::empty_trash,
             commands::list_trash,
             commands::generate_password,
+            commands::estimate_master_password,
             commands::copy_generated_password,
             commands::get_settings,
             commands::update_settings,

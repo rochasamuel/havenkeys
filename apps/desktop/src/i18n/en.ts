@@ -187,6 +187,13 @@ export const en = {
     invite: "Setup code",
     inviteHint: "One line, from your sign-up email or from whoever runs your server. It works once.",
     passwordHint: "At least 10 characters. Nobody can reset it for you — not the server, not us.",
+    /** Under the master password gauge, by zxcvbn score. */
+    strengthNote: {
+      weak: "Easy to guess.",
+      fair: "Guessable with some effort.",
+      strong: "Hard to guess.",
+      excellent: "Very hard to guess.",
+    },
     repeatPassword: "Repeat master password",
     tooShort: "Use at least 10 characters.",
     mismatch: "The two passwords don’t match.",

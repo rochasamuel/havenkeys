@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api } from "../lib/api";
-import type { InvitePreview, VaultStatus } from "../lib/types";
+import type { InvitePreview, PasswordStrength, VaultStatus } from "../lib/types";
 import { Guilloche } from "../components/Guilloche";
 import { Seal } from "../components/Seal";
 import { useI18n } from "../i18n/context";
@@ -38,6 +38,8 @@ function Field(props: {
   mono?: boolean;
   inputRef?: React.Ref<HTMLInputElement>;
   autoComplete?: string;
+  /** Rendered between the input and the hint (the strength gauge). */
+  after?: ReactNode;
 }) {
   return (
     <label className="wf">
@@ -55,8 +57,38 @@ function Field(props: {
         autoCapitalize="off"
         autoCorrect="off"
       />
+      {props.after}
       {props.hint && <span className="wf-hint">{props.hint}</span>}
     </label>
+  );
+}
+
+type StrengthLevel = "weak" | "fair" | "strong" | "excellent";
+
+function strengthLevelOf(score: PasswordStrength["score"]): StrengthLevel {
+  return score <= 1 ? "weak" : score === 2 ? "fair" : score === 3 ? "strong" : "excellent";
+}
+
+/**
+ * The master password gauge: the generator's strength bar, driven by the
+ * core's zxcvbn score instead of generator entropy. Rendered as soon as the
+ * user types, so the bar is in place before the first score lands.
+ */
+function StrengthMeter({ strength }: { strength: PasswordStrength | null }) {
+  const { t } = useI18n();
+  const level = strength && strengthLevelOf(strength.score);
+  const fill = strength ? Math.min(1, Math.max(0.06, strength.guessesLog10 / 12)) : 0;
+  return (
+    <div className={level ? `strength wf-strength strength-${level}` : "strength wf-strength"} aria-live="polite">
+      <div className="strength-bar">
+        <span style={{ transform: `scaleX(${fill})` }} />
+      </div>
+      {level && (
+        <span>
+          <strong>{t.generator.strength[level]}</strong> · {t.welcome.strengthNote[level]}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -68,9 +100,40 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<InvitePreview | null>(null);
+  const [strength, setStrength] = useState<PasswordStrength | null>(null);
   const first = useRef<HTMLInputElement>(null);
 
   useEffect(() => first.current?.focus(), []);
+
+  // The code box grows with what is pasted (a code wraps onto several
+  // lines) instead of scrolling inside a fixed height; see .wf-area.
+  useEffect(() => {
+    const area = first.current as unknown as HTMLTextAreaElement | null;
+    if (!area) return;
+    area.style.height = "auto";
+    area.style.height = `${area.scrollHeight}px`;
+  }, [invite]);
+
+  // Score the draft after each pause in typing. The core scores and drops
+  // it; the account email (from the code's preview) counts as an easy guess.
+  useEffect(() => {
+    if (password.length === 0) {
+      setStrength(null);
+      return;
+    }
+    let live = true;
+    const inputs = preview ? [preview.email] : [];
+    const timer = window.setTimeout(() => {
+      api.estimateMasterPassword(password, inputs).then(
+        (s) => live && setStrength(s),
+        () => live && setStrength(null),
+      );
+    }, 150);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [password, preview]);
 
   // Say who the code is for before the user commits. Only a setup code is
   // sent to Rust; a failure (a typo, half a paste) just clears the line.
@@ -141,6 +204,7 @@ function InvitePanel({ onActivated }: { onActivated: (s: VaultStatus) => void })
         value={password}
         onChange={setPassword}
         disabled={busy}
+        after={password.length > 0 ? <StrengthMeter strength={strength} /> : null}
         hint={t.welcome.passwordHint}
       />
       <Field
