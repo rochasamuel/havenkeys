@@ -12,7 +12,7 @@ import { applyDocumentLang, t } from "../i18n";
 import { cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
 import type { CardRowView } from "../messaging/inline";
 import { displayHost } from "../shared/url";
-import { tagLine } from "../shared/tags";
+import { tagChips } from "../shared/tags";
 
 const main = document.getElementById("main") as HTMLElement;
 const pill = document.getElementById("state") as HTMLElement;
@@ -124,12 +124,15 @@ function userLine(m: Match): HTMLElement {
 
 /**
  * A login's title line. With tags, the title comes first and the tags
- * follow it in brass, small; the tags are what shrink when the row is full.
+ * follow it as small brass pills (two, then "+N"); the pills are what
+ * shrink when the row is full.
  */
 function titleLine(m: Match): HTMLElement {
-  const tags = tagLine(m.tags);
-  if (!tags) return truncates(h("div", { className: "title", text: m.title }));
-  return h("div", { className: "title with-tags" }, truncates(h("span", { className: "title-name", text: m.title })), truncates(h("span", { className: "tags", text: tags })));
+  const { shown, more } = tagChips(m.tags);
+  if (shown.length === 0) return truncates(h("div", { className: "title", text: m.title }));
+  const pills = shown.map((tag) => truncates(h("span", { className: "tag", text: tag })));
+  if (more > 0) pills.push(h("span", { className: "tag-more", text: `+${more}` }));
+  return h("div", { className: "title with-tags" }, truncates(h("span", { className: "title-name", text: m.title })), h("span", { className: "tags" }, ...pills));
 }
 
 function identityRow(title: string): HTMLElement {

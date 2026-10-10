@@ -5,7 +5,7 @@
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, SSO_PROVIDERS, type IdentityRole, type PasswordOptions } from "@havenkeys/protocol";
 import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
-import { tagLine } from "../shared/tags";
+import { tagChips } from "../shared/tags";
 import { ask, createClickGuard, h, monogram, receiveToken, userData } from "./common";
 import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
 
@@ -30,13 +30,16 @@ function line(className: "title" | "user", text: string, copy: boolean): HTMLEle
 
 /**
  * A login's title line. With tags, the title comes first and the tags
- * follow it in brass, small; the tags are what shrink when the row is full.
+ * follow it as small brass pills (two, then "+N"); the pills are what
+ * shrink when the row is full.
  */
 function titleLine(title: string, copy: boolean, tags: readonly string[]): HTMLElement {
-  const text = tagLine(tags);
-  if (!text) return line("title", title, copy);
+  const { shown, more } = tagChips(tags);
+  if (shown.length === 0) return line("title", title, copy);
   const name = copy ? h("span", { className: "title-name copy", text: title }) : userData(h("span", { className: "title-name", text: title }));
-  return h("span", { className: "title with-tags" }, name, userData(h("span", { className: "tags", text })));
+  const pills = shown.map((tag) => userData(h("span", { className: "tag", text: tag })));
+  if (more > 0) pills.push(h("span", { className: "tag-more", text: `+${more}` }));
+  return h("span", { className: "title with-tags" }, name, h("span", { className: "tags" }, ...pills));
 }
 
 /** The generate row's glyph: a sparkle drawn in the app's 1.6-stroke icon set. */

@@ -232,12 +232,11 @@ main {
   font-size: 12px;
 }
 
-/* With tags the title is a flex row: the title first, then the tags in
-   brass, small, as text (no pill: Fill is the row's one brass control).
-   The tags shrink first. */
+/* With tags the title is a flex row: the title first, then brass tag
+   pills. The pills shrink first. */
 .title.with-tags {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   min-width: 0;
   overflow: hidden;
   gap: 6px;
@@ -256,15 +255,37 @@ main {
   overflow-wrap: anywhere;
 }
 
+/* The product's tag pill (brass wash, brass ink, no outline), sized to the
+   row: 16px tall, 10px 600. The pills shrink and truncate before the title. */
 .tags {
+  display: flex;
+  align-items: center;
   flex: 0 1000 auto;
+  gap: 4px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brass-soft);
+  color: var(--tag-ink);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
+}
+
+.tag-more {
+  flex: none;
+  color: var(--muted);
+  font-size: 10px;
   font-weight: 600;
-  color: var(--tag-ink);
 }
 
 /* Tag ink: brass that carries 10.5px text. Light theme darkens it past the

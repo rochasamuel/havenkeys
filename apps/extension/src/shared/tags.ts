@@ -1,5 +1,4 @@
-/** A suggestion's tags as one short, quiet line: two names, then "+N". */
-export function tagLine(tags: readonly string[]): string {
-  if (tags.length <= 2) return tags.join(", ");
-  return `${tags.slice(0, 2).join(", ")} +${tags.length - 2}`;
+/** A suggestion's tags as pills: the first two by name, then how many more. */
+export function tagChips(tags: readonly string[]): { shown: string[]; more: number } {
+  return { shown: tags.slice(0, 2), more: Math.max(0, tags.length - 2) };
 }

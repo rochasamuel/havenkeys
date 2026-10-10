@@ -228,12 +228,11 @@ without case.
 
 ### 4.4 Extension — in-page menu and popup
 
-* Tags go on the **title line**, after the title, as the smallest text on
-  the row in brass ink (10.5px, 600): `Acme  staging`. The username line
-  stays plain. (Revised 2026-10-10 at the owner's request; they were faint
-  muted text after the username.)
-* At most 2 tags, then "+N". Text, not pills: Fill is the row's one brass
-  control.
+* Tags go on the **title line**, after the title, as the product's brass
+  tag pill scaled to the row (16px tall, 10px 600, brass wash, brass ink).
+  The username line stays plain. (Revised 2026-10-10 at the owner's
+  request; they were faint muted text after the username.)
+* At most 2 pills, then a muted "+N".
 * Frame geometry does not change (Fixed Frame Rule: rows stay 46px; no
   change to `content/frames.ts`). On overflow the tag text is what gets
   truncated, never the title.

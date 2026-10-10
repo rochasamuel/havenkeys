@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { tagLine } from "./tags";
+import { tagChips } from "./tags";
 
-describe("tagLine", () => {
-  it("shows at most two tags, then a count", () => {
-    expect(tagLine([])).toBe("");
-    expect(tagLine(["staging"])).toBe("staging");
-    expect(tagLine(["prod", "work"])).toBe("prod, work");
-    expect(tagLine(["a", "b", "c", "d"])).toBe("a, b +2");
+describe("tagChips", () => {
+  it("shows up to two tags and counts the rest", () => {
+    expect(tagChips([])).toEqual({ shown: [], more: 0 });
+    expect(tagChips(["staging"])).toEqual({ shown: ["staging"], more: 0 });
+    expect(tagChips(["prod", "work"])).toEqual({ shown: ["prod", "work"], more: 0 });
+    expect(tagChips(["a", "b", "c", "d"])).toEqual({ shown: ["a", "b"], more: 2 });
   });
 });

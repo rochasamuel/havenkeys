@@ -172,7 +172,7 @@ describe("popup tags", () => {
     await open(["staging"]);
     const title = document.querySelector(".item .who .title")!;
     expect(title.querySelector(".title-name")!.textContent).toBe("Acme");
-    expect(title.querySelector(".tags")!.textContent).toBe("staging");
+    expect([...title.querySelectorAll(".tag")].map((e) => e.textContent)).toEqual(["staging"]);
     expect(title.firstElementChild!.className).toContain("title-name");
     expect(document.querySelector(".item .who .user")!.textContent).toBe("admin@acme.example.com");
   });
@@ -193,7 +193,7 @@ describe("popup tags", () => {
     await import("./popup");
     await vi.waitFor(() => expect(document.querySelector(".item .who")).not.toBeNull());
     expect(document.querySelector(".user")!.textContent).toBe("No username");
-    expect(document.querySelector(".title .tags")!.textContent).toBe("staging");
+    expect(document.querySelector(".title .tag")!.textContent).toBe("staging");
   });
 });
 
