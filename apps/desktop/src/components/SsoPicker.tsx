@@ -124,34 +124,38 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
       </button>
       {open && (
         <div className="menu sso-menu">
-          <input
-            type="search"
-            role="combobox"
-            aria-expanded="true"
-            aria-autocomplete="list"
-            className="edit-input sso-search"
-            value={query}
-            placeholder={t.editor.providerSearch}
-            aria-label={t.editor.providerSearch}
-            aria-controls="sso-listbox"
-            aria-activedescendant={rows[active] ? rowId(active) : undefined}
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActive(0);
-            }}
-            onKeyDown={onKey}
-          />
-          <div role="listbox" id="sso-listbox" aria-label={t.editor.providerPick}>
+          {/* The search is a row, not a boxed field (Row Is the Field): a glyph, the input, a hairline under. */}
+          <div className="sso-search-row">
+            <Icon name="search" size={15} />
+            <input
+              type="search"
+              role="combobox"
+              aria-expanded="true"
+              aria-autocomplete="list"
+              className="edit-input sso-search"
+              value={query}
+              placeholder={t.editor.providerSearch}
+              aria-label={t.editor.providerSearch}
+              aria-controls="sso-listbox"
+              aria-activedescendant={rows[active] ? rowId(active) : undefined}
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActive(0);
+              }}
+              onKeyDown={onKey}
+            />
+          </div>
+          <div role="listbox" id="sso-listbox" aria-label={t.editor.providerPick} className="sso-list">
             {rows.map((row, i) => (
               <div
                 key={row.kind === "account" ? `a-${row.account.id}` : row.kind === "provider" ? `p-${row.provider}` : "none"}
                 id={rowId(i)}
                 role="option"
                 aria-selected={i === active}
-                className={`sso-option${row.kind === "account" ? " sso-option-account" : ""}`}
+                className={`sso-option sso-option-${row.kind}`}
                 onMouseEnter={() => setActive(i)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(row)}
@@ -165,9 +169,10 @@ export function SsoPicker({ value, onChange }: { value: SignInWith | null; onCha
                   </>
                 ) : (
                   <>
-                    <ProviderIcon provider={row.provider} size={15} />
-                    <span data-truncate="">{row.account.title}</span>
-                    <span className="muted" data-truncate="">{row.account.username}</span>
+                    {/* Under its provider: the icon sits where the provider's name starts. */}
+                    <ProviderIcon provider={row.provider} size={16} />
+                    <span className="sso-account-title" data-truncate="">{row.account.title}</span>
+                    <span className="sso-account-user muted" data-truncate="">{row.account.username}</span>
                   </>
                 )}
               </div>

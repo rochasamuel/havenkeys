@@ -1027,22 +1027,48 @@ input::-ms-clear {
   margin-top: -7px;
 }
 
+/* The picker menu: a search row pinned at the top, then providers as
+   section rows with their logins nested one icon-width in. Every row is
+   32px with the same 13px text; what differs is weight (provider 600) and
+   the icon size (18px provider, 16px login), so the tree reads at a glance. */
 .sso-menu {
   left: 8px;
   right: 8px;
   min-width: 0;
-  max-height: 340px;
+  max-height: 360px;
+  padding: 0 5px 5px;
   overflow-y: auto;
   transform-origin: top left;
 }
 
+.sso-search-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  margin: 0 -5px 5px;
+  padding: 0 14px 0 13px;
+  border-bottom: 1px solid var(--group-line);
+  background: var(--raised);
+  color: var(--muted);
+}
+
+.sso-search-row svg {
+  flex: none;
+}
+
 .sso-search {
-  width: 100%;
-  margin-bottom: 4px;
-  padding: 7px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: var(--field);
+  height: 100%;
+  font-size: 13.5px;
+}
+
+.sso-search::-webkit-search-cancel-button,
+.sso-search::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .sso-picker [data-truncate] {
@@ -1059,10 +1085,13 @@ input::-ms-clear {
 .sso-option {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 9px;
   border-radius: 7px;
   color: var(--text-strong);
+  font-size: 13px;
+  line-height: 1.3;
   cursor: pointer;
 }
 
@@ -1070,17 +1099,38 @@ input::-ms-clear {
   background: var(--sel);
 }
 
-.sso-option-account {
-  padding-left: 30px;
-  font-size: 13px;
+.sso-option-provider {
+  font-weight: 600;
 }
 
-.sso-option-account .muted {
+/* A gap before each provider after the first, and before "Nothing". */
+.sso-option-provider + .sso-option-provider,
+.sso-option-account + .sso-option-provider,
+.sso-option-account + .sso-option-none,
+.sso-option-provider + .sso-option-none {
+  margin-top: 4px;
+}
+
+/* 9px pad + 18px icon + 10px gap: the login's icon starts under the
+   provider's name. */
+.sso-option-account {
+  padding-left: 37px;
+}
+
+.sso-account-title {
+  flex: 1 1 auto;
+}
+
+.sso-account-user {
+  flex: 0 1 auto;
+  max-width: 50%;
   margin-left: auto;
+  padding-left: 12px;
+  font-size: 12px;
 }
 
 .sso-empty {
-  padding: 8px 9px;
+  padding: 6px 9px 4px;
   font-size: 12.5px;
 }
 
