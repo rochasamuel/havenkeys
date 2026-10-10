@@ -270,19 +270,71 @@ p {
 /* ------------------------------------------------------------ signup */
 
 .signup {
-  max-width: 560px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: clamp(72px, 10vw, 120px) var(--gutter) 0;
+  padding: clamp(64px, 9vw, 112px) var(--gutter) 0;
+}
+
+/* The form sits on a ground panel with a hairline, like the site's other
+   panels: flat, tonal, no shadow (it is not an object). */
+.signup__card {
+  padding: clamp(26px, 4.5vw, 40px) clamp(22px, 4.5vw, 40px) clamp(28px, 4.5vw, 40px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--ground);
+}
+
+/* Three hairline segments; the current step is brass. */
+.signup__progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: clamp(22px, 4vw, 32px);
+}
+
+.signup__progress span {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.signup__progress span.is-done {
+  background: var(--brass-line);
+}
+
+.signup__progress span.is-current {
+  background: var(--brass);
 }
 
 .signup__card h1 {
-  font-size: clamp(2rem, 4vw, 2.6rem);
-  margin-bottom: 8px;
+  margin: 0 0 10px;
+  font-size: clamp(1.9rem, 3.4vw, 2.5rem);
+  line-height: 1.1;
+  text-wrap: balance;
 }
 
 .signup__lede {
-  margin: 0 0 24px;
+  margin: 0 0 18px;
   color: var(--muted-hi);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.signup__card .field {
+  margin: 22px 0 0;
+}
+
+.signup__card .check {
+  margin: 18px 0 22px;
+}
+
+.signup__card .field__error {
+  margin: 0 0 14px;
+}
+
+.signup__card > form > .btn--primary,
+.signup__actions .btn--primary {
+  min-width: 200px;
 }
 
 .signup__actions {
@@ -293,8 +345,14 @@ p {
 }
 
 .signup__note {
+  margin: 0 0 6px;
   color: var(--muted);
   font-size: 14px;
+  line-height: 1.55;
+}
+
+.signup__note + .signup__note {
+  margin-top: 6px;
 }
 
 .invite {
@@ -318,13 +376,25 @@ p {
 }
 
 .signup h2 {
-  margin-top: 40px;
+  margin: 36px 0 14px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
   font-size: 1.3rem;
+}
+
+.signup__downloads {
+  margin-bottom: 18px;
 }
 
 @media (max-width: 480px) {
   .invite {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .signup__card > form > .btn--primary,
+  .signup__actions .btn--primary,
+  .signup__actions .btn--ghost {
+    width: 100%;
   }
 }
 
@@ -2377,7 +2447,9 @@ main {
 
 main > .docs-page:last-child,
 main > .security:last-child,
-main > .download:last-child {
+main > .download:last-child,
+main > .signup:last-child,
+main > .pricing:last-child {
   padding-bottom: var(--section);
 }
 
@@ -2753,10 +2825,10 @@ main > .download:last-child {
 
 .pricing__card {
   margin: 32px 0;
-  padding: 28px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg, 16px);
-  background: var(--ink);
+  padding: clamp(24px, 4vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--ground);
 }
 
 .pricing__card h2 {

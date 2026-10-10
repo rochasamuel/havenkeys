@@ -68,7 +68,7 @@ export const ptBR: Messages = {
     privacy: "Privacidade",
     terms: "Termos e licença",
     deleteAccount: "Excluir conta",
-    license: "MIT ou Apache-2.0",
+    license: "Apache-2.0",
     languageAria: "Idioma",
   },
 
@@ -531,7 +531,7 @@ export const ptBR: Messages = {
     buildTitle: "Compile você mesmo",
     buildBody: (
       <>
-        O HavenKeys é código aberto, sob MIT ou Apache-2.0. O{" "}
+        O HavenKeys é código aberto, sob Apache-2.0. O{" "}
         <Ext href={`${DOCS}development.md`}>guia de desenvolvimento</Ext> explica como compilar o app
         de desktop, a extensão, o Android e o servidor; o{" "}
         <Ext href={`${DOCS}self-hosting.md`}>self-hosting.md</Ext> explica como rodar seu próprio servidor.
@@ -984,6 +984,7 @@ export const ptBR: Messages = {
 
   signup: {
     title: "Crie sua conta HavenKeys",
+    step: (n: number) => `Passo ${n} de 3`,
     lede: "Três passos: confirme seu e-mail e depois configure o app no computador ou no celular.",
     emailLabel: "E-mail",
     emailHint: "Enviamos um código de seis dígitos para confirmar que ele é seu.",

@@ -74,7 +74,7 @@ export const en = {
     privacy: "Privacy",
     terms: "Terms & license",
     deleteAccount: "Delete account",
-    license: "MIT or Apache-2.0",
+    license: "Apache-2.0",
     languageAria: "Language",
   },
 
@@ -523,7 +523,7 @@ export const en = {
     buildTitle: "Build it yourself",
     buildBody: (
       <>
-        HavenKeys is open source under MIT or Apache-2.0. The{" "}
+        HavenKeys is open source under Apache-2.0. The{" "}
         <Ext href={`${DOCS}development.md`}>development guide</Ext> covers building the desktop app,
         the extension, Android and the server; <Ext href={`${DOCS}self-hosting.md`}>self-hosting.md</Ext>{" "}
         covers running your own server.
@@ -968,6 +968,7 @@ export const en = {
 
   signup: {
     title: "Create your HavenKeys account",
+    step: (n: number) => `Step ${n} of 3`,
     lede: "Three steps: confirm your email, then set up the app on your computer or phone.",
     emailLabel: "Email",
     emailHint: "We send a six-digit code to confirm it is yours.",

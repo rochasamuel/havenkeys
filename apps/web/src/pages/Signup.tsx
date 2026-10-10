@@ -87,9 +87,15 @@ export function SignupView({
 }) {
   const s = t.signup;
   const path = (p: string) => (locale === "pt-BR" ? `/pt-br${p}` : p);
+  const stepIndex = state.step === "email" ? 0 : state.step === "code" ? 1 : 2;
   return (
     <section className="signup">
       <div className="signup__card">
+        <div className="signup__progress" role="img" aria-label={s.step(stepIndex + 1)}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className={i < stepIndex ? "is-done" : i === stepIndex ? "is-current" : undefined} />
+          ))}
+        </div>
         {state.step === "email" && (
           <form
             onSubmit={(e: FormEvent) => {
