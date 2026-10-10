@@ -150,20 +150,13 @@ export function SignupView({
           >
             <h1>{s.codeTitle}</h1>
             <p className="signup__lede">{s.codeLede(state.email)}</p>
-            <label className="field">
-              <span className="field__label">{s.codeLabel}</span>
-              <input
-                className="field__input code-input"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={state.code}
-                disabled={state.busy}
-                onChange={(e) => dispatch({ type: "code", value: e.target.value })}
-              />
-            </label>
+            <CodeField
+              label={s.codeLabel}
+              value={state.code}
+              disabled={state.busy}
+              invalid={state.error !== null}
+              onChange={(value) => dispatch({ type: "code", value })}
+            />
             {state.error && (
               <p className="field__error" role="alert">
                 {s.errors[state.error]}
@@ -173,8 +166,10 @@ export function SignupView({
               <button className="btn btn--primary btn--lg" type="submit" disabled={state.busy}>
                 {state.busy ? s.verifying : s.verify}
               </button>
+            </div>
+            <div className="signup__secondary">
               <button
-                className="btn btn--ghost"
+                className="btn--link"
                 type="button"
                 disabled={!canResend(state, now)}
                 onClick={() => dispatch({ type: "resend" })}
@@ -183,7 +178,7 @@ export function SignupView({
                   ? s.resend
                   : s.resendIn.replace("{s}", String(Math.max(0, Math.ceil((state.sentAt + RESEND_AFTER_MS - now) / 1000))))}
               </button>
-              <button className="btn btn--ghost" type="button" onClick={() => dispatch({ type: "reset" })}>
+              <button className="btn--link" type="button" onClick={() => dispatch({ type: "reset" })}>
                 {s.changeEmail}
               </button>
             </div>
@@ -193,6 +188,68 @@ export function SignupView({
         {state.step === "done" && <Done invite={state.invite} t={t} downloadPath={path("/download")} />}
       </div>
     </section>
+  );
+}
+
+const CODE_LENGTH = 6;
+
+/*
+ * Six digit cells over one real input. The input is what the browser sees
+ * (label, one-time-code autofill, paste, the numeric keyboard); the cells are
+ * paint. Its text is transparent, so the typed digits appear only in the
+ * cells, and the active cell carries the caret.
+ */
+function CodeField({
+  label,
+  value,
+  disabled,
+  invalid,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  invalid: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const active = Math.min(value.length, CODE_LENGTH - 1);
+  return (
+    <label className="field">
+      <span className="field__label">{label}</span>
+      <span className={`otp${invalid ? " is-invalid" : ""}${disabled ? " is-disabled" : ""}`}>
+        {Array.from({ length: CODE_LENGTH }, (_, i) => {
+          const digit = value[i] ?? "";
+          const cls = ["otp__cell", digit && "is-filled", focused && i === active && "is-active"].filter(Boolean).join(" ");
+          return (
+            <span key={i} className={cls} aria-hidden="true">
+              {digit}
+            </span>
+          );
+        })}
+        <input
+          className="otp__input"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={CODE_LENGTH}
+          autoFocus
+          spellCheck={false}
+          aria-invalid={invalid || undefined}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => {
+            setFocused(true);
+            // Typing always appends: the cells show the caret on the next empty one.
+            const end = e.target.value.length;
+            e.target.setSelectionRange(end, end);
+          }}
+          onBlur={() => setFocused(false)}
+        />
+      </span>
+    </label>
   );
 }
 

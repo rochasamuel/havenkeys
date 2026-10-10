@@ -199,6 +199,37 @@ p {
   font-weight: 600;
 }
 
+/* A button that reads as a link: the secondary actions next to one primary
+   button (resend the code, use another email). */
+.btn--link {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brass-hi);
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 160ms var(--ease-mechanical);
+}
+
+.btn--link:hover {
+  color: var(--brass);
+}
+
+.btn--link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+
 /* ------------------------------------------------------------- forms */
 
 .field {
@@ -260,11 +291,93 @@ p {
   accent-color: var(--primary-bg);
 }
 
-.code-input {
-  font-family: "JetBrains Mono", monospace;
+/* Six digit cells over one real input (see CodeField). The cells are paint;
+   the input underneath keeps the label, paste, the numeric keyboard and
+   one-time-code autofill, and the active cell carries the caret. The gap
+   after the third cell groups the code the way the product shows codes. */
+.otp {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.otp__cell {
+  display: grid;
+  place-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 48px;
+  height: 56px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--ink);
+  font-family: var(--mono);
   font-size: 24px;
-  letter-spacing: 0.4em;
-  text-align: center;
+  font-weight: 500;
+  color: var(--text-strong);
+  transition:
+    border-color 160ms var(--ease-mechanical),
+    box-shadow 160ms var(--ease-mechanical);
+}
+
+.otp__cell:nth-child(4) {
+  margin-left: 12px;
+}
+
+.otp__cell.is-active {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass);
+}
+
+.otp__cell.is-active:empty::after {
+  content: "";
+  width: 1px;
+  height: 24px;
+  background: var(--brass-hi);
+  animation: otp-caret 1.1s steps(2, start) infinite;
+}
+
+@keyframes otp-caret {
+  to {
+    visibility: hidden;
+  }
+}
+
+.otp.is-invalid .otp__cell {
+  border-color: var(--danger);
+}
+
+.otp.is-disabled .otp__cell {
+  opacity: 0.6;
+}
+
+.otp__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+  font: inherit;
+  outline: none;
+}
+
+.otp__input::selection {
+  background: transparent;
+}
+
+.otp__input:focus-visible {
+  outline: none;
+}
+
+.otp__input:disabled {
+  cursor: default;
 }
 
 /* ------------------------------------------------------------ signup */
@@ -332,6 +445,10 @@ p {
   margin: 0 0 14px;
 }
 
+.signup__card .field + .field__error {
+  margin-top: 10px;
+}
+
 .signup__card > form > .btn--primary,
 .signup__actions .btn--primary {
   min-width: 200px;
@@ -342,6 +459,25 @@ p {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  margin-top: 22px;
+}
+
+/* The two quiet actions under Continue, divided by a hairline. */
+.signup__secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 18px;
+}
+
+.signup__secondary > * + *::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  margin-right: 14px;
+  background: var(--line-strong);
 }
 
 .signup__note {
@@ -392,9 +528,21 @@ p {
   }
 
   .signup__card > form > .btn--primary,
-  .signup__actions .btn--primary,
-  .signup__actions .btn--ghost {
+  .signup__actions .btn--primary {
     width: 100%;
+  }
+
+  .otp {
+    gap: 6px;
+  }
+
+  .otp__cell {
+    max-width: 44px;
+    height: 52px;
+  }
+
+  .otp__cell:nth-child(4) {
+    margin-left: 10px;
   }
 }
 
