@@ -441,7 +441,7 @@ offset  size  field
 32      1     flags    = 0x1d on get, 0x5d on create
 33      4     signCount = 0, big-endian
 --- create only (attested credential data) ---
-37      16    AAGUID = 16 zero bytes
+37      16    AAGUID = 5fa9623b-c2ff-4166-92da-c011a036bcb0 (HavenKeys)
 53      2     credentialIdLength = 16, big-endian
 55      16    credentialId
 71      77    credentialPublicKey (COSE_Key, below)
@@ -477,14 +477,19 @@ The public key is a COSE_Key map in CTAP2 canonical key order:
 `create()` also returns it as SubjectPublicKeyInfo DER (`getPublicKey()`),
 from `p256`'s `pkcs8` encoder.
 
-Attestation is always `none`, with a zero AAGUID:
+Attestation is always `none`, with HavenKeys' own AAGUID
+`5fa9623b-c2ff-4166-92da-c011a036bcb0` (a random UUID v4):
 
 ```text
 { "fmt": "none", "attStmt": {}, "authData": <authenticator data> }
 ```
 
-A relying party therefore cannot tell which authenticator made the passkey,
-and a site that insists on attestation will refuse it.
+Without attestation the AAGUID is a claim, not proof, but it names the
+provider: a relying party can tell a HavenKeys passkey from others and show
+it as such in its passkey list. (Until 2026-10-12 it was all zeros, which is
+also what Apple's passkeys carry, and Google listed HavenKeys passkeys as
+Apple's; passkeys made before then keep the zero AAGUID the site stored.) A
+site that insists on attestation will refuse it.
 
 ### clientDataJSON
 

@@ -21,7 +21,13 @@ const FLAG_UV: u8 = 0x04;
 const FLAG_BE: u8 = 0x08;
 const FLAG_BS: u8 = 0x10;
 const FLAG_AT: u8 = 0x40;
-const AAGUID: [u8; 16] = [0; 16];
+/// HavenKeys' authenticator ID, 5fa9623b-c2ff-4166-92da-c011a036bcb0 (a
+/// random UUID v4). It names the provider, so a site can show "HavenKeys"
+/// in its passkey list; an all-zero AAGUID is what Apple's passkeys carry,
+/// and Google labelled HavenKeys passkeys as Apple's.
+const AAGUID: [u8; 16] = [
+    0x5f, 0xa9, 0x62, 0x3b, 0xc2, 0xff, 0x41, 0x66, 0x92, 0xda, 0xc0, 0x11, 0xa0, 0x36, 0xbc, 0xb0,
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ceremony {
@@ -277,13 +283,18 @@ mod tests {
         assert_eq!(passkey.user_handle.0, vec![1, 2, 3]);
         assert_eq!(passkey.created_at, 42);
 
-        // authenticatorData: rpIdHash, flags AT|BS|BE|UV|UP, counter 0, zero
-        // AAGUID, credential ID length and ID, then the COSE key.
+        // authenticatorData: rpIdHash, flags AT|BS|BE|UV|UP, counter 0,
+        // HavenKeys' AAGUID, credential ID length and ID, then the COSE key.
         let a = &reg.authenticator_data;
         assert_eq!(&a[..32], Sha256::digest(b"github.com").as_slice());
         assert_eq!(a[32], 0x5d);
         assert_eq!(&a[33..37], &[0, 0, 0, 0]);
-        assert_eq!(&a[37..53], &[0; 16]);
+        assert_eq!(
+            &a[37..53],
+            uuid::Uuid::parse_str("5fa9623b-c2ff-4166-92da-c011a036bcb0")
+                .unwrap()
+                .as_bytes()
+        );
         assert_eq!(&a[53..55], &[0, 16]);
         assert_eq!(&a[55..71], reg.credential_id.as_slice());
 
