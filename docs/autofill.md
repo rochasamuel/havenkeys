@@ -912,7 +912,8 @@ goes through the bridge to the background, which asks the desktop.
   "Passkey · account", above the saved logins. Picking one signs in and
   aborts the browser's request; if the user picks from the browser's UI
   instead, HavenKeys' request is cancelled. `isConditionalMediationAvailable()`
-  returns true wherever the script runs.
+  and `isUserVerifyingPlatformAuthenticatorAvailable()` return true wherever
+  the script runs.
 * After a passkey sign-in nothing else is filled. A later OTP field uses the
   normal one-time-code menu.
 
@@ -1488,10 +1489,18 @@ See `security-model.md` §12.
 * **No WebAuthn extensions** (PRF, largeBlob, credProps, …), no attestation
   other than `none`, and no hybrid (phone) transport from HavenKeys itself;
   **Use another device** reaches the browser's own.
-* **`PublicKeyCredential.getClientCapabilities()` is unchanged.** A site
-  that checks its `conditionalCreate` capability before offering the
-  automatic upgrade sees the browser's own answer; HavenKeys does not
-  intercept or change that call.
+* **HavenKeys reports itself as this device's passkey store.**
+  `isUserVerifyingPlatformAuthenticatorAvailable()` returns true, and
+  `getClientCapabilities()` returns the browser's own answer with only
+  `passkeyPlatformAuthenticator` and `userVerifyingPlatformAuthenticator`
+  set to true. Sites check these before offering to create a passkey:
+  Google's "Create a passkey" says "A passkey can't be created on this
+  device" without calling `create()` when the browser answers no (Linux
+  browsers have no store of their own; some Windows setups answer no too).
+  Every other capability, `conditionalCreate` included, is the browser's.
+  A site may therefore offer a passkey where only HavenKeys can make one;
+  when HavenKeys hands a request back (the user picks **Use another
+  device**), the browser's own UI runs.
 * **An abort during a silent save can leave an orphaned passkey.** If a page
   aborts, navigates away, or otherwise cancels its `create()` while the
   automatic upgrade's save is already in flight, the save is not rolled

@@ -232,6 +232,43 @@ describe("page wrapper", () => {
     await expect((win.PublicKeyCredential as unknown as { isConditionalMediationAvailable(): Promise<boolean> }).isConditionalMediationAvailable()).resolves.toBe(true);
   });
 
+  it("reports a passkey store, which sites check before offering to create one", async () => {
+    // Google's "Create a passkey" checks isUserVerifyingPlatformAuthenticatorAvailable
+    // and never calls create() when it is false (Linux; some Windows setups).
+    class PKC {
+      static isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+      static getClientCapabilities = () =>
+        Promise.resolve({ conditionalGet: true, hybridTransport: true, passkeyPlatformAuthenticator: false, userVerifyingPlatformAuthenticator: false });
+    }
+    const win = fresh();
+    Object.assign(win, { PublicKeyCredential: PKC });
+    install(win);
+    await expect(PKC.isUserVerifyingPlatformAuthenticatorAvailable()).resolves.toBe(true);
+    // Only the two platform-authenticator answers change; the rest is the browser's.
+    await expect(PKC.getClientCapabilities()).resolves.toEqual({
+      conditionalGet: true,
+      hybridTransport: true,
+      passkeyPlatformAuthenticator: true,
+      userVerifyingPlatformAuthenticator: true,
+    });
+  });
+
+  it("leaves getClientCapabilities absent where the browser has none, and survives it rejecting", async () => {
+    class Bare {}
+    const win = fresh();
+    Object.assign(win, { PublicKeyCredential: Bare });
+    install(win);
+    expect("getClientCapabilities" in Bare).toBe(false);
+    await expect((Bare as unknown as { isUserVerifyingPlatformAuthenticatorAvailable(): Promise<boolean> }).isUserVerifyingPlatformAuthenticatorAvailable()).resolves.toBe(true);
+
+    class Failing {
+      static getClientCapabilities = () => Promise.reject(new Error("nope"));
+    }
+    Object.assign(win, { PublicKeyCredential: Failing });
+    install(win);
+    await expect(Failing.getClientCapabilities()).resolves.toEqual({ passkeyPlatformAuthenticator: true, userVerifyingPlatformAuthenticator: true });
+  });
+
   it("rejects a conditional get immediately when the signal is already aborted", async () => {
     const win = fresh();
     install(win);

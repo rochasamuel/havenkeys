@@ -31,6 +31,9 @@ import {
   type PageRequest,
 } from "./messages";
 
+/** The capabilities HavenKeys provides as this device's passkey store. */
+const PLATFORM = { passkeyPlatformAuthenticator: true, userVerifyingPlatformAuthenticator: true } as const;
+
 /** How long to wait for the bridge's acknowledgement. */
 const ACK_MS = 1000;
 /** Slack on top of the bridge's own timer (itself the site's timeout + 10 s). */
@@ -52,6 +55,9 @@ export function install(win: Win): void {
   if (!container || typeof PKC !== "function") return;
 
   // Captured before any page script runs.
+  const caps = (PKC as { getClientCapabilities?: unknown }).getClientCapabilities;
+  const origCapabilities = typeof caps === "function" ? (caps.bind(PKC) as () => Promise<Record<string, boolean>>) : null;
+  const assign = Object.assign;
   const origCreate = container.create.bind(container) as Native;
   const origGet = container.get.bind(container) as Native;
   const stringify = JSON.stringify;
@@ -353,4 +359,26 @@ export function install(win: Win): void {
     writable: true,
     configurable: true,
   });
+  // HavenKeys is a passkey store on this device. Sites check for one before
+  // offering to create a passkey: Google's "Create a passkey" asks
+  // isUserVerifyingPlatformAuthenticatorAvailable() and never calls
+  // create() on a "no" (Linux browsers have no store of their own; some
+  // Windows setups answer no as well). Only the two platform-authenticator
+  // capabilities change; every other answer is the browser's own.
+  Object.defineProperty(PKC, "isUserVerifyingPlatformAuthenticatorAvailable", {
+    value: () => Promise.resolve(true),
+    writable: true,
+    configurable: true,
+  });
+  if (typeof origCapabilities === "function") {
+    Object.defineProperty(PKC, "getClientCapabilities", {
+      value: () =>
+        origCapabilities().then(
+          (caps) => assign({}, caps, PLATFORM),
+          () => assign({}, PLATFORM),
+        ),
+      writable: true,
+      configurable: true,
+    });
+  }
 }
