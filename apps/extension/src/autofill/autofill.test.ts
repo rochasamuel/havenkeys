@@ -502,6 +502,51 @@ describe("submissions", () => {
     expect(readSubmission(group('[name="p"]', "/signup"))).toBeNull();
   });
 
+  it("a password-only step takes the username from the hidden field the page keeps for password managers", () => {
+    // Google's password step: the account's email in a hidden `identifier`.
+    page(`<form><input type="email" name="identifier" style="display:none" value="me@gmail.com">
+      <input name="p" type="password" autocomplete="current-password"></form>`);
+    $('[name="p"]').value = "typed";
+    markUserEdit($('[name="p"]'));
+    expect(readSubmission(group('[name="p"]'))).toEqual({ username: "me@gmail.com", password: "typed" });
+    // Chromium's documented pattern: a hidden autocomplete=username field.
+    page(`<form><input type="text" autocomplete="username" hidden value="octo"><input name="p" type="password"></form>`);
+    $('[name="p"]').value = "typed";
+    markUserEdit($('[name="p"]'));
+    expect(readSubmission(group('[name="p"]'))).toEqual({ username: "octo", password: "typed" });
+  });
+
+  it("Google's password step: the hidden email sits 10 levels above the password field", () => {
+    // The nesting of Google's page (Firefox, 2026-10), values left out.
+    const deep = (inner: string, n: number) => "<div>".repeat(n) + inner + "</div>".repeat(n);
+    page(`<main><section><div><div><input type="email" name="identifier" class="Hvu6D" tabindex="-1" aria-hidden="true"
+      value="me@gmail.com" autocomplete="off" id="hiddenEmail" style="display:none">
+      ${deep('<input type="password" autocomplete="current-password webauthn" aria-label="Digite sua senha" name="Passwd">', 9)}
+      <div><input type="checkbox" aria-labelledby="sel"><div id="sel">Mostrar senha</div></div>
+      <div style="display:none">${deep('<input type="text" autocomplete="off" aria-label="Digite o texto que você ouve ou vê" name="ca">', 4)}</div>
+      </div></div></section><input type="hidden" value="me@gmail.com" id="identifierId"></main>`);
+    const pw = $('[name="Passwd"]');
+    pw.value = "typed";
+    markUserEdit(pw);
+    expect(readSubmission(groupFor(pw, env()).group, env())).toEqual({ username: "me@gmail.com", password: "typed" });
+    // Google hides it with a class: aria-hidden marks it hidden even where it still takes space.
+    $("#hiddenEmail").removeAttribute("style");
+    expect(readSubmission(groupFor(pw, env()).group, env())).toEqual({ username: "me@gmail.com", password: "typed" });
+  });
+
+  it("a hidden username never overrides a visible one, and two different hidden ones are ignored", () => {
+    page(`<form><input type="email" style="display:none" value="other@x.com"><input name="u" type="email" value="me@x.com">
+      <input name="p" type="password"></form>`);
+    $('[name="p"]').value = "typed";
+    markUserEdit($('[name="p"]'));
+    expect(readSubmission(group('[name="p"]'))).toEqual({ username: "me@x.com", password: "typed" });
+    page(`<form><input type="email" style="display:none" value="a@x.com"><input type="email" style="display:none" value="b@x.com">
+      <input name="p" type="password"></form>`);
+    $('[name="p"]').value = "typed";
+    markUserEdit($('[name="p"]'));
+    expect(readSubmission(group('[name="p"]'))).toEqual({ username: null, password: "typed" });
+  });
+
   it("username-only steps and empty forms", () => {
     page(`<form><h1>Sign in</h1><input name="u" type="email" autocomplete="username" value="me"></form>`);
     expect(readSubmission(group('[name="u"]'))).toEqual({ username: "me", password: null });

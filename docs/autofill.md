@@ -363,6 +363,14 @@ Detection is conservative:
   compared in the core, to find the login that changed, and is not kept.
 * **Multi-step logins:** a username-only step is remembered in memory for 5
   minutes, per tab and origin, and joined with the password step.
+* **Password-only steps** with no visible username field (Google after the
+  account chooser) take the username from a hidden field the page keeps for
+  password managers: `autocomplete="username"` (Chromium's documented
+  pattern) or `type="email"` (Google's `identifier`, 10 levels above its
+  password field), hidden or `aria-hidden`. It is searched in the password's
+  form, else in its ancestors (up to 12) from the nearest one holding any,
+  and used only if those fields agree. The prompt shows it before anything
+  is saved.
 * **Generated passwords:** if a generated password was filled but no submit
   was seen, it is offered when the page unloads, so it is not lost.
 

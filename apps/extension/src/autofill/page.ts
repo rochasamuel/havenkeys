@@ -2,7 +2,7 @@
 // from the toolbar popup) and reading what the user submitted.
 
 import { valueSource } from "./fill";
-import { classifyGroup, fieldsOf, groupRoot, isFillable, type Env, type LoginGroup } from "./group";
+import { classifyGroup, defaultEnv, fieldsOf, groupRoot, isFillable, type Env, type LoginGroup } from "./group";
 import type { FieldClassification } from "./classify";
 
 /** Candidates examined when looking for a login form on the whole page. */
@@ -101,7 +101,7 @@ export interface Submission {
  *   tell which login changed when the form has no username.
  * * Over-long values are ignored rather than truncated.
  */
-export function readSubmission(group: LoginGroup): Submission | null {
+export function readSubmission(group: LoginGroup, env: Env = defaultEnv()): Submission | null {
   const [userEl] = fieldsOf(group, "username");
   const username = userEl?.value.trim() || null;
   if (username !== null && username.length > MAX_USERNAME_CHARS) return null;
@@ -128,11 +128,47 @@ export function readSubmission(group: LoginGroup): Submission | null {
   if (source !== "user" && source !== "generated") return null;
   const password = pwEl.value;
   if (password.length > MAX_PASSWORD_CHARS) return null;
-  const sub: Submission = { username, password };
+  const sub: Submission = { username: username ?? (userEl ? null : hiddenUsername(pwEl, env)), password };
   const [oldEl] = pwEl === newEl ? fieldsOf(group, "current-password") : [];
   const oldSource = oldEl && valueSource(oldEl);
   if (oldEl?.value && oldEl.value.length <= MAX_PASSWORD_CHARS && (oldSource === "user" || oldSource === "vault")) {
     sub.currentPassword = oldEl.value;
   }
   return sub;
+}
+
+/** Hidden username fields examined per scope. */
+const MAX_HIDDEN_USERNAMES = 5;
+/**
+ * Ancestors of the password field searched for a hidden username. Google's
+ * password step keeps it 10 levels up, past the group's own root.
+ */
+const MAX_HIDDEN_CLIMB = 12;
+
+/**
+ * The username a password-only step keeps in a hidden field for password
+ * managers (Chromium's documented `autocomplete="username"` pattern;
+ * Google's password step keeps the account's email in a hidden `type=email`
+ * `identifier`). Searched in the password's form, else in its ancestors
+ * from the nearest up, stopping at the first that holds any. Hidden means
+ * not fillable or `aria-hidden` (Google hides it with a class). Used only
+ * if those fields agree on one value; the user sees it in the save prompt
+ * before anything is saved.
+ */
+function hiddenUsername(pwEl: HTMLInputElement, env: Env): string | null {
+  const scopes: ParentNode[] = [];
+  if (pwEl.form) scopes.push(pwEl.form);
+  else {
+    let node = pwEl.parentElement;
+    for (let i = 0; node && i < MAX_HIDDEN_CLIMB; i++, node = node.parentElement) scopes.push(node);
+  }
+  for (const scope of scopes) {
+    const hidden = Array.from(scope.querySelectorAll<HTMLInputElement>('input[autocomplete~="username"], input[type="email"]'))
+      .slice(0, MAX_HIDDEN_USERNAMES)
+      .filter((el) => !isFillable(el, env) || el.getAttribute("aria-hidden") === "true");
+    if (hidden.length === 0) continue;
+    const values = new Set(hidden.map((el) => el.value.trim()).filter((v) => v !== "" && v.length <= MAX_USERNAME_CHARS));
+    return values.size === 1 ? [...values][0]! : null;
+  }
+  return null;
 }
