@@ -161,6 +161,13 @@ are. `tauri-plugin-single-instance` makes a second launch show the running
 instance's window and exit, so two processes never open the same vault
 file.
 
+**AppImage desktop entry (Linux).** When started from an AppImage, the app
+writes `havenkeys-desktop.desktop` under `$XDG_DATA_HOME/applications` and
+its icon under `$XDG_DATA_HOME/icons/hicolor`, so GNOME and KDE show its
+icon in the dock and menu (on Wayland they ignore a window's own icon). The
+entry starts the image at `$APPIMAGE` and holds no vault data; a path with
+control characters is refused rather than written into it.
+
 **Screen lock.** The vault also locks when the operating-system session
 locks (reason `screen_lock`). The auto-lock thread polls every 5 seconds
 through `crates/havenkeys-oslock`:

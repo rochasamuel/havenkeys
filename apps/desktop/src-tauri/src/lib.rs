@@ -9,6 +9,8 @@ mod card;
 mod clipboard;
 mod commands;
 mod custom_field;
+#[cfg(target_os = "linux")]
+mod desktop_entry;
 mod device_label;
 mod emergency_kit;
 mod events;
@@ -241,6 +243,9 @@ pub fn run() {
             let _ = Endpoint::for_current_user().and_then(|ep| bridge.serve(&ep));
             // Point the browsers at the bundled native host (native_host.rs).
             native_host::register_in_background(dir.clone());
+            // Give a running AppImage its dock icon (desktop_entry.rs).
+            #[cfg(target_os = "linux")]
+            desktop_entry::install_in_background();
 
             tray::install(app)?;
 
