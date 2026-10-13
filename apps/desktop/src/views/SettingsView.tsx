@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { Settings, Theme } from "../lib/types";
+import type { QuickAccessStatus, Settings, Theme } from "../lib/types";
 import { applyTheme } from "../lib/theme";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/Switch";
@@ -101,6 +101,8 @@ export function SettingsView({
   const { t, preference, setPreference } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
+  const [quickAccess, setQuickAccessState] = useState<QuickAccessStatus | null>(null);
+  const isMac = document.documentElement.dataset.platform === "mac";
   const updateStatus = useUpdateStatus();
 
   useEffect(() => {
@@ -113,12 +115,26 @@ export function SettingsView({
       .launchAtLogin()
       .then(setLaunchAtLogin)
       .catch(() => setLaunchAtLogin(null));
+    // Unknown (null) hides the block, like launch at login.
+    api
+      .quickAccessStatus()
+      .then(setQuickAccessState)
+      .catch(() => setQuickAccessState(null));
     // `t` is left out: a language change must not reload the settings.
   }, [toast]);
 
   async function updateLaunchAtLogin(enabled: boolean) {
     try {
       setLaunchAtLogin(await api.setLaunchAtLogin(enabled));
+      toast(t.settings.saved);
+    } catch (e) {
+      toast(errorMessage(e, t, t.settings.saveFailed), "error");
+    }
+  }
+
+  async function updateQuickAccess(enabled: boolean) {
+    try {
+      setQuickAccessState(await api.setQuickAccess(enabled));
       toast(t.settings.saved);
     } catch (e) {
       toast(errorMessage(e, t, t.settings.saveFailed), "error");
@@ -239,6 +255,28 @@ export function SettingsView({
             </div>
           </div>
           <p className="group-note">{t.settings.startupNote}</p>
+        </div>
+      )}
+
+      {quickAccess && (
+        <div className="settings-block">
+          <h3 className="group-title">{t.settings.quickAccess}</h3>
+          <div className="group">
+            <div className="row">
+              <span className="row-label-inline">{t.settings.quickAccessShortcut}</span>
+              <Switch
+                label={t.settings.quickAccessShortcutLabel}
+                checked={quickAccess.enabled}
+                onChange={(checked) => void updateQuickAccess(checked)}
+              />
+            </div>
+          </div>
+          {quickAccess.enabled && quickAccess.inUse && (
+            <p className="group-note warn" role="status">
+              {t.settings.quickAccessInUse}
+            </p>
+          )}
+          <p className="group-note">{t.settings.quickAccessNote(isMac ? "⌘⇧Space" : "Ctrl+Shift+Space")}</p>
         </div>
       )}
 

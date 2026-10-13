@@ -744,6 +744,12 @@ export const ptBR: Messages = {
     launchAtLoginLabel: "Abrir o HavenKeys ao iniciar a sessão neste computador",
     startupNote:
       "O HavenKeys inicia bloqueado, na bandeja, para que a extensão do navegador possa acessá-lo. Vale só para este computador.",
+    quickAccess: "Acesso rápido",
+    quickAccessShortcut: "Atalho do Acesso rápido",
+    quickAccessShortcutLabel: "Abrir o Acesso rápido com um atalho de teclado em qualquer app",
+    quickAccessNote: (keys: string) =>
+      `Pressione ${keys} em qualquer app para buscar seus logins e copiar uma senha. Itens copiados são apagados como definido em Segurança. Vale só para este computador; atalhos globais não funcionam em sessões Wayland no Linux.`,
+    quickAccessInUse: "O atalho está em uso por outro app.",
     browserExtension: "Extensão do navegador",
     browserIntegration: "Sugerir e preencher logins no navegador",
     browserIntegrationLabel: "Permitir que a extensão do HavenKeys sugira e preencha logins",

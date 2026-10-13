@@ -722,6 +722,12 @@ export const en = {
     launchAtLoginLabel: "Open HavenKeys when you log in to this computer",
     startupNote:
       "HavenKeys starts locked, in the tray, so the browser extension can reach it. This applies to this computer only.",
+    quickAccess: "Quick Access",
+    quickAccessShortcut: "Quick Access shortcut",
+    quickAccessShortcutLabel: "Open Quick Access with a keyboard shortcut from any app",
+    quickAccessNote: (keys: string) =>
+      `Press ${keys} in any app to search your logins and copy a password. Copied items clear as set under Security. This applies to this computer only; global shortcuts don't work in Linux Wayland sessions.`,
+    quickAccessInUse: "The shortcut is in use by another app.",
     browserExtension: "Browser extension",
     browserIntegration: "Suggest and fill logins in the browser",
     browserIntegrationLabel: "Allow the HavenKeys browser extension to suggest and fill logins",

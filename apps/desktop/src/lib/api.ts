@@ -38,6 +38,7 @@ import type {
   PairingState,
   PasskeyInfo,
   ProviderLogin,
+  QuickAccessStatus,
   ScannedTotp,
   SecretField,
   SectionView,
@@ -219,6 +220,9 @@ export const api = {
   /** Whether this computer opens HavenKeys at login (an OS setting, not a vault one). */
   launchAtLogin: () => call<boolean>("launch_at_login"),
   setLaunchAtLogin: (enabled: boolean) => call<boolean>("set_launch_at_login", { enabled }),
+  /** This computer's Quick Access shortcut; Rust registers it with the OS. */
+  quickAccessStatus: () => call<QuickAccessStatus>("quick_access_status"),
+  setQuickAccess: (enabled: boolean) => call<QuickAccessStatus>("set_quick_access", { enabled }),
   /** Relabel the tray menu. Rust accepts only "en" and "pt-BR". */
   setUiLanguage: (lang: "en" | "pt-BR") => call<void>("set_ui_language", { lang }),
 

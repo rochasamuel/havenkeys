@@ -262,6 +262,8 @@ function baseResponses() {
     update_settings: settings,
     launch_at_login: false,
     set_launch_at_login: false,
+    quick_access_status: { enabled: true, inUse: false },
+    set_quick_access: { enabled: true, inUse: false },
     set_ui_language: null,
     record_activity: null,
     account_status: {
@@ -1002,7 +1004,17 @@ export const desktopScenarios = [
       await page.waitForTimeout(300);
     },
     // Walk down the page, a section at a time.
-    shots: ["settings-block:2", "settings-block:3", "settings-block:4", "settings-block:5", "settings-block:6", "settings-block:7", "settings-block:8"],
+    shots: ["settings-block:2", "settings-block:3", "settings-block:4", "settings-block:5", "settings-block:6", "settings-block:7", "settings-block:8", "settings-block:9"],
+  },
+  {
+    // Another app owns Ctrl+Shift+Space: the switch stays on, with a note.
+    name: "settings-quick-access-in-use",
+    respond: { launch_at_login: true, quick_access_status: { enabled: true, inUse: true } },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+    },
+    shots: ["settings-block:4"],
   },
   {
     name: "settings-account-states",
@@ -1073,7 +1085,7 @@ export const desktopScenarios = [
       await page.click(SETTINGS);
       await page.waitForTimeout(300);
     },
-    shots: ["settings-block:4", "settings-block:5"],
+    shots: ["settings-block:5", "settings-block:6"],
   },
   // ---------------------------------------------------------------- Quick Access window
   {

@@ -292,6 +292,13 @@ export interface PasswordStrength {
 
 export type Theme = "dark" | "light" | "system";
 
+/** The Quick Access shortcut on this computer (quick-access.json, not a vault setting). */
+export interface QuickAccessStatus {
+  enabled: boolean;
+  /** The OS refused the shortcut: another app owns it. The switch stays on. */
+  inUse: boolean;
+}
+
 export interface Settings {
   autoLockMinutes: number;
   clipboardClearSeconds: number;
