@@ -729,7 +729,7 @@ export const ptBR: Messages = {
     browserIntegrationLabel: "Permitir que a extensão do HavenKeys sugira e preencha logins",
     autoPasskey: "Adicionar chaves de acesso automaticamente depois que eu entrar",
     autoSignIn: "Entrar automaticamente após preencher",
-    equivalentDomains: "Preencher em sites relacionados",
+    equivalentDomains: "Sugerir logins em sites relacionados",
     extensionNote:
       "A extensão só recebe um login quando você o escolhe em um site para o qual ele está salvo, e só enquanto o HavenKeys está desbloqueado. Ela nunca recebe a sua senha mestra. Desativado por padrão: enquanto estiver ativado, outros programas rodando na sua conta podem fazer as mesmas solicitações que a extensão.",
     passkeyNote:
@@ -737,7 +737,7 @@ export const ptBR: Messages = {
     autoSignInNote:
       "Depois que você escolhe um login, o HavenKeys aperta o botão de entrar e segue pelas etapas de e-mail, senha e verificação em duas etapas no mesmo site. Logins que passam por várias páginas precisam das sugestões na página. Cada login pode desativar isso.",
     equivalentDomainsNote:
-      "Oferece um login em outro site da mesma empresa, como icloud.com para um login de apple.com.",
+      "Sugere um login salvo para um site em outro site da mesma empresa, como um login de apple.com no icloud.com. Você continua escolhendo o login.",
     about: "Sobre",
     aboutText: (version: string) =>
       `HavenKeys ${version}. Seu cofre é criptografado com AES-256-GCM sob uma chave derivada da sua senha mestra (com Argon2id) e da sua Secret Key. Ele fica neste computador, a menos que você ative a sincronização. Este software não passou por uma auditoria de segurança independente.`,

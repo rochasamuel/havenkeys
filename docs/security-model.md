@@ -714,9 +714,9 @@ See `native-messaging.md` for the full protocol. In summary:
 * Domain matching may widen to equivalent domains: a login with a `domain`
   rule also matches a page whose registrable domain shares a group with the
   rule's in a fixed list compiled into Rust (a short curated list,
-  reviewed in code, no network). It is the weakest strength, still needs the user's pick, and
-  can be turned off ("Fill on related sites", `equivalent_domains`; the
-  restrictive settings turn it off). Save-update authorization, "Sign in
+  reviewed in code, no network). It is the weakest strength, still needs
+  the user's pick, and can be turned off ("Suggest logins on related
+  sites", `equivalent_domains`; the restrictive settings turn it off). Save-update authorization, "Sign in
   with" and passkeys never widen; save-login deduplication widens only to
   "unchanged" (no prompt for a login just filled there), never to "update".
   The bridge's fill and open origin checks use the unranked `matches_page`. The list can go

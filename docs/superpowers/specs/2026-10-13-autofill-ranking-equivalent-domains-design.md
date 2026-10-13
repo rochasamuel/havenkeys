@@ -162,9 +162,11 @@ server, so each device has its own switch.
 * Android: `MobileSettings` gains `equivalent_domains`, written into the
   shared settings by `update_settings`; a switch in the Settings screen.
 
-Label (en): "Fill on related sites", description: "Offer a login on
-another site owned by the same company, such as icloud.com for an
-apple.com login." Final copy goes through the impeccable review.
+Label (en): "Suggest logins on related sites", description: "Suggests a
+login saved for one site on another site of the same company, such as an
+apple.com login on icloud.com. You still choose it yourself." (pt-BR:
+"Sugerir logins em sites relacionados".) Final copy from the impeccable
+review; the first draft said "Fill on related sites".
 
 ## 5. CLAUDE.md amendment
 

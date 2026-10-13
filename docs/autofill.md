@@ -49,8 +49,8 @@ the wire protocol is unchanged). The scheme and port checks above run
 first. `exact` and `origin` rules never widen, and a malformed table reads
 as empty.
 
-The setting "Fill on related sites" (on by default; off in the restrictive
-settings) controls it. It applies to `find_matches`, `matches_for_app`,
+The setting "Suggest logins on related sites" (on by default; off in the
+restrictive settings) controls it. It applies to `find_matches`, `matches_for_app`,
 fill and TOTP authorization (page and app) and automatic sign-in. It never
 applies to save-update authorization, "Sign in with" provider logins, or
 passkeys (candidate lists and relying-party ID checks), and a passkey

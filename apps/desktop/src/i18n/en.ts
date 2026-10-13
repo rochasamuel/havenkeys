@@ -706,7 +706,7 @@ export const en = {
     browserIntegrationLabel: "Allow the HavenKeys browser extension to suggest and fill logins",
     autoPasskey: "Add passkeys automatically after I sign in",
     autoSignIn: "Sign in automatically after filling",
-    equivalentDomains: "Fill on related sites",
+    equivalentDomains: "Suggest logins on related sites",
     extensionNote:
       "The extension only receives a login when you choose it on a website that login is saved for, and only while HavenKeys is unlocked. It never receives your master password. Off by default: while it is on, other programs running under your account can make the same requests as the extension.",
     passkeyNote:
@@ -714,7 +714,7 @@ export const en = {
     autoSignInNote:
       "After you choose a login, HavenKeys presses the sign-in button and continues through email, password and two-factor steps on the same site. Sign-ins that span several pages need in-page suggestions. Each login can turn this off.",
     equivalentDomainsNote:
-      "Offer a login on another site owned by the same company, such as icloud.com for an apple.com login.",
+      "Suggests a login saved for one site on another site of the same company, such as an apple.com login on icloud.com. You still choose it yourself.",
     about: "About",
     aboutText: (version: string) =>
       `HavenKeys ${version}. Your vault is encrypted with AES-256-GCM under a key derived from your master password (with Argon2id) and your Secret Key. It stays on this computer unless you turn on sync. This software has not undergone an independent security audit.`,
