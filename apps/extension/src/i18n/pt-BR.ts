@@ -78,6 +78,10 @@ export const ptBR: Messages = {
       title: "Nenhum login salvo para este site",
       body: "Os logins salvos no HavenKeys para este site aparecem aqui.",
     },
+    lookalike: {
+      title: (site: string) => `Este site não é ${site}`,
+      body: (site: string) => `Só se parece com ele. Não digite aqui sua senha do ${site}.`,
+    },
     offer: {
       title: "O acesso aos sites está desativado",
       body: "Permita para receber ofertas de salvar logins e usar chaves de acesso com o HavenKeys.",

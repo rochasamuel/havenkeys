@@ -9,7 +9,7 @@ import { SSO_PROVIDERS, type IdentityRole, type Match, type SsoProvider } from "
 import type { CardsView, IdentityFillReply, PopupReply, PopupRequest, PopupState, TotpView } from "../messaging/popup";
 import { INLINE_ORIGINS, grantedOrigins } from "../background/registration";
 import { applyDocumentLang, t } from "../i18n";
-import { cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
+import { alertIcon, cardBrandIcon, idCardIcon, providerIcon } from "../menu/icons";
 import type { CardRowView } from "../messaging/inline";
 import { displayHost } from "../shared/url";
 import { tagChips } from "../shared/tags";
@@ -319,6 +319,16 @@ function lockedNotice(): HTMLElement {
   return box;
 }
 
+/** The page only looks like a saved site (spec 2026-10-13-lookalike-warning §5). The site is set as text. */
+function lookalikeNotice(saved: string): HTMLElement {
+  const box = notice(t.popup.lookalike.title(saved), t.popup.lookalike.body(saved));
+  box.classList.add("lookalike");
+  box.setAttribute("role", "alert");
+  // The menu's look-alike mark: one ember sign across the three surfaces.
+  box.prepend(h("span", { className: "notice-mark" }, alertIcon(18)));
+  return box;
+}
+
 function render(state: PopupState): void {
   lockBtn.hidden = state.kind !== "unlocked";
   switch (state.kind) {
@@ -369,7 +379,7 @@ function render(state: PopupState): void {
       if (!state.site) {
         parts.push(notice(t.popup.noPage.title, t.popup.noPage.body));
       } else if (state.matches.length === 0) {
-        parts.push(notice(t.popup.noMatches.title, t.popup.noMatches.body));
+        parts.push(state.lookalikeOf ? lookalikeNotice(state.lookalikeOf) : notice(t.popup.noMatches.title, t.popup.noMatches.body));
       } else {
         parts.push(h("ul", { className: "list" }, ...state.matches.map(matchRow)));
       }

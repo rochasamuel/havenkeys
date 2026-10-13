@@ -45,7 +45,14 @@ export type PopupState =
   | { kind: "no_vault" }
   | { kind: "locked" }
   | { kind: "disabled" }
-  | { kind: "unlocked"; site: string | null; matches: Match[]; identity: { title: string } | null }
+  | {
+      kind: "unlocked";
+      site: string | null;
+      matches: Match[];
+      identity: { title: string } | null;
+      /** The saved site this page only looks like; set only when `matches` is empty. */
+      lookalikeOf: string | null;
+    }
   /** Trial over: logins are listed, codes still shown, nothing is filled. */
   | { kind: "frozen"; site: string | null; matches: Match[] }
   | { kind: "error"; message: string };

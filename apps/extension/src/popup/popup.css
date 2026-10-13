@@ -183,6 +183,30 @@ main {
   border-left: 3px solid var(--brass-ink);
 }
 
+/* A look-alike page (spec 2026-10-13-lookalike-warning §5): the menu's
+   ember mark on its 12% ember wash (the desktop's quiet-danger) above an
+   ember title, as the menu's look-alike row and the save prompt's warning.
+   The body stays muted. The saved site's name wraps; it never truncates. */
+.notice-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.notice.lookalike strong {
+  color: var(--danger);
+}
+
+.notice.lookalike strong,
+.notice.lookalike p {
+  overflow-wrap: anywhere;
+}
+
 .notice.frozen .btn,
 .notice.locked .btn {
   margin-top: 12px;

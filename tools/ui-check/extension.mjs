@@ -159,6 +159,13 @@ export const extensionScenarios = [
     replies: () => ({ popup_state: ok({ kind: "unlocked", site: "example.com", matches: [], identity: null }) }),
   },
   {
+    name: "popup-unlocked-lookalike",
+    page: "popup.html",
+    frame: { kind: "popup" },
+    granted: true,
+    replies: () => ({ popup_state: ok({ kind: "unlocked", site: "xn--gthub-n2e.com", matches: [], identity: null, lookalikeOf: "github.com" }) }),
+  },
+  {
     name: "popup-unlocked-no-page",
     page: "popup.html",
     frame: { kind: "popup" },

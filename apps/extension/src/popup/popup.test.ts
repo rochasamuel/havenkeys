@@ -239,3 +239,23 @@ describe("popup frozen", () => {
     expect(asked.map((m) => (m as { type: string }).type)).not.toContain("popup_fill");
   });
 });
+
+describe("popup look-alike warning", () => {
+  it("replaces the no-logins notice with the warning, as text", async () => {
+    replies.popup_state = async () => ({
+      ok: true,
+      value: { kind: "unlocked", site: "xn--gthub-n2e.com", matches: [], identity: { title: "Samuel" }, lookalikeOf: "github.com" },
+    });
+    await load();
+    const box = document.querySelector(".notice.lookalike")!;
+    expect(box.textContent).toContain("github.com");
+    expect(document.body.textContent).not.toContain(en.popup.noMatches.title);
+  });
+
+  it("a state without lookalikeOf shows the usual notice", async () => {
+    replies.popup_state = async () => ({ ok: true, value: { kind: "unlocked", site: "shop.com", matches: [], identity: { title: "Samuel" } } });
+    await load();
+    expect(document.querySelector(".notice.lookalike")).toBeNull();
+    expect(document.body.textContent).toContain(en.popup.noMatches.title);
+  });
+});

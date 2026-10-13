@@ -129,7 +129,7 @@ export function createPopupHandler(
         const found = await client.request({ type: "find_matches", url });
         return { kind: "frozen", site: displayHost(url), matches: found.matches };
       }
-      if (!url) return { kind: "unlocked", site: null, matches: [], identity: null };
+      if (!url) return { kind: "unlocked", site: null, matches: [], identity: null, lookalikeOf: null };
       // Both at once: the popup waits for the slower of the two, not their sum.
       const [found, identity] = await Promise.all([
         client.request({ type: "find_matches", url }),
@@ -138,7 +138,15 @@ export function createPopupHandler(
           .then((s) => (s.roles.length > 0 ? { title: s.title } : null))
           .catch(() => null),
       ]);
-      return { kind: "unlocked", site: displayHost(url), matches: found.matches, identity };
+      // Only a page with no logins can be a look-alike; any error is no warning.
+      const lookalikeOf =
+        found.matches.length === 0
+          ? await client
+              .request({ type: "check_lookalike", url })
+              .then((r) => r.lookalikeOf)
+              .catch(() => null)
+          : null;
+      return { kind: "unlocked", site: displayHost(url), matches: found.matches, identity, lookalikeOf };
     } catch (e) {
       return stateForError(e);
     }

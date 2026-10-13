@@ -73,11 +73,13 @@ describe("popup handler", () => {
     const c = fakeClient((r) =>
       r.type === "status"
         ? { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" }
-        : { type: "find_matches", matches: [], entitlement: "full" },
+        : r.type === "check_lookalike"
+          ? { type: "check_lookalike", lookalikeOf: null }
+          : { type: "find_matches", matches: [], entitlement: "full" },
     );
     const h = createPopupHandler(c, async () => ({ id: 1, url: "https://github.com/login?next=x#y" }));
     const r = await h.handle({ type: "popup_state" });
-    expect(r).toEqual({ ok: true, value: { kind: "unlocked", site: "github.com", matches: [], identity: null } });
+    expect(r).toEqual({ ok: true, value: { kind: "unlocked", site: "github.com", matches: [], identity: null, lookalikeOf: null } });
     expect(c.seen[1]).toEqual({ type: "find_matches", url: "https://github.com/login" });
   });
 
@@ -412,9 +414,9 @@ describe("popup cards", () => {
 
   it("draws the logins without looking for cards", async () => {
     const { h, requests, scans } = handler("https://shop.com/checkout", true);
-    expect(await h.handle({ type: "popup_state" })).toEqual({ ok: true, value: { kind: "unlocked", site: "shop.com", matches: [], identity: null } });
+    expect(await h.handle({ type: "popup_state" })).toEqual({ ok: true, value: { kind: "unlocked", site: "shop.com", matches: [], identity: null, lookalikeOf: null } });
     expect(scans.n).toBe(0);
-    expect(requests.map((x) => x.type)).toEqual(["status", "find_matches", "find_identity"]);
+    expect(requests.map((x) => x.type)).toEqual(["status", "find_matches", "find_identity", "check_lookalike"]);
   });
 
   it("fills an offered card into the tab, and reports no card form", async () => {
@@ -505,5 +507,48 @@ describe("popup frozen", () => {
     expect(created).toEqual(["https://havenkeys.net/pricing"]);
     expect(parsePopupRequest({ type: "popup_open_pricing" })).toEqual({ type: "popup_open_pricing" });
     expect(parsePopupRequest({ type: "popup_open_pricing", url: "https://evil.com" })).toBeNull();
+  });
+});
+
+describe("popup look-alike warning", () => {
+  const status = { type: "status", state: "unlocked", vaultExists: true, entitlement: "full" };
+  const answer = (lookalike: () => unknown) => (r: Request) => {
+    switch (r.type) {
+      case "status":
+        return status;
+      case "find_matches":
+        return { type: "find_matches", matches: [], entitlement: "full" };
+      case "find_identity":
+        return { type: "find_identity", title: "Me", email: null, roles: [] };
+      case "check_lookalike":
+        return lookalike();
+      default:
+        throw new Error(r.type);
+    }
+  };
+  const tab = async () => ({ id: 1, url: "https://xn--gthub-n2e.com/login?x=1" });
+
+  it("names the saved site when the page has no logins", async () => {
+    const client = fakeClient(answer(() => ({ type: "check_lookalike", lookalikeOf: "github.com" })));
+    const r = await createPopupHandler(client, tab).handle({ type: "popup_state" });
+    expect(r).toMatchObject({ ok: true, value: { kind: "unlocked", matches: [], lookalikeOf: "github.com" } });
+    expect(client.seen.find((x) => x.type === "check_lookalike")).toEqual({ type: "check_lookalike", url: "https://xn--gthub-n2e.com/login" });
+  });
+
+  it("an error is no warning", async () => {
+    const client = fakeClient(
+      answer(() => {
+        throw new BridgeError("malformed", "x");
+      }),
+    );
+    const r = await createPopupHandler(client, tab).handle({ type: "popup_state" });
+    expect(r).toMatchObject({ ok: true, value: { kind: "unlocked", lookalikeOf: null } });
+  });
+
+  it("does not ask when the page has logins", async () => {
+    const m = { id: ID, title: "GitHub", username: "octo", hasTotp: false, strength: "same_host", provider: null, tags: [] };
+    const client = fakeClient((r) => (r.type === "find_matches" ? { type: "find_matches", matches: [m], entitlement: "full" } : answer(() => null)(r)));
+    await createPopupHandler(client, tab).handle({ type: "popup_state" });
+    expect(client.seen.some((x) => x.type === "check_lookalike")).toBe(false);
   });
 });

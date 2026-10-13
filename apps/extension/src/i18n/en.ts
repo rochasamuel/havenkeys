@@ -111,6 +111,11 @@ export const en = {
       title: "No saved logins for this site",
       body: "Logins saved in HavenKeys for this website appear here.",
     },
+    /** A page that only looks like a saved site (spec 2026-10-13-lookalike-warning §5). */
+    lookalike: {
+      title: (site: string) => `This isn’t ${site}`,
+      body: (site: string) => `It only looks like it. Don’t enter your ${site} password here.`,
+    },
     offer: {
       title: "Site access is off",
       body: "Allow it to get offers to save logins and to use passkeys with HavenKeys.",
