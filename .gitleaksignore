@@ -17,3 +17,5 @@ d9839685f549e8ba45fc55788887d54c8e2c80fd:tools/ui-check/desktop.mjs:generic-api-
 d9839685f549e8ba45fc55788887d54c8e2c80fd:tools/ui-check/extension.mjs:generic-api-key:5
 # Made-up Secret Key in the website's illustrated walkthrough.
 5af3628118fe30c0162ef2d479625eec3c30e852:apps/web/src/components/journey/Scenes.tsx:generic-api-key:10
+# HavenKeys' public passkey AAGUID (an authenticator model ID, not a secret).
+7b3d04b4cdc9d6ddf91dd155a9e92a19efaa19a8:crates/havenkeys-core/src/passkey/webauthn.rs:generic-api-key:24
