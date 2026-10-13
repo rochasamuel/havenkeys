@@ -43,3 +43,127 @@ body {
 .quick-unlock .unlock-field {
   width: 100%;
 }
+
+/* The quick unlock's error sits 12px under the field, as on the unlock
+   screen (the grid gap already spaces it). */
+.quick-unlock .unlock-error {
+  margin-top: -2px;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.quick-unlock .unlock-fields {
+  width: 100%;
+}
+
+/* ---------------------------------------------------------------- search */
+
+.quick-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  height: 56px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.quick-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 17px;
+}
+
+/* The bar marks focus (brass glass and caret), as the sidebar search does. */
+.quick-search input:focus-visible {
+  box-shadow: none;
+}
+
+.quick-search input::placeholder {
+  color: var(--muted);
+}
+
+.quick-search:focus-within {
+  color: var(--brass-ink);
+}
+
+.quick-list {
+  flex: 1;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.quick-list .list-item {
+  grid-template-columns: 34px minmax(0, 1fr);
+  cursor: default;
+}
+
+.quick-list .list-item[aria-selected="true"] {
+  background: var(--sel);
+}
+
+.quick-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  /* The list's empty line: a small serif title, as in the main window. */
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--text-strong);
+  text-align: center;
+}
+
+.quick-error {
+  flex: none;
+  margin: 0;
+  padding: 0 18px;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.quick-error.is-visible {
+  padding-block: 6px;
+}
+
+.quick-hints {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 9px 18px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.quick-hints-end {
+  margin-left: auto;
+}
+
+/* Key caps as in the sidebar's lock button: the body face, never mono. */
+.quick-hints kbd {
+  display: inline-block;
+  min-width: 20px;
+  margin-right: 3px;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--group);
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 17px;
+  text-align: center;
+  color: var(--text);
+}

@@ -114,6 +114,8 @@ describe("QuickApp", () => {
     await submit();
     expect(host.textContent).toContain(en.errors.codes.unlock_failed);
     expect(password()!.value).toBe("");
+    expect(host.querySelector(".unlock-fields.is-shaking")).not.toBeNull();
+    expect(document.activeElement).toBe(password());
   });
 
   it("sends the user to the main window when the Secret Key is needed", async () => {
@@ -143,6 +145,18 @@ describe("QuickApp", () => {
     expect(search()).not.toBeNull();
     await act(async () => locked?.("idle"));
     expect(password()).not.toBeNull();
+  });
+
+  it("a lock clears the query", async () => {
+    status.mockResolvedValue(UNLOCKED);
+    await render();
+    await act(async () => type("input[role=combobox]", "git"));
+    expect(search()!.value).toBe("git");
+    // Only the lock event: no `shown`, so the lock handler alone must reset the view.
+    await act(async () => locked?.("idle"));
+    await act(async () => type("input[type=password]", "correct horse"));
+    await submit();
+    expect(search()!.value).toBe("");
   });
 
   it("re-reads the lock state each time it is shown", async () => {

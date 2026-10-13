@@ -172,13 +172,13 @@ if (!appFilter || appFilter === "desktop") {
     if (only && !scenario.name.includes(only)) continue;
     for (const locale of LOCALES) {
       for (const theme of THEMES) {
-        for (const size of DESKTOP_SIZES) {
+        for (const size of scenario.sizes ?? DESKTOP_SIZES) {
           const { context, page } = await newPage(locale, theme);
           const label = `desktop/${locale}/${theme}/${size.name}/${scenario.name}`;
           page.__label = label;
           await page.setViewportSize({ width: size.width, height: size.height });
           await page.addInitScript(tauriStub, desktopSetup(scenario, locale, theme));
-          await page.goto(`${baseUrl}/`);
+          await page.goto(`${baseUrl}${scenario.path ?? "/"}`);
           await page.evaluate(() => document.fonts.ready);
           await page.addStyleTag({ content: STILL });
           await page.waitForTimeout(250);

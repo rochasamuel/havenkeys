@@ -315,6 +315,7 @@ function baseResponses() {
     restore_item: items[0],
     purge_item: null,
     empty_trash: 3,
+    hide_quick_window: null,
   };
 }
 
@@ -1073,6 +1074,33 @@ export const desktopScenarios = [
       await page.waitForTimeout(300);
     },
     shots: ["settings-block:4", "settings-block:5"],
+  },
+  // ---------------------------------------------------------------- Quick Access window
+  {
+    name: "quick-locked",
+    path: "/quick.html",
+    sizes: [{ name: "quick", width: 640, height: 420 }],
+    respond: { vault_status: { state: "locked", vaultExists: true, damagedItems: 0, unreadableItems: 0 } },
+  },
+  {
+    name: "quick-locked-error",
+    path: "/quick.html",
+    sizes: [{ name: "quick", width: 640, height: 420 }],
+    respond: {
+      vault_status: { state: "locked", vaultExists: true, damagedItems: 0, unreadableItems: 0 },
+      unlock_vault: reject("secret_key_required"),
+    },
+    async act(page) {
+      await page.fill(".quick-unlock input[type=password]", "password");
+      await page.press(".quick-unlock input[type=password]", "Enter");
+    },
+  },
+  { name: "quick-search", path: "/quick.html", sizes: [{ name: "quick", width: 640, height: 420 }] },
+  {
+    name: "quick-search-empty",
+    path: "/quick.html",
+    sizes: [{ name: "quick", width: 640, height: 420 }],
+    respond: { list_items: [] },
   },
 ];
 

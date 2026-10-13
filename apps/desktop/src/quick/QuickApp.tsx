@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useActivityReporter } from "../lib/hooks";
+import { QuickSearch } from "./QuickSearch";
 import { QuickUnlock } from "./QuickUnlock";
-import { QuickSearchPlaceholder as QuickSearch } from "./QuickUnlock"; // Task 5 replaces this import
 
 type View = "loading" | "locked" | "unlocked";
 

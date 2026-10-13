@@ -11,8 +11,9 @@ import { applyTheme } from "../lib/theme";
 import { QuickApp } from "./QuickApp";
 
 // The theme is a sealed vault setting this window cannot read
-// (capabilities/quick.json has no get_settings): it stays the default.
-applyTheme("dark");
+// (capabilities/quick.json has no get_settings). It follows the OS colour
+// scheme in CSS, like the extension's popup: it floats over other apps.
+applyTheme("system");
 if (/Mac/.test(navigator.userAgent)) document.documentElement.dataset.platform = "mac";
 
 const root = document.getElementById("root");

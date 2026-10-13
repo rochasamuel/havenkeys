@@ -16,9 +16,12 @@ export function QuickUnlock({ onUnlocked, onHide }: Props) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on every failure so the shake replays, as on the unlock screen.
+  const [attempt, setAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => inputRef.current?.focus(), []);
+  // The field remounts with each attempt: focus the new one.
+  useEffect(() => inputRef.current?.focus(), [attempt]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -37,7 +40,7 @@ export function QuickUnlock({ onUnlocked, onHide }: Props) {
       );
       setPassword("");
       setBusy(false);
-      inputRef.current?.focus();
+      setAttempt((a) => a + 1);
     }
   }
 
@@ -53,37 +56,30 @@ export function QuickUnlock({ onUnlocked, onHide }: Props) {
       <form className="quick-unlock" onSubmit={submit} aria-busy={busy}>
         <Seal open={busy} size={40} />
         <p className="quick-lede">{t.quick.unlockLede}</p>
-        <label className="unlock-field">
-          <span className="sr-only">{t.common.masterPassword}</span>
-          <input
-            ref={inputRef}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            autoCapitalize="off"
-            placeholder={t.common.masterPassword}
-            disabled={busy}
-            aria-invalid={!!error}
-          />
-          <button className="unlock-go" type="submit" disabled={busy || !password} aria-label={t.unlock.unlock}>
-            {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="arrowRight" size={18} />}
-          </button>
-        </label>
+        <div key={attempt} className={`unlock-fields${attempt > 0 ? " is-shaking" : ""}`}>
+          <label className="unlock-field">
+            <span className="sr-only">{t.common.masterPassword}</span>
+            <input
+              ref={inputRef}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="off"
+              placeholder={t.common.masterPassword}
+              disabled={busy}
+              aria-invalid={!!error}
+            />
+            <button className="unlock-go" type="submit" disabled={busy || !password} aria-label={t.unlock.unlock}>
+              {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="arrowRight" size={18} />}
+            </button>
+          </label>
+        </div>
         <p className={`unlock-error${error ? " is-visible" : ""}`} role="alert">
           {error}
         </p>
       </form>
-    </main>
-  );
-}
-
-/** Until Task 5: the unlocked view's frame, so the lock flow can be tested. */
-export function QuickSearchPlaceholder({ onHide }: { onHide: () => void }) {
-  return (
-    <main className="quick" onKeyDown={(e) => e.key === "Escape" && onHide()}>
-      <input role="combobox" aria-expanded="false" aria-controls="quick-results" />
     </main>
   );
 }
