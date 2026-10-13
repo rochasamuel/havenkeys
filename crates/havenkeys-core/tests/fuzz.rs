@@ -188,9 +188,18 @@ fn fuzz_url_parsing_and_matching() {
     }
 }
 
+/// Both policies a match may run under: the direct one (save, Sign in
+/// with, passkeys) and the widened one the equivalent-domains setting turns on.
+const POLICIES: [MatchPolicy; 2] = [
+    MatchPolicy::DIRECT,
+    MatchPolicy {
+        equivalent_domains: true,
+    },
+];
+
 /// The phishing properties of CLAUDE.md §23–24, checked on generated
 /// look-alikes of many real sites instead of a hand-written list: none of
-/// them may ever match, while real subdomains must.
+/// them may ever match, while real subdomains must. Under either policy.
 #[test]
 fn fuzz_lookalike_hosts_never_match() {
     // (host of the saved rule, its registrable domain)
@@ -202,6 +211,8 @@ fn fuzz_lookalike_hosts_never_match() {
         ("example.org", "example.org"),
         ("paypal.com", "paypal.com"),
         ("login.microsoftonline.com", "microsoftonline.com"),
+        ("apple.com", "apple.com"),
+        ("icloud.com", "icloud.com"),
     ];
     let evil = [
         "evil.com",
@@ -229,41 +240,142 @@ fn fuzz_lookalike_hosts_never_match() {
             format!("{site}@{bad}"), // userinfo trick
             format!("{bad}#{site}"),
         ];
-        for rule_type in [MatchType::Exact, MatchType::Origin, MatchType::Domain] {
-            let rule = UrlRule {
-                url: format!("https://{site}/"),
-                match_type: rule_type,
-            };
-            for host in &lookalikes {
-                let page = format!("https://{host}/");
-                if let Some(p) = PageUrl::parse(&page) {
-                    assert_eq!(
-                        match_rule(&rule, &p, MatchPolicy::DIRECT),
-                        None,
-                        "{page} matched {site}"
-                    );
+        for policy in POLICIES {
+            for rule_type in [MatchType::Exact, MatchType::Origin, MatchType::Domain] {
+                let rule = UrlRule {
+                    url: format!("https://{site}/"),
+                    match_type: rule_type,
+                };
+                for host in &lookalikes {
+                    let page = format!("https://{host}/");
+                    if let Some(p) = PageUrl::parse(&page) {
+                        assert_eq!(
+                            match_rule(&rule, &p, policy),
+                            None,
+                            "{page} matched {site} under {policy:?}"
+                        );
+                    }
                 }
                 // A downgrade of the real site never matches an https rule.
                 let downgrade = PageUrl::parse(&format!("http://{site}/")).unwrap();
-                assert_eq!(match_rule(&rule, &downgrade, MatchPolicy::DIRECT), None);
+                assert_eq!(match_rule(&rule, &downgrade, policy), None);
+            }
+            // Real subdomains match a whole-site rule, and only as "same site".
+            let rule = UrlRule {
+                url: format!("https://{site}/"),
+                match_type: MatchType::Domain,
+            };
+            let sub = PageUrl::parse(&format!("https://{label}.{site}/")).unwrap();
+            assert_eq!(
+                match_rule(&rule, &sub, policy),
+                Some(MatchStrength::SameSite),
+                "{label}.{site}"
+            );
+            let origin_rule = UrlRule {
+                match_type: MatchType::Origin,
+                ..rule
+            };
+            assert_eq!(match_rule(&origin_rule, &sub, policy), None);
+        }
+    }
+}
+
+/// Look-alikes of a site the equivalent-domains table relates to the saved
+/// one (`icloud.com.evil.com`, `evil-icloud.com`, `icloud.co`, an IDN
+/// homograph of `icloud.com`) never match the saved site's rules, under
+/// either policy; the real related site and its subdomains match a
+/// whole-site rule only when the policy allows, and never over http.
+#[test]
+fn fuzz_lookalikes_of_related_sites_never_match() {
+    // (the saved rule's site, a site in its group)
+    let pairs = [
+        ("apple.com", "icloud.com"),
+        ("icloud.com", "apple.com"),
+        ("youtube.com", "google.com"),
+        ("google.com", "google.com.br"),
+        ("google.com", "youtube.com"),
+        ("microsoft.com", "outlook.com"),
+        ("ebay.com", "ebay.co.uk"),
+        ("mercadolivre.com.br", "mercadopago.com.br"),
+        ("twitter.com", "x.com"),
+        ("proton.me", "protonmail.com"),
+        ("wise.com", "transferwise.com"),
+    ];
+    let evil = ["evil.com", "attacker.net", "co.uk", "com.br", "github.io"];
+    let mut rng = Rng::new(0xE0_1C);
+    for _ in 0..5_000 {
+        let (site, related) = *rng.pick(&pairs);
+        let bad = *rng.pick(&evil);
+        let label = format!("x{}", rng.below(1000));
+        let (first, rest) = related.split_once('.').unwrap();
+        let mut lookalikes = vec![
+            format!("{related}.{bad}"),        // icloud.com.evil.com
+            format!("evil-{related}"),         // evil-icloud.com
+            format!("{first}-{label}.{rest}"), // icloud-x12.com
+            format!("{label}{related}"),       // x12icloud.com
+            format!("{bad}{related}"),         // evil.comicloud.com
+            format!("{}-login.{bad}", related.replace('.', "-")),
+            format!("xn--{first}-{label}.{rest}"), // punycode-looking label
+            format!("{related}@{bad}"),            // userinfo trick
+            format!("{bad}/{related}"),            // path, not host
+        ];
+        // Under a public suffix (icloud.co.uk) the label could form a real
+        // group member (google.co.uk), so only under registrable domains.
+        if !bad.starts_with("co") {
+            lookalikes.push(format!("{first}.{bad}")); // icloud.evil.com
+        }
+        if let Some(stem) = related.strip_suffix(".com") {
+            lookalikes.push(format!("{stem}.co")); // icloud.co
+            lookalikes.push(format!("{stem}.cm"));
+        }
+        // An IDN homograph of the related site's first label (Cyrillic а, о, е).
+        for (latin, cyrillic) in [('a', 'а'), ('o', 'о'), ('e', 'е')] {
+            if first.contains(latin) {
+                lookalikes.push(format!(
+                    "{}.{rest}",
+                    first.replacen(latin, &cyrillic.to_string(), 1)
+                ));
             }
         }
-        // Real subdomains match a whole-site rule, and only as "same site".
-        let rule = UrlRule {
-            url: format!("https://{site}/"),
-            match_type: MatchType::Domain,
-        };
-        let sub = PageUrl::parse(&format!("https://{label}.{site}/")).unwrap();
-        assert_eq!(
-            match_rule(&rule, &sub, MatchPolicy::DIRECT),
-            Some(MatchStrength::SameSite),
-            "{label}.{site}"
-        );
-        let origin_rule = UrlRule {
-            match_type: MatchType::Origin,
-            ..rule
-        };
-        assert_eq!(match_rule(&origin_rule, &sub, MatchPolicy::DIRECT), None);
+        for policy in POLICIES {
+            for rule_type in [MatchType::Exact, MatchType::Origin, MatchType::Domain] {
+                let rule = UrlRule {
+                    url: format!("https://{site}/"),
+                    match_type: rule_type,
+                };
+                for host in &lookalikes {
+                    let page = format!("https://{host}/");
+                    if let Some(p) = PageUrl::parse(&page) {
+                        assert_eq!(
+                            match_rule(&rule, &p, policy),
+                            None,
+                            "{page} matched {site} under {policy:?}"
+                        );
+                    }
+                }
+                // The related site over http never matches.
+                let downgrade = PageUrl::parse(&format!("http://{related}/")).unwrap();
+                assert_eq!(match_rule(&rule, &downgrade, policy), None);
+                let sub_downgrade = PageUrl::parse(&format!("http://{label}.{related}/")).unwrap();
+                assert_eq!(match_rule(&rule, &sub_downgrade, policy), None);
+            }
+            // The real related site: only a whole-site rule, only when allowed.
+            for page in [
+                format!("https://{related}/"),
+                format!("https://{label}.{related}/"),
+            ] {
+                let p = PageUrl::parse(&page).unwrap();
+                for rule_type in [MatchType::Exact, MatchType::Origin, MatchType::Domain] {
+                    let rule = UrlRule {
+                        url: format!("https://{site}/"),
+                        match_type: rule_type,
+                    };
+                    let want = (rule_type == MatchType::Domain && policy.equivalent_domains)
+                        .then_some(MatchStrength::Equivalent);
+                    assert_eq!(match_rule(&rule, &p, policy), want, "{page} vs {site}");
+                }
+            }
+        }
     }
 }
 
