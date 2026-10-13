@@ -15,6 +15,7 @@ pub mod card;
 pub mod card_page;
 pub mod crypto;
 pub mod custom_field;
+mod equivalent;
 pub mod error;
 pub mod export;
 pub mod generator;

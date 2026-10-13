@@ -1,0 +1,16 @@
+{
+  "groups": [
+    { "note": "Apple Account", "domains": ["apple.com", "icloud.com"] },
+    { "note": "Google Account", "domains": ["google.com", "google.com.br", "google.co.uk", "google.de", "google.fr", "google.es", "google.it", "google.ca", "google.com.au", "youtube.com"] },
+    { "note": "Microsoft account (personal)", "domains": ["live.com", "microsoft.com", "outlook.com", "xbox.com"] },
+    { "note": "eBay account (one account across eBay sites)", "domains": ["ebay.com", "ebay.co.uk", "ebay.de", "ebay.fr", "ebay.it", "ebay.es", "ebay.ca", "ebay.com.au"] },
+    { "note": "Mercado Livre account, also used by Mercado Pago (Brazil)", "domains": ["mercadolivre.com.br", "mercadopago.com.br"] },
+    { "note": "Steam account", "domains": ["steampowered.com", "steamcommunity.com"] },
+    { "note": "X (Twitter) account", "domains": ["x.com", "twitter.com"] },
+    { "note": "Facebook account, also used by Messenger", "domains": ["facebook.com", "messenger.com"] },
+    { "note": "Proton Account", "domains": ["proton.me", "protonmail.com"] },
+    { "note": "Uber account, also used by Uber Eats", "domains": ["uber.com", "ubereats.com"] },
+    { "note": "Discord account", "domains": ["discord.com", "discordapp.com"] },
+    { "note": "Wise account (formerly TransferWise)", "domains": ["wise.com", "transferwise.com"] }
+  ]
+}
