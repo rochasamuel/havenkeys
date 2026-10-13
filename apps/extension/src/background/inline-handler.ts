@@ -183,6 +183,8 @@ interface MenuSession {
   card: CardMenu | null;
   /** The top frame showing this menu for a processor frame. */
   host: Pick<FrameRef, "tabId" | "frameId"> | null;
+  /** The saved site this page only looks like: the menu shows only the warning. */
+  lookalikeOf: string | null;
   expires: number;
 }
 
@@ -558,6 +560,12 @@ export function createInlineHandler(deps: InlineDeps) {
       if (e instanceof BridgeError && e.code === "locked") locked = true;
       else return { ok: false };
     }
+    // A page that only looks like a saved site: one warning row, no fill
+    // rows (no logins, passkeys or identity), even on focus.
+    if (!locked && items.length === 0 && (kind === "login" || kind === "otp")) {
+      const imitated = await lookalikeOf(frame);
+      if (imitated) return register(frame, kind, false, [], [], { hint: null, help: null }, [], null, null, imitated);
+    }
     if (kind === "otp") items = items.filter((m) => m.hasTotp);
     if (kind === "new_password") items = [];
     const passkeys = kind === "login" && !locked ? (deps.passkeys?.conditionalFor(frame) ?? []) : [];
@@ -584,6 +592,7 @@ export function createInlineHandler(deps: InlineDeps) {
     roles: IdentityRole[] = [],
     identity: IdentityRowView | null = null,
     card: CardMenu | null = null,
+    lookalikeOf: string | null = null,
   ): OpenMenuReply {
     closeMenu(frame.tabId);
     const token = deps.newToken();
@@ -600,11 +609,12 @@ export function createInlineHandler(deps: InlineDeps) {
       identity,
       card,
       host: null,
+      lookalikeOf,
       expires: deps.now() + MENU_TTL_MS,
     });
     const offered = items.length + passkeys.length + (hint ? 1 : 0) + (identity ? 1 : 0);
     const rows =
-      locked || kind === "new_password" || kind === "identity"
+      lookalikeOf || locked || kind === "new_password" || kind === "identity"
         ? 1
         : kind === "card"
           ? Math.max(1, Math.min(card && !card.insecure ? card.rows.length : 1, MENU_MAX_ROWS))
@@ -617,6 +627,19 @@ export function createInlineHandler(deps: InlineDeps) {
     try {
       const { matches } = await deps.client.request({ type: "find_matches", ...frameFields(frame) });
       return matches.find((m) => m.id === itemId)?.username ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The saved site this frame only looks like, or null. Any error (an older
+   * desktop that does not know the request, locked meanwhile, rate limited)
+   * is no warning. Rust decides; the answer only shapes our own frames.
+   */
+  async function lookalikeOf(frame: FrameRef): Promise<string | null> {
+    try {
+      return (await deps.client.request({ type: "check_lookalike", ...frameFields(frame) })).lookalikeOf;
     } catch {
       return null;
     }
@@ -794,6 +817,7 @@ export function createInlineHandler(deps: InlineDeps) {
         const m = liveMenu(tabId, req.token);
         if (!m) return { ok: false, message: t.errors.menuExpired };
         if (m.locked) return { ok: true, value: { state: "locked" } };
+        if (m.lookalikeOf) return { ok: true, value: { state: "lookalike", site: displayHost(m.frame.url) ?? "", lookalikeOf: m.lookalikeOf } };
         if (m.kind === "card" && m.card) {
           // The top page's site: that is who is paid.
           const site = displayHost(m.frame.topUrl ?? m.frame.url) ?? "";

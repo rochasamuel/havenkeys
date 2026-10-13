@@ -7,7 +7,7 @@ import { applyDocumentLang, t as msg } from "../i18n";
 import { MENU_MAX_HEIGHT, MENU_MAX_ROWS, MENU_MIN_HEIGHT, type CardRowView, type IdentityRowView, type MenuItemView, type MenuView } from "../messaging/inline";
 import { tagChips } from "../shared/tags";
 import { ask, createClickGuard, h, monogram, receiveToken, userData } from "./common";
-import { cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
+import { alertIcon, cardBrandIcon, idCardIcon, providerIcon, switchesIcon, unlockIcon } from "./icons";
 
 const main = document.getElementById("main") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -336,6 +336,20 @@ function hintNote(title: string, detail: string): HTMLElement {
   );
 }
 
+/**
+ * A look-alike page's warning (spec 2026-10-13-lookalike-warning §5): it
+ * informs and fills nothing, so it is no button and not in the arrow-key
+ * order. The saved site comes from Rust and is set as text.
+ */
+function lookalikeNote(saved: string): HTMLElement {
+  const note = hintNote(msg.menu.lookalikeTitle(saved), msg.menu.lookalikeBody);
+  note.classList.add("lookalike");
+  // An ember mark in the avatar column: the warning does not rest on colour alone.
+  note.prepend(h("span", { className: "avatar avatar-icon" }, alertIcon()));
+  note.setAttribute("role", "alert");
+  return note;
+}
+
 /** Characters of the host shown at most, the leading "…" included. */
 const DEST_HOST_MAX = 32;
 
@@ -375,6 +389,11 @@ function showDestination(host: string): void {
 function render(t: string, view: MenuView): void {
   if (view.state === "locked") {
     main.replaceChildren(lockedMessage(t));
+    return;
+  }
+  if (view.state === "lookalike") {
+    site.textContent = view.site;
+    main.replaceChildren(lookalikeNote(view.lookalikeOf));
     return;
   }
   if (view.state === "cards") {

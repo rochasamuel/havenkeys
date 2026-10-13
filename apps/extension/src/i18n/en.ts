@@ -193,6 +193,8 @@ export const en = {
     passkeyAccountFallback: "account",
     usePasskeyTitle: (site: string) => `You have a passkey for ${site}`,
     usePasskeyBody: "Use the site’s “Sign in with a passkey” option",
+    lookalikeTitle: (site: string) => `This isn’t ${site}`,
+    lookalikeBody: "It only looks like it, so HavenKeys won’t fill here.",
     addPasskeyTitle: (name: string) => `${name} supports passkeys`,
     addPasskeyBody: "How to add one",
     noCodesTitle: "No one-time codes here",

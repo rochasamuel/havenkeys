@@ -160,6 +160,8 @@ export const ptBR: Messages = {
     passkeyAccountFallback: "conta",
     usePasskeyTitle: (site: string) => `Você tem uma chave de acesso para ${site}`,
     usePasskeyBody: "Use a opção do site para entrar com chave de acesso",
+    lookalikeTitle: (site: string) => `Este site não é ${site}`,
+    lookalikeBody: "Só se parece com ele, então o HavenKeys não preenche aqui.",
     addPasskeyTitle: (name: string) => `${name} aceita chaves de acesso`,
     addPasskeyBody: "Como adicionar uma",
     noCodesTitle: "Nenhum código de verificação aqui",

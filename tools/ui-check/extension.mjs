@@ -368,6 +368,12 @@ export const extensionScenarios = [
       replies: () => ({ menu_state: ok(menuView({ items: [] })) }),
     },
     {
+      name: `menu-lookalike-${width}`,
+      page: "menu.html",
+      frame: { kind: "menu", width, rows: 1 },
+      replies: () => ({ menu_state: ok({ state: "lookalike", site: "xn--gthub-n2e.com", lookalikeOf: "github.com" }) }),
+    },
+    {
       name: `menu-empty-otp-${width}`,
       page: "menu.html",
       frame: { kind: "menu", width, rows: 1 },

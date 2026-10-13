@@ -608,3 +608,23 @@ describe("field menu tags", () => {
     expect(document.querySelector("button.row .tags")).toBeNull();
   });
 });
+
+describe("look-alike warning", () => {
+  it("shows one warning naming the saved site, with nothing to click", async () => {
+    replies = [{ ok: true, value: { state: "lookalike", site: "xn--gthub-n2e.com", lookalikeOf: "github.com" } }];
+    await load();
+    const main = document.getElementById("main")!;
+    expect(main.querySelectorAll("button")).toHaveLength(0);
+    const note = main.querySelector(".lookalike")!;
+    expect(note.getAttribute("role")).toBe("alert");
+    expect(note.textContent).toContain("github.com");
+    expect(document.getElementById("site")!.textContent).toBe("xn--gthub-n2e.com");
+  });
+
+  it("renders the saved site as text, never as markup", async () => {
+    replies = [{ ok: true, value: { state: "lookalike", site: "a.com", lookalikeOf: "<img src=x>.com" } }];
+    await load();
+    expect(document.querySelector("#main img")).toBeNull();
+    expect(document.querySelector(".lookalike")!.textContent).toContain("<img src=x>.com");
+  });
+});

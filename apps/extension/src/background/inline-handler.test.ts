@@ -69,6 +69,8 @@ function defaultAnswer(r: Request): unknown {
       return { type: "check_login", action: "add", itemId: null };
     case "save_login":
       return { type: "save_login", itemId: GH };
+    case "check_lookalike":
+      return { type: "check_lookalike", lookalikeOf: r.url.startsWith("https://xn--gthub-n2e.com") ? "github.com" : null };
     default:
       throw new Error(`unexpected ${r.type}`);
   }
@@ -215,6 +217,55 @@ describe("message validation", () => {
 });
 
 describe("suggestion menus", () => {
+  const LOOKALIKE = "https://xn--gthub-n2e.com/login";
+
+  it("a look-alike page gets one warning row on focus, and nothing to pick", async () => {
+    const { h, requests } = setup();
+    const f = frame({ url: LOOKALIKE, origin: "https://xn--gthub-n2e.com" });
+    expect(await h.handleContent(f, { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(requests.map((r) => r.type)).toEqual(["find_matches", "check_lookalike"]);
+    expect(requests[1]).toEqual({ type: "check_lookalike", url: LOOKALIKE });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toEqual({
+      ok: true,
+      value: { state: "lookalike", site: "xn--gthub-n2e.com", lookalikeOf: "github.com" },
+    });
+    expect((await h.handleInline(1, { type: "menu_pick", token: T1, itemId: GH })).ok).toBe(false);
+    expect(requests.some((r) => r.type === "fill_item" || r.type === "get_totp")).toBe(false);
+  });
+
+  it("an OTP field on a look-alike page warns too; passkey rows are not offered there", async () => {
+    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
+    const { h } = setup(defaultAnswer, { passkeys: { conditionalFor: () => [row], pickConditional: async () => ({ ok: true as const, value: null }) } });
+    const f = frame({ url: LOOKALIKE, origin: "https://xn--gthub-n2e.com" });
+    expect(await h.handleContent(f, { type: "cs_open_menu", kind: "otp" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({ ok: true, value: { state: "lookalike" } });
+    expect((await h.handleInline(1, { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: row.credentialId })).ok).toBe(false);
+  });
+
+  it("asks nothing more when the page has logins", async () => {
+    const { h, requests } = setup();
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect(requests.some((r) => r.type === "check_lookalike")).toBe(false);
+  });
+
+  it("an error from check_lookalike (an older desktop) shows nothing", async () => {
+    const { h } = setup((r) => {
+      if (r.type === "check_lookalike") throw new BridgeError("malformed", "x");
+      return defaultAnswer(r);
+    });
+    expect(await h.handleContent(frame({ url: LOOKALIKE }), { type: "cs_open_menu", kind: "login" })).toEqual({ ok: false });
+  });
+
+  it("new-password menus never ask, and a locked vault never asks", async () => {
+    const { h, requests } = setup();
+    await h.handleContent(frame({ url: LOOKALIKE }), { type: "cs_open_menu", kind: "new_password" });
+    expect(requests.some((r) => r.type === "check_lookalike")).toBe(false);
+    const locked = setup(() => {
+      throw new BridgeError("locked", "x");
+    });
+    await locked.h.handleContent(frame({ url: LOOKALIKE }), { type: "cs_open_menu", kind: "login" });
+    expect(locked.requests.map((r) => r.type)).toEqual(["find_matches"]);
+  });
   it("no menu when the account is frozen", async () => {
     const { h, requests } = setup((r) =>
       r.type === "find_matches" ? { type: "find_matches", matches: [ghMatch], entitlement: "frozen" } : { type: "status", state: "unlocked", vaultExists: true, entitlement: "frozen" },

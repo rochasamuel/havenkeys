@@ -233,7 +233,9 @@ export type IdentityRolesReply = { roles: IdentityRole[] };
 export type MenuView =
   | { state: "locked" }
   | { state: "ready"; kind: MenuKind; site: string; items: MenuItemView[]; passkeys: PasskeyRow[]; hint: MenuHint | null; identity: IdentityRowView | null }
-  | { state: "cards"; site: string; cards: CardRowView[]; insecure: boolean };
+  | { state: "cards"; site: string; cards: CardRowView[]; insecure: boolean }
+  /** The page only looks like a saved site (spec 2026-10-13-lookalike-warning §5): one warning, nothing to fill. */
+  | { state: "lookalike"; site: string; lookalikeOf: string };
 
 export interface SaveView {
   action: "add" | "update";
