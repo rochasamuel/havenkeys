@@ -22,6 +22,7 @@ mod item_input;
 mod native_host;
 mod pairing;
 mod qr_scan;
+mod quick_access;
 mod removal;
 mod scan_slot;
 mod secret_store;
