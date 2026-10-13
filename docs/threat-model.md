@@ -187,6 +187,11 @@ to message the extension. Mitigations (detailed in `security-model.md` and
 * No secret data goes into the DOM beyond the filled input values.
 * A page cannot start or extend an automatic sign-in run: it starts only
   from a trusted pick, and continuation never crosses origins (T9).
+* **Look-alike domains (homographs).** A page on `pаypal.com` or
+  `g00gle.com` gets no login (origin binding is exact), and from 2026-10-13
+  HavenKeys also warns, naming the saved site it imitates (`autofill.md`
+  § Look-alike sites). Coverage is partial: typos, other suffixes and
+  brand-containing names are not detected.
 
 ### T4 — Compromised or buggy extension or native host
 The Rust side re-validates every request: it must be a known request type,
@@ -904,3 +909,4 @@ because:
 | A4c | Android passkeys: an app supplies a `clientDataHash` to be signed | Ignored; Rust signs its own `clientDataJSON` with the `apk-key-hash` origin | `regressions.rs` (`attack_an_apps_client_data_hash_is_not_signed`) |
 | A5c | Android passkeys: vault locked, offers or sign-in requested | `locked`; nothing offered or signed | `regressions.rs` (`attack_a_locked_vault_gives_no_passkey`), `passkeys_android.rs` (`a_locked_vault_is_refused_first`) |
 | A6c | Android passkeys: an app picks a login not matched to it, or asks for another RP's site | Refused | `passkeys_android.rs` (`a_chosen_login_must_be_matched_to_the_app`, `a_site_vouches_only_for_its_own_rp_id`) |
+| LA | Look-alike of a saved site (confusable or digit) | No match, no fill; a warning naming the saved site; save stays possible | `crates/havenkeys-core/tests/lookalike.rs`, `crates/havenkeys-bridge/tests/bridge.rs` (`check_lookalike_names_the_imitated_saved_site`), `apps/extension/src/background/inline-handler.test.ts` |

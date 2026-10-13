@@ -116,6 +116,7 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `status` | none | no | none |
 | `lock` | none | no | none |
 | `find_matches` | `url`, `topUrl`? | yes | lookup |
+| `check_lookalike` | `url`, `topUrl`? | yes | lookup |
 | `fill_item` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `get_totp` | `itemId` (UUID), `url`, `topUrl`? | yes | secret |
 | `generator_options` | none (returns the policy saved in the desktop's generator tab) | yes | lookup |
@@ -138,6 +139,13 @@ UTF-8 JSON. The length is checked before anything is allocated.
 | `check_sso` | `url`, `topUrl`?, `provider` (`"google"` \| `"microsoft"` \| `"github"` \| `"apple"` \| `"facebook"` \| `"discord"` \| `"x"` \| `"linkedin"` \| `"gitlab"`), `account` (string or null) | yes | secret |
 | `save_sso` | `url`, `topUrl`?, `provider`, `account` (string or null), `itemId` (UUID or null), `title`? (a new login's name; refused with `itemId`) | yes | secret, plus one update per item per 10 min (shares `save_login`'s per-item limiter) |
 | `show_unlock` | none | no | secret |
+
+`check_lookalike` returns `{ lookalikeOf }`: an ASCII registrable domain of
+at most 253 bytes (a saved site whose confusable key equals the page's) or
+`null`. The extension asks it only when a page has no logins. The bridge
+answers it while the account is frozen. An older desktop rejects the
+unknown type, and the extension treats any error as "no warning". The
+native host must be rebuilt for development, as for every protocol change.
 
 `entitlement` on the `status` and `find_matches` results is sent only when
 the account is frozen (`"frozen"`); a Full account's results carry no such
@@ -165,6 +173,7 @@ and `save_card`, and to `fill_item` after the origin check (a page that
 does not match the login still gets `denied`, never `frozen`). Still
 answered: `status`, `lock`, `show_unlock`, `find_matches` (metadata only,
 origin bound; the popup lists the site's logins for their codes),
+`check_lookalike`,
 `get_totp` (always with `autoSubmit: false` while frozen),
 `generator_options`, `generate_password` (it touches no item),
 `find_passkeys`, `passkey_get`, `passkey_status`, `open_item` and
@@ -693,6 +702,7 @@ with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedI
 | `crates/havenkeys-native-host/tests/host.rs` | Runs the real host binary: relaying, Firefox/Chrome caller check, desktop not running, A5/A6 at the host, truncated input, and a hostile fake desktop (invalid messages dropped, spoofed error text replaced, `disconnected` event) |
 | `packages/protocol/src/index.test.ts` | TS validator accepts exact shapes only |
 | `apps/extension/src/**/*.test.ts` | Native client (ID correlation, timeouts, host loss, idle close, type mismatch), popup request validation, URL stripping, the popup never supplying URLs, content/menu/save message validation, menu sessions (single use, same tab only, offered items only, expiry, lock), save prompts (unchanged logins, multi-step, expiry, other tabs), content-script origin check and sender check, untrusted events, source hygiene |
+| `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | `check_lookalike` parses with exact shapes; the result is a bounded ASCII domain or null; `check_lookalike_names_the_imitated_saved_site`, `check_lookalike_refuses_when_locked`, `check_lookalike_is_answered_when_frozen`, `check_lookalike_is_rate_limited_as_a_lookup` |
 | `crates/havenkeys-core/tests/security.rs` (Phase 5) | Frames on foreign top pages (A1), `check_login` classification, `save_login` origin binding (A2 for writes), password history bound |
 | `crates/havenkeys-core/tests/passkeys.rs`, `src/passkey/*.rs` | Passkey create → sign in, A1p/A2p/A3p, attaching to a login and keeping passkeys through edits, re-registration replacing across logins, the per-login limit, removal, input bounds; `authorize_rp` rules; byte layouts; the automatic upgrade (A1u/A2u): `auto`/`ask` after a recent fill, the 5-minute window and clock-skew handling, folded account-name matching, per-site scoping (`upgrade_is_per_site_and_never_for_look_alikes`, `a_fill_on_one_site_is_no_upgrade_on_another_site_of_the_same_login`), `conditional_create_needs_auto_for_exactly_that_login`, add-only and one silent passkey per fill (`conditional_create_never_replaces_the_filled_logins_own_passkey`, `one_fill_grants_one_silent_passkey`), the 16-entry fill memory cap, fill memory dropped on lock |
 | `crates/havenkeys-protocol/tests/messages.rs`, `crates/havenkeys-bridge/tests/bridge.rs` | Passkey requests parse with exact shapes and bounds, results validate; create → get over the bridge, attacks, offline create stores nothing; `passkey_upgrade_through_the_bridge` (A1u end to end), `passkey_status_through_the_bridge` |

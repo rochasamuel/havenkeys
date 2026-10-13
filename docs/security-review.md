@@ -3693,3 +3693,79 @@ strength and still needs the user's explicit pick; nothing is filled
 automatically; the setting turns it off.
 **Remaining limitations:** a user who picks the login on such a page hands
 it to that page's author.
+
+# Security Review: Look-alike site warning (2026-10-13)
+
+Branch `feat/lookalike-warning`. Spec:
+`docs/superpowers/specs/2026-10-13-lookalike-warning-design.md` §7; model:
+`autofill.md` § Look-alike sites. Internal review, not an independent audit.
+
+| ID | Severity | Component | Finding | Status/mitigation |
+|---|---|---|---|---|
+| LA1 | Info | `check_lookalike`, extension frames, popup, Android autofill UI | The warning names a saved site to HavenKeys' own UI | By design |
+| LA2 | Low | `lookalike.rs` | Coverage is partial: typos, other suffixes and brand-containing names are not detected | Accepted |
+| LA3 | Info | Extension save prompt, Android save sheet | A false alarm cannot block the user; a look-alike never gains a fill | By design |
+| LA4 | Info | Extension field menu | The page sees a menu frame appear on focus, so it learns that a saved site looks like it | Accepted |
+| LA5 | Info | Dependencies | New dependency `unicode-security` 0.1.2 (+ `unicode-script`) | Audited below |
+
+### LA1. The warning names a saved site (Info, by design)
+**Component:** `check_lookalike`, the field menu frame, the save prompt, the
+toolbar popup, Android's autofill UI.
+**Attack scenario:** a hostile page tries to read which site it was matched
+against.
+**Mitigation:** the exposure class is that of `find_matches` titles. The page
+cannot read extension frames, the popup or Android's autofill UI. The site
+is set with `textContent`. Rust validates the shape (`lookalike_site_ok`)
+and the extension validates it again (`isLookalikeSite`).
+**Remaining limitations:** see LA4.
+
+### LA2. Partial coverage (Low, accepted)
+**Component:** `crates/havenkeys-core/src/lookalike.rs`.
+**Attack scenario:** a phishing page on `paypall.com`, `paypal.co.uk` or
+`paypal-login.com` is not detected, so the user sees no warning.
+**Mitigation:** documented in `autofill.md` and the threat model. Origin
+binding, not this check, is what stops a fill: those pages get no login.
+**Remaining limitations:** the absence of a warning is not a guarantee that a
+site is genuine.
+
+### LA3. A warning never blocks and never grants (Info, by design)
+**Component:** extension save prompt, Android save sheet,
+`VaultService::lookalike_for_page`.
+**Attack scenario:** a false alarm tries to stop the user from saving a
+legitimate login, or a look-alike tries to gain a fill through the warning.
+**Mitigation:** **Save anyway** (extension) and the system Save button
+(Android) remain; typing by hand is never blocked. Matching, fill
+authorization, save checks and passkeys never call `lookalike_for_page`.
+**Remaining limitations:** none new.
+
+### LA4. The page can see the menu frame (Info, accepted)
+**Component:** extension field menu.
+**Attack scenario:** a page on a confusable domain notices a menu frame
+appearing on focus and learns that the user has a login for a site that
+looks like it.
+**Mitigation:** the same class as the existing "Signals visible to the page"
+limitation (`autofill.md`). The page learns only that some saved site
+shares its skeleton, which a page on a confusable of a big brand assumes
+anyway. The frame's contents are not readable.
+**Remaining limitations:** the page cannot learn which site, but can learn
+that one exists.
+
+### LA5. New dependency `unicode-security` (Info, audited)
+**Component:** `crates/havenkeys-core` (`unicode-security` 0.1.2 and its
+`unicode-script` 0.5.8).
+**Attack scenario:** a vulnerable or malicious dependency processes
+page-controlled hostnames.
+**Mitigation:** maintained by the `unicode-rs` GitHub team (and
+Manishearth); repository not archived, last push 2025-12-27; 0.1.2 released
+2024-09-12, none yanked; about 15.7M downloads, 29 reverse dependencies, and
+used by rustc for its `confusable_idents` lint. `Cargo.lock` adds only
+`unicode-security` and `unicode-script` (`idna` is an explicit dependency of
+core, with no second version). `cargo deny check`: advisories, bans,
+licenses and sources ok. `cargo audit`: only the existing allowed warnings
+(Tauri GTK stack), no new advisory. Licences MIT/Apache-2.0, Unicode data
+under Unicode-3.0 (`THIRD-PARTY-NOTICES.md`). No `unsafe` is reached from
+untrusted input beyond table lookups. Fuzzed:
+`lookalike::tests::fuzz_key_is_total_and_deterministic` and
+`tests/fuzz.rs::fuzz_lookalike_hosts`.
+**Remaining limitations:** the crate is at 0.1.x and its Unicode tables
+follow its releases.

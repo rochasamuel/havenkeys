@@ -69,6 +69,35 @@ desktop bridge on each `fill_item` that returns a password, and by Android
 on the user's own pick. Ranking only reorders what already matched; it never
 adds a login.
 
+### Look-alike sites
+
+A page that imitates a saved site never matches (origin binding is exact),
+so it gets no login. HavenKeys also warns, naming the saved site, so the
+user learns why nothing is offered.
+
+* **What is compared.** The page's registrable domain against the
+  registrable domains of the rules of every live login (`lookalike.rs`).
+  A page that equals a saved site is a match, not a look-alike.
+* **The key.** Each host becomes: IDNA to ASCII, then the digits `0 1 3 5`
+  read as `o l e s`, then the Unicode UTS #39 confusable skeleton (crate
+  `unicode-security`), then lowercase. Two different domains with the same
+  key are look-alikes. Examples: `pаypal.com` (Cyrillic `а`) and
+  `paypa1.com` for `paypal.com`, `g00gle.com` for `google.com`,
+  `rnicrosoft.com` for `microsoft.com`.
+* **When it is asked.** Only when the page has no logins, with the
+  `check_lookalike` request (`native-messaging.md`): the field menu on a
+  login or code field, the save prompt for a new login, and the toolbar
+  popup. On Android, browser pages in the autofill service.
+* **What it shows.** One warning row naming the saved site, with nothing to
+  fill. The save prompt keeps **Save anyway**, and Enter does not save. The
+  site name is set with `textContent`.
+* **Not detected.** Typos (`paypall.com`), other suffixes
+  (`paypal.co.uk`) and names that contain the brand (`paypal-login.com`).
+  No warning is not a guarantee that a site is genuine. What stops a fill
+  is origin binding, not this check.
+* **Not used for decisions.** Matching, fill authorization, save checks and
+  passkeys never call `lookalike_for_page`.
+
 ### Examples (all are unit tests)
 
 Rule `https://github.com`, match type `domain`:
@@ -1437,6 +1466,10 @@ added. `FormRouter` picks login, card or identity by the focused field, and
 `ValueShaper` follows `card-fill.ts` and `identity-fill.ts`. Rust makes the
 decisions (`docs/android.md`, `security-model.md` §22.4a).
 
+For a browser page with no logins, `lookalike_for` shows a warning row
+naming the saved site; tapping it opens an explanation dialog. The save
+sheet's description carries the same warning. See "Look-alike sites".
+
 ## Permissions and injection
 
 * Requested at install: `nativeMessaging`, `activeTab`, `scripting`,
@@ -1472,6 +1505,9 @@ See `security-model.md` §12.
 
 ## Limitations
 
+* **The look-alike warning is visible to the page** as a menu frame
+  appearing on focus, which tells the page that the user has a login for a
+  site that looks like it (the page cannot read which).
 * **Clickjacking on Firefox.** Firefox has no IntersectionObserver v2, so a
   page that covers the menu with a click-through decoy is guarded only by
   the 400 ms delay. The item filled still has to match the page's origin in
