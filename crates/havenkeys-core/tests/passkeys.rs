@@ -6,7 +6,7 @@ mod common;
 use common::*;
 use havenkeys_core::model::{MatchType, Settings, UrlRule};
 use havenkeys_core::passkey::{
-    CreateQuery, PasskeyCreate, StagedPasskey, Upgrade, MAX_PASSKEYS_PER_LOGIN,
+    CreateQuery, PasskeyCreate, StagedPasskey, Upgrade, MAX_CHALLENGE_BYTES, MAX_PASSKEYS_PER_LOGIN,
 };
 use havenkeys_core::vault::{VaultService, MAX_RECENT_FILLS, UPGRADE_WINDOW_MS};
 use havenkeys_core::Error;
@@ -439,7 +439,7 @@ fn inputs_are_bounded() {
         v.stage_passkey_create(r, NOW).err(),
         Some(Error::InvalidInput(_))
     ));
-    let huge = vec![0u8; 1025];
+    let huge = vec![0u8; MAX_CHALLENGE_BYTES + 1];
     r = PasskeyCreate {
         challenge: &huge,
         ..create_req("octo", &[1], None)
@@ -448,6 +448,13 @@ fn inputs_are_bounded() {
         v.stage_passkey_create(r, NOW).err(),
         Some(Error::InvalidInput(_))
     ));
+    // The largest challenge allowed is accepted.
+    let largest = vec![0u8; MAX_CHALLENGE_BYTES];
+    r = PasskeyCreate {
+        challenge: &largest,
+        ..create_req("octo", &[1], None)
+    };
+    assert!(v.stage_passkey_create(r, NOW).is_ok());
     r = PasskeyCreate {
         challenge: &[],
         ..create_req("octo", &[1], None)
