@@ -406,6 +406,12 @@ export const extensionScenarios = [
     replies: () => ({ save_state: ok({ action: "add", site: "github.com", username: "octocat@example.com" }) }),
   },
   {
+    name: "save-lookalike",
+    page: "save.html",
+    frame: { kind: "save" },
+    replies: () => ({ save_state: ok({ action: "add", site: "xn--gthub-n2e.com", username: "octocat@example.com", title: "xn--gthub-n2e.com", lookalikeOf: "github.com" }) }),
+  },
+  {
     name: "save-card",
     page: "save.html",
     frame: { kind: "save" },

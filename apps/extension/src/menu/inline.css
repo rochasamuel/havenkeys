@@ -636,6 +636,33 @@ main.sliding {
   margin: 0;
 }
 
+/* A look-alike page (spec 2026-10-13-lookalike-warning §5): the warning
+   leads the card, ember on the 12% ember wash (the desktop's quiet-danger,
+   as the menu's look-alike row). Our copy wraps; it never truncates. */
+.prompt .warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.prompt .warning[hidden] {
+  display: none;
+}
+
+.prompt .warning svg {
+  flex: none;
+  margin-top: 1px;
+}
+
 #question {
   color: var(--text-strong);
   font-weight: 600;

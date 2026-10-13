@@ -579,10 +579,11 @@ describe("save prompts", () => {
     });
     expect(sent[0]).toEqual({ to: { tabId: 1, frameId: 0 }, msg: { type: "bg_show_save", token: T1 } });
     const state = await h.handleInline(1, { type: "save_state", token: T1 });
-    expect(state).toEqual({ ok: true, value: { action: "add", site: "github.com", username: "octo", title: "github.com" } });
+    expect(state).toEqual({ ok: true, value: { action: "add", site: "github.com", username: "octo", title: "github.com", lookalikeOf: null } });
     expect(JSON.stringify(state)).not.toContain("typed");
     expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
-    expect(requests[1]).toEqual({
+    expect(requests[1]).toMatchObject({ type: "check_lookalike" });
+    expect(requests[2]).toEqual({
       type: "save_login",
       url: "https://github.com/login",
       topUrl: "https://github.com/",
@@ -609,7 +610,7 @@ describe("save prompts", () => {
     });
     // The prompt names the saved login's username, which the form did not have.
     const state = await h.handleInline(1, { type: "save_state", token: T1 });
-    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo", title: null } });
+    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo", title: null, lookalikeOf: null } });
     expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
     const save = requests.find((r) => r.type === "save_login");
     expect(save).toMatchObject({ username: null, password: "new-pw", itemId: GH });
@@ -632,6 +633,34 @@ describe("save prompts", () => {
     }
   });
 
+  it("a new login on a look-alike page: the prompt carries the warning, and Save anyway still saves", async () => {
+    const { h, requests } = setup();
+    const f = frame({ url: "https://xn--gthub-n2e.com/login", origin: "https://xn--gthub-n2e.com" });
+    await h.handleContent(f, { type: "cs_submit", username: "octo", password: "typed" });
+    expect(requests.map((r) => r.type)).toEqual(["check_login", "check_lookalike"]);
+    const state = await h.handleInline(1, { type: "save_state", token: T1 });
+    expect(state).toMatchObject({ ok: true, value: { action: "add", lookalikeOf: "github.com" } });
+    expect(JSON.stringify(state)).not.toContain("typed");
+    expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
+    expect(requests.at(-1)).toMatchObject({ type: "save_login", url: "https://xn--gthub-n2e.com/login", password: "typed" });
+  });
+
+  it("an update never asks (an update means a login matches)", async () => {
+    const { h, requests } = setup((r) => (r.type === "check_login" ? { type: "check_login", action: "update", itemId: GH } : defaultAnswer(r)));
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new" });
+    expect(requests.some((r) => r.type === "check_lookalike")).toBe(false);
+    expect(await h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { lookalikeOf: null } });
+  });
+
+  it("an error from check_lookalike leaves the usual prompt", async () => {
+    const { h } = setup((r) => {
+      if (r.type === "check_lookalike") throw new BridgeError("malformed", "x");
+      return defaultAnswer(r);
+    });
+    await h.handleContent(frame({ url: "https://xn--gthub-n2e.com/login" }), { type: "cs_submit", username: "octo", password: "typed" });
+    expect(await h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { action: "add", lookalikeOf: null } });
+  });
+
   it("does not prompt for unchanged logins", async () => {
     const { h, sent } = setup((r) =>
       r.type === "check_login" ? { type: "check_login", action: "unchanged", itemId: null } : defaultAnswer(r),
@@ -652,7 +681,7 @@ describe("save prompts", () => {
       username: null,
       password: "pw3",
     });
-    expect(requests[1]).toMatchObject({ username: null, password: "pw3" });
+    expect(requests.filter((r) => r.type === "check_login")[1]).toMatchObject({ username: null, password: "pw3" });
   });
 
   it("the new page gets the prompt after navigation; subframes don't", async () => {

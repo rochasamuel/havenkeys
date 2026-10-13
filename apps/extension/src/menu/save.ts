@@ -6,8 +6,9 @@
 import { MAX_TITLE_CHARS, SAVE_MAX_HEIGHT, SAVE_MIN_HEIGHT, type CardSaveView, type InlineRequest, type SaveView } from "../messaging/inline";
 import { applyDocumentLang, t } from "../i18n";
 import { ask, createClickGuard, receiveToken } from "./common";
-import { cardBrandIcon } from "./icons";
+import { alertIcon, cardBrandIcon } from "./icons";
 
+const warning = document.getElementById("warning") as HTMLElement;
 const question = document.getElementById("question") as HTMLElement;
 const detail = document.getElementById("detail") as HTMLElement;
 const site = document.getElementById("site") as HTMLElement;
@@ -18,6 +19,8 @@ const confirmBtn = document.getElementById("confirm") as HTMLButtonElement;
 const dismissBtn = document.getElementById("dismiss") as HTMLButtonElement;
 /** Set once the content script posts it (`receiveToken`). */
 let token: string | null = null;
+/** The page only looks like a saved site: saving is no longer the primary action. */
+let lookalike = false;
 const card = document.querySelector(".card") as HTMLElement;
 const guard = createClickGuard(card);
 
@@ -34,7 +37,32 @@ export function confirmRequest(token: string, title: string | null): InlineReque
   return title === null ? { type: "save_confirm", token } : { type: "save_confirm", token, title };
 }
 
+/**
+ * A look-alike page (spec 2026-10-13-lookalike-warning §5): the warning
+ * leads; saving stays possible ("Save anyway") but is no longer the primary
+ * action. The saved site is our text, set with textContent only.
+ */
+function showLookalike(imitated: string | null): void {
+  lookalike = imitated !== null;
+  warning.hidden = !lookalike;
+  if (imitated === null) warning.replaceChildren();
+  else warning.replaceChildren(alertIcon(15), document.createTextNode(t.save.lookalikeWarning(imitated)));
+  confirmBtn.classList.toggle("primary", !lookalike);
+  dismissBtn.classList.toggle("primary", lookalike);
+  // The primary sits last, where a reflexive click lands: "Not now" here.
+  // Moved in the DOM, not with CSS order, so the focus order follows.
+  if (lookalike) confirmBtn.after(dismissBtn);
+  else dismissBtn.after(confirmBtn);
+}
+
+/** Whether a key press in the name field saves: never on a look-alike page, where a reflexive Enter must not save. */
+export function enterSaves(e: Pick<KeyboardEvent, "key" | "isComposing">): boolean {
+  return e.key === "Enter" && !e.isComposing && !lookalike;
+}
+
 function show(view: SaveView): void {
+  // An older background's view has no lookalikeOf: no warning.
+  showLookalike(view.action === "add" ? (view.lookalikeOf ?? null) : null);
   site.textContent = view.site;
   // No autofocus: the prompt opens over the page and must not take its focus.
   titleField.hidden = view.title === null;
@@ -44,7 +72,7 @@ function show(view: SaveView): void {
     confirmBtn.textContent = t.save.update;
   } else {
     question.textContent = t.save.addQuestion;
-    confirmBtn.textContent = t.save.save;
+    confirmBtn.textContent = lookalike ? t.save.saveAnyway : t.save.save;
   }
   // The username may be cut with an ellipsis; "No username" is our copy and wraps.
   detail.textContent = view.username ?? t.common.noUsername;
@@ -55,6 +83,7 @@ function show(view: SaveView): void {
 }
 
 function showCard(view: CardSaveView): void {
+  showLookalike(null);
   site.textContent = view.site;
   question.textContent = t.save.cardQuestion;
   confirmBtn.textContent = t.save.save;
@@ -68,6 +97,7 @@ function showCard(view: CardSaveView): void {
 
 function fail(message: string): void {
   // The error takes the question's place; the prompt grows to fit it (save_resize).
+  showLookalike(null);
   detail.textContent = "";
   delete detail.dataset.truncate;
   titleField.hidden = true;
@@ -86,7 +116,7 @@ async function confirm(e: Event): Promise<void> {
 
 confirmBtn.addEventListener("click", (e) => void confirm(e));
 titleInput.addEventListener("keydown", (e) => {
-  if (e.key !== "Enter" || e.isComposing) return;
+  if (!enterSaves(e)) return;
   e.preventDefault();
   void confirm(e);
 });

@@ -199,6 +199,8 @@ interface PendingSave {
   password: string;
   action: "add" | "update";
   itemId: string | null;
+  /** The saved site this page only looks like: the prompt leads with a warning. */
+  lookalikeOf: string | null;
   expires: number;
 }
 
@@ -694,6 +696,8 @@ export function createInlineHandler(deps: InlineDeps) {
       return; // Locked, not running, rate limited: no prompt.
     }
     if (check.action === "unchanged") return;
+    // Only a new login can be offered on a look-alike page: an update means a login matches here.
+    const imitated = check.action === "add" ? await lookalikeOf(frame) : null;
     const shownUsername = username ?? (check.itemId === null ? null : await savedUsername(frame, check.itemId));
 
     dropSave(frame.tabId, true);
@@ -708,6 +712,7 @@ export function createInlineHandler(deps: InlineDeps) {
       password,
       action: check.action,
       itemId: check.itemId,
+      lookalikeOf: imitated,
       expires: now + SAVE_TTL_MS,
     });
     // Never hold the password longer than the prompt lives.
@@ -969,7 +974,7 @@ export function createInlineHandler(deps: InlineDeps) {
         }
         const s = liveSave(tabId, req.token);
         if (!s) return { ok: false, message: t.errors.promptExpired };
-        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title } };
+        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title, lookalikeOf: s.lookalikeOf } };
       }
       case "save_confirm": {
         const c = liveCardSave(tabId, req.token);

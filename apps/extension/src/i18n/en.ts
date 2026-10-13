@@ -214,6 +214,8 @@ export const en = {
     update: "Update",
     notNow: "Not now",
     titleLabel: "Name",
+    lookalikeWarning: (site: string) => `This isn’t ${site}. Don’t save or enter your ${site} password here.`,
+    saveAnyway: "Save anyway",
   },
 
   sso: {

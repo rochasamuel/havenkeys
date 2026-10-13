@@ -26,6 +26,10 @@ function page(): void {
     p.id = id;
     text.append(p);
   }
+  const warning = document.createElement("p");
+  warning.id = "warning";
+  warning.hidden = true;
+  text.prepend(warning);
   const field = document.createElement("label");
   field.id = "title-field";
   field.hidden = true;
@@ -39,6 +43,7 @@ function page(): void {
   for (const id of ["dismiss", "confirm"]) {
     const b = document.createElement("button");
     b.id = id;
+    b.className = id === "confirm" ? "btn primary" : "btn";
     actions.append(b);
   }
   prompt.append(text, actions);
@@ -132,5 +137,63 @@ describe("card save prompt", () => {
     expect(document.querySelector("#detail svg")).not.toBeNull();
     expect(titleField().hidden).toBe(false);
     expect(titleInput().value).toBe("Visa");
+  });
+});
+
+describe("look-alike warning", () => {
+  const view = { action: "add", site: "xn--gthub-n2e.com", username: "octo", title: "xn--gthub-n2e.com", lookalikeOf: "github.com" };
+  const enter = { key: "Enter", isComposing: false };
+
+  it("leads with the warning and offers Save anyway as the secondary action", async () => {
+    await openPrompt(view);
+    const warning = document.getElementById("warning")!;
+    expect(warning.hidden).toBe(false);
+    expect(warning.textContent).toContain("github.com");
+    const confirm = document.getElementById("confirm") as HTMLButtonElement;
+    expect(confirm.textContent).toBe("Save anyway");
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.classList.contains("primary")).toBe(false);
+    expect(document.getElementById("dismiss")!.classList.contains("primary")).toBe(true);
+    // The primary ("Not now") sits last, where a reflexive click lands; focus order follows.
+    expect(confirm.nextElementSibling?.id).toBe("dismiss");
+  });
+
+  it("the saved site is text, never markup", async () => {
+    await openPrompt({ ...view, lookalikeOf: "<img src=x>.com" });
+    const warning = document.getElementById("warning")!;
+    expect(warning.querySelector("img")).toBeNull();
+    expect(warning.textContent).toContain("<img src=x>.com");
+  });
+
+  it("Enter does not save on a look-alike page", async () => {
+    // A synthetic KeyboardEvent is never trusted (confirm() ignores it), so
+    // the Enter rule is checked directly: a reflexive Enter must not save.
+    await openPrompt(view);
+    const { enterSaves } = await import("./save");
+    expect(enterSaves(enter)).toBe(false);
+  });
+
+  it("Enter saves as usual elsewhere", async () => {
+    await openPrompt({ action: "add", site: "github.com", username: "octo", title: "github.com", lookalikeOf: null });
+    const { enterSaves } = await import("./save");
+    expect(enterSaves(enter)).toBe(true);
+    expect(enterSaves({ key: "Enter", isComposing: true })).toBe(false);
+    expect(enterSaves({ key: "a", isComposing: false })).toBe(false);
+  });
+
+  it("a view without lookalikeOf shows no warning", async () => {
+    await openPrompt({ action: "add", site: "github.com", username: "octo", title: "github.com" });
+    expect(document.getElementById("warning")!.hidden).toBe(true);
+    expect(document.getElementById("warning")!.textContent).toBe("");
+    expect(document.getElementById("confirm")!.textContent).toBe("Save");
+    expect(document.getElementById("confirm")!.classList.contains("primary")).toBe(true);
+    expect(document.getElementById("dismiss")!.classList.contains("primary")).toBe(false);
+    expect(document.getElementById("dismiss")!.nextElementSibling?.id).toBe("confirm");
+  });
+
+  it("an update never shows the warning", async () => {
+    await openPrompt({ action: "update", site: "github.com", username: "octo", title: null, lookalikeOf: null });
+    expect(document.getElementById("warning")!.hidden).toBe(true);
+    expect(document.getElementById("confirm")!.textContent).toBe("Update");
   });
 });

@@ -243,6 +243,8 @@ export interface SaveView {
   username: string | null;
   /** The suggested name for a new login; null for an update, which keeps its title. */
   title: string | null;
+  /** The saved site this page only looks like (the prompt leads with a warning), or null. */
+  lookalikeOf: string | null;
 }
 
 /** The core's limit on a login title. */

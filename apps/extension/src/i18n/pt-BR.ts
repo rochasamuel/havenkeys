@@ -181,6 +181,8 @@ export const ptBR: Messages = {
     update: "Atualizar",
     notNow: "Agora não",
     titleLabel: "Nome",
+    lookalikeWarning: (site: string) => `Este site não é ${site}. Não salve nem digite aqui sua senha do ${site}.`,
+    saveAnyway: "Salvar mesmo assim",
   },
 
   sso: {
