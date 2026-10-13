@@ -19,6 +19,9 @@
 //!   registrable domain under a *known* public suffix (IP addresses,
 //!   `localhost`, unknown TLDs, or a host that is itself a public suffix such
 //!   as `github.io`), `Domain` falls back to same-host.
+//! * Equivalent domains: when the policy allows, a `Domain` rule also
+//!   matches a page whose registrable domain is in the same group of
+//!   `data/equivalent-domains.json` (`MatchStrength::Equivalent`).
 
 use crate::model::{ItemOverview, MatchType, UrlRule};
 use serde::Serialize;
@@ -34,6 +37,24 @@ pub enum MatchStrength {
     SameHost,
     /// Different host under the same registrable domain (`Domain` rule only).
     SameSite,
+    /// A different registrable domain that the equivalent-domains table puts
+    /// in the rule's group (`Domain` rule only, when the policy allows).
+    Equivalent,
+}
+
+/// Which widening the caller allows. User-facing match lists follow the
+/// vault setting; internal checks (save, Sign in with, passkeys) use
+/// [`MatchPolicy::DIRECT`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MatchPolicy {
+    pub equivalent_domains: bool,
+}
+
+impl MatchPolicy {
+    /// No widening: the rule's own host or site only.
+    pub const DIRECT: Self = Self {
+        equivalent_domains: false,
+    };
 }
 
 /// A page URL that has passed the basic checks.
@@ -135,7 +156,7 @@ fn port_matches(rule: &Url, page: &Url) -> bool {
 }
 
 /// Does `rule` apply to `page`? Returns how strongly, or `None`.
-pub fn match_rule(rule: &UrlRule, page: &PageUrl) -> Option<MatchStrength> {
+pub fn match_rule(rule: &UrlRule, page: &PageUrl, policy: MatchPolicy) -> Option<MatchStrength> {
     let rule_url = Url::parse(&rule.url).ok()?;
     let page = &page.url;
     if !matches!(rule_url.scheme(), "http" | "https") {
@@ -159,14 +180,29 @@ pub fn match_rule(rule: &UrlRule, page: &PageUrl) -> Option<MatchStrength> {
             }
             let rule_site = registrable_domain(&rule_url)?;
             let page_site = registrable_domain(page)?;
-            (rule_site == page_site).then_some(MatchStrength::SameSite)
+            if rule_site == page_site {
+                Some(MatchStrength::SameSite)
+            } else if policy.equivalent_domains
+                && crate::equivalent::same_group(&rule_site, &page_site)
+            {
+                Some(MatchStrength::Equivalent)
+            } else {
+                None
+            }
         }
     }
 }
 
 /// Best match of any of the item's website rules.
-pub fn match_item(item: &ItemOverview, page: &PageUrl) -> Option<MatchStrength> {
-    item.urls.iter().filter_map(|r| match_rule(r, page)).min()
+pub fn match_item(
+    item: &ItemOverview,
+    page: &PageUrl,
+    policy: MatchPolicy,
+) -> Option<MatchStrength> {
+    item.urls
+        .iter()
+        .filter_map(|r| match_rule(r, page, policy))
+        .min()
 }
 
 #[cfg(test)]
@@ -182,7 +218,60 @@ mod tests {
     }
 
     fn m(rule_url: &str, match_type: MatchType, page: &str) -> Option<MatchStrength> {
-        match_rule(&rule(rule_url, match_type), &PageUrl::parse(page)?)
+        match_rule(
+            &rule(rule_url, match_type),
+            &PageUrl::parse(page)?,
+            MatchPolicy::DIRECT,
+        )
+    }
+
+    fn eq(rule_url: &str, match_type: MatchType, page: &str) -> Option<MatchStrength> {
+        let policy = MatchPolicy {
+            equivalent_domains: true,
+        };
+        match_rule(&rule(rule_url, match_type), &PageUrl::parse(page)?, policy)
+    }
+
+    #[test]
+    fn domain_rules_match_equivalent_sites_when_allowed() {
+        let r = "https://apple.com";
+        assert_eq!(eq(r, Domain, "https://www.icloud.com/"), Some(Equivalent));
+        assert_eq!(eq(r, Domain, "https://icloud.com/"), Some(Equivalent));
+        assert_eq!(
+            eq("https://idmsa.apple.com", Domain, "https://www.icloud.com/"),
+            Some(Equivalent)
+        );
+        // Direct matches keep their own strength.
+        assert_eq!(eq(r, Domain, "https://apple.com/"), Some(SameHost));
+        assert_eq!(eq(r, Domain, "https://appleid.apple.com/"), Some(SameSite));
+        // Policy off: today's behaviour.
+        assert_eq!(m(r, Domain, "https://www.icloud.com/"), None);
+    }
+
+    #[test]
+    fn exact_and_origin_rules_never_widen() {
+        assert_eq!(eq("https://apple.com", Origin, "https://icloud.com/"), None);
+        assert_eq!(eq("https://apple.com/", Exact, "https://icloud.com/"), None);
+    }
+
+    #[test]
+    fn equivalence_keeps_phishing_and_downgrade_rules() {
+        let r = "https://apple.com";
+        for page in [
+            "https://icloud.com.evil.com/",
+            "https://evil-icloud.com/",
+            "https://icloud.co/",
+            "http://icloud.com/",
+            "https://icloud.com:8443/",
+        ] {
+            assert_eq!(eq(r, Domain, page), None, "{page}");
+        }
+    }
+
+    #[test]
+    fn equivalent_is_the_weakest_strength() {
+        assert!(SameSite < Equivalent);
+        assert!(ExactUrl < Equivalent && SameHost < Equivalent);
     }
 
     use MatchStrength::*;
@@ -409,11 +498,17 @@ mod tests {
             updated_at: 0,
         };
         let page = PageUrl::parse("https://app.example.com/login").unwrap();
-        assert_eq!(match_item(&item, &page), Some(ExactUrl));
+        assert_eq!(
+            match_item(&item, &page, MatchPolicy::DIRECT),
+            Some(ExactUrl)
+        );
         let page = PageUrl::parse("https://other.example.com/").unwrap();
-        assert_eq!(match_item(&item, &page), Some(SameSite));
+        assert_eq!(
+            match_item(&item, &page, MatchPolicy::DIRECT),
+            Some(SameSite)
+        );
         let page = PageUrl::parse("https://example.org/").unwrap();
-        assert_eq!(match_item(&item, &page), None);
+        assert_eq!(match_item(&item, &page, MatchPolicy::DIRECT), None);
     }
 
     #[test]
@@ -440,7 +535,7 @@ mod tests {
         for p in pages {
             if let Some(page) = PageUrl::parse(p) {
                 for r in &rules {
-                    let _ = match_rule(r, &page);
+                    let _ = match_rule(r, &page, MatchPolicy::DIRECT);
                 }
             }
         }

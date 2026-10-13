@@ -12,7 +12,7 @@ use common::*;
 use havenkeys_core::crypto::blob::{self, BlobContext};
 use havenkeys_core::crypto::keys::Key256;
 use havenkeys_core::model::{normalize_url, ItemInput, MatchType, UrlRule};
-use havenkeys_core::origin::{match_rule, MatchStrength, PageUrl};
+use havenkeys_core::origin::{match_rule, MatchPolicy, MatchStrength, PageUrl};
 use havenkeys_core::totp::{generate, parse_totp_input};
 use uuid::Uuid;
 
@@ -181,6 +181,7 @@ fn fuzz_url_parsing_and_matching() {
                         match_type,
                     },
                     &page,
+                    MatchPolicy::DIRECT,
                 );
             }
         }
@@ -236,11 +237,15 @@ fn fuzz_lookalike_hosts_never_match() {
             for host in &lookalikes {
                 let page = format!("https://{host}/");
                 if let Some(p) = PageUrl::parse(&page) {
-                    assert_eq!(match_rule(&rule, &p), None, "{page} matched {site}");
+                    assert_eq!(
+                        match_rule(&rule, &p, MatchPolicy::DIRECT),
+                        None,
+                        "{page} matched {site}"
+                    );
                 }
                 // A downgrade of the real site never matches an https rule.
                 let downgrade = PageUrl::parse(&format!("http://{site}/")).unwrap();
-                assert_eq!(match_rule(&rule, &downgrade), None);
+                assert_eq!(match_rule(&rule, &downgrade, MatchPolicy::DIRECT), None);
             }
         }
         // Real subdomains match a whole-site rule, and only as "same site".
@@ -250,7 +255,7 @@ fn fuzz_lookalike_hosts_never_match() {
         };
         let sub = PageUrl::parse(&format!("https://{label}.{site}/")).unwrap();
         assert_eq!(
-            match_rule(&rule, &sub),
+            match_rule(&rule, &sub, MatchPolicy::DIRECT),
             Some(MatchStrength::SameSite),
             "{label}.{site}"
         );
@@ -258,7 +263,7 @@ fn fuzz_lookalike_hosts_never_match() {
             match_type: MatchType::Origin,
             ..rule
         };
-        assert_eq!(match_rule(&origin_rule, &sub), None);
+        assert_eq!(match_rule(&origin_rule, &sub, MatchPolicy::DIRECT), None);
     }
 }
 

@@ -10,7 +10,7 @@ use crate::model::{
     clean_title, AppBinding, ItemDetails, ItemInput, ItemOverview, ItemType, SecretUpdate,
     MAX_APP_BINDINGS,
 };
-use crate::origin::{match_item, MatchStrength, PageUrl};
+use crate::origin::{match_item, MatchPolicy, MatchStrength, PageUrl};
 use crate::totp::TotpCode;
 use crate::vault::{
     build_item, login_input_from, FillCredentials, SaveAction, SaveTarget, StagedSave, StagedWrite,
@@ -87,7 +87,7 @@ impl VaultService {
         Ok(verified_hosts
             .iter()
             .filter_map(|h| PageUrl::parse(&format!("https://{h}/")))
-            .filter_map(|page| match_item(o, &page))
+            .filter_map(|page| match_item(o, &page, MatchPolicy::DIRECT))
             .min())
     }
 

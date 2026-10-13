@@ -29,7 +29,9 @@ pub(crate) fn strength(s: CoreStrength) -> MatchStrength {
     match s {
         CoreStrength::ExactUrl => MatchStrength::ExactUrl,
         CoreStrength::SameHost => MatchStrength::SameHost,
-        CoreStrength::SameSite => MatchStrength::SameSite,
+        // The wire has no "equivalent" (spec 2026-10-13 §4): older
+        // extensions reject unknown strengths, and order is Rust's.
+        CoreStrength::SameSite | CoreStrength::Equivalent => MatchStrength::SameSite,
     }
 }
 
@@ -171,5 +173,17 @@ pub(crate) fn save_action(a: CoreSaveAction) -> (SaveAction, Option<Uuid>) {
         CoreSaveAction::Add => (SaveAction::Add, None),
         CoreSaveAction::Update(id) => (SaveAction::Update, Some(id)),
         CoreSaveAction::Unchanged => (SaveAction::Unchanged, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn equivalent_goes_on_the_wire_as_same_site() {
+        // Older extensions accept only exact_url / same_host / same_site.
+        assert_eq!(strength(CoreStrength::Equivalent), MatchStrength::SameSite);
+        assert_eq!(strength(CoreStrength::SameSite), MatchStrength::SameSite);
     }
 }

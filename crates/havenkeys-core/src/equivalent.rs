@@ -53,7 +53,6 @@ fn build(json: &str) -> Option<HashMap<String, usize>> {
 }
 
 /// Both are registrable domains in the same group, and differ.
-#[allow(dead_code)] // used by origin.rs from the next task
 pub(crate) fn same_group(a: &str, b: &str) -> bool {
     a != b && matches!((index().get(a), index().get(b)), (Some(x), Some(y)) if x == y)
 }

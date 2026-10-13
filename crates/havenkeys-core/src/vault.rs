@@ -22,7 +22,7 @@ use crate::model::{
     clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
     SecretField, SecretUpdate, Settings, UrlRule, MAX_PASSWORD_HISTORY,
 };
-use crate::origin::{match_item, site_of, MatchStrength, PageUrl};
+use crate::origin::{match_item, site_of, MatchPolicy, MatchStrength, PageUrl};
 use crate::secret::SecretString;
 use crate::sso::{SignInWith, SsoProvider};
 use crate::store::{AccountRecord, Entitlement, HeaderRecord, KeyScheme, PlanRecord, Store};
@@ -318,9 +318,9 @@ impl PageContext {
 
     /// How well `item` matches the frame, if it also matches the top page.
     fn matches(&self, item: &ItemOverview) -> Option<MatchStrength> {
-        let strength = match_item(item, &self.frame)?;
+        let strength = match_item(item, &self.frame, MatchPolicy::DIRECT)?;
         if let Some(top) = &self.top {
-            match_item(item, top)?;
+            match_item(item, top, MatchPolicy::DIRECT)?;
         }
         Some(strength)
     }
