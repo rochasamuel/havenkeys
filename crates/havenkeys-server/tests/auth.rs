@@ -333,8 +333,16 @@ async fn a_parallel_burst_gets_at_most_five_key_checks() {
     let t = || try_login(&server, "user@example.com", [1u8; 32]);
     let (a, b, c, d, e, f, g, h) = tokio::join!(t(), t(), t(), t(), t(), t(), t(), t());
     let statuses = [a, b, c, d, e, f, g, h];
-    assert_eq!(statuses.iter().filter(|&&s| s == 401).count(), 5, "{statuses:?}");
-    assert_eq!(statuses.iter().filter(|&&s| s == 429).count(), 3, "{statuses:?}");
+    assert_eq!(
+        statuses.iter().filter(|&&s| s == 401).count(),
+        5,
+        "{statuses:?}"
+    );
+    assert_eq!(
+        statuses.iter().filter(|&&s| s == 429).count(),
+        3,
+        "{statuses:?}"
+    );
     server.cleanup().await;
 }
 
@@ -451,7 +459,13 @@ async fn a_second_login_on_the_same_device_replaces_its_session() {
 async fn a_device_name_that_is_empty_overlong_or_control_laden_is_refused() {
     let server = support::TestServer::start().await;
     let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
-    for name in ["", "   ", &"x".repeat(65), "Desk\u{0007}top", "\u{200B}\u{202E}"] {
+    for name in [
+        "",
+        "   ",
+        &"x".repeat(65),
+        "Desk\u{0007}top",
+        "\u{200B}\u{202E}",
+    ] {
         let res = server
             .post("/v1/auth/login")
             .json(&serde_json::json!({

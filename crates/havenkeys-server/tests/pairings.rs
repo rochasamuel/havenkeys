@@ -308,7 +308,11 @@ async fn parallel_creates_from_one_address_respect_the_pending_cap() {
     };
     let (a, b, c, d, e, f) = tokio::join!(send(), send(), send(), send(), send(), send());
     let statuses = [a, b, c, d, e, f];
-    assert_eq!(statuses.iter().filter(|&&s| s == 200).count(), 3, "{statuses:?}");
+    assert_eq!(
+        statuses.iter().filter(|&&s| s == 200).count(),
+        3,
+        "{statuses:?}"
+    );
     let rows: i64 = server
         .db()
         .await

@@ -143,11 +143,13 @@ async fn a_vault_stops_growing_at_its_limit_but_can_still_shrink() {
     let (_, sess) = support::signed_in(&server, "user@example.com").await;
     let blob = vec![7u8; 3_000];
     let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
-    let (status, body) = support::write(&server, &sess, vec![support::change(a, None, &blob, &blob)]).await;
+    let (status, body) =
+        support::write(&server, &sess, vec![support::change(a, None, &blob, &blob)]).await;
     assert_eq!(status, 200, "{body}");
     let revision = body["cursor"].as_i64().unwrap();
 
-    let (status, body) = support::write(&server, &sess, vec![support::change(b, None, &blob, &blob)]).await;
+    let (status, body) =
+        support::write(&server, &sess, vec![support::change(b, None, &blob, &blob)]).await;
     assert_eq!(status, 413);
     assert_eq!(body["error"]["code"], "vault_full");
     // Nothing of the refused batch was kept.
@@ -161,9 +163,15 @@ async fn a_vault_stops_growing_at_its_limit_but_can_still_shrink() {
     assert_eq!(rows, 1);
 
     let small = vec![1u8; 100];
-    let (status, _) = support::write(&server, &sess, vec![support::change(a, Some(revision), &small, &small)]).await;
+    let (status, _) = support::write(
+        &server,
+        &sess,
+        vec![support::change(a, Some(revision), &small, &small)],
+    )
+    .await;
     assert_eq!(status, 200, "shrinking is allowed");
-    let (status, _) = support::write(&server, &sess, vec![support::change(b, None, &blob, &blob)]).await;
+    let (status, _) =
+        support::write(&server, &sess, vec![support::change(b, None, &blob, &blob)]).await;
     assert_eq!(status, 200, "and makes room again");
     server.cleanup().await;
 }

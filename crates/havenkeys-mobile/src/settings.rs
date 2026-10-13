@@ -107,6 +107,13 @@ mod tests {
         s.equivalent_domains = false;
         v.update_settings(s).unwrap();
         assert!(!v.settings().unwrap().equivalent_domains);
-        assert!(!v.client.vault().unwrap().settings().unwrap().equivalent_domains);
+        assert!(
+            !v.client
+                .vault()
+                .unwrap()
+                .settings()
+                .unwrap()
+                .equivalent_domains
+        );
     }
 }
