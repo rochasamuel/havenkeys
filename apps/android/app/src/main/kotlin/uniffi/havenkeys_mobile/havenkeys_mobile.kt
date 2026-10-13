@@ -831,6 +831,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling(
     ): Int
+    external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_lookalike_for(
+    ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_card_values(
     ): Int
     external fun uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_cards(
@@ -1037,6 +1039,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_havenkeys_mobile_fn_method_mobilevault_lookalike_for(`ptr`: Long,`target`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_card_values(`ptr`: Long,`id`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,`frames`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_havenkeys_mobile_fn_method_mobilevault_autofill_cards(`ptr`: Long,`target`: RustBuffer.ByValue,`frames`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1353,6 +1357,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_confirm_before_filling() and 0xFFFF) != 26529) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_lookalike_for() and 0xFFFF) != 12751) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_havenkeys_mobile_checksum_method_mobilevault_autofill_card_values() and 0xFFFF) != 37266) {
@@ -2403,6 +2410,15 @@ public interface MobileVaultInterface {
     fun `confirmBeforeFilling`(): kotlin.Boolean
     
     /**
+     * The saved site a browser page only looks like (spec
+     * 2026-10-13-lookalike-warning §6), for the warning row and the save
+     * sheet; `None` for apps, which are identified by package and signing
+     * certificate, not a domain. Answered while frozen: a warning, not a
+     * fill. No secrets.
+     */
+    fun `lookalikeFor`(`target`: TargetFacts): kotlin.String?
+    
+    /**
      * One card's values for each frame, in order. Every frame must be
      * allowed, or nothing is returned.
      */
@@ -3062,6 +3078,28 @@ open class MobileVault: Disposable, AutoCloseable, MobileVaultInterface
     UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_confirm_before_filling(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The saved site a browser page only looks like (spec
+     * 2026-10-13-lookalike-warning §6), for the warning row and the save
+     * sheet; `None` for apps, which are identified by package and signing
+     * certificate, not a domain. Answered while frozen: a warning, not a
+     * fill. No secrets.
+     */
+    @Throws(MobileException::class)override fun `lookalikeFor`(`target`: TargetFacts): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(MobileException) { _status ->
+    UniffiLib.uniffi_havenkeys_mobile_fn_method_mobilevault_lookalike_for(
+        it,
+        
+        FfiConverterTypeTargetFacts.lower(`target`),_status)
 }
     }
     )

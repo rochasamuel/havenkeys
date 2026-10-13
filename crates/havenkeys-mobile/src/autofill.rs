@@ -212,6 +212,21 @@ impl MobileVault {
         Ok(found.iter().map(to_match).collect())
     }
 
+    /// The saved site a browser page only looks like (spec
+    /// 2026-10-13-lookalike-warning §6), for the warning row and the save
+    /// sheet; `None` for apps, which are identified by package and signing
+    /// certificate, not a domain. Answered while frozen: a warning, not a
+    /// fill. No secrets.
+    pub fn lookalike_for(&self, target: TargetFacts) -> MobileResult<Option<String>> {
+        self.unlocked()?;
+        Ok(match self.target(&target)? {
+            FillTarget::Browser { page_url } => {
+                self.client.vault()?.lookalike_for_page(&page_url, None)?
+            }
+            FillTarget::App(_) => None,
+        })
+    }
+
     pub fn autofill_fill(&self, id: String, target: TargetFacts) -> MobileResult<FillValues> {
         let id = parse_id(&id)?;
         self.unlocked()?;
@@ -566,5 +581,56 @@ mod tests {
         assert_eq!(code(err), "account_frozen");
         assert!(v.frequently_used(6).unwrap().is_empty());
         assert_eq!(v.autofill_totp(id, page()).unwrap().len(), 6);
+    }
+
+    #[test]
+    fn a_browser_look_alike_names_the_saved_site() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        add_login(&v, "https://github.com");
+        // Chrome may report the domain in Unicode or punycode; both parse.
+        for domain in ["g\u{0456}thub.com", "xn--gthub-n2e.com"] {
+            assert_eq!(
+                v.lookalike_for(chrome(domain, Some("https")))
+                    .unwrap()
+                    .as_deref(),
+                Some("github.com"),
+                "{domain}"
+            );
+        }
+        assert_eq!(
+            v.lookalike_for(chrome("github.com", Some("https")))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            v.lookalike_for(chrome("evilgithub.com", Some("https")))
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn apps_are_never_look_alikes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        add_login(&v, "https://github.com");
+        assert_eq!(v.lookalike_for(app(1)).unwrap(), None);
+    }
+
+    #[test]
+    fn look_alikes_need_an_unlocked_vault_and_are_answered_when_frozen() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, seen) = unlocked(dir.path());
+        add_login(&v, "https://github.com");
+        let page = || chrome("g\u{0456}thub.com", Some("https"));
+        freeze(&v);
+        assert_eq!(
+            v.lookalike_for(page()).unwrap().as_deref(),
+            Some("github.com")
+        );
+        // Leaves the vault locked, so the call after it is the locked case.
+        overdue_refuses(&v, &seen, |v| v.lookalike_for(page()));
+        assert!(v.lookalike_for(page()).is_err());
     }
 }
