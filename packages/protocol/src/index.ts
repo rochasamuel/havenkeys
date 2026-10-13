@@ -16,6 +16,13 @@ import { isIdentityRole, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, type Iden
 export const PROTOCOL_VERSION = 1;
 export const MAX_URL_BYTES = 4096;
 export const MAX_MATCHES = 50;
+/** A saved site in a check_lookalike result: an ASCII registrable domain (see the Rust protocol crate). */
+export const MAX_LOOKALIKE_BYTES = 253;
+const LOOKALIKE_SITE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+/** The only shape Rust sends: lowercase ASCII labels (punycode for IDNs), at most a DNS name's length. */
+export function isLookalikeSite(v: unknown): v is string {
+  return typeof v === "string" && v.length <= MAX_LOOKALIKE_BYTES && LOOKALIKE_SITE.test(v);
+}
 export const MAX_MATCH_TAGS = 20;
 export const MAX_MATCH_TAG_BYTES = 4 * 32;
 /** Byte limits for check_login/save_login (see the Rust protocol crate). */
@@ -65,6 +72,8 @@ export type Request =
   | { type: "status" }
   | { type: "lock" }
   | { type: "find_matches"; url: string; topUrl?: string }
+  /** The saved site this page only looks like, for a warning. Asked only when the page has no logins. */
+  | { type: "check_lookalike"; url: string; topUrl?: string }
   | { type: "fill_item"; itemId: string; url: string; topUrl?: string }
   | { type: "open_item"; itemId: string; url: string; topUrl?: string }
   | { type: "get_totp"; itemId: string; url: string; topUrl?: string }
@@ -179,6 +188,7 @@ export type Result =
   | { type: "status"; state: LockState; vaultExists: boolean; entitlement: Entitlement }
   | { type: "lock" }
   | { type: "find_matches"; matches: Match[]; entitlement: Entitlement }
+  | { type: "check_lookalike"; lookalikeOf: string | null }
   | { type: "fill_item"; username: string | null; password: string | null; autoSubmit: boolean }
   | { type: "get_totp"; code: string; period: number; secondsRemaining: number; autoSubmit: boolean }
   | { type: "generator_options"; options: PasswordOptions }
@@ -425,6 +435,10 @@ function parseResult(v: unknown): Result | null {
       };
     case "lock":
       return hasExactKeys(v, ["type"]) ? { type: "lock" } : null;
+    case "check_lookalike":
+      if (!hasExactKeys(v, ["type", "lookalikeOf"])) return null;
+      if (v.lookalikeOf !== null && !isLookalikeSite(v.lookalikeOf)) return null;
+      return { type: "check_lookalike", lookalikeOf: v.lookalikeOf };
     case "find_matches": {
       // `entitlement` is sent only when frozen; absent reads as "full".
       if (!hasExactKeys(v, ["type", "matches", "entitlement"]) && !hasExactKeys(v, ["type", "matches"])) return null;

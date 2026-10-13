@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { b64urlLength, envelope, MAX_MATCHES, parseIncoming, providersForOrigin } from "./index";
+import { b64urlLength, envelope, MAX_LOOKALIKE_BYTES, MAX_MATCHES, parseIncoming, providersForOrigin } from "./index";
 
 const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const match = { id: ID, title: "GitHub", username: "octo", hasTotp: true, strength: "same_host", provider: null, tags: [] };
@@ -311,6 +311,46 @@ describe("entitlement", () => {
     });
     expect(parse({ type: "find_matches", matches: [], entitlement: "frozen" })).toMatchObject({
       result: { entitlement: "frozen" },
+    });
+  });
+});
+
+describe("check_lookalike", () => {
+  it("parses a saved site or null", () => {
+    expect(parseIncoming({ v: 1, id: 1, result: { type: "check_lookalike", lookalikeOf: null } })).toEqual({
+      kind: "result",
+      id: 1,
+      result: { type: "check_lookalike", lookalikeOf: null },
+    });
+    expect(parseIncoming({ v: 1, id: 2, result: { type: "check_lookalike", lookalikeOf: "paypal.com" } })).toEqual({
+      kind: "result",
+      id: 2,
+      result: { type: "check_lookalike", lookalikeOf: "paypal.com" },
+    });
+    const longest = `${"a".repeat(MAX_LOOKALIKE_BYTES - 4)}.com`;
+    expect(parseIncoming({ v: 1, id: 3, result: { type: "check_lookalike", lookalikeOf: longest } })).not.toBeNull();
+  });
+
+  it("rejects oversized, non-ASCII, loose or extra shapes", () => {
+    const bad: unknown[] = [
+      { type: "check_lookalike" },
+      { type: "check_lookalike", lookalikeOf: "" },
+      { type: "check_lookalike", lookalikeOf: "pаypal.com" },
+      { type: "check_lookalike", lookalikeOf: "PayPal.com" },
+      { type: "check_lookalike", lookalikeOf: "paypal" },
+      { type: "check_lookalike", lookalikeOf: "<b>x</b>.com" },
+      { type: "check_lookalike", lookalikeOf: 7 },
+      { type: "check_lookalike", lookalikeOf: `${"a".repeat(MAX_LOOKALIKE_BYTES - 3)}.com` },
+      { type: "check_lookalike", lookalikeOf: null, extra: 1 },
+    ];
+    for (const result of bad) expect(parseIncoming({ v: 1, id: 1, result }), JSON.stringify(result)).toBeNull();
+  });
+
+  it("builds the request envelope", () => {
+    expect(envelope(4, { type: "check_lookalike", url: "https://a.com/", topUrl: "https://b.com/" })).toEqual({
+      v: 1,
+      id: 4,
+      request: { type: "check_lookalike", url: "https://a.com/", topUrl: "https://b.com/" },
     });
   });
 });
