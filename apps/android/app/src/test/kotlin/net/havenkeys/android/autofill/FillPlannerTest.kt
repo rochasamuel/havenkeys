@@ -207,4 +207,46 @@ class FillPlannerTest {
         assertNull(offered(null, "com.android.chrome", repo))
         assertNull(offered(form, "", repo))
     }
+
+    @Test
+    fun aBrowserLookAlikeWithNoMatchesIsOfferedTheWarning() = runTest {
+        val repo = FakeAutofillRepository().apply { lookalikeSite = Outcome.Ok("github.com") }
+        val plan = FillPlanner.plan(login, target, unlocked = true, repo) as FillPlan.Offer
+        assertEquals("github.com", plan.lookalikeOf)
+        assertTrue(plan.datasets.isEmpty())
+        assertTrue(repo.calls.none { it.startsWith("fill:") || it.startsWith("totp:") })
+    }
+
+    @Test
+    fun matchesMeanNoLookAlikeQuestion() = runTest {
+        val repo = FakeAutofillRepository().apply {
+            matchList = Outcome.Ok(listOf(match))
+            confirm = true
+            lookalikeSite = Outcome.Ok("github.com")
+        }
+        val plan = FillPlanner.plan(login, target, unlocked = true, repo) as FillPlan.Offer
+        assertNull(plan.lookalikeOf)
+        assertFalse("lookalike" in repo.calls)
+    }
+
+    @Test
+    fun appsAreNeverAskedAndAFailedAnswerIsNoWarning() = runTest {
+        val app = FakeAutofillRepository().apply {
+            kind = Outcome.Ok(TargetKind.APP)
+            lookalikeSite = Outcome.Ok("github.com")
+        }
+        val plan = FillPlanner.plan(login, target, unlocked = true, app) as FillPlan.Offer
+        assertNull(plan.lookalikeOf)
+        assertFalse("lookalike" in app.calls)
+        val failed = FakeAutofillRepository().apply { lookalikeSite = Outcome.Failed("locked") }
+        assertEquals(FillPlan.Nothing, FillPlanner.plan(login, target, unlocked = true, failed))
+    }
+
+    @Test
+    fun aSaveOnlyScreenOnALookAlikeCarriesTheWarningForTheSaveSheet() = runTest {
+        val repo = FakeAutofillRepository().apply { lookalikeSite = Outcome.Ok("github.com") }
+        val plan = FillPlanner.plan(null, target, unlocked = true, repo, saveable = true) as FillPlan.Offer
+        assertEquals("github.com", plan.lookalikeOf)
+        assertTrue(plan.save)
+    }
 }

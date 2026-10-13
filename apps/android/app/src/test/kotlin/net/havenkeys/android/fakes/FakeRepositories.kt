@@ -420,6 +420,13 @@ class FakeAutofillRepository : AutofillRepository {
         return matchList
     }
 
+    var lookalikeSite: Outcome<String?> = Outcome.Ok(null)
+
+    override suspend fun lookalike(target: TargetFacts): Outcome<String?> {
+        calls += "lookalike"
+        return lookalikeSite
+    }
+
     override suspend fun fill(id: String, target: TargetFacts): Outcome<FillValues> {
         calls += "fill:$id"
         return values

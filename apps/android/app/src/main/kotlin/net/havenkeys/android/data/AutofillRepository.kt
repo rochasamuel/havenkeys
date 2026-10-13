@@ -25,6 +25,9 @@ interface AutofillRepository {
     /** Trial ended: Autofill offers nothing and saves nothing. A failed read is not frozen. */
     suspend fun frozen(): Boolean
     suspend fun matches(target: TargetFacts): Outcome<List<AutofillMatch>>
+
+    /** The saved site a browser page only looks like (Rust decides; null for apps). A warning only. */
+    suspend fun lookalike(target: TargetFacts): Outcome<String?>
     suspend fun fill(id: String, target: TargetFacts): Outcome<FillValues>
     suspend fun totp(id: String, target: TargetFacts): Outcome<String>
     suspend fun search(query: String): Outcome<List<AutofillMatch>>
@@ -55,6 +58,7 @@ class RustAutofillRepository(private val vault: MobileVault) : AutofillRepositor
         (rust { vault.confirmBeforeFilling() } as? Outcome.Ok)?.value ?: true
     override suspend fun frozen() = (rust { vault.frozen() } as? Outcome.Ok)?.value ?: false
     override suspend fun matches(target: TargetFacts) = rust { vault.autofillMatches(target) }
+    override suspend fun lookalike(target: TargetFacts) = rust { vault.lookalikeFor(target) }
     override suspend fun fill(id: String, target: TargetFacts) = rust { vault.autofillFill(id, target) }
     override suspend fun totp(id: String, target: TargetFacts) = rust { vault.autofillTotp(id, target) }
     override suspend fun search(query: String) = rust { vault.autofillSearch(query) }

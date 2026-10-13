@@ -21,6 +21,11 @@ sealed interface FillPlan {
         val copies: List<AutofillMatch> = emptyList(),
         /** Attach a SaveInfo: the screen has a login to save. */
         val save: Boolean = false,
+        /**
+         * A browser page that only looks like this saved site (Rust's
+         * answer): one warning row, and the save sheet says so.
+         */
+        val lookalikeOf: String? = null,
     ) : FillPlan
 }
 
@@ -60,8 +65,14 @@ object FillPlanner {
         return when {
             kind == null -> FillPlan.Nothing
             !unlocked -> if (form != null) FillPlan.UnlockFirst else FillPlan.Nothing
-            // Nothing to fill: no login is read at all.
-            form == null -> if (saveable) FillPlan.Offer(emptyList(), search = false, save = true) else FillPlan.Nothing
+            // Nothing to fill: no login is read; only the look-alike question, which reads no secret.
+            form == null ->
+                if (saveable) {
+                    val lookalikeOf = lookalike(kind, target, repo)
+                    FillPlan.Offer(emptyList(), search = false, save = true, lookalikeOf = lookalikeOf)
+                } else {
+                    FillPlan.Nothing
+                }
             else -> offer(form, target, kind, repo, saveable)
         }
     }
@@ -82,9 +93,22 @@ object FillPlanner {
         val search = kind == TargetKind.APP && form.hasLoginFields
         // The code itself is asked of Rust only when a copy is tapped.
         val copies = if (form.otpOnly) datasets.map { it.match } else emptyList()
-        val offered = datasets.isNotEmpty() || search || saveable
-        return if (offered) FillPlan.Offer(datasets, search, copies, save = saveable) else FillPlan.Nothing
+        // Only a page with no logins can be a look-alike (spec 2026-10-13-lookalike-warning §6).
+        val lookalikeOf = if (matches.isEmpty()) lookalike(kind, target, repo) else null
+        val offered = datasets.isNotEmpty() || search || saveable || lookalikeOf != null
+        return if (offered) {
+            FillPlan.Offer(datasets, search, copies, save = saveable, lookalikeOf = lookalikeOf)
+        } else {
+            FillPlan.Nothing
+        }
     }
+
+    /**
+     * Browser pages only: an app is identified by package and certificate,
+     * not a domain. A failed answer is no warning.
+     */
+    private suspend fun lookalike(kind: TargetKind, target: TargetFacts, repo: AutofillRepository): String? =
+        if (kind == TargetKind.BROWSER) repo.lookalike(target).valueOrNull() else null
 
     private suspend fun datasetsOf(
         matches: List<AutofillMatch>,

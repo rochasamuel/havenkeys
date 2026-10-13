@@ -63,9 +63,12 @@ class DatasetFactory(
             R.drawable.ic_autofill_copy,
         )
         val datasets = offer.datasets.mapNotNull(::datasetOf).toMutableList()
+        // A look-alike page's warning leads; it fills nothing (spec 2026-10-13-lookalike-warning §6).
+        offer.lookalikeOf?.let(::lookalikeDataset)?.let { datasets.add(0, it) }
         offer.copies.mapNotNullTo(datasets, ::copyDataset)
         if (offer.search) searchDataset()?.let(datasets::add)
-        val saveInfo = if (offer.save) save?.saveInfoIn(screen) else null
+        val warning = offer.lookalikeOf?.let(context::lookalikeSaveDescription)
+        val saveInfo = if (offer.save) save?.saveInfoIn(screen, warning) else null
         if (datasets.isEmpty() && saveInfo == null) return null
         return FillResponse.Builder().apply {
             datasets.forEach(::addDataset)
@@ -93,6 +96,19 @@ class DatasetFactory(
         passwordId?.let { id -> values.password?.let { id to AutofillValue.forText(it) } },
     )
 
+    /**
+     * The look-alike warning row: every login field, no value, so Android
+     * fills nothing; tapping it opens HavenKeys' explanation (the saved site
+     * is asked of Rust again there; the Intent carries only the mode).
+     */
+    private fun lookalikeDataset(site: String): Dataset? = rows.dataset(
+        listOfNotNull(usernameId, passwordId, otpId).map { it to null },
+        context.getString(R.string.autofill_lookalike_title, site),
+        context.getString(R.string.autofill_lookalike_subtitle),
+        autofillSender(context, MODE_LOOKALIKE, null),
+        R.drawable.ic_autofill_warning,
+    )
+
     private fun searchDataset(): Dataset? = rows.dataset(
         listOfNotNull(usernameId, passwordId).map { it to null },
         context.getString(R.string.autofill_search),
@@ -108,6 +124,7 @@ class DatasetFactory(
         const val MODE_COPY_TOTP = "copy-totp"
         const val MODE_UNLOCK = "unlock"
         const val MODE_SEARCH = "search"
+        const val MODE_LOOKALIKE = "lookalike"
         const val MODE_CARD = "card"
         const val MODE_IDENTITY = "identity"
         const val MODE_IDENTITY_DOCS = "identity-docs"
@@ -118,11 +135,15 @@ class DatasetFactory(
     }
 }
 
+/** What Android's save sheet says on a look-alike page; its Save button stays "save anyway". */
+internal fun Context.lookalikeSaveDescription(site: String): String = getString(R.string.autofill_lookalike_save, site)
+
 /**
  * Android's save sheet, shown when the form is submitted. Its "Save" is
  * the user's confirmation; Rust decides what it adds or updates.
+ * [description]: the look-alike warning, shown in the sheet.
  */
-internal fun SaveForm.saveInfoIn(screen: ParsedScreen): SaveInfo? {
+internal fun SaveForm.saveInfoIn(screen: ParsedScreen, description: CharSequence? = null): SaveInfo? {
     val passwordId = password?.let(screen.ids::getOrNull)
     val usernameId = username?.let(screen.ids::getOrNull)
     val currentId = current?.let(screen.ids::getOrNull)
@@ -137,12 +158,14 @@ internal fun SaveForm.saveInfoIn(screen: ParsedScreen): SaveInfo? {
                 }
                 // Web pages and single-activity apps rarely finish: save when the fields go away.
                 .setFlags(SaveInfo.FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE)
+                .apply { description?.let(::setDescription) }
                 .build()
         }
         // A username-first sign-in: keep this screen for the password's.
         usernameId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
             SaveInfo.Builder(SaveInfo.SAVE_DATA_TYPE_USERNAME, arrayOf(usernameId))
                 .setFlags(SaveInfo.FLAG_DELAY_SAVE)
+                .apply { description?.let(::setDescription) }
                 .build()
         else -> null
     }
