@@ -13,6 +13,9 @@ redistributed unmodified from crates.io. Among the MIT crates, `zxcvbn`
 (Copyright (c) 2016 Joshua Holmer; the Rust port by shssoichiro of Dropbox's
 zxcvbn) compiles its password and word lists into the core, so they ship in
 the desktop app and the Android library (Vault health).
+`unicode-security` (MIT/Apache-2.0, unicode-rs) compiles tables derived
+from the Unicode Character Database (Unicode-3.0 licence) into the core for
+the look-alike site warning.
 
 The fonts and data below are different: their files are embedded in the
 desktop application bundle, the browser extension package, the Android app

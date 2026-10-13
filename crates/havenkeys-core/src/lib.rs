@@ -25,6 +25,7 @@ pub mod identity_page;
 pub mod import;
 pub mod local;
 pub mod lock;
+mod lookalike;
 pub mod model;
 pub mod origin;
 pub mod pairing;
