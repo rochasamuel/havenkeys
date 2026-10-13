@@ -43,5 +43,8 @@ describe("quickKeyAction", () => {
     expect(quickKeyAction(press("Enter", { ctrlKey: true }), false)).toBeNull();
     expect(quickKeyAction(press("Enter", { isComposing: true }), false)).toBeNull();
     expect(quickKeyAction(press("Escape", { isComposing: true }), true)).toBeNull();
+    // An input method's commit Enter, reported without isComposing.
+    expect(quickKeyAction(press("Enter", { keyCode: 229 }), true)).toBeNull();
+    expect(quickKeyAction(press("Enter", { keyCode: 13 }), true)).toBe("password");
   });
 });

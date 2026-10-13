@@ -8,6 +8,8 @@ export interface KeyLike {
   altKey: boolean;
   shiftKey: boolean;
   isComposing?: boolean;
+  /** 229: an input method took the key (WKWebView can send its commit Enter with isComposing false). */
+  keyCode?: number;
 }
 
 /**
@@ -16,7 +18,7 @@ export interface KeyLike {
  * key pressed while an input method is composing, is never an action.
  */
 export function quickKeyAction(e: KeyLike, mac: boolean): QuickKeyAction | null {
-  if (e.isComposing) return null;
+  if (e.isComposing || e.keyCode === 229) return null;
   const command = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
   if (command) {
     if (e.altKey || e.shiftKey) return null;

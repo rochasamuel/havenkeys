@@ -231,6 +231,29 @@ describe("QuickSearch", () => {
     expect(down.defaultPrevented).toBe(true);
   });
 
+  it("drops the old rows when a search fails", async () => {
+    await render();
+    listItems.mockRejectedValue(new ApiError("vault_locked", "The vault is locked."));
+    await type("x");
+    expect(rows()).toHaveLength(0);
+    await key("Enter");
+    await key("c", { ctrlKey: true });
+    expect(copy).not.toHaveBeenCalled();
+    expect(host.querySelector("[role=alert]")?.textContent).not.toBe("");
+  });
+
+  it("leaves Cmd/Ctrl+C to text copy when the query is selected", async () => {
+    await render();
+    await type("git");
+    field().setSelectionRange(0, 3);
+    const event = await key("c", { ctrlKey: true });
+    expect(event.defaultPrevented).toBe(false);
+    expect(copy).not.toHaveBeenCalled();
+    field().setSelectionRange(3, 3);
+    await key("c", { ctrlKey: true });
+    expect(copy).toHaveBeenCalledWith("a", "username");
+  });
+
   it("hides on Esc", async () => {
     await render();
     await key("Escape");

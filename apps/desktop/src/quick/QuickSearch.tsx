@@ -38,7 +38,11 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
         setError(null);
       },
       (err) => {
-        if (id === request.current) setError(errorMessage(err, t));
+        if (id !== request.current) return;
+        // Drop the previous query's rows, so no key acts on one of them.
+        setItems([]);
+        setIndex(0);
+        setError(errorMessage(err, t));
       },
     );
     // `t` is left out: a language change must not re-run the search.
@@ -93,6 +97,9 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
       onHide();
       return;
     }
+    // Text selected in the field: Cmd/Ctrl+C copies that text as usual.
+    const field = e.currentTarget;
+    if (action === "username" && field.selectionStart !== field.selectionEnd) return;
     if (action === "up" || action === "down") {
       e.preventDefault();
       const last = Math.max(0, (items?.length ?? 0) - 1);
