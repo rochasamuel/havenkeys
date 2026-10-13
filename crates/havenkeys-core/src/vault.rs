@@ -1466,6 +1466,24 @@ impl VaultService {
         Ok(out)
     }
 
+    /// Whether `id` is a login whose rules match the page (and the embedding
+    /// page, for frames), under the same equivalent-domains setting as
+    /// [`find_matches`](Self::find_matches). The same answer as "is `id`
+    /// among `find_matches`", without ranking: it reads no activity record,
+    /// so an origin check never depends on one. An unknown ID or an
+    /// unparsable page is `false`; a locked vault is an error. No secrets.
+    pub fn matches_page(&self, id: &Uuid, page_url: &str, top_url: Option<&str>) -> Result<bool> {
+        let policy = self.match_policy()?;
+        let session = self.session()?;
+        let Some(page) = PageContext::parse(page_url, top_url) else {
+            return Ok(false);
+        };
+        Ok(session
+            .overviews
+            .get(id)
+            .is_some_and(|o| o.item_type == ItemType::Login && page.matches(o, policy).is_some()))
+    }
+
     /// The policy user-facing match lists and fill authorization follow:
     /// the vault setting.
     pub(crate) fn match_policy(&self) -> Result<MatchPolicy> {
@@ -1636,7 +1654,8 @@ impl VaultService {
     /// See the spec §4: `Unchanged` when a login for the page already has
     /// this provider and account (or this provider and no account was
     /// learned); `Update(id)` when exactly one has this provider and no
-    /// account; `Add` otherwise.
+    /// account; `Add` otherwise. `Unchanged` (only) also counts the logins
+    /// the equivalent-domains setting fills on the page; `Update` never does.
     pub fn check_sso(
         &self,
         page_url: &str,
@@ -1645,23 +1664,34 @@ impl VaultService {
         account: Option<&str>,
     ) -> Result<SaveAction> {
         let wanted = normalize_username(account);
+        let same_account = |s: &Suggestion| {
+            s.provider == Some(provider)
+                && (wanted.is_none() || normalize_username(s.account.as_deref()) == wanted)
+        };
         let mut without_account = Vec::new();
         for s in self.direct_matches(page_url, top_url)? {
-            if s.provider != Some(provider) {
-                continue;
-            }
-            let have = normalize_username(s.account.as_deref());
-            if wanted.is_none() || have == wanted {
+            if same_account(&s) {
                 return Ok(SaveAction::Unchanged);
             }
-            if have.is_none() {
+            if s.provider == Some(provider) && normalize_username(s.account.as_deref()).is_none() {
                 without_account.push(s.id);
             }
         }
-        Ok(match without_account.as_slice() {
-            [id] => SaveAction::Update(*id),
-            _ => SaveAction::Add,
-        })
+        if let [id] = without_account.as_slice() {
+            return Ok(SaveAction::Update(*id));
+        }
+        // Widened only to `Unchanged`: a login matched by equivalence is
+        // never updated from here.
+        let policy = self.match_policy()?;
+        if policy != MatchPolicy::DIRECT
+            && self
+                .page_matches(page_url, top_url, policy)?
+                .iter()
+                .any(same_account)
+        {
+            return Ok(SaveAction::Unchanged);
+        }
+        Ok(SaveAction::Add)
     }
 
     /// Every login whose URL rules match one of the provider's own sign-in
@@ -1802,6 +1832,11 @@ impl VaultService {
     ///   username if one was given, has `current` as its password.
     /// * `Add`: no login for this page has this username.
     ///
+    /// The logins compared are those saved for this page directly. When
+    /// they give `Add`, the logins the equivalent-domains setting fills here
+    /// may still make it `Unchanged`, never `Update`
+    /// ([`unchanged_or_add`](Self::unchanged_or_add)).
+    ///
     /// Usernames compare case-insensitively after trimming. Passwords are
     /// compared inside the core and never returned.
     pub fn check_login(
@@ -1813,7 +1848,30 @@ impl VaultService {
         current: Option<&SecretString>,
     ) -> Result<SaveAction> {
         let candidates = self.direct_matches(page_url, top_url)?;
-        self.save_action(&candidates, username, password, current)
+        let action = self.save_action(&candidates, username, password, current)?;
+        let policy = self.match_policy()?;
+        if action != SaveAction::Add || policy == MatchPolicy::DIRECT {
+            return Ok(action);
+        }
+        let related = self.page_matches(page_url, top_url, policy)?;
+        self.unchanged_or_add(&related, username, password)
+    }
+
+    /// After the direct logins gave `Add`: `Unchanged` if one of `related`
+    /// (the logins the equivalent-domains setting fills here) already has
+    /// this username and password, so a login filled on a related site is
+    /// not offered as new. Never `Update`: a login is only ever updated
+    /// from a place it matches directly.
+    pub(crate) fn unchanged_or_add(
+        &self,
+        related: &[Suggestion],
+        username: Option<&str>,
+        password: &SecretString,
+    ) -> Result<SaveAction> {
+        Ok(match self.save_action(related, username, password, None)? {
+            SaveAction::Unchanged => SaveAction::Unchanged,
+            SaveAction::Update(_) | SaveAction::Add => SaveAction::Add,
+        })
     }
 
     /// The decision [`check_login`](Self::check_login) describes, over the

@@ -212,6 +212,8 @@ impl VaultService {
     /// What saving a login the user just submitted in `app` would do: the
     /// rules of [`check_login`](VaultService::check_login), over the logins
     /// this app is matched to (bound to it, or vouched for by their site).
+    /// As there, logins matched only by equivalence may make it `Unchanged`,
+    /// never `Update`.
     pub fn check_login_for_app(
         &self,
         app: &AppIdentity,
@@ -221,7 +223,13 @@ impl VaultService {
         current: Option<&SecretString>,
     ) -> Result<SaveAction> {
         let candidates = self.direct_app_matches(app, verified_hosts)?;
-        self.save_action(&candidates, username, password, current)
+        let action = self.save_action(&candidates, username, password, current)?;
+        let policy = self.match_policy()?;
+        if action != SaveAction::Add || policy == MatchPolicy::DIRECT {
+            return Ok(action);
+        }
+        let related = self.app_matches(app, verified_hosts, policy)?;
+        self.unchanged_or_add(&related, username, password)
     }
 
     /// Seal a login submitted in `app`, ready to send. A new login is bound
