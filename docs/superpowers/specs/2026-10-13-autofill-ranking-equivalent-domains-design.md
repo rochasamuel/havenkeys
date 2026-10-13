@@ -29,7 +29,7 @@ order Rust returns).
 | Equivalence source | Compiled `crates/havenkeys-core/data/equivalent-domains.json`, curated by us (no AGPL lists copied) |
 | Which rules widen | `Domain` rules only; `Exact` and `Origin` stay as narrow as the user set them |
 | Strength of a widened match | New `MatchStrength::Equivalent`, weakest |
-| Default | On; vault setting `equivalent_domains` turns it off; `Settings::restrictive()` has it off |
+| Default | On; the per-device setting `equivalent_domains` (not synced) turns it off; `Settings::restrictive()` has it off |
 | UI | One switch in desktop Settings and one in Android Settings; impeccable review for both |
 | Passkeys | Unaffected (rpId rules are separate) |
 | User-defined groups | Out of scope |
@@ -137,8 +137,14 @@ and Android `matches_for_app` (asset-links verified hosts).
 
 * Passkeys: the relying-party ID check in `passkey` code is untouched.
 * The "Sign in with" provider-origin list.
-* `same_site` / `site_of` users: save-login deduplication, recent-fill
-  records and the passkey-upgrade consent window keep exact sites.
+* `same_site` / `site_of` users: recent-fill records and the
+  passkey-upgrade consent window keep exact sites.
+* Save-login deduplication (`check_login`, `check_login_for_app`,
+  `check_sso`) compares the direct matches first. Only when they give
+  `Add` are the setting-following matches compared, and only to return
+  `Unchanged` (the login was just filled there, so no prompt); never
+  `Update`. Revised in the final review: without this, a login filled on an
+  equivalent site was proposed again as new on every sign-in.
 * Save-update authorization (page, SSO and app) stays direct
   (`MatchPolicy::DIRECT`): a tampered extension cannot overwrite a password
   from an equivalent site.
@@ -147,8 +153,9 @@ and Android `matches_for_app` (asset-links verified hosts).
 
 `Settings::equivalent_domains: bool`, `#[serde(default = "default_true")]`.
 `Settings::restrictive()` sets it `false`, so a damaged or tampered
-settings blob narrows matching. It syncs with the rest of the vault's
-settings.
+settings blob narrows matching. Like the other settings, it is per
+device: a sealed row in the local SQLite store that is never sent to the
+server, so each device has its own switch.
 
 * Desktop: a switch in Settings, with the other autofill switches
   (`SettingsView.tsx`, `i18n/en.ts`, `i18n/pt-BR.ts`, `lib/types.ts`).

@@ -3649,7 +3649,8 @@ independent audit.
 | ID | Severity | Component | Finding | Status/mitigation |
 |---|---|---|---|---|
 | ED1 | Low | `havenkeys-core` origin matching, `equivalent-domains.json` | A wrong group, or a listed domain changing owner, offers a login to a site that does not own it | Accepted |
-| ED2 | Info | Activity record, ranking | Ranking reveals nothing off-device; the activity record is unchanged | By design |
+| ED2 | Info | Activity record, ranking | No use data leaves the device; only the resulting order reaches the extension | By design |
+| ED3 | Info | `equivalent-domains.json` (Google group) | A `youtube.com` (or `google.com`) whole-site login is also offered on Google-hosted user content such as `sites.google.com` and Google Forms | Accepted |
 
 ### ED1. Equivalent-domain table (Low, accepted)
 **Component:** `crates/havenkeys-core/data/equivalent-domains.json`,
@@ -3660,9 +3661,11 @@ owner, so a login is offered on a site that does not own it.
 first; the user's explicit pick is still required (§25); the list is
 compiled in and changes only by code review, with a `note` per group; table
 checks run in CI; it is the weakest strength; the setting is a kill switch
-and restrictive settings turn it off; no network. Save-login dedup,
-save-update authorization, "Sign in with" and passkeys use
-`MatchPolicy::DIRECT` and never widen.
+and restrictive settings turn it off; no network. Save-update
+authorization, "Sign in with" and passkeys use `MatchPolicy::DIRECT` and
+never widen. Save-login dedup compares the direct logins first and lets the
+widened ones answer only "unchanged", never "update", so no login is
+overwritten from a site it matches only by equivalence.
 **Remaining limitations:** the list can go stale between releases.
 
 ### ED2. Ranking data stays on the device (Info, by design)
@@ -3676,3 +3679,17 @@ server or the extension beyond the order.
 **Remaining limitations:** the desktop now writes to the activity record on
 each password fill; a local attacker with the unlocked vault could already
 read what was filled.
+
+### ED3. Google group covers user-content pages (Info, accepted)
+**Component:** the Google group of `equivalent-domains.json`
+(`google.com`, its country domains and `youtube.com`).
+**Attack scenario:** pages anyone can publish under `google.com`, such as
+`sites.google.com` sites and Google Forms, are same-site with `google.com`,
+so with the setting on a `youtube.com` whole-site login is also offered
+there. A page author could build a look-alike sign-in form to collect it.
+**Mitigation:** the same exposure already exists, without this feature, for
+any `google.com` whole-site rule; the login is offered at the weakest
+strength and still needs the user's explicit pick; nothing is filled
+automatically; the setting turns it off.
+**Remaining limitations:** a user who picks the login on such a page hands
+it to that page's author.

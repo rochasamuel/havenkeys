@@ -711,14 +711,15 @@ See `native-messaging.md` for the full protocol. In summary:
 * Passkeys add one more write, `passkey_create`, and four lookups or
   signatures (§15). Toward the browser they carry only public WebAuthn data
   (credential IDs, public keys, signatures, authenticator data).
-
 * Domain matching may widen to equivalent domains: a login with a `domain`
   rule also matches a page whose registrable domain shares a group with the
-  rule's in a fixed list compiled into Rust (reviewed in code, 12 groups,
-  no network). It is the weakest strength, still needs the user's pick, and
+  rule's in a fixed list compiled into Rust (a short curated list,
+  reviewed in code, no network). It is the weakest strength, still needs the user's pick, and
   can be turned off ("Fill on related sites", `equivalent_domains`; the
-  restrictive settings turn it off). Save-login deduplication, save-update
-  authorization, "Sign in with" and passkeys never widen. The list can go
+  restrictive settings turn it off). Save-update authorization, "Sign in
+  with" and passkeys never widen; save-login deduplication widens only to
+  "unchanged" (no prompt for a login just filled there), never to "update".
+  The bridge's fill and open origin checks use the unranked `matches_page`. The list can go
   stale between releases (security-review.md, ED1). Ranking by use reads
   only the sealed, never-synced activity record and sends nothing anywhere.
 

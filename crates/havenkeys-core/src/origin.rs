@@ -42,9 +42,12 @@ pub enum MatchStrength {
     Equivalent,
 }
 
-/// Which widening the caller allows. User-facing match lists follow the
-/// vault setting; internal checks (save, Sign in with, passkeys) use
-/// [`MatchPolicy::DIRECT`].
+/// Which widening the caller allows. User-facing match lists and fill
+/// authorization (including `start_sso_for_page`) follow the per-device
+/// setting. Internal save and "Sign in with" save checks, the "Sign in
+/// with" provider logins and passkeys use [`MatchPolicy::DIRECT`]; save
+/// deduplication may additionally consult the setting's matches, but only
+/// to answer `Unchanged`, never `Update`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MatchPolicy {
     pub equivalent_domains: bool,

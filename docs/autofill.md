@@ -36,14 +36,14 @@ public suffixes, such as `github.io`.
 
 Suggestions are ranked `exact_url` → `same_host` → `same_site` →
 `equivalent`, then by how recently and often the user filled each login on
-this device, then by title.
+this device, then by title, then by ID.
 
 ### Equivalent domains
 
 Only a `domain` rule can widen. If the page is not the rule's own site, the
 core looks both registrable domains up in a fixed table
-(`crates/havenkeys-core/data/equivalent-domains.json`, 12 groups, compiled
-in, each with a `note`). When both fall in one group, the login matches with
+(`crates/havenkeys-core/data/equivalent-domains.json`, a short curated
+list compiled in, each group with a `note`). When both fall in one group, the login matches with
 the weakest strength, `equivalent` (sent to the extension as `same_site`;
 the wire protocol is unchanged). The scheme and port checks above run
 first. `exact` and `origin` rules never widen, and a malformed table reads
@@ -52,10 +52,14 @@ as empty.
 The setting "Fill on related sites" (on by default; off in the restrictive
 settings) controls it. It applies to `find_matches`, `matches_for_app`,
 fill and TOTP authorization (page and app) and automatic sign-in. It never
-applies to save-login deduplication, save-update authorization, "Sign in
-with" provider logins, or passkeys (candidate lists and relying-party ID
-checks), so a save prompt on an equivalent site offers a new login rather
-than overwriting, and a passkey upgrade never attaches to it.
+applies to save-update authorization, "Sign in with" provider logins, or
+passkeys (candidate lists and relying-party ID checks), and a passkey
+upgrade never attaches to an equivalent login. Save-login deduplication
+(`check_login`, `check_login_for_app`, `check_sso`) compares the direct
+logins first; only when they give "add" do the equivalent logins count, and
+then only to answer "unchanged" (the login just filled there, so no prompt),
+never "update": a save prompt on an equivalent site offers a new login
+rather than overwriting one.
 
 ### Ranking
 
