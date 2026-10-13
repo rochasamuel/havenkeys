@@ -23,6 +23,7 @@ mod native_host;
 mod pairing;
 mod qr_scan;
 mod quick_access;
+mod quick_window;
 mod removal;
 mod scan_slot;
 mod secret_store;
@@ -252,6 +253,8 @@ pub fn run() {
 
             // In-app updates: this computer's setting and the daily check.
             app.manage(updater::Updates::new(dir.clone()));
+            // Quick Access: this computer's shortcut setting (quick-access.json).
+            app.manage(quick_access::QuickAccess::new(dir.clone()));
             updater::schedule(app.handle().clone());
 
             // The window starts hidden (tauri.conf.json). A login launch
@@ -263,24 +266,32 @@ pub fn run() {
             start_auto_lock(app.handle().clone())?;
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            // Closing the window hides HavenKeys to the tray instead of
-            // quitting: the tray menu's "Open HavenKeys" brings it back, and
-            // "Quit HavenKeys" is the way out. The vault is deliberately not
-            // locked here — the idle timer keeps running while the window is
-            // hidden, so auto-lock still applies (`security-model.md` §5).
-            WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                let _ = window.hide();
+        .on_window_event(|window, event| {
+            // The quick window hides on close and on focus loss, and never
+            // locks the vault or quits (quick_window.rs).
+            if window.label() == quick_access::QUICK_WINDOW {
+                quick_window::on_window_event(window, event);
+                return;
             }
-            // The window is actually going away (quit, or the session ending).
-            WindowEvent::Destroyed => {
-                let app = window.app_handle();
-                if let Some(state) = app.try_state::<AppState>() {
-                    state.lock("exit");
+            match event {
+                // Closing the window hides HavenKeys to the tray instead of
+                // quitting: the tray menu's "Open HavenKeys" brings it back, and
+                // "Quit HavenKeys" is the way out. The vault is deliberately not
+                // locked here — the idle timer keeps running while the window is
+                // hidden, so auto-lock still applies (`security-model.md` §5).
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
+                // The window is actually going away (quit, or the session ending).
+                WindowEvent::Destroyed => {
+                    let app = window.app_handle();
+                    if let Some(state) = app.try_state::<AppState>() {
+                        state.lock("exit");
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::vault_status,
@@ -361,6 +372,7 @@ pub fn run() {
             updater::check_for_update,
             updater::install_update,
             updater::set_update_auto_check,
+            quick_window::hide_quick_window,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the HavenKeys application");

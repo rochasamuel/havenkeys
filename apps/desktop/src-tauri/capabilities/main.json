@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "The only capability: the main window may call exactly these commands, listen for events, and start a window drag from its own title-bar areas (macOS overlay title bar). No plugin commands, no filesystem, no shell, no network. (Rust itself checks GitHub for signed updates; see updater.rs.)",
+  "description": "The main window's capability (the Quick Access window has its own, capabilities/quick.json): it may call exactly these commands, listen for events, and start a window drag from its own title-bar areas (macOS overlay title bar). No plugin commands, no filesystem, no shell, no network. (Rust itself checks GitHub for signed updates; see updater.rs.)",
   "windows": [
     "main"
   ],

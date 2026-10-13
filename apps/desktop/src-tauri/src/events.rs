@@ -1,7 +1,7 @@
 //! The desktop's answer to `ClientEvents`: Tauri events for the window,
 //! the auto-lock clock and the browser bridge.
 
-use crate::state::{AppState, ITEMS_CHANGED_EVENT, LOCKED_EVENT};
+use crate::state::{AppState, ITEMS_CHANGED_EVENT, LOCKED_EVENT, UNLOCKED_EVENT};
 use crate::sync::{CONNECTIVITY_EVENT, SIGNED_OUT_EVENT, SYNCED_EVENT};
 use havenkeys_client::ClientEvents;
 use havenkeys_core::sync::SyncReport;
@@ -47,6 +47,7 @@ impl ClientEvents for DesktopEvents {
             state.arm_auto_lock(auto_lock_minutes);
             state.notify_unlocked();
         }
+        let _ = self.app.emit(UNLOCKED_EVENT, ());
     }
 
     fn locked(&self, reason: &'static str, was_open: bool) {
@@ -55,6 +56,8 @@ impl ClientEvents for DesktopEvents {
             if was_open {
                 state.notify_locked();
                 let _ = self.app.emit(LOCKED_EVENT, LockedPayload { reason });
+                // Spec §3: the window hides; its view resets on the event.
+                crate::quick_window::hide(&self.app, crate::quick_access::HideReason::Locked);
             }
         }
     }

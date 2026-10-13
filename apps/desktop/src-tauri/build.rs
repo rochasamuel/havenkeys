@@ -80,6 +80,7 @@ const COMMANDS: &[&str] = &[
     "check_for_update",
     "install_update",
     "set_update_auto_check",
+    "hide_quick_window",
 ];
 
 fn main() {

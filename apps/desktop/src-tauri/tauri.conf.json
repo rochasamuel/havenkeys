@@ -26,6 +26,26 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "dragDropEnabled": false
+      },
+      {
+        "label": "quick",
+        "url": "quick.html",
+        "title": "HavenKeys Quick Access",
+        "width": 640,
+        "height": 420,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visibleOnAllWorkspaces": true,
+        "center": true,
+        "visible": false,
+        "focus": true,
+        "theme": "Dark",
+        "backgroundColor": "#0f1614",
+        "dragDropEnabled": false
       }
     ],
     "security": {
@@ -61,7 +81,8 @@
       },
       "freezePrototype": true,
       "capabilities": [
-        "main"
+        "main",
+        "quick"
       ],
       "pattern": {
         "use": "brownfield"

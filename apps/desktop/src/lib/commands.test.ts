@@ -2,7 +2,10 @@
 //
 //   src-tauri/build.rs             generates one permission per command
 //   src-tauri/src/lib.rs           registers the handlers
-//   src-tauri/capabilities/main.json  grants the window exactly these
+//   src-tauri/capabilities/main.json  grants the main window all of them
+//                                     except the quick-only commands
+//   src-tauri/capabilities/quick.json grants the Quick Access window its
+//                                     fixed list (spec 2026-10-13 §4)
 //   src/lib/api.ts                 what the UI can actually call
 //
 // A command missing from the capability is denied by Tauri before it reaches
@@ -50,9 +53,22 @@ function registeredInLibRs(): string[] {
   return captured(list, /(?:^|\s)(?:\w+::)?(\w+),/g);
 }
 
+/** Commands only the Quick Access window may call (capabilities/quick.json). */
+const QUICK_ONLY = ["hide_quick_window"];
+/** Spec 2026-10-13-quick-access-design §4, in command names. */
+const QUICK_GRANTS = [
+  "vault_status",
+  "unlock_vault",
+  "record_activity",
+  "list_items",
+  "copy_secret",
+  "open_website",
+  "hide_quick_window",
+];
+
 /** `allow-create-item` → `create_item`, ignoring Tauri's own `core:` grants. */
-function grantedInCapability(): string[] {
-  const capability = JSON.parse(read("../../src-tauri/capabilities/main.json")) as {
+function grantedInCapability(file = "main.json"): string[] {
+  const capability = JSON.parse(read(`../../src-tauri/capabilities/${file}`)) as {
     permissions: string[];
   };
   return capability.permissions
@@ -66,8 +82,15 @@ function calledFromApi(): string[] {
 }
 
 describe("the Tauri command surface", () => {
-  it("is granted to the window exactly as it is registered", () => {
-    expect([...grantedInCapability()].sort()).toEqual([...registeredInLibRs()].sort());
+  it("is granted to the main window exactly as it is registered, minus the quick-only commands", () => {
+    const registered = registeredInLibRs().filter((name) => !QUICK_ONLY.includes(name));
+    expect([...grantedInCapability()].sort()).toEqual(registered.sort());
+  });
+
+  it("grants the quick window only its fixed list, all of it registered", () => {
+    expect([...grantedInCapability("quick.json")].sort()).toEqual([...QUICK_GRANTS].sort());
+    const registered = new Set(registeredInLibRs());
+    expect(QUICK_GRANTS.filter((name) => !registered.has(name))).toEqual([]);
   });
 
   it("has a generated permission for every registered command", () => {
@@ -109,5 +132,19 @@ describe("background reads do not count as activity", () => {
     expect(body("../../src-tauri/src/health.rs", "health_report")).not.toContain("touch()");
     // The guard itself: an explicit action in the same file still touches.
     expect(body("../../src-tauri/src/health.rs", "set_health_ignored")).toContain("touch()");
+  });
+
+  /** A trait method's body (no `pub`), up to the next `fn`, comments dropped. */
+  function methodBody(file: string, name: string): string {
+    const text = read(file);
+    const start = text.search(new RegExp(`\\bfn ${name}\\b`));
+    expect(start, `${name} not found in ${file}`).toBeGreaterThan(-1);
+    const rest = text.slice(start);
+    const end = rest.slice(1).search(/\n\s*(?:pub )?(?:async )?fn /);
+    return (end === -1 ? rest : rest.slice(0, end + 1)).replace(/\/\/.*$/gm, "");
+  }
+
+  it("a lock hides the Quick Access window", () => {
+    expect(methodBody("../../src-tauri/src/events.rs", "locked")).toContain("quick_window::hide(");
   });
 });

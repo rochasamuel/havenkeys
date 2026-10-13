@@ -10,7 +10,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Wry};
 
-const MAIN_WINDOW: &str = "main";
+pub const MAIN_WINDOW: &str = "main";
 
 /// The languages the UI speaks. A closed set: the renderer names one, and
 /// anything else is refused rather than falling back silently.

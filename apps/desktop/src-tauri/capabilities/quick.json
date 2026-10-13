@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "quick",
+  "description": "The Quick Access window (spec 2026-10-13-quick-access-design §4): read the lock state, unlock, search logins, copy a password, username or one-time code (Rust writes the clipboard), open a login's saved website, report activity, hide itself, and listen for events. Nothing that edits, reveals, exports, changes settings, or touches the account, pairing or passkeys; no plugin commands, no filesystem, no shell, no network.",
+  "windows": ["quick"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-vault-status",
+    "allow-unlock-vault",
+    "allow-record-activity",
+    "allow-list-items",
+    "allow-copy-secret",
+    "allow-open-website",
+    "allow-hide-quick-window"
+  ]
+}

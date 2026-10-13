@@ -20,6 +20,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const LOCKED_EVENT: &str = "vault://locked";
+/// The vault was unlocked (here or in the Quick Access window): the main
+/// window re-reads the status. Carries nothing.
+pub const UNLOCKED_EVENT: &str = "vault://unlocked";
 /// Items were added or changed from outside the UI (the browser extension).
 pub const ITEMS_CHANGED_EVENT: &str = "vault://items-changed";
 /// The browser extension asked to edit this item (payload: its UUID).

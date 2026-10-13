@@ -93,6 +93,8 @@ export const api = {
   unlock: (password: string, secretKey?: string) =>
     call<VaultStatus>("unlock_vault", { password, secretKey: secretKey?.trim() ? secretKey : null }),
   lock: () => call<void>("lock_vault"),
+  /** The Quick Access window hides itself (Esc, or after an action). Rust only hides that window. */
+  hideQuickWindow: () => call<void>("hide_quick_window"),
   changeMasterPassword: (current: string, next: string) =>
     call<void>("change_master_password", { current, new: next }),
   recordActivity: () => call<void>("record_activity"),
@@ -230,6 +232,10 @@ export const api = {
 
   onLocked: (handler: (reason: string) => void): Promise<UnlistenFn> =>
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),
+  /** The vault was unlocked, here or in the Quick Access window. Carries no data. */
+  onUnlocked: (handler: () => void): Promise<UnlistenFn> => listen("vault://unlocked", () => handler()),
+  /** The Quick Access window was just shown (sent to that window only). */
+  onQuickShown: (handler: () => void): Promise<UnlistenFn> => listen("quick://shown", () => handler()),
   /** A login was saved from the browser extension. Carries no data. */
   onItemsChanged: (handler: () => void): Promise<UnlistenFn> => listen("vault://items-changed", () => handler()),
   /** The browser extension asked to edit this item (already checked against the page in Rust). */
