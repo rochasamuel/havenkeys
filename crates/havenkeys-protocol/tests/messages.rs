@@ -473,7 +473,7 @@ fn passkey_requests_parse() {
 
 #[test]
 fn passkey_requests_are_bounded() {
-    let long_chal = "A".repeat(1368); // 1026 bytes → over the limit
+    let long_chal = "A".repeat(5464); // 4098 bytes → over the limit
     let many: Vec<String> = (0..65).map(|_| format!("\"{CRED}\"")).collect();
     let bad = [
         // credential IDs must be exactly 16 bytes

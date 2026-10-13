@@ -27,7 +27,7 @@ export const MAX_PASSWORD_LENGTH = 128;
 
 /** Credential IDs HavenKeys creates, and the only length it accepts. */
 export const CREDENTIAL_ID_BYTES = 16;
-export const MAX_CHALLENGE_BYTES = 1024;
+export const MAX_CHALLENGE_BYTES = 4096;
 export const MAX_USER_HANDLE_BYTES = 64;
 export const MAX_RP_ID_BYTES = 253;
 export const MAX_CREDENTIAL_LIST = 64;

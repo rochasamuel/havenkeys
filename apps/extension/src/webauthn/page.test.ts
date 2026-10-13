@@ -5,6 +5,7 @@
 // the tests provide PublicKeyCredential and navigator.credentials.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_CHALLENGE_BYTES } from "@havenkeys/protocol";
 import { MIN_TIMEOUT_MS, REQUEST_EVENT, RESPONSE_EVENT } from "./messages";
 import { install } from "./page";
 
@@ -101,7 +102,7 @@ describe("page wrapper", () => {
   it("falls back instead of sending a request the bridge would silently drop", async () => {
     const win = fresh();
     install(win);
-    const bigChallenge = new Uint8Array(1025);
+    const bigChallenge = new Uint8Array(MAX_CHALLENGE_BYTES + 1);
     const bigUserId = new Uint8Array(65);
     await win.navigator.credentials.get({ publicKey: { challenge: new Uint8Array(0) } });
     await win.navigator.credentials.get({ publicKey: { challenge: bigChallenge } });
@@ -114,6 +115,18 @@ describe("page wrapper", () => {
     expect(requests).toEqual([]);
     expect(nativeGet).toHaveBeenCalledTimes(3);
     expect(nativeCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it("sends Google's 1950-byte challenge to HavenKeys", async () => {
+    const win = fresh();
+    install(win);
+    answer = () => ({ outcome: "fallback" });
+    const id = new Uint8Array(16).fill(7);
+    await win.navigator.credentials.get({
+      publicKey: { challenge: new Uint8Array(1950).buffer, rpId: "google.com", allowCredentials: [{ type: "public-key", id: id.buffer }] },
+    });
+    expect(requests).toHaveLength(1);
+    expect((requests[0]?.options as { allowCredentials: string[] }).allowCredentials).toEqual(["BwcHBwcHBwcHBwcHBwcHBw"]);
   });
 
   it("sends a null timeout instead of a non-finite one the bridge would reject", async () => {

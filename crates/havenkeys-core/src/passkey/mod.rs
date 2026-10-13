@@ -39,7 +39,7 @@ pub const MAX_PASSKEYS_PER_LOGIN: usize = 8;
 pub const CREDENTIAL_ID_LEN: usize = 16;
 pub const MAX_USER_HANDLE_BYTES: usize = 64;
 pub const MIN_CHALLENGE_BYTES: usize = 1;
-pub const MAX_CHALLENGE_BYTES: usize = 1024;
+pub const MAX_CHALLENGE_BYTES: usize = 4096;
 pub const MAX_CREDENTIAL_LIST: usize = 64;
 /// COSE algorithm identifier for ES256 (ECDSA P-256 with SHA-256).
 pub const COSE_ALG_ES256: i64 = -7;

@@ -87,7 +87,7 @@ pub const MAX_CARD_CODE_BYTES: usize = 16;
 /// Credential IDs HavenKeys creates, and the only length it accepts.
 pub const CREDENTIAL_ID_BYTES: usize = 16;
 /// WebAuthn challenge bounds, in bytes.
-pub const MAX_CHALLENGE_BYTES: usize = 1024;
+pub const MAX_CHALLENGE_BYTES: usize = 4096;
 /// WebAuthn user handle bound, in bytes.
 pub const MAX_USER_HANDLE_BYTES: usize = 64;
 /// Relying-party ID bound (a DNS name).

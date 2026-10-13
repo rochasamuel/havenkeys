@@ -888,7 +888,7 @@ when:
 * there is no `publicKey` member, or `get()` asks for `mediation: "silent"`;
 * `create()` asks for `authenticatorAttachment: "cross-platform"`, or does not
   list ES256 (`-7`) in `pubKeyCredParams`;
-* the challenge is empty or over 1024 bytes, the user handle is empty or over
+* the challenge is empty or over 4096 bytes, the user handle is empty or over
   64 bytes, the `rpId` is empty or over 253 characters, or the options cannot
   be read;
 * `get()` names `allowCredentials`, none of them 16 bytes long (so none can

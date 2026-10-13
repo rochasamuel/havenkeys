@@ -62,7 +62,7 @@ describe("page ↔ bridge", () => {
       { kind: "create", id: ID, options: { ...create, excludeCredentials: ["AQ"] } },
       { kind: "create", id: ID, options: { ...create, userId: "" } },
       { kind: "create", id: ID, options: { ...create, userId: "A".repeat(90) } },
-      { kind: "create", id: ID, options: { ...create, challenge: "A".repeat(1400) } },
+      { kind: "create", id: ID, options: { ...create, challenge: "A".repeat(5470) } },
       { kind: "create", id: ID, options: { ...create, userName: "x".repeat(513) } },
       { kind: "create", id: ID, options: { ...create, algs: [1.5] } },
       { kind: "create", id: ID, options: { ...create, extra: 1 } },
