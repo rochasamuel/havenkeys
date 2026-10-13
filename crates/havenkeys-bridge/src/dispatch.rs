@@ -1,10 +1,10 @@
 //! Request → core call. The authorization decisions live in the core
-//! (`VaultService::{find_matches, fill_for_page, totp_for_page, check_login,
-//! save_login, find_passkeys, passkey_assert, check_passkey_create,
-//! stage_passkey_create, has_passkey_for_page, start_sso_for_page, check_sso,
-//! stage_save_sso, cards_for_page, card_values_for_page,
-//! stage_save_card}`); this layer adds the integration switch and maps types,
-//! and never widens what the core returns.
+//! (`VaultService::{find_matches, matches_page, fill_for_page, totp_for_page,
+//! check_login, save_login, find_passkeys, passkey_assert,
+//! check_passkey_create, stage_passkey_create, has_passkey_for_page,
+//! start_sso_for_page, check_sso, stage_save_sso, cards_for_page,
+//! card_values_for_page, stage_save_card}`); this layer adds the integration
+//! switch and maps types, and never widens what the core returns.
 
 use crate::convert::{
     core_card_role, core_provider, core_role, lock_state, save_action, strength, wire_brand,
@@ -197,10 +197,8 @@ pub fn dispatch(
         } => {
             // Origin first (attack 1), then the plan.
             let matched = v
-                .find_matches(url, top_url.as_deref(), now_ms(unix_seconds))
-                .map_err(code)?
-                .iter()
-                .any(|s| s.id == *item_id);
+                .matches_page(item_id, url, top_url.as_deref())
+                .map_err(code)?;
             if !matched {
                 return Err(ErrorCode::Denied);
             }
@@ -468,10 +466,8 @@ pub fn dispatch(
             // secret: the item must be one of this page's matches. An unknown
             // ID answers exactly like another site's item.
             let saved_here = v
-                .find_matches(url, top_url.as_deref(), now_ms(unix_seconds))
-                .map_err(code)?
-                .iter()
-                .any(|s| s.id == *item_id);
+                .matches_page(item_id, url, top_url.as_deref())
+                .map_err(code)?;
             if !saved_here {
                 return Err(ErrorCode::Denied);
             }
