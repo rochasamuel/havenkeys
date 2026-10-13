@@ -41,7 +41,7 @@ havenkeys/
 ├── apps/
 │   ├── desktop/
 │   │   ├── src/               React + TypeScript UI (no crypto)
-│   │   │   └── src/quick/     the Quick Access window (second page, quick.html)
+│   │   │   └── quick/         the Quick Access window (second page, quick.html)
 │   │   └── src-tauri/         Thin Tauri shell: commands, clipboard, auto-lock ticker
 │   │                          (quick_access.rs / quick_window.rs / quick_shortcut.rs:
 │   │                          Quick Access: setting, window, global shortcut)

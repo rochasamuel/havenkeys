@@ -211,20 +211,17 @@ a keystroke through `record_activity`, not through the search command.
   grants nine permissions: `core:event:allow-listen`,
   `core:event:allow-unlisten`, `allow-vault-status`, `allow-unlock-vault`,
   `allow-record-activity`, `allow-list-items`, `allow-copy-secret`,
-  `allow-open-website` and `allow-hide-quick-window`. Compared with the
-  Quick Access spec's first draft, `main.json` gained only
-  `allow-quick-access-status` and `allow-set-quick-access`, and
-  `quick.json` includes `record-activity`.
-* **Global shortcut.** `tauri-plugin-global-shortcut` is used from Rust
-  only. No capability grants a `global-shortcut:` permission, so no
-  renderer can register, unregister or query a shortcut. The shortcut is
-  fixed (Cmd/Ctrl+Shift+Space); registration and unregistration follow the
-  setting in `quick-access.json`.
+  `allow-open-website` and `allow-hide-quick-window`.
   No `fs`, `shell`, `http`, `dialog`, `opener`, or `clipboard` plugins are
   installed (clipboard is handled in Rust). The `tauri-plugin-opener` crate is
   a dependency only for its free `open_url` function, called from
   `open_website`; the plugin is never registered, so the renderer has no
   opener commands.
+* **Global shortcut.** `tauri-plugin-global-shortcut` is used from Rust
+  only. No capability grants a `global-shortcut:` permission, so no
+  renderer can register, unregister or query a shortcut. The shortcut is
+  fixed (Cmd/Ctrl+Shift+Space); registration and unregistration follow the
+  setting in `quick-access.json`.
 * **Screen capture (TOTP QR scan).** `scan_totp_qr` reads the clipboard
   image and, only if that holds no TOTP code, captures every monitor
   (`xcap`). It runs only on the user's click in the unlocked app; pixels
@@ -250,7 +247,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 81 of them (recounted from `build.rs`), which is the whole
+Every command the renderer can call — all 81 of them, which is the whole
 surface. `build.rs` declares this list, `lib.rs` registers it, the
 capability files grant exactly it between them, and `src/lib/commands.test.ts` fails if they (or the
 commands `api.ts` calls) ever disagree. "Online"
