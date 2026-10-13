@@ -391,6 +391,11 @@ pub struct Settings {
     /// login has its own switch too (`ItemOverview::auto_sign_in`).
     #[serde(default = "default_true")]
     pub auto_sign_in: bool,
+    /// Whether a login with a "domain" website rule is also offered on
+    /// sites the equivalent-domains table groups with it (spec 2026-10-13).
+    /// On by default, including for settings saved before this field existed.
+    #[serde(default = "default_true")]
+    pub equivalent_domains: bool,
     /// The password generator's policy, set in the desktop's generator tab.
     /// The browser extension's "Generate strong password" uses it too.
     /// Settings saved before this field existed get the default policy.
@@ -413,6 +418,7 @@ impl Default for Settings {
             browser_integration: false,
             auto_passkey_upgrade: true,
             auto_sign_in: true,
+            equivalent_domains: true,
             generator: GeneratorOptions::default(),
         }
     }
@@ -427,6 +433,7 @@ impl Settings {
             browser_integration: false,
             auto_passkey_upgrade: false,
             auto_sign_in: false,
+            equivalent_domains: false,
             ..Self::default()
         }
     }

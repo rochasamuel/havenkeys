@@ -130,3 +130,21 @@ pub fn note(title: &str, content: &str) -> ItemInput {
         sections: None,
     }
 }
+
+/// An activated account vault, unlocked (the Secret Key is not needed).
+pub fn unlocked_vault() -> VaultService {
+    activated_vault().0
+}
+
+/// Add a login (username `octo`, password `hunter2hunter2`, a TOTP secret)
+/// with one website rule of the given kind; returns its ID.
+pub fn add_login(v: &mut VaultService, title: &str, url: &str, match_type: MatchType) -> Uuid {
+    let mut input = login(title, "octo", "hunter2hunter2", url);
+    input.urls[0].match_type = match_type;
+    input.totp = SecretUpdate::Set(secret("JBSWY3DPEHPK3PXP"));
+    let revision = v.list_items().unwrap().len() as i64 + 1;
+    let staged = v.stage_create(input, NOW).unwrap();
+    let id = staged.item_id;
+    v.commit_write(staged, revision).unwrap();
+    id
+}

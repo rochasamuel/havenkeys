@@ -59,6 +59,25 @@ impl VaultService {
         app: &AppIdentity,
         verified_hosts: &[String],
     ) -> Result<Vec<Suggestion>> {
+        self.app_matches(app, verified_hosts, self.match_policy()?)
+    }
+
+    /// Logins matched to the app without equivalent-domain widening: for
+    /// save and passkey checks.
+    pub(crate) fn direct_app_matches(
+        &self,
+        app: &AppIdentity,
+        verified_hosts: &[String],
+    ) -> Result<Vec<Suggestion>> {
+        self.app_matches(app, verified_hosts, MatchPolicy::DIRECT)
+    }
+
+    fn app_matches(
+        &self,
+        app: &AppIdentity,
+        verified_hosts: &[String],
+        policy: MatchPolicy,
+    ) -> Result<Vec<Suggestion>> {
         let session = self.session()?;
         let mut out = Vec::new();
         for o in session
@@ -66,7 +85,7 @@ impl VaultService {
             .values()
             .filter(|o| o.item_type == ItemType::Login)
         {
-            if let Some(strength) = self.app_match(o, app, verified_hosts)? {
+            if let Some(strength) = self.app_match(o, app, verified_hosts, policy)? {
                 out.push(suggestion(o, strength));
             }
         }
@@ -79,6 +98,7 @@ impl VaultService {
         o: &ItemOverview,
         app: &AppIdentity,
         verified_hosts: &[String],
+        policy: MatchPolicy,
     ) -> Result<Option<MatchStrength>> {
         // Bound by the user: as strong as an exact page match.
         if self.bound_to(&o.id, app)? {
@@ -87,7 +107,7 @@ impl VaultService {
         Ok(verified_hosts
             .iter()
             .filter_map(|h| PageUrl::parse(&format!("https://{h}/")))
-            .filter_map(|page| match_item(o, &page, MatchPolicy::DIRECT))
+            .filter_map(|page| match_item(o, &page, policy))
             .min())
     }
 
@@ -109,8 +129,22 @@ impl VaultService {
         app: &AppIdentity,
         verified_hosts: &[String],
     ) -> Result<&ItemOverview> {
+        self.authorize_for_app_with(id, app, verified_hosts, self.match_policy()?)
+    }
+
+    /// [`authorize_for_app`](Self::authorize_for_app) under `policy`; save
+    /// updates use [`MatchPolicy::DIRECT`], as save dedup does.
+    fn authorize_for_app_with(
+        &self,
+        id: &Uuid,
+        app: &AppIdentity,
+        verified_hosts: &[String],
+        policy: MatchPolicy,
+    ) -> Result<&ItemOverview> {
         let o = self.session()?.overviews.get(id).ok_or(Error::NotFound)?;
-        if o.item_type != ItemType::Login || self.app_match(o, app, verified_hosts)?.is_none() {
+        if o.item_type != ItemType::Login
+            || self.app_match(o, app, verified_hosts, policy)?.is_none()
+        {
             return Err(Error::Denied);
         }
         Ok(o)
@@ -180,7 +214,7 @@ impl VaultService {
         password: &SecretString,
         current: Option<&SecretString>,
     ) -> Result<SaveAction> {
-        let candidates = self.matches_for_app(app, verified_hosts)?;
+        let candidates = self.direct_app_matches(app, verified_hosts)?;
         self.save_action(&candidates, username, password, current)
     }
 
@@ -204,7 +238,8 @@ impl VaultService {
         let title = match target {
             SaveTarget::New { title } => title,
             SaveTarget::Update(id) => {
-                let existing = self.authorize_for_app(id, app, verified_hosts)?;
+                let existing =
+                    self.authorize_for_app_with(id, app, verified_hosts, MatchPolicy::DIRECT)?;
                 let input = ItemInput {
                     password: SecretUpdate::Set(password),
                     sign_in_with: existing.sign_in_with.clone(),

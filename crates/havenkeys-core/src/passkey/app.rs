@@ -88,7 +88,7 @@ impl VaultService {
     ) -> Result<CreateCheck> {
         let ctx = self.authorize_app_rp(q.rp_id, q.app, now_ms)?;
         let excluded = !q.exclude.is_empty() && !self.passkeys_for(&ctx, q.exclude)?.is_empty();
-        let mut candidates = self.with_room(self.matches_for_app(q.app, q.verified_hosts)?);
+        let mut candidates = self.with_room(self.direct_app_matches(q.app, q.verified_hosts)?);
         same_user_first(&mut candidates, q.user_name);
         Ok(CreateCheck {
             excluded,
@@ -106,7 +106,7 @@ impl VaultService {
         check_challenge(req.challenge)?;
         let ctx = self.authorize_app_rp(req.rp_id, req.app, now_ms)?;
         let offered: Vec<Uuid> = self
-            .matches_for_app(req.app, req.verified_hosts)?
+            .direct_app_matches(req.app, req.verified_hosts)?
             .iter()
             .map(|s| s.id)
             .collect();

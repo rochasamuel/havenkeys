@@ -317,10 +317,11 @@ impl PageContext {
     }
 
     /// How well `item` matches the frame, if it also matches the top page.
-    fn matches(&self, item: &ItemOverview) -> Option<MatchStrength> {
-        let strength = match_item(item, &self.frame, MatchPolicy::DIRECT)?;
+    /// The same `policy` applies to both.
+    fn matches(&self, item: &ItemOverview, policy: MatchPolicy) -> Option<MatchStrength> {
+        let strength = match_item(item, &self.frame, policy)?;
         if let Some(top) = &self.top {
-            match_item(item, top, MatchPolicy::DIRECT)?;
+            match_item(item, top, policy)?;
         }
         Some(strength)
     }
@@ -1450,7 +1451,36 @@ impl VaultService {
     /// iframe (`None` for the top frame). A login is offered in a frame only
     /// if its rules match the frame *and* the page embedding it, so a
     /// `github.com` frame embedded in `evil.com` gets nothing.
+    ///
+    /// Follows the vault's equivalent-domains setting.
     pub fn find_matches(&self, page_url: &str, top_url: Option<&str>) -> Result<Vec<Suggestion>> {
+        self.page_matches(page_url, top_url, self.match_policy()?)
+    }
+
+    /// The policy user-facing match lists and fill authorization follow:
+    /// the vault setting.
+    pub(crate) fn match_policy(&self) -> Result<MatchPolicy> {
+        Ok(MatchPolicy {
+            equivalent_domains: self.session()?.settings.equivalent_domains,
+        })
+    }
+
+    /// Logins matching the page by their own host or site only, never
+    /// widened: for save, Sign in with and passkey checks.
+    pub(crate) fn direct_matches(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<Vec<Suggestion>> {
+        self.page_matches(page_url, top_url, MatchPolicy::DIRECT)
+    }
+
+    fn page_matches(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        policy: MatchPolicy,
+    ) -> Result<Vec<Suggestion>> {
         let session = self.session()?;
         let Some(page) = PageContext::parse(page_url, top_url) else {
             return Ok(Vec::new());
@@ -1460,7 +1490,7 @@ impl VaultService {
             .values()
             .filter(|o| o.item_type == ItemType::Login)
             .filter_map(|o| {
-                page.matches(o).map(|strength| Suggestion {
+                page.matches(o, policy).map(|strength| Suggestion {
                     id: o.id,
                     title: o.title.clone(),
                     username: o.username.clone(),
@@ -1478,16 +1508,32 @@ impl VaultService {
 
     /// The item, if and only if it is a login whose rules match the page
     /// (and the embedding page, for frames).
+    ///
+    /// Follows the vault's equivalent-domains setting, like
+    /// [`find_matches`](Self::find_matches).
     fn authorize_for_page(
         &self,
         id: &Uuid,
         page_url: &str,
         top_url: Option<&str>,
     ) -> Result<&ItemOverview> {
+        self.authorize_for_page_with(id, page_url, top_url, self.match_policy()?)
+    }
+
+    /// [`authorize_for_page`](Self::authorize_for_page) under `policy`.
+    /// Save updates use [`MatchPolicy::DIRECT`]: a login is only ever
+    /// updated from a page it matches directly, as save dedup proposes.
+    fn authorize_for_page_with(
+        &self,
+        id: &Uuid,
+        page_url: &str,
+        top_url: Option<&str>,
+        policy: MatchPolicy,
+    ) -> Result<&ItemOverview> {
         let session = self.session()?;
         let overview = session.overviews.get(id).ok_or(Error::NotFound)?;
         let page = PageContext::parse(page_url, top_url).ok_or(Error::Denied)?;
-        if overview.item_type != ItemType::Login || page.matches(overview).is_none() {
+        if overview.item_type != ItemType::Login || page.matches(overview, policy).is_none() {
             return Err(Error::Denied);
         }
         Ok(overview)
@@ -1591,7 +1637,7 @@ impl VaultService {
     ) -> Result<SaveAction> {
         let wanted = normalize_username(account);
         let mut without_account = Vec::new();
-        for s in self.find_matches(page_url, top_url)? {
+        for s in self.direct_matches(page_url, top_url)? {
             if s.provider != Some(provider) {
                 continue;
             }
@@ -1616,7 +1662,7 @@ impl VaultService {
         let mut seen = std::collections::HashSet::new();
         let mut out = Vec::new();
         for origin in provider.origins() {
-            for s in self.find_matches(&format!("{origin}/"), None)? {
+            for s in self.direct_matches(&format!("{origin}/"), None)? {
                 let Some(username) = s
                     .username
                     .as_deref()
@@ -1715,7 +1761,8 @@ impl VaultService {
                 if account.is_none_or(|a| a.trim().is_empty()) {
                     return Err(Error::InvalidInput("account is required"));
                 }
-                let existing = self.authorize_for_page(id, page_url, top_url)?;
+                let existing =
+                    self.authorize_for_page_with(id, page_url, top_url, MatchPolicy::DIRECT)?;
                 if existing.sign_in_with.as_ref().map(|s| s.provider) != Some(provider) {
                     return Err(Error::Denied);
                 }
@@ -1756,7 +1803,7 @@ impl VaultService {
         password: &SecretString,
         current: Option<&SecretString>,
     ) -> Result<SaveAction> {
-        let candidates = self.find_matches(page_url, top_url)?;
+        let candidates = self.direct_matches(page_url, top_url)?;
         self.save_action(&candidates, username, password, current)
     }
 
@@ -1858,7 +1905,7 @@ impl VaultService {
         password: SecretString,
         now_ms: i64,
     ) -> Result<StagedSave> {
-        let existing = self.authorize_for_page(id, page_url, top_url)?;
+        let existing = self.authorize_for_page_with(id, page_url, top_url, MatchPolicy::DIRECT)?;
         let input = ItemInput {
             password: SecretUpdate::Set(password),
             sign_in_with: existing.sign_in_with.clone(),

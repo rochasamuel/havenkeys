@@ -393,7 +393,7 @@ impl VaultService {
         self.session()?;
         let ctx = authorize_rp(q.rp_id, q.page_url, q.top_url)?;
         let excluded = !q.exclude.is_empty() && !self.passkeys_for(&ctx, q.exclude)?.is_empty();
-        let mut candidates = self.with_room(self.find_matches(q.page_url, q.top_url)?);
+        let mut candidates = self.with_room(self.direct_matches(q.page_url, q.top_url)?);
         same_user_first(&mut candidates, q.user_name);
         let upgrade = if q.conditional && !excluded {
             self.upgrade_for(q.page_url, q.user_name, &candidates, now_ms)?
@@ -496,7 +496,7 @@ impl VaultService {
         // here, never taken from the extension.
         if req.conditional {
             let item = req.item_id.ok_or(Error::Denied)?;
-            let homes = self.with_room(self.find_matches(req.page_url, req.top_url)?);
+            let homes = self.with_room(self.direct_matches(req.page_url, req.top_url)?);
             if self.upgrade_for(req.page_url, req.user_name, &homes, now_ms)? != Upgrade::Auto(item)
             {
                 return Err(Error::Denied);
@@ -504,7 +504,7 @@ impl VaultService {
         }
         let ctx = authorize_rp(req.rp_id, req.page_url, req.top_url)?;
         let offered: Vec<Uuid> = self
-            .find_matches(req.page_url, req.top_url)?
+            .direct_matches(req.page_url, req.top_url)?
             .iter()
             .map(|s| s.id)
             .collect();
