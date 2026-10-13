@@ -55,6 +55,8 @@ impl QuickAccessSetting {
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         let bytes = serde_json::to_vec(self).map_err(std::io::Error::other)?;
         let tmp = dir.join(TMP);
+        // A stale file from a crash may have looser permissions.
+        let _ = std::fs::remove_file(&tmp);
         {
             let mut options = std::fs::OpenOptions::new();
             options.write(true).create(true).truncate(true);
@@ -142,6 +144,11 @@ impl QuickAccess {
     /// registered.
     pub fn apply(&self, host: &impl ShortcutHost) -> QuickAccessStatus {
         let _one_at_a_time = self.applying.lock().unwrap_or_else(|p| p.into_inner());
+        self.apply_locked(host)
+    }
+
+    /// `applying` must be held by the caller.
+    fn apply_locked(&self, host: &impl ShortcutHost) -> QuickAccessStatus {
         let r = self.snapshot();
         let next = if r.enabled && !r.registered {
             match host.register() {
@@ -168,7 +175,12 @@ impl QuickAccess {
         } else {
             r
         };
-        *self.registration.lock().unwrap_or_else(|p| p.into_inner()) = next;
+        // Only what this call changed; `enabled` is never written back.
+        {
+            let mut current = self.registration.lock().unwrap_or_else(|p| p.into_inner());
+            current.registered = next.registered;
+            current.in_use = next.in_use;
+        }
         self.status()
     }
 
@@ -179,12 +191,14 @@ impl QuickAccess {
         host: &impl ShortcutHost,
         enabled: bool,
     ) -> std::io::Result<QuickAccessStatus> {
+        // Held across save, enable and apply, so two sets cannot interleave.
+        let _one_at_a_time = self.applying.lock().unwrap_or_else(|p| p.into_inner());
         QuickAccessSetting { shortcut: enabled }.save(&self.dir)?;
         self.registration
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .enabled = enabled;
-        Ok(self.apply(host))
+        Ok(self.apply_locked(host))
     }
 
     pub fn note_opened(&self, main_was_focused: bool) {
@@ -403,6 +417,66 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn a_set_during_register_is_not_undone() {
+        use std::sync::mpsc;
+        use std::sync::{Arc, Mutex};
+        struct Slow {
+            started: Mutex<mpsc::Sender<()>>,
+            go: Mutex<mpsc::Receiver<()>>,
+            unregisters: Mutex<u32>,
+        }
+        impl ShortcutHost for Slow {
+            fn register(&self) -> Result<(), ShortcutTaken> {
+                self.started.lock().unwrap().send(()).unwrap();
+                self.go.lock().unwrap().recv().unwrap();
+                Ok(())
+            }
+            fn unregister(&self) {
+                *self.unregisters.lock().unwrap() += 1;
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let qa = Arc::new(QuickAccess::new(dir.path().into()));
+        let (started_tx, started_rx) = mpsc::channel();
+        let (go_tx, go_rx) = mpsc::channel();
+        let host = Arc::new(Slow {
+            started: Mutex::new(started_tx),
+            go: Mutex::new(go_rx),
+            unregisters: Mutex::new(0),
+        });
+        let applier = {
+            let (qa, host) = (qa.clone(), host.clone());
+            std::thread::spawn(move || qa.apply(&*host))
+        };
+        started_rx.recv().unwrap();
+        let setter = {
+            let (qa, host) = (qa.clone(), host.clone());
+            std::thread::spawn(move || qa.set(&*host, false).unwrap())
+        };
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        go_tx.send(()).unwrap();
+        applier.join().unwrap();
+        assert_eq!(setter.join().unwrap(), OFF);
+        assert_eq!(qa.status(), OFF);
+        assert_eq!(*host.unregisters.lock().unwrap(), 1);
+        assert!(!QuickAccessSetting::load(dir.path()).shortcut);
+    }
+
+    #[test]
+    fn a_stale_temp_file_does_not_loosen_the_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(TMP), b"old").unwrap();
+        QuickAccessSetting { shortcut: true }
+            .save(dir.path())
+            .unwrap();
+        assert!(!dir.path().join(TMP).exists());
+        assert_eq!(
+            QuickAccessSetting::load(dir.path()),
+            QuickAccessSetting { shortcut: true }
+        );
     }
 
     #[test]
