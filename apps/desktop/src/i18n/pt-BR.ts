@@ -277,6 +277,7 @@ export const ptBR: Messages = {
     noResults: "Nenhum login encontrado.",
     noLogins: "Nenhum login ainda.",
     actionFailed: "Não deu certo. Tente de novo.",
+    noPassword: "Este login não tem senha.",
     hints: {
       password: "Copiar senha",
       username: "Usuário",

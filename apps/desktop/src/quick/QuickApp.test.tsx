@@ -11,6 +11,7 @@ const hideQuickWindow = vi.fn<() => Promise<void>>();
 const listItems = vi.fn();
 let shown: (() => void) | null = null;
 let locked: ((reason: string) => void) | null = null;
+let unlocked: (() => void) | null = null;
 
 vi.mock("../lib/api", async (importOriginal) => {
   const original = await importOriginal<typeof import("../lib/api")>();
@@ -21,6 +22,10 @@ vi.mock("../lib/api", async (importOriginal) => {
     listItems: (q?: string) => listItems(q),
     onQuickShown: (cb: () => void) => {
       shown = cb;
+      return Promise.resolve(() => undefined);
+    },
+    onUnlocked: (cb: () => void) => {
+      unlocked = cb;
       return Promise.resolve(() => undefined);
     },
     onLocked: (cb: (r: string) => void) => {
@@ -59,6 +64,7 @@ beforeEach(() => {
   listItems.mockReset().mockResolvedValue([]);
   shown = null;
   locked = null;
+  unlocked = null;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -165,5 +171,14 @@ describe("QuickApp", () => {
     status.mockResolvedValue(UNLOCKED); // unlocked in the main window meanwhile
     await act(async () => shown?.());
     expect(search()).not.toBeNull();
+  });
+
+  it("moves to the search when the vault is unlocked elsewhere", async () => {
+    await render();
+    expect(password()).not.toBeNull();
+    status.mockResolvedValue(UNLOCKED);
+    await act(async () => unlocked?.());
+    expect(search()).not.toBeNull();
+    expect(password()).toBeNull();
   });
 });

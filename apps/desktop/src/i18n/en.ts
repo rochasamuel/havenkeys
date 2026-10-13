@@ -257,6 +257,7 @@ export const en = {
     noResults: "No logins match.",
     noLogins: "No logins yet.",
     actionFailed: "That didn't work. Try again.",
+    noPassword: "This login has no password.",
     hints: {
       password: "Copy password",
       username: "Username",

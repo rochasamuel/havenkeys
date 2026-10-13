@@ -33,7 +33,10 @@ export function QuickApp() {
       setSession((s) => s + 1);
       setView("locked");
     });
+    // An unlock elsewhere (main window, phone sign-in) moves this window on.
+    const offUnlocked = api.onUnlocked(() => refresh());
     return () => {
+      void offUnlocked.then((f) => f());
       void offShown.then((f) => f());
       void offLocked.then((f) => f());
     };

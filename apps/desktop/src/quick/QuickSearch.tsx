@@ -68,7 +68,11 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
   }
 
   async function run(item: ItemOverview, action: Action) {
-    if (!available(item, action)) return;
+    if (!available(item, action)) {
+      // A click on a row without a password: say so, stay open.
+      if (action === "password") setError(t.quick.noPassword);
+      return;
+    }
     try {
       if (action === "open") {
         const url = item.urls[0]?.url;
@@ -106,13 +110,22 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
       setIndex((i) => (action === "up" ? Math.max(0, i - 1) : Math.min(last, i + 1)));
       return;
     }
-    // Nothing selected: Cmd/Ctrl+C copies selected text as usual.
+    // No current row: Cmd/Ctrl+C copies selected text as usual.
     if (!current) return;
     e.preventDefault();
     void run(current, action);
   }
 
   const mod = mac ? "⌘" : "Ctrl+";
+  const modKey = mac ? "Meta" : "Control";
+  const shortcuts = [
+    current?.hasPassword && "Enter",
+    current?.username && `${modKey}+C`,
+    current?.hasTotp && `${modKey}+T`,
+    current && current.urls.length > 0 && `${modKey}+O`,
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <main
       className="quick"
@@ -131,6 +144,7 @@ export function QuickSearch({ onHide }: { onHide: () => void }) {
           aria-controls="quick-results"
           aria-activedescendant={current ? `quick-row-${current.id}` : undefined}
           aria-autocomplete="list"
+          aria-keyshortcuts={shortcuts || undefined}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}

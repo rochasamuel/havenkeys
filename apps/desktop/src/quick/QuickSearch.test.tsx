@@ -285,4 +285,21 @@ describe("QuickSearch", () => {
     }
     expect("copy").not.toMatch(SECRET_READS);
   });
+
+  it("says so when a clicked login has no password, and stays open", async () => {
+    listItems.mockResolvedValue([login("p", "Pinless", { hasPassword: false })]);
+    await render();
+    await act(async () => rows()[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(host.querySelector("[role=alert]")!.textContent).toBe(en.quick.noPassword);
+    expect(copy).not.toHaveBeenCalled();
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it("announces the keys the selected login answers to", async () => {
+    await render();
+    expect(field().getAttribute("aria-keyshortcuts")).toBe("Enter Control+C Control+T Control+O");
+    document.documentElement.dataset.platform = "mac";
+    await act(async () => root.render(<QuickSearch key="m" onHide={onHide} />));
+    expect(field().getAttribute("aria-keyshortcuts")).toBe("Enter Meta+C Meta+T Meta+O");
+  });
 });
