@@ -38,12 +38,14 @@ order Rust returns).
 
 ### 3.1 Recording
 
-`VaultService::fill_for_page` calls `record_use(id, now_ms)` after it has
-decided to return a password, next to the existing `record_fill`. A failure
-to record is ignored: the fill is the point, the activity a convenience
-(same rule as `MobileVault::note_use`). This one call covers desktop
-browser fills (bridge) and Android browser fills. Android app fills and
-copies already record uses through `havenkeys-mobile`.
+The desktop bridge's `fill_item` arm calls `record_use(id, now_ms)` after
+the fill returned a password, next to the existing `record_fill`. It is not
+in `VaultService::fill_for_page`, because Android calls `fill_for_page`
+before the user's pick (to build the datasets handed to the autofill
+framework), so recording there would count offers as uses. Android records
+its own picks (and copies) through `havenkeys-mobile`. A failure to record
+is ignored: the fill is the point, the activity a convenience (same rule as
+`MobileVault::note_use`).
 
 The desktop thereby adopts the activity record, as the 2026-10-03
 amendment to `CLAUDE.md` foresaw ("the desktop may adopt it later"). No
@@ -137,6 +139,9 @@ and Android `matches_for_app` (asset-links verified hosts).
 * The "Sign in with" provider-origin list.
 * `same_site` / `site_of` users: save-login deduplication, recent-fill
   records and the passkey-upgrade consent window keep exact sites.
+* Save-update authorization (page, SSO and app) stays direct
+  (`MatchPolicy::DIRECT`): a tampered extension cannot overwrite a password
+  from an equivalent site.
 
 ### 4.5 Setting
 

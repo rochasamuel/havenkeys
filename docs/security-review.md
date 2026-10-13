@@ -3638,3 +3638,41 @@ list calls answer empty, value and bind calls refuse with `account_frozen`,
 passkey save entry. TOTP and passkey sign-in stay. See `android.md`.
 **Remaining limitations:** as FZ1, a modified build can remove the gate.
 
+
+# Security Review: Equivalent domains and ranking (2026-10-13)
+
+Branch `feat/autofill-ranking`. Spec:
+`docs/superpowers/specs/2026-10-13-autofill-ranking-equivalent-domains-design.md`
+§6; model: `security-model.md` §14, `autofill.md`. Internal review, not an
+independent audit.
+
+| ID | Severity | Component | Finding | Status/mitigation |
+|---|---|---|---|---|
+| ED1 | Low | `havenkeys-core` origin matching, `equivalent-domains.json` | A wrong group, or a listed domain changing owner, offers a login to a site that does not own it | Accepted |
+| ED2 | Info | Activity record, ranking | Ranking reveals nothing off-device; the activity record is unchanged | By design |
+
+### ED1. Equivalent-domain table (Low, accepted)
+**Component:** `crates/havenkeys-core/data/equivalent-domains.json`,
+`equivalent.rs`, `origin.rs` (`MatchPolicy`, `MatchStrength::Equivalent`).
+**Attack scenario:** a group is wrong, or a domain in a group later changes
+owner, so a login is offered on a site that does not own it.
+**Mitigation:** only `Domain` rules widen; the scheme and port checks run
+first; the user's explicit pick is still required (§25); the list is
+compiled in and changes only by code review, with a `note` per group; table
+checks run in CI; it is the weakest strength; the setting is a kill switch
+and restrictive settings turn it off; no network. Save-login dedup,
+save-update authorization, "Sign in with" and passkeys use
+`MatchPolicy::DIRECT` and never widen.
+**Remaining limitations:** the list can go stale between releases.
+
+### ED2. Ranking data stays on the device (Info, by design)
+**Component:** `find_matches` / `matches_for_app` ordering, the sealed
+activity record.
+**Attack scenario:** none new: ranking orders matches already authorized by
+origin and adds no login to the answer.
+**Mitigation:** the score comes from the per-device activity record, sealed
+and never synced; the wire protocol is unchanged; nothing is sent to the
+server or the extension beyond the order.
+**Remaining limitations:** the desktop now writes to the activity record on
+each password fill; a local attacker with the unlocked vault could already
+read what was filled.

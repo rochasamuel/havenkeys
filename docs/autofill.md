@@ -34,7 +34,36 @@ registrable domain under a known public suffix. That covers IP addresses,
 `localhost`, unknown TLDs such as `.internal`, and hosts that are themselves
 public suffixes, such as `github.io`.
 
-Suggestions are ranked `exact_url` → `same_host` → `same_site`, then by title.
+Suggestions are ranked `exact_url` → `same_host` → `same_site` →
+`equivalent`, then by how recently and often the user filled each login on
+this device, then by title.
+
+### Equivalent domains
+
+Only a `domain` rule can widen. If the page is not the rule's own site, the
+core looks both registrable domains up in a fixed table
+(`crates/havenkeys-core/data/equivalent-domains.json`, 12 groups, compiled
+in, each with a `note`). When both fall in one group, the login matches with
+the weakest strength, `equivalent` (sent to the extension as `same_site`;
+the wire protocol is unchanged). The scheme and port checks above run
+first. `exact` and `origin` rules never widen, and a malformed table reads
+as empty.
+
+The setting "Fill on related sites" (on by default; off in the restrictive
+settings) controls it. It applies to `find_matches`, `matches_for_app`,
+fill and TOTP authorization (page and app) and automatic sign-in. It never
+applies to save-login deduplication, save-update authorization, "Sign in
+with" provider logins, or passkeys (candidate lists and relying-party ID
+checks), so a save prompt on an equivalent site offers a new login rather
+than overwriting, and a passkey upgrade never attaches to it.
+
+### Ranking
+
+Within one strength, logins are ordered by a decayed use score from the
+per-device activity record (sealed, never synced). A use is recorded by the
+desktop bridge on each `fill_item` that returns a password, and by Android
+on the user's own pick. Ranking only reorders what already matched; it never
+adds a login.
 
 ### Examples (all are unit tests)
 

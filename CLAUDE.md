@@ -78,6 +78,13 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > carries every item including passkeys, and restoring it needs that
 > password. Every export asks for the master password again.
 
+> Amended on 2026-10-13 by
+> `docs/superpowers/specs/2026-10-13-autofill-ranking-equivalent-domains-design.md`:
+> a login with a "domain" website rule also matches pages on domains that a
+> fixed, reviewed list in Rust records as owned by the same company and
+> sharing its sign-in (for example `icloud.com` for `apple.com`), ranked
+> below direct matches. A vault setting turns this off.
+
 ---
 
 # 1. Core philosophy
