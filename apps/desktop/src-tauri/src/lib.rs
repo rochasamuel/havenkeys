@@ -23,6 +23,7 @@ mod native_host;
 mod pairing;
 mod qr_scan;
 mod quick_access;
+mod quick_shortcut;
 mod quick_window;
 mod removal;
 mod scan_slot;
@@ -194,7 +195,7 @@ fn start_auto_lock(handle: AppHandle) -> std::io::Result<()> {
 }
 
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // First, so a second launch (the app icon while the login launch
         // sits in the tray) hands over to this process and exits before it
         // opens the vault or the bridge.
@@ -210,7 +211,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // Used from Rust only (updater.rs). The capability grants the
         // renderer none of the plugin's commands.
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    // Used from Rust only (quick_shortcut.rs). No capability grants the
+    // renderer any of the plugin's commands.
+    let app = quick_shortcut::install(builder)
         .setup(|app| {
             let path = vault_path(app)?;
             let dir = path.parent().ok_or("no data directory")?.to_path_buf();
@@ -255,6 +259,7 @@ pub fn run() {
             app.manage(updater::Updates::new(dir.clone()));
             // Quick Access: this computer's shortcut setting (quick-access.json).
             app.manage(quick_access::QuickAccess::new(dir.clone()));
+            quick_shortcut::register_in_background(app.handle().clone());
             updater::schedule(app.handle().clone());
 
             // The window starts hidden (tauri.conf.json). A login launch
@@ -372,6 +377,8 @@ pub fn run() {
             updater::check_for_update,
             updater::install_update,
             updater::set_update_auto_check,
+            quick_shortcut::quick_access_status,
+            quick_shortcut::set_quick_access,
             quick_window::hide_quick_window,
         ])
         .build(tauri::generate_context!())

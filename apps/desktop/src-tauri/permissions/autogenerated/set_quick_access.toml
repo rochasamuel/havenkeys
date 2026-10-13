@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-quick-access"
+description = "Enables the set_quick_access command without any pre-configured scope."
+commands.allow = ["set_quick_access"]
+
+[[permission]]
+identifier = "deny-set-quick-access"
+description = "Denies the set_quick_access command without any pre-configured scope."
+commands.deny = ["set_quick_access"]

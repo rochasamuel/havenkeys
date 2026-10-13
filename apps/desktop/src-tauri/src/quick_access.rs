@@ -5,8 +5,6 @@
 //! OS hook and no window: `ShortcutHost` registers the one fixed shortcut
 //! (quick_shortcut.rs), `QuickSurface` shows and hides the window
 //! (quick_window.rs).
-// Used by quick_window.rs and quick_shortcut.rs (later tasks of the plan).
-#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 use std::io::Write;

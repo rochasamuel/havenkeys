@@ -86,6 +86,8 @@
     "allow-update-status",
     "allow-check-for-update",
     "allow-install-update",
-    "allow-set-update-auto-check"
+    "allow-set-update-auto-check",
+    "allow-quick-access-status",
+    "allow-set-quick-access"
   ]
 }

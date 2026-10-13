@@ -80,6 +80,8 @@ const COMMANDS: &[&str] = &[
     "check_for_update",
     "install_update",
     "set_update_auto_check",
+    "quick_access_status",
+    "set_quick_access",
     "hide_quick_window",
 ];
 

@@ -59,6 +59,9 @@ tauri-plugin-opener = "2"
 # the renderer none of the plugin's commands. Verifies each download against
 # the minisign public key in tauri.conf.json before it can be installed.
 tauri-plugin-updater = "2"
+# The Quick Access shortcut (quick_shortcut.rs), registered and unregistered
+# from Rust only: no capability grants the renderer any of its commands.
+tauri-plugin-global-shortcut = "2.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1", default-features = false }

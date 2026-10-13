@@ -62,7 +62,6 @@ fn center_on_cursor_display(window: &WebviewWindow) {
 }
 
 /// The global shortcut was pressed.
-#[allow(dead_code)] // the shortcut handler, quick_shortcut.rs
 pub fn toggle_from_shortcut(app: &AppHandle) {
     let vault_exists = app
         .try_state::<AppState>()
@@ -80,7 +79,9 @@ pub fn toggle_from_shortcut(app: &AppHandle) {
     }
 }
 
-/// Hide the quick window (a no-op when it is hidden already).
+/// Hide the quick window if it exists, then hand the keyboard back as
+/// `reason` calls for (macOS: hides the app when focus came from another
+/// app). Runs the focus step even when the window was already hidden.
 pub fn hide(app: &AppHandle, reason: HideReason) {
     if let Some(window) = app.get_webview_window(QUICK_WINDOW) {
         let _ = window.hide();
