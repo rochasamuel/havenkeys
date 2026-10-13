@@ -242,6 +242,31 @@ describe("suggestion menus", () => {
     expect((await h.handleInline(1, { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: row.credentialId })).ok).toBe(false);
   });
 
+  it("a login field on a look-alike page warns instead of offering a waiting passkey", async () => {
+    const row = { itemId: GH, credentialId: "AQEBAQEBAQEBAQEBAQEBAQ", title: "GitHub", userName: "octo" };
+    const { h } = setup(defaultAnswer, { passkeys: { conditionalFor: () => [row], pickConditional: async () => ({ ok: true as const, value: null }) } });
+    const f = frame({ url: LOOKALIKE, origin: "https://xn--gthub-n2e.com" });
+    expect(await h.handleContent(f, { type: "cs_open_menu", kind: "login" })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toEqual({
+      ok: true,
+      value: { state: "lookalike", site: "xn--gthub-n2e.com", lookalikeOf: "github.com" },
+    });
+    expect((await h.handleInline(1, { type: "menu_pick_passkey", token: T1, itemId: GH, credentialId: row.credentialId })).ok).toBe(false);
+  });
+
+  it("an explicit open falls back to the plain empty menu when check_lookalike errors", async () => {
+    const { h } = setup((r) => {
+      if (r.type === "check_lookalike") throw new BridgeError("malformed", "x");
+      return defaultAnswer(r);
+    });
+    const f = frame({ url: LOOKALIKE, origin: "https://xn--gthub-n2e.com" });
+    expect(await h.handleContent(f, { type: "cs_open_menu", kind: "login", explicit: true })).toEqual({ ok: true, token: T1, rows: 1 });
+    expect(await h.handleInline(1, { type: "menu_state", token: T1 })).toMatchObject({
+      ok: true,
+      value: { state: "ready", kind: "login", site: "xn--gthub-n2e.com", items: [], passkeys: [], hint: null, identity: null },
+    });
+  });
+
   it("asks nothing more when the page has logins", async () => {
     const { h, requests } = setup();
     await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
