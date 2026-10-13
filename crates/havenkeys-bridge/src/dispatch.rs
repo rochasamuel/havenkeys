@@ -3,7 +3,7 @@
 //! check_login, save_login, find_passkeys, passkey_assert,
 //! check_passkey_create, stage_passkey_create, has_passkey_for_page,
 //! start_sso_for_page, check_sso, stage_save_sso, cards_for_page,
-//! card_values_for_page, stage_save_card}`); this layer adds the integration
+//! card_values_for_page, stage_save_card, lookalike_for_page}`); this layer adds the integration
 //! switch and maps types, and never widens what the core returns.
 
 use crate::convert::{
@@ -18,9 +18,9 @@ use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate,
 use havenkeys_core::vault::{SaveTarget, StagedWrite, VaultService};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
-    CardFrameValues, CardMatch, CardValue, Entitlement, ErrorCode, IdentityValue, Match,
-    PasskeyCandidate, PasskeyMatch, PasswordOptions, Request, ResultBody, SaveAction, UpgradeHint,
-    WireSecret, MAX_MATCHES,
+    lookalike_site_ok, CardFrameValues, CardMatch, CardValue, Entitlement, ErrorCode,
+    IdentityValue, Match, PasskeyCandidate, PasskeyMatch, PasswordOptions, Request, ResultBody,
+    SaveAction, UpgradeHint, WireSecret, MAX_MATCHES,
 };
 use uuid::Uuid;
 
@@ -188,6 +188,17 @@ pub fn dispatch(
             Ok(Dispatched::Done(ResultBody::FindMatches {
                 matches,
                 entitlement,
+            }))
+        }
+        Request::CheckLookalike { url, top_url } => {
+            // A warning only: the core never widens what may be filled here.
+            // An answer the protocol would reject is dropped, not sent.
+            let lookalike_of = v
+                .lookalike_for_page(url, top_url.as_deref())
+                .map_err(code)?
+                .filter(|s| lookalike_site_ok(s));
+            Ok(Dispatched::Done(ResultBody::CheckLookalike {
+                lookalike_of,
             }))
         }
         Request::FillItem {

@@ -92,6 +92,10 @@ pub const MAX_CHALLENGE_BYTES: usize = 4096;
 pub const MAX_USER_HANDLE_BYTES: usize = 64;
 /// Relying-party ID bound (a DNS name).
 pub const MAX_RP_ID_BYTES: usize = 253;
+
+/// A saved site named by a `check_lookalike` result: an ASCII registrable
+/// domain, so a DNS name's length.
+pub const MAX_LOOKALIKE_BYTES: usize = 253;
 /// `allowCredentials` / `excludeCredentials` entries accepted.
 pub const MAX_CREDENTIAL_LIST: usize = 64;
 /// COSE ES256, the only algorithm HavenKeys creates keys for.

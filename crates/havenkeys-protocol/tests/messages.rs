@@ -636,6 +636,7 @@ fn fuzz_parse_request_never_panics() {
         r#"{"v":1,"id":3,"request":{"type":"find_matches","url":"https://github.com/login"}}"#.to_string(),
         format!(r#"{{"v":1,"id":4,"request":{{"type":"get_totp","itemId":"{ITEM}","url":"https://a.com/"}}}}"#),
         r#"{"v":1,"id":5,"request":{"type":"find_matches","url":"https://a.com/","topUrl":"https://b.com/"}}"#.to_string(),
+        r#"{"v":1,"id":5,"request":{"type":"check_lookalike","url":"https://a.com/","topUrl":"https://b.com/"}}"#.to_string(),
         r#"{"v":1,"id":6,"request":{"type":"generate_password"}}"#.to_string(),
         r#"{"v":1,"id":7,"request":{"type":"check_login","url":"https://a.com/","username":"u","password":"p"}}"#.to_string(),
         format!(r#"{{"v":1,"id":8,"request":{{"type":"save_login","url":"https://a.com/","username":null,"password":"p","itemId":"{ITEM}"}}}}"#),
@@ -929,4 +930,87 @@ fn entitlement_key_is_sent_only_when_frozen() {
 fn a_match_without_tags_is_rejected() {
     let raw = r#"{"v":1,"id":1,"result":{"type":"find_matches","matches":[{"id":"00000000-0000-0000-0000-000000000000","title":"t","username":null,"hasTotp":false,"strength":"same_host","provider":null}]}}"#;
     assert!(Outgoing::parse(raw.as_bytes()).is_none());
+}
+
+#[test]
+fn check_lookalike_requests_parse_and_are_bounded() {
+    let ok = [
+        r#"{"v":1,"id":1,"request":{"type":"check_lookalike","url":"https://xn--pypal-4ve.com/"}}"#,
+        r#"{"v":1,"id":2,"request":{"type":"check_lookalike","url":"https://a.com/","topUrl":"https://b.com/"}}"#,
+    ];
+    for s in ok {
+        let env = parse(s).unwrap_or_else(|_| panic!("{s}"));
+        assert_eq!(env.request.kind(), "check_lookalike");
+        assert_eq!(
+            serde_json::to_string(&env).unwrap(),
+            s,
+            "re-encodes canonically"
+        );
+    }
+    let long = format!(
+        r#"{{"v":1,"id":3,"request":{{"type":"check_lookalike","url":"https://a.com/{}"}}}}"#,
+        "a".repeat(MAX_URL_BYTES)
+    );
+    let bad = [
+        r#"{"v":1,"id":4,"request":{"type":"check_lookalike"}}"#.to_owned(),
+        r#"{"v":1,"id":5,"request":{"type":"check_lookalike","url":null}}"#.to_owned(),
+        r#"{"v":1,"id":6,"request":{"type":"check_lookalike","url":""}}"#.to_owned(),
+        r#"{"v":1,"id":7,"request":{"type":"check_lookalike","url":"https://a.com/","itemId":"x"}}"#.to_owned(),
+        r#"{"v":1,"id":8,"request":{"type":"check_lookalike","url":"https://a.com/","lookalikeOf":"b.com"}}"#.to_owned(),
+        long,
+    ];
+    for s in &bad {
+        assert!(parse(s).is_err(), "{s}");
+    }
+}
+
+#[test]
+fn check_lookalike_results_are_validated() {
+    let valid = [
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":null}}"#.to_owned(),
+        r#"{"v":1,"id":2,"result":{"type":"check_lookalike","lookalikeOf":"paypal.com"}}"#
+            .to_owned(),
+        r#"{"v":1,"id":3,"result":{"type":"check_lookalike","lookalikeOf":"xn--bcher-kva.co.uk"}}"#
+            .to_owned(),
+        format!(
+            r#"{{"v":1,"id":4,"result":{{"type":"check_lookalike","lookalikeOf":"{}.com"}}}}"#,
+            "a".repeat(MAX_LOOKALIKE_BYTES - 4)
+        ),
+    ];
+    for s in &valid {
+        assert!(Outgoing::parse(s.as_bytes()).is_some(), "{s}");
+    }
+    let invalid = [
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike"}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":""}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":"pаypal.com"}}"#
+            .to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":"PayPal.com"}}"#
+            .to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":"paypal"}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":"a b.com"}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":"a..com"}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":7}}"#.to_owned(),
+        r#"{"v":1,"id":1,"result":{"type":"check_lookalike","lookalikeOf":null,"extra":1}}"#
+            .to_owned(),
+        format!(
+            r#"{{"v":1,"id":1,"result":{{"type":"check_lookalike","lookalikeOf":"{}.com"}}}}"#,
+            "a".repeat(MAX_LOOKALIKE_BYTES - 3)
+        ),
+    ];
+    for s in &invalid {
+        assert!(Outgoing::parse(s.as_bytes()).is_none(), "{s}");
+    }
+}
+
+#[test]
+fn check_lookalike_debug_hides_the_site_and_the_url() {
+    let body = ResultBody::CheckLookalike {
+        lookalike_of: Some("paypal.com".into()),
+    };
+    assert!(!format!("{body:?}").contains("paypal"));
+    let env =
+        parse(r#"{"v":1,"id":1,"request":{"type":"check_lookalike","url":"https://paypa1.com/"}}"#)
+            .unwrap();
+    assert!(!format!("{env:?}").contains("paypa1"));
 }

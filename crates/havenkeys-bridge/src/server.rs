@@ -403,6 +403,7 @@ fn request_class(req: &Request) -> Option<RequestClass> {
     match req {
         Request::Status {} | Request::Lock {} => None,
         Request::FindMatches { .. }
+        | Request::CheckLookalike { .. }
         | Request::GeneratorOptions {}
         | Request::GeneratePassword { .. }
         | Request::FindPasskeys { .. }

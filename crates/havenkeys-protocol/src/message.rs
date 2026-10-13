@@ -6,10 +6,10 @@ use crate::secret::WireSecret;
 use crate::{
     COSE_ES256, CREDENTIAL_ID_BYTES, MAX_ACCOUNT_BYTES, MAX_CARD_CODE_BYTES, MAX_CARD_FRAMES,
     MAX_CARD_NUMBER_BYTES, MAX_CARD_ROLES, MAX_CARD_VALUE_BYTES, MAX_CHALLENGE_BYTES,
-    MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_MATCHES, MAX_MATCH_TAGS,
-    MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH, MAX_PROVIDER_ACCOUNTS, MAX_PROVIDER_ORIGINS,
-    MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES, MAX_USERNAME_BYTES,
-    MAX_USER_HANDLE_BYTES, MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
+    MAX_CREDENTIAL_LIST, MAX_IDENTITY_ROLES, MAX_IDENTITY_VALUE_BYTES, MAX_LOOKALIKE_BYTES,
+    MAX_MATCHES, MAX_MATCH_TAGS, MAX_MATCH_TAG_BYTES, MAX_PASSWORD_LENGTH, MAX_PROVIDER_ACCOUNTS,
+    MAX_PROVIDER_ORIGINS, MAX_RP_ID_BYTES, MAX_SECRET_BYTES, MAX_TITLE_BYTES, MAX_URL_BYTES,
+    MAX_USERNAME_BYTES, MAX_USER_HANDLE_BYTES, MIN_PASSWORD_LENGTH, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -51,6 +51,14 @@ pub enum Request {
     /// `top_url` is set when `url` is an iframe: the tab's top-level page.
     /// Items must then match both.
     FindMatches {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_url: Option<String>,
+    },
+    /// The saved site `url` only looks like (spec 2026-10-13-lookalike-
+    /// warning §4), for a warning. Asked only when a page has no logins.
+    /// `top_url` as for `find_matches`.
+    CheckLookalike {
         url: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top_url: Option<String>,
@@ -447,6 +455,20 @@ fn text_ok(s: &str, max: usize) -> bool {
     !s.is_empty() && s.len() <= max
 }
 
+/// The shape of a `check_lookalike` answer: a lowercase ASCII registrable
+/// domain (punycode for IDNs), at most a DNS name's length.
+pub fn lookalike_site_ok(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= MAX_LOOKALIKE_BYTES
+        && s.split('.').count() >= 2
+        && s.split('.').all(|label| {
+            !label.is_empty()
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
 /// A password in a request.
 fn secret_ok(s: &WireSecret) -> bool {
     text_ok(s.expose(), MAX_SECRET_BYTES)
@@ -491,6 +513,7 @@ impl Request {
             Request::Status {} => "status",
             Request::Lock {} => "lock",
             Request::FindMatches { .. } => "find_matches",
+            Request::CheckLookalike { .. } => "check_lookalike",
             Request::FillItem { .. } => "fill_item",
             Request::GetTotp { .. } => "get_totp",
             Request::GeneratorOptions {} => "generator_options",
@@ -529,6 +552,7 @@ impl Request {
                 .chain(frames.iter().map(|f| f.url.as_str()))
                 .collect(),
             Request::FindMatches { url, top_url }
+            | Request::CheckLookalike { url, top_url }
             | Request::FillItem { url, top_url, .. }
             | Request::GetTotp { url, top_url, .. }
             | Request::CheckLogin { url, top_url, .. }
@@ -761,6 +785,9 @@ impl Response {
             return false;
         }
         match &self.result {
+            Some(ResultBody::CheckLookalike { lookalike_of }) => {
+                lookalike_of.as_deref().is_none_or(lookalike_site_ok)
+            }
             Some(ResultBody::FindMatches { matches, .. }) => {
                 matches.len() <= MAX_MATCHES
                     && matches.iter().all(|m| {
@@ -884,6 +911,11 @@ pub enum ResultBody {
         #[serde(default, skip_serializing_if = "Entitlement::is_full")]
         entitlement: Entitlement,
     },
+    CheckLookalike {
+        /// The saved site's ASCII registrable domain, or null.
+        #[serde(deserialize_with = "required")]
+        lookalike_of: Option<String>,
+    },
     FillItem {
         username: Option<String>,
         password: Option<WireSecret>,
@@ -997,6 +1029,7 @@ impl fmt::Debug for ResultBody {
             ResultBody::Status { .. } => "status",
             ResultBody::Lock {} => "lock",
             ResultBody::FindMatches { .. } => "find_matches",
+            ResultBody::CheckLookalike { .. } => "check_lookalike",
             ResultBody::FillItem { .. } => "fill_item",
             ResultBody::GetTotp { .. } => "get_totp",
             ResultBody::GeneratorOptions { .. } => "generator_options",

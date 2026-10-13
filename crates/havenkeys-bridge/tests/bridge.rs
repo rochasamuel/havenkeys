@@ -271,6 +271,78 @@ fn find(f: &Fixture, url: &str) -> serde_json::Value {
     call(f, serde_json::json!({"type": "find_matches", "url": url}))
 }
 
+fn lookalike(f: &Fixture, url: &str) -> serde_json::Value {
+    call(
+        f,
+        serde_json::json!({"type": "check_lookalike", "url": url}),
+    )
+}
+
+/// Spec 2026-10-13-lookalike-warning §4: the saved site a look-alike page
+/// imitates; null for a matching or unrelated page. The key is always sent.
+#[test]
+fn check_lookalike_names_the_imitated_saved_site() {
+    let f = fixture();
+    // Cyrillic "і": the core parses the URL and punycodes the host.
+    let r = lookalike(&f, "https://g\u{0456}thub.com/login");
+    assert_eq!(r["result"]["type"], "check_lookalike");
+    assert_eq!(r["result"]["lookalikeOf"], "github.com");
+    for url in [
+        "https://github.com/login",
+        "https://evil.com/",
+        "https://192.168.0.1/",
+    ] {
+        let r = lookalike(&f, url);
+        assert!(
+            r["result"].as_object().unwrap().contains_key("lookalikeOf"),
+            "{url}"
+        );
+        assert!(r["result"]["lookalikeOf"].is_null(), "{url}");
+    }
+    // Nothing to fill there, as before.
+    let m = find(&f, "https://g\u{0456}thub.com/login");
+    assert!(m["result"]["matches"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn check_lookalike_refuses_when_locked() {
+    let f = fixture();
+    f.vault.lock().unwrap().lock();
+    assert_eq!(
+        error_code(&lookalike(&f, "https://g\u{0456}thub.com/")),
+        Some("locked")
+    );
+}
+
+/// A warning, not a fill: answered while the account is frozen.
+#[test]
+fn check_lookalike_is_answered_when_frozen() {
+    let f = online_fixture();
+    freeze(&f);
+    assert_eq!(
+        lookalike(&f, "https://g\u{0456}thub.com/")["result"]["lookalikeOf"],
+        "github.com"
+    );
+}
+
+/// Lookup class: 30 checks leave the Secret bucket alone; the Lookup burst limits it.
+#[test]
+fn check_lookalike_is_rate_limited_as_a_lookup() {
+    let f = fixture();
+    for _ in 0..30 {
+        lookalike(&f, "https://evil.com/");
+    }
+    assert_ne!(
+        error_code(&fill(&f, f.github, "https://github.com/")),
+        Some("rate_limited")
+    );
+    let mut limited = false;
+    for _ in 0..60 {
+        limited |= error_code(&lookalike(&f, "https://evil.com/")) == Some("rate_limited");
+    }
+    assert!(limited, "check_lookalike is limited at the Lookup burst");
+}
+
 // A tagged login's suggestion carries its tags; nothing else about it changes.
 #[test]
 fn suggestions_carry_the_logins_tags() {
@@ -564,6 +636,7 @@ fn every_page_request_is_refused_while_integration_is_off() {
     let url = "https://github.com/";
     let requests = [
         serde_json::json!({"type": "find_matches", "url": url}),
+        serde_json::json!({"type": "check_lookalike", "url": url}),
         serde_json::json!({"type": "fill_item", "itemId": item, "url": url}),
         serde_json::json!({"type": "get_totp", "itemId": item, "url": url}),
         serde_json::json!({"type": "generate_password"}),
