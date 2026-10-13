@@ -306,6 +306,32 @@ fn legitimate_flow_works() {
     assert_eq!(t["result"]["code"].as_str().unwrap().len(), 6);
 }
 
+/// A login the user filled ranks first among equal matches next time.
+#[test]
+fn a_filled_login_ranks_first_next_time() {
+    let f = fixture();
+    let mut ids = Vec::new();
+    for (i, title) in ["A", "B"].into_iter().enumerate() {
+        let mut v = f.vault.lock().unwrap();
+        let staged = v
+            .stage_create(item(title, title, "pw", "https://shop.example", None), NOW)
+            .unwrap();
+        ids.push(v.commit_write(staged, 10 + i as i64).unwrap().unwrap().id);
+    }
+    let titles = |f: &Fixture| -> Vec<String> {
+        find(f, "https://shop.example/")["result"]["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["title"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(titles(&f), ["A", "B"]);
+    let r = fill(&f, ids[1], "https://shop.example/");
+    assert_eq!(r["result"]["password"], "pw");
+    assert_eq!(titles(&f), ["B", "A"]);
+}
+
 /// Secret minimization: find_matches never carries passwords, TOTP secrets
 /// or notes; fill_item carries no notes or TOTP.
 #[test]

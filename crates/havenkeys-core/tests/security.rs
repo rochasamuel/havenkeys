@@ -473,7 +473,10 @@ fn a1_wrong_origin_is_denied() {
             Some(Error::Denied),
             "{page}"
         );
-        assert!(v.find_matches(page, None).unwrap().is_empty(), "{page}");
+        assert!(
+            v.find_matches(page, None, NOW).unwrap().is_empty(),
+            "{page}"
+        );
     }
 }
 
@@ -491,7 +494,7 @@ fn a2_item_only_for_matching_origin() {
         .is_ok());
 
     // The bank item exists but must not be served on github.com.
-    let bank = v.find_matches("https://mybank.com/", None).unwrap()[0].id;
+    let bank = v.find_matches("https://mybank.com/", None, NOW).unwrap()[0].id;
     assert_eq!(
         v.fill_for_page(&bank, "https://github.com/", None, NOW)
             .err(),
@@ -515,7 +518,9 @@ fn find_matches_returns_no_secrets_and_ranks() {
         )
         .unwrap();
     v.commit_write(staged, 3).unwrap();
-    let matches = v.find_matches("https://gist.github.com/new", None).unwrap();
+    let matches = v
+        .find_matches("https://gist.github.com/new", None, NOW)
+        .unwrap();
     let titles: Vec<&str> = matches.iter().map(|m| m.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -540,7 +545,7 @@ fn notes_and_locked_vault_are_never_served_to_pages() {
     );
     v.lock();
     assert_eq!(
-        v.find_matches("https://github.com/", None).err(),
+        v.find_matches("https://github.com/", None, NOW).err(),
         Some(Error::Locked)
     );
     assert_eq!(
@@ -568,7 +573,7 @@ fn a1_frame_on_foreign_top_page_is_denied() {
         "not a url",
     ] {
         assert!(
-            v.find_matches(frame, Some(top)).unwrap().is_empty(),
+            v.find_matches(frame, Some(top), NOW).unwrap().is_empty(),
             "{top}"
         );
         assert_eq!(
@@ -584,9 +589,13 @@ fn a1_frame_on_foreign_top_page_is_denied() {
     }
     // Same-site embedding is fine for a whole-site rule.
     assert_eq!(
-        v.find_matches("https://login.github.com/", Some("https://github.com/"))
-            .unwrap()
-            .len(),
+        v.find_matches(
+            "https://login.github.com/",
+            Some("https://github.com/"),
+            NOW
+        )
+        .unwrap()
+        .len(),
         1
     );
     assert!(v
@@ -599,7 +608,7 @@ fn a1_frame_on_foreign_top_page_is_denied() {
         .is_ok());
     // An evil.com frame inside github.com is still evil.com.
     assert!(v
-        .find_matches("https://evil.com/", Some("https://github.com/"))
+        .find_matches("https://evil.com/", Some("https://github.com/"), NOW)
         .unwrap()
         .is_empty());
 }
@@ -715,26 +724,28 @@ fn save_login_adds_for_the_page_site_only() {
         )
         .unwrap();
     assert!(
-        v.find_matches("https://www.example.com/", None)
+        v.find_matches("https://www.example.com/", None, NOW)
             .unwrap()
             .is_empty(),
         "nothing is stored before the server accepts it"
     );
 
     v.commit_write(staged.write, 7).unwrap();
-    let matches = v.find_matches("https://www.example.com/", None).unwrap();
+    let matches = v
+        .find_matches("https://www.example.com/", None, NOW)
+        .unwrap();
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].username.as_deref(), Some("me@example.com"));
     // Saved as a whole-site rule for the page's own site, so a subdomain
     // matches and an unrelated site does not.
     assert_eq!(
-        v.find_matches("https://login.example.com/", None)
+        v.find_matches("https://login.example.com/", None, NOW)
             .unwrap()
             .len(),
         1
     );
     assert!(v
-        .find_matches("https://example.org/", None)
+        .find_matches("https://example.org/", None, NOW)
         .unwrap()
         .is_empty());
 
@@ -771,7 +782,7 @@ fn save_login_takes_the_prompts_title() {
             .unwrap();
         let id = staged.item_id;
         v.commit_write(staged.write, 7).unwrap();
-        v.find_matches(page, None)
+        v.find_matches(page, None, NOW)
             .unwrap()
             .into_iter()
             .find(|m| m.id == id)
@@ -803,7 +814,7 @@ fn save_login_takes_the_prompts_title() {
 #[test]
 fn save_login_update_is_origin_bound_and_keeps_history() {
     let (mut v, gh) = github_vault();
-    let bank = v.find_matches("https://mybank.com/", None).unwrap()[0].id;
+    let bank = v.find_matches("https://mybank.com/", None, NOW).unwrap()[0].id;
     assert_eq!(
         v.stage_save_login(
             "https://github.com/",
@@ -1117,7 +1128,7 @@ fn start_sso_is_origin_bound_and_returns_no_secret() {
         Some(Error::Denied)
     );
     // A login without sign_in_with is not an SSO item.
-    let gh = v.find_matches("https://github.com/", None).unwrap()[0].id;
+    let gh = v.find_matches("https://github.com/", None, NOW).unwrap()[0].id;
     assert_eq!(
         v.start_sso_for_page(&gh, "https://github.com/", None).err(),
         Some(Error::Denied)
@@ -1151,7 +1162,7 @@ fn start_sso_auto_choose_follows_both_switches() {
 #[test]
 fn find_matches_reports_provider_and_account() {
     let (v, id) = sso_vault();
-    let m = v.find_matches("https://typeform.com/", None).unwrap();
+    let m = v.find_matches("https://typeform.com/", None, NOW).unwrap();
     let s = m.iter().find(|s| s.id == id).unwrap();
     assert_eq!(s.provider, Some(SsoProvider::Google));
     assert_eq!(s.account.as_deref(), Some("me@gmail.com"));

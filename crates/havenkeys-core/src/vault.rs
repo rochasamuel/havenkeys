@@ -1452,9 +1452,18 @@ impl VaultService {
     /// if its rules match the frame *and* the page embedding it, so a
     /// `github.com` frame embedded in `evil.com` gets nothing.
     ///
-    /// Follows the vault's equivalent-domains setting.
-    pub fn find_matches(&self, page_url: &str, top_url: Option<&str>) -> Result<Vec<Suggestion>> {
-        self.page_matches(page_url, top_url, self.match_policy()?)
+    /// Follows the vault's equivalent-domains setting. Ranked by match
+    /// strength, then by how much this device used each login
+    /// (`activity.rs`, never synced), as of `now_ms`.
+    pub fn find_matches(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+        now_ms: i64,
+    ) -> Result<Vec<Suggestion>> {
+        let mut out = self.page_matches(page_url, top_url, self.match_policy()?)?;
+        self.rank_by_use(&mut out, now_ms)?;
+        Ok(out)
     }
 
     /// The policy user-facing match lists and fill authorization follow:

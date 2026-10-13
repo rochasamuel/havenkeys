@@ -11,7 +11,9 @@ const NOW: i64 = 1_800_000_000_000;
 fn apple_login_is_offered_and_filled_on_icloud() {
     let mut v = common::unlocked_vault();
     let id = common::add_login(&mut v, "Apple", "https://apple.com", MatchType::Domain);
-    let m = v.find_matches("https://www.icloud.com/", None).unwrap();
+    let m = v
+        .find_matches("https://www.icloud.com/", None, NOW)
+        .unwrap();
     assert_eq!(m.len(), 1);
     assert_eq!(m[0].strength, MatchStrength::Equivalent);
     assert!(v
@@ -32,7 +34,7 @@ fn setting_off_denies_equivalent_sites() {
     })
     .unwrap();
     assert!(v
-        .find_matches("https://www.icloud.com/", None)
+        .find_matches("https://www.icloud.com/", None, NOW)
         .unwrap()
         .is_empty());
     assert!(v
@@ -42,7 +44,12 @@ fn setting_off_denies_equivalent_sites() {
         .totp_for_page(&id, "https://www.icloud.com/", None, 1_800_000_000)
         .is_err());
     // Direct matches are unaffected.
-    assert_eq!(v.find_matches("https://apple.com/", None).unwrap().len(), 1);
+    assert_eq!(
+        v.find_matches("https://apple.com/", None, NOW)
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -50,7 +57,7 @@ fn origin_rules_never_widen() {
     let mut v = common::unlocked_vault();
     let id = common::add_login(&mut v, "Apple", "https://apple.com", MatchType::Origin);
     assert!(v
-        .find_matches("https://icloud.com/", None)
+        .find_matches("https://icloud.com/", None, NOW)
         .unwrap()
         .is_empty());
     assert!(v
@@ -63,11 +70,11 @@ fn frames_need_both_pages_to_match() {
     let mut v = common::unlocked_vault();
     common::add_login(&mut v, "Apple", "https://apple.com", MatchType::Domain);
     assert!(v
-        .find_matches("https://www.icloud.com/", Some("https://evil.com/"))
+        .find_matches("https://www.icloud.com/", Some("https://evil.com/"), NOW)
         .unwrap()
         .is_empty());
     assert_eq!(
-        v.find_matches("https://www.icloud.com/", Some("https://apple.com/"))
+        v.find_matches("https://www.icloud.com/", Some("https://apple.com/"), NOW)
             .unwrap()
             .len(),
         1
@@ -79,7 +86,7 @@ fn direct_matches_always_rank_first() {
     let mut v = common::unlocked_vault();
     common::add_login(&mut v, "A Apple", "https://apple.com", MatchType::Domain);
     common::add_login(&mut v, "Z iCloud", "https://icloud.com", MatchType::Domain);
-    let m = v.find_matches("https://icloud.com/", None).unwrap();
+    let m = v.find_matches("https://icloud.com/", None, NOW).unwrap();
     assert_eq!(
         m.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(),
         ["Z iCloud", "A Apple"]

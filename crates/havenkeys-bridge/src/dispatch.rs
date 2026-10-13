@@ -170,7 +170,7 @@ pub fn dispatch(
         Request::Lock {} | Request::ShowUnlock {} => Err(ErrorCode::Internal),
         Request::FindMatches { url, top_url } => {
             let matches = v
-                .find_matches(url, top_url.as_deref())
+                .find_matches(url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(code)?
                 .into_iter()
                 .take(MAX_MATCHES)
@@ -197,7 +197,7 @@ pub fn dispatch(
         } => {
             // Origin first (attack 1), then the plan.
             let matched = v
-                .find_matches(url, top_url.as_deref())
+                .find_matches(url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(code)?
                 .iter()
                 .any(|s| s.id == *item_id);
@@ -211,6 +211,11 @@ pub fn dispatch(
                 .fill_for_page(item_id, url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(item_code)?;
             let auto_submit = v.auto_sign_in_for(item_id).map_err(item_code)?;
+            if creds.password.is_some() {
+                // The user picked this login: rank it higher next time.
+                // Never fails the fill (activity is a convenience).
+                let _ = v.record_use(item_id, now_ms(unix_seconds));
+            }
             Ok(Dispatched::Done(ResultBody::FillItem {
                 username: creds.username.clone(),
                 password: creds.password.as_ref().map(wire_secret),
@@ -463,7 +468,7 @@ pub fn dispatch(
             // secret: the item must be one of this page's matches. An unknown
             // ID answers exactly like another site's item.
             let saved_here = v
-                .find_matches(url, top_url.as_deref())
+                .find_matches(url, top_url.as_deref(), now_ms(unix_seconds))
                 .map_err(code)?
                 .iter()
                 .any(|s| s.id == *item_id);

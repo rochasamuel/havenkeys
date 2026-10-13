@@ -395,7 +395,7 @@ fn attack_a_trashed_login_is_not_filled_on_its_own_site() {
     let (id, _) = live_github(&mut v);
     let page = "https://github.com/login";
     // Positive control: while live, the same calls succeed.
-    assert_eq!(v.find_matches(page, None).unwrap().len(), 1);
+    assert_eq!(v.find_matches(page, None, NOW).unwrap().len(), 1);
     assert!(v.fill_for_page(&id, page, None, NOW).is_ok());
     assert!(v.totp_for_page(&id, page, None, 59).is_ok());
     assert!(v.totp_code(&id, 59).is_ok());
@@ -403,7 +403,7 @@ fn attack_a_trashed_login_is_not_filled_on_its_own_site() {
     assert!(v.reveal(&id, SecretField::Password).is_ok());
     trash(&mut v, &id);
 
-    assert!(v.find_matches(page, None).unwrap().is_empty());
+    assert!(v.find_matches(page, None, NOW).unwrap().is_empty());
     assert!(v.fill_for_page(&id, page, None, NOW).is_err());
     assert!(v.totp_for_page(&id, page, None, 59).is_err());
     assert!(v.totp_code(&id, 59).is_err());
@@ -433,7 +433,7 @@ fn a_trashed_login_is_offered_to_no_app_and_no_passkey_request() {
     let hosts = vec!["github.com".to_string()];
     let allow = vec![cred.clone()];
     // Positive control: while live, the same calls succeed.
-    assert_eq!(v.matches_for_app(&app, &hosts).unwrap().len(), 1);
+    assert_eq!(v.matches_for_app(&app, &hosts, NOW).unwrap().len(), 1);
     assert!(v.fill_for_app(&id, &app, &hosts).is_ok());
     assert_eq!(
         v.find_passkeys("github.com", GH, None, &allow)
@@ -447,7 +447,7 @@ fn a_trashed_login_is_offered_to_no_app_and_no_passkey_request() {
         .is_ok());
     trash(&mut v, &id);
 
-    assert!(v.matches_for_app(&app, &hosts).unwrap().is_empty());
+    assert!(v.matches_for_app(&app, &hosts, NOW).unwrap().is_empty());
     assert!(v.fill_for_app(&id, &app, &hosts).is_err());
 
     assert!(v

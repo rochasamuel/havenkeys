@@ -54,12 +54,18 @@ fn bindings_for(app: &AppIdentity) -> Vec<AppBinding> {
 }
 
 impl VaultService {
+    /// Logins for the app, ranked like
+    /// [`find_matches`](Self::find_matches): match strength, then this
+    /// device's use as of `now_ms`.
     pub fn matches_for_app(
         &self,
         app: &AppIdentity,
         verified_hosts: &[String],
+        now_ms: i64,
     ) -> Result<Vec<Suggestion>> {
-        self.app_matches(app, verified_hosts, self.match_policy()?)
+        let mut out = self.app_matches(app, verified_hosts, self.match_policy()?)?;
+        self.rank_by_use(&mut out, now_ms)?;
+        Ok(out)
     }
 
     /// Logins matched to the app without equivalent-domain widening: for
@@ -351,7 +357,7 @@ mod tests {
         let mut v = unlocked_vault();
         let id = add_login(&mut v, "GitHub", "https://github.com");
         bind(&mut v, &id, &github_app(1));
-        let m = v.matches_for_app(&github_app(1), &[]).unwrap();
+        let m = v.matches_for_app(&github_app(1), &[], NOW).unwrap();
         assert_eq!(m.len(), 1);
         assert_eq!(m[0].id, id);
         let fill = v.fill_for_app(&id, &github_app(1), &[]).unwrap();
@@ -371,7 +377,10 @@ mod tests {
         let mut v = unlocked_vault();
         let id = add_login(&mut v, "GitHub", "https://github.com");
         bind(&mut v, &id, &github_app(1));
-        assert!(v.matches_for_app(&github_app(2), &[]).unwrap().is_empty());
+        assert!(v
+            .matches_for_app(&github_app(2), &[], NOW)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             v.fill_for_app(&id, &github_app(2), &[]).err(),
             Some(Error::Denied)
@@ -388,7 +397,7 @@ mod tests {
         let id = add_login(&mut v, "GitHub", "https://github.com");
         let other = add_login(&mut v, "Evil", "https://evil.example");
         let hosts = vec!["github.com".to_string()];
-        let m = v.matches_for_app(&github_app(1), &hosts).unwrap();
+        let m = v.matches_for_app(&github_app(1), &hosts, NOW).unwrap();
         assert_eq!(m.iter().map(|s| s.id).collect::<Vec<_>>(), vec![id]);
         assert!(v.fill_for_app(&id, &github_app(1), &hosts).is_ok());
         assert_eq!(
@@ -401,7 +410,10 @@ mod tests {
     fn an_unbound_unvouched_app_gets_nothing() {
         let mut v = unlocked_vault();
         let id = add_login(&mut v, "GitHub", "https://github.com");
-        assert!(v.matches_for_app(&github_app(1), &[]).unwrap().is_empty());
+        assert!(v
+            .matches_for_app(&github_app(1), &[], NOW)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             v.fill_for_app(&id, &github_app(1), &[]).err(),
             Some(Error::Denied)
@@ -415,7 +427,7 @@ mod tests {
         bind(&mut v, &id, &github_app(1));
         v.lock();
         assert_eq!(
-            v.matches_for_app(&github_app(1), &[]).err(),
+            v.matches_for_app(&github_app(1), &[], NOW).err(),
             Some(Error::Locked)
         );
         assert_eq!(
@@ -460,7 +472,10 @@ mod tests {
         };
         let staged = v.stage_update(&id, edit, NOW + 1).unwrap();
         v.commit_write(staged, 3).unwrap();
-        assert_eq!(v.matches_for_app(&github_app(1), &[]).unwrap().len(), 1);
+        assert_eq!(
+            v.matches_for_app(&github_app(1), &[], NOW).unwrap().len(),
+            1
+        );
     }
 
     #[test]
@@ -541,7 +556,7 @@ mod tests {
         assert_eq!(o.title, "GitHub");
         assert_eq!(o.username.as_deref(), Some("octo"));
         assert!(o.urls.is_empty());
-        let m = v.matches_for_app(&github_app(1), &[]).unwrap();
+        let m = v.matches_for_app(&github_app(1), &[], NOW).unwrap();
         assert_eq!(m.len(), 1);
         assert_eq!(
             v.fill_for_app(&id, &github_app(1), &[])
@@ -551,7 +566,10 @@ mod tests {
                 .expose(),
             "s3cret-pass"
         );
-        assert!(v.matches_for_app(&github_app(2), &[]).unwrap().is_empty());
+        assert!(v
+            .matches_for_app(&github_app(2), &[], NOW)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -598,7 +616,10 @@ mod tests {
             "brand-new-pass"
         );
         // Still bound: the update did not drop the app.
-        assert_eq!(v.matches_for_app(&github_app(1), &[]).unwrap().len(), 1);
+        assert_eq!(
+            v.matches_for_app(&github_app(1), &[], NOW).unwrap().len(),
+            1
+        );
     }
 
     #[test]

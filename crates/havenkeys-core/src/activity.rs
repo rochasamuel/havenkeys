@@ -7,7 +7,7 @@
 use crate::error::{Error, Result};
 use crate::local::LocalSlot;
 use crate::model::ItemOverview;
-use crate::vault::{VaultService, MAX_SEARCH_QUERY_CHARS};
+use crate::vault::{Suggestion, VaultService, MAX_SEARCH_QUERY_CHARS};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -55,6 +55,21 @@ fn decayed(score: f64, from_ms: i64, to_ms: i64) -> f64 {
     score * 0.5_f64.powf(elapsed / HALF_LIFE_MS as f64)
 }
 
+/// `f64` ordered by `total_cmp`, for sort keys.
+#[derive(PartialEq)]
+struct OrderedScore(f64);
+impl Eq for OrderedScore {}
+impl PartialOrd for OrderedScore {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for OrderedScore {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
 impl VaultService {
     pub(crate) fn activity(&self) -> Result<Activity> {
         match self.read_local::<Activity>(LocalSlot::Activity) {
@@ -93,6 +108,29 @@ impl VaultService {
         };
         activity.uses.insert(*id, next);
         self.save_activity(activity, now_ms)
+    }
+
+    /// Sort user-facing matches: strength first, then decayed use at
+    /// `now_ms` (higher first), then title and id. An unreadable activity
+    /// record ranks as if empty.
+    pub(crate) fn rank_by_use(&self, matches: &mut [Suggestion], now_ms: i64) -> Result<()> {
+        let activity = self.activity()?;
+        let score = |id: &Uuid| {
+            activity
+                .uses
+                .get(id)
+                .filter(|u| now_ms.saturating_sub(u.last_ms) <= FORGET_AFTER_MS)
+                .map_or(0.0, |u| decayed(u.score, u.last_ms, now_ms))
+        };
+        matches.sort_by_cached_key(|s| {
+            (
+                s.strength,
+                std::cmp::Reverse(OrderedScore(score(&s.id))),
+                s.title.to_lowercase(),
+                s.id,
+            )
+        });
+        Ok(())
     }
 
     /// Up to `n` items by decayed use, ties by the latest use. Deleted items
@@ -430,5 +468,116 @@ mod tests {
         v.lock();
         assert_eq!(v.recent_searches().unwrap_err(), Error::Locked);
         assert_eq!(v.record_search("a", T0).unwrap_err(), Error::Locked);
+    }
+
+    fn add_github(vault: &mut VaultService, title: &str, at: i64) -> Uuid {
+        let input = ItemInput {
+            username: Some(title.to_lowercase()),
+            urls: vec![crate::model::UrlRule {
+                url: "https://github.com".into(),
+                match_type: crate::model::MatchType::Domain,
+            }],
+            ..ItemInput::blank(ItemType::Login, title.into())
+        };
+        let staged = vault.stage_create(input, at).unwrap();
+        let id = staged.item_id;
+        vault.commit_write(staged, 1).unwrap();
+        id
+    }
+
+    fn match_titles(v: &VaultService, page: &str, now: i64) -> Vec<String> {
+        v.find_matches(page, None, now)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.title)
+            .collect()
+    }
+
+    #[test]
+    fn used_logins_rank_first_among_equal_matches() {
+        let mut v = unlocked_vault();
+        add_github(&mut v, "A Work", T0);
+        let b = add_github(&mut v, "B Personal", T0);
+        assert_eq!(
+            match_titles(&v, "https://github.com/", T0),
+            ["A Work", "B Personal"]
+        );
+        v.record_use(&b, T0).unwrap();
+        assert_eq!(
+            match_titles(&v, "https://github.com/", T0),
+            ["B Personal", "A Work"]
+        );
+    }
+
+    #[test]
+    fn use_never_beats_a_stronger_match() {
+        let mut v = unlocked_vault();
+        let site = add_github(&mut v, "Site", T0); // Domain rule on github.com
+        let input = ItemInput {
+            urls: vec![crate::model::UrlRule {
+                url: "https://gist.github.com".into(),
+                match_type: crate::model::MatchType::Origin,
+            }],
+            ..ItemInput::blank(ItemType::Login, "Gist".into())
+        };
+        let staged = v.stage_create(input, T0).unwrap();
+        v.commit_write(staged, 1).unwrap();
+        for _ in 0..20 {
+            v.record_use(&site, T0).unwrap();
+        }
+        assert_eq!(
+            match_titles(&v, "https://gist.github.com/", T0),
+            ["Gist", "Site"]
+        );
+    }
+
+    #[test]
+    fn old_uses_stop_reordering() {
+        let mut v = unlocked_vault();
+        add_github(&mut v, "A", T0);
+        let b = add_github(&mut v, "B", T0);
+        v.record_use(&b, T0).unwrap();
+        assert_eq!(match_titles(&v, "https://github.com/", T0 + DAY)[0], "B");
+        // Past FORGET_AFTER_MS the use no longer counts: back to title order.
+        assert_eq!(
+            match_titles(&v, "https://github.com/", T0 + 366 * DAY)[0],
+            "A"
+        );
+    }
+
+    #[test]
+    fn unreadable_activity_keeps_title_order() {
+        let mut v = unlocked_vault();
+        add_github(&mut v, "A", T0);
+        let b = add_github(&mut v, "B", T0);
+        v.record_use(&b, T0).unwrap();
+        v.write_local(
+            LocalSlot::Activity,
+            &serde_json::json!({"version": 99, "whatever": true}),
+        )
+        .unwrap();
+        assert_eq!(match_titles(&v, "https://github.com/", T0), ["A", "B"]);
+    }
+
+    #[test]
+    fn fill_for_page_does_not_record_a_use() {
+        // Android fills rows ahead of the user's pick (direct fill); a use
+        // is recorded by whoever saw the pick (bridge, Android).
+        let mut v = unlocked_vault();
+        add_github(&mut v, "A", T0);
+        let b = add_github(&mut v, "B", T0);
+        let _ = v.fill_for_page(&b, "https://github.com/", None, T0);
+        assert_eq!(match_titles(&v, "https://github.com/", T0), ["A", "B"]);
+    }
+
+    #[test]
+    fn ranked_matches_need_an_unlocked_vault() {
+        let mut v = unlocked_vault();
+        add_github(&mut v, "A", T0);
+        v.lock();
+        assert_eq!(
+            v.find_matches("https://github.com/", None, T0).unwrap_err(),
+            Error::Locked
+        );
     }
 }

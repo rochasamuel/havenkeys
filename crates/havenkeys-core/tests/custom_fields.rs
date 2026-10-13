@@ -234,7 +234,7 @@ fn only_a_login_has_custom_fields() {
 fn page_bound_answers_hold_no_custom_field() {
     let (mut v, _) = activated_vault();
     create_with_fields(&mut v);
-    let matches = v.find_matches("https://github.com/", None).unwrap();
+    let matches = v.find_matches("https://github.com/", None, NOW).unwrap();
     let json = format!("{matches:?}");
     assert!(!json.contains("4321") && !json.contains("Bank") && !json.contains("PIN"));
 }

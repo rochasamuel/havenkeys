@@ -366,10 +366,16 @@ impl MobileVault {
             return Ok(Vec::new());
         }
         let found = match self.credential_caller(&caller)? {
-            Caller::Browser { page_url } => self.client.vault()?.find_matches(&page_url, None)?,
+            Caller::Browser { page_url } => {
+                self.client
+                    .vault()?
+                    .find_matches(&page_url, None, havenkeys_client::now_ms())?
+            }
             Caller::App(app) => {
                 let hosts = self.verified_hosts(&app)?;
-                self.client.vault()?.matches_for_app(&app, &hosts)?
+                self.client
+                    .vault()?
+                    .matches_for_app(&app, &hosts, havenkeys_client::now_ms())?
             }
         };
         Ok(with_username(found).into_iter().take(MAX_OFFERS).collect())

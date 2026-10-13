@@ -340,7 +340,7 @@ fn the_extension_can_never_read_a_card() {
         "http://localhost:3000/",
     ] {
         assert!(v
-            .find_matches(page, None)
+            .find_matches(page, None, NOW)
             .unwrap()
             .iter()
             .all(|s| s.id != id));

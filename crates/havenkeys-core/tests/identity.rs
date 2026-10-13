@@ -267,7 +267,7 @@ fn the_extension_can_never_read_the_identity() {
     vault.commit_write(staged, 2).unwrap();
 
     for page in ["https://github.com/login", "https://example.com/"] {
-        assert!(vault.find_matches(page, None).unwrap().is_empty());
+        assert!(vault.find_matches(page, None, NOW).unwrap().is_empty());
         assert!(matches!(
             vault.fill_for_page(&id, page, None, NOW),
             Err(Error::Denied)

@@ -198,11 +198,15 @@ impl MobileVault {
         }
         let found = match self.target(&target)? {
             FillTarget::Browser { page_url } => {
-                self.client.vault()?.find_matches(&page_url, None)?
+                self.client
+                    .vault()?
+                    .find_matches(&page_url, None, havenkeys_client::now_ms())?
             }
             FillTarget::App(app) => {
                 let hosts = self.verified_hosts(&app)?;
-                self.client.vault()?.matches_for_app(&app, &hosts)?
+                self.client
+                    .vault()?
+                    .matches_for_app(&app, &hosts, havenkeys_client::now_ms())?
             }
         };
         Ok(found.iter().map(to_match).collect())
