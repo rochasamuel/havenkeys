@@ -270,10 +270,19 @@ export function SettingsView({
                 onChange={(checked) => void update({ autoSignIn: checked })}
               />
             </div>
+            <div className="row">
+              <span className="row-label-inline">{t.settings.equivalentDomains}</span>
+              <Switch
+                label={t.settings.equivalentDomains}
+                checked={settings.equivalentDomains}
+                onChange={(checked) => void update({ equivalentDomains: checked })}
+              />
+            </div>
           </div>
           <p className="group-note">{t.settings.extensionNote}</p>
           <p className="group-note">{t.settings.passkeyNote}</p>
           <p className="group-note">{t.settings.autoSignInNote}</p>
+          <p className="group-note">{t.settings.equivalentDomainsNote}</p>
         </div>
       )}
 

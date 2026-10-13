@@ -299,6 +299,7 @@ export interface Settings {
   browserIntegration: boolean;
   autoPasskeyUpgrade: boolean;
   autoSignIn: boolean;
+  equivalentDomains: boolean;
   /** Saved from the generator tab (setGeneratorOptions); updateSettings keeps it. */
   generator: GeneratorOptions;
 }
