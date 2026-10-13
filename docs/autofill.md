@@ -78,7 +78,7 @@ user learns why nothing is offered.
 * **What is compared.** The page's registrable domain against the
   registrable domains of the rules of every live login (`lookalike.rs`).
   A page that equals a saved site is a match, not a look-alike.
-* **The key.** Each host becomes: IDNA to ASCII, then the digits `0 1 3 5`
+* **The key.** Each host becomes: punycode decoded to Unicode (`idna::domain_to_unicode`), then the digits `0 1 3 5`
   read as `o l e s`, then the Unicode UTS #39 confusable skeleton (crate
   `unicode-security`), then lowercase. Two different domains with the same
   key are look-alikes. Examples: `pаypal.com` (Cyrillic `а`) and

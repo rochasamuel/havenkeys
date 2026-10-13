@@ -3742,13 +3742,16 @@ authorization, save checks and passkeys never call `lookalike_for_page`.
 **Component:** extension field menu.
 **Attack scenario:** a page on a confusable domain notices a menu frame
 appearing on focus and learns that the user has a login for a site that
-looks like it.
+looks like it. Because the page knows which brand it imitates, the menu
+appearing on a trusted focus tells it the user has a login for that brand;
+several look-alike frames could probe several brands, one trusted user
+focus each.
 **Mitigation:** the same class as the existing "Signals visible to the page"
-limitation (`autofill.md`). The page learns only that some saved site
-shares its skeleton, which a page on a confusable of a big brand assumes
-anyway. The frame's contents are not readable.
-**Remaining limitations:** the page cannot learn which site, but can learn
-that one exists.
+limitation (`autofill.md`). The frame's contents are not readable, and each
+probe needs a real user focus. The page learns at most a yes/no about a
+brand it already chose.
+**Remaining limitations:** a page can learn, per brand it imitates, whether
+the user has a login for it. Accepted (Info).
 
 ### LA5. New dependency `unicode-security` (Info, audited)
 **Component:** `crates/havenkeys-core` (`unicode-security` 0.1.2 and its
@@ -3763,9 +3766,16 @@ used by rustc for its `confusable_idents` lint. `Cargo.lock` adds only
 core, with no second version). `cargo deny check`: advisories, bans,
 licenses and sources ok. `cargo audit`: only the existing allowed warnings
 (Tauri GTK stack), no new advisory. Licences MIT/Apache-2.0, Unicode data
-under Unicode-3.0 (`THIRD-PARTY-NOTICES.md`). No `unsafe` is reached from
-untrusted input beyond table lookups. Fuzzed:
+under Unicode-3.0 (`THIRD-PARTY-NOTICES.md`). `unicode-security` declares `#![deny(missing_docs, unsafe_code)]`;
+`unicode-script` 0.5.8 has no such attribute but contains no `unsafe` code
+(checked by grep of its source). Fuzzed:
 `lookalike::tests::fuzz_key_is_total_and_deterministic` and
 `tests/fuzz.rs::fuzz_lookalike_hosts`.
 **Remaining limitations:** the crate is at 0.1.x and its Unicode tables
 follow its releases.
+
+### LA6. Follow-up: frozen accounts get no warning (Info, noted)
+**Component:** extension popup/menu, Android.
+**Note:** the bridge still answers `check_lookalike` when the account is
+frozen, but the extension popup/menu and Android do not call it for frozen
+accounts, so those users get no look-alike warning. To do later.
