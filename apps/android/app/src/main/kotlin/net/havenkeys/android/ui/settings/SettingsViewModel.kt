@@ -119,6 +119,8 @@ class SettingsViewModel(
 
     fun setAssetLinks(on: Boolean) = save { it.copy(assetLinks = on) }
 
+    fun setEquivalentDomains(on: Boolean) = save { it.copy(equivalentDomains = on) }
+
     /** Rust saves the whole record; the shown value changes only once it is accepted. */
     private fun save(change: (MobileSettings) -> MobileSettings) {
         val current = _state.value.settings ?: return

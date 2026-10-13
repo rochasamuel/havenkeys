@@ -177,6 +177,14 @@ private fun AutofillGroup(settings: MobileSettings, viewModel: SettingsViewModel
                 detail = stringResource(R.string.settings_asset_links_note),
             )
         }
+        row {
+            ToggleRow(
+                stringResource(R.string.settings_equivalent_domains),
+                settings.equivalentDomains,
+                viewModel::setEquivalentDomains,
+                detail = stringResource(R.string.settings_equivalent_domains_note),
+            )
+        }
     }
 }
 

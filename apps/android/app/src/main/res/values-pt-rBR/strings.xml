@@ -180,6 +180,8 @@
     <string name="settings_confirm_before_filling_note">Ativado, o HavenKeys abre e confere cada preenchimento antes de o Android receber o login. Desativado, o Android guarda os logins correspondentes enquanto os mostra e preenche só o que você tocar.</string>
     <string name="settings_asset_links">Verificar vínculos entre sites e apps</string>
     <string name="settings_asset_links_note">Sugere o login de um site no app dele (Digital Asset Links). Isso contata os sites salvos no seu cofre.</string>
+    <string name="settings_equivalent_domains">Preencher em sites relacionados</string>
+    <string name="settings_equivalent_domains_note">Oferece um login em outro site da mesma empresa, como icloud.com para um login de apple.com.</string>
     <string name="settings_autofill_setup">Configurar preenchimento automático</string>
     <string name="settings_account">Conta</string>
     <string name="settings_devices">Dispositivos</string>

@@ -45,6 +45,7 @@ pub struct MobileSettings {
     pub lock_on_screen_off: bool,
     pub confirm_before_filling: bool,
     pub asset_links: bool,
+    pub equivalent_domains: bool,
 }
 
 impl MobileVault {
@@ -68,6 +69,7 @@ impl MobileVault {
             lock_on_screen_off: device.lock_on_screen_off,
             confirm_before_filling: device.confirm_before_filling,
             asset_links: device.asset_links,
+            equivalent_domains: shared.equivalent_domains,
         })
     }
 
@@ -76,6 +78,7 @@ impl MobileVault {
         let mut shared = vault.settings()?;
         shared.auto_lock_minutes = s.auto_lock_minutes;
         shared.clipboard_clear_seconds = s.clipboard_clear_seconds;
+        shared.equivalent_domains = s.equivalent_domains;
         vault.update_settings(shared)?;
         vault.write_local(
             LocalSlot::DeviceSettings,
@@ -88,5 +91,22 @@ impl MobileVault {
         drop(vault);
         self.clock.arm(s.auto_lock_minutes);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::vault::tests::unlocked;
+
+    #[test]
+    fn equivalent_domains_round_trips_through_shared_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let mut s = v.settings().unwrap();
+        assert!(s.equivalent_domains);
+        s.equivalent_domains = false;
+        v.update_settings(s).unwrap();
+        assert!(!v.settings().unwrap().equivalent_domains);
+        assert!(!v.client.vault().unwrap().settings().unwrap().equivalent_domains);
     }
 }

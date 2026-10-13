@@ -5846,6 +5846,8 @@ data class MobileSettings (
     var `confirmBeforeFilling`: kotlin.Boolean
     , 
     var `assetLinks`: kotlin.Boolean
+    , 
+    var `equivalentDomains`: kotlin.Boolean
     
 ){
     
@@ -5867,6 +5869,7 @@ public object FfiConverterTypeMobileSettings: FfiConverterRustBuffer<MobileSetti
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -5875,7 +5878,8 @@ public object FfiConverterTypeMobileSettings: FfiConverterRustBuffer<MobileSetti
             FfiConverterUInt.allocationSize(value.`clipboardClearSeconds`) +
             FfiConverterBoolean.allocationSize(value.`lockOnScreenOff`) +
             FfiConverterBoolean.allocationSize(value.`confirmBeforeFilling`) +
-            FfiConverterBoolean.allocationSize(value.`assetLinks`)
+            FfiConverterBoolean.allocationSize(value.`assetLinks`) +
+            FfiConverterBoolean.allocationSize(value.`equivalentDomains`)
     )
 
     override fun write(value: MobileSettings, buf: ByteBuffer) {
@@ -5884,6 +5888,7 @@ public object FfiConverterTypeMobileSettings: FfiConverterRustBuffer<MobileSetti
             FfiConverterBoolean.write(value.`lockOnScreenOff`, buf)
             FfiConverterBoolean.write(value.`confirmBeforeFilling`, buf)
             FfiConverterBoolean.write(value.`assetLinks`, buf)
+            FfiConverterBoolean.write(value.`equivalentDomains`, buf)
     }
 }
 

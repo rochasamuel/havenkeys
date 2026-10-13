@@ -190,6 +190,8 @@
     <string name="settings_confirm_before_filling_note">When on, HavenKeys opens and checks each fill before Android receives the login. When off, Android holds the matching logins while it shows them, and fills only the one you tap.</string>
     <string name="settings_asset_links">Check website–app links</string>
     <string name="settings_asset_links_note">Suggests a website’s login in its own app (Digital Asset Links). This contacts the websites saved in your vault.</string>
+    <string name="settings_equivalent_domains">Fill on related sites</string>
+    <string name="settings_equivalent_domains_note">Offer a login on another site owned by the same company, such as icloud.com for an apple.com login.</string>
     <string name="settings_autofill_setup">Autofill setup</string>
     <string name="settings_account">Account</string>
     <string name="settings_devices">Devices</string>

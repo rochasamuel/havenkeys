@@ -62,6 +62,7 @@ fun settings() = MobileSettings(
     lockOnScreenOff = true,
     confirmBeforeFilling = false,
     assetLinks = true,
+    equivalentDomains = true,
 )
 
 class FakeVaultRepository : VaultRepository {
