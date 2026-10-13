@@ -41,7 +41,10 @@ havenkeys/
 ├── apps/
 │   ├── desktop/
 │   │   ├── src/               React + TypeScript UI (no crypto)
+│   │   │   └── src/quick/     the Quick Access window (second page, quick.html)
 │   │   └── src-tauri/         Thin Tauri shell: commands, clipboard, auto-lock ticker
+│   │                          (quick_access.rs / quick_window.rs / quick_shortcut.rs:
+│   │                          Quick Access: setting, window, global shortcut)
 │   │                          (custom fields: login_fields, reveal_login_field,
 │   │                          login_field_totp, copy_login_field, open_login_field_url)
 │   ├── extension/             MV3 extension: background worker, popup, content script,
@@ -373,6 +376,35 @@ gets `pt-BR`); with neither, English. On macOS the webview only reports
 languages the app bundle declares, so `apps/desktop/src-tauri/Info.plist`
 lists `en` and `pt-BR` (`CFBundleLocalizations`). Details: `docs/development.md` §"Adding
 a translated string".
+
+## Quick Access window
+
+A global shortcut (Cmd/Ctrl+Shift+Space) opens a small search window over
+whatever the user is doing, to copy a login's password, username or one-time
+code without opening the main window.
+
+* **Shortcut.** `quick_shortcut.rs` registers the one fixed shortcut from
+  Rust through `tauri-plugin-global-shortcut`; the renderer never sees it.
+  Whether it is registered follows `quick-access.json` in the app data
+  folder (`{"shortcut": true|false}`, on by default), which is read at start
+  and rewritten by `set_quick_access`. The decisions (toggle, hide reasons,
+  setting) live in `quick_access.rs` behind two small traits so the tests
+  need no OS hook and no window.
+* **Window.** `quick_window.rs` drives a second window, `quick`, declared in
+  `tauri.conf.json` (no decorations, always on top, hidden until shown,
+  centred). It loads `quick.html` from the same bundle under the same CSP
+  and navigation guard as the main window, and has its own capability,
+  `capabilities/quick.json`. The Vite build has two entries.
+* **Flow.** Shortcut, window shown centred and the search field focused;
+  if the vault is locked it asks for the master password there
+  (`unlock_vault`); `list_items` filters in memory; Enter, or a copy key,
+  calls `copy_secret`, which writes the clipboard in Rust and returns only
+  the clear delay; the window hides and the keyboard goes back to the
+  previous app. Esc, losing focus, the shortcut again and Alt+F4 also hide it.
+* **Lock.** Locking hides the window and the next open starts empty. When
+  the quick window unlocks the vault, the `vault://unlocked` event lets the
+  main window show the vault too.
+* **Later.** A1 will extend this window (including a non-activating panel).
 
 ## Browser integration
 

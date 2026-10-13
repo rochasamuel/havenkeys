@@ -145,6 +145,16 @@ Then register it in `generate_handler!` in `lib.rs` and add a typed wrapper in
 `apps/desktop/src/lib/api.ts`. Update the command table in
 `docs/security-model.md` §7.
 
+A command for the Quick Access window goes in
+`apps/desktop/src-tauri/capabilities/quick.json` instead of (or as well as)
+`main.json`. A quick-only command is added to `QUICK_ONLY`/`QUICK_GRANTS` in
+`apps/desktop/src/lib/commands.test.ts` and to `QUICK_PERMISSIONS` in
+`apps/desktop/src-tauri/src/quick_window.rs`.
+
+The Vite build has two entries (`index.html` and `quick.html`, set in
+`vite.config.ts` `rolldownOptions.input`); `pnpm dev` serves both
+(`/quick.html`).
+
 ## Adding a bridge request
 
 The browser can reach the vault only through the bridge, so every new request

@@ -3779,3 +3779,93 @@ follow its releases.
 **Note:** the bridge still answers `check_lookalike` when the account is
 frozen, but the extension popup/menu and Android do not call it for frozen
 accounts, so those users get no look-alike warning. To do later.
+
+# Security Review: Quick Access window (2026-10-13)
+
+Branch `feat/quick-access`. Spec:
+`docs/superpowers/specs/2026-10-13-quick-access-design.md` §4, §7; model:
+`security-model.md` §4, §6, §7, §19. Internal review, not an independent
+audit.
+
+| ID | Severity | Component | Finding | Status/mitigation |
+|---|---|---|---|---|
+| QA1 | Info | `quick` window, `capabilities/quick.json` | A second webview that can unlock the vault and copy secrets | By design; least-privilege capability |
+| QA2 | Info | Global shortcut | Any local process that can send key events can open the window | Accepted; same trust level as the user's session |
+| QA3 | Info | `tauri-plugin-global-shortcut` | New dependency | Audited; see below |
+| QA4 | Info | `quick-access.json` | Plaintext setting outside the vault | Intentional; holds one boolean |
+
+### QA1. A second window with its own capability (Info, by design)
+**Component:** `tauri.conf.json` window `quick`, `capabilities/quick.json`,
+`quick_window.rs`, `apps/desktop/src/quick/`.
+**Attack scenario:** a compromised quick-window renderer tries to read or
+change the vault beyond copying.
+**Mitigation:** the window loads only the local bundle (`quick.html`) under
+the same CSP and navigation guard; its capability grants nine permissions
+(event listen/unlisten, `vault_status`, `unlock_vault`, `record_activity`,
+`list_items`, `copy_secret`, `open_website`, `hide_quick_window`) and no
+edit, reveal, export, settings, account, pairing, passkey or plugin
+command; `copy_secret` writes the clipboard in Rust and returns only the
+clear delay; `open_website` opens only an address saved on that item;
+`hide_quick_window` takes no argument and hides only that window. Two tests
+pin the list (`quick_window.rs`, `commands.test.ts`). The spec text said
+`main.json` was unchanged; in fact it gained `allow-quick-access-status`
+and `allow-set-quick-access` (the Settings block), and `quick.json`
+includes `record-activity` so that copying counts as activity.
+**Remaining limitations:** a compromised quick renderer can copy any
+login's password to the clipboard and send whatever it is given to
+`unlock_vault`, as the main window can.
+
+### QA2. The global shortcut (Info, accepted)
+**Component:** `quick_shortcut.rs`, `tauri-plugin-global-shortcut`.
+**Attack scenario:** another program synthesizes `Cmd/Ctrl+Shift+Space`
+and then Enter to put a password on the clipboard.
+**Mitigation:** a program that can inject key events into the user's
+session can already drive the unlocked main window the same way; the
+vault still needs the master password when locked; copying counts as
+activity like any other; the clipboard clears after the vault's delay;
+the shortcut can be turned off in Settings; registration is Rust-only (no
+`global-shortcut:` permission is granted to any window).
+**Remaining limitations:** none beyond §34's clipboard limits (and
+`security-model.md` §19: no Wayland support, window takes focus).
+
+### QA3. New dependency `tauri-plugin-global-shortcut` (Info, audited)
+**Component:** `apps/desktop/src-tauri` (`tauri-plugin-global-shortcut`
+2.4.1 and `global-hotkey` 0.8.0).
+**Attack scenario:** a vulnerable or malicious dependency sees key events
+or registers shortcuts.
+**Mitigation:** `tauri-plugin-global-shortcut` 2.4.1 (Apache-2.0 OR MIT,
+`tauri-apps/plugins-workspace`, released 2026-10-10, 2.4.0 on 2026-09-26) is
+maintained by the Tauri project. `global-hotkey` 0.8.0 (Apache-2.0 OR MIT,
+`tauri-apps/global-hotkey`, released 2026-05-01) is used only under that
+plugin (`cargo tree -i global-hotkey`). `Cargo.lock` adds
+`global-hotkey`, `keyboard-types`, `tauri-plugin-global-shortcut` and
+`xkeysym`, and forces two bumps required by the plugin's build-dependency:
+`tauri-plugin` 2.6.3 to 2.7.1 and `tauri-utils` 2.10.0 to 2.10.1.
+`cargo deny check`: advisories, bans, licenses and sources ok before and
+after, `deny.toml` unchanged. `cargo audit`: identical before and after
+(the two existing allowed warnings, RUSTSEC-2024-0370 and RUSTSEC-2024-0429).
+The plugin registers only the one shortcut the app asks for and receives
+no other key events.
+**Remaining limitations:** not compiled for macOS or Windows on the
+development machine (Linux/WSL); the owner's builds there confirm it.
+
+### QA4. `quick-access.json` is plaintext (Info, intentional)
+**Component:** `quick_access.rs`.
+**Attack scenario:** an attacker with the app data folder learns whether
+the shortcut is on.
+**Mitigation:** the file holds `{"shortcut": true|false}` only, mode 0600,
+next to `device.json` and `updates.json`. It must be outside the vault
+because the shortcut works while locked. Listed in `security-model.md` §4.
+**Remaining limitations:** none.
+
+### Manual checks (owner, macOS and Windows)
+- [ ] With another app in front, the shortcut opens Quick Access centred on the display under the pointer, search field focused.
+- [ ] Type a few letters, Enter: the password is on the clipboard, the window hides, the previous app has the keyboard again; the clipboard clears after the Settings delay.
+- [ ] Cmd/Ctrl+C copies the username, Cmd/Ctrl+T the code (only with TOTP), Cmd/Ctrl+O opens the website; each hides the window.
+- [ ] Esc, clicking another app, and the shortcut again each hide it. Alt+F4 (Windows) hides it and does not lock or quit.
+- [ ] Locked: the window asks for the master password; after unlocking there, the main window shows the vault too.
+- [ ] Lock (tray, Cmd/Ctrl+L in the main window, screen lock, auto-lock) while it is open: it hides; the next open starts empty.
+- [ ] Settings → Quick Access off: the shortcut does nothing; on again: it works without a restart; the choice survives a restart.
+- [ ] Windows: with another app holding Ctrl+Shift+Space, Settings says "The shortcut is in use by another app." and the switch stays on.
+- [ ] macOS: opened from the main window, Esc returns to the main window; opened from another app, Esc returns to that app.
+- [ ] First run (no vault): the shortcut raises the main window instead.

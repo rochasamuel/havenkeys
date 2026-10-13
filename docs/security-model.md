@@ -85,7 +85,14 @@ Stored unencrypted in SQLite:
 There are no tombstones on a device: a deletion the server serves removes the
 row, and the server keeps the tombstone (`server-sync.md` §3).
 
-Outside the vault database, `device.json` (same folder, mode 0600) holds the
+Outside the vault database, `quick-access.json` (same folder as
+`device.json`, mode 0600, written through a temporary file and a rename)
+holds `{"shortcut": true|false}` and nothing else. It is intentionally
+plaintext and outside the vault: the Quick Access shortcut must work while
+the vault is locked, and the vault's settings are sealed under the vault
+key. Missing or malformed means on.
+
+`device.json` (same folder, mode 0600) holds the
 device ID. The Secret Key itself is kept in the OS keychain (Windows
 Credential Manager, macOS Keychain, the Secret Service on Linux); it falls
 back to **plain text in `device.json`** only when no keychain is available or
@@ -195,11 +202,24 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 6. Desktop (Tauri) hardening
 
-* **Command allowlist.** `build.rs` declares every app command; the only
-  capability file grants exactly those plus `core:event` listen/unlisten and
+* **Command allowlist.** `build.rs` declares every app command. Two
+  capability files grant them. `main.json` (the main window) grants those
+  commands plus `core:event` listen/unlisten and
   `core:window:allow-start-dragging`, which lets the window be dragged by
   its own title-bar areas now that macOS uses an overlay title bar. It moves
-  the window and nothing else.
+  the window and nothing else. `quick.json` (the Quick Access window)
+  grants nine permissions: `core:event:allow-listen`,
+  `core:event:allow-unlisten`, `allow-vault-status`, `allow-unlock-vault`,
+  `allow-record-activity`, `allow-list-items`, `allow-copy-secret`,
+  `allow-open-website` and `allow-hide-quick-window`. Compared with the
+  Quick Access spec's first draft, `main.json` gained only
+  `allow-quick-access-status` and `allow-set-quick-access`, and
+  `quick.json` includes `record-activity`.
+* **Global shortcut.** `tauri-plugin-global-shortcut` is used from Rust
+  only. No capability grants a `global-shortcut:` permission, so no
+  renderer can register, unregister or query a shortcut. The shortcut is
+  fixed (Cmd/Ctrl+Shift+Space); registration and unregistration follow the
+  setting in `quick-access.json`.
   No `fs`, `shell`, `http`, `dialog`, `opener`, or `clipboard` plugins are
   installed (clipboard is handled in Rust). The `tauri-plugin-opener` crate is
   a dependency only for its free `open_url` function, called from
@@ -216,7 +236,9 @@ a keystroke through `record_activity`, not through the search command.
   The dev CSP additionally allows inline styles for Vite HMR only.
 * `withGlobalTauri: false`, `freezePrototype: true`.
 * Navigation to any non-app URL is blocked (`on_navigation` + `is_app_url`);
-  the app never opens a second window, and the CSP's `frame-src 'none'`
+  the app has exactly two windows, `main` and `quick`, both declared in
+  `tauri.conf.json`, both loading the local bundle under the same CSP and
+  the same navigation guard; it opens no others. The CSP's `frame-src 'none'`
   stops embedded content. There is no explicit `window.open` handler: the
   renderer has no reason to call it, but nothing in this repository denies
   it beyond the navigation guard and the CSP.
@@ -228,9 +250,9 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 67 of them, which is the whole
-surface. `build.rs` declares this list, `lib.rs` registers it, the capability
-file grants exactly it, and `src/lib/commands.test.ts` fails if they (or the
+Every command the renderer can call — all 81 of them (recounted from `build.rs`), which is the whole
+surface. `build.rs` declares this list, `lib.rs` registers it, the
+capability files grant exactly it between them, and `src/lib/commands.test.ts` fails if they (or the
 commands `api.ts` calls) ever disagree. "Online"
 means a live server session, which a locked vault does not have.
 
@@ -290,10 +312,16 @@ means a live server session, which a locked vault does not have.
 | `copy_login_field` | yes | no. Copies one field's value from Rust, read from the vault by field id, cleared after the clipboard delay |
 | `open_login_field_url` | yes | no. Rust reads the URL field's saved value by field id, re-normalises it and opens it only if it is http(s); the renderer supplies no URL |
 | `check_card_number` | no | no. Returns the brand the number's prefix names and whether its check digit passes; keeps nothing |
+| `quick_access_status` | no | no. Whether the shortcut is on and whether it is registered or in use by another app |
+| `set_quick_access` | no | no. Writes `quick-access.json` and registers or unregisters the shortcut |
+| `hide_quick_window` | no | no. Takes no argument; callable from the quick window only; hides that window and nothing else |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
 convenience only.
+
+The quick window can call only the commands in `quick.json`; `commands.test.ts`
+and the tests in `quick_window.rs` check both lists.
 
 Custom fields (a login's titled sections of typed fields) are desktop-only and
 live in the login's encrypted details blob, not in its overview. The renderer
@@ -991,6 +1019,14 @@ release and key-rotation steps.
 ## 19. Known limitations
 
 See `threat-model.md` §4 and `security-review.md`.
+
+- **Quick Access shortcut.** Global shortcuts do not work in Linux Wayland
+  sessions. Without an X display the plugin is not loaded and Settings shows
+  the shortcut as in use. The quick window takes keyboard focus (a
+  non-activating panel comes with A1). macOS may not report a shortcut that
+  another app already holds, so "in use" can be missing there. The clipboard
+  limits of §9 apply unchanged. The quick window is always dark, whatever
+  theme the main window uses.
 
 - **Custom fields and older releases.** A device running a HavenKeys release
   from before login custom fields ignores a login's custom fields and drops
