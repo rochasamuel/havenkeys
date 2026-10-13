@@ -9,6 +9,7 @@ import android.os.Parcelable
 import android.view.autofill.AutofillManager
 import android.view.inputmethod.InlineSuggestionsRequest
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.FragmentActivity
@@ -29,7 +30,8 @@ import uniffi.havenkeys_mobile.LockState
 import uniffi.havenkeys_mobile.TargetFacts
 
 /**
- * Opened by a tapped "Unlock HavenKeys" row or a gated dataset (spec §7.3).
+ * Opened by a tapped "Unlock HavenKeys" row, a gated dataset (spec §7.3) or
+ * a look-alike warning.
  * Unlocks if needed, then asks Rust for the fill; Rust re-checks the target
  * and its refusal returns nothing. Not exported: only our PendingIntents
  * reach it.
@@ -61,6 +63,7 @@ class AutofillAuthActivity : FragmentActivity() {
         val repo = container.autofillRepository
         val factory = tapped.factory(this)
         val form = login.form ?: return cancel()
+        if (mode == DatasetFactory.MODE_LOOKALIKE) return explainLookalike(repo, tapped.target)
         val result: Parcelable? = when {
             mode == DatasetFactory.MODE_UNLOCK -> factory.response(
                 FillPlanner.plan(
@@ -100,6 +103,15 @@ private suspend fun AutofillAuthActivity.copyCode(code: String) {
     val seconds = container.settingsRepository.clipboardClearSeconds()
     container.clipboard.copy(getString(R.string.autofill_code), code, seconds)
     Toast.makeText(applicationContext, getString(R.string.autofill_code_copied, seconds), Toast.LENGTH_LONG).show()
+}
+
+/**
+ * A tapped look-alike warning: Rust is asked again about the page Android
+ * attached (never our extras); nothing is filled, the answer is "cancelled".
+ */
+internal suspend fun ComponentActivity.explainLookalike(repo: AutofillRepository, target: TargetFacts) {
+    val site = (repo.lookalike(target) as? Outcome.Ok)?.value ?: return cancel()
+    setContent { HavenTheme { LookalikeDialog(site = site, onDismiss = { cancel() }) } }
 }
 
 /** What a tapped row is about, rebuilt from the structure Android attaches, never from our extras. */

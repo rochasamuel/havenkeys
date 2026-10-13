@@ -421,9 +421,11 @@ class FakeAutofillRepository : AutofillRepository {
     }
 
     var lookalikeSite: Outcome<String?> = Outcome.Ok(null)
+    val lookalikeTargets = mutableListOf<TargetFacts>()
 
     override suspend fun lookalike(target: TargetFacts): Outcome<String?> {
         calls += "lookalike"
+        lookalikeTargets += target
         return lookalikeSite
     }
 

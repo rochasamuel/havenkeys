@@ -216,8 +216,11 @@
     <string name="autofill_code">Código de uso único</string>
     <string name="autofill_copy_code">Copiar código de verificação</string>
     <string name="autofill_lookalike_title">Este site não é %1$s</string>
-    <string name="autofill_lookalike_subtitle">Só se parece com ele, então o HavenKeys não preenche aqui.</string>
+    <string name="autofill_lookalike_subtitle">Só se parece. O HavenKeys não preenche.</string>
     <string name="autofill_lookalike_save">Este site não é %1$s. Não salve nem digite aqui sua senha do %1$s.</string>
+    <string name="autofill_lookalike_dialog_title">Este site não é %1$s</string>
+    <string name="autofill_lookalike_dialog_body">O endereço desta página só se parece com %1$s, onde você tem um login. Endereços parecidos costumam ser usados para roubar senhas, então o HavenKeys não preenche aqui. Não digite sua senha do %1$s nesta página.</string>
+    <string name="autofill_lookalike_dialog_close">Fechar</string>
     <string name="autofill_code_copied">Código de verificação copiado. A área de transferência é limpa em %1$d s.</string>
     <string name="autofill_use_in_app">Usar %1$s em %2$s?</string>
     <string name="autofill_app_label">O app se chama “%1$s”. Só o nome do pacote acima diz qual app é este.</string>

@@ -228,8 +228,11 @@
     <string name="autofill_code">One-time code</string>
     <string name="autofill_copy_code">Copy one-time code</string>
     <string name="autofill_lookalike_title">This isn’t %1$s</string>
-    <string name="autofill_lookalike_subtitle">It only looks like it, so HavenKeys won’t fill here.</string>
+    <string name="autofill_lookalike_subtitle">Only looks like it. HavenKeys won’t fill.</string>
     <string name="autofill_lookalike_save">This isn’t %1$s. Don’t save or enter your %1$s password here.</string>
+    <string name="autofill_lookalike_dialog_title">This isn’t %1$s</string>
+    <string name="autofill_lookalike_dialog_body">This page’s address only looks like %1$s, where you have a login. Look-alike addresses are often used to steal passwords, so HavenKeys won’t fill here. Don’t enter your %1$s password on this page.</string>
+    <string name="autofill_lookalike_dialog_close">Close</string>
     <string name="autofill_code_copied">One-time code copied. The clipboard clears in %1$d s.</string>
     <string name="autofill_use_in_app">Use %1$s in %2$s?</string>
     <string name="autofill_app_label">The app calls itself “%1$s”. Only the package name above says which app this is.</string>
