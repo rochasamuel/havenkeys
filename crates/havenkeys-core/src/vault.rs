@@ -720,6 +720,31 @@ impl std::fmt::Debug for StagedSave {
     }
 }
 
+/// How long after a password change another browser change of the same
+/// login needs the user's Allow in the desktop app (spec
+/// 2026-10-13-confirm-repeat-password-change §3).
+pub const REPEAT_CHANGE_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// What the desktop shows when the browser asks to change a login's password
+/// again: the login's title and username (from its overview) and the page's
+/// site. No secret. Never logged: `Debug` prints the item ID only.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ConfirmUpdate {
+    pub item_id: Uuid,
+    pub title: String,
+    pub username: Option<String>,
+    /// The page's registrable domain, or its host when it has none.
+    pub site: String,
+}
+
+impl std::fmt::Debug for ConfirmUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfirmUpdate")
+            .field("item_id", &self.item_id)
+            .finish_non_exhaustive()
+    }
+}
+
 /// An import sealed and ready to send. Never logged: the writes hold
 /// ciphertext, and the counts are all that is safe to show.
 pub struct StagedImport {
@@ -2035,6 +2060,34 @@ impl VaultService {
                 Ok(Vec::new())
             }
         }
+    }
+
+    /// Whether a browser change of `id`'s password needs the user's Allow in
+    /// the desktop app: its newest password-history entry is younger than
+    /// [`REPEAT_CHANGE_WINDOW_MS`]. Desktop edits and changes synced from
+    /// other devices count, since they write the same history. An entry
+    /// dated after `now_ms` (a clock that went backwards, another device's
+    /// clock ahead) counts as recent. Only the timestamps are used.
+    pub fn update_needs_confirmation(&self, id: &Uuid, now_ms: i64) -> Result<bool> {
+        let newest = self.password_history(id)?.into_iter().max();
+        Ok(newest.is_some_and(|at| now_ms.saturating_sub(at) < REPEAT_CHANGE_WINDOW_MS))
+    }
+
+    /// The desktop's question for a browser change of `id`'s password made
+    /// from `page_url`. The caller has already authorized the change for the
+    /// page (`stage_save_login`); this only reads the overview.
+    pub fn confirm_update_summary(&self, id: &Uuid, page_url: &str) -> Result<ConfirmUpdate> {
+        let overview = self.session()?.overviews.get(id).ok_or(Error::NotFound)?;
+        let site = PageUrl::parse(page_url)
+            .as_ref()
+            .and_then(site_of)
+            .ok_or(Error::Denied)?;
+        Ok(ConfirmUpdate {
+            item_id: *id,
+            title: overview.title.clone(),
+            username: overview.username.clone(),
+            site,
+        })
     }
 
     /// Decrypt one previous password (index into [`password_history`](Self::password_history)).
