@@ -1,0 +1,45 @@
+/* The Quick Access window (640×420, no decorations): the vault's search in
+   miniature. Grounds and rows reuse the main window's tokens and classes. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--pane);
+}
+
+.quick {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border: 1px solid var(--line-strong);
+  box-sizing: border-box;
+  background: var(--pane);
+}
+
+.quick-locked {
+  justify-content: center;
+  align-items: center;
+}
+
+.quick-unlock {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(380px, 100% - 48px);
+}
+
+.quick-lede {
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.quick-unlock .unlock-field {
+  width: 100%;
+}

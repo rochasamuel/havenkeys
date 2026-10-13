@@ -68,6 +68,23 @@ export function App() {
     return () => void unlisten.then((f) => f());
   }, []);
 
+  // Unlocked elsewhere (the Quick Access window): show the vault here too.
+  // An unlock from this window's own screen arrives here as well; re-reading
+  // the status is harmless then.
+  useEffect(() => {
+    const unlisten = api.onUnlocked(() => {
+      api.status().then(
+        (s) => {
+          if (s.state !== "unlocked") return;
+          setLockReason(null);
+          setStatus(s);
+        },
+        () => undefined,
+      );
+    });
+    return () => void unlisten.then((f) => f());
+  }, []);
+
   // This computer was removed from its account: the store reopened empty, so
   // re-reading status shows the first-run screen (vaultExists: false).
   useEffect(() => {

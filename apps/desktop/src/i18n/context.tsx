@@ -30,7 +30,7 @@ function osLanguages(): readonly string[] {
   return navigator.language ? [navigator.language] : [];
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
+export function I18nProvider({ children, syncTray = true }: { children: ReactNode; syncTray?: boolean }) {
   const [preference, setPreferenceState] = useState<Preference>(readPreference);
   const [languages, setLanguages] = useState<readonly string[]>(osLanguages);
   const locale = effectiveLocale(preference, languages);
@@ -45,8 +45,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = locale;
     // The tray menu is built in Rust; relabel it. Failure leaves it English.
-    api.setUiLanguage(locale).catch(() => undefined);
-  }, [locale]);
+    // The quick window has no tray command (capabilities/quick.json).
+    if (syncTray) api.setUiLanguage(locale).catch(() => undefined);
+  }, [locale, syncTray]);
 
   const setPreference = useCallback((p: Preference) => {
     writePreference(p);

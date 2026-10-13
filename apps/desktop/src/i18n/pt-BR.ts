@@ -267,6 +267,25 @@ export const ptBR: Messages = {
     hint: "Seu cofre é descriptografado somente neste computador.",
   },
 
+  quick: {
+    title: "Acesso rápido",
+    unlockLede: "Digite sua senha mestra para buscar seus logins.",
+    secretKeyNeeded: "Este computador precisa da sua Secret Key primeiro. Abra o HavenKeys para digitá-la.",
+    searchLabel: "Buscar logins",
+    searchPlaceholder: "Buscar logins",
+    resultsLabel: "Logins",
+    noResults: "Nenhum login encontrado.",
+    noLogins: "Nenhum login ainda.",
+    actionFailed: "Não deu certo. Tente de novo.",
+    hints: {
+      password: "Copiar senha",
+      username: "Usuário",
+      totp: "Código",
+      open: "Abrir",
+      close: "Fechar",
+    },
+  },
+
   vault: {
     allItems: "Todos os itens",
     logins: "Logins",

@@ -247,6 +247,25 @@ export const en = {
     hint: "Your vault is decrypted on this computer only.",
   },
 
+  quick: {
+    title: "Quick Access",
+    unlockLede: "Enter your master password to search your logins.",
+    secretKeyNeeded: "This computer needs your Secret Key first. Open HavenKeys to enter it.",
+    searchLabel: "Search logins",
+    searchPlaceholder: "Search logins",
+    resultsLabel: "Logins",
+    noResults: "No logins match.",
+    noLogins: "No logins yet.",
+    actionFailed: "That didn't work. Try again.",
+    hints: {
+      password: "Copy password",
+      username: "Username",
+      totp: "Code",
+      open: "Open",
+      close: "Close",
+    },
+  },
+
   vault: {
     allItems: "All items",
     logins: "Logins",
