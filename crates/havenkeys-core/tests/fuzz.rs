@@ -587,3 +587,34 @@ fn fuzz_backup_file() {
         }
     }
 }
+
+/// Random Unicode hosts: the look-alike check never panics, is stable, only
+/// names a saved site, and never coexists with a match (spec 2026-10-13-
+/// lookalike-warning §8).
+#[test]
+fn fuzz_lookalike_hosts() {
+    let mut v = unlocked_vault();
+    add_login(&mut v, "PayPal", "https://paypal.com", MatchType::Domain);
+    add_login(&mut v, "Google", "https://google.com", MatchType::Domain);
+    let alphabet: Vec<char> = "abcdeglnoprsuy0135.-"
+        .chars()
+        .chain([
+            '\u{0430}', '\u{0435}', '\u{043E}', '\u{0440}', '\u{0456}', '\u{0261}', '\u{1D0F}',
+            '\u{FF41}', '\u{200D}', '\u{0307}', '\u{00E9}',
+        ])
+        .collect();
+    let mut rng = Rng::new(0x100c_a11e);
+    for _ in 0..2_000 {
+        let host: String = (0..=rng.below(16)).map(|_| *rng.pick(&alphabet)).collect();
+        let url = format!("https://{host}.com/");
+        let first = v.lookalike_for_page(&url, None).unwrap();
+        assert_eq!(first, v.lookalike_for_page(&url, None).unwrap(), "{url}");
+        if let Some(saved) = &first {
+            assert!(
+                saved == "paypal.com" || saved == "google.com",
+                "{url} → {saved}"
+            );
+            assert!(v.find_matches(&url, None, NOW).unwrap().is_empty(), "{url}");
+        }
+    }
+}

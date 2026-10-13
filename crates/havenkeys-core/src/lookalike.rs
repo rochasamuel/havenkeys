@@ -7,7 +7,6 @@
 //!
 //! Not detected, by design: typos (`paypall.com`), the same name on another
 //! suffix (`paypal.co.uk`), names that contain a brand (`paypal-login.com`).
-#![cfg_attr(not(test), allow(dead_code))]
 
 use crate::origin::{host_key, registrable_domain_of, PageUrl};
 use std::collections::BTreeSet;

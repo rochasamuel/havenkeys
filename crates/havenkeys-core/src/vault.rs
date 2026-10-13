@@ -17,6 +17,7 @@ use crate::custom_field::{self, CustomField, FieldSection};
 use crate::error::{Error, Result};
 use crate::identity::{IdentityField, IdentityFields};
 use crate::import::{ImportReport, ImportedItem};
+use crate::lookalike;
 use crate::model::{
     check_note_content, check_notes, check_password, check_shape, clean_title, clean_urls,
     clean_username, ItemDetails, ItemInput, ItemOverview, ItemType, MatchType, PreviousPassword,
@@ -30,7 +31,7 @@ use crate::totp::{self, TotpCode};
 use crate::unlock_bundle::UnlockBundle;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -1464,6 +1465,47 @@ impl VaultService {
         let mut out = self.page_matches(page_url, top_url, self.match_policy()?)?;
         self.rank_by_use(&mut out, now_ms)?;
         Ok(out)
+    }
+
+    /// The saved site this page only looks like (spec
+    /// 2026-10-13-lookalike-warning §3.2), for a warning. `None` when the
+    /// page does not parse, has no registrable domain under a known suffix,
+    /// or when any login matches it (under the vault's setting, like
+    /// [`find_matches`](Self::find_matches)): the user is where a login says.
+    /// Otherwise the frame page, then the top page, is compared with the
+    /// registrable domains of every live login's website rules.
+    ///
+    /// Adds a warning only: it never makes a login match or fill. No
+    /// secrets; the answer is shown only by HavenKeys' own UI.
+    pub fn lookalike_for_page(
+        &self,
+        page_url: &str,
+        top_url: Option<&str>,
+    ) -> Result<Option<String>> {
+        let session = self.session()?;
+        let Some(page) = PageContext::parse(page_url, top_url) else {
+            return Ok(None);
+        };
+        if !self
+            .page_matches(page_url, top_url, self.match_policy()?)?
+            .is_empty()
+        {
+            return Ok(None);
+        }
+        let saved: BTreeSet<String> = session
+            .overviews
+            .values()
+            .filter(|o| o.item_type == ItemType::Login)
+            .flat_map(|o| o.urls.iter())
+            .filter_map(|r| lookalike::rule_site(&r.url))
+            .collect();
+        if saved.is_empty() {
+            return Ok(None);
+        }
+        Ok(std::iter::once(&page.frame)
+            .chain(page.top.as_ref())
+            .filter_map(lookalike::page_site)
+            .find_map(|site| lookalike::imitated(&site, &saved)))
     }
 
     /// Whether `id` is a login whose rules match the page (and the embedding
