@@ -3860,7 +3860,7 @@ login's password to the clipboard and send whatever it is given to
 
 ### QA2. The global shortcut (Info, accepted)
 **Component:** `quick_shortcut.rs`, `tauri-plugin-global-shortcut`.
-**Attack scenario:** another program synthesizes `Cmd/Ctrl+Shift+Space`
+**Attack scenario:** another program synthesizes the Quick Access chord (default Cmd/Ctrl+Shift+Space)
 and then Enter to put a password on the clipboard.
 **Mitigation:** a program that can inject key events into the user's
 session can already drive the unlocked main window the same way; the
@@ -3933,7 +3933,7 @@ sees it in Settings.
 - [ ] First run (no vault): the shortcut raises the main window instead.
 - [ ] Settings → Quick Access → Change…: press Alt+Shift+K (Windows) / ⌥⇧K (macOS); the row shows it; the old chord no longer opens Quick Access; the new one does; it survives a restart.
 - [ ] Press Cmd/Ctrl+C while recording: "Reserved by the system." and recording stays open; Esc cancels and the old chord still works.
-- [ ] Windows: record a chord another app holds: "That shortcut is in use by another app." and the old chord still works.
+- [ ] Windows: with another app holding the default chord, change to a free chord, then press Reset (or re-choose the taken chord): "That shortcut is in use by another app." and the current chord still works. (A chord another app holds is usually swallowed by the OS before the recorder sees it, so do not test it by pressing it while recording.)
 - [ ] With the old chord held by another app ("in use"), Choose another shortcut → a free chord fixes it without a restart.
 - [ ] Reset returns to Cmd/Ctrl+Shift+Space; turning the switch off and on keeps a chosen chord.
 - [ ] A non-US layout (e.g. AZERTY on Windows): the recorded chord is the physical key; note what the row shows.

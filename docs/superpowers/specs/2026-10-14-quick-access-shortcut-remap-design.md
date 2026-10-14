@@ -89,6 +89,9 @@ on this platform.
      state. If saving fails, unregister the new chord, re-register the old
      one, and return the `quick_access_settings` error.
   5. If the switch is off: only validate and save.
+  *Revised in planning:* the implemented order is register new, then save,
+  then unregister old. A failed save releases only the new chord; the old
+  one was never unregistered.
 * `QuickAccessStatus` gains `keys: String` (current chord, plugin form) and
   `isDefault: bool`, and `candidateInUse: bool` (false except in step 3).
 

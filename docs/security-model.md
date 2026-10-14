@@ -319,7 +319,7 @@ means a live server session, which a locked vault does not have.
 | `copy_login_field` | yes | no. Copies one field's value from Rust, read from the vault by field id, cleared after the clipboard delay |
 | `open_login_field_url` | yes | no. Rust reads the URL field's saved value by field id, re-normalises it and opens it only if it is http(s); the renderer supplies no URL |
 | `check_card_number` | no | no. Returns the brand the number's prefix names and whether its check digit passes; keeps nothing |
-| `quick_access_status` | no | no. Whether the shortcut is on and whether it is registered or in use by another app |
+| `quick_access_status` | no | no. Whether the shortcut is on and whether it is registered or in use by another app: `enabled`, `inUse`, `keys` (the current chord), `isDefault`, and `candidateInUse` (always false here) |
 | `set_quick_access` | yes (unlocked) | no. Writes `quick-access.json` and registers or unregisters the shortcut |
 | `set_quick_access_shortcut` | yes (unlocked) | no. Takes a chord string or null (default); Rust checks the rules, registers it only if the OS accepts it, saves `quick-access.json`, then releases the old chord. Refused: `quick_access_shortcut_invalid` with one of three fixed reasons; taken: status with `candidateInUse`. In `main.json` only |
 | `hide_quick_window` | no | no. Takes no argument; callable from the quick window only; hides that window and nothing else |
@@ -1038,7 +1038,7 @@ See `threat-model.md` §4 and `security-review.md`.
   another app already holds, so "in use" can be missing there (it may also
   accept a chord another app uses without reporting it when you change the
   shortcut). While recording a new chord, pressing the current chord still
-  opens Quick Access, because the OS takes it first. The clipboard
+  opens Quick Access, because the OS takes it first; likewise, pressing a chord another app holds may do nothing while recording. On Windows, Ctrl+Alt+letter/digit can collide with AltGr characters on some layouts, and Alt+Space opens the window menu; choosing them may swallow that input while HavenKeys runs. The clipboard
   limits of §9 apply unchanged. The quick window is always dark, whatever
   theme the main window uses.
 
