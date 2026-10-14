@@ -110,15 +110,24 @@ pub fn wait(answer: &Receiver<bool>, timeout: Duration) -> bool {
 /// `timeout`, whichever comes first. The deadline is enforced here, not by
 /// the bridge, so the wait always ends. `closed` runs whenever a dialog was
 /// started, however it ended.
+///
+/// `unlocked` is asked once the slot is taken: a lock that came before it
+/// found nothing to cancel, so a vault already locked is a Deny at once,
+/// with no dialog. A lock after this check cancels the slot as usual.
 fn run(
     pending: &PendingConfirmation,
     timeout: Duration,
+    unlocked: impl FnOnce() -> bool,
     show: impl FnOnce(Uuid) -> bool,
     closed: impl FnOnce(Uuid),
 ) -> bool {
     let Some((id, answer)) = pending.begin() else {
         return false;
     };
+    if !unlocked() {
+        pending.finish(id);
+        return false;
+    }
     let allowed = show(id) && wait(&answer, timeout);
     pending.finish(id);
     closed(id);
@@ -126,7 +135,8 @@ fn run(
 }
 
 /// The bridge's confirmation hook. No app state, a confirmation already
-/// showing, no main window or a failed emit is a Deny at once. An emit
+/// showing, a vault that locked since the request was dispatched, no main
+/// window or a failed emit is a Deny at once. An emit
 /// nobody listens to still succeeds (Tauri cannot tell), so a UI that never
 /// shows the dialog is a Deny only at the deadline.
 pub fn ask(app: &AppHandle, summary: ConfirmUpdate, timeout: Duration) -> bool {
@@ -137,6 +147,7 @@ pub fn ask(app: &AppHandle, summary: ConfirmUpdate, timeout: Duration) -> bool {
     run(
         &state.confirm,
         timeout,
+        || state.require_unlocked().is_ok(),
         |id| {
             if app.get_webview_window(tray::MAIN_WINDOW).is_none() {
                 return false;
@@ -256,6 +267,7 @@ mod tests {
         let allowed = run(
             &p,
             Duration::from_millis(50),
+            || true,
             |_| true,
             |id| closed = Some(id),
         );
@@ -275,6 +287,7 @@ mod tests {
         let allowed = run(
             &p,
             Duration::from_secs(5),
+            || true,
             move |id| {
                 std::thread::spawn(move || assert!(answering.answer(id, true)));
                 true
@@ -295,6 +308,7 @@ mod tests {
         assert!(!run(
             &p,
             Duration::from_secs(5),
+            || true,
             |_| false,
             |_| closed = true
         ));
@@ -315,6 +329,7 @@ mod tests {
         assert!(!run(
             &p,
             Duration::from_secs(5),
+            || true,
             |_| {
                 shown = true;
                 true
@@ -322,6 +337,29 @@ mod tests {
             |_| closed = true
         ));
         assert!(!shown && !closed, "the showing one is left alone");
+    }
+
+    // A lock between the bridge's dispatch and `begin` found no slot to
+    // cancel: the hook must not wait out the deadline for a locked vault.
+    #[test]
+    fn the_hook_denies_at_once_when_the_vault_is_already_locked() {
+        let p = PendingConfirmation::default();
+        let started = Instant::now();
+        let mut shown = false;
+        let mut closed = false;
+        assert!(!run(
+            &p,
+            Duration::from_secs(5),
+            || false,
+            |_| {
+                shown = true;
+                true
+            },
+            |_| closed = true
+        ));
+        assert!(started.elapsed() < Duration::from_secs(1), "no wait");
+        assert!(!shown && !closed, "no dialog is raised");
+        assert!(p.begin().is_some(), "the slot is free again");
     }
 
     #[test]
@@ -332,6 +370,7 @@ mod tests {
         let allowed = run(
             &p,
             Duration::from_secs(5),
+            || true,
             move |_| {
                 std::thread::spawn(move || locking.cancel());
                 true
