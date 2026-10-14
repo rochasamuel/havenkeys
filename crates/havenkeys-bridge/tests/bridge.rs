@@ -1718,6 +1718,33 @@ fn an_allowed_change_is_authorized_again() {
         error_code(&save(&f, GH, None, "two", Some(f.github))),
         Some("integration_disabled")
     );
+
+    // The account was frozen meanwhile (trial over): the write gate refuses.
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    let vault = f.vault.clone();
+    f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+        let mut v = vault.lock().unwrap();
+        let mut plan = v.plan().unwrap();
+        plan.status = Some("trialing".into());
+        plan.entitlement = havenkeys_core::store::Entitlement::Frozen;
+        v.set_plan(&plan).unwrap();
+        true
+    });
+    let r = save(&f, GH, None, "two", Some(f.github));
+    assert_eq!(
+        error_code(&r),
+        Some("frozen"),
+        "an Allow does not override a freeze"
+    );
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+    let kept = f
+        .vault
+        .lock()
+        .unwrap()
+        .reveal(&f.github, havenkeys_core::model::SecretField::Password)
+        .unwrap();
+    assert_eq!(kept.expose(), "one");
 }
 
 #[test]
