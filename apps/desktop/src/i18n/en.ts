@@ -59,7 +59,8 @@ export type ErrorCode =
   | "update_unavailable"
   | "update_failed"
   | "update_settings"
-  | "quick_access_settings";
+  | "quick_access_settings"
+  | "no_confirmation";
 
 /**
  * The core's errors, by code (havenkeys-core Error::code and the
@@ -107,6 +108,7 @@ const codes: Record<ErrorCode, string | null> = {
   update_failed: "The update could not be installed. Try again later.",
   update_settings: "Could not save the update setting.",
   quick_access_settings: "Could not save the Quick Access setting.",
+  no_confirmation: "Nothing is waiting for this answer.",
   unsupported_language: "Unsupported language.",
   keychain_unavailable:
     "Your system keychain did not answer. Approve its prompt if one is showing, then try again.",

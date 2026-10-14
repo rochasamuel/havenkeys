@@ -51,6 +51,7 @@ const codes: Record<ErrorCode, string | null> = {
   update_failed: "Não foi possível instalar a atualização. Tente novamente mais tarde.",
   update_settings: "Não foi possível salvar a configuração de atualizações.",
   quick_access_settings: "Não foi possível salvar a configuração do Acesso rápido.",
+  no_confirmation: "Nada está esperando por esta resposta.",
   unsupported_language: "Idioma não suportado.",
   keychain_unavailable:
     "O chaveiro do sistema não respondeu. Aprove a solicitação dele, se houver uma aberta, e tente novamente.",

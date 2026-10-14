@@ -15,6 +15,7 @@ const COMMANDS: &[&str] = &[
     "password_history",
     "list_passkeys",
     "delete_passkey",
+    "answer_update_confirmation",
     "device_status",
     "account_status",
     "preview_invite",

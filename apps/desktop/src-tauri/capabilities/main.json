@@ -22,6 +22,7 @@
     "allow-password-history",
     "allow-list-passkeys",
     "allow-delete-passkey",
+    "allow-answer-update-confirmation",
     "allow-device-status",
     "allow-account-status",
     "allow-preview-invite",

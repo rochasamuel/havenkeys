@@ -41,6 +41,9 @@ pub struct AppState {
     pub last_import: Mutex<Option<PathBuf>>,
     /// The last QR scan's codes, waiting to be saved (scan_slot.rs).
     totp_scan: Mutex<ScanSlot>,
+    /// A repeat password change from the browser waiting for the user
+    /// (confirm.rs).
+    pub confirm: crate::confirm::PendingConfirmation,
     origin: Instant,
 }
 
@@ -54,6 +57,7 @@ impl AppState {
             clipboard: ClipboardGuard::default(),
             last_import: Mutex::new(None),
             totp_scan: Mutex::new(ScanSlot::default()),
+            confirm: Default::default(),
             origin: Instant::now(),
         }
     }
@@ -162,6 +166,9 @@ impl AppState {
         }
         // Scanned TOTP codes waiting to be saved are vault secrets too.
         self.clear_totp_scan();
+        // A repeat password change waiting for the user is refused: its
+        // dialog closes, and the bridge answers `denied`.
+        self.confirm.cancel();
     }
 
     pub fn lock(&self, reason: &'static str) {

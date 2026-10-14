@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-answer-update-confirmation"
+description = "Enables the answer_update_confirmation command without any pre-configured scope."
+commands.allow = ["answer_update_confirmation"]
+
+[[permission]]
+identifier = "deny-answer-update-confirmation"
+description = "Denies the answer_update_confirmation command without any pre-configured scope."
+commands.deny = ["answer_update_confirmation"]

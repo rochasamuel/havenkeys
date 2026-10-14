@@ -8,6 +8,7 @@ mod autostart;
 mod card;
 mod clipboard;
 mod commands;
+mod confirm;
 mod custom_field;
 #[cfg(target_os = "linux")]
 mod desktop_entry;
@@ -143,6 +144,13 @@ fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
     // vault is already unlocked.
     let show_handle = app.clone();
     bridge.set_show_unlock_hook(move || tray::show_main_window(&show_handle));
+    // A repeat password change from the browser (spec 2026-10-13): raise the
+    // window and ask. Runs on a bridge thread without the vault lock; any
+    // failure is a Deny, and the wait ends at the bridge's deadline.
+    let confirm_handle = app.clone();
+    bridge.set_confirm_update_hook(move |summary, timeout| {
+        confirm::ask(&confirm_handle, summary, timeout)
+    });
     bridge
 }
 
@@ -285,6 +293,13 @@ pub fn run() {
                 // locked here — the idle timer keeps running while the window is
                 // hidden, so auto-lock still applies (`security-model.md` §5).
                 WindowEvent::CloseRequested { api, .. } => {
+                    // Closing the main window answers a pending confirmation
+                    // with Deny instead of leaving it to time out unseen.
+                    if window.label() == tray::MAIN_WINDOW {
+                        if let Some(state) = window.app_handle().try_state::<AppState>() {
+                            state.confirm.cancel();
+                        }
+                    }
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -292,6 +307,9 @@ pub fn run() {
                 WindowEvent::Destroyed => {
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
+                        if window.label() == tray::MAIN_WINDOW {
+                            state.confirm.cancel();
+                        }
                         state.lock("exit");
                     }
                 }
@@ -312,6 +330,7 @@ pub fn run() {
             commands::password_history,
             commands::list_passkeys,
             commands::delete_passkey,
+            confirm::answer_update_confirmation,
             account::device_status,
             account::account_status,
             account::preview_invite,
