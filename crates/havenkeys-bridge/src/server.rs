@@ -264,6 +264,10 @@ impl Bridge {
     /// connection's writer when it is ready. Replies carry the request's ID,
     /// so they may arrive out of order. With no place left on this
     /// connection (or no thread to be had) it is answered `busy` at once.
+    /// The thread can outlive its connection (its reply is then dropped,
+    /// but the request still completes), yet such threads stay bounded:
+    /// only one at a time waits on the user, and the others are answered
+    /// `busy` or rate-limited.
     fn answer_in_background(
         &self,
         env: RequestEnvelope,
