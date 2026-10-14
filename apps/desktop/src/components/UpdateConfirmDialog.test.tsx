@@ -19,6 +19,26 @@ vi.mock("../lib/api", async (importOriginal) => ({
   },
 }));
 
+// Each render of the dialog first notes what the last commit put on screen:
+// whether Allow was enabled and which login the body named.
+const seen: Array<{ allowEnabled: boolean; body: string }> = [];
+vi.mock("../i18n/context", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../i18n/context")>();
+  return {
+    ...real,
+    useI18n: () => {
+      const allow = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Allow");
+      if (allow) {
+        seen.push({
+          allowEnabled: !allow.disabled,
+          body: document.getElementById("confirm-update-body")?.textContent ?? "",
+        });
+      }
+      return real.useI18n();
+    },
+  };
+});
+
 import { UpdateConfirmDialog } from "./UpdateConfirmDialog";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -165,6 +185,22 @@ describe("UpdateConfirmDialog", () => {
     await act(async () => locked?.("auto"));
     expect(dialog()).toBeNull();
     expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("a newer confirmation is never on screen armed by the one it replaced", async () => {
+    const B: UpdateConfirmation = { ...PENDING, id: "c0ffee00-0000-4000-8000-000000000002", title: "GitLab" };
+    await open();
+    await armed();
+    expect(button("Allow").disabled).toBe(false);
+    seen.length = 0;
+    await open(B);
+    await act(async () => button("Allow").click());
+    expect(answer).not.toHaveBeenCalled();
+    // No commit ever showed B's text with Allow enabled before its own delay.
+    expect(seen.filter((s) => s.body.includes("“GitLab”") && s.allowEnabled)).toEqual([]);
+    expect(button("Allow").disabled).toBe(true);
+    await armed();
+    expect(button("Allow").disabled).toBe(false);
   });
 
   it("returns the focus where it was on close", async () => {

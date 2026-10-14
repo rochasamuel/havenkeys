@@ -23,7 +23,8 @@ export function UpdateConfirmDialog() {
   const [pending, setPending] = useState<UpdateConfirmation | null>(null);
   // Allow stays off for a moment after the dialog opens, so a click already
   // on its way (meant for the screen behind) cannot answer it.
-  const [armed, setArmed] = useState(false);
+  // Keyed to the confirmation's ID, so a new one is never born armed.
+  const [armedId, setArmedId] = useState<string | null>(null);
   const denyRef = useRef<HTMLButtonElement>(null);
   const pendingRef = useRef<UpdateConfirmation | null>(null);
   pendingRef.current = pending;
@@ -60,8 +61,7 @@ export function UpdateConfirmDialog() {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     appRoot?.setAttribute("inert", "");
     denyRef.current?.focus();
-    setArmed(false);
-    const arm = window.setTimeout(() => setArmed(true), ARM_DELAY_MS);
+    const arm = window.setTimeout(() => setArmedId(pendingId), ARM_DELAY_MS);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -78,6 +78,7 @@ export function UpdateConfirmDialog() {
   }, [pendingId, answer]);
 
   if (!pending) return null;
+  const armed = armedId === pending.id;
 
   return createPortal(
     <div className="modal-scrim">
