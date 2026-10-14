@@ -258,6 +258,23 @@ describe("save prompt waiting for the desktop", () => {
     expect(question().textContent).toBe("Not saved");
   });
 
+  it("a new login shown again during its save waits for the same answer, without the desktop hint", async () => {
+    const release = holdConfirm();
+    await openPrompt({ action: "add", site: "github.com", username: "octo", title: "GitHub", lookalikeOf: null, confirming: true });
+    const before = question().textContent;
+    expect((document.getElementById("confirm") as HTMLButtonElement).disabled).toBe(true);
+    expect(asked.filter((m) => (m as { type: string }).type === "save_confirm")).toEqual([{ type: "save_confirm", token: TOKEN }]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    // An add never waits on the desktop's Allow: no "Confirm in HavenKeys…".
+    expect(question().textContent).toBe(before);
+    expect(question().classList.contains("waiting")).toBe(false);
+    release({ ok: true, value: null });
+    await vi.advanceTimersByTimeAsync(0);
+    // The join resolved: the background closes the frame, nothing fails here.
+    expect(question().textContent).toBe(before);
+    expect(question().className).not.toBe("error");
+  });
+
   it("a card save never shows the desktop hint", async () => {
     const handlers = captureClicks();
     await openPrompt({ site: "shop.com", title: "Visa", card: { brand: null, last4: "4242", expiry: "12/30" } });
