@@ -2126,6 +2126,7 @@ fn save_sso_flow() {
 #[cfg(unix)]
 mod socket {
     use super::*;
+    use interprocess::local_socket::traits::Stream as _;
     use std::io::Write;
 
     fn serve(f: &Fixture) -> (tempfile::TempDir, Endpoint) {
@@ -2341,6 +2342,91 @@ mod socket {
             error_code(&fill(&f, f.github, "https://evil.com/")),
             Some("denied")
         );
+    }
+
+    /// Makes the confirmation hook wait until the test answers on the
+    /// returned sender (or 10 s pass, which counts as a Deny).
+    fn hold_confirmations(f: &Fixture) -> mpsc::Sender<bool> {
+        let (release_tx, release_rx) = mpsc::channel::<bool>();
+        let release_rx = Mutex::new(release_rx);
+        f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+            release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap_or(false)
+        });
+        release_tx
+    }
+
+    fn save_update(id: u32, url: &str, password: &str, item: Uuid) -> Vec<u8> {
+        request(
+            id,
+            serde_json::json!({"type": "save_login", "url": url, "username": null, "password": password, "itemId": item}),
+        )
+    }
+
+    fn read_json(s: &mut interprocess::local_socket::Stream) -> serde_json::Value {
+        let resp = read_frame(s, MAX_RESPONSE_BYTES).unwrap().unwrap();
+        serde_json::from_slice(&resp).unwrap()
+    }
+
+    /// A save waiting for the user's answer is answered on its own thread:
+    /// the browser's other requests on the same connection keep flowing.
+    #[test]
+    fn a_pending_confirmation_does_not_hold_up_the_connection() {
+        let f = online_fixture();
+        let gh = "https://github.com/";
+        assert!(error_code(&save(&f, gh, None, "one", Some(f.github))).is_none());
+        let release_tx = hold_confirmations(&f);
+        let (_dir, ep) = serve(&f);
+        let mut s = ep.connect().unwrap();
+        // Fail instead of hanging if the reader thread is stuck.
+        s.set_recv_timeout(Some(Duration::from_secs(5))).unwrap();
+        write_frame(&mut s, &save_update(7, gh, "two", f.github), usize::MAX).unwrap();
+        let r = roundtrip(&mut s, &request(8, serde_json::json!({"type": "status"})));
+        assert_eq!(r["id"], 8, "status answered while the save waits");
+        release_tx.send(true).unwrap();
+        let r = read_json(&mut s);
+        assert_eq!(r["id"], 7);
+        assert_eq!(r["result"]["type"], "save_login");
+    }
+
+    /// A burst of password changes while one waits for the user is answered
+    /// at once (busy or rate limited), never queued behind the wait, and the
+    /// connection keeps working.
+    #[test]
+    fn a_burst_of_changes_behind_a_pending_confirmation_is_answered_at_once() {
+        let f = online_fixture();
+        let gh = "https://github.com/";
+        assert!(error_code(&save(&f, gh, None, "one", Some(f.github))).is_none());
+        let release_tx = hold_confirmations(&f);
+        let (_dir, ep) = serve(&f);
+        let mut s = ep.connect().unwrap();
+        s.set_recv_timeout(Some(Duration::from_secs(5))).unwrap();
+        write_frame(&mut s, &save_update(1, gh, "two", f.github), usize::MAX).unwrap();
+        // Let the first one reach the user before the burst.
+        std::thread::sleep(Duration::from_millis(200));
+        for id in 2..=21 {
+            write_frame(&mut s, &save_update(id, gh, "three", f.github), usize::MAX).unwrap();
+        }
+        let mut answered = std::collections::BTreeSet::new();
+        for _ in 2..=21 {
+            let r = read_json(&mut s);
+            let code = error_code(&r).unwrap_or("none").to_string();
+            assert!(
+                code == "busy" || code == "rate_limited",
+                "unexpected answer {code}"
+            );
+            answered.insert(r["id"].as_u64().unwrap());
+        }
+        assert_eq!(answered, (2..=21).collect());
+        let r = roundtrip(&mut s, &request(30, serde_json::json!({"type": "status"})));
+        assert_eq!(r["id"], 30);
+        release_tx.send(true).unwrap();
+        let r = read_json(&mut s);
+        assert_eq!(r["id"], 1);
+        assert_eq!(r["result"]["type"], "save_login");
     }
 }
 

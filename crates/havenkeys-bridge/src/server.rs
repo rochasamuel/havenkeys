@@ -2,7 +2,10 @@
 //!
 //! One thread accepts connections; each connection gets a reader thread
 //! (parse → authorize → answer) and a writer thread fed by a bounded
-//! channel. Events such as "locked" are queued with `try_send`, so a peer
+//! channel. A request that may wait for the user (a repeat password change)
+//! is answered on a thread of its own, so it never holds up the connection;
+//! every reply still goes through the one writer, so frames never interleave.
+//! Events such as "locked" are queued with `try_send`, so a peer
 //! that stops reading can never block the code path that locks the vault.
 
 use crate::dispatch::{dispatch_with, Dispatched, UpdateConsent};
@@ -11,12 +14,12 @@ use havenkeys_core::vault::{ConfirmUpdate, StagedWrite, VaultService};
 use havenkeys_protocol::endpoint::Endpoint;
 use havenkeys_protocol::frame::{read_frame, write_frame, FrameError};
 use havenkeys_protocol::{
-    parse_request, ErrorCode, Event, Outgoing, Request, Response, ResultBody, MAX_REQUEST_BYTES,
-    MAX_RESPONSE_BYTES,
+    parse_request, ErrorCode, Event, Outgoing, Request, RequestEnvelope, Response, ResultBody,
+    MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES,
 };
 use interprocess::local_socket::{prelude::*, Stream};
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -37,6 +40,12 @@ const OUTBOX: usize = 16;
 const IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 
 type Frame = Zeroizing<Vec<u8>>;
+
+/// Requests one connection may have answered on threads of their own at
+/// once (see `may_wait_for_user`). Only one confirmation waits at a time
+/// across all connections; this leaves room for it plus one change that
+/// does not ask, and answers the rest `busy` without starting a thread.
+const MAX_BACKGROUND_PER_CONNECTION: usize = 2;
 
 /// Hook run once `open_item` is allowed; see `Bridge::set_open_item_hook`.
 type OpenItemHook = Arc<dyn Fn(Uuid) + Send + Sync>;
@@ -62,6 +71,27 @@ enum ItemBudget {
     /// The interval is running: only a change the user allows on the
     /// desktop goes through, and it starts the interval again.
     CoolingDown(Uuid),
+}
+
+/// One of a connection's background-answer places. Freed on drop, however
+/// the answer ends.
+struct BackgroundSlot(Arc<AtomicUsize>);
+
+impl BackgroundSlot {
+    fn claim(count: &Arc<AtomicUsize>) -> Option<Self> {
+        count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_BACKGROUND_PER_CONNECTION).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| Self(count.clone()))
+    }
+}
+
+impl Drop for BackgroundSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 /// The one confirmation slot. Freed on drop, however the wait ends.
@@ -214,13 +244,52 @@ impl Bridge {
     /// Handle one raw request frame and produce the reply. Never panics on
     /// any input.
     pub fn handle_frame(&self, bytes: &[u8]) -> Outgoing {
-        let env = match parse_request(bytes) {
-            Ok(env) => env,
-            Err(rejection) => return rejection.response().into(),
-        };
+        match parse_request(bytes) {
+            Ok(env) => self.answer(&env),
+            Err(rejection) => rejection.response().into(),
+        }
+    }
+
+    fn answer(&self, env: &RequestEnvelope) -> Outgoing {
         match self.handle(&env.request) {
             Ok(result) => fit_frame(Response::ok(env.id, result)).into(),
             Err(code) => Response::err(Some(env.id), code).into(),
+        }
+    }
+
+    /// Answer `env` on its own thread and queue the reply for the
+    /// connection's writer when it is ready. Replies carry the request's ID,
+    /// so they may arrive out of order. With no place left on this
+    /// connection (or no thread to be had) it is answered `busy` at once.
+    fn answer_in_background(
+        &self,
+        env: RequestEnvelope,
+        tx: &SyncSender<Frame>,
+        in_flight: &Arc<AtomicUsize>,
+    ) {
+        let id = env.id;
+        let busy = || {
+            if let Some(bytes) = Outgoing::from(Response::err(Some(id), ErrorCode::Busy)).to_bytes()
+            {
+                let _ = tx.send(bytes);
+            }
+        };
+        let Some(slot) = BackgroundSlot::claim(in_flight) else {
+            return busy();
+        };
+        let bridge = self.clone();
+        let reply_tx = tx.clone();
+        let spawned = std::thread::Builder::new()
+            .name("bridge-confirm".into())
+            .spawn(move || {
+                let _slot = slot;
+                if let Some(bytes) = bridge.answer(&env).to_bytes() {
+                    let _ = reply_tx.send(bytes);
+                }
+            });
+        // The closure (and its slot) is dropped with the error.
+        if spawned.is_err() {
+            busy();
         }
     }
 
@@ -463,9 +532,20 @@ impl Bridge {
     }
 
     fn read_loop<R: io::Read>(&self, recv: &mut R, tx: &SyncSender<Frame>) {
+        let in_flight = Arc::new(AtomicUsize::new(0));
         loop {
             let reply = match read_frame(recv, MAX_REQUEST_BYTES) {
-                Ok(Some(bytes)) => self.handle_frame(&bytes),
+                Ok(Some(bytes)) => match parse_request(&bytes) {
+                    Err(rejection) => rejection.response().into(),
+                    // May wait up to a minute for the user's answer in the
+                    // desktop: answered on its own thread, so the browser's
+                    // other requests on this connection are not held up.
+                    Ok(env) if may_wait_for_user(&env.request) => {
+                        self.answer_in_background(env, tx, &in_flight);
+                        continue;
+                    }
+                    Ok(env) => self.answer(&env),
+                },
                 Ok(None) => return,
                 // A6: an oversized frame is answered and the connection
                 // closed. Its payload is never read.
@@ -567,6 +647,20 @@ fn request_class(req: &Request) -> Option<RequestClass> {
         | Request::FillCard { .. }
         | Request::SaveCard { .. } => Some(RequestClass::Secret),
     }
+}
+
+/// Requests that may wait for the user's answer in the desktop: a browser
+/// password change of an existing login (spec 2026-10-13 §4). At most one
+/// waits at a time; the others answer `busy` at once, and
+/// `MAX_BACKGROUND_PER_CONNECTION` bounds the threads this starts.
+fn may_wait_for_user(req: &Request) -> bool {
+    matches!(
+        req,
+        Request::SaveLogin {
+            item_id: Some(_),
+            ..
+        }
+    )
 }
 
 /// Requests that add or change an item, so the desktop list must refresh.
