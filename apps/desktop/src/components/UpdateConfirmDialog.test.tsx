@@ -224,4 +224,26 @@ describe("UpdateConfirmDialog", () => {
     await act(async () => button("Deny").click());
     expect(answer).toHaveBeenCalledExactlyOnceWith(B.id, false);
   });
+
+  it("closes without answering at its deadline even if Rust's closed event is lost", async () => {
+    await open({ ...PENDING, timeoutMs: 2_000 });
+    await act(async () => vi.advanceTimersByTime(1_999));
+    expect(dialog()).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(dialog()).toBeNull();
+    expect(appRoot.hasAttribute("inert")).toBe(false);
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("a newer confirmation gets its own deadline, not the replaced one's", async () => {
+    const B: UpdateConfirmation = { ...PENDING, id: "c0ffee00-0000-4000-8000-000000000002", timeoutMs: 5_000 };
+    await open({ ...PENDING, timeoutMs: 1_000 });
+    await act(async () => vi.advanceTimersByTime(900));
+    await open(B);
+    await act(async () => vi.advanceTimersByTime(4_999));
+    expect(dialog()).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(dialog()).toBeNull();
+    expect(answer).not.toHaveBeenCalled();
+  });
 });

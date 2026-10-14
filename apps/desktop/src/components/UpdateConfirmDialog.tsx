@@ -14,7 +14,8 @@ const ARM_DELAY_MS = 500;
  * login's title and username and the page's site as text, never a password.
  * Deny is the default (primary, first, focused) and the Escape action;
  * Allow is enabled only after a short delay. Closes once answered, on lock,
- * and when Rust says the wait ended (timeout, window closed). Rust's reply to
+ * when Rust says the wait ended (timeout, window closed), and at the
+ * payload's deadline even if that event never arrives. Rust's reply to
  * an answer is not shown: a late answer may be accepted while the browser was
  * already denied, so the dialog never claims the change happened.
  */
@@ -62,6 +63,17 @@ export function UpdateConfirmDialog() {
     appRoot?.setAttribute("inert", "");
     denyRef.current?.focus();
     const arm = window.setTimeout(() => setArmedId(pendingId), ARM_DELAY_MS);
+    // A backstop for a lost closed event: past Rust's deadline the answer
+    // is refused anyway, so the dialog closes without answering.
+    const timeoutMs = pendingRef.current?.timeoutMs ?? 0;
+    const expire = window.setTimeout(
+      () => {
+        if (pendingRef.current?.id !== pendingId) return;
+        pendingRef.current = null;
+        setPending(null);
+      },
+      Number.isFinite(timeoutMs) ? Math.max(0, timeoutMs) : 0,
+    );
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -71,6 +83,7 @@ export function UpdateConfirmDialog() {
     document.addEventListener("keydown", onKey, true);
     return () => {
       window.clearTimeout(arm);
+      window.clearTimeout(expire);
       document.removeEventListener("keydown", onKey, true);
       appRoot?.removeAttribute("inert");
       if (previous?.isConnected) previous.focus();
