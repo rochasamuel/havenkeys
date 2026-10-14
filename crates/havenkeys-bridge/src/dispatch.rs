@@ -3,8 +3,9 @@
 //! check_login, save_login, find_passkeys, passkey_assert,
 //! check_passkey_create, stage_passkey_create, has_passkey_for_page,
 //! start_sso_for_page, check_sso, stage_save_sso, cards_for_page,
-//! card_values_for_page, stage_save_card, lookalike_for_page}`); this layer adds the integration
-//! switch and maps types, and never widens what the core returns.
+//! card_values_for_page, stage_save_card, lookalike_for_page,
+//! update_needs_confirmation, confirm_update_summary}`); this layer adds the
+//! integration switch and maps types, and never widens what the core returns.
 
 use crate::convert::{
     core_card_role, core_provider, core_role, lock_state, save_action, strength, wire_brand,
@@ -15,7 +16,7 @@ use havenkeys_core::card_page::{CardFrame as CoreCardFrame, CardRole as CoreCard
 use havenkeys_core::generator::{generate, GeneratorOptions};
 use havenkeys_core::identity::FillRole;
 use havenkeys_core::passkey::{encode_b64url, B64Url, CreateQuery, PasskeyCreate, Upgrade};
-use havenkeys_core::vault::{SaveTarget, StagedWrite, VaultService};
+use havenkeys_core::vault::{ConfirmUpdate, SaveTarget, StagedWrite, VaultService};
 use havenkeys_core::{Error, SecretString};
 use havenkeys_protocol::{
     lookalike_site_ok, CardFrameValues, CardMatch, CardValue, Entitlement, ErrorCode,
@@ -90,6 +91,18 @@ fn save_target<'a>(item_id: &'a Option<Uuid>, title: &'a Option<String>) -> Save
     }
 }
 
+/// Whether a `save_login` update may need the user's Allow in the desktop
+/// app (spec 2026-10-13-confirm-repeat-password-change §4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum UpdateConsent {
+    /// Ask when the login's password changed in the last 24 hours.
+    AskIfRecent,
+    /// The item's 10-minute browser interval is running: always ask.
+    AskAlways,
+    /// The user allowed this update on the desktop: stage it.
+    Allowed,
+}
+
 /// What answering a request produced.
 // One value per request, matched at once: boxing `Write` would only add an
 // allocation. (The enum is the same size it was with one variant per save.)
@@ -109,6 +122,12 @@ pub enum Dispatched {
     /// The item may be opened in the desktop; the caller runs the open-item
     /// hook once the vault lock is released, then returns `result`.
     Open { item: Uuid, result: ResultBody },
+    /// A password update that needs the user's Allow in the desktop app.
+    /// The caller asks without the vault lock held and, on Allow, dispatches
+    /// the request again with `UpdateConsent::Allowed`, which authorizes it
+    /// from scratch. `epoch` is the vault's lock epoch now: a different one
+    /// afterwards means the vault locked meanwhile.
+    Confirm { summary: ConfirmUpdate, epoch: u64 },
 }
 
 fn refused_when_frozen(req: &Request) -> bool {
@@ -129,12 +148,23 @@ fn refused_when_frozen(req: &Request) -> bool {
     )
 }
 
-/// Answer a request. `lock` and `show_unlock` are handled by the caller, which must not hold
-/// the vault while locking.
+/// Answer a request. `lock` and `show_unlock` are handled by the caller,
+/// which must not hold the vault while locking. A repeat password change
+/// comes back as `Dispatched::Confirm`.
 pub fn dispatch(
     v: &mut VaultService,
     req: &Request,
     unix_seconds: u64,
+) -> Result<Dispatched, ErrorCode> {
+    dispatch_with(v, req, unix_seconds, UpdateConsent::AskIfRecent)
+}
+
+/// [`dispatch`], with how a `save_login` update is to be confirmed.
+pub(crate) fn dispatch_with(
+    v: &mut VaultService,
+    req: &Request,
+    unix_seconds: u64,
+    consent: UpdateConsent,
 ) -> Result<Dispatched, ErrorCode> {
     // Everything but status and lock comes from a web page.
     if !matches!(
@@ -308,6 +338,8 @@ pub fn dispatch(
             item_id,
             title,
         } => {
+            let now = now_ms(unix_seconds);
+            // Authorized exactly as before; nothing is sent from here.
             let staged = v
                 .stage_save_login(
                     url,
@@ -315,9 +347,28 @@ pub fn dispatch(
                     username.as_deref(),
                     core_secret(password),
                     save_target(item_id, title),
-                    now_ms(unix_seconds),
+                    now,
                 )
                 .map_err(item_code)?;
+            if let Some(id) = item_id {
+                let ask = match consent {
+                    UpdateConsent::Allowed => false,
+                    UpdateConsent::AskAlways => true,
+                    UpdateConsent::AskIfRecent => {
+                        v.update_needs_confirmation(id, now).map_err(item_code)?
+                    }
+                };
+                if ask {
+                    // The sealed write is dropped unsent. After Allow the
+                    // save is staged again from scratch.
+                    drop(staged);
+                    let summary = v.confirm_update_summary(id, url).map_err(item_code)?;
+                    return Ok(Dispatched::Confirm {
+                        summary,
+                        epoch: v.epoch(),
+                    });
+                }
+            }
             Ok(Dispatched::Write {
                 write: staged.write,
                 result: ResultBody::SaveLogin {

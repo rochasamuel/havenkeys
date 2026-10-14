@@ -5,9 +5,9 @@
 //! channel. Events such as "locked" are queued with `try_send`, so a peer
 //! that stops reading can never block the code path that locks the vault.
 
-use crate::dispatch::{dispatch, Dispatched};
+use crate::dispatch::{dispatch_with, Dispatched, UpdateConsent};
 use crate::ratelimit::{RateLimiter, RequestClass};
-use havenkeys_core::vault::{StagedWrite, VaultService};
+use havenkeys_core::vault::{ConfirmUpdate, StagedWrite, VaultService};
 use havenkeys_protocol::endpoint::Endpoint;
 use havenkeys_protocol::frame::{read_frame, write_frame, FrameError};
 use havenkeys_protocol::{
@@ -16,6 +16,7 @@ use havenkeys_protocol::{
 };
 use interprocess::local_socket::{prelude::*, Stream};
 use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -43,6 +44,43 @@ type OpenItemHook = Arc<dyn Fn(Uuid) + Send + Sync>;
 /// Hook run once `show_unlock` is allowed; see `Bridge::set_show_unlock_hook`.
 type ShowUnlockHook = Arc<dyn Fn() + Send + Sync>;
 
+/// How long the desktop has to answer a confirmation before it counts as a
+/// Deny (spec 2026-10-13-confirm-repeat-password-change §4).
+pub const CONFIRM_UPDATE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Asks the user to allow a repeat password change; see
+/// `Bridge::set_confirm_update_hook`.
+type ConfirmUpdateHook = Arc<dyn Fn(ConfirmUpdate, Duration) -> bool + Send + Sync>;
+
+/// A password change's claim on its item's 10-minute interval.
+#[derive(Clone, Copy)]
+enum ItemBudget {
+    /// Not an item update.
+    None,
+    /// Reserved at this instant; given back if the change does not happen.
+    Reserved(Uuid, Instant),
+    /// The interval is running: only a change the user allows on the
+    /// desktop goes through, and it starts the interval again.
+    CoolingDown(Uuid),
+}
+
+/// The one confirmation slot. Freed on drop, however the wait ends.
+struct PendingSlot<'a>(&'a AtomicBool);
+
+impl<'a> PendingSlot<'a> {
+    fn claim(flag: &'a AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| Self(flag))
+    }
+}
+
+impl Drop for PendingSlot<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
 struct Inner {
     vault: Arc<Mutex<VaultService>>,
     on_lock: Box<dyn Fn() + Send + Sync>,
@@ -57,6 +95,12 @@ struct Inner {
     on_open_item: Mutex<Option<OpenItemHook>>,
     /// What `show_unlock` does once allowed; see `set_show_unlock_hook`.
     on_show_unlock: Mutex<Option<ShowUnlockHook>>,
+    /// Asks the user about a repeat password change; see
+    /// `set_confirm_update_hook`.
+    on_confirm_update: Mutex<Option<ConfirmUpdateHook>>,
+    /// Set while a confirmation is with the user: only one at a time.
+    confirm_pending: AtomicBool,
+    confirm_timeout: Mutex<Duration>,
 }
 
 /// Cheap to clone; all clones share state.
@@ -125,6 +169,9 @@ impl Bridge {
                 next_conn: Mutex::new(0),
                 on_open_item: Mutex::new(None),
                 on_show_unlock: Mutex::new(None),
+                on_confirm_update: Mutex::new(None),
+                confirm_pending: AtomicBool::new(false),
+                confirm_timeout: Mutex::new(CONFIRM_UPDATE_TIMEOUT),
             }),
         }
     }
@@ -145,6 +192,25 @@ impl Bridge {
         *guard(&self.inner.on_show_unlock) = Some(Arc::new(hook));
     }
 
+    /// How a repeat password change from the browser is put to the user: the
+    /// desktop raises its window and asks, returning `true` for Allow. Gets
+    /// the change's summary (no secret) and how long it has. Called on a
+    /// bridge thread without the vault lock or any bridge mutex held; it
+    /// must return within that time and answer `false` on any failure.
+    /// Without a hook every such change is refused (`denied`).
+    pub fn set_confirm_update_hook(
+        &self,
+        hook: impl Fn(ConfirmUpdate, Duration) -> bool + Send + Sync + 'static,
+    ) {
+        *guard(&self.inner.on_confirm_update) = Some(Arc::new(hook));
+    }
+
+    /// Shortens the confirmation timeout. For tests: the desktop keeps
+    /// [`CONFIRM_UPDATE_TIMEOUT`].
+    pub fn set_confirm_timeout(&self, timeout: Duration) {
+        *guard(&self.inner.confirm_timeout) = timeout;
+    }
+
     /// Handle one raw request frame and produce the reply. Never panics on
     /// any input.
     pub fn handle_frame(&self, bytes: &[u8]) -> Outgoing {
@@ -163,17 +229,33 @@ impl Bridge {
             (self.inner.on_lock)();
             return Ok(ResultBody::Lock {});
         }
-        let reserved = self.check_rate_limits(req)?;
-        let result = self.handle_limited(req);
-        // BR-2: a password change that was denied or failed does not spend
-        // the item's budget, so a retry after an outage still goes through.
-        if let (Err(_), Some((item, at))) = (&result, reserved) {
-            guard(&self.inner.limiter).release_item_update(item, at);
+        let budget = self.check_rate_limits(req)?;
+        let consent = match budget {
+            ItemBudget::CoolingDown(_) => UpdateConsent::AskAlways,
+            ItemBudget::None | ItemBudget::Reserved(..) => UpdateConsent::AskIfRecent,
+        };
+        let result = self.handle_limited(req, consent);
+        match (&result, budget) {
+            // BR-2: a password change that was denied or failed does not
+            // spend the item's budget, so a retry after an outage still goes
+            // through.
+            (Err(_), ItemBudget::Reserved(item, at)) => {
+                guard(&self.inner.limiter).release_item_update(item, at)
+            }
+            // A change the user allowed inside the interval starts it again.
+            (Ok(_), ItemBudget::CoolingDown(item)) => {
+                guard(&self.inner.limiter).record_item_update(item, Instant::now())
+            }
+            _ => {}
         }
         result
     }
 
-    fn handle_limited(&self, req: &Request) -> Result<ResultBody, ErrorCode> {
+    fn handle_limited(
+        &self,
+        req: &Request,
+        consent: UpdateConsent,
+    ) -> Result<ResultBody, ErrorCode> {
         // Answered in any lock state and without the vault: it carries no
         // secret and returns none. The browser-integration switch is sealed
         // in the vault, so it cannot be read while locked; the rate limit
@@ -183,14 +265,24 @@ impl Bridge {
         }
         let dispatched = {
             let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
-            dispatch(&mut vault, req, unix_seconds())
+            dispatch_with(&mut vault, req, unix_seconds(), consent)
+        };
+        // A repeat password change: the vault lock is already released above,
+        // so the user can take their time and the vault can still lock.
+        let dispatched = match dispatched? {
+            Dispatched::Confirm { summary, epoch } => {
+                self.confirm_then_stage(req, summary, epoch)?
+            }
+            other => other,
         };
         // The vault lock is released above, before the save below reaches the
         // network: a slow or hostile server must never delay locking.
-        let result = match dispatched? {
+        let result = match dispatched {
             Dispatched::Done(body) => Ok(body),
             Dispatched::Write { write, result } => (self.inner.save)(write).map(|()| result),
             Dispatched::Open { item, result } => self.open_in_desktop(item).map(|()| result),
+            // `confirm_then_stage` never asks twice.
+            Dispatched::Confirm { .. } => Err(ErrorCode::Internal),
         };
         if result.is_ok() && changes_items(req) {
             (self.inner.on_items_changed)();
@@ -199,8 +291,9 @@ impl Bridge {
     }
 
     /// Spend `req`'s rate-limit tokens, or refuse it. A password change also
-    /// reserves its item's budget, returned so a failure can give it back.
-    fn check_rate_limits(&self, req: &Request) -> Result<Option<(Uuid, Instant)>, ErrorCode> {
+    /// reserves its item's budget, returned so a failure can give it back,
+    /// or learns that the item's interval is running.
+    fn check_rate_limits(&self, req: &Request) -> Result<ItemBudget, ErrorCode> {
         if let Some(class) = request_class(req) {
             if !guard(&self.inner.limiter).allow(class, Instant::now()) {
                 return Err(ErrorCode::RateLimited);
@@ -209,20 +302,62 @@ impl Bridge {
         // Password changes from the browser: one per item per interval,
         // reserved before the core runs (so concurrent saves cannot both
         // pass) and given back by `handle` if the change does not happen.
-        if let Request::SaveLogin {
-            item_id: Some(id), ..
-        }
-        | Request::SaveSso {
-            item_id: Some(id), ..
-        } = req
-        {
-            let now = Instant::now();
-            if !guard(&self.inner.limiter).allow_item_update(*id, now) {
-                return Err(ErrorCode::RateLimited);
+        // Inside the interval a `save_login` update is asked on the desktop
+        // instead of refused; `save_sso` is refused as before.
+        let now = Instant::now();
+        match req {
+            Request::SaveLogin {
+                item_id: Some(id), ..
+            } => Ok(if guard(&self.inner.limiter).allow_item_update(*id, now) {
+                ItemBudget::Reserved(*id, now)
+            } else {
+                ItemBudget::CoolingDown(*id)
+            }),
+            Request::SaveSso {
+                item_id: Some(id), ..
+            } => {
+                if !guard(&self.inner.limiter).allow_item_update(*id, now) {
+                    return Err(ErrorCode::RateLimited);
+                }
+                Ok(ItemBudget::Reserved(*id, now))
             }
-            return Ok(Some((*id, now)));
+            _ => Ok(ItemBudget::None),
         }
-        Ok(None)
+    }
+
+    /// Ask the user, then stage the save again from scratch under the vault
+    /// lock: the item, the page's rules, the integration switch and the plan
+    /// are all checked again. A lock in between (even one followed by an
+    /// unlock) refuses it.
+    fn confirm_then_stage(
+        &self,
+        req: &Request,
+        summary: ConfirmUpdate,
+        epoch: u64,
+    ) -> Result<Dispatched, ErrorCode> {
+        self.ask_user(summary)?;
+        let mut vault = self.inner.vault.lock().map_err(|_| ErrorCode::Internal)?;
+        if vault.epoch() != epoch {
+            return Err(ErrorCode::Denied);
+        }
+        dispatch_with(&mut vault, req, unix_seconds(), UpdateConsent::Allowed)
+    }
+
+    /// Run the confirmation hook with no vault or bridge mutex held. Only an
+    /// Allow given within the timeout counts. Nothing about the change is
+    /// logged here or anywhere in this crate.
+    fn ask_user(&self, summary: ConfirmUpdate) -> Result<(), ErrorCode> {
+        let hook = guard(&self.inner.on_confirm_update).clone();
+        let hook = hook.ok_or(ErrorCode::Denied)?;
+        let _slot = PendingSlot::claim(&self.inner.confirm_pending).ok_or(ErrorCode::Busy)?;
+        let timeout = *guard(&self.inner.confirm_timeout);
+        let started = Instant::now();
+        let allowed = hook(summary, timeout);
+        if allowed && started.elapsed() <= timeout {
+            Ok(())
+        } else {
+            Err(ErrorCode::Denied)
+        }
     }
 
     /// Run the open-item hook, without holding its mutex while it runs.

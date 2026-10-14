@@ -9,12 +9,13 @@ use havenkeys_core::generator::GeneratorOptions;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, Settings, UrlRule};
 use havenkeys_core::sso::{SignInWith, SsoProvider};
 use havenkeys_core::store::{AccountRecord, Store};
-use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
+use havenkeys_core::vault::{prepare_new_account_vault, ConfirmUpdate, VaultService};
 use havenkeys_core::SecretString;
 use havenkeys_protocol::endpoint::Endpoint;
 use havenkeys_protocol::frame::{read_frame, write_frame};
 use havenkeys_protocol::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
@@ -1410,17 +1411,18 @@ fn a2_save_login_cannot_touch_other_sites() {
 }
 
 /// A flood of password changes cannot push the real password out of the
-/// item's history: one browser-initiated change per item per interval. The
-/// limiter runs before the core, so it still engages even though every save
-/// is refused for lack of a server session (spec 2026-09-20 §8.4).
+/// item's history. One browser-initiated change per item per interval
+/// without the desktop. A change inside the interval is asked on the
+/// desktop, and with no desktop hook it is refused.
 #[test]
-fn password_updates_are_limited_per_item() {
+fn a_change_inside_the_interval_needs_the_desktop() {
     let f = online_fixture();
     let url = "https://github.com/";
     assert!(error_code(&save(&f, url, None, "one", Some(f.github))).is_none());
+    // Asked on the desktop (spec 2026-10-13 §4); no hook here, so refused.
     assert_eq!(
         error_code(&save(&f, url, None, "two", Some(f.github))),
-        Some("rate_limited")
+        Some("denied")
     );
     assert_eq!(fill(&f, f.github, url)["result"]["password"], "one");
     // Adding new logins is not affected by the per-item limit.
@@ -1445,17 +1447,18 @@ fn failed_or_denied_password_updates_do_not_spend_the_item_budget() {
         assert!(error_code(&save(&f, "https://evil.com/", None, "x", Some(f.github))).is_some());
     }
     assert!(error_code(&save(&f, url, None, "one", Some(f.github))).is_none());
+    // The budget was spent by "one": the next change is asked on the
+    // desktop, and with no hook here it is refused.
     assert_eq!(
         error_code(&save(&f, url, None, "two", Some(f.github))),
-        Some("rate_limited")
+        Some("denied")
     );
 }
 
-/// `save_sso` shares `save_login`'s per-item cooldown (server.rs checks both
-/// request kinds under the same `allow_item_update` branch): a second
-/// `save_sso` for the same item inside the interval is rate-limited, and so
-/// is a `save_login` for that same item afterward, whichever request made
-/// the first change.
+/// `save_sso` shares `save_login`'s per-item cooldown: a second `save_sso`
+/// for the same item inside the interval is rate-limited (never asked), and
+/// a `save_login` for that same item afterward is asked on the desktop
+/// because of the interval `save_sso` started.
 #[test]
 fn save_sso_shares_the_per_item_limiter() {
     let f = online_fixture();
@@ -1467,13 +1470,20 @@ fn save_sso_shares_the_per_item_limiter() {
         )
     };
     assert!(error_code(&save_sso("one@gmail.com")).is_none());
+    // A refusal below went through this hook if, and only if, it is a
+    // confirmation: the count tells a denial from the rate limit.
+    let asked = answer_with(&f, false);
     assert_eq!(error_code(&save_sso("two@gmail.com")), Some("rate_limited"));
-    // A save_login for the same item right after still hits the cooldown
-    // save_sso just started.
+    assert!(asked.lock().unwrap().is_empty(), "save_sso is never asked");
+    // save_login inside that interval is asked on the desktop instead. The
+    // login has no password history, so only the interval save_sso started
+    // can be why it was asked; the user's Deny refuses it.
     assert_eq!(
         error_code(&save(&f, url, None, "pw", Some(f.typeform))),
-        Some("rate_limited")
+        Some("denied")
     );
+    assert_eq!(asked.lock().unwrap().len(), 1);
+    assert_eq!(asked.lock().unwrap()[0].item_id, f.typeform);
 }
 
 #[test]
@@ -1490,6 +1500,330 @@ fn save_requests_share_the_secret_rate_limit() {
         error_code(&fill(&f, f.github, "https://github.com/")),
         Some("rate_limited")
     );
+}
+
+// --------------------------------------------- repeat password changes
+// Spec 2026-10-13-confirm-repeat-password-change: a browser update of a
+// login whose password changed in the last 24 h needs the desktop's Allow.
+
+const GH: &str = "https://github.com/";
+
+/// A fake desktop that answers `allow` and records what it was asked.
+fn answer_with(f: &Fixture, allow: bool) -> Arc<Mutex<Vec<ConfirmUpdate>>> {
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let a2 = asked.clone();
+    f.bridge.set_confirm_update_hook(move |summary, _timeout| {
+        a2.lock().unwrap().push(summary);
+        allow
+    });
+    asked
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
+#[test]
+fn the_first_change_in_a_day_is_not_asked() {
+    let f = online_fixture();
+    let asked = answer_with(&f, false);
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    assert!(asked.lock().unwrap().is_empty());
+    assert_eq!(fill(&f, f.github, GH)["result"]["password"], "one");
+}
+
+/// Also covers "an allowed update is not refused by the 10-minute limit":
+/// the second and third saves fall inside the item's interval.
+#[test]
+fn a_repeat_change_is_asked_and_saved_on_allow() {
+    let f = online_fixture();
+    let asked = answer_with(&f, true);
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    let r = save(&f, GH, None, "two", Some(f.github));
+    assert_eq!(r["result"]["type"], "save_login");
+    assert_eq!(fill(&f, f.github, GH)["result"]["password"], "two");
+    {
+        let asked = asked.lock().unwrap();
+        assert_eq!(asked.len(), 1);
+        assert_eq!(asked[0].item_id, f.github);
+        assert_eq!(asked[0].title, "GitHub");
+        assert_eq!(asked[0].username.as_deref(), Some("octo"));
+        assert_eq!(asked[0].site, "github.com");
+    }
+    // Asked again, and allowed again: the limit restarts, it does not refuse.
+    assert!(error_code(&save(&f, GH, None, "three", Some(f.github))).is_none());
+    assert_eq!(asked.lock().unwrap().len(), 2);
+    assert_eq!(f.changes.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn a_desktop_edit_then_a_browser_change_is_asked() {
+    let f = online_fixture();
+    {
+        let mut v = f.vault.lock().unwrap();
+        let existing = v.get_item(&f.bank).unwrap();
+        let input = ItemInput {
+            password: SecretUpdate::Set(SecretString::from("edited-on-desktop")),
+            ..item(
+                &existing.title,
+                "alice",
+                "unused",
+                "https://bank.example",
+                None,
+            )
+        };
+        let staged = v.stage_update(&f.bank, input, now_ms()).unwrap();
+        v.commit_write(staged, 50).unwrap();
+    }
+    let asked = answer_with(&f, true);
+    assert!(error_code(&save(
+        &f,
+        "https://bank.example/",
+        None,
+        "browser",
+        Some(f.bank)
+    ))
+    .is_none());
+    assert_eq!(asked.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn deny_and_no_desktop_both_refuse() {
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    // No hook installed: nothing can say yes.
+    assert_eq!(
+        error_code(&save(&f, GH, None, "two", Some(f.github))),
+        Some("denied")
+    );
+    let asked = answer_with(&f, false);
+    assert_eq!(
+        error_code(&save(&f, GH, None, "two", Some(f.github))),
+        Some("denied")
+    );
+    assert_eq!(asked.lock().unwrap().len(), 1);
+    assert_eq!(fill(&f, f.github, GH)["result"]["password"], "one");
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn an_allow_after_the_deadline_is_a_deny() {
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    f.bridge.set_confirm_timeout(Duration::from_millis(50));
+    let given = Arc::new(Mutex::new(None));
+    let g2 = given.clone();
+    f.bridge.set_confirm_update_hook(move |_summary, timeout| {
+        *g2.lock().unwrap() = Some(timeout);
+        std::thread::sleep(Duration::from_millis(200));
+        true
+    });
+    assert_eq!(
+        error_code(&save(&f, GH, None, "two", Some(f.github))),
+        Some("denied")
+    );
+    assert_eq!(*given.lock().unwrap(), Some(Duration::from_millis(50)));
+    assert_eq!(fill(&f, f.github, GH)["result"]["password"], "one");
+}
+
+/// The vault guard is not held while the user decides: a lock request
+/// completes during the wait, and the change is then refused.
+#[test]
+fn a_lock_completes_while_the_user_decides_and_the_change_is_refused() {
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    let (entered_tx, entered_rx) = mpsc::channel::<()>();
+    let (locked_tx, locked_rx) = mpsc::channel::<()>();
+    let locked_rx = Mutex::new(locked_rx);
+    f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+        entered_tx.send(()).unwrap();
+        // The user clicks Allow only after the lock below went through.
+        locked_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(10))
+            .is_ok()
+    });
+    let saver = {
+        let bridge = f.bridge.clone();
+        let id = f.github;
+        std::thread::spawn(move || {
+            let out = bridge.handle_frame(&request(
+                1,
+                serde_json::json!({"type": "save_login", "url": GH, "username": null, "password": "two", "itemId": id}),
+            ));
+            serde_json::from_slice::<serde_json::Value>(&out.to_bytes().unwrap()).unwrap()
+        })
+    };
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the hook ran");
+    let (done_tx, done_rx) = mpsc::channel();
+    {
+        let bridge = f.bridge.clone();
+        std::thread::spawn(move || {
+            let out = bridge.handle_frame(&request(2, serde_json::json!({"type": "lock"})));
+            done_tx.send(out.to_bytes().unwrap().to_vec()).unwrap();
+        });
+    }
+    done_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("lock completes while the hook waits");
+    assert!(!f.vault.lock().unwrap().is_unlocked());
+    locked_tx.send(()).unwrap();
+    let r = saver.join().unwrap();
+    assert_eq!(error_code(&r), Some("denied"));
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+}
+
+/// After Allow the save is authorized again from scratch: what changed
+/// while the user decided counts. The hook takes the vault guard itself,
+/// which would deadlock if the bridge still held it.
+#[test]
+fn an_allowed_change_is_authorized_again() {
+    // The login was trashed meanwhile: refused like any unknown ID.
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    let (vault, id) = (f.vault.clone(), f.github);
+    f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+        let mut v = vault.lock().unwrap();
+        let staged = v.stage_trash(&id, NOW).unwrap();
+        v.commit_write(staged, 98).unwrap();
+        true
+    });
+    assert_eq!(
+        error_code(&save(&f, GH, None, "two", Some(f.github))),
+        Some("denied")
+    );
+    assert_eq!(f.changes.load(Ordering::SeqCst), 1);
+
+    // Browser integration was turned off meanwhile.
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    let vault = f.vault.clone();
+    f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+        let mut v = vault.lock().unwrap();
+        let s = v.settings().unwrap();
+        v.update_settings(Settings {
+            browser_integration: false,
+            ..s
+        })
+        .unwrap();
+        true
+    });
+    assert_eq!(
+        error_code(&save(&f, GH, None, "two", Some(f.github))),
+        Some("integration_disabled")
+    );
+}
+
+#[test]
+fn a_second_confirmation_while_one_is_pending_is_busy() {
+    let f = online_fixture();
+    let bank = "https://bank.example/";
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    assert!(error_code(&save(&f, bank, None, "one", Some(f.bank))).is_none());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let (entered_tx, entered_rx) = mpsc::channel::<()>();
+    let (release_tx, release_rx) = mpsc::channel::<()>();
+    let release_rx = Mutex::new(release_rx);
+    let c2 = calls.clone();
+    f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+        if c2.fetch_add(1, Ordering::SeqCst) == 0 {
+            entered_tx.send(()).unwrap();
+            return release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(10))
+                .is_ok();
+        }
+        true
+    });
+    let first = {
+        let bridge = f.bridge.clone();
+        let id = f.github;
+        std::thread::spawn(move || {
+            let out = bridge.handle_frame(&request(
+                1,
+                serde_json::json!({"type": "save_login", "url": GH, "username": null, "password": "two", "itemId": id}),
+            ));
+            serde_json::from_slice::<serde_json::Value>(&out.to_bytes().unwrap()).unwrap()
+        })
+    };
+    entered_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(
+        error_code(&save(&f, bank, None, "two", Some(f.bank))),
+        Some("busy")
+    );
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "the busy request never reached the desktop"
+    );
+    release_tx.send(()).unwrap();
+    assert!(error_code(&first.join().unwrap()).is_none());
+    // The slot is free again.
+    assert!(error_code(&save(&f, bank, None, "two", Some(f.bank))).is_none());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn new_logins_are_never_asked() {
+    let f = online_fixture();
+    f.bridge
+        .set_confirm_update_hook(|_summary, _timeout| panic!("a new login is never asked"));
+    for _ in 0..2 {
+        assert!(error_code(&save(&f, "https://new.example/", Some("me"), "pw", None)).is_none());
+    }
+}
+
+/// The hook runs with no bridge mutex held: from inside it, the desktop can
+/// still answer requests (limiter and vault), install hooks and read the
+/// connection list. A held mutex would deadlock and fail the timeout below.
+#[test]
+fn the_hook_runs_with_no_bridge_mutex_held() {
+    let f = online_fixture();
+    assert!(error_code(&save(&f, GH, None, "one", Some(f.github))).is_none());
+    let inner_bridge = f.bridge.clone();
+    let found = Arc::new(Mutex::new(None));
+    let found2 = found.clone();
+    f.bridge.set_confirm_update_hook(move |_summary, timeout| {
+        let out = inner_bridge.handle_frame(&request(
+            9,
+            serde_json::json!({"type": "find_matches", "url": GH}),
+        ));
+        let r: serde_json::Value = serde_json::from_slice(&out.to_bytes().unwrap()).unwrap();
+        *found2.lock().unwrap() = Some(r["result"]["type"].clone());
+        inner_bridge.set_open_item_hook(|_| {});
+        inner_bridge.set_confirm_timeout(timeout);
+        let _ = inner_bridge.connection_count();
+        true
+    });
+    let (tx, rx) = mpsc::channel();
+    {
+        let bridge = f.bridge.clone();
+        let id = f.github;
+        std::thread::spawn(move || {
+            let out = bridge.handle_frame(&request(
+                1,
+                serde_json::json!({"type": "save_login", "url": GH, "username": null, "password": "two", "itemId": id}),
+            ));
+            tx.send(serde_json::from_slice::<serde_json::Value>(&out.to_bytes().unwrap()).unwrap())
+                .unwrap();
+        });
+    }
+    let r = rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("no mutex is held across the hook");
+    assert!(error_code(&r).is_none());
+    assert_eq!(
+        *found.lock().unwrap(),
+        Some(serde_json::json!("find_matches"))
+    );
+    assert_eq!(fill(&f, f.github, GH)["result"]["password"], "two");
 }
 
 /// A5 at the handler: unknown commands and malformed messages get an error

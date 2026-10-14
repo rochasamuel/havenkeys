@@ -61,9 +61,12 @@ pub struct RateLimiter {
     updates: HashMap<Uuid, Instant>,
 }
 
-/// One password change per item from the browser in this window. A caller
-/// that floods updates cannot push the real password out of the item's
-/// password history (5 entries) in less than this × 5.
+/// One password change per item from the browser in this window without the
+/// user's Allow in the desktop app. A `save_login` update inside it is asked
+/// on the desktop instead of refused (spec 2026-10-13-confirm-repeat-
+/// password-change §4); `save_sso` is still refused. Together with the
+/// 24-hour confirmation, cycling the real password out of the item's
+/// history (5 entries) takes five Allow clicks.
 pub const ITEM_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 impl Default for RateLimiter {
@@ -98,6 +101,12 @@ impl RateLimiter {
         }
         self.updates.insert(item, now);
         true
+    }
+
+    /// Start `item`'s interval again at `now`: a change the user allowed on
+    /// the desktop while the interval was running.
+    pub fn record_item_update(&mut self, item: Uuid, now: Instant) {
+        self.updates.insert(item, now);
     }
 
     /// Give back the reservation `allow_item_update(item, at)` made, when
@@ -150,6 +159,19 @@ mod tests {
         // A stale release does not drop the newer reservation.
         rl.release_item_update(a, t0);
         assert!(!rl.allow_item_update(a, t1 + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn an_allowed_update_restarts_the_interval() {
+        let mut rl = RateLimiter::default();
+        let a = Uuid::new_v4();
+        let t0 = Instant::now();
+        assert!(rl.allow_item_update(a, t0));
+        let t1 = t0 + Duration::from_secs(300);
+        rl.record_item_update(a, t1);
+        // Counted from the allowed change, not the first one.
+        assert!(!rl.allow_item_update(a, t0 + ITEM_UPDATE_INTERVAL));
+        assert!(rl.allow_item_update(a, t1 + ITEM_UPDATE_INTERVAL));
     }
 
     #[test]
