@@ -661,6 +661,23 @@ describe("save prompts", () => {
     expect(await h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { action: "add", lookalikeOf: null } });
   });
 
+  it("says why an update was not saved", async () => {
+    for (const [code, message] of [
+      ["denied", "Not saved"],
+      ["timeout", "Not saved"],
+      ["busy", "Not saved — HavenKeys is waiting for another confirmation"],
+      ["offline", "wire text"],
+    ] as const) {
+      const { h } = setup((r) => {
+        if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+        if (r.type === "save_login") throw new BridgeError(code, "wire text");
+        return defaultAnswer(r);
+      });
+      await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+      expect(await h.handleInline(1, { type: "save_confirm", token: T1 }), code).toEqual({ ok: false, message });
+    }
+  });
+
   it("does not prompt for unchanged logins", async () => {
     const { h, sent } = setup((r) =>
       r.type === "check_login" ? { type: "check_login", action: "unchanged", itemId: null } : defaultAnswer(r),

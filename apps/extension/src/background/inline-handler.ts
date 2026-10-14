@@ -208,6 +208,19 @@ function fail(e: unknown): { ok: false; message: string } {
   return { ok: false, message: e instanceof BridgeError ? e.message : t.errors.generic };
 }
 
+/**
+ * What the save card says when a login was not saved. A repeat password
+ * change may have been denied or left unanswered in the desktop app, or
+ * another confirmation was already waiting (spec 2026-10-13 §6).
+ */
+function saveFailure(e: unknown): { ok: false; message: string } {
+  if (e instanceof BridgeError) {
+    if (e.code === "busy") return { ok: false, message: t.save.notSavedBusy };
+    if (e.code === "denied" || e.code === "timeout") return { ok: false, message: t.save.notSaved };
+  }
+  return fail(e);
+}
+
 export function createInlineHandler(deps: InlineDeps) {
   const menus = new Map<number, MenuSession>(); // by tab
   const saves = new Map<number, PendingSave>(); // by tab
@@ -1011,7 +1024,7 @@ export function createInlineHandler(deps: InlineDeps) {
             ...(title ? { title } : {}),
           });
         } catch (e) {
-          return fail(e);
+          return saveFailure(e);
         } finally {
           dropSave(tabId, true);
         }

@@ -30,7 +30,7 @@ let port: FakePort;
 let connects: number;
 let events: BridgeEvent[];
 
-function client(opts: { timeoutMs?: number; idleMs?: number } = {}) {
+function client(opts: { timeoutMs?: number; idleMs?: number; saveTimeoutMs?: number } = {}) {
   return new NativeClient(
     () => {
       connects++;
@@ -142,5 +142,28 @@ describe("NativeClient", () => {
     void c.request({ type: "status" }).catch(() => {});
     const ids = port.sent.map((m) => (m as { id: number }).id);
     expect(new Set(ids).size).toBe(2);
+  });
+
+  it("gives save_login 75 s, since the desktop may be asking the user, and everything else 10 s", async () => {
+    vi.useFakeTimers();
+    const c = client();
+    const save = c.request({ type: "save_login", url: "https://github.com/", username: null, password: "pw", itemId: ID });
+    const saveId = port.lastId();
+    const status = c.request({ type: "status" });
+    const statusFailed = expect(status).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await statusFailed;
+    port.deliver({ v: 1, id: saveId, result: { type: "save_login", itemId: ID } });
+    await expect(save).resolves.toEqual({ type: "save_login", itemId: ID });
+  });
+
+  it("a save_login nobody answers times out after 75 s", async () => {
+    vi.useFakeTimers();
+    const c = client();
+    const save = c.request({ type: "save_login", url: "https://github.com/", username: null, password: "pw", itemId: ID });
+    const failed = expect(save).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(74_999);
+    await vi.advanceTimersByTimeAsync(1);
+    await failed;
   });
 });

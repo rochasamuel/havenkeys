@@ -187,6 +187,9 @@ export const ptBR: Messages = {
     titleLabel: "Nome",
     lookalikeWarning: (site: string) => `Este site não é ${site}. Não salve nem digite aqui sua senha do ${site}.`,
     saveAnyway: "Salvar mesmo assim",
+    confirmInDesktop: "Confirme no HavenKeys…",
+    notSaved: "Não foi salvo",
+    notSavedBusy: "Não foi salvo — o HavenKeys está aguardando outra confirmação",
   },
 
   sso: {

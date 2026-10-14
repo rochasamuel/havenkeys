@@ -44,9 +44,18 @@ export interface NativePort {
   onDisconnect: { addListener(cb: () => void): void };
 }
 
+/**
+ * `save_login` may wait for the user's Allow in the desktop app, which gives
+ * up after 60 s (spec 2026-10-13-confirm-repeat-password-change §6), so it
+ * gets longer than everything else.
+ */
+export const SAVE_LOGIN_TIMEOUT_MS = 75_000;
+
 export interface NativeClientOptions {
   /** Per-request timeout. */
   timeoutMs?: number;
+  /** Timeout for `save_login`. */
+  saveTimeoutMs?: number;
   /** Close the port after this long without pending requests. */
   idleMs?: number;
   onEvent?: (event: BridgeEvent) => void;
@@ -64,6 +73,7 @@ type RequestOf<T extends RequestType> = Extract<Request, { type: T }>;
 export class NativeClient {
   readonly #connect: () => NativePort;
   readonly #timeoutMs: number;
+  readonly #saveTimeoutMs: number;
   readonly #idleMs: number;
   readonly #onEvent: (event: BridgeEvent) => void;
   #port: NativePort | null = null;
@@ -74,6 +84,7 @@ export class NativeClient {
   constructor(connect: () => NativePort, options: NativeClientOptions = {}) {
     this.#connect = connect;
     this.#timeoutMs = options.timeoutMs ?? 10_000;
+    this.#saveTimeoutMs = options.saveTimeoutMs ?? SAVE_LOGIN_TIMEOUT_MS;
     this.#idleMs = options.idleMs ?? 60_000;
     this.#onEvent = options.onEvent ?? (() => {});
   }
@@ -89,7 +100,8 @@ export class NativeClient {
         return;
       }
       const id = this.#takeId();
-      const timer = setTimeout(() => this.#settle(id, new BridgeError("timeout", TIMEOUT)), this.#timeoutMs);
+      const timeoutMs = request.type === "save_login" ? this.#saveTimeoutMs : this.#timeoutMs;
+      const timer = setTimeout(() => this.#settle(id, new BridgeError("timeout", TIMEOUT)), timeoutMs);
       this.#pending.set(id, {
         type: request.type,
         resolve: resolve as (r: Result) => void,

@@ -221,6 +221,9 @@ export const en = {
     titleLabel: "Name",
     lookalikeWarning: (site: string) => `This isn’t ${site}. Don’t save or enter your ${site} password here.`,
     saveAnyway: "Save anyway",
+    confirmInDesktop: "Confirm in HavenKeys…",
+    notSaved: "Not saved",
+    notSavedBusy: "Not saved — HavenKeys is waiting for another confirmation",
   },
 
   sso: {
