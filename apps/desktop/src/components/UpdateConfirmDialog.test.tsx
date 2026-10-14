@@ -36,6 +36,7 @@ let host: HTMLElement;
 let root: Root;
 
 beforeEach(async () => {
+  vi.useFakeTimers();
   answer.mockReset();
   answer.mockImplementation(() => Promise.resolve());
   appRoot = document.createElement("div");
@@ -50,6 +51,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   document.body.replaceChildren();
+  vi.useRealTimers();
 });
 
 const dialog = () => document.querySelector<HTMLElement>("[role=alertdialog]");
@@ -58,6 +60,11 @@ const button = (name: string) =>
 
 async function open(c: UpdateConfirmation = PENDING) {
   await act(async () => ask?.(c));
+}
+
+/** Past the delay that keeps Allow off right after the dialog opens. */
+async function armed() {
+  await act(async () => vi.advanceTimersByTime(500));
 }
 
 describe("UpdateConfirmDialog", () => {
@@ -86,8 +93,29 @@ describe("UpdateConfirmDialog", () => {
     );
   });
 
+  it("Deny is the primary, first answer; Allow is a plain button", async () => {
+    await open();
+    const [first, second] = Array.from(dialog()!.querySelectorAll("button"));
+    expect(first).toBe(button("Deny"));
+    expect(first?.className).toBe("btn btn-primary");
+    expect(second).toBe(button("Allow"));
+    expect(second?.className).toBe("btn");
+  });
+
+  it("keeps Allow off for a moment after opening, against a click already on its way", async () => {
+    await open();
+    expect(button("Allow").disabled).toBe(true);
+    await act(async () => button("Allow").click());
+    expect(answer).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(499));
+    expect(button("Allow").disabled).toBe(true);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(button("Allow").disabled).toBe(false);
+  });
+
   it("Allow answers yes for this confirmation and closes", async () => {
     await open();
+    await armed();
     await act(async () => button("Allow").click());
     expect(answer).toHaveBeenCalledWith(PENDING.id, true);
     expect(dialog()).toBeNull();
@@ -120,6 +148,7 @@ describe("UpdateConfirmDialog", () => {
   it("closes quietly when Rust refuses the answer", async () => {
     answer.mockImplementation(() => Promise.reject(new Error("not_pending")));
     await open();
+    await armed();
     await act(async () => button("Allow").click());
     expect(dialog()).toBeNull();
     expect(appRoot.hasAttribute("inert")).toBe(false);
@@ -136,5 +165,27 @@ describe("UpdateConfirmDialog", () => {
     await act(async () => locked?.("auto"));
     expect(dialog()).toBeNull();
     expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("returns the focus where it was on close", async () => {
+    const before = document.createElement("button");
+    host.append(before);
+    before.focus();
+    await open();
+    expect(document.activeElement).toBe(button("Deny"));
+    await act(async () => button("Deny").click());
+    expect(document.activeElement).toBe(before);
+  });
+
+  it("a newer confirmation replaces the old; the old one's close leaves it open", async () => {
+    const B: UpdateConfirmation = { ...PENDING, id: "c0ffee00-0000-4000-8000-000000000002", title: "GitLab" };
+    await open();
+    await open(B);
+    await act(async () => closed?.(PENDING.id));
+    expect(dialog()).not.toBeNull();
+    expect(appRoot.hasAttribute("inert")).toBe(true);
+    expect(document.getElementById("confirm-update-body")?.textContent).toContain("“GitLab”");
+    await act(async () => button("Deny").click());
+    expect(answer).toHaveBeenCalledExactlyOnceWith(B.id, false);
   });
 });
