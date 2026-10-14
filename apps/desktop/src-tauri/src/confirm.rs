@@ -7,6 +7,12 @@
 //! waits for [`answer_update_confirmation`], a lock, the window closing or
 //! the timeout, whichever comes first. Anything but an Allow is a Deny.
 //! The summary carries no secret, and nothing here logs.
+//!
+//! The events are addressed to the main window, but `emit_to` is not an
+//! isolation boundary: any webview allowed to listen to events globally
+//! (the quick window has `core:event:allow-listen`) receives them too. What
+//! keeps the answer to the main window is the command: it is granted in
+//! capabilities/main.json only.
 
 use crate::state::{AppState, CmdError, CmdResult};
 use crate::tray;
@@ -119,8 +125,10 @@ fn run(
     allowed
 }
 
-/// The bridge's confirmation hook. Any failure (no app state, a
-/// confirmation already showing, the event not delivered) is a Deny.
+/// The bridge's confirmation hook. No app state, a confirmation already
+/// showing, no main window or a failed emit is a Deny at once. An emit
+/// nobody listens to still succeeds (Tauri cannot tell), so a UI that never
+/// shows the dialog is a Deny only at the deadline.
 pub fn ask(app: &AppHandle, summary: ConfirmUpdate, timeout: Duration) -> bool {
     let Some(state) = app.try_state::<AppState>() else {
         return false;
@@ -130,6 +138,9 @@ pub fn ask(app: &AppHandle, summary: ConfirmUpdate, timeout: Duration) -> bool {
         &state.confirm,
         timeout,
         |id| {
+            if app.get_webview_window(tray::MAIN_WINDOW).is_none() {
+                return false;
+            }
             tray::show_main_window(app);
             let payload = ConfirmUpdatePayload {
                 id,
@@ -275,6 +286,7 @@ mod tests {
         assert!(p.begin().is_some());
     }
 
+    // `show` returns false when there is no main window or the emit failed.
     #[test]
     fn the_hook_denies_when_the_dialog_cannot_be_shown() {
         let p = PendingConfirmation::default();
