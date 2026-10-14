@@ -749,6 +749,13 @@ export const en = {
     quickAccessNote: (keys: string) =>
       `Press ${keys} in any app to search your logins and copy a password. Copied items clear as set under Security. This applies to this computer only; global shortcuts don't work in Linux Wayland sessions.`,
     quickAccessInUse: "The shortcut is in use by another app.",
+    quickAccessKeys: "Shortcut",
+    quickAccessChange: "Change…",
+    quickAccessReset: "Reset",
+    quickAccessRecording: "Press the new shortcut (Esc to cancel)",
+    quickAccessRecordLabel: "New Quick Access shortcut",
+    quickAccessChooseAnother: "Choose another shortcut",
+    quickAccessCandidateInUse: "That shortcut is in use by another app.",
     browserExtension: "Browser extension",
     browserIntegration: "Suggest and fill logins in the browser",
     browserIntegrationLabel: "Allow the HavenKeys browser extension to suggest and fill logins",

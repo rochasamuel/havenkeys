@@ -768,6 +768,13 @@ export const ptBR: Messages = {
     quickAccessNote: (keys: string) =>
       `Pressione ${keys} em qualquer app para buscar seus logins e copiar uma senha. Itens copiados são apagados como definido em Segurança. Vale só para este computador; atalhos globais não funcionam em sessões Wayland no Linux.`,
     quickAccessInUse: "O atalho está em uso por outro app.",
+    quickAccessKeys: "Atalho",
+    quickAccessChange: "Alterar…",
+    quickAccessReset: "Redefinir",
+    quickAccessRecording: "Pressione o novo atalho (Esc para cancelar)",
+    quickAccessRecordLabel: "Novo atalho do Acesso rápido",
+    quickAccessChooseAnother: "Escolher outro atalho",
+    quickAccessCandidateInUse: "Esse atalho está em uso por outro app.",
     browserExtension: "Extensão do navegador",
     browserIntegration: "Sugerir e preencher logins no navegador",
     browserIntegrationLabel: "Permitir que a extensão do HavenKeys sugira e preencha logins",

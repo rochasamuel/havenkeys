@@ -262,8 +262,9 @@ function baseResponses() {
     update_settings: settings,
     launch_at_login: false,
     set_launch_at_login: false,
-    quick_access_status: { enabled: true, inUse: false },
-    set_quick_access: { enabled: true, inUse: false },
+    quick_access_status: { enabled: true, inUse: false, keys: "Control+Shift+Space", isDefault: true, candidateInUse: false },
+    set_quick_access: { enabled: true, inUse: false, keys: "Control+Shift+Space", isDefault: true, candidateInUse: false },
+    set_quick_access_shortcut: { enabled: true, inUse: false, keys: "Alt+Shift+K", isDefault: false, candidateInUse: false },
     set_ui_language: null,
     record_activity: null,
     account_status: {
@@ -1039,10 +1040,57 @@ export const desktopScenarios = [
   {
     // Another app owns Ctrl+Shift+Space: the switch stays on, with a note.
     name: "settings-quick-access-in-use",
-    respond: { launch_at_login: true, quick_access_status: { enabled: true, inUse: true } },
+    respond: { launch_at_login: true, quick_access_status: { enabled: true, inUse: true, keys: "Control+Shift+Space", isDefault: true, candidateInUse: false } },
     async act(page) {
       await page.click(SETTINGS);
       await page.waitForTimeout(300);
+    },
+    shots: ["settings-block:4"],
+  },
+  {
+    // A chosen chord: Reset is offered.
+    name: "settings-quick-access-custom",
+    respond: { launch_at_login: true, quick_access_status: { enabled: true, inUse: false, keys: "Super+Control+Alt+Shift+BracketLeft", isDefault: false, candidateInUse: false } },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+    },
+    shots: ["settings-block:4"],
+  },
+  {
+    name: "settings-quick-access-recording",
+    respond: { launch_at_login: true },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await page.click(".quick-shortcut-row .btn");
+      await page.waitForTimeout(150);
+    },
+    shots: ["settings-block:4"],
+  },
+  {
+    // Rust refused the chord: the reason under the recorder.
+    name: "settings-quick-access-refused",
+    respond: { launch_at_login: true, set_quick_access_shortcut: { reject: { code: "quick_access_shortcut_invalid", message: "Reserved by the system." } } },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await page.click(".quick-shortcut-row .btn");
+      await page.keyboard.press("Control+KeyC");
+      await page.waitForTimeout(150);
+    },
+    shots: ["settings-block:4"],
+  },
+  {
+    // Another app owns the proposed chord.
+    name: "settings-quick-access-taken",
+    respond: { launch_at_login: true, set_quick_access_shortcut: { enabled: true, inUse: false, keys: "Control+Shift+Space", isDefault: true, candidateInUse: true } },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await page.click(".quick-shortcut-row .btn");
+      await page.keyboard.press("Alt+KeyK");
+      await page.waitForTimeout(150);
     },
     shots: ["settings-block:4"],
   },
