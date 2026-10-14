@@ -161,9 +161,12 @@ describe("NativeClient", () => {
     vi.useFakeTimers();
     const c = client();
     const save = c.request({ type: "save_login", url: "https://github.com/", username: null, password: "pw", itemId: ID });
-    const failed = expect(save).rejects.toMatchObject({ code: "timeout" });
+    let settled = false;
+    const failed = expect(save.finally(() => { settled = true; })).rejects.toMatchObject({ code: "timeout" });
     await vi.advanceTimersByTimeAsync(74_999);
+    expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await failed;
+    expect(settled).toBe(true);
   });
 });
