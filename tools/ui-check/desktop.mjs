@@ -466,6 +466,36 @@ export const desktopScenarios = [
     },
   },
   {
+    name: "vault-confirm-update",
+    respond: {},
+    async act(page) {
+      await page.evaluate(() =>
+        window.__hkEmit("bridge://confirm-update", {
+          id: "c0ffee00-0000-4000-8000-000000000001",
+          title: "GitHub",
+          username: "octocat@example.com",
+          site: "github.com",
+          timeoutMs: 60000,
+        }),
+      );
+    },
+  },
+  {
+    name: "vault-confirm-update-long",
+    respond: {},
+    async act(page) {
+      await page.evaluate(() =>
+        window.__hkEmit("bridge://confirm-update", {
+          id: "c0ffee00-0000-4000-8000-000000000002",
+          title: "Company single sign-on — platform infrastructure team account",
+          username: "firstname.lastname.with-a-long-address@corporate-example.com",
+          site: "accounts.example-with-a-rather-long-hostname.com",
+          timeoutMs: 60000,
+        }),
+      );
+    },
+  },
+  {
     name: "vault-new-menu",
     respond: {},
     async act(page) {

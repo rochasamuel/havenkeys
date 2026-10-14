@@ -538,6 +538,14 @@ export const ptBR: Messages = {
     restoreFirst: "Restaure o item para ver ou usar as senhas e códigos.",
   },
 
+  confirmUpdate: {
+    title: "Alterar esta senha?",
+    body: (title: string, username: string | null, site: string) =>
+      `O navegador quer alterar a senha de “${title}”${username ? ` (${username})` : ""} em ${site}. Ela já foi alterada nas últimas 24 horas.`,
+    allow: "Permitir",
+    deny: "Negar",
+  },
+
   health: {
     title: "Saúde do cofre",
     intro: "Verificado neste aparelho, com o cofre aberto. Nada é enviado.",

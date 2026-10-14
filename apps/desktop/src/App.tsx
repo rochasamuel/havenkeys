@@ -6,6 +6,7 @@ import { applyTheme } from "./lib/theme";
 import { EmergencyKit } from "./components/EmergencyKit";
 import { Seal } from "./components/Seal";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { UpdateConfirmDialog } from "./components/UpdateConfirmDialog";
 import { UnlockScreen } from "./views/UnlockScreen";
 import { VaultScreen } from "./views/VaultScreen";
 import { WelcomeScreen } from "./views/WelcomeScreen";
@@ -174,6 +175,10 @@ export function App() {
   }, [unlocked]);
 
   const updateBanner = <UpdateBanner dismissed={dismissedUpdate} onDismiss={setDismissedUpdate} />;
+  // "Change this password?" (portalled to <body>) is mounted on every unlocked
+  // screen, the emergency kit included, and never while locked: a
+  // confirmation only exists while unlocked, and Rust ends it on lock.
+  const confirmDialog = <UpdateConfirmDialog />;
 
   if (fatal) {
     return (
@@ -244,6 +249,7 @@ export function App() {
           <p>{t.app.kitBody}</p>
         </header>
         <EmergencyKit onDone={() => setShowKit(false)} />
+        {confirmDialog}
       </main>
     );
   }
@@ -313,6 +319,7 @@ export function App() {
           setStatus({ ...status, state: "locked", damagedItems: 0, damagedSettings: false, unreadableItems: 0 });
         }}
       />
+      {confirmDialog}
     </div>
   );
 }

@@ -50,6 +50,7 @@ import type {
   TrashEntry,
   UpdateStatus,
   VaultStatus,
+  UpdateConfirmation,
 } from "./types";
 
 export class ApiError extends Error {
@@ -234,6 +235,14 @@ export const api = {
   installUpdate: () => call<void>("install_update"),
   setUpdateAutoCheck: (enabled: boolean) => call<UpdateStatus>("set_update_auto_check", { enabled }),
 
+  /** Allow or Deny the pending browser password change. Rust accepts only the pending ID. */
+  answerUpdateConfirmation: (id: string, allow: boolean) => call<void>("answer_update_confirmation", { id, allow }),
+  /** The browser wants to change a password that already changed in the last 24 hours (checked against the page in Rust). */
+  onConfirmUpdate: (handler: (c: UpdateConfirmation) => void): Promise<UnlistenFn> =>
+    listen<UpdateConfirmation>("bridge://confirm-update", (e) => handler(e.payload)),
+  /** That confirmation ended: answered, timed out, the vault locked or the window closed. */
+  onConfirmUpdateClosed: (handler: (id: string) => void): Promise<UnlistenFn> =>
+    listen<string>("bridge://confirm-update-closed", (e) => handler(e.payload)),
   onLocked: (handler: (reason: string) => void): Promise<UnlistenFn> =>
     listen<{ reason: string }>("vault://locked", (e) => handler(e.payload.reason)),
   /** The vault was unlocked, here or in the Quick Access window. Carries no data. */

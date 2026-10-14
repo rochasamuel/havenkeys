@@ -370,10 +370,10 @@ The extension popup is 320px wide with a 48px bar. The in-page frames are sized 
 
 ## Elevation & Depth
 
-Depth is tonal: the sidebar, list and pane step through greens, and groups sit on a slightly lifted surface with a hairline. Shadows are soft, offset downward and reserved for things that float: the new-item menu, the toast and the Recovery Sheet sheet (lift), plus the small thumbs of the switch, slider and segmented control. Focus is a ring, not a shadow.
+Depth is tonal: the sidebar, list and pane step through greens, and groups sit on a slightly lifted surface with a hairline. Shadows are soft, offset downward and reserved for things that float: the new-item menu, the toast, the confirmation dialog and the Recovery Sheet sheet (lift), plus the small thumbs of the switch, slider and segmented control. Focus is a ring, not a shadow.
 
 ### Shadow Vocabulary
-- **Lift** (`0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45)`; light: `0 24px 48px -18px rgba(22,35,31,0.28), 0 8px 16px -8px rgba(22,35,31,0.14)`): popover menus, the toast, the kit sheet.
+- **Lift** (`0 24px 48px -16px rgba(0,0,0,0.6), 0 8px 16px -8px rgba(0,0,0,0.45)`; light: `0 24px 48px -18px rgba(22,35,31,0.28), 0 8px 16px -8px rgba(22,35,31,0.14)`): popover menus, the toast, the confirmation dialog, the kit sheet.
 - **Thumb** (`0 1px 3px rgba(0,0,0,0.35)` to `0 1px 4px rgba(0,0,0,0.45)`): switch and slider thumbs on paper-white (#fbfcfb).
 - **Segmented thumb** (`0 1px 3px rgba(0,0,0,0.25), inset 0 0 0 1px line-strong`): the selected segment.
 - **Focus ring** (`0 0 0 2px var(--bg), 0 0 0 4px rgba(201,164,92,0.6)`): keyboard focus on buttons, switches and sliders. Inputs instead turn their border brass with a 3 to 4px brass-soft halo.
@@ -420,6 +420,9 @@ A **Tags** section, when any item has a tag, lists each tag A–Z (without case)
 
 ### Toast
 A glass pill centred 22px above the bottom: blurred dark ground in both themes, bright text, a green check or ember alert, lift shadow; rises in and falls away.
+
+### Confirmation dialog
+The app's one modal, for a decision only the user can make while something waits on it (today: "Change this password?" when the browser changes a password again within 24 hours). An alertdialog portalled over a dark scrim (55%) while the app behind it is inert: raised ground, 1px line-strong border, 12px radius, lift shadow, at most 420px wide with 22px padding. Serif title-sm (17px, 500), a body paragraph that wraps long names anywhere, then the buttons at the right: the safe answer (secondary) first and focused, the action (primary) last. Escape gives the safe answer. It names what is affected as plain text and never shows a secret. The scrim fades and the card rises 4px in, on the house ease.
 
 ### Recovery Sheet (signature)
 A paper sheet (paper-sheet, 6px, lift shadow) in every theme, laid out like a certificate: the app icon in miniature (brass seal on a 34px forest tile) and the wordmark beside the created date; a faint guilloche rosette cropped by the top-right corner in paper-line; the serif title at 34px over a 2px paper-strong rule; the Secret Key in mono 19px in a paper-well box with a paper-line hairline; email, server and account ID as hairline-separated rows ending in the master-password write-in line, with the QR beside them; a hairline foot. Printing hides everything but the sheet, on A4 with a zero page margin (so the browser prints no date, title, address or page number) and the sheet's own 18–20mm padding.

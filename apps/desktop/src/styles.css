@@ -3146,6 +3146,66 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   accent-color: var(--brass);
 }
 
+/* ---------------------------------------------------------------- modal
+   The one modal: a repeat password change from the browser waits for the
+   user's Allow (UpdateConfirmDialog). Portalled to <body> while #root is
+   inert. Above popovers, just below the toast. */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-toast) - 1);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 9, 8, 0.55);
+  animation: modal-scrim-in var(--t-fast) var(--ease) both;
+}
+
+.modal {
+  width: min(420px, 100%);
+  padding: 22px 22px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: var(--lift);
+  animation: modal-in var(--t-med) var(--ease) both;
+}
+
+.modal-title {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.modal-body {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+@keyframes modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
 /* ---------------------------------------------------------------- toast */
 
 .toast-region {

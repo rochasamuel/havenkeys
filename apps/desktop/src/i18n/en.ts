@@ -517,6 +517,14 @@ export const en = {
     restoreFirst: "Restore this item to see or use its passwords and codes.",
   },
 
+  confirmUpdate: {
+    title: "Change this password?",
+    body: (title: string, username: string | null, site: string) =>
+      `The browser wants to change the password of “${title}”${username ? ` (${username})` : ""} on ${site}. It was already changed in the last 24 hours.`,
+    allow: "Allow",
+    deny: "Deny",
+  },
+
   health: {
     title: "Vault health",
     intro: "Checked on this device with the vault unlocked. Nothing is sent anywhere.",

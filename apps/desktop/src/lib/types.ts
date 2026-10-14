@@ -495,3 +495,12 @@ export interface HealthReport {
   issues: HealthIssue[];
   dismissed: HealthDismissed[];
 }
+
+/** A browser password change waiting for the user's answer (bridge://confirm-update). No secret. */
+export type UpdateConfirmation = {
+  id: string;
+  title: string;
+  username: string | null;
+  site: string;
+  timeoutMs: number;
+};
