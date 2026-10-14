@@ -85,6 +85,13 @@ function show(view: SaveView): void {
   if (view.username === null) delete detail.dataset.truncate;
   else detail.dataset.truncate = "";
   confirmBtn.disabled = false;
+  if (view.confirming) {
+    // Shown again after a navigation, with the user's confirm already in
+    // flight: wait for the same answer (the background never saves twice).
+    confirmBtn.disabled = true;
+    if (view.action === "update") showWaiting();
+    void answer(null, false);
+  }
 }
 
 function showCard(view: CardSaveView): void {
@@ -127,9 +134,15 @@ function fail(message: string): void {
 async function confirm(e: Event): Promise<void> {
   if (!token || !e.isTrusted || !guard.armed() || confirmBtn.disabled) return;
   confirmBtn.disabled = true;
-  const hint = saving === "update" ? setTimeout(showWaiting, CONFIRM_HINT_DELAY_MS) : null;
-  const r = await ask<null>(confirmRequest(token, titleField.hidden ? null : titleInput.value));
-  if (hint !== null) clearTimeout(hint);
+  await answer(titleField.hidden ? null : titleInput.value, saving === "update");
+}
+
+/** Sends the confirm and shows the desktop's answer; `hint`: say "Confirm in HavenKeys…" if it takes a while. */
+async function answer(title: string | null, hint: boolean): Promise<void> {
+  if (!token) return;
+  const timer = hint ? setTimeout(showWaiting, CONFIRM_HINT_DELAY_MS) : null;
+  const r = await ask<null>(confirmRequest(token, title));
+  if (timer !== null) clearTimeout(timer);
   // On success the background closes this frame.
   if (!r.ok) fail(r.message);
 }

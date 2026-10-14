@@ -206,8 +206,12 @@ interface PendingSave {
   /** The saved site this page only looks like: the prompt leads with a warning. */
   lookalikeOf: string | null;
   expires: number;
-  /** save_login is in flight (an update may wait for the desktop's Allow): the prompt must not expire under it. */
-  confirming: boolean;
+  /**
+   * save_login is in flight (an update may wait for the desktop's Allow): the
+   * prompt must not expire under it, and a card shown again after a
+   * navigation joins this answer instead of saving twice.
+   */
+  confirming: Promise<InlineReply<null>> | null;
   /** The desktop refused the save: the password is gone, the prompt only shows why. */
   failed: boolean;
   /** Closes the prompt at `expires`. */
@@ -283,6 +287,32 @@ export function createInlineHandler(deps: InlineDeps) {
     s.timer = setTimeout(() => {
       if (saves.get(s.frame.tabId) === s) dropSave(s.frame.tabId, true);
     }, ms);
+  }
+
+  /** The confirmed save; its answer goes to every save card shown for it. */
+  async function saveLogin(tabId: number, s: PendingSave, title: string | null): Promise<InlineReply<null>> {
+    try {
+      await deps.client.request({
+        type: "save_login",
+        ...frameFields(s.frame),
+        username: s.username,
+        password: s.password,
+        itemId: s.itemId,
+        ...(title ? { title } : {}),
+      });
+    } catch (e) {
+      // The prompt says why; the password goes now. Unless a newer prompt
+      // or a lock replaced this one meanwhile.
+      if (saves.get(tabId) === s) {
+        s.confirming = null;
+        s.failed = true;
+        s.password = "";
+        expireSave(s, SAVE_FAILED_TTL_MS);
+      }
+      return saveFailure(e);
+    }
+    if (saves.get(tabId) === s) dropSave(tabId, true);
+    return { ok: true, value: null };
   }
 
   function liveSave(tabId: number, token: string): PendingSave | null {
@@ -747,7 +777,7 @@ export function createInlineHandler(deps: InlineDeps) {
       itemId: check.itemId,
       lookalikeOf: imitated,
       expires: now + SAVE_TTL_MS,
-      confirming: false,
+      confirming: null,
       failed: false,
       timer: undefined,
     };
@@ -1010,7 +1040,7 @@ export function createInlineHandler(deps: InlineDeps) {
         }
         const s = liveSave(tabId, req.token);
         if (!s || s.failed) return { ok: false, message: t.errors.promptExpired };
-        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title, lookalikeOf: s.lookalikeOf } };
+        return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title, lookalikeOf: s.lookalikeOf, confirming: s.confirming !== null } };
       }
       case "save_confirm": {
         const c = liveCardSave(tabId, req.token);
@@ -1034,35 +1064,17 @@ export function createInlineHandler(deps: InlineDeps) {
           return { ok: true, value: null };
         }
         const s = liveSave(tabId, req.token);
-        if (!s || s.failed || s.confirming) return { ok: false, message: t.errors.promptExpired };
+        if (!s || s.failed) return { ok: false, message: t.errors.promptExpired };
+        // Already confirmed (the card was shown again after a navigation):
+        // wait for the same answer, never a second save_login.
+        if (s.confirming) return s.confirming;
         // A cleared name field falls back to the suggestion; the desktop checks the rest.
         const title = s.action === "add" ? req.title?.trim() || s.title : null;
         // An update may wait up to save_login's timeout for the desktop's
         // Allow: the prompt stays until it answers (spec 2026-10-13 §6).
-        s.confirming = true;
         clearTimeout(s.timer);
-        try {
-          await deps.client.request({
-            type: "save_login",
-            ...frameFields(s.frame),
-            username: s.username,
-            password: s.password,
-            itemId: s.itemId,
-            ...(title ? { title } : {}),
-          });
-        } catch (e) {
-          // The prompt says why; the password goes now. Unless a newer
-          // prompt or a lock replaced this one meanwhile.
-          if (saves.get(tabId) === s) {
-            s.confirming = false;
-            s.failed = true;
-            s.password = "";
-            expireSave(s, SAVE_FAILED_TTL_MS);
-          }
-          return saveFailure(e);
-        }
-        if (saves.get(tabId) === s) dropSave(tabId, true);
-        return { ok: true, value: null };
+        s.confirming = saveLogin(tabId, s, title);
+        return s.confirming;
       }
       case "save_dismiss":
         if (liveCardSave(tabId, req.token)) dropCardSave(tabId, true);

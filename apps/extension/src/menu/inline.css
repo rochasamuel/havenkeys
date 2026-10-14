@@ -676,7 +676,7 @@ main.sliding {
 /* Waiting for the user's answer in the desktop app (save.ts showWaiting).
    It is the instruction the user acts on, so it keeps the question's
    weight; a small muted dot breathes before it while the desktop asks
-   (still under reduced motion). */
+   (static under reduced motion). */
 #question.waiting::before {
   content: "";
   display: inline-block;

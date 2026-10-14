@@ -246,6 +246,27 @@ describe("save prompt waiting for the desktop", () => {
     expect(question().textContent).toBe("Not saved — HavenKeys is waiting for another confirmation");
   });
 
+  it("a card shown again during a confirmation waits for the same answer", async () => {
+    const release = holdConfirm();
+    await openPrompt({ action: "update", site: "github.com", username: "octo", title: null, lookalikeOf: null, confirming: true });
+    expect(question().textContent).toBe("Confirm in HavenKeys…");
+    expect((document.getElementById("confirm") as HTMLButtonElement).disabled).toBe(true);
+    expect(document.getElementById("dismiss")!.textContent).toBe("Close");
+    expect(asked.filter((m) => (m as { type: string }).type === "save_confirm")).toEqual([{ type: "save_confirm", token: TOKEN }]);
+    release({ ok: false, message: "Not saved" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(question().textContent).toBe("Not saved");
+  });
+
+  it("a card save never shows the desktop hint", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ site: "shop.com", title: "Visa", card: { brand: null, last4: "4242", expiry: "12/30" } });
+    holdConfirm();
+    handlers.get(document.getElementById("confirm")!)!({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(question().textContent).toBe("Save this card to HavenKeys?");
+  });
+
   it("a new login never shows the desktop hint", async () => {
     const handlers = captureClicks();
     await openPrompt({ action: "add", site: "github.com", username: "octo", title: "GitHub" });

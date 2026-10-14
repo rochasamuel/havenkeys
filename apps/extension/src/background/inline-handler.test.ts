@@ -579,7 +579,7 @@ describe("save prompts", () => {
     });
     expect(sent[0]).toEqual({ to: { tabId: 1, frameId: 0 }, msg: { type: "bg_show_save", token: T1 } });
     const state = await h.handleInline(1, { type: "save_state", token: T1 });
-    expect(state).toEqual({ ok: true, value: { action: "add", site: "github.com", username: "octo", title: "github.com", lookalikeOf: null } });
+    expect(state).toEqual({ ok: true, value: { action: "add", site: "github.com", username: "octo", title: "github.com", lookalikeOf: null, confirming: false } });
     expect(JSON.stringify(state)).not.toContain("typed");
     expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
     expect(requests[1]).toMatchObject({ type: "check_lookalike" });
@@ -610,7 +610,7 @@ describe("save prompts", () => {
     });
     // The prompt names the saved login's username, which the form did not have.
     const state = await h.handleInline(1, { type: "save_state", token: T1 });
-    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo", title: null, lookalikeOf: null } });
+    expect(state).toEqual({ ok: true, value: { action: "update", site: "github.com", username: "octo", title: null, lookalikeOf: null, confirming: false } });
     expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: true, value: null });
     const save = requests.find((r) => r.type === "save_login");
     expect(save).toMatchObject({ username: null, password: "new-pw", itemId: GH });
@@ -689,10 +689,11 @@ describe("save prompts", () => {
     const confirming = h.handleInline(1, { type: "save_confirm", token: T1 });
     await vi.advanceTimersByTimeAsync(SAVE_TTL_MS + 1);
     expect(sent.map((x) => x.msg.type)).not.toContain("bg_close_save");
-    // A second confirm while the first waits is refused, not sent twice.
-    expect((await h.handleInline(1, { type: "save_confirm", token: T1 })).ok).toBe(false);
+    // A second confirm while the first waits joins it: one save_login, the same answer.
+    const joined = h.handleInline(1, { type: "save_confirm", token: T1 });
     answer({ type: "save_login", id: GH });
     expect(await confirming).toEqual({ ok: true, value: null });
+    expect(await joined).toEqual({ ok: true, value: null });
     expect(requests.filter((r) => r.type === "save_login")).toHaveLength(1);
     expect(sent.at(-1)?.msg).toEqual({ type: "bg_close_save", token: T1 });
   });
@@ -728,6 +729,25 @@ describe("save prompts", () => {
     await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
     await h.handleInline(1, { type: "save_confirm", token: T1 });
     expect(await h.handleContent(frame({ url: "https://github.com/dashboard" }), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
+  });
+
+  it("a navigation during a confirmation shows the card again, waiting for the same answer", async () => {
+    let refuse!: (e: unknown) => void;
+    const { h, requests } = setup((r) => {
+      if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+      if (r.type === "save_login") return new Promise((_, rej) => (refuse = rej));
+      return defaultAnswer(r);
+    });
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+    const first = h.handleInline(1, { type: "save_confirm", token: T1 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await h.handleContent(frame({ url: "https://github.com/settings" }), { type: "cs_ready" })).toEqual({ saveToken: T1, watch: null });
+    expect(await h.handleInline(1, { type: "save_state", token: T1 })).toMatchObject({ ok: true, value: { action: "update", confirming: true } });
+    const again = h.handleInline(1, { type: "save_confirm", token: T1 });
+    refuse(new BridgeError("denied", "x"));
+    expect(await first).toEqual({ ok: false, message: "Not saved" });
+    expect(await again).toEqual({ ok: false, message: "Not saved" });
+    expect(requests.filter((r) => r.type === "save_login")).toHaveLength(1);
   });
 
   it("Close while the desktop is asking drops the prompt; the desktop's answer still counts", async () => {

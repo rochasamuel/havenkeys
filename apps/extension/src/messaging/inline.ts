@@ -245,6 +245,8 @@ export interface SaveView {
   title: string | null;
   /** The saved site this page only looks like (the prompt leads with a warning), or null. */
   lookalikeOf: string | null;
+  /** The user already confirmed (the card is shown again after a navigation): it waits for the desktop's answer. */
+  confirming?: boolean;
 }
 
 /** The core's limit on a login title. */
