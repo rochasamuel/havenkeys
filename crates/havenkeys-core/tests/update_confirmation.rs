@@ -118,6 +118,10 @@ fn locked_and_unknown_items_are_errors() {
         v.update_needs_confirmation(&Uuid::new_v4(), NOW),
         Err(Error::NotFound)
     ));
+    assert!(matches!(
+        v.confirm_update_summary(&Uuid::new_v4(), PAGE),
+        Err(Error::NotFound)
+    ));
     v.lock();
     assert!(matches!(
         v.update_needs_confirmation(&id, NOW),
