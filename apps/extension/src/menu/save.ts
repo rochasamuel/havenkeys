@@ -21,6 +21,10 @@ const dismissBtn = document.getElementById("dismiss") as HTMLButtonElement;
 let token: string | null = null;
 /** The page only looks like a saved site: saving is no longer the primary action. */
 let lookalike = false;
+/** After this long without an answer, an update is probably waiting for the desktop's Allow. */
+export const CONFIRM_HINT_DELAY_MS = 2_000;
+/** What the prompt is saving: only an update can need the desktop's Allow. */
+let saving: "add" | "update" | "card" | null = null;
 const card = document.querySelector(".card") as HTMLElement;
 const guard = createClickGuard(card);
 
@@ -61,6 +65,7 @@ export function enterSaves(e: Pick<KeyboardEvent, "key" | "isComposing">): boole
 }
 
 function show(view: SaveView): void {
+  saving = view.action;
   // An older background's view has no lookalikeOf: no warning.
   showLookalike(view.action === "add" ? (view.lookalikeOf ?? null) : null);
   site.textContent = view.site;
@@ -83,6 +88,7 @@ function show(view: SaveView): void {
 }
 
 function showCard(view: CardSaveView): void {
+  saving = "card";
   showLookalike(null);
   site.textContent = view.site;
   question.textContent = t.save.cardQuestion;
@@ -95,6 +101,16 @@ function showCard(view: CardSaveView): void {
   confirmBtn.disabled = false;
 }
 
+/**
+ * The save is waiting for the user's answer in the desktop app. Closing the
+ * card does not withdraw that question, so the secondary button says Close.
+ */
+function showWaiting(): void {
+  question.textContent = t.save.confirmInDesktop;
+  question.className = "waiting";
+  dismissBtn.textContent = t.save.close;
+}
+
 function fail(message: string): void {
   // The error takes the question's place; the prompt grows to fit it (save_resize).
   showLookalike(null);
@@ -104,12 +120,16 @@ function fail(message: string): void {
   question.textContent = message;
   question.className = "error";
   confirmBtn.disabled = true;
+  // Nothing is left to decide: the card only says why.
+  dismissBtn.textContent = t.save.close;
 }
 
 async function confirm(e: Event): Promise<void> {
   if (!token || !e.isTrusted || !guard.armed() || confirmBtn.disabled) return;
   confirmBtn.disabled = true;
+  const hint = saving === "update" ? setTimeout(showWaiting, CONFIRM_HINT_DELAY_MS) : null;
   const r = await ask<null>(confirmRequest(token, titleField.hidden ? null : titleInput.value));
+  if (hint !== null) clearTimeout(hint);
   // On success the background closes this frame.
   if (!r.ok) fail(r.message);
 }

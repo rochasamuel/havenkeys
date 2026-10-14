@@ -24,6 +24,8 @@ const TEXT = {
     promptExpired: "This prompt has expired.",
     denied: "This item is not saved for this site.",
     offline: "HavenKeys is offline. The vault is read-only until it reconnects.",
+    notSaved: "Not saved",
+    notSavedBusy: "Not saved — HavenKeys is waiting for another confirmation",
   },
   "pt-BR": {
     hostUnavailable: "O host de mensagens nativas do HavenKeys não está instalado ou não conseguiu iniciar.",
@@ -31,6 +33,8 @@ const TEXT = {
     promptExpired: "Esta solicitação expirou.",
     denied: "Este item não está salvo para este site.",
     offline: "O HavenKeys está offline. O cofre fica somente leitura até reconectar.",
+    notSaved: "Não foi salvo",
+    notSavedBusy: "Não foi salvo — o HavenKeys está aguardando outra confirmação",
   },
 };
 
@@ -469,6 +473,33 @@ export const extensionScenarios = [
       await page.click("#confirm");
     },
   },
+  {
+    name: "save-update-waiting",
+    page: "save.html",
+    frame: { kind: "save" },
+    replies: () => ({
+      save_state: ok({ action: "update", site: "github.com", username: "octocat@example.com", title: null }),
+      save_confirm: { pending: true },
+    }),
+    async act(page) {
+      await page.waitForTimeout(600);
+      await page.click("#confirm");
+      await page.waitForTimeout(2300);
+    },
+  },
+  {
+    name: "save-update-not-saved-busy",
+    page: "save.html",
+    frame: { kind: "save" },
+    replies: (x) => ({
+      save_state: ok({ action: "update", site: "github.com", username: "octocat@example.com", title: null }),
+      save_confirm: err(x.notSavedBusy),
+    }),
+    async act(page) {
+      await page.waitForTimeout(600);
+      await page.click("#confirm");
+    },
+  },
 
   // ---------------------------------------------------------------- sign in with
   {
@@ -662,7 +693,11 @@ export function chromeStub(setup) {
     i18n: { getUILanguage: () => setup.locale, getMessage: () => "" },
     runtime: {
       id: "havenkeysuicheck",
-      sendMessage: async (msg) => JSON.parse(JSON.stringify(reply(msg))),
+      sendMessage: (msg) => {
+        const r = reply(msg);
+        // `{ pending: true }`: the background never answers (a save waiting on the desktop).
+        return r && r.pending ? new Promise(() => {}) : Promise.resolve(JSON.parse(JSON.stringify(r)));
+      },
       getURL: (p) => new URL(p, location.href).href,
       openOptionsPage: async () => undefined,
       onMessage: noopEvent,

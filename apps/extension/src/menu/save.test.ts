@@ -4,6 +4,7 @@
 // content needs (long errors wrap to several lines) so the frame can grow.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { captureClicks } from "./click-capture.test-helper";
 import { postToken } from "./token.test-helper";
 
 const TOKEN = "b".repeat(32);
@@ -195,5 +196,62 @@ describe("look-alike warning", () => {
     await openPrompt({ action: "update", site: "github.com", username: "octo", title: null, lookalikeOf: null });
     expect(document.getElementById("warning")!.hidden).toBe(true);
     expect(document.getElementById("confirm")!.textContent).toBe("Update");
+  });
+});
+
+describe("save prompt waiting for the desktop", () => {
+  /** Holds the next save_confirm reply until released. */
+  function holdConfirm(): (reply: unknown) => void {
+    let release!: (reply: unknown) => void;
+    const held = new Promise((r) => (release = r));
+    const runtime = (globalThis as unknown as { chrome: { runtime: { sendMessage: (m: unknown) => Promise<unknown> } } }).chrome.runtime;
+    const next = runtime.sendMessage;
+    runtime.sendMessage = async (m: unknown) => {
+      if ((m as { type?: string }).type !== "save_confirm") return next(m);
+      asked.push(m);
+      return held;
+    };
+    return release;
+  }
+  const question = () => document.getElementById("question") as HTMLElement;
+
+  it("an update says to confirm in HavenKeys after 2 s, then shows the answer", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ action: "update", site: "github.com", username: "octo", title: null });
+    const release = holdConfirm();
+    handlers.get(document.getElementById("confirm")!)!({ isTrusted: true } as MouseEvent);
+    const dismiss = document.getElementById("dismiss") as HTMLButtonElement;
+    await vi.advanceTimersByTimeAsync(1_900);
+    expect(question().textContent).toBe("Update the saved password?");
+    expect(dismiss.textContent).toBe("Not now");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(question().textContent).toBe("Confirm in HavenKeys…");
+    // Closing the card does not withdraw the desktop's question: it stays possible, and says Close.
+    expect(dismiss.textContent).toBe("Close");
+    expect(dismiss.disabled).toBe(false);
+    release({ ok: false, message: "Not saved" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(question().textContent).toBe("Not saved");
+    expect(question().className).toBe("error");
+    expect(dismiss.textContent).toBe("Close");
+  });
+
+  it("a quick answer never shows the hint", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ action: "update", site: "github.com", username: "octo", title: null });
+    const release = holdConfirm();
+    handlers.get(document.getElementById("confirm")!)!({ isTrusted: true } as MouseEvent);
+    release({ ok: false, message: "Not saved — HavenKeys is waiting for another confirmation" });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(question().textContent).toBe("Not saved — HavenKeys is waiting for another confirmation");
+  });
+
+  it("a new login never shows the desktop hint", async () => {
+    const handlers = captureClicks();
+    await openPrompt({ action: "add", site: "github.com", username: "octo", title: "GitHub" });
+    holdConfirm();
+    handlers.get(document.getElementById("confirm")!)!({ isTrusted: true } as MouseEvent);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(question().textContent).toBe("Save this login to HavenKeys?");
   });
 });

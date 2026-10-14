@@ -218,6 +218,7 @@ export const en = {
     save: "Save",
     update: "Update",
     notNow: "Not now",
+    close: "Close",
     titleLabel: "Name",
     lookalikeWarning: (site: string) => `This isn’t ${site}. Don’t save or enter your ${site} password here.`,
     saveAnyway: "Save anyway",
