@@ -38,24 +38,41 @@ export function QuickAccessSection() {
   useEffect(() => {
     if (recording) {
       recorderRef.current?.focus();
-    } else if (wasRecording.current && (!document.activeElement || document.activeElement === document.body)) {
-      // Esc or an accepted chord removed the focused recorder: hand focus
-      // back to Change…, not to the top of the page. A click elsewhere keeps
-      // the focus it moved.
-      changeRef.current?.focus();
+      wasRecording.current = true;
+      return;
     }
-    wasRecording.current = recording;
-  }, [recording]);
+    // Esc or an accepted chord removed the focused recorder: hand focus back
+    // to Change… (once it is enabled again), not to the top of the page. A
+    // click elsewhere keeps the focus it moved.
+    if (!wasRecording.current || busy) return;
+    wasRecording.current = false;
+    if (!document.activeElement || document.activeElement === document.body) changeRef.current?.focus();
+  }, [recording, busy]);
 
-  async function updateEnabled(enabled: boolean) {
+  /** One request at a time, so answers cannot land out of order. */
+  async function request(run: () => Promise<void>) {
+    if (sending.current) return;
+    sending.current = true;
+    setBusy(true);
+    try {
+      await run();
+    } finally {
+      sending.current = false;
+      setBusy(false);
+    }
+  }
+
+  function updateEnabled(enabled: boolean) {
     setRecording(false);
     setProblem(null);
-    try {
-      setStatus(await api.setQuickAccess(enabled));
-      toast(t.settings.saved);
-    } catch (e) {
-      toast(errorMessage(e, t, t.settings.saveFailed), "error");
-    }
+    void request(async () => {
+      try {
+        setStatus(await api.setQuickAccess(enabled));
+        toast(t.settings.saved);
+      } catch (e) {
+        toast(errorMessage(e, t, t.settings.saveFailed), "error");
+      }
+    });
   }
 
   function startRecording() {
@@ -68,26 +85,31 @@ export function QuickAccessSection() {
     setProblem(null);
   }
 
-  async function propose(keys: string | null) {
-    if (sending.current) return;
-    sending.current = true;
-    setBusy(true);
-    try {
-      const next = await api.setQuickAccessShortcut(keys);
-      setStatus(next);
-      if (next.candidateInUse) {
-        setProblem(t.settings.quickAccessCandidateInUse);
-        return;
+  /** The recorder stays open for another try only while it still has focus. */
+  function keepRecordingIfFocused() {
+    if (document.activeElement !== recorderRef.current) setRecording(false);
+  }
+
+  function propose(keys: string | null) {
+    return request(async () => {
+      try {
+        const next = await api.setQuickAccessShortcut(keys);
+        setStatus(next);
+        if (next.candidateInUse) {
+          setProblem(t.settings.quickAccessCandidateInUse);
+          keepRecordingIfFocused();
+          return;
+        }
+        setProblem(null);
+        setRecording(false);
+        // Still taken (Rust retried the current chord and lost again): the
+        // in-use warning says so; "Saved" would contradict it.
+        if (!next.inUse) toast(t.settings.saved);
+      } catch (e) {
+        setProblem(errorMessage(e, t, t.settings.saveFailed));
+        keepRecordingIfFocused();
       }
-      setProblem(null);
-      setRecording(false);
-      toast(t.settings.saved);
-    } catch (e) {
-      setProblem(errorMessage(e, t, t.settings.saveFailed));
-    } finally {
-      sending.current = false;
-      setBusy(false);
-    }
+    });
   }
 
   function onRecorderKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -120,7 +142,7 @@ export function QuickAccessSection() {
       <div className="group">
         <div className="row">
           <span className="row-label-inline">{t.settings.quickAccessShortcut}</span>
-          <Switch label={t.settings.quickAccessShortcutLabel} checked={status.enabled} onChange={(checked) => void updateEnabled(checked)} />
+          <Switch label={t.settings.quickAccessShortcutLabel} checked={status.enabled} disabled={busy} onChange={updateEnabled} />
         </div>
         {status.enabled && (
           <div className="row quick-shortcut-row">
@@ -142,7 +164,7 @@ export function QuickAccessSection() {
             ) : (
               <>
                 <kbd className="shortcut-keys">{chord}</kbd>
-                <button ref={changeRef} type="button" className="btn btn-small btn-ghost" onClick={startRecording}>
+                <button ref={changeRef} type="button" className="btn btn-small btn-ghost" disabled={busy} onClick={startRecording}>
                   {t.settings.quickAccessChange}
                 </button>
                 {!status.isDefault && (
@@ -163,7 +185,7 @@ export function QuickAccessSection() {
       {status.enabled && status.inUse && !recording && (
         <div className="group-note warn quick-in-use">
           <span role="status">{t.settings.quickAccessInUse}</span>
-          <button type="button" className="btn btn-small btn-ghost" onClick={startRecording}>
+          <button type="button" className="btn btn-small btn-ghost" disabled={busy} onClick={startRecording}>
             {t.settings.quickAccessChooseAnother}
           </button>
         </div>

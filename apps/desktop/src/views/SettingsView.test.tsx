@@ -233,4 +233,71 @@ describe("Settings → Quick Access shortcut", () => {
     await act(async () => button(en.settings.quickAccessChooseAnother)!.click());
     expect(document.activeElement).toBe(recorder());
   });
+
+  it("closes the recorder when a refusal arrives after focus left it", async () => {
+    let fail: (e: unknown) => void = () => undefined;
+    setQuickAccessShortcut.mockImplementation(() => new Promise((_, reject) => (fail = reject)));
+    const elsewhere = document.createElement("button");
+    document.body.append(elsewhere);
+    try {
+      await startRecording();
+      await key("KeyC", { ctrlKey: true });
+      await act(async () => elsewhere.focus());
+      expect(recorder()).not.toBeNull();
+      await act(async () => fail(new ApiError("quick_access_shortcut_invalid", "Reserved by the system.")));
+      expect(recorder()).toBeNull();
+      expect(alertText()).toBe("Reserved by the system.");
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+    }
+  });
+
+  it("closes the recorder when a taken answer arrives after focus left it", async () => {
+    let answer: (s: QuickAccessStatus) => void = () => undefined;
+    setQuickAccessShortcut.mockImplementation(() => new Promise((r) => (answer = r)));
+    const elsewhere = document.createElement("button");
+    document.body.append(elsewhere);
+    try {
+      await startRecording();
+      await key("KeyK", { altKey: true });
+      await act(async () => elsewhere.focus());
+      await act(async () => answer(status({ candidateInUse: true })));
+      expect(recorder()).toBeNull();
+      expect(alertText()).toBe(en.settings.quickAccessCandidateInUse);
+    } finally {
+      elsewhere.remove();
+    }
+  });
+
+  it("disables the other controls while a request is out", async () => {
+    let answer: (s: QuickAccessStatus) => void = () => undefined;
+    quickAccessStatus.mockResolvedValue(status({ keys: "Alt+Shift+K", isDefault: false, inUse: true }));
+    setQuickAccessShortcut.mockImplementation(() => new Promise((r) => (answer = r)));
+    await render();
+    await act(async () => button(en.settings.quickAccessReset)!.click());
+    expect(button(en.settings.quickAccessChange)!.disabled).toBe(true);
+    expect(button(en.settings.quickAccessChooseAnother)!.disabled).toBe(true);
+    expect(button(en.settings.quickAccessReset)!.disabled).toBe(true);
+    expect(toggle()!.disabled).toBe(true);
+    await act(async () => answer(status()));
+    expect(button(en.settings.quickAccessChange)!.disabled).toBe(false);
+    expect(toggle()!.disabled).toBe(false);
+  });
+
+  it("says Saved after a reset, but not when the chord is still taken", async () => {
+    const toastText = () => host.querySelector(".toast-region")?.textContent ?? "";
+    quickAccessStatus.mockResolvedValue(status({ keys: "Alt+Shift+K", isDefault: false }));
+    setQuickAccessShortcut.mockResolvedValue(status({ inUse: true }));
+    await render();
+    await act(async () => button(en.settings.quickAccessReset)!.click());
+    expect(toastText()).not.toContain(en.settings.saved);
+    expect(host.querySelector(".quick-in-use [role=status]")?.textContent).toBe(en.settings.quickAccessInUse);
+    act(() => root.unmount());
+    root = createRoot(host);
+    setQuickAccessShortcut.mockResolvedValue(status());
+    await render();
+    await act(async () => button(en.settings.quickAccessReset)!.click());
+    expect(toastText()).toContain(en.settings.saved);
+  });
 });
