@@ -705,9 +705,13 @@ with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedI
   password out of the 5-entry history in about 5 days with no click. Within a
   day it takes one Allow per change. The caller can raise that dialog
   repeatedly (one at a time).
-* **Version skew.** An extension older than this change keeps a 10 s timeout
-  for `save_login`, so an update that needs confirmation fails unless answered
-  quickly. A desktop older than this change never asks.
+* **Version skew and dropped connections.** An extension older than this
+  change keeps a 10 s timeout for `save_login`, so after 10 s it reports the
+  update as failed. The same happens when the connection drops while the
+  desktop is asking (the native host exits, the browser restarts). The
+  bridge does not know: it keeps waiting, and an Allow given later, within
+  the 60 s, still saves the change. The browser then shows a failure for a
+  change that happened. A desktop older than this change never asks.
 
 ## 9. Tests
 

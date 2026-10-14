@@ -355,8 +355,11 @@ change.
 Also accepted: a hostile caller can raise the dialog over and over (one at a
 time, each for up to 60 s, within the secret rate limit). Deny is the default
 and the Escape action, and the dialog names the login and the site. An older
-extension keeps its 10 s timeout, so a change that needs confirmation fails
-unless answered quickly.
+extension keeps its 10 s timeout, and a connection can drop while the desktop
+asks: either way the browser reports the change as failed, but the bridge
+keeps waiting, and an Allow given later (within the 60 s) still saves it. The
+user only ever sees a failure for a change that did happen, never the
+reverse, and the old password stays in the item's history.
 
 **Info (F2-i).** The Quick Access window has `core:event:allow-listen`, so a
 global `listen()` there could receive the `bridge://confirm-update` payload
@@ -444,7 +447,8 @@ and the fault was in the generator. It is a reminder that whole-site rules
 "This exact site" exists for sites where that is too broad.
 
 Windows pipe owner check (P10) is fixed in code by BR-1 (unverified on Windows). Still open for Phase 6: macOS screen lock,
-export, and the manual runtime checks (#14, Phase 5 browser checklist).
+export, the manual runtime checks (#14, Phase 5 browser checklist), and F2
+residual (changes spaced >24 h, accepted).
 
 ---
 
