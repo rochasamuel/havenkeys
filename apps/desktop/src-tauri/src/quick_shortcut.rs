@@ -1,23 +1,13 @@
 //! The Quick Access shortcut (spec 2026-10-13-quick-access-design §2, §4):
-//! registered and unregistered here from the setting in quick-access.json.
+//! registered and unregistered here from the setting in quick-access.json
+//! (switch and chord, spec 2026-10-14-quick-access-shortcut-remap-design).
 //! The plugin is added in Rust with a handler; no capability grants the
 //! renderer its commands, so no webview can add or change a global shortcut.
 
 use crate::quick_access::{QuickAccess, QuickAccessStatus, ShortcutHost, ShortcutTaken};
 use crate::state::{AppState, CmdError, CmdResult};
 use tauri::{AppHandle, Manager, State, Wry};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcut, Modifiers, Shortcut, ShortcutState};
-
-/// `Cmd+Shift+Space` on macOS, `Ctrl+Shift+Space` elsewhere. Fixed in this
-/// version.
-pub fn shortcut() -> Shortcut {
-    let primary = if cfg!(target_os = "macos") {
-        Modifiers::SUPER
-    } else {
-        Modifiers::CONTROL
-    };
-    Shortcut::new(Some(primary | Modifiers::SHIFT), Code::Space)
-}
+use tauri_plugin_global_shortcut::{GlobalShortcut, Shortcut, ShortcutState};
 
 /// Linux without an X display (a Wayland session with no XWayland) has no
 /// global hotkeys; the plugin is then left out rather than failing the
@@ -34,7 +24,12 @@ pub fn install(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
     builder.plugin(
         tauri_plugin_global_shortcut::Builder::new()
             .with_handler(|app, pressed, event| {
-                if event.state() == ShortcutState::Pressed && *pressed == shortcut() {
+                // Only the chord Quick Access answers to now (Settings may change it).
+                if event.state() == ShortcutState::Pressed
+                    && app
+                        .try_state::<QuickAccess>()
+                        .is_some_and(|qa| qa.is_current(pressed))
+                {
                     crate::quick_window::toggle_from_shortcut(app);
                 }
             })
@@ -45,7 +40,7 @@ pub fn install(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
 struct OsShortcuts<'a>(&'a AppHandle);
 
 impl ShortcutHost for OsShortcuts<'_> {
-    fn register(&self) -> Result<(), ShortcutTaken> {
+    fn register(&self, shortcut: &Shortcut) -> Result<(), ShortcutTaken> {
         // No plugin (see `supported`): the shortcut cannot be had.
         let plugin = self
             .0
@@ -56,12 +51,12 @@ impl ShortcutHost for OsShortcuts<'_> {
         // `AlreadyRegistered` (another app owns the chord) cannot be told
         // apart from an OS failure without matching on message text; either
         // way the shortcut is unavailable and the next `apply` retries it.
-        plugin.register(shortcut()).map_err(|_| ShortcutTaken)
+        plugin.register(*shortcut).map_err(|_| ShortcutTaken)
     }
 
-    fn unregister(&self) {
+    fn unregister(&self, shortcut: &Shortcut) {
         if let Some(plugin) = self.0.try_state::<GlobalShortcut<Wry>>() {
-            let _ = plugin.unregister(shortcut());
+            let _ = plugin.unregister(*shortcut);
         }
     }
 }
@@ -104,27 +99,4 @@ pub async fn set_quick_access(app: AppHandle, enabled: bool) -> CmdResult<QuickA
     let qa = app.state::<QuickAccess>();
     qa.set(&OsShortcuts(&app), enabled)
         .map_err(|_| settings_failed())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_shortcut_is_command_or_control_shift_space() {
-        let (primary, other) = if cfg!(target_os = "macos") {
-            (Modifiers::SUPER, Modifiers::CONTROL)
-        } else {
-            (Modifiers::CONTROL, Modifiers::SUPER)
-        };
-        assert_eq!(
-            shortcut(),
-            Shortcut::new(Some(primary | Modifiers::SHIFT), Code::Space)
-        );
-        // Exactly this platform's modifier plus Shift: never the other
-        // platform's, never Alt.
-        assert_eq!(shortcut().mods, primary | Modifiers::SHIFT);
-        assert!(!shortcut().mods.intersects(other | Modifiers::ALT));
-        assert_eq!(shortcut().key, Code::Space);
-    }
 }
