@@ -89,6 +89,7 @@
     "allow-install-update",
     "allow-set-update-auto-check",
     "allow-quick-access-status",
-    "allow-set-quick-access"
+    "allow-set-quick-access",
+    "allow-set-quick-access-shortcut"
   ]
 }

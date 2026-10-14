@@ -6,6 +6,14 @@ import type { QuickAccessStatus } from "../lib/types";
 
 const quickAccessStatus = vi.fn<() => Promise<QuickAccessStatus>>();
 const setQuickAccess = vi.fn<(enabled: boolean) => Promise<QuickAccessStatus>>();
+const status = (over: Partial<QuickAccessStatus> = {}): QuickAccessStatus => ({
+  enabled: true,
+  inUse: false,
+  keys: "Control+Shift+Space",
+  isDefault: true,
+  candidateInUse: false,
+  ...over,
+});
 
 vi.mock("../lib/api", async (importOriginal) => {
   const original = await importOriginal<typeof import("../lib/api")>();
@@ -41,8 +49,8 @@ let host: HTMLElement;
 let root: Root;
 beforeEach(() => {
   document.documentElement.dataset.platform = "";
-  quickAccessStatus.mockReset().mockResolvedValue({ enabled: true, inUse: false });
-  setQuickAccess.mockReset().mockImplementation(async (enabled) => ({ enabled, inUse: false }));
+  quickAccessStatus.mockReset().mockResolvedValue(status());
+  setQuickAccess.mockReset().mockImplementation(async (enabled) => status({ enabled }));
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -78,7 +86,7 @@ describe("Settings → Quick Access", () => {
   });
 
   it("says when another app owns the shortcut, and stays on", async () => {
-    quickAccessStatus.mockResolvedValue({ enabled: true, inUse: true });
+    quickAccessStatus.mockResolvedValue(status({ inUse: true }));
     await render();
     expect(toggle()!.checked).toBe(true);
     expect(host.querySelector("[role=status]")?.textContent).toBe(en.settings.quickAccessInUse);
@@ -89,7 +97,7 @@ describe("Settings → Quick Access", () => {
     await act(async () => toggle()!.click());
     expect(setQuickAccess).toHaveBeenCalledWith(false);
     expect(toggle()!.checked).toBe(false);
-    setQuickAccess.mockResolvedValue({ enabled: true, inUse: true });
+    setQuickAccess.mockResolvedValue(status({ inUse: true }));
     await act(async () => toggle()!.click());
     expect(setQuickAccess).toHaveBeenLastCalledWith(true);
     expect(host.textContent).toContain(en.settings.quickAccessInUse);

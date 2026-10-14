@@ -51,6 +51,7 @@ const codes: Record<ErrorCode, string | null> = {
   update_failed: "Não foi possível instalar a atualização. Tente novamente mais tarde.",
   update_settings: "Não foi possível salvar a configuração de atualizações.",
   quick_access_settings: "Não foi possível salvar a configuração do Acesso rápido.",
+  quick_access_shortcut_invalid: null,
   no_confirmation: "Nada está esperando por esta resposta.",
   unsupported_language: "Idioma não suportado.",
   keychain_unavailable:
@@ -70,6 +71,13 @@ const codes: Record<ErrorCode, string | null> = {
   // Two different Rust messages ("did not accept that request", "did not
   // acknowledge that item" — the write may have been applied), so Rust's own.
   sync_failed: null,
+};
+
+/** By Rust's message: why it refused a Quick Access shortcut. */
+const shortcutRefused: Record<string, string> = {
+  "Add Cmd, Ctrl or Alt.": "Adicione Cmd, Ctrl ou Alt.",
+  "This key can't be used.": "Esta tecla não pode ser usada.",
+  "Reserved by the system.": "Reservado pelo sistema.",
 };
 
 /** By Rust's InvalidInput detail: the ones a person can cause from the UI. */
@@ -1017,5 +1025,6 @@ export const ptBR: Messages = {
     generic: "Algo deu errado. Tente novamente.",
     codes,
     invalidInput,
+    shortcutRefused,
   },
 };

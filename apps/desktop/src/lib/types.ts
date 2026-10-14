@@ -295,8 +295,13 @@ export type Theme = "dark" | "light" | "system";
 /** The Quick Access shortcut on this computer (quick-access.json, not a vault setting). */
 export interface QuickAccessStatus {
   enabled: boolean;
-  /** The OS refused the shortcut: another app owns it. The switch stays on. */
+  /** The OS refused the current chord: another app owns it. The switch stays on. */
   inUse: boolean;
+  /** The current chord in Rust's form, e.g. "Control+Shift+Space" (see lib/shortcut.ts). */
+  keys: string;
+  isDefault: boolean;
+  /** Only in `setQuickAccessShortcut`'s answer: the proposed chord is taken; nothing changed. */
+  candidateInUse: boolean;
 }
 
 export interface Settings {

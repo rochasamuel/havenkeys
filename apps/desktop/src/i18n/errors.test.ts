@@ -139,6 +139,23 @@ describe("the error table", () => {
     expect(unknown).toEqual([]);
   });
 
+  it("translates exactly the Quick Access shortcut refusals Rust sends", () => {
+    const sent = [...(rust.get("quick_access_shortcut_invalid") ?? [])].sort();
+    expect(sent).toHaveLength(3);
+    expect(Object.keys(en.errors.shortcutRefused).sort()).toEqual(sent);
+    expect(Object.keys(ptBR.errors.shortcutRefused).sort()).toEqual(sent);
+    for (const message of sent) {
+      if (message === null) throw new Error("a refusal is built with format!");
+      expect(en.errors.shortcutRefused[message]).toBe(message);
+      const e = new ApiError("quick_access_shortcut_invalid", message);
+      expect(errorMessage(e, en)).toBe(message);
+      expect(errorMessage(e, ptBR)).toBe(ptBR.errors.shortcutRefused[message]);
+    }
+    // A refusal it does not know shows Rust's text.
+    const other = new ApiError("quick_access_shortcut_invalid", "Something newer.");
+    expect(errorMessage(other, ptBR)).toBe("Something newer.");
+  });
+
   it("keeps Rust's keychain warning word for word", () => {
     const events = readFileSync(join(root, "apps/desktop/src-tauri/src/events.rs"), "utf8");
     const rustText = /const KEYCHAIN_NOT_CLEARED: &str = "([^"]*)";/.exec(events)?.[1];

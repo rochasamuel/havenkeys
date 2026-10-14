@@ -306,8 +306,6 @@ pub struct QuickAccessStatus {
     pub candidate_in_use: bool,
 }
 
-// The command that calls `set_shortcut` arrives with Settings → Change….
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug)]
 pub enum SetShortcutError {
     Refused(ShortcutRefusal),
@@ -449,8 +447,9 @@ impl QuickAccess {
     /// chord is registered while the old one still is; taken → the status
     /// with `candidate_in_use`, nothing changed; then the file is saved
     /// (failure → the new chord is released, the old one never was) and
-    /// only then the old chord is released. Switch off: only saved.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// only then the old chord is released. Switch off: only saved. The
+    /// same chord is a no-op, except that one another app held is tried
+    /// again (Reset, or choosing it again, once that app let go).
     pub fn set_shortcut(
         &self,
         host: &impl ShortcutHost,
@@ -463,7 +462,11 @@ impl QuickAccess {
         };
         let r = self.snapshot();
         if next == r.shortcut {
-            return Ok(self.status());
+            return Ok(if r.enabled && !r.registered {
+                self.apply_locked(host)
+            } else {
+                self.status()
+            });
         }
         let setting = QuickAccessSetting {
             shortcut: r.enabled,
@@ -1147,6 +1150,25 @@ mod tests {
         assert_eq!(qa.set_shortcut(&host, Some(dflt().as_str())).unwrap(), on());
         assert_eq!(qa.set_shortcut(&host, None).unwrap(), on());
         assert_eq!(host.registers(), 1);
+        assert!(!dir.path().join(FILE).exists());
+    }
+
+    #[test]
+    fn the_same_chord_retries_one_another_app_held() {
+        let dir = tempfile::tempdir().unwrap();
+        let qa = QuickAccess::new(dir.path().into());
+        let host = FakeHost::default();
+        host.taken_all.set(true);
+        assert_eq!(qa.apply(&host), status(true, true));
+        // Still taken: still in use, and nothing saved.
+        assert_eq!(qa.set_shortcut(&host, None).unwrap(), status(true, true));
+        assert_eq!(host.registers(), 2);
+        // The other app let go: Reset (or choosing it again) takes it.
+        host.taken_all.set(false);
+        assert_eq!(qa.set_shortcut(&host, None).unwrap(), on());
+        assert!(host.holds(&dflt()));
+        assert_eq!(qa.set_shortcut(&host, Some(dflt().as_str())).unwrap(), on());
+        assert_eq!(host.registers(), 3);
         assert!(!dir.path().join(FILE).exists());
     }
 

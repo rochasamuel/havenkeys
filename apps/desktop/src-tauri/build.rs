@@ -83,6 +83,7 @@ const COMMANDS: &[&str] = &[
     "set_update_auto_check",
     "quick_access_status",
     "set_quick_access",
+    "set_quick_access_shortcut",
     "hide_quick_window",
 ];
 

@@ -60,6 +60,7 @@ export type ErrorCode =
   | "update_failed"
   | "update_settings"
   | "quick_access_settings"
+  | "quick_access_shortcut_invalid"
   | "no_confirmation";
 
 /**
@@ -108,6 +109,8 @@ const codes: Record<ErrorCode, string | null> = {
   update_failed: "The update could not be installed. Try again later.",
   update_settings: "Could not save the update setting.",
   quick_access_settings: "Could not save the Quick Access setting.",
+  // Three fixed reasons; translated through `shortcutRefused` below.
+  quick_access_shortcut_invalid: null,
   no_confirmation: "Nothing is waiting for this answer.",
   unsupported_language: "Unsupported language.",
   keychain_unavailable:
@@ -132,6 +135,13 @@ const codes: Record<ErrorCode, string | null> = {
  * none: Rust's message is already English.
  */
 const noDetails: Record<string, string> = {};
+
+/** Rust's three Quick Access shortcut refusals, keyed by its message. */
+const shortcutRefused: Record<string, string> = {
+  "Add Cmd, Ctrl or Alt.": "Add Cmd, Ctrl or Alt.",
+  "This key can't be used.": "This key can't be used.",
+  "Reserved by the system.": "Reserved by the system.",
+};
 
 export const en = {
   common: {
@@ -985,6 +995,8 @@ export const en = {
      * shows Rust's message.
      */
     invalidInput: noDetails,
+    /** Why Rust refused a Quick Access shortcut, keyed by its message. */
+    shortcutRefused,
   },
 };
 

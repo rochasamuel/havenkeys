@@ -398,6 +398,7 @@ pub fn run() {
             updater::set_update_auto_check,
             quick_shortcut::quick_access_status,
             quick_shortcut::set_quick_access,
+            quick_shortcut::set_quick_access_shortcut,
             quick_window::hide_quick_window,
         ])
         .build(tauri::generate_context!())

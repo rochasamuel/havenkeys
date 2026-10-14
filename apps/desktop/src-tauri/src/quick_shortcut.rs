@@ -4,7 +4,9 @@
 //! The plugin is added in Rust with a handler; no capability grants the
 //! renderer its commands, so no webview can add or change a global shortcut.
 
-use crate::quick_access::{QuickAccess, QuickAccessStatus, ShortcutHost, ShortcutTaken};
+use crate::quick_access::{
+    QuickAccess, QuickAccessStatus, SetShortcutError, ShortcutHost, ShortcutRefusal, ShortcutTaken,
+};
 use crate::state::{AppState, CmdError, CmdResult};
 use tauri::{AppHandle, Manager, State, Wry};
 use tauri_plugin_global_shortcut::{GlobalShortcut, Shortcut, ShortcutState};
@@ -80,6 +82,25 @@ fn settings_failed() -> CmdError {
     }
 }
 
+/// One code, one fixed message per reason; the UI translates each
+/// message (i18n `errors.shortcutRefused`).
+fn shortcut_refused(reason: ShortcutRefusal) -> CmdError {
+    match reason {
+        ShortcutRefusal::Modifier => CmdError {
+            code: "quick_access_shortcut_invalid",
+            message: "Add Cmd, Ctrl or Alt.".into(),
+        },
+        ShortcutRefusal::Key => CmdError {
+            code: "quick_access_shortcut_invalid",
+            message: "This key can't be used.".into(),
+        },
+        ShortcutRefusal::Reserved => CmdError {
+            code: "quick_access_shortcut_invalid",
+            message: "Reserved by the system.".into(),
+        },
+    }
+}
+
 /// Not sensitive; readable locked or not. No `touch()`: Settings reads it
 /// whenever it opens.
 #[tauri::command]
@@ -99,4 +120,54 @@ pub async fn set_quick_access(app: AppHandle, enabled: bool) -> CmdResult<QuickA
     let qa = app.state::<QuickAccess>();
     qa.set(&OsShortcuts(&app), enabled)
         .map_err(|_| settings_failed())
+}
+
+/// Settings → Change… / Reset. `keys` is the renderer's proposal in
+/// `parse_keys` form, or `None` for the default; Rust checks it again
+/// whatever the renderer did. Taken by another app is an answer
+/// (`candidateInUse`), not an error. Async for the same reason as
+/// `set_quick_access`.
+#[tauri::command]
+pub async fn set_quick_access_shortcut(
+    app: AppHandle,
+    keys: Option<String>,
+) -> CmdResult<QuickAccessStatus> {
+    {
+        let state = app.state::<AppState>();
+        state.touch();
+        state.require_unlocked()?;
+    }
+    let qa = app.state::<QuickAccess>();
+    qa.set_shortcut(&OsShortcuts(&app), keys.as_deref())
+        .map_err(|e| match e {
+            SetShortcutError::Refused(reason) => shortcut_refused(reason),
+            SetShortcutError::Save(_) => settings_failed(),
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::quick_access::ShortcutRefusal;
+
+    #[test]
+    fn each_refusal_has_its_own_fixed_message_under_one_code() {
+        let all = [
+            ShortcutRefusal::Modifier,
+            ShortcutRefusal::Key,
+            ShortcutRefusal::Reserved,
+        ]
+        .map(shortcut_refused);
+        assert!(all
+            .iter()
+            .all(|e| e.code == "quick_access_shortcut_invalid"));
+        assert_eq!(
+            all.map(|e| e.message),
+            [
+                "Add Cmd, Ctrl or Alt.",
+                "This key can't be used.",
+                "Reserved by the system.",
+            ]
+        );
+    }
 }

@@ -23,5 +23,8 @@ export function errorMessage(e: unknown, t: Messages, fallback: string = t.error
     const sentence = detail !== undefined && Object.hasOwn(t.errors.invalidInput, detail) ? t.errors.invalidInput[detail] : undefined;
     return sentence ?? e.message;
   }
+  if (e.code === "quick_access_shortcut_invalid") {
+    return Object.hasOwn(t.errors.shortcutRefused, e.message) ? (t.errors.shortcutRefused[e.message] ?? e.message) : e.message;
+  }
   return t.errors.codes[e.code] ?? e.message;
 }

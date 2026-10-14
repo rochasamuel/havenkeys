@@ -224,6 +224,8 @@ export const api = {
   /** This computer's Quick Access shortcut; Rust registers it with the OS. */
   quickAccessStatus: () => call<QuickAccessStatus>("quick_access_status"),
   setQuickAccess: (enabled: boolean) => call<QuickAccessStatus>("set_quick_access", { enabled }),
+  /** Propose a new chord (null = the default). Rust checks it and registers it only if the OS accepts it. */
+  setQuickAccessShortcut: (keys: string | null) => call<QuickAccessStatus>("set_quick_access_shortcut", { keys }),
   /** Relabel the tray menu. Rust accepts only "en" and "pt-BR". */
   setUiLanguage: (lang: "en" | "pt-BR") => call<void>("set_ui_language", { lang }),
 

@@ -171,6 +171,11 @@ mod tests {
         assert_eq!(strings(&cap["windows"]), ["main"]);
         let granted = strings(&cap["permissions"]);
         assert!(!granted.iter().any(|p| p == "allow-hide-quick-window"));
+        // Choosing the chord is a Settings action: main window only (the
+        // quick window's exact list is pinned elsewhere).
+        assert!(granted
+            .iter()
+            .any(|p| p == "allow-set-quick-access-shortcut"));
         // Neither window may drive the shortcut plugin (spec §4).
         let quick = json(include_str!("../capabilities/quick.json"));
         for p in granted.iter().chain(strings(&quick["permissions"]).iter()) {
