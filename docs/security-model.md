@@ -247,7 +247,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 81 of them, which is the whole
+Every command the renderer can call — all 82 of them, which is the whole
 surface. `build.rs` declares this list, `lib.rs` registers it, the
 capability files grant exactly it between them, and `src/lib/commands.test.ts` fails if they (or the
 commands `api.ts` calls) ever disagree. "Online"
@@ -312,6 +312,7 @@ means a live server session, which a locked vault does not have.
 | `quick_access_status` | no | no. Whether the shortcut is on and whether it is registered or in use by another app |
 | `set_quick_access` | no | no. Writes `quick-access.json` and registers or unregisters the shortcut |
 | `hide_quick_window` | no | no. Takes no argument; callable from the quick window only; hides that window and nothing else |
+| `answer_update_confirmation` | no (a lock denies the pending question) | no. Takes the pending confirmation's ID and Allow/Deny; any other ID is refused. In `main.json` only (not the Quick Access window). Allow lets one browser `save_login` password change proceed, which Rust then authorizes again from scratch; the dialog shows the login's name, username and site, and Deny is the default |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
 
 All inputs are length-limited and validated in Rust; the UI's validation is
@@ -720,7 +721,9 @@ See `native-messaging.md` for the full protocol. In summary:
 * The only write is `save_login`: add a login for the page, or replace the
   password of a login matching the page. Replaced passwords go to the item's
   password history (5 entries), and at most one change per item every 10
-  minutes is allowed from the browser.
+  minutes is allowed from the browser without the desktop. A repeat change
+  within 24 hours needs the user's Allow in the desktop app (spaced-out
+  changes are not asked; `security-review.md` F2).
 * For iframes, items must match both the frame and the top-level page.
 * The socket lives in a `0700` per-user directory that both sides verify.
   Peer UIDs are checked on Unix.

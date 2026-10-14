@@ -275,7 +275,7 @@ desktop's history commands.
 | # | Severity | Component | Finding | Status |
 |---|---|---|---|---|
 | F1 | Medium | Extension (save-login) | A page could plant a password, forge a `submit`, and watch for a save prompt to learn whether it guessed the saved password (same-origin oracle, e.g. after XSS) | **Fixed**: only passwords the user typed (trusted `input`) or we generated, still unchanged at submit, are reported |
-| F2 | Medium | Bridge / core | A compromised extension could replace a login's password repeatedly and push the real one out of history, or overwrite without any record | **Fixed**: replaced passwords go to an encrypted history (5 entries); one browser-initiated change per item per 10 min. Residual: a patient attacker can still cycle history in about an hour |
+| F2 | Medium | Bridge / core | A compromised extension could replace a login's password repeatedly and push the real one out of history, or overwrite without any record | **Fixed, residual reduced**: replaced passwords go to an encrypted history (5 entries); one browser-initiated change per item per 10 min; a repeat change within 24 h needs Allow in the desktop app (2026-10-13). Residual: changes spaced more than 24 h apart are never asked, so about 5 days of patience still flushes the history with no click (before: about an hour) |
 | F3 | Medium | Extension (menu) | Clickjacking: the page controls the menu's `<iframe>` element | **Mitigated**: inline `!important` styles, tamper observer, 400 ms arming delay, IntersectionObserver v2 visibility on Chromium. Weaker on Firefox (delay only). Accepted, documented |
 | F4 | Low | Extension (fill) | A frame could navigate between the user's pick and the fill, and receive another origin's credentials | **Fixed by design**: fills are addressed to the frame (and, on Chromium, its `documentId`), and the content script refuses unless its origin equals the matched one |
 | F5 | Low | Core / extension | A login iframe of site A embedded in site B was matched on the frame URL alone | **Fixed**: `topUrl` is sent for iframes, and the core requires the item to match both |
@@ -307,7 +307,7 @@ value planted, or swapped after the user typed, has no matching record.
 Tests: `autofill.test.ts` ("ignores passwords a page script planted or
 swapped"), `content.test.ts` ("no save-prompt oracle").
 
-### F2. Destructive writes (Medium, fixed; residual accepted)
+### F2. Destructive writes (Medium, fixed; residual reduced and accepted)
 
 `save_login` with an item ID replaces a password. Everything that can use
 the bridge could do this: a compromised extension, or same-user malware (P9).
@@ -324,9 +324,45 @@ Now:
 * Only the password changes. The title, username, URLs, TOTP and notes are
   kept.
 
-Residual: 5 changes spaced 10 minutes apart still flush the history. A
-desktop-side confirmation for browser-initiated updates would close this. It
-is deferred, and listed in `native-messaging.md` §8.
+A browser `save_login` update of a login whose password changed in the last
+24 hours (newest `password_history` entry; desktop edits and synced changes
+count) now needs the user's Allow in the desktop app. An update inside the
+10-minute interval is asked too, instead of answering `rate_limited`; an
+allowed change restarts the interval (`save_sso` stays `rate_limited`). The
+bridge releases the vault lock, asks through the desktop's hook (60 s, then
+deny; the desktop enforces the deadline as well), allows one pending
+confirmation at a time (`busy` otherwise, with at most 2 background answers
+per connection), and on Allow re-checks the lock epoch and authorizes the
+save again from scratch. A lock in between refuses it, and an item deleted or
+trashed during the wait answers `denied` (no probing). The dialog is
+"Change this password?" with the login's name, username and site; Deny is the
+default, focused and the Escape action, and Allow arms after 500 ms. The
+answer command `answer_update_confirmation` is in `main.json` only, and
+accepts only the pending confirmation's ID. Spec:
+`docs/superpowers/specs/2026-10-13-confirm-repeat-password-change-design.md`.
+Tests: `crates/havenkeys-core/tests/update_confirmation.rs`, the "repeat
+password changes" block of `crates/havenkeys-bridge/tests/bridge.rs`,
+`apps/desktop/src-tauri/src/confirm.rs`, and the extension's `save_login`
+tests.
+
+Residual (reduced, not closed): the 24 h rule asks only when the newest
+history entry is under 24 hours old. Changes spaced more than 24 hours apart
+are never asked, so five changes about a day apart (roughly 5 days) still
+flush the 5-entry history without a single click. Before this change that
+took about an hour. Within a day, cycling the history needs one Allow per
+change.
+
+Also accepted: a hostile caller can raise the dialog over and over (one at a
+time, each for up to 60 s, within the secret rate limit). Deny is the default
+and the Escape action, and the dialog names the login and the site. An older
+extension keeps its 10 s timeout, so a change that needs confirmation fails
+unless answered quickly.
+
+**Info (F2-i).** The Quick Access window has `core:event:allow-listen`, so a
+global `listen()` there could receive the `bridge://confirm-update` payload
+(title, username and site of the login being changed). It cannot answer:
+`answer_update_confirmation` is `main.json` only. It already sees these
+overviews through `list_items`, so nothing new is disclosed.
 
 ### F3. Clickjacking (Medium, mitigated)
 
@@ -407,8 +443,7 @@ and the fault was in the generator. It is a reminder that whole-site rules
 (the default) cover every subdomain of the registrable domain, and that
 "This exact site" exists for sites where that is too broad.
 
-Windows pipe owner check (P10) is fixed in code by BR-1 (unverified on Windows). Still open for Phase 6: desktop confirmation
-for browser-initiated password changes (F2 residual), macOS screen lock,
+Windows pipe owner check (P10) is fixed in code by BR-1 (unverified on Windows). Still open for Phase 6: macOS screen lock,
 export, and the manual runtime checks (#14, Phase 5 browser checklist).
 
 ---
@@ -3869,3 +3904,8 @@ because the shortcut works while locked. Listed in `security-model.md` §4.
 - [ ] Windows: with another app holding Ctrl+Shift+Space, Settings says "The shortcut is in use by another app." and the switch stays on.
 - [ ] macOS: opened from the main window, Esc returns to the main window; opened from another app, Esc returns to that app.
 - [ ] First run (no vault): the shortcut raises the main window instead.
+
+### Manual checks for the F2 confirmation (owner)
+- [ ] A 60 s wait with no answer ends in "Not saved" in Chrome (service worker lifetime) and in Firefox (event page).
+- [ ] The "Change this password?" dialog appears over other windows on macOS and on Windows.
+- [ ] `inert` on the main content behind the dialog works in both webviews (Tauri on macOS and on Windows).

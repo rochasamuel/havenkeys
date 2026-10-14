@@ -451,7 +451,17 @@ click.
 
 Saving an **update** changes only that login's password. The old one moves
 to the login's password history (5 entries, shown in the desktop app), and
-the bridge allows one browser-initiated change per item every 10 minutes. A
+the bridge allows one browser-initiated change per item every 10 minutes. If
+the login's password already changed in the last 24 hours (in the browser, in
+the desktop app or on another device), or the change falls inside that
+10-minute interval, the desktop app opens "Change this password?" with the
+login's name, username and the page's site, and saves only on Allow (Deny is
+the default; 60 s, then not saved). After 2 s without an answer the save
+prompt shows "Confirm in HavenKeys…". It ends with "Not saved" on Deny or
+timeout, or "Not saved — HavenKeys is waiting for another confirmation" when
+another one is open, and stays 30 s after a failure. Closing the prompt does
+not withdraw the question in the desktop app; the answer there still applies.
+A prompt shown again after navigation joins the same pending confirmation. A
 new login is saved with the page's origin as a whole-site rule.
 
 **A new login's name** is editable in the prompt before saving. It starts as

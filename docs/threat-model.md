@@ -201,7 +201,10 @@ the vault key or the master password, `find_matches` returns no secrets, and
 an unknown item ID looks the same as "not saved for this site". A compromised
 extension can still obtain the password of any login **for a site whose URL
 it claims**, within the rate limit. The browser-reported tab URL is only as
-trustworthy as the extension that reports it.
+trustworthy as the extension that reports it. Its writes are bounded too. A
+repeat password change of a login within 24 hours needs the user's Allow in
+the desktop app (`security-review.md` F2); changes spaced further apart do
+not.
 
 ### T5 — Compromised renderer / UI process
 * No cryptography in JavaScript; no keys in JavaScript.
@@ -882,7 +885,7 @@ because:
 | A12 | Fill arrives after the frame navigated to another origin | Refused by the content script (origin check; Chromium also pins the document) | `content.test.ts` |
 | A13 | Menu frame or other tab tries to pick an item the menu did not offer | Refused | `inline-handler.test.ts` |
 | A14 | Page plants a password and forges a submit to probe the vault | No report, no prompt | `autofill.test.ts`, `content.test.ts` |
-| A15 | Extension overwrites another site's login, or floods password changes | DENIED / one change per item per 10 min; old passwords kept in history | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |
+| A15 | Extension overwrites another site's login, or floods password changes | DENIED / one change per item per 10 min without the desktop; a repeat change within 24 h needs Allow in the desktop app; old passwords kept in history | `crates/havenkeys-core/tests/security.rs`, `crates/havenkeys-core/tests/update_confirmation.rs`, `crates/havenkeys-bridge/tests/bridge.rs` |
 | A1p | Passkey assertion for github.com requested from evil.com (or from a look-alike, a public suffix, plain http, a cross-site frame) | DENIED; nothing signed | `crates/havenkeys-core/src/passkey/rp.rs`, `crates/havenkeys-core/tests/passkeys.rs` (`attack_wrong_origin_is_denied`), `crates/havenkeys-bridge/tests/bridge.rs` (`passkey_attacks_through_the_bridge`), `tests/fuzz.rs` (`fuzz_authorize_rp`) |
 | A2p | Extension asks to sign with an arbitrary item ID / credential ID, or one bound to another rpId | DENIED, indistinguishable from "no such passkey" at the bridge | `crates/havenkeys-core/tests/passkeys.rs` (`attack_arbitrary_ids_are_denied`), `crates/havenkeys-bridge/tests/bridge.rs` |
 | A3p | Vault locked, passkey sign-in or creation requested | `locked`; nothing signed or created | `crates/havenkeys-core/tests/passkeys.rs` (`attack_locked_vault_is_refused`), `crates/havenkeys-bridge/tests/bridge.rs` |

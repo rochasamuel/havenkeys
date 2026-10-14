@@ -377,6 +377,8 @@ error.
 | Lookup rate | burst 60, then 5/s | bridge (global) |
 | Secret rate | burst 10, then 1 per 2 s | bridge (global) |
 | Request timeout | 10 s | extension |
+| `save_login` timeout | 75 s (the desktop may wait 60 s for the user) | extension |
+| Pending desktop confirmations | 1 (others: `busy`); 60 s, then denied | bridge |
 | Idle port | closed after 60 s | extension |
 
 ## 4. Validation at each hop
@@ -436,7 +438,15 @@ For every request the bridge and core check, in this order:
 7. **Writes:** `save_login` updates change only the password, and the
    replaced one goes to the item's password history (5 entries). The bridge
    allows one such change per item every 10 minutes, so a flood cannot push
-   the real password out of the history quickly. After a successful save, the
+   the real password out of the history quickly. A `save_login` update of a
+   login whose password changed in the last 24 hours, or one inside that
+   10-minute interval, is not saved until the user allows it in the desktop
+   app. The bridge asks without holding the vault lock, answers on a thread of
+   its own so the connection keeps serving other requests, and on Allow
+   authorizes the save again from scratch. Deny, the 60 s deadline, a lock
+   meanwhile, an item deleted meanwhile or no desktop hook answer `denied`. A
+   second confirmation while one is pending answers `busy`. An allowed change
+   restarts the item's 10-minute interval. After a successful save, the
    desktop UI is told to refresh its list (`vault://items-changed`, no data).
    `passkey_create` is the same kind of write: sealed, sent to the server,
    and answered only after the server accepted it.
@@ -689,8 +699,15 @@ with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedI
 * **A compromised extension can write.** Within the rate limits it can add
   logins for sites it names, and replace the password of a login for a site
   it names. Old passwords stay in the item's history, and there is at most
-  one change per item every 10 minutes, but a patient attacker can still
-  cycle a password out of the 5-entry history over about an hour.
+  one change per item every 10 minutes. A repeat change within 24 hours
+  needs the user's Allow in the desktop app, but changes spaced more than 24
+  hours apart are never asked, so a patient attacker can still cycle a
+  password out of the 5-entry history in about 5 days with no click. Within a
+  day it takes one Allow per change. The caller can raise that dialog
+  repeatedly (one at a time).
+* **Version skew.** An extension older than this change keeps a 10 s timeout
+  for `save_login`, so an update that needs confirmation fails unless answered
+  quickly. A desktop older than this change never asks.
 
 ## 9. Tests
 
@@ -698,7 +715,8 @@ with a provider (Google, Microsoft, GitHub, Apple, Facebook, Discord, X, LinkedI
 |---|---|
 | `crates/havenkeys-protocol/tests/messages.rs` | A5 parsing cases, version handling, error text never echoes input, deterministic fuzz (50 000 cases) |
 | `crates/havenkeys-protocol/src/frame.rs` | A6 framing: rejected before allocation, resync after discard, truncated streams |
-| `crates/havenkeys-bridge/tests/bridge.rs` | A1 wrong origin, A2 arbitrary item ID, A3 locked, integration switch, rate limit, secret minimization, and over a real socket: A5, A6, lock events, connection limit, second-instance and stale-socket handling, non-private directory refusal |
+| `crates/havenkeys-core/tests/update_confirmation.rs` | When a password change needs confirmation (24 h rule, interval, desktop and synced changes) |
+| `crates/havenkeys-bridge/tests/bridge.rs` | repeat-change confirmation (allow, deny, timeout, lock while waiting, re-authorization, busy, connection not blocked); A1 wrong origin, A2 arbitrary item ID, A3 locked, integration switch, rate limit, secret minimization, and over a real socket: A5, A6, lock events, connection limit, second-instance and stale-socket handling, non-private directory refusal |
 | `crates/havenkeys-native-host/tests/host.rs` | Runs the real host binary: relaying, Firefox/Chrome caller check, desktop not running, A5/A6 at the host, truncated input, and a hostile fake desktop (invalid messages dropped, spoofed error text replaced, `disconnected` event) |
 | `packages/protocol/src/index.test.ts` | TS validator accepts exact shapes only |
 | `apps/extension/src/**/*.test.ts` | Native client (ID correlation, timeouts, host loss, idle close, type mismatch), popup request validation, URL stripping, the popup never supplying URLs, content/menu/save message validation, menu sessions (single use, same tab only, offered items only, expiry, lock), save prompts (unchanged logins, multi-step, expiry, other tabs), content-script origin check and sender check, untrusted events, source hygiene |
