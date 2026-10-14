@@ -42,9 +42,12 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 type Frame = Zeroizing<Vec<u8>>;
 
 /// Requests one connection may have answered on threads of their own at
-/// once (see `may_wait_for_user`). Only one confirmation waits at a time
-/// across all connections; this leaves room for it plus one change that
-/// does not ask, and answers the rest `busy` without starting a thread.
+/// once (see `may_wait_for_user`); the rest are answered `busy` without
+/// starting a thread. One place is for the confirmation that may be waiting
+/// for the user (only one waits at a time, across all connections). The
+/// second lets a password change that needs no confirmation (another
+/// login's first change in its interval) still go through meanwhile,
+/// instead of being refused only because a confirmation is pending.
 const MAX_BACKGROUND_PER_CONNECTION: usize = 2;
 
 /// Hook run once `open_item` is allowed; see `Bridge::set_open_item_hook`.
@@ -741,4 +744,24 @@ fn prepare_endpoint(endpoint: &Endpoint) -> io::Result<()> {
 #[cfg(windows)]
 fn prepare_endpoint(_endpoint: &Endpoint) -> io::Result<()> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn background_slots_are_capped_per_connection_and_freed_on_drop() {
+        let count = Arc::new(AtomicUsize::new(0));
+        let first = BackgroundSlot::claim(&count).expect("first place");
+        let _second = BackgroundSlot::claim(&count).expect("second place");
+        assert!(BackgroundSlot::claim(&count).is_none(), "third is refused");
+        drop(first);
+        assert!(
+            BackgroundSlot::claim(&count).is_some(),
+            "freed place reused"
+        );
+        // The temporary above was dropped again: one place still held.
+        assert_eq!(count.load(Ordering::Acquire), 1);
+    }
 }

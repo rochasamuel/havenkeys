@@ -2345,18 +2345,22 @@ mod socket {
     }
 
     /// Makes the confirmation hook wait until the test answers on the
-    /// returned sender (or 10 s pass, which counts as a Deny).
-    fn hold_confirmations(f: &Fixture) -> mpsc::Sender<bool> {
+    /// returned sender (or 10 s pass, which counts as a Deny). The returned
+    /// receiver gets a message each time the hook is entered.
+    fn hold_confirmations(f: &Fixture) -> (mpsc::Sender<bool>, mpsc::Receiver<()>) {
         let (release_tx, release_rx) = mpsc::channel::<bool>();
+        let (entered_tx, entered_rx) = mpsc::channel::<()>();
         let release_rx = Mutex::new(release_rx);
+        let entered_tx = Mutex::new(entered_tx);
         f.bridge.set_confirm_update_hook(move |_summary, _timeout| {
+            let _ = entered_tx.lock().unwrap().send(());
             release_rx
                 .lock()
                 .unwrap()
                 .recv_timeout(Duration::from_secs(10))
                 .unwrap_or(false)
         });
-        release_tx
+        (release_tx, entered_rx)
     }
 
     fn save_update(id: u32, url: &str, password: &str, item: Uuid) -> Vec<u8> {
@@ -2378,12 +2382,14 @@ mod socket {
         let f = online_fixture();
         let gh = "https://github.com/";
         assert!(error_code(&save(&f, gh, None, "one", Some(f.github))).is_none());
-        let release_tx = hold_confirmations(&f);
+        let (release_tx, entered_rx) = hold_confirmations(&f);
         let (_dir, ep) = serve(&f);
         let mut s = ep.connect().unwrap();
         // Fail instead of hanging if the reader thread is stuck.
         s.set_recv_timeout(Some(Duration::from_secs(5))).unwrap();
         write_frame(&mut s, &save_update(7, gh, "two", f.github), usize::MAX).unwrap();
+        // The save is with the user before `status` is sent.
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let r = roundtrip(&mut s, &request(8, serde_json::json!({"type": "status"})));
         assert_eq!(r["id"], 8, "status answered while the save waits");
         release_tx.send(true).unwrap();
@@ -2400,13 +2406,13 @@ mod socket {
         let f = online_fixture();
         let gh = "https://github.com/";
         assert!(error_code(&save(&f, gh, None, "one", Some(f.github))).is_none());
-        let release_tx = hold_confirmations(&f);
+        let (release_tx, entered_rx) = hold_confirmations(&f);
         let (_dir, ep) = serve(&f);
         let mut s = ep.connect().unwrap();
         s.set_recv_timeout(Some(Duration::from_secs(5))).unwrap();
         write_frame(&mut s, &save_update(1, gh, "two", f.github), usize::MAX).unwrap();
-        // Let the first one reach the user before the burst.
-        std::thread::sleep(Duration::from_millis(200));
+        // The first one holds the confirmation slot before the burst.
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         for id in 2..=21 {
             write_frame(&mut s, &save_update(id, gh, "three", f.github), usize::MAX).unwrap();
         }
