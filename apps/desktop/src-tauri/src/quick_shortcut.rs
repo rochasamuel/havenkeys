@@ -148,7 +148,6 @@ pub async fn set_quick_access_shortcut(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quick_access::ShortcutRefusal;
 
     #[test]
     fn each_refusal_has_its_own_fixed_message_under_one_code() {

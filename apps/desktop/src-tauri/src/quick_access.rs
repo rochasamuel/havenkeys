@@ -322,6 +322,7 @@ struct Registration {
     registered: bool,
     in_use: bool,
 }
+
 pub struct QuickAccess {
     dir: PathBuf,
     registration: Mutex<Registration>,
@@ -594,6 +595,17 @@ pub fn centered(
 mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
+
+    #[test]
+    fn every_allowed_key_parses_unless_reserved() {
+        for (_, name) in ALLOWED_KEYS {
+            let chord = format!("Control+Shift+{name}");
+            if RESERVED.contains(&chord.as_str()) {
+                continue;
+            }
+            assert!(parse_keys(&chord).is_ok(), "{chord} should parse");
+        }
+    }
 
     /// A fake OS. `log` records "+keys" for every register attempt and
     /// "-keys" for every unregister, in order.
