@@ -12,7 +12,7 @@ import {
   SAVE_MIN_HEIGHT,
   type BackgroundToContent,
 } from "../messaging/inline";
-import { createInlineHandler, MENU_TTL_MS, SAVE_TTL_MS, type FrameRef, type InlineDeps } from "./inline-handler";
+import { createInlineHandler, MENU_TTL_MS, SAVE_FAILED_TTL_MS, SAVE_TTL_MS, type FrameRef, type InlineDeps } from "./inline-handler";
 
 const GH = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const OTHER = "11111111-2222-4333-8444-555555555555";
@@ -676,6 +676,94 @@ describe("save prompts", () => {
       await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
       expect(await h.handleInline(1, { type: "save_confirm", token: T1 }), code).toEqual({ ok: false, message });
     }
+  });
+
+  it("keeps the prompt open while the desktop is still asking, past the prompt's lifetime", async () => {
+    let answer!: (v: unknown) => void;
+    const { h, sent, requests } = setup((r) => {
+      if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+      if (r.type === "save_login") return new Promise((res) => (answer = res));
+      return defaultAnswer(r);
+    });
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+    const confirming = h.handleInline(1, { type: "save_confirm", token: T1 });
+    await vi.advanceTimersByTimeAsync(SAVE_TTL_MS + 1);
+    expect(sent.map((x) => x.msg.type)).not.toContain("bg_close_save");
+    // A second confirm while the first waits is refused, not sent twice.
+    expect((await h.handleInline(1, { type: "save_confirm", token: T1 })).ok).toBe(false);
+    answer({ type: "save_login", id: GH });
+    expect(await confirming).toEqual({ ok: true, value: null });
+    expect(requests.filter((r) => r.type === "save_login")).toHaveLength(1);
+    expect(sent.at(-1)?.msg).toEqual({ type: "bg_close_save", token: T1 });
+  });
+
+  it("a refused update stays on screen to say why, without its password, then closes", async () => {
+    for (const end of ["dismiss", "expire"] as const) {
+      const { h, sent, requests } = setup((r) => {
+        if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+        if (r.type === "save_login") throw new BridgeError("denied", "x");
+        return defaultAnswer(r);
+      });
+      await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+      expect(await h.handleInline(1, { type: "save_confirm", token: T1 })).toEqual({ ok: false, message: "Not saved" });
+      expect(sent.map((x) => x.msg.type), end).not.toContain("bg_close_save");
+      // Nothing more can be saved from it, it is not offered again after a navigation, and it can still resize.
+      expect((await h.handleInline(1, { type: "save_confirm", token: T1 })).ok, end).toBe(false);
+      expect((await h.handleInline(1, { type: "save_state", token: T1 })).ok, end).toBe(false);
+      expect((await h.handleInline(1, { type: "save_resize", token: T1, height: 170 })).ok, end).toBe(true);
+      expect(requests.filter((r) => r.type === "save_login"), end).toHaveLength(1);
+      if (end === "dismiss") await h.handleInline(1, { type: "save_dismiss", token: T1 });
+      else {
+        vi.advanceTimersByTime(SAVE_FAILED_TTL_MS - 1);
+        expect(sent.map((x) => x.msg.type), end).not.toContain("bg_close_save");
+        vi.advanceTimersByTime(1);
+      }
+      expect(sent.at(-1)?.msg, end).toEqual({ type: "bg_close_save", token: T1 });
+    }
+    const { h } = setup((r) => {
+      if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+      if (r.type === "save_login") throw new BridgeError("denied", "x");
+      return defaultAnswer(r);
+    });
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+    await h.handleInline(1, { type: "save_confirm", token: T1 });
+    expect(await h.handleContent(frame({ url: "https://github.com/dashboard" }), { type: "cs_ready" })).toEqual({ saveToken: null, watch: null });
+  });
+
+  it("Close while the desktop is asking drops the prompt; the desktop's answer still counts", async () => {
+    let answer!: (v: unknown) => void;
+    const { h, sent } = setup((r) => {
+      if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+      if (r.type === "save_login") return new Promise((res) => (answer = res));
+      return defaultAnswer(r);
+    });
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+    const confirming = h.handleInline(1, { type: "save_confirm", token: T1 });
+    await vi.advanceTimersByTimeAsync(0);
+    await h.handleInline(1, { type: "save_dismiss", token: T1 });
+    expect(sent.at(-1)?.msg).toEqual({ type: "bg_close_save", token: T1 });
+    const before = sent.length;
+    answer({ type: "save_login", id: GH });
+    expect(await confirming).toEqual({ ok: true, value: null });
+    expect(sent.length).toBe(before);
+  });
+
+  it("a confirm that finishes after a newer prompt replaced it leaves the newer one alone", async () => {
+    let answer!: (v: unknown) => void;
+    const { h, sent } = setup((r) => {
+      if (r.type === "check_login") return { type: "check_login", action: "update", itemId: GH };
+      if (r.type === "save_login") return new Promise((res) => (answer = res));
+      return defaultAnswer(r);
+    });
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "new-pw" });
+    const confirming = h.handleInline(1, { type: "save_confirm", token: T1 });
+    await vi.advanceTimersByTimeAsync(0);
+    await h.handleContent(frame(), { type: "cs_submit", username: "octo", password: "newer-pw" });
+    const T2 = "2".padStart(32, "0");
+    answer({ type: "save_login", id: GH });
+    await confirming;
+    expect(sent.some((x) => x.msg.type === "bg_close_save" && (x.msg as { token: string }).token === T2)).toBe(false);
+    expect((await h.handleInline(1, { type: "save_state", token: T2 })).ok).toBe(true);
   });
 
   it("does not prompt for unchanged logins", async () => {

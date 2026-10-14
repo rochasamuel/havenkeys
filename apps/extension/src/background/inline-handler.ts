@@ -10,8 +10,10 @@
 //   accepted only from the same tab, only for items the session offered, and
 //   the desktop re-checks the item against the URL regardless.
 // * Nothing here is persisted. Pending save prompts hold the submitted
-//   password in memory only, for at most SAVE_TTL_MS, and are dropped when
-//   the vault locks.
+//   password in memory only, for at most SAVE_TTL_MS (or until the desktop
+//   answers a save the user confirmed, at most save_login's timeout), and
+//   are dropped when the vault locks. A refused save drops its password at
+//   once; its prompt stays SAVE_FAILED_TTL_MS to say why.
 // * A sign-in run (signin-run.ts) starts only from a pick whose fill Rust
 //   marked autoSubmit, is bound to that tab, frame and origin, and every
 //   continuation fill is re-requested from the desktop for the frame's URL.
@@ -166,6 +168,8 @@ interface PendingCardSave {
   expires: number;
 }
 export const SAVE_TTL_MS = 3 * 60_000;
+/** How long a save prompt stays to say why the login was not saved (its password is already gone). */
+export const SAVE_FAILED_TTL_MS = 30_000;
 export const USERNAME_TTL_MS = 5 * 60_000;
 
 interface MenuSession {
@@ -202,6 +206,12 @@ interface PendingSave {
   /** The saved site this page only looks like: the prompt leads with a warning. */
   lookalikeOf: string | null;
   expires: number;
+  /** save_login is in flight (an update may wait for the desktop's Allow): the prompt must not expire under it. */
+  confirming: boolean;
+  /** The desktop refused the save: the password is gone, the prompt only shows why. */
+  failed: boolean;
+  /** Closes the prompt at `expires`. */
+  timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 function fail(e: unknown): { ok: false; message: string } {
@@ -249,6 +259,7 @@ export function createInlineHandler(deps: InlineDeps) {
     const s = saves.get(tabId);
     if (!s) return;
     saves.delete(tabId);
+    clearTimeout(s.timer);
     // Strings cannot be wiped in JS; dropping the only reference is the most
     // we can do (docs/security-model.md, memory).
     s.password = "";
@@ -265,10 +276,19 @@ export function createInlineHandler(deps: InlineDeps) {
     return m;
   }
 
+  /** Never hold the password, or show the prompt, past `ms` from now. */
+  function expireSave(s: PendingSave, ms: number): void {
+    clearTimeout(s.timer);
+    s.expires = deps.now() + ms;
+    s.timer = setTimeout(() => {
+      if (saves.get(s.frame.tabId) === s) dropSave(s.frame.tabId, true);
+    }, ms);
+  }
+
   function liveSave(tabId: number, token: string): PendingSave | null {
     const s = saves.get(tabId);
     if (!s || s.token !== token) return null;
-    if (s.expires <= deps.now()) {
+    if (s.expires <= deps.now() && !s.confirming) {
       dropSave(tabId, true);
       return null;
     }
@@ -716,7 +736,7 @@ export function createInlineHandler(deps: InlineDeps) {
     dropSave(frame.tabId, true);
     dropCardSave(frame.tabId, true); // one prompt per tab
     const token = deps.newToken();
-    saves.set(frame.tabId, {
+    const pending: PendingSave = {
       token,
       frame,
       username,
@@ -727,11 +747,13 @@ export function createInlineHandler(deps: InlineDeps) {
       itemId: check.itemId,
       lookalikeOf: imitated,
       expires: now + SAVE_TTL_MS,
-    });
+      confirming: false,
+      failed: false,
+      timer: undefined,
+    };
+    saves.set(frame.tabId, pending);
     // Never hold the password longer than the prompt lives.
-    setTimeout(() => {
-      if (saves.get(frame.tabId)?.token === token) dropSave(frame.tabId, true);
-    }, SAVE_TTL_MS);
+    expireSave(pending, SAVE_TTL_MS);
     // The prompt lives in the top frame. If the page is navigating, the new
     // page's content script asks for it with cs_ready.
     void deps.sendToFrame(top(frame), { type: "bg_show_save", token });
@@ -745,7 +767,8 @@ export function createInlineHandler(deps: InlineDeps) {
     if (c && c.expires > deps.now()) return { saveToken: c.token, watch };
     dropCardSave(frame.tabId, false);
     const s = saves.get(frame.tabId);
-    if (!s || s.expires <= deps.now()) {
+    // A refused save is not offered again; one waiting on the desktop is.
+    if (!s || s.failed || (s.expires <= deps.now() && !s.confirming)) {
       dropSave(frame.tabId, false);
       return { saveToken: null, watch };
     }
@@ -986,7 +1009,7 @@ export function createInlineHandler(deps: InlineDeps) {
           return { ok: true, value: { site: displayHost(c.frame.url) ?? "", title: c.title, card } };
         }
         const s = liveSave(tabId, req.token);
-        if (!s) return { ok: false, message: t.errors.promptExpired };
+        if (!s || s.failed) return { ok: false, message: t.errors.promptExpired };
         return { ok: true, value: { action: s.action, site: displayHost(s.frame.url) ?? "", username: s.shownUsername, title: s.title, lookalikeOf: s.lookalikeOf } };
       }
       case "save_confirm": {
@@ -1011,9 +1034,13 @@ export function createInlineHandler(deps: InlineDeps) {
           return { ok: true, value: null };
         }
         const s = liveSave(tabId, req.token);
-        if (!s) return { ok: false, message: t.errors.promptExpired };
+        if (!s || s.failed || s.confirming) return { ok: false, message: t.errors.promptExpired };
         // A cleared name field falls back to the suggestion; the desktop checks the rest.
         const title = s.action === "add" ? req.title?.trim() || s.title : null;
+        // An update may wait up to save_login's timeout for the desktop's
+        // Allow: the prompt stays until it answers (spec 2026-10-13 §6).
+        s.confirming = true;
+        clearTimeout(s.timer);
         try {
           await deps.client.request({
             type: "save_login",
@@ -1024,10 +1051,17 @@ export function createInlineHandler(deps: InlineDeps) {
             ...(title ? { title } : {}),
           });
         } catch (e) {
+          // The prompt says why; the password goes now. Unless a newer
+          // prompt or a lock replaced this one meanwhile.
+          if (saves.get(tabId) === s) {
+            s.confirming = false;
+            s.failed = true;
+            s.password = "";
+            expireSave(s, SAVE_FAILED_TTL_MS);
+          }
           return saveFailure(e);
-        } finally {
-          dropSave(tabId, true);
         }
+        if (saves.get(tabId) === s) dropSave(tabId, true);
         return { ok: true, value: null };
       }
       case "save_dismiss":
