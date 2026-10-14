@@ -379,15 +379,18 @@ a translated string".
 
 ## Quick Access window
 
-A global shortcut (Cmd/Ctrl+Shift+Space) opens a small search window over
+A global shortcut (Cmd/Ctrl+Shift+Space by default; changeable in Settings) opens a small search window over
 whatever the user is doing, to copy a login's password, username or one-time
 code without opening the main window.
 
-* **Shortcut.** `quick_shortcut.rs` registers the one fixed shortcut from
+* **Shortcut.** `quick_shortcut.rs` registers the one shortcut from
   Rust through `tauri-plugin-global-shortcut`; the renderer never sees it.
   Whether it is registered follows `quick-access.json` in the app data
-  folder (`{"shortcut": true|false}`, on by default), which is read at start
-  and rewritten by `set_quick_access`. The decisions (toggle, hide reasons,
+  folder (`{"shortcut": true|false, "shortcut_keys"?: "<chord>"}`, on by
+  default), which is read at start and rewritten by `set_quick_access` and
+  `set_quick_access_shortcut`. The chord rules live in `quick_access.rs`
+  (`parse_keys`) and the renderer's key table in `src/lib/shortcut.ts`,
+  cross-checked by `shortcut.test.ts`. The decisions (toggle, hide reasons,
   setting) live in `quick_access.rs` behind two small traits so the tests
   need no OS hook and no window.
 * **Window.** `quick_window.rs` drives a second window, `quick`, declared in

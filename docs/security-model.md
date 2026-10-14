@@ -87,7 +87,11 @@ row, and the server keeps the tombstone (`server-sync.md` §3).
 
 Outside the vault database, `quick-access.json` (same folder as
 `device.json`, mode 0600, written through a temporary file and a rename)
-holds `{"shortcut": true|false}` and nothing else. It is intentionally
+holds `{"shortcut": true|false}` and, only when the user chose another
+chord, `"shortcut_keys"` (a chord string such as `"Alt+Shift+K"`), nothing
+else. On load the chord passes the same rules as a proposal from Settings
+(`quick_access.rs` `parse_keys`); a missing, non-string or rule-breaking
+value means the default chord, without changing the switch. It is intentionally
 plaintext and outside the vault: the Quick Access shortcut must work while
 the vault is locked, and the vault's settings are sealed under the vault
 key. Missing or malformed means on.
@@ -219,8 +223,14 @@ a keystroke through `record_activity`, not through the search command.
   opener commands.
 * **Global shortcut.** `tauri-plugin-global-shortcut` is used from Rust
   only. No capability grants a `global-shortcut:` permission, so no
-  renderer can register, unregister or query a shortcut. The shortcut is
-  fixed (Cmd/Ctrl+Shift+Space); registration and unregistration follow the
+  renderer can register, unregister or query a shortcut. The default is
+  Cmd/Ctrl+Shift+Space; the user may choose another from Settings through
+  `set_quick_access_shortcut`, which Rust validates (at least Cmd/Super,
+  Ctrl or Alt; letters, digits, Space, F1-F12 and `` ` - = [ ] \ ; ' , . / ``;
+  a denylist of system and editing chords; the exact chord spelling, at most
+  64 bytes). The new chord is registered before the old one is released
+  (then saved, then the old one unregistered), and only the toggle of the
+  quick window is ever bound. Registration and unregistration follow the
   setting in `quick-access.json`.
 * **Screen capture (TOTP QR scan).** `scan_totp_qr` reads the clipboard
   image and, only if that holds no TOTP code, captures every monitor
@@ -247,7 +257,7 @@ a keystroke through `record_activity`, not through the search command.
 
 ## 7. Renderer ↔ core interface
 
-Every command the renderer can call — all 82 of them, which is the whole
+Every command the renderer can call — all 83 of them, which is the whole
 surface. `build.rs` declares this list, `lib.rs` registers it, the
 capability files grant exactly it between them, and `src/lib/commands.test.ts` fails if they (or the
 commands `api.ts` calls) ever disagree. "Online"
@@ -310,7 +320,8 @@ means a live server session, which a locked vault does not have.
 | `open_login_field_url` | yes | no. Rust reads the URL field's saved value by field id, re-normalises it and opens it only if it is http(s); the renderer supplies no URL |
 | `check_card_number` | no | no. Returns the brand the number's prefix names and whether its check digit passes; keeps nothing |
 | `quick_access_status` | no | no. Whether the shortcut is on and whether it is registered or in use by another app |
-| `set_quick_access` | no | no. Writes `quick-access.json` and registers or unregisters the shortcut |
+| `set_quick_access` | yes (unlocked) | no. Writes `quick-access.json` and registers or unregisters the shortcut |
+| `set_quick_access_shortcut` | yes (unlocked) | no. Takes a chord string or null (default); Rust checks the rules, registers it only if the OS accepts it, saves `quick-access.json`, then releases the old chord. Refused: `quick_access_shortcut_invalid` with one of three fixed reasons; taken: status with `candidateInUse`. In `main.json` only |
 | `hide_quick_window` | no | no. Takes no argument; callable from the quick window only; hides that window and nothing else |
 | `answer_update_confirmation` | no (a lock denies the pending question) | no. Takes the pending confirmation's ID and Allow/Deny; any other ID is refused. In `main.json` only (not the Quick Access window). Allow lets one browser `save_login` password change proceed, which Rust then authorizes again from scratch; the dialog shows the login's name, username and site, and Deny is the default |
 | `copy_account_field` | yes | no. Copies the account's email, server, account ID or Secret Key from Rust, cleared after the clipboard delay; the field is a closed enum |
@@ -1024,7 +1035,10 @@ See `threat-model.md` §4 and `security-review.md`.
   sessions. Without an X display the plugin is not loaded and Settings shows
   the shortcut as in use. The quick window takes keyboard focus (a
   non-activating panel comes with A1). macOS may not report a shortcut that
-  another app already holds, so "in use" can be missing there. The clipboard
+  another app already holds, so "in use" can be missing there (it may also
+  accept a chord another app uses without reporting it when you change the
+  shortcut). While recording a new chord, pressing the current chord still
+  opens Quick Access, because the OS takes it first. The clipboard
   limits of §9 apply unchanged. The quick window is always dark, whatever
   theme the main window uses.
 

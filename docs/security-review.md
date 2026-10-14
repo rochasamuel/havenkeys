@@ -3831,7 +3831,8 @@ audit.
 | QA1 | Info | `quick` window, `capabilities/quick.json` | A second webview that can unlock the vault and copy secrets | By design; least-privilege capability |
 | QA2 | Info | Global shortcut | Any local process that can send key events can open the window | Accepted; same trust level as the user's session |
 | QA3 | Info | `tauri-plugin-global-shortcut` | New dependency | Audited; see below |
-| QA4 | Info | `quick-access.json` | Plaintext setting outside the vault | Intentional; holds one boolean |
+| QA4 | Info | `quick-access.json` | Plaintext setting outside the vault (switch and chosen chord) | Intentional; holds one boolean and an optional chord |
+| QA5 | Info | `set_quick_access_shortcut`, `main.json` | The main renderer chooses which allowed chord opens Quick Access | Accepted; validated in Rust, user-visible, resettable |
 
 ### QA1. A second window with its own capability (Info, by design)
 **Component:** `tauri.conf.json` window `quick`, `capabilities/quick.json`,
@@ -3850,6 +3851,9 @@ pin the list (`quick_window.rs`, `commands.test.ts`). The spec text said
 `main.json` was unchanged; in fact it gained `allow-quick-access-status`
 and `allow-set-quick-access` (the Settings block), and `quick.json`
 includes `record-activity` so that copying counts as activity.
+`main.json` also gained `allow-set-quick-access-shortcut` (spec
+2026-10-14); `quick.json` is unchanged, pinned by `quick_window.rs` and
+`commands.test.ts`.
 **Remaining limitations:** a compromised quick renderer can copy any
 login's password to the clipboard and send whatever it is given to
 `unlock_vault`, as the main window can.
@@ -3892,10 +3896,29 @@ development machine (Linux/WSL); the owner's builds there confirm it.
 **Component:** `quick_access.rs`.
 **Attack scenario:** an attacker with the app data folder learns whether
 the shortcut is on.
-**Mitigation:** the file holds `{"shortcut": true|false}` only, mode 0600,
-next to `device.json` and `updates.json`. It must be outside the vault
-because the shortcut works while locked. Listed in `security-model.md` §4.
+**Mitigation:** the file holds `{"shortcut": true|false}` and an optional
+`shortcut_keys` chord, mode 0600, next to `device.json` and `updates.json`.
+A tampered `shortcut_keys` goes through `parse_keys` on load and falls back
+to the default chord; it reveals only which key chord the user prefers. It
+must be outside the vault because the shortcut works while locked. Listed in
+`security-model.md` §4.
 **Remaining limitations:** none.
+
+### QA5. Choosing the Quick Access chord (Info, accepted)
+**Component:** `quick_access.rs` (`parse_keys`, `set_shortcut`),
+`quick_shortcut.rs` (`set_quick_access_shortcut`), `capabilities/main.json`,
+`apps/desktop/src/lib/shortcut.ts`, `QuickAccessSection.tsx`.
+**Attack scenario:** a compromised main renderer (vault unlocked) picks a
+chord that shadows a shortcut the user relies on in another app, or tries to
+register arbitrary or many global shortcuts.
+**Mitigation:** no `global-shortcut:` permission is granted; the only path
+is this command, which needs the vault unlocked, holds one chord at a time
+(the old one is released), binds only the quick-window toggle, and re-checks
+the chord in Rust (modifier, allowed keys, denylist, exact spelling, 64
+bytes). The chord is shown in Settings and Reset restores the default.
+**Remaining limitations:** within the allowed set the renderer can still
+shadow an app's own chord (for example Ctrl+L) while HavenKeys runs; the user
+sees it in Settings.
 
 ### Manual checks (owner, macOS and Windows)
 - [ ] With another app in front, the shortcut opens Quick Access centred on the display under the pointer, search field focused.
@@ -3908,6 +3931,12 @@ because the shortcut works while locked. Listed in `security-model.md` §4.
 - [ ] Windows: with another app holding Ctrl+Shift+Space, Settings says "The shortcut is in use by another app." and the switch stays on.
 - [ ] macOS: opened from the main window, Esc returns to the main window; opened from another app, Esc returns to that app.
 - [ ] First run (no vault): the shortcut raises the main window instead.
+- [ ] Settings → Quick Access → Change…: press Alt+Shift+K (Windows) / ⌥⇧K (macOS); the row shows it; the old chord no longer opens Quick Access; the new one does; it survives a restart.
+- [ ] Press Cmd/Ctrl+C while recording: "Reserved by the system." and recording stays open; Esc cancels and the old chord still works.
+- [ ] Windows: record a chord another app holds: "That shortcut is in use by another app." and the old chord still works.
+- [ ] With the old chord held by another app ("in use"), Choose another shortcut → a free chord fixes it without a restart.
+- [ ] Reset returns to Cmd/Ctrl+Shift+Space; turning the switch off and on keeps a chosen chord.
+- [ ] A non-US layout (e.g. AZERTY on Windows): the recorded chord is the physical key; note what the row shows.
 
 ### Manual checks for the F2 confirmation (owner)
 - [ ] A 60 s wait with no answer ends in "Not saved" in Chrome (service worker lifetime) and in Firefox (event page).
