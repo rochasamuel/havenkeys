@@ -133,8 +133,8 @@ const identity = {
   address: "Quadra 02 Conjunto 01 (Setor Especial) with a long street name, 10\nEstrutural\nBrasília – DF\nCEP 71266-105\nBrasil",
 };
 
-/** A login's custom fields (login_fields): every type, a titled and an untitled section. */
-const loginFields = [
+/** A login's custom fields (item_fields): every type, a titled and an untitled section. */
+const itemFields = [
   {
     id: "c1000000-0000-4000-8000-000000000001",
     title: null,
@@ -241,13 +241,13 @@ function baseResponses() {
     reveal_card_field: "5200828282827609",
     copy_card_field: { clearAfterSeconds: 30 },
     check_card_number: { brand: "mastercard", checkDigitOk: false },
-    login_fields: [],
+    item_fields: [],
     sso_accounts: [],
     provider_login: { kind: "none" },
-    reveal_login_field: "a deploy key passphrase that is rather long",
-    login_field_totp: { code: "77104523", period: 30, secondsRemaining: 4 },
-    copy_login_field: { clearAfterSeconds: 30 },
-    open_login_field_url: null,
+    reveal_item_field: "a deploy key passphrase that is rather long",
+    item_field_totp: { code: "77104523", period: 30, secondsRemaining: 4 },
+    copy_item_field: { clearAfterSeconds: 30 },
+    open_item_field_url: null,
     get_item: items[0],
     reveal_secret: "correct horse battery staple — a long passphrase note\nSecond line of the note.",
     password_history: [NOW - 40 * DAY, NOW - 200 * DAY],
@@ -567,7 +567,7 @@ export const desktopScenarios = [
   },
   {
     name: "detail-custom-fields",
-    respond: { login_fields: loginFields },
+    respond: { item_fields: itemFields },
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
@@ -579,7 +579,7 @@ export const desktopScenarios = [
   },
   {
     name: "detail-custom-fields-failed",
-    respond: { login_fields: reject("internal") },
+    respond: { item_fields: reject("internal") },
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
@@ -846,7 +846,7 @@ export const desktopScenarios = [
   },
   {
     name: "editor-custom-fields",
-    respond: { login_fields: loginFields },
+    respond: { item_fields: itemFields },
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
@@ -860,7 +860,7 @@ export const desktopScenarios = [
   },
   {
     name: "editor-custom-fields-reveal",
-    respond: { login_fields: loginFields },
+    respond: { item_fields: itemFields },
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
@@ -874,7 +874,7 @@ export const desktopScenarios = [
   },
   {
     name: "editor-custom-fields-drag",
-    respond: { login_fields: loginFields },
+    respond: { item_fields: itemFields },
     async act(page) {
       await page.click(firstItem);
       await page.waitForTimeout(200);
