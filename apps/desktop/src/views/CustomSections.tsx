@@ -10,8 +10,8 @@ import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
 /**
- * A login's custom fields, under its built-in ones (spec
- * 2026-09-30-login-custom-fields §5.2). Loaded when the login opens or
+ * A login's or secure note's custom fields, under its built-in ones (spec
+ * 2026-09-30-login-custom-fields §5.2, 2026-10-16-secure-note-fields §5). Loaded when the login opens or
  * changes; Password values only on the eye, copies done in Rust.
  */
 export function CustomSections({ itemId, updatedAt }: { itemId: string; updatedAt: number }) {

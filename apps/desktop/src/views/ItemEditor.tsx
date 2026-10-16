@@ -42,10 +42,12 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   const [password, setPassword] = useState<SecretEdit>(isNew || !existing.hasPassword ? EMPTY : KEEP);
   const [showPassword, setShowPassword] = useState(false);
   const [totp, setTotp] = useState<SecretEdit>(isNew || !existing.hasTotp ? EMPTY : KEEP);
-  // A login's custom fields. `null` while an existing login's are loading
-  // or failed to load: nothing renders and the save sends no `sections`,
-  // so Rust keeps them as they are.
-  const [sections, setSections] = useState<EditSection[] | null>(itemType === "login" && isNew ? [] : null);
+  // A login's or note's custom fields. `null` while an existing item's are
+  // loading or failed to load: nothing renders and the save sends no
+  // `sections`, so Rust keeps them as they are.
+  const [sections, setSections] = useState<EditSection[] | null>(
+    (itemType === "login" || itemType === "secure_note") && isNew ? [] : null,
+  );
   // Notes/content are loaded (explicit edit action) so they can be edited in place.
   const [notes, setNotes] = useState<SecretEdit>(KEEP);
   const [notesText, setNotesText] = useState("");
@@ -106,7 +108,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
   // the editor a new `existing` and must not reload over the user's edits.
   const existingId = existing?.id;
   useEffect(() => {
-    if (!existingId || itemType !== "login") return;
+    if (!existingId || (itemType !== "login" && itemType !== "secure_note")) return;
     let cancelled = false;
     api
       .itemFields(existingId)
@@ -168,7 +170,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             sections: sectionsInput(sections, t.fields.types),
             tags: finalTags,
           }
-        : { itemType, title, content: textUpdate, tags: finalTags };
+        : { itemType, title, content: textUpdate, sections: sectionsInput(sections, t.fields.types), tags: finalTags };
 
     try {
       const saved = existing ? await api.updateItem(existing.id, input) : await api.createItem(input);
@@ -436,7 +438,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
       <h3 className="group-title">{itemType === "login" ? t.editor.notes : t.editor.note}</h3>
       <div className="group">
         <textarea
-          className={`edit-area${itemType === "secure_note" ? " note-input" : ""}`}
+          className={`edit-area${itemType === "secure_note" ? (sections?.length ? " note-input note-input-short" : " note-input") : ""}`}
           value={notesText}
           disabled={loadingText}
           placeholder={loadingText ? t.common.decrypting : itemType === "login" ? t.editor.notesPlaceholder : undefined}
@@ -446,9 +448,19 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
             setNotes({ mode: "set", value: e.target.value });
           }}
           spellCheck={false}
-          rows={itemType === "login" ? 4 : 14}
+          rows={itemType === "login" ? 4 : sections?.length ? 6 : 14}
         />
       </div>
+
+      {itemType === "secure_note" && sections !== null && (
+        <CustomFieldsEditor
+          itemId={existingId}
+          sections={sections}
+          onChange={setSections}
+          disabled={saving || !!readOnly}
+          onError={setError}
+        />
+      )}
 
       {error && (
         <p className="form-error" role="alert">

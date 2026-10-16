@@ -355,13 +355,20 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
       )}
 
       {item.itemType === "secure_note" && (
-        <div className="note-sheet">
+        <>
           {content === null ? (
-            <p className="muted">{t.common.decrypting}</p>
+            <div className="note-sheet">
+              <p className="muted">{t.common.decrypting}</p>
+            </div>
           ) : (
-            <p className="note-body selectable">{content}</p>
+            content !== "" && (
+              <div className="note-sheet">
+                <p className="note-body selectable">{content}</p>
+              </div>
+            )
           )}
-        </div>
+          <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
+        </>
       )}
 
       <footer className="item-foot">

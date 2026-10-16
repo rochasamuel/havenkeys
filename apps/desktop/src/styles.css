@@ -1931,6 +1931,7 @@ input::-ms-clear {
 }
 
 .note-sheet {
+  margin: 0 0 14px;
   padding: 20px 24px;
   border: 1px solid var(--group-line);
   border-radius: 12px;
@@ -2196,6 +2197,14 @@ input::-ms-clear {
 
 .edit-area.note-input {
   min-height: 320px;
+}
+
+/* With fields under it the note shrinks to its text, but never below the
+   base box: an empty note must not read as a one-line input. */
+.edit-area.note-input.note-input-short {
+  min-height: 104px;
+  field-sizing: content;
+  max-height: 480px;
 }
 
 /* ------------------------------------------------- login custom fields */

@@ -164,6 +164,19 @@ const itemFields = [
   },
 ];
 
+/** A secure note's custom fields: a titled section with a Password and an OTP field. */
+const noteFields = [
+  {
+    id: "c2000000-0000-4000-8000-000000000001",
+    title: "Router admin",
+    fields: [
+      { id: "f2000000-0000-4000-8000-000000000001", type: "text", label: "Address", value: "192.168.0.1" },
+      { id: "f2000000-0000-4000-8000-000000000002", type: "password", label: "Admin password", hasValue: true },
+      { id: "f2000000-0000-4000-8000-000000000003", type: "otp", label: "Provider portal code", hasOtp: true },
+    ],
+  },
+];
+
 const settings = {
   autoLockMinutes: 15,
   clipboardClearSeconds: 30,
@@ -604,6 +617,41 @@ export const desktopScenarios = [
     },
   },
   {
+    name: "detail-note-fields",
+    respond: { item_fields: noteFields },
+    async act(page) {
+      await page.click(".list-items li:nth-child(3) .list-item");
+      await page.waitForTimeout(200);
+    },
+  },
+  {
+    // An untitled first section right under the note text.
+    name: "detail-note-untitled-fields",
+    respond: { item_fields: itemFields },
+    async act(page) {
+      await page.click(".list-items li:nth-child(3) .list-item");
+      await page.waitForTimeout(200);
+    },
+  },
+  {
+    name: "editor-note-fields-only",
+    respond: { item_fields: noteFields, reveal_secret: "" },
+    async act(page) {
+      await page.click(".list-items li:nth-child(3) .list-item");
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+    },
+  },
+  {
+    name: "detail-note-fields-only",
+    respond: { item_fields: noteFields, reveal_secret: "" },
+    async act(page) {
+      await page.click(".list-items li:nth-child(3) .list-item");
+      await page.waitForTimeout(200);
+    },
+  },
+  {
     name: "identity",
     respond: {},
     act: async (page) => {
@@ -918,6 +966,29 @@ export const desktopScenarios = [
       await page.click(".new-menu .icon-btn");
       await page.click(".menu button >> nth=1");
       await page.waitForTimeout(200);
+    },
+  },
+  {
+    name: "editor-note-fields",
+    respond: { item_fields: noteFields },
+    async act(page) {
+      await page.click(".list-items li:nth-child(3) .list-item");
+      await page.waitForTimeout(200);
+      await page.click(".item-head-actions .btn");
+      await page.waitForTimeout(200);
+    },
+    shots: [".edit-area", ".cf-section", ".cf-add-group"],
+  },
+  {
+    name: "editor-note-first-field",
+    respond: {},
+    async act(page) {
+      await page.click(".new-menu .icon-btn");
+      await page.click(".menu button >> nth=1");
+      await page.waitForTimeout(200);
+      await page.fill(".edit-area", "Router in the hall closet.\nReset button on the back.");
+      await page.click(".cf-add .add-row");
+      await page.click(".cf-menu button >> nth=6");
     },
   },
   {

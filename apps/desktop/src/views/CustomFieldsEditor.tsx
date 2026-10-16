@@ -46,7 +46,7 @@ function focusHandle(key: string) {
   requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-cf-handle="${key}"]`)?.focus());
 }
 
-/** A login's custom fields in the editor (spec 2026-09-30-login-custom-fields §5.3). */
+/** A login's or note's custom fields in the editor (spec 2026-09-30-login-custom-fields §5.3). */
 export function CustomFieldsEditor({
   itemId,
   sections,
@@ -54,7 +54,7 @@ export function CustomFieldsEditor({
   disabled,
   onError,
 }: {
-  /** The saved login, for revealing a kept Password; absent for a new login. */
+  /** The saved item, for revealing a kept Password; absent for a new item. */
   itemId?: string;
   sections: EditSection[];
   onChange: (next: EditSection[]) => void;

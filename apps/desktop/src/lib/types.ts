@@ -107,7 +107,7 @@ export type SecretUpdate =
   | { op: "scanned"; value: string };
 
 export interface ItemInput {
-  /** A login's custom fields, whole layout in order. Absent: kept as they are. */
+  /** A login's or note's custom fields, whole layout in order. Absent: kept as they are. */
   sections?: SectionInput[];
   itemType: ItemType;
   title: string;
