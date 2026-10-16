@@ -36,7 +36,7 @@ What the desktop app does today:
   extension. The desktop app follows the OS language by default, or a choice
   in Settings; the extension follows the browser's language
 * Logins (username, password, websites with match rules, TOTP, notes)
-* Secure notes
+* Secure notes (and custom fields like a login's)
 * An **Identity** per account (name, documents such as CPF and RG, contact,
   address, anything else in custom fields): created automatically, shown and
   edited in the desktop app, each value copyable. Filling web forms from it
@@ -124,7 +124,8 @@ What the Android app does (early release; tried on one phone, the instrumented t
   the identity (needs the server); saving a login typed into a browser or an
   app after you confirm Android's save sheet
 * Passkeys through Credential Manager (Android 14+)
-* Not yet: editing custom fields, scanning a TOTP QR code, saving a login
+* Custom fields of logins and notes are shown with their labels; editing them is desktop-only
+* Not yet: scanning a TOTP QR code, saving a login
   typed while locked, an in-app updater
 
 Setting up the first computer needs an invite from whoever runs the server

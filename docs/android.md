@@ -22,8 +22,9 @@ that app (`security-model.md` §22.16, §22.17). Android M3 adds passkeys
 and Android M4 cards and the identity in Autofill (below). The redesign's
 shell (2026-10-03 spec §6) replaces the vault list: Home, Items and Settings
 tabs with their own back stacks, a search screen with recent searches, and
-an add sheet. Not yet: editing
-custom fields (kept as they are), scanning a TOTP QR code (type or paste the
+an add sheet. The phone shows the
+custom fields of logins and notes with their labels; editing them is
+desktop-only (they are kept as they are). Not yet: scanning a TOTP QR code (type or paste the
 key), saving a login typed while locked, and an in-app updater.
 
 **Nothing in `apps/android` has run on a phone or an emulator yet.** It

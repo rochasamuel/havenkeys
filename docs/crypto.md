@@ -52,9 +52,9 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
                                    Digital Asset Links cache; device-local, unsynced)
 ```
 
-A login's custom fields (`sections`: section titles, field labels and values,
-including Password and OTP setups) sit inside the same `ItemDetails::Login`
-blob. Nothing about them is in the overview, so the server and the search
+A login's or secure note's custom fields (`sections`: section titles, field
+labels and values, including Password and OTP setups) sit inside the same
+`ItemDetails::Login` or `ItemDetails::SecureNote` blob. Nothing about them is in the overview, so the server and the search
 index see no titles, labels or values.
 
 Why this shape:

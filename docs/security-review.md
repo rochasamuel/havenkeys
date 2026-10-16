@@ -2690,6 +2690,7 @@ None of these has been run.
 
 - [ ] Editor: create a login, a secure note and a card; edit each; delete one. Each shows in the list and on the desktop.
 - [ ] Edit a login that has a custom field, a passkey and an app binding on the desktop: after a phone edit all three are still there.
+- [ ] Edit a secure note that has a Password and an OTP field on the phone: after the edit both are still there, and the OTP still gives codes.
 - [ ] Change a password: the field loads the current value, stays read-only until loaded, and Save waits; leaving a field untouched keeps the stored value.
 - [ ] Rotate the phone, change the theme and the font size with an open draft: the draft stays. Change the locale (or kill the process): the draft is gone.
 - [ ] Lock (auto-lock or the lock button) with a draft open: the editor closes and the draft is gone; recents show a blank thumbnail.
