@@ -117,9 +117,9 @@ pub(super) fn join_notes(first: Option<&str>, extras: &Extras) -> Option<SecretS
     out.map(SecretString::new)
 }
 
-/// A login's custom fields (spec 2026-09-30-login-custom-fields §6).
+/// A login's or secure note's custom fields (specs 2026-09-30-login-custom-fields §6, 2026-10-16-secure-note-fields §4.5).
 #[derive(Default)]
-pub(super) struct LoginSections {
+pub(super) struct ItemSections {
     sections: Vec<SectionInput>,
     count: usize,
     /// Bytes of titles, labels and values so far, counted strictly (at least
@@ -127,7 +127,7 @@ pub(super) struct LoginSections {
     bytes: usize,
 }
 
-impl LoginSections {
+impl ItemSections {
     pub(super) fn start(&mut self, title: Option<&str>) {
         let title = non_empty(title)
             .map(|t| clean_line(t, MAX_LABEL_CHARS))
@@ -141,8 +141,8 @@ impl LoginSections {
         });
     }
 
-    /// Add a field to the current section; false when the login is full, so
-    /// the caller keeps the value in the notes.
+    /// Add a field to the current section; false when the item is full, so
+    /// the caller keeps the value in the notes or note text.
     pub(super) fn push(&mut self, label: Option<&str>, value: FieldValueInput) -> bool {
         let used = self
             .sections

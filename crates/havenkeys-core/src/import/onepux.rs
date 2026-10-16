@@ -18,7 +18,7 @@
 
 use super::common::{
     self, clean_line, fill, format_date, non_empty, set_or_keep, str_at, validated, wipe, Extras,
-    LoginSections,
+    ItemSections,
 };
 use super::{split_tags, ImportReport, ImportedItem, Parsed, MAX_ITEMS};
 use crate::card::{self, CardBrand, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
@@ -379,7 +379,7 @@ impl CardParts {
 fn login_fields(
     fields: &[Value],
     extras: &mut Extras,
-    sections: &mut LoginSections,
+    sections: &mut ItemSections,
     report: &mut ImportReport,
 ) -> (Option<String>, Option<SecretString>) {
     let mut username: Option<String> = None;
@@ -444,7 +444,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     }
 
     let mut extras = Extras::default();
-    let mut fields = LoginSections::default();
+    let mut fields = ItemSections::default();
     let mut totp: Option<SecretString> = None;
     let mut sso: Option<SignInWith> = None;
 

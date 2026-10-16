@@ -17,7 +17,7 @@
 
 use super::common::{
     brand_from_name, clean_line, collect_urls, join_notes, non_empty, parse_utc_timestamp_ms,
-    set_or_keep, str_at, validated, wipe, Extras, LoginSections,
+    set_or_keep, str_at, validated, wipe, Extras, ItemSections,
 };
 use super::{split_tags, ImportReport, ImportedItem, Parsed, MAX_ITEMS};
 use crate::card::{self, CardExpiry, CardInput, MAX_CARDHOLDER_CHARS};
@@ -158,27 +158,9 @@ fn convert_item(
                 }
                 None => None,
             };
-            let mut sections = LoginSections::default();
+            let mut sections = ItemSections::default();
             sections.start(None);
-            for f in custom {
-                let Some(value) = text(f, "value") else {
-                    continue;
-                };
-                let name = text(f, "name");
-                let candidate = match f.get("type").and_then(Value::as_i64) {
-                    Some(1) => FieldValueInput::Password(SecretUpdate::Set(value.into())),
-                    // A linked field only points at the username or password.
-                    Some(3) => continue,
-                    _ => FieldValueInput::Text(value.into()),
-                };
-                let kept = validated(candidate, || Some(value.to_owned()))
-                    .is_some_and(|fv| sections.push(name, fv));
-                if !kept {
-                    report.fields_to_notes += 1;
-                    extras.section(None);
-                    extras.push(name, value);
-                }
-            }
+            custom_sections(custom, &mut sections, &mut extras, report);
             report.logins += 1;
             ItemInput {
                 username: text(login, "username")
@@ -197,10 +179,13 @@ fn convert_item(
             }
         }
         2 => {
-            push_fields(custom, &mut extras);
+            let mut sections = ItemSections::default();
+            sections.start(None);
+            custom_sections(custom, &mut sections, &mut extras, report);
             report.secure_notes += 1;
             ItemInput {
                 content: SecretUpdate::Set(join_notes(notes, &extras).unwrap_or_default()),
+                sections: sections.finish(),
                 ..ItemInput::blank(ItemType::SecureNote, title)
             }
         }
@@ -235,14 +220,29 @@ fn convert_item(
                 5 => "sshKey",
                 _ => "",
             };
+            let mut sections = ItemSections::default();
+            sections.start(Some(type_name(other)));
             if let Some(Value::Object(values)) = item.get(key) {
                 for (name, value) in values {
-                    if let Some(v) = non_empty(value.as_str()) {
-                        extras.push(Some(&label(name)), v);
+                    let Some(v) = non_empty(value.as_str()) else {
+                        continue;
+                    };
+                    let label = label(name);
+                    let candidate = if SECRET_KEYS.contains(&name.as_str()) {
+                        FieldValueInput::Password(SecretUpdate::Set(v.into()))
+                    } else {
+                        FieldValueInput::Text(v.into())
+                    };
+                    let kept = validated(candidate, || Some(v.to_owned()))
+                        .is_some_and(|fv| sections.push(Some(&label), fv));
+                    if !kept {
+                        report.fields_to_notes += 1;
+                        extras.push(Some(&label), v);
                     }
                 }
             }
-            push_fields(custom, &mut extras);
+            sections.start(None);
+            custom_sections(custom, &mut sections, &mut extras, report);
             report.converted_to_notes += 1;
             let mut body = format!("Imported from Bitwarden ({})", type_name(other));
             let mut rendered = extras.render();
@@ -259,6 +259,7 @@ fn convert_item(
             body.zeroize();
             ItemInput {
                 content: SecretUpdate::Set(content),
+                sections: sections.finish(),
                 ..ItemInput::blank(ItemType::SecureNote, title)
             }
         }
@@ -286,6 +287,40 @@ fn label(key: &str) -> String {
     }
     out
 }
+
+/// Bitwarden custom fields into the current section: hidden (type 1)
+/// becomes Password, linked (type 3) is skipped, anything else is Text. A
+/// value that does not fit stays in the notes or note text.
+fn custom_sections(
+    custom: &[Value],
+    sections: &mut ItemSections,
+    extras: &mut Extras,
+    report: &mut ImportReport,
+) {
+    for f in custom {
+        let Some(value) = text(f, "value") else {
+            continue;
+        };
+        let name = text(f, "name");
+        let candidate = match f.get("type").and_then(Value::as_i64) {
+            Some(1) => FieldValueInput::Password(SecretUpdate::Set(value.into())),
+            // A linked field only points at the username or password.
+            Some(3) => continue,
+            _ => FieldValueInput::Text(value.into()),
+        };
+        let kept = validated(candidate, || Some(value.to_owned()))
+            .is_some_and(|fv| sections.push(name, fv));
+        if !kept {
+            report.fields_to_notes += 1;
+            extras.section(None);
+            extras.push(name, value);
+        }
+    }
+}
+
+/// Values of the types turned into notes that stay masked: the SSH private
+/// key and an identity's document numbers.
+const SECRET_KEYS: &[&str] = &["privateKey", "ssn", "passportNumber", "licenseNumber"];
 
 fn push_fields(custom: &[Value], extras: &mut Extras) {
     for f in custom {
@@ -484,7 +519,11 @@ mod tests {
         );
 
         let note = &parsed.items[1].input;
-        assert_eq!(set(&note.content), Some("pw is 1234\n\nSSID: home"));
+        assert_eq!(set(&note.content), Some("pw is 1234"));
+        let fields = &note.sections.as_ref().unwrap()[0].fields;
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].label.expose(), "SSID");
+        assert_eq!(fields[0].value.kind(), FieldKind::Text);
 
         let card = parsed.items[2].input.card.as_ref().unwrap();
         assert_eq!(set(&card.number), Some("4111111111111111"));
@@ -494,13 +533,41 @@ mod tests {
         assert_eq!(card.cardholder_name.as_ref().unwrap().expose(), "Sam Rocha");
         assert!(card.notes.is_none());
 
-        let me = set(&parsed.items[3].input.content).unwrap();
-        assert!(me.starts_with("Imported from Bitwarden (Identity)"));
-        assert!(me.contains("First name: Sam"));
-        assert!(me.contains("Passport number: X123"));
+        let me = &parsed.items[3].input;
+        assert_eq!(set(&me.content), Some("Imported from Bitwarden (Identity)"));
+        let s = &me.sections.as_ref().unwrap()[0];
+        assert_eq!(s.title.as_ref().unwrap().expose(), "Identity");
+        let kinds: Vec<(&str, FieldKind)> = s
+            .fields
+            .iter()
+            .map(|f| (f.label.expose(), f.value.kind()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                ("First name", FieldKind::Text),
+                ("Last name", FieldKind::Text),
+                ("Passport number", FieldKind::Password),
+            ]
+        );
 
-        let key = set(&parsed.items[4].input.content).unwrap();
-        assert!(key.contains("Private key: -----BEGIN KEY-----"));
+        let key = &parsed.items[4].input;
+        assert_eq!(set(&key.content), Some("Imported from Bitwarden (SSH key)"));
+        let s = &key.sections.as_ref().unwrap()[0];
+        assert_eq!(s.title.as_ref().unwrap().expose(), "SSH key");
+        let kinds: Vec<(&str, FieldKind)> = s
+            .fields
+            .iter()
+            .map(|f| (f.label.expose(), f.value.kind()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                ("Key fingerprint", FieldKind::Text),
+                ("Private key", FieldKind::Password),
+                ("Public key", FieldKind::Text),
+            ]
+        );
     }
 
     #[test]

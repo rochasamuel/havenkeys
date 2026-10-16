@@ -93,3 +93,25 @@ fn large_valid_fields_stop_at_the_total_and_the_login_stores() {
         .stage_create(input, NOW)
         .expect("imported fields pass the vault");
 }
+
+#[test]
+fn a_bitwarden_note_whose_field_is_too_long_keeps_it_in_the_text_and_stores() {
+    let data = json!({"items": [
+        {"id": "1", "type": 2, "name": "Big", "notes": "body", "secureNote": {"type": 0},
+         "fields": [
+            {"name": "Short", "value": "ok", "type": 0},
+            {"name": "Huge", "value": "z".repeat(300_000), "type": 0}
+         ]}
+    ]});
+    let parsed = havenkeys_core::import::bitwarden::parse(data.to_string().as_bytes()).unwrap();
+    let input = parsed.items.into_iter().next().unwrap().input;
+    let text = match &input.content {
+        SecretUpdate::Set(c) => c.expose().to_owned(),
+        _ => String::new(),
+    };
+    assert!(text.starts_with("body"));
+    assert!(text.contains("Huge: zzzz"));
+    assert_eq!(input.sections.as_ref().unwrap()[0].fields.len(), 1);
+    let (vault, _) = activated_vault();
+    vault.stage_create(input, NOW).expect("the note stores");
+}
