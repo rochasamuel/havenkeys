@@ -562,6 +562,91 @@ describe("suggestion menus", () => {
   });
 });
 
+describe("reopening the menu after Unlock", () => {
+  function lockedUntil(unlocked: () => boolean) {
+    return (r: Request): unknown => {
+      if (r.type === "find_matches") throw new BridgeError("locked", "x");
+      if (r.type === "status") return { type: "status", state: unlocked() ? "unlocked" : "locked" };
+      return null;
+    };
+  }
+
+  it("asks the menu's frame to reopen once the desktop says it unlocked", async () => {
+    const { h, sent } = setup(lockedUntil(() => false));
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    await h.handleInline(1, { type: "menu_show_unlock", token: T1 });
+    h.unlocked();
+    expect(sent.map((s) => s.msg)).toEqual([
+      { type: "bg_close_menu", token: T1 },
+      { type: "bg_reopen_menu", token: T1 },
+    ]);
+    expect(sent[1]!.to).toEqual({ tabId: 1, frameId: 0 });
+    // Once.
+    h.unlocked();
+    expect(sent).toHaveLength(2);
+  });
+
+  it("finds the unlock by asking, when the event does not come", async () => {
+    let open = false;
+    const { h, sent, requests } = setup(lockedUntil(() => open));
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    await h.handleInline(1, { type: "menu_show_unlock", token: T1 });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(requests.filter((r) => r.type === "status")).toHaveLength(1);
+    expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
+    open = true;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu", "bg_reopen_menu"]);
+    // Done asking.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(requests.filter((r) => r.type === "status")).toHaveLength(2);
+  });
+
+  it("stops waiting after two minutes", async () => {
+    const { h, sent, requests, advance } = setup(lockedUntil(() => false));
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    await h.handleInline(1, { type: "menu_show_unlock", token: T1 });
+    advance(120_000);
+    await vi.advanceTimersByTimeAsync(120_000);
+    const asked = requests.filter((r) => r.type === "status").length;
+    expect(asked).toBeLessThanOrEqual(60);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(requests.filter((r) => r.type === "status")).toHaveLength(asked);
+    h.unlocked();
+    expect(sent.map((s) => s.msg.type)).toEqual(["bg_close_menu"]);
+  });
+
+  it("a lock, the desktop going away or the tab closing ends the wait", async () => {
+    for (const end of ["reset", "forgetTab"] as const) {
+      const { h, sent } = setup(lockedUntil(() => false));
+      await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+      await h.handleInline(1, { type: "menu_show_unlock", token: T1 });
+      if (end === "reset") h.reset();
+      else h.forgetTab(1);
+      h.unlocked();
+      expect(sent.some((s) => s.msg.type === "bg_reopen_menu"), end).toBe(false);
+    }
+  });
+
+  it("does not wait when the desktop could not be asked", async () => {
+    const { h, sent } = setup((r) => {
+      if (r.type === "find_matches") throw new BridgeError("locked", "x");
+      if (r.type === "show_unlock") throw new BridgeError("desktop_unavailable", "x");
+      return null;
+    });
+    await h.handleContent(frame(), { type: "cs_open_menu", kind: "login" });
+    expect((await h.handleInline(1, { type: "menu_show_unlock", token: T1 })).ok).toBe(false);
+    h.unlocked();
+    expect(sent.some((s) => s.msg.type === "bg_reopen_menu")).toBe(false);
+  });
+
+  it("the reopen message carries only a menu token", () => {
+    expect(parseBackgroundMessage({ type: "bg_reopen_menu", token: T1 })).toEqual({ type: "bg_reopen_menu", token: T1 });
+    expect(parseBackgroundMessage({ type: "bg_reopen_menu", token: "x" })).toBeNull();
+    expect(parseBackgroundMessage({ type: "bg_reopen_menu", token: T1, itemId: GH })).toBeNull();
+  });
+});
+
 describe("save prompts", () => {
   it("asks the desktop, prompts in the top frame, saves on confirm", async () => {
     const { h, requests, sent } = setup();

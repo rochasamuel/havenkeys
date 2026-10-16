@@ -616,6 +616,61 @@ describe("identity fills", () => {
   }
   const emails = () => Array.from(document.querySelectorAll<HTMLInputElement>('[name="email"]'));
 
+  /** After Unlock, the menu reopens where the user still is. */
+  const LOGIN = `<form><input name="email" type="email"><input name="password" type="password"></form>`;
+  const opens = () => sent.filter((m) => (m as { type?: string }).type === "cs_open_menu").length;
+
+  it("reopens the menu on the unlocked menu's field when it still has focus", async () => {
+    document.body.innerHTML = LOGIN;
+    const token = await pickLogin(emails()[0]!);
+    const before = opens();
+    deliver({ type: "bg_reopen_menu", token });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(opens()).toBe(before + 1);
+    // Once.
+    deliver({ type: "bg_reopen_menu", token });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(opens()).toBe(before + 1);
+  });
+
+  it("reopens and refocuses the field when the Unlock click left focus on the page body", async () => {
+    document.body.innerHTML = LOGIN;
+    const email = emails()[0]!;
+    // The real sequence: clicking Unlock focuses the menu's iframe, and
+    // removing that iframe (bg_close_menu) drops focus to <body>.
+    const token = (++seq).toString(16).padStart(32, "c");
+    openReply = { ok: true, token, rows: 1 };
+    email.focus();
+    for (const l of windowListeners.get("pointerdown") ?? []) l({ isTrusted: true, composedPath: () => [email] } as unknown as Event);
+    await new Promise((r) => setTimeout(r, 10));
+    const frameEl = frameWith(token)!;
+    frameEl.focus();
+    deliver({ type: "bg_close_menu", token });
+    openReply = undefined;
+    expect(document.activeElement).toBe(document.body);
+    const before = opens();
+    deliver({ type: "bg_reopen_menu", token });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(document.activeElement).toBe(email);
+    expect(opens()).toBe(before + 1);
+  });
+
+  it("does not reopen for another menu's token, or once focus moved", async () => {
+    document.body.innerHTML = LOGIN;
+    const token = await pickLogin(emails()[0]!);
+    const before = opens();
+    deliver({ type: "bg_reopen_menu", token: "f".repeat(32) });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(opens()).toBe(before);
+    const token2 = await pickLogin(emails()[0]!);
+    const after = opens();
+    (document.querySelector('[name="password"]') as HTMLInputElement).focus();
+    deliver({ type: "bg_reopen_menu", token: token2 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(opens()).toBe(after);
+    expect(token).not.toBe(token2);
+  });
+
   it("fills the picked field's re-rendered copy (VTEX)", async () => {
     document.body.innerHTML = VTEX;
     const token = await pickLogin(field("email"));

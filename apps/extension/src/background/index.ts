@@ -38,8 +38,11 @@ const client = new NativeClient(() => chrome.runtime.connectNative(NATIVE_HOST_N
       passkeys.reset();
       sso.reset();
     }
-    // Unlocked: passkey cards showing "locked" look their passkeys up again.
-    if (event.type === "unlocked") void passkeys.refreshLocked();
+    // Unlocked: locked passkey cards and the field menu the user unlocked from refresh.
+    if (event.type === "unlocked") {
+      void passkeys.refreshLocked();
+      inline.unlocked();
+    }
   },
 });
 

@@ -121,6 +121,8 @@ export type BackgroundToContent =
    */
   | { type: "bg_fill"; origin: string; token: string | null; fill: FillPayload; submit: boolean; totp: boolean }
   | { type: "bg_close_menu"; token: string }
+  /** The vault opened after the Unlock in menu `token`: open it again on its field. */
+  | { type: "bg_reopen_menu"; token: string }
   /** Resize the menu frame to the height its page reported (menu_resize). */
   | { type: "bg_resize_menu"; token: string; height: number; animate?: true }
   | { type: "bg_show_save"; token: string }
@@ -605,6 +607,7 @@ export function parseBackgroundMessage(msg: unknown): BackgroundToContent | null
         ? { type: "bg_resize_save", token: o.token, height: o.height }
         : null;
     case "bg_close_menu":
+    case "bg_reopen_menu":
     case "bg_show_save":
     case "bg_close_save":
       return keysAre(o, ["type", "token"]) && isToken(o.token) ? { type: o.type, token: o.token } : null;

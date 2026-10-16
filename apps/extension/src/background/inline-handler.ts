@@ -235,8 +235,14 @@ function saveFailure(e: unknown): { ok: false; message: string } {
   return fail(e);
 }
 
+const UNLOCK_WAIT_MS = 120_000;
+/** The "unlocked" event may never come (the native port closes when idle). */
+const UNLOCK_POLL_MS = 2_000;
+
 export function createInlineHandler(deps: InlineDeps) {
   const menus = new Map<number, MenuSession>(); // by tab
+  /** The locked menu whose Unlock was clicked; it reopens once the vault opens. */
+  let unlockWait: { frame: FrameRef; token: string; until: number } | null = null;
   const saves = new Map<number, PendingSave>(); // by tab
   const cardSaves = new Map<number, PendingCardSave>(); // by tab
   const scans = new Map<string, { tabId: number; reports: CardReport[] }>(); // by scan token
@@ -248,6 +254,7 @@ export function createInlineHandler(deps: InlineDeps) {
     if (r) void deps.sendToFrame({ tabId, frameId: r.frameId }, { type: "bg_run_end" });
   }
 
+  const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const top = (f: FrameRef) => ({ tabId: f.tabId, frameId: 0 });
   const frameFields = (f: FrameRef) => (f.topUrl === undefined ? { url: f.url } : { url: f.url, topUrl: f.topUrl });
 
@@ -507,7 +514,7 @@ export function createInlineHandler(deps: InlineDeps) {
     const scan = deps.newToken();
     scans.set(scan, { tabId, reports: [] });
     void deps.sendToTab(tabId, { type: "bg_card_scan", scan }).catch(() => undefined);
-    await (deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(CARD_SCAN_MS);
+    await wait(CARD_SCAN_MS);
     const s = scans.get(scan);
     scans.delete(scan);
     return s?.reports ?? [];
@@ -1011,16 +1018,19 @@ export function createInlineHandler(deps: InlineDeps) {
         return { ok: true, value: null };
       }
       case "menu_show_unlock": {
-        // As the popup's Unlock: no URL or item, the desktop only raises its
-        // window. The master password is typed there, never in the page.
+        // The master password is typed in the desktop, never in the page.
         const m = liveMenu(tabId, req.token);
         if (!m || !m.locked) return { ok: false, message: t.errors.menuExpired };
         closeMenu(tabId);
+        const w = { frame: m.frame, token: m.token, until: deps.now() + UNLOCK_WAIT_MS };
+        unlockWait = w;
         try {
           await deps.client.request({ type: "show_unlock" });
         } catch (e) {
+          if (unlockWait === w) unlockWait = null;
           return fail(e);
         }
+        void watchUnlock(w);
         return { ok: true, value: null };
       }
       case "menu_close":
@@ -1089,6 +1099,22 @@ export function createInlineHandler(deps: InlineDeps) {
     }
   }
 
+  // ------------------------------------------------------------ unlock
+
+  function unlocked(): void {
+    const w = unlockWait;
+    unlockWait = null;
+    if (w && w.until > deps.now()) void deps.sendToFrame(w.frame, { type: "bg_reopen_menu", token: w.token });
+  }
+
+  async function watchUnlock(w: NonNullable<typeof unlockWait>): Promise<void> {
+    while (unlockWait === w && w.until > deps.now()) {
+      await wait(UNLOCK_POLL_MS);
+      const status = await deps.client.request({ type: "status" }).catch(() => null);
+      if (status?.state === "unlocked" && unlockWait === w) unlocked();
+    }
+  }
+
   // ------------------------------------------------------------ lifecycle
 
   /** Vault locked or desktop gone: forget everything, close every prompt. */
@@ -1098,6 +1124,7 @@ export function createInlineHandler(deps: InlineDeps) {
     for (const tabId of [...cardSaves.keys()]) dropCardSave(tabId, true);
     scans.clear();
     recentUsernames.clear();
+    unlockWait = null;
     for (const r of runs.clear()) void deps.sendToFrame({ tabId: r.tabId, frameId: r.frameId }, { type: "bg_run_end" });
   }
 
@@ -1108,9 +1135,10 @@ export function createInlineHandler(deps: InlineDeps) {
     dropCardSave(tabId, false);
     recentUsernames.delete(tabId);
     runs.end(tabId);
+    if (unlockWait?.frame.tabId === tabId) unlockWait = null;
   }
 
-  return { handleContent, handleInline, pickFill, fillCard, scanCards, reset, forgetTab };
+  return { handleContent, handleInline, pickFill, fillCard, scanCards, unlocked, reset, forgetTab };
 }
 
 export type InlineHandler = ReturnType<typeof createInlineHandler>;

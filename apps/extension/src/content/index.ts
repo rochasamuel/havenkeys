@@ -130,6 +130,8 @@ function start(): void {
   let menu: OpenMenu | null = null;
   /** The last menu the user could pick from, kept briefly for its fill. */
   let picked: { token: string; field: HTMLInputElement; until: number; twins: Twins } | null = null;
+  /** For bg_reopen_menu. */
+  let lastClosed: { token: string; field: HTMLInputElement } | null = null;
   let saveFrame: InlineFrame | null = null;
   /** A group we filled a generated password into and have not seen submitted. */
   let generatedIn: ParentNode | null = null;
@@ -160,6 +162,7 @@ function start(): void {
     menu = null;
     frame?.remove();
     picked = { token, field, until: Date.now() + PICK_WINDOW_MS, twins: twinsOf(field) };
+    lastClosed = { token, field };
     if (tellBackground) void send({ type: "cs_close_menu", token });
     if (icon && deepActiveElement() !== icon.field) hideIcon();
   }
@@ -807,6 +810,21 @@ function start(): void {
         }
         if (hosted?.frame.token === m.token) closeHosted(false);
         return false;
+      case "bg_reopen_menu": {
+        // Clicking Unlock moved focus into the menu frame, so its removal left
+        // focus on <body>; focus the user put anywhere else is left alone.
+        const field = lastClosed?.token === m.token ? lastClosed.field : null;
+        lastClosed = null;
+        const active = deepActiveElement();
+        const nowhere = active === null || active === document.body || active === document.documentElement;
+        if (field && field.isConnected && (active === field || nowhere)) {
+          dismissed.delete(field);
+          empty.delete(field);
+          if (active !== field) field.focus();
+          void maybeOpen(field);
+        }
+        return false;
+      }
       case "bg_resize_menu":
         // Wrapped rows: grow or shrink to what the menu page laid out.
         // `animate`: the user opened or closed the generator settings; slide.
