@@ -276,7 +276,11 @@ private class FieldActions(
 
 @Composable
 private fun FieldRow(field: ViewField, actions: FieldActions) {
-    val label = stringResource(fieldLabel(field.label))
+    val label = if (field.key.startsWith("custom.") && field.label.isNotBlank()) {
+        field.label
+    } else {
+        stringResource(fieldLabel(field.label))
+    }
     val shown = field.value
     when {
         field.kind == FieldKind.TOTP -> CodeField(label, actions)
@@ -369,6 +373,6 @@ private val labels = mapOf(
     "identity.notes" to R.string.field_identity_notes,
 )
 
-/** The text for a `ViewField.label` key; a custom field (empty label) reads "Field". */
+/** The text for a `ViewField.label` key; a custom field without a label reads "Field". */
 @StringRes
 internal fun fieldLabel(label: String): Int = labels[label] ?: R.string.field_custom

@@ -6,7 +6,7 @@ use crate::autofill::unix_seconds;
 use crate::error::MobileResult;
 use crate::vault::MobileVault;
 use havenkeys_core::card::CardField;
-use havenkeys_core::custom_field::FieldValue;
+use havenkeys_core::custom_field::{FieldSection, FieldValue};
 use havenkeys_core::generator;
 use havenkeys_core::identity::IdentityField;
 use havenkeys_core::model::{ItemOverview, ItemType, SecretField};
@@ -184,6 +184,26 @@ fn identity_field(name: &str) -> Option<IdentityField> {
     })
 }
 
+/// A login's or note's custom fields as rows: the field's own label, after
+/// its section's title when it has one. Values come on `reveal`.
+fn custom_rows(sections: Vec<FieldSection>, fields: &mut Vec<ViewField>) {
+    for section in sections {
+        let prefix = section.title.as_ref().map(|t| t.expose().to_owned());
+        for f in section.fields {
+            let kind = if f.value.is_concealed() {
+                FieldKind::Secret
+            } else {
+                FieldKind::Text
+            };
+            let label = match &prefix {
+                Some(p) => format!("{p} · {}", f.label.expose()),
+                None => f.label.expose().to_owned(),
+            };
+            fields.push(field(format!("custom.{}", f.id), label, kind, None));
+        }
+    }
+}
+
 #[uniffi::export]
 impl MobileVault {
     pub fn list_items(&self) -> MobileResult<Vec<ItemSummary>> {
@@ -244,23 +264,17 @@ impl MobileVault {
                         Some(rule.url.clone()),
                     ));
                 }
-                for section in vault.item_sections(&id)? {
-                    for f in section.fields {
-                        let kind = if f.value.is_concealed() {
-                            FieldKind::Secret
-                        } else {
-                            FieldKind::Text
-                        };
-                        fields.push(field(format!("custom.{}", f.id), "", kind, None));
-                    }
-                }
+                custom_rows(vault.item_sections(&id)?, &mut fields);
                 if o.has_notes {
                     fields.push(field("notes", "notes", FieldKind::Secret, None));
                 }
             }
             // The body is shown as the note opens, as on the desktop; the
             // screen still asks for it with `reveal`, so the view carries none.
-            ItemType::SecureNote => fields.push(field("content", "content", FieldKind::Text, None)),
+            ItemType::SecureNote => {
+                fields.push(field("content", "content", FieldKind::Text, None));
+                custom_rows(vault.item_sections(&id)?, &mut fields);
+            }
             ItemType::Card => {
                 for (key, kind) in [
                     ("card.holder", FieldKind::Text),
@@ -579,7 +593,7 @@ mod tests {
         let mut input = blank(ItemType::Login, "Bank");
         input.sections = Some(vec![SectionInput {
             id: None,
-            title: None,
+            title: Some(SecretString::from("Bank")),
             fields: vec![
                 field(
                     "PIN",
@@ -599,6 +613,8 @@ mod tests {
             .filter(|f| f.key.starts_with("custom."))
             .collect();
         assert_eq!(custom.len(), 2);
+        let labels: Vec<&str> = custom.iter().map(|f| f.label.as_str()).collect();
+        assert_eq!(labels, ["Bank · PIN", "Bank · 2FA"]);
         assert!(custom
             .iter()
             .all(|f| matches!(f.kind, FieldKind::Secret) && f.value.is_none()));
@@ -613,6 +629,40 @@ mod tests {
         assert!(v
             .reveal(id, format!("custom.{}", uuid::Uuid::new_v4()))
             .is_err());
+    }
+
+    #[test]
+    fn a_note_shows_its_text_then_its_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let mut note = blank(ItemType::SecureNote, "Server");
+        note.content = SecretUpdate::Set(SecretString::from("root box"));
+        note.sections = Some(vec![SectionInput {
+            id: None,
+            title: None,
+            fields: vec![
+                FieldInput {
+                    id: None,
+                    label: SecretString::from("Host"),
+                    value: FieldValueInput::Text(SecretString::from("srv")),
+                },
+                FieldInput {
+                    id: None,
+                    label: SecretString::from("Root"),
+                    value: FieldValueInput::Password(SecretUpdate::Set(SecretString::from("r00t"))),
+                },
+            ],
+        }]);
+        let id = create(&v, note);
+        let view = v.item_view(id.clone()).unwrap();
+        assert_eq!(view.fields[0].key, "content");
+        assert_eq!(view.fields[1].label, "Host");
+        assert!(matches!(view.fields[1].kind, FieldKind::Text));
+        assert_eq!(view.fields[2].label, "Root");
+        assert!(matches!(view.fields[2].kind, FieldKind::Secret));
+        assert!(view.fields.iter().all(|f| f.value.is_none()));
+        assert_eq!(v.reveal(id.clone(), custom_key(&view, 0)).unwrap(), "srv");
+        assert_eq!(v.reveal(id, custom_key(&view, 1)).unwrap(), "r00t");
     }
 
     #[test]

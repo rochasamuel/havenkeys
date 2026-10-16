@@ -506,7 +506,8 @@ impl MobileVault {
                 .map(|n| format!("identity.{n}"))
                 .collect(),
         };
-        let has_custom_fields = kind == ItemKind::Login && !vault.item_sections(&id)?.is_empty();
+        let has_custom_fields = matches!(kind, ItemKind::Login | ItemKind::SecureNote)
+            && !vault.item_sections(&id)?.is_empty();
         Ok(ItemEdit {
             kind,
             title,
@@ -926,6 +927,69 @@ mod tests {
         );
         assert_eq!(v.autofill_matches(app).unwrap().len(), 1);
         assert!(v.item_edit(id.to_string()).unwrap().has_custom_fields);
+    }
+
+    #[test]
+    fn a_phone_edit_of_a_note_keeps_its_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let (v, _) = unlocked(dir.path());
+        let id = {
+            let mut vault = v.client.vault().unwrap();
+            let input = ItemInput {
+                content: SecretUpdate::Set(SecretString::from("a")),
+                sections: Some(vec![SectionInput {
+                    id: None,
+                    title: None,
+                    fields: vec![
+                        FieldInput {
+                            id: None,
+                            label: SecretString::from("PIN"),
+                            value: FieldValueInput::Password(SecretUpdate::Set(
+                                SecretString::from("4821"),
+                            )),
+                        },
+                        FieldInput {
+                            id: None,
+                            label: SecretString::from("2FA"),
+                            value: FieldValueInput::Otp(SecretUpdate::Set(SecretString::from(
+                                "JBSWY3DPEHPK3PXP",
+                            ))),
+                        },
+                    ],
+                }]),
+                ..blank(ItemType::SecureNote, "Safe".into())
+            };
+            let staged = vault.stage_create(input, 1).unwrap();
+            let id = staged.item_id;
+            vault.commit_write(staged, 1).unwrap();
+            id.to_string()
+        };
+        assert!(v.item_edit(id.clone()).unwrap().has_custom_fields);
+        update(
+            &v,
+            &id,
+            ItemDraft {
+                kind: ItemKind::SecureNote,
+                title: "Renamed".into(),
+                websites: vec![],
+                changes: vec![replace("content", "b")],
+                base_revision: None,
+                tags: Vec::new(),
+            },
+        );
+        let view = v.item_view(id.clone()).unwrap();
+        assert_eq!(view.summary.title, "Renamed");
+        let custom: Vec<_> = view
+            .fields
+            .iter()
+            .filter(|f| f.key.starts_with("custom."))
+            .collect();
+        assert_eq!(custom.len(), 2);
+        assert_eq!(v.reveal(id.clone(), custom[0].key.clone()).unwrap(), "4821");
+        let code = v.reveal(id.clone(), custom[1].key.clone()).unwrap();
+        assert_eq!(code.len(), 6);
+        assert!(code.chars().all(|c| c.is_ascii_digit()));
+        assert_eq!(v.reveal(id, "content".into()).unwrap(), "b");
     }
 
     #[test]
