@@ -1,4 +1,5 @@
-//! A login's custom fields in the vault (spec 2026-09-30-login-custom-fields).
+//! A login's or secure note's custom fields in the vault (specs
+//! 2026-09-30-login-custom-fields, 2026-10-16-secure-note-fields).
 
 mod common;
 

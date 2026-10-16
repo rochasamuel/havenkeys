@@ -332,14 +332,16 @@ convenience only.
 The quick window can call only the commands in `quick.json`; `commands.test.ts`
 and the tests in `quick_window.rs` check both lists.
 
-Custom fields (a login's or secure note's titled sections of typed fields) are desktop-only and
-live in the item's encrypted details blob, not in its overview. The renderer
+Custom fields (a login's or secure note's titled sections of typed fields)
+are edited only on the desktop; Android shows them read-only, with their
+labels, and the browser extension never sees them. They live in the item's
+encrypted details blob, not in its overview. The renderer
 receives plain values and flags through `item_fields`; a Password field's
 value comes only through `reveal_item_field`, and an OTP field's secret never
 leaves Rust (only codes, via `item_field_totp`). Copies and URL opens read the
 value from the vault by field id, so the renderer never supplies the text or
-URL. A save's field ids are checked against the same login: an id may appear
-once and only if it belongs to that login, and keeping a value requires the
+URL. A save's field ids are checked against the same item (a login or secure
+note): an id may appear once and only if it belongs to that item, and keeping a value requires the
 same type. Labels, titles and values are never put in error text or logs.
 
 The browser extension does not use these commands. It reaches the core
@@ -1050,7 +1052,9 @@ See `threat-model.md` §4 and `security-review.md`.
 - **Custom fields and older releases.** A device running a HavenKeys release
   from before login custom fields ignores a login's custom fields, and one
   from before secure note fields ignores a note's fields; either drops them
-  if it rewrites that item (any save, including a browser password update).
+  if it rewrites that item (any save, including moving it to the Trash,
+  restoring it from the Trash, changing its tags, or a browser password
+  update).
   Update every device before using custom fields.
 
 ## 20. Filling forms from the Identity

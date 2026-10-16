@@ -1050,20 +1050,44 @@ mod tests {
 
     #[test]
     fn debug_never_prints_labels_or_values() {
-        let b = bank();
-        let dbg = format!("{b:?}");
-        for secret in [
-            "Bank", "PIN", "4321", "Token", RFC_SECRET, "Account", "12345-6",
-        ] {
+        // Sentinels contain non-hex characters so the random UUIDs in the
+        // Debug output can never contain them by chance.
+        let sections = apply_sections(
+            Some(vec![section(
+                None,
+                Some("Bank-zq9x"),
+                vec![
+                    field(
+                        None,
+                        "PIN-zq9x",
+                        FieldValueInput::Password(SecretUpdate::Set(s("val-ωzq1"))),
+                    ),
+                    field(
+                        None,
+                        "Token-zq9x",
+                        FieldValueInput::Otp(SecretUpdate::Set(s(RFC_SECRET))),
+                    ),
+                    field(None, "Account-zq9x", FieldValueInput::Text(s("val-ωzq2"))),
+                ],
+            )]),
+            Vec::new(),
+        )
+        .unwrap();
+        let dbg = format!("{sections:?}");
+        for secret in ["zq9x", "ωzq", "Bank", "PIN", "Token", "Account", RFC_SECRET] {
             assert!(!dbg.contains(secret), "Debug printed {secret}");
         }
         let input = section(
             None,
-            Some("Bank"),
-            vec![field(None, "PIN", FieldValueInput::Text(s("4321")))],
+            Some("Bank-zq9x"),
+            vec![field(
+                None,
+                "PIN-zq9x",
+                FieldValueInput::Text(s("val-ωzq3")),
+            )],
         );
         let dbg = format!("{input:?}");
-        assert!(!dbg.contains("Bank") && !dbg.contains("4321"));
+        assert!(!dbg.contains("zq9x") && !dbg.contains("ωzq"));
     }
 
     #[test]
