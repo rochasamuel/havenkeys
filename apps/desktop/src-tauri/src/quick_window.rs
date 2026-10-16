@@ -44,6 +44,7 @@ impl QuickSurface for Surface<'_> {
 /// macOS draws no corners on a borderless window: give it a hidden title bar
 /// so the system rounds it like any app window. Windows 11 rounds by itself.
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 pub fn use_system_corners(app: &AppHandle) {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSWindow, NSWindowButton, NSWindowStyleMask, NSWindowTitleVisibility};

@@ -1,7 +1,9 @@
 //! HavenKeys desktop shell. Thin by design: all security logic lives in
 //! `havenkeys-core`; this crate wires it to Tauri, the clipboard and timers.
 
-#![forbid(unsafe_code)]
+// The one macOS call into AppKit (quick_window::use_system_corners) opts in to unsafe.
+#![cfg_attr(not(target_os = "macos"), forbid(unsafe_code))]
+#![cfg_attr(target_os = "macos", deny(unsafe_code))]
 
 mod account;
 mod autostart;
