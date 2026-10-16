@@ -453,11 +453,27 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
     // (logins only); everything else is rendered into the notes.
     let is_login = matches!(category, "001" | "005");
     let is_card = category == "002";
+    // Logins, secure notes and the categories turned into notes keep typed
+    // fields; a card's leftovers stay in its notes.
+    let takes_fields = !is_card;
+    let is_converted = !matches!(category, "001" | "005" | "002" | "003");
+    // A converted item's websites come first, as URL fields.
+    let mut early_urls = Vec::new();
+    if is_converted {
+        fields.start(None);
+        for rule in collect_urls(overview, report, &mut extras) {
+            let url = rule.url.clone();
+            let fv = FieldValueInput::Url(SecretString::from(url.as_str()));
+            if !fields.push(Some("Website"), fv) {
+                early_urls.push(url);
+            }
+        }
+    }
     let mut card_parts = CardParts::default();
     if let Some(sections) = details.get("sections").and_then(Value::as_array) {
         for section in sections {
             extras.section(str_at(section, &["title"]));
-            if is_login {
+            if takes_fields {
                 fields.start(str_at(section, &["title"]));
             }
             let Some(section_fields) = section.get("fields").and_then(Value::as_array) else {
@@ -493,7 +509,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
                         continue;
                     }
                 }
-                if is_login {
+                if takes_fields {
                     if let Some(fv) = custom_field_from(value, report) {
                         if fields.push(label, fv) {
                             continue;
@@ -584,6 +600,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             report.secure_notes += 1;
             ItemInput {
                 content: SecretUpdate::Set(join_notes(extras.render()).unwrap_or_default()),
+                sections: fields.finish(),
                 ..ItemInput::blank(ItemType::SecureNote, title)
             }
         }
@@ -616,12 +633,9 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             // No native type yet: keep every field as text in a secure note.
             report.converted_to_notes += 1;
             let mut body = format!("Imported from 1Password ({})", category_name(other));
-            let urls: Vec<String> = collect_urls(overview, report, &mut extras)
-                .into_iter()
-                .map(|r| r.url.clone())
-                .collect();
-            if !urls.is_empty() {
-                body.push_str(&format!("\nWebsite: {}", urls.join(", ")));
+            // Websites that did not fit as fields.
+            if !early_urls.is_empty() {
+                body.push_str(&format!("\nWebsite: {}", early_urls.join(", ")));
             }
             let rendered = extras.render();
             if !rendered.is_empty() {
@@ -636,6 +650,7 @@ fn convert_item(item: &Value, report: &mut ImportReport) -> Option<ImportedItem>
             body.zeroize();
             ItemInput {
                 content: SecretUpdate::Set(content),
+                sections: fields.finish(),
                 ..ItemInput::blank(ItemType::SecureNote, title)
             }
         }
