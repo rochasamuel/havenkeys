@@ -245,6 +245,16 @@ describe("save", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(requests).toEqual([]);
   });
+  it("asks on return when the provider only redirected (signed in, already authorized: no provider page)", async () => {
+    const { h, requests, sent } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
+    const cf: FrameRef = { tabId: 1, frameId: 0, url: "https://dash.cloudflare.com/login", origin: "https://dash.cloudflare.com" };
+    await h.handleContent(cf, { tabId: 1 }, { type: "cs_sso_click", provider: "github" });
+    h.providerRequest(1, "https://github.com/login/oauth/authorize?client_id=x&redirect_uri=https%3A%2F%2Fdash.cloudflare.com%2F");
+    h.providerRequest(1, "not a url");
+    h.ready({ tabId: 1, frameId: 0, url: "https://dash.cloudflare.com/abc", origin: "https://dash.cloudflare.com" }, { tabId: 1 });
+    await vi.waitFor(() => expect(sent.some((s) => s.msg.type === "bg_sso_show")).toBe(true));
+    expect(requests).toEqual([{ type: "check_sso", url: "https://dash.cloudflare.com/login", provider: "github", account: null }]);
+  });
   it("ignores a click reported by any other provider iframe, or for another provider", async () => {
     const { h, requests } = setup({ check_sso: { type: "check_sso", action: "add", itemId: null, accounts: [] } });
     const gsi: FrameRef = { tabId: 1, frameId: 7, url: "https://accounts.google.com/gsi/button", origin: "https://accounts.google.com", topUrl: top.url };

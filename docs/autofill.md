@@ -885,6 +885,16 @@ is a list of them. The suggestion is added to the list if the vault lacks it
 and preselected; otherwise the first account is preselected. "Other email…"
 reveals a free-text field. With none, it is the text field as before.
 
+A provider where the user is signed in and has already approved the site
+may also answer **in the same tab** with redirects alone (GitHub for
+`dash.cloudflare.com`): the tab goes site → `github.com` → site and no
+document on the provider's origin ever runs the content script. The
+background therefore also observes top-level requests to the providers' own
+origins (`webRequest.onBeforeRequest`, `main_frame`, observe-only, filtered
+to the `SSO_PROVIDERS` origins; a redirect hop fires it too). Such a request
+in the clicked tab, or its tied popup, while the capture is pending counts as
+reaching the provider. A request before the click does not.
+
 Once the provider has been reached, either of these asks the desktop
 `check_sso` while the pending capture is still valid:
 

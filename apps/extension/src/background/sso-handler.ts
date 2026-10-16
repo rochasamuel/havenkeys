@@ -241,6 +241,17 @@ export function createSsoHandler(deps: SsoDeps) {
     state.hint(tab, url);
   }
 
+  /** A top-level request in a tab (from webRequest): the provider reached by redirects alone. */
+  function providerRequest(tabId: number, url: string): void {
+    let origin: string;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return;
+    }
+    state.providerRequest(tabId, origin);
+  }
+
   /** Back from the provider: ask whether to save, unless the vault already has it. */
   async function ask(p: PendingSso): Promise<void> {
     const gen = generation;
@@ -374,7 +385,7 @@ export function createSsoHandler(deps: SsoDeps) {
     state.clear();
   }
 
-  return { handleContent, handleFrame, ready, noteUsername, start, tabCreated, tabUrl, tabRemoved, reset };
+  return { handleContent, handleFrame, ready, noteUsername, start, tabCreated, tabUrl, providerRequest, tabRemoved, reset };
 }
 
 export type SsoHandler = ReturnType<typeof createSsoHandler>;

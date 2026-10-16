@@ -14,7 +14,7 @@
 import { t } from "../i18n";
 import { NativeClient, type NativePort } from "../messaging/native";
 import { newToken, parseContentRequest, parseIdentityRolesReply, parseInlineRequest, type BackgroundToContent, type FillPayload } from "../messaging/inline";
-import type { IdentityRole } from "@havenkeys/protocol";
+import { SSO_PROVIDER_IDS, SSO_PROVIDERS, type IdentityRole } from "@havenkeys/protocol";
 import { parsePopupRequest } from "../messaging/popup";
 import { parseSsoContentRequest, parseSsoFrameRequest, type BackgroundToSso } from "../messaging/sso";
 import { NATIVE_HOST_NAME } from "../shared/constants";
@@ -276,6 +276,18 @@ chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
   const ref = tabRef(tab);
   if (ref && change.url) sso.tabUrl(ref, change.url);
 });
+
+// A provider that already approved the site may answer with redirects alone
+// (GitHub for Cloudflare when signed in): the tab passes through its origin
+// without a page loading there. Observe-only, top-level requests to the
+// providers' own origins; only the tab id and the origin are used.
+chrome.webRequest.onBeforeRequest.addListener(
+  (d) => {
+    if (d.tabId >= 0) sso.providerRequest(d.tabId, d.url);
+    return undefined;
+  },
+  { urls: SSO_PROVIDER_IDS.flatMap((p) => SSO_PROVIDERS[p].origins.map((o) => `${o}/*`)), types: ["main_frame"] },
+);
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   inline.forgetTab(tabId);

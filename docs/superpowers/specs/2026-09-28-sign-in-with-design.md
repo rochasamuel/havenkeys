@@ -179,6 +179,12 @@ balloon, the user can edit it, and Rust validates it on save.
 
 ### 5.4 Asking on return
 
+> Amended on 2026-10-16: a top-level request of the clicked tab to one of
+> the provider's origins (observed with `webRequest`, redirect hops
+> included) also counts as reaching the provider, for a provider that
+> approves with redirects alone in the same tab (GitHub for Cloudflare when
+> signed in). `docs/autofill.md`, `docs/security-model.md` §12.
+
 Once the flow has reached one of the provider's origins (in the tab, or in
 a popup it opened), either of these triggers `CheckSso` while `PendingSso`
 is valid:

@@ -80,6 +80,23 @@ describe("pending captures", () => {
     s.account({ tabId: 1 }, G, "chosen@gmail.com", true);
     expect(s.pending(1)).toMatchObject({ account: "chosen@gmail.com", hint: "me@gmail.com" });
   });
+  it("a provider request in the clicked tab counts, though only redirects passed through it", () => {
+    // GitHub, signed in and already authorized: site → github.com → site with no page shown.
+    const { s } = setup();
+    s.click(1, "https://dash.cloudflare.com/login", undefined, "github");
+    s.providerRequest(1, "https://dash.cloudflare.com"); // the site's own hop
+    s.providerRequest(1, "https://accounts.google.com"); // another provider's origin
+    s.providerRequest(2, "https://github.com"); // another tab
+    expect(s.takeReturn(1, "https://dash.cloudflare.com")).toBeNull();
+    s.providerRequest(1, "https://github.com");
+    expect(s.takeReturn(1, "https://dash.cloudflare.com")?.url).toBe("https://dash.cloudflare.com/login");
+  });
+  it("a provider request before any click does not count", () => {
+    const { s } = setup();
+    s.providerRequest(1, "https://github.com");
+    s.click(1, "https://dash.cloudflare.com/login", undefined, "github");
+    expect(s.takeReturn(1, "https://dash.cloudflare.com")).toBeNull();
+  });
   it("expires", () => {
     const { s, advance } = setup();
     s.click(1, "https://typeform.com/", undefined, "google");

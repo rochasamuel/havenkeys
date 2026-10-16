@@ -30,7 +30,7 @@ describe("manifest locales", () => {
 
 describe("manifest permissions", () => {
   it("has site access from install and asks for nothing else new", () => {
-    expect(base.permissions).toEqual(["nativeMessaging", "activeTab", "scripting", "storage"]);
+    expect(base.permissions).toEqual(["nativeMessaging", "activeTab", "scripting", "storage", "webRequest"]);
     expect((base as Record<string, unknown>).host_permissions).toEqual(["https://*/*", "http://*/*"]);
     expect("optional_host_permissions" in base).toBe(false);
   });

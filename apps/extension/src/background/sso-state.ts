@@ -171,6 +171,15 @@ export function createSsoState(now: () => number) {
       p.sawProvider = true;
       if (tab.tabId !== p.tabId) p.popupTabId = tab.tabId;
     },
+    /** A top-level request of the clicked tab (or its tied popup) to one of
+     * the provider's origins, from the browser's webRequest events. A
+     * signed-in provider that already approved the site answers with
+     * redirects alone (GitHub for Cloudflare), so no provider document ever
+     * runs our content script; the request still reached it. */
+    providerRequest(tabId: number, origin: string): void {
+      const p = pendingOf({ tabId });
+      if (p && isProviderOrigin(p, origin)) p.sawProvider = true;
+    },
     /** A tab opened by the clicked tab (the site's login popup). Its closing is a
      * return even if no provider page loaded in it: a signed-in, consented
      * provider may approve with redirects alone. */

@@ -3942,3 +3942,30 @@ sees it in Settings.
 - [ ] A 60 s wait with no answer ends in "Not saved" in Chrome (service worker lifetime) and in Firefox (event page).
 - [ ] The "Change this password?" dialog appears over other windows on macOS and on Windows.
 - [ ] `inert` on the main content behind the dialog works in both webviews (Tauri on macOS and on Windows).
+
+# Security Review: "Sign in with" redirect-only return (2026-10-16)
+
+### SR1. New `webRequest` permission (Info, accepted)
+**Component:** `apps/extension/manifest/base.json`,
+`background/index.ts` (`webRequest.onBeforeRequest`),
+`sso-handler.ts` (`providerRequest`), `sso-state.ts`.
+**Problem fixed:** a "Sign in with GitHub" on `dash.cloudflare.com` while
+signed in to GitHub never asked to save: GitHub approved with redirects
+alone in the same tab, no GitHub document ran the content script, so the
+pending capture never "reached the provider".
+**Attack scenario:** a compromised extension build could use the permission
+to watch top-level navigation; a page could try to arm a save question.
+**Mitigation:** observe-only (no `webRequestBlocking`, no header or body
+access), filtered to `main_frame` requests on the fixed provider origins;
+host access already let the extension see tab URLs. Only the tab id and
+origin are used, in memory, and only while a trusted provider-button click
+is pending in that tab. A page navigating itself to the provider after the
+user's trusted click yields at most a save question, which holds no secret
+and saves nothing without **Save**; `check_sso` stays the authority.
+**Remaining limitations:** Firefox may ask existing users to approve the new
+permission on update.
+
+### Manual checks (owner)
+- [ ] Chrome and Firefox, signed in to GitHub with Cloudflare already authorized: "Continue with GitHub" on `dash.cloudflare.com/login` redirects to the dashboard and the save question appears.
+- [ ] The private-window flow (GitHub's sign-in page shown) still asks once.
+- [ ] Chrome shows no new install warning; note what Firefox shows on update.

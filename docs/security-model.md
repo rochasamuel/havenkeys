@@ -545,6 +545,7 @@ macros appear in the core crate.
 | `scripting` | yes | Inject the content script into that tab for a popup fill, and register the content script and passkey scripts for the granted hosts |
 | `https://*/*`, `http://*/*` | yes (`host_permissions`) | Save/update prompts, passkeys and in-page suggestions need scripts in the pages the user visits. Granted at install. The user can withdraw it in the browser's site-access controls; the scripts are then unregistered, and the options page and popup offer **Allow**. Narrowing it to chosen sites currently turns the scripts off everywhere (fails closed; `autofill.md` §Permissions) |
 | `storage` | yes | One boolean in `chrome.storage.local`: whether in-page suggestions (the field icon and menu) are shown. Nothing else is stored |
+| `webRequest` | yes | Observe-only (no blocking, no headers, no bodies): top-level requests to the fixed sign-in provider origins (`SSO_PROVIDERS`: `github.com`, `accounts.google.com`, …), so a "Sign in with" that the provider approves with redirects alone still counts as reaching it and the save question is asked. Only the tab id and the request's origin are used, in memory, while a provider-button click is pending in that tab. Events arrive only for hosts the user granted (`autofill.md` §Sign in with a provider) |
 
 Why site access is asked for at install (changed 2026-09-28, spec
 `2026-09-28-extension-defaults-design.md`): offering to save a new or
