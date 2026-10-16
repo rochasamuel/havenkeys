@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { TOKEN_MESSAGE } from "../messaging/inline";
-import { InlineFrame, MENU_HEADER, MENU_PADDING, MENU_ROW, SAVE_HEIGHT, SAVE_WIDTH, SSO_HEIGHT, frameToken, menuBox, saveBox, ssoBox } from "./frames";
+import { InlineFrame, MENU_HEADER, MENU_PADDING, MENU_ROW, SAVE_HEIGHT, SAVE_WIDTH, SLIDE_OUT_MS, SSO_HEIGHT, frameToken, menuBox, saveBox, ssoBox } from "./frames";
 
 const field = { top: 100, bottom: 130, left: 20, width: 300 } as DOMRect;
 const viewport = { width: 1000, height: 800 };
@@ -58,4 +58,75 @@ describe("InlineFrame token", () => {
     expect(post).toHaveBeenCalledWith({ type: TOKEN_MESSAGE, token }, "chrome-extension://ext/");
     frame.remove();
   });
+});
+
+describe("InlineFrame slide", () => {
+  const box = { top: 12, left: 600, width: 340, height: 138 };
+  const style = (f: InlineFrame) => f.el.style;
+
+  function withMotion(reduce: boolean, run: () => void | Promise<void>) {
+    (globalThis as { chrome?: unknown }).chrome = { runtime: { getURL: (p: string) => `chrome-extension://ext/${p}` } };
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: reduce && q.includes("reduce") }));
+    vi.useFakeTimers();
+    return Promise.resolve(run()).finally(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+  }
+
+  it("slides a prompt in from the right, and out before removing it", () =>
+    withMotion(false, async () => {
+      const frame = new InlineFrame("save.html", "b".repeat(32), box, () => {});
+      expect(style(frame).transform).toBe("none");
+      expect(style(frame).transition).toContain("transform 280ms");
+
+      frame.remove();
+      expect(frame.el.isConnected).toBe(true);
+      expect(style(frame).transform).toContain("translateX");
+      expect(style(frame).pointerEvents).toBe("none");
+      vi.advanceTimersByTime(SLIDE_OUT_MS);
+      expect(frame.el.isConnected).toBe(false);
+    }));
+
+  it("keeps sliding in when the prompt reports its height", () =>
+    withMotion(false, () => {
+      const frame = new InlineFrame("passkey.html", "c".repeat(32), box, () => {});
+      frame.place({ ...box, height: 200 });
+      expect(style(frame).transition).toContain("transform 280ms");
+      expect(style(frame).height).toBe("200px");
+      frame.remove();
+    }));
+
+  it("removes a prompt the page touched at once", () =>
+    withMotion(false, async () => {
+      let frame: InlineFrame | null = null;
+      frame = new InlineFrame("save.html", "d".repeat(32), box, () => frame?.remove());
+      frame.el.style.setProperty("opacity", "0.01");
+      await Promise.resolve();
+      expect(frame.el.isConnected).toBe(false);
+    }));
+
+  it("removes a sliding-out prompt at once if the page touches it", () =>
+    withMotion(false, async () => {
+      const frame = new InlineFrame("sso.html", "e".repeat(32), box, () => {});
+      frame.remove();
+      frame.el.style.setProperty("pointer-events", "auto");
+      await Promise.resolve();
+      expect(frame.el.isConnected).toBe(false);
+    }));
+
+  it("does not animate with reduced motion, nor the field menu", () =>
+    withMotion(true, () => {
+      const prompt = new InlineFrame("save.html", "f".repeat(32), box, () => {});
+      expect(style(prompt).transition).toBe("none");
+      prompt.remove();
+      expect(prompt.el.isConnected).toBe(false);
+    }).then(() =>
+      withMotion(false, () => {
+        const menu = new InlineFrame("menu.html", "g".repeat(32), box, () => {});
+        expect(style(menu).transition).toBe("none");
+        menu.remove();
+        expect(menu.el.isConnected).toBe(false);
+      }),
+    ));
 });

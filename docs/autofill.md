@@ -359,6 +359,12 @@ The page does control the `<iframe>` element itself, so:
   Chromium, only while IntersectionObserver v2 reports it unobscured and
   opaque. This is a clickjacking guard (see Limitations for Firefox).
 
+The prompts at the top right (save, passkey, sign-in-with) slide in from
+the right and back out when they close; with reduced motion they appear
+and go at once. A prompt sliding out ignores clicks, and if the page
+touches it then, it is removed at once. One the page touched never
+animates out.
+
 A menu session is a random 128-bit token bound to the tab, frame and URL the
 user clicked in. Picks are accepted only from a menu frame in the same tab,
 only for items the menu offered, once, and within 5 minutes. Locking the

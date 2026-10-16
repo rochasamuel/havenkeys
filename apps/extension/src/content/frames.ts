@@ -10,6 +10,7 @@
 // * the menu page itself ignores clicks until it has been visible for a
 //   moment, and on Chromium only while IntersectionObserver v2 reports it
 //   unobscured (see menu.ts);
+// * a prompt sliding out (see remove) goes at once if the page touches it;
 // * the frame's session token is posted to it after it loads, for the
 //   extension's origin only, never put in its URL: the page can read an
 //   iframe's src, and with the token could show the same page in a frame
@@ -41,10 +42,16 @@ const BASE_STYLE: Record<string, string> = {
   overflow: "hidden",
 };
 
-const FRAME_TRANSITION = "height 220ms cubic-bezier(0.32, 0.72, 0, 1), top 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+const EASE_OUT = "cubic-bezier(0.32, 0.72, 0, 1)";
+const FRAME_TRANSITION = `height 220ms ${EASE_OUT}, top 220ms ${EASE_OUT}`;
+const SLIDE_IN = `transform 280ms ${EASE_OUT}, opacity 200ms ease-out`;
+export const SLIDE_OUT_MS = 200;
+const SLIDE_OUT = `transform ${SLIDE_OUT_MS}ms cubic-bezier(0.4, 0, 1, 1), opacity ${SLIDE_OUT_MS}ms ease-in`;
+/** Just past the right edge of the viewport, where a prompt slides from and back to. */
+const OFFSTAGE: Record<string, string> = { transform: "translateX(calc(100% + 24px))", opacity: "0", "pointer-events": "none" };
 
-function reducedMotion(): boolean {
-  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+function motionAllowed(): boolean {
+  return typeof matchMedia === "function" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 export interface Box {
@@ -70,6 +77,13 @@ export class InlineFrame {
   readonly el: HTMLIFrameElement;
   #observer: MutationObserver;
   #closed = false;
+  /** The page moved, hid or removed the frame: it goes at once, never animated. */
+  #tampered = false;
+  /** The prompts at the top right slide in from the right and back out; the menu does not. */
+  readonly #slides: boolean;
+  #box: Box;
+  #offstage = false;
+  #slide = "";
 
   constructor(page: "menu.html" | "save.html" | "passkey.html" | "sso.html", token: string, box: Box, onGone: () => void) {
     this.token = token;
@@ -93,14 +107,27 @@ export class InlineFrame {
     el.setAttribute("referrerpolicy", "no-referrer");
     el.setAttribute("allow", "");
     this.el = el;
+    this.#box = box;
+    this.#slides = page !== "menu.html" && motionAllowed();
+    if (this.#slides) {
+      this.#offstage = true;
+      this.#slide = SLIDE_IN;
+    }
     this.#apply(box);
     // Attach to <html>, not <body>: pages transform or replace <body>.
     document.documentElement.append(el);
+    if (this.#offstage) {
+      el.getBoundingClientRect(); // commit the offstage style so the slide runs
+      this.#offstage = false;
+      this.#apply(box);
+    }
 
     this.#observer = new MutationObserver((records) => {
-      if (this.#closed) return;
       const touched = records.some((r) => r.type === "attributes" && r.target === el);
-      if (touched || !el.isConnected) onGone();
+      if (!touched && el.isConnected) return;
+      if (this.#closed) return el.remove(); // touched while sliding out
+      this.#tampered = true;
+      onGone();
     });
     this.#observer.observe(el, { attributes: true });
     this.#observer.observe(document.documentElement, { childList: true });
@@ -108,13 +135,16 @@ export class InlineFrame {
 
   /** `animate`: slide top and height to the new box (a menu panel opening); else jump, so scrolling never lags. */
   #apply(box: Box, animate = false): void {
+    this.#box = box;
+    const transition = [animate && motionAllowed() ? FRAME_TRANSITION : "", this.#slide].filter(Boolean).join(", ");
     const style = {
       ...BASE_STYLE,
+      ...(this.#offstage ? OFFSTAGE : {}),
       top: `${box.top}px`,
       left: `${box.left}px`,
       width: `${box.width}px`,
       height: `${box.height}px`,
-      transition: animate && !reducedMotion() ? FRAME_TRANSITION : "none",
+      transition: transition || "none",
     };
     for (const [k, v] of Object.entries(style)) this.el.style.setProperty(k, v, "important");
   }
@@ -129,10 +159,23 @@ export class InlineFrame {
     this.el.focus();
   }
 
+  /** Slides a prompt out to the right first, unless the page touched it. */
   remove(): void {
+    if (this.#closed) return;
     this.#closed = true;
-    this.#observer.disconnect();
-    this.el.remove();
+    if (!this.#slides || this.#tampered || !this.el.isConnected) {
+      this.#observer.disconnect();
+      this.el.remove();
+      return;
+    }
+    this.#offstage = true;
+    this.#slide = SLIDE_OUT;
+    this.#apply(this.#box);
+    this.#observer.takeRecords();
+    setTimeout(() => {
+      this.#observer.disconnect();
+      this.el.remove();
+    }, SLIDE_OUT_MS);
   }
 }
 
