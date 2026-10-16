@@ -13,7 +13,7 @@ use crate::crypto::keys::{
     Key256, KEY_LEN,
 };
 use crate::crypto::secret_key::SecretKey;
-use crate::custom_field::{self, CustomField, FieldSection};
+use crate::custom_field::{self, CustomField, FieldSection, FieldValue};
 use crate::error::{Error, Result};
 use crate::identity::{IdentityField, IdentityFields};
 use crate::import::{ImportReport, ImportedItem};
@@ -1448,7 +1448,7 @@ impl VaultService {
         let value = match (self.load_details(id)?, field) {
             (ItemDetails::Login { password, .. }, SecretField::Password) => password,
             (ItemDetails::Login { notes, .. }, SecretField::Notes) => notes,
-            (ItemDetails::SecureNote { content }, SecretField::Content) => Some(content),
+            (ItemDetails::SecureNote { content, .. }, SecretField::Content) => Some(content),
             _ => return Err(Error::InvalidInput("field does not exist on this item")),
         };
         value.ok_or(Error::NotFound)
@@ -2262,21 +2262,24 @@ impl VaultService {
 
     // ------------------------------------------------------------ custom fields
 
-    /// A login's custom fields (spec 2026-09-30-login-custom-fields).
+    /// A login's or secure note's custom fields (specs
+    /// 2026-09-30-login-custom-fields, 2026-10-16-secure-note-fields).
     /// `NotFound` for any other kind of item. Holds Password values and OTP
     /// secrets: callers hand out `custom_field::views` or one value.
-    pub fn login_sections(&self, id: &Uuid) -> Result<Vec<FieldSection>> {
+    pub fn item_sections(&self, id: &Uuid) -> Result<Vec<FieldSection>> {
         match self.load_details(id)? {
-            ItemDetails::Login { sections, .. } => Ok(sections),
+            ItemDetails::Login { sections, .. } | ItemDetails::SecureNote { sections, .. } => {
+                Ok(sections)
+            }
             _ => Err(Error::NotFound),
         }
     }
 
-    /// One custom field of a login: the one lookup behind reveal, code,
-    /// copy and open. `load_details` checks the session first, so a locked
-    /// vault answers `Locked` before any id is looked at.
-    pub fn login_field(&self, id: &Uuid, field_id: &Uuid) -> Result<CustomField> {
-        self.login_sections(id)?
+    /// One custom field of a login or note: the one lookup behind reveal,
+    /// code, copy and open. `load_details` checks the session first, so a
+    /// locked vault answers `Locked` before any id is looked at.
+    pub fn item_field(&self, id: &Uuid, field_id: &Uuid) -> Result<CustomField> {
+        self.item_sections(id)?
             .into_iter()
             .flat_map(|s| s.fields)
             .find(|f| f.id == *field_id)
@@ -2582,8 +2585,26 @@ pub(crate) fn dedupe_key_parts(overview: &ItemOverview, details: Option<&ItemDet
         ItemType::SecureNote => {
             field(&mut h, "note");
             field(&mut h, &overview.title);
-            if let Some(ItemDetails::SecureNote { content }) = details {
+            if let Some(ItemDetails::SecureNote { content, sections }) = details {
                 field(&mut h, content.expose());
+                // Adds nothing for a note without fields: same key as before.
+                for s in sections {
+                    field(&mut h, "section");
+                    field(&mut h, s.title.as_ref().map_or("", |t| t.expose()));
+                    for f in &s.fields {
+                        field(&mut h, f.label.expose());
+                        field(&mut h, &format!("{:?}", f.value.kind()));
+                        match &f.value {
+                            FieldValue::Otp(c) => {
+                                field(&mut h, c.as_ref().map_or("", |c| c.secret.expose()))
+                            }
+                            v => {
+                                let text = v.clone().into_text();
+                                field(&mut h, text.expose());
+                            }
+                        }
+                    }
+                }
             }
         }
         // Never "the same" as an imported item: keyed by its own ID.
@@ -2726,14 +2747,15 @@ pub(crate) fn build_item(
             }
         }
         ItemType::SecureNote => {
-            let cur = match current {
-                Some(ItemDetails::SecureNote { content }) => Some(content),
+            let (cur, cur_sections) = match current {
+                Some(ItemDetails::SecureNote { content, sections }) => (Some(content), sections),
                 Some(_) => return Err(Error::Corrupted),
-                None => None,
+                None => (None, Vec::new()),
             };
             let content = content.apply(cur).unwrap_or_default();
             check_note_content(&content)?;
-            ItemDetails::SecureNote { content }
+            let sections = custom_field::apply_sections(sections, cur_sections)?;
+            ItemDetails::SecureNote { content, sections }
         }
         ItemType::Identity => {
             if !matches!(current, None | Some(ItemDetails::Identity(_))) {

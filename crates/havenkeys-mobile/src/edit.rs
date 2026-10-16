@@ -506,7 +506,7 @@ impl MobileVault {
                 .map(|n| format!("identity.{n}"))
                 .collect(),
         };
-        let has_custom_fields = kind == ItemKind::Login && !vault.login_sections(&id)?.is_empty();
+        let has_custom_fields = kind == ItemKind::Login && !vault.item_sections(&id)?.is_empty();
         Ok(ItemEdit {
             kind,
             title,

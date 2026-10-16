@@ -1,7 +1,8 @@
-//! A login's custom fields (spec 2026-09-30-login-custom-fields).
+//! A login's or secure note's custom fields (specs
+//! 2026-09-30-login-custom-fields, 2026-10-16-secure-note-fields).
 //!
-//! Sections of labelled, typed fields inside the login's encrypted details;
-//! nothing here is in the overview. Plain values reach the UI when a login
+//! Sections of labelled, typed fields inside the item's encrypted details;
+//! nothing here is in the overview. Plain values reach the UI when an item
 //! opens (as notes do). A Password value leaves the core only on an explicit
 //! reveal or copy; an OTP secret never does, only its codes.
 
@@ -20,13 +21,12 @@ pub const MAX_SECTIONS: usize = 20;
 pub const MAX_FIELDS: usize = 100;
 pub const MAX_LABEL_CHARS: usize = MAX_TITLE_CHARS;
 pub const MAX_SHORT_VALUE_CHARS: usize = 512;
-/// Every value, label and title of one login together, in bytes.
+/// Every value, label and title of one item together, in bytes.
 pub const MAX_TOTAL_BYTES: usize = 256 * 1024;
 
-/// An id that is not one of this login's fields or sections, sent twice, or
+/// An id that is not one of this item's fields or sections, sent twice, or
 /// a kept value on a new field or with a changed type. Never names a value.
-const BAD_LAYOUT: Error =
-    Error::InvalidInput("the login's fields changed; reopen it and try again");
+const BAD_LAYOUT: Error = Error::InvalidInput("the item's fields changed; reopen it and try again");
 
 // ---------------------------------------------------------------- stored
 
@@ -669,7 +669,7 @@ pub(crate) fn apply_sections(
         })
         .sum();
     if total > MAX_TOTAL_BYTES {
-        return Err(Error::InvalidInput("the login's fields are too large"));
+        return Err(Error::InvalidInput("the item's fields are too large"));
     }
     Ok(out)
 }
@@ -980,7 +980,7 @@ mod tests {
             .collect();
         assert_eq!(
             apply_sections(Some(vec![section(None, None, big)]), Vec::new()).err(),
-            Some(Error::InvalidInput("the login's fields are too large"))
+            Some(Error::InvalidInput("the item's fields are too large"))
         );
     }
 

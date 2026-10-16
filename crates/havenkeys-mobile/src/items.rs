@@ -244,7 +244,7 @@ impl MobileVault {
                         Some(rule.url.clone()),
                     ));
                 }
-                for section in vault.login_sections(&id)? {
+                for section in vault.item_sections(&id)? {
                     for f in section.fields {
                         let kind = if f.value.is_concealed() {
                             FieldKind::Secret
@@ -316,7 +316,7 @@ impl MobileVault {
             }
             k if k.starts_with("custom.") => {
                 let field_id = Uuid::parse_str(&k["custom.".len()..]).map_err(|_| wrong())?;
-                let custom = vault.login_field(&id, &field_id)?;
+                let custom = vault.item_field(&id, &field_id)?;
                 // An OTP field's secret never leaves the core: its code does.
                 if matches!(custom.value, FieldValue::Otp(_)) {
                     custom.totp_code(unix_seconds())?.code

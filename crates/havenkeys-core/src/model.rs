@@ -176,6 +176,9 @@ pub enum ItemDetails {
     },
     SecureNote {
         content: SecretString,
+        /// Custom fields, in sections (spec 2026-10-16-secure-note-fields).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        sections: Vec<FieldSection>,
     },
     Identity(Box<IdentityFields>),
     Card(Box<CardFields>),
@@ -298,7 +301,7 @@ pub struct ItemInput {
     /// A card's values. Required for a card, refused for the other types.
     #[serde(default)]
     pub card: Option<CardInput>,
-    /// A login's custom fields. `None` keeps them as they are (every save
+    /// A login's or secure note's custom fields. `None` keeps them as they are (every save
     /// path except the desktop editor); `Some` replaces the whole layout, in
     /// order (`custom_field::apply_sections`).
     #[serde(default)]
@@ -564,8 +567,10 @@ pub(crate) fn check_shape(input: &ItemInput) -> Result<()> {
     // What a login or a secure note may hold, and an identity or card not.
     let identity_only = login_fields || !input.content.is_keep();
     match input.item_type {
-        t if t != ItemType::Login && input.sections.is_some() => {
-            Err(Error::InvalidInput("only a login has custom fields"))
+        t if !matches!(t, ItemType::Login | ItemType::SecureNote) && input.sections.is_some() => {
+            Err(Error::InvalidInput(
+                "only a login or a secure note has custom fields",
+            ))
         }
         ItemType::Card if input.card.is_none() => {
             Err(Error::InvalidInput("a card needs its values"))

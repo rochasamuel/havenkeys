@@ -561,7 +561,7 @@ fn bitwarden_json_maps_every_item_kind() {
     let gh_id = v.commit_write(w, 1).unwrap().unwrap().id;
 
     // Change the password (old one goes to history) and clear one field.
-    let sections = v.login_sections(&gh_id).unwrap();
+    let sections = v.item_sections(&gh_id).unwrap();
     let (sid, ids): (_, Vec<_>) = (
         sections[0].id,
         sections[0].fields.iter().map(|f| f.id).collect(),
@@ -766,7 +766,7 @@ fn section_shape(vault: &VaultService, id: &uuid::Uuid) -> serde_json::Value {
             _ => {}
         }
     }
-    let views = havenkeys_core::custom_field::views(vault.login_sections(id).unwrap());
+    let views = havenkeys_core::custom_field::views(vault.item_sections(id).unwrap());
     let mut v = serde_json::to_value(views).unwrap();
     strip(&mut v);
     v
@@ -906,7 +906,7 @@ fn a_full_vault_round_trips_through_a_backup() {
     );
     assert_eq!(section_shape(&b, &gh_id), section_shape(&a, &gh_id));
     let secrets = |v: &VaultService| -> Vec<String> {
-        v.login_sections(&gh_id).unwrap()[0]
+        v.item_sections(&gh_id).unwrap()[0]
             .fields
             .iter()
             .filter_map(|f| match &f.value {

@@ -143,7 +143,7 @@ fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetail
                 ..blank
             }
         }
-        ItemDetails::SecureNote { content } => ItemInput {
+        ItemDetails::SecureNote { content, .. } => ItemInput {
             content: SecretUpdate::Set(content),
             ..blank
         },

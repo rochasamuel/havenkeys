@@ -227,7 +227,7 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
                 fido2_credentials: [],
             });
         }
-        ItemDetails::SecureNote { content } => {
+        ItemDetails::SecureNote { content, .. } => {
             it.r#type = 2;
             it.notes = Some(content);
             it.secure_note = Some(SecureNote { r#type: 0 });
@@ -367,6 +367,7 @@ mod tests {
         assert_eq!(item(&overview(ItemType::Card, " "), card).name, "Visa");
         let note = ItemDetails::SecureNote {
             content: "x".into(),
+            sections: Vec::new(),
         };
         assert_eq!(
             item(&overview(ItemType::SecureNote, ""), note).name,
@@ -374,6 +375,7 @@ mod tests {
         );
         let note = ItemDetails::SecureNote {
             content: "x".into(),
+            sections: Vec::new(),
         };
         assert_eq!(
             item(&overview(ItemType::SecureNote, "Kept"), note).name,

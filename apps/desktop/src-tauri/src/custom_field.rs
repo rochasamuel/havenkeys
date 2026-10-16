@@ -18,7 +18,7 @@ use uuid::Uuid;
 pub fn login_fields(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<SectionView>> {
     // No `touch()`: loaded whenever a login is shown, including one the
     // browser extension opened (DT2, see `commands::reveal_secret`).
-    Ok(custom_field::views(state.vault()?.login_sections(&id)?))
+    Ok(custom_field::views(state.vault()?.item_sections(&id)?))
 }
 
 #[tauri::command]
@@ -28,7 +28,7 @@ pub fn reveal_login_field(
     field_id: Uuid,
 ) -> CmdResult<SecretString> {
     state.touch();
-    Ok(state.vault()?.login_field(&id, &field_id)?.concealed()?)
+    Ok(state.vault()?.item_field(&id, &field_id)?.concealed()?)
 }
 
 #[tauri::command]
@@ -40,7 +40,7 @@ pub fn login_field_totp(
     // No `touch()`: refreshed on a timer, like `get_totp_code`.
     Ok(state
         .vault()?
-        .login_field(&id, &field_id)?
+        .item_field(&id, &field_id)?
         .totp_code(AppState::unix_seconds())?)
 }
 
@@ -52,7 +52,7 @@ pub fn copy_login_field(
     part: Option<AddressPart>,
 ) -> CmdResult<CopyResult> {
     copy_from_vault(&state, |v| {
-        v.login_field(&id, &field_id)?
+        v.item_field(&id, &field_id)?
             .copy_value(part, AppState::unix_seconds())
     })
 }
@@ -63,6 +63,6 @@ pub fn copy_login_field(
 #[tauri::command]
 pub fn open_login_field_url(state: State<'_, AppState>, id: Uuid, field_id: Uuid) -> CmdResult<()> {
     state.touch();
-    let target = state.vault()?.login_field(&id, &field_id)?.url()?;
+    let target = state.vault()?.item_field(&id, &field_id)?.url()?;
     tauri_plugin_opener::open_url(target, None::<&str>).map_err(|_| CmdError::open_website())
 }
