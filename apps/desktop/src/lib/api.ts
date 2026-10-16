@@ -122,13 +122,13 @@ export const api = {
   healthReport: () => call<HealthReport>("health_report"),
   setHealthIgnored: (id: string, checks: HealthCheck[]) => call<void>("set_health_ignored", { id, checks }),
   openHealthHelp: (id: string, check: HealthCheck) => call<void>("open_health_help", { id, check }),
-  loginFields: (id: string) => call<SectionView[]>("login_fields", { id }),
-  revealLoginField: (id: string, fieldId: string) => call<string>("reveal_login_field", { id, fieldId }),
-  loginFieldTotp: (id: string, fieldId: string) => call<TotpCode>("login_field_totp", { id, fieldId }),
-  copyLoginField: (id: string, fieldId: string, part?: AddressPart) =>
-    call<CopyResult>("copy_login_field", { id, fieldId, part: part ?? null }),
+  itemFields: (id: string) => call<SectionView[]>("item_fields", { id }),
+  revealItemField: (id: string, fieldId: string) => call<string>("reveal_item_field", { id, fieldId }),
+  itemFieldTotp: (id: string, fieldId: string) => call<TotpCode>("item_field_totp", { id, fieldId }),
+  copyItemField: (id: string, fieldId: string, part?: AddressPart) =>
+    call<CopyResult>("copy_item_field", { id, fieldId, part: part ?? null }),
   /** Rust opens only that field's saved http(s) address. */
-  openLoginFieldUrl: (id: string, fieldId: string) => call<void>("open_login_field_url", { id, fieldId }),
+  openItemFieldUrl: (id: string, fieldId: string) => call<void>("open_item_field_url", { id, fieldId }),
   /** Rust reads the clipboard image, then the screen; returns tokens and labels, never the secret. */
   scanTotpQr: () => call<ScannedTotp[]>("scan_totp_qr"),
   createItem: (input: ItemInput) => call<ItemOverview>("create_item", { input }),

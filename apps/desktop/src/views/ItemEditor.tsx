@@ -109,7 +109,7 @@ export function ItemEditor({ itemType, existing, readOnly, onCancel, onSaved, on
     if (!existingId || itemType !== "login") return;
     let cancelled = false;
     api
-      .loginFields(existingId)
+      .itemFields(existingId)
       .then((views) => {
         if (cancelled) return;
         const loaded = fromViews(views);

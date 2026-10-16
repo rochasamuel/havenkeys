@@ -22,7 +22,7 @@ export function CustomSections({ itemId, updatedAt }: { itemId: string; updatedA
   useEffect(() => {
     let live = true;
     setFailed(false);
-    api.loginFields(itemId).then(
+    api.itemFields(itemId).then(
       (s) => live && setSections(s),
       () => live && setFailed(true),
     );
@@ -64,7 +64,7 @@ function FieldRow({ itemId, field }: { itemId: string; field: FieldView }) {
   const name = field.label || t.fields.types[field.type];
   const copy = useCallback(async () => {
     try {
-      const r = await api.copyLoginField(itemId, field.id);
+      const r = await api.copyItemField(itemId, field.id);
       toast(t.fields.copied(name, r.clearAfterSeconds));
       return true;
     } catch (e) {
@@ -85,7 +85,7 @@ function FieldRow({ itemId, field }: { itemId: string; field: FieldView }) {
       return field.hasOtp ? (
         <TotpField
           label={field.label}
-          load={() => api.loginFieldTotp(itemId, field.id)}
+          load={() => api.itemFieldTotp(itemId, field.id)}
           loadKey={`${itemId}/${field.id}`}
           actions={copyButton}
         />
@@ -110,7 +110,7 @@ function FieldRow({ itemId, field }: { itemId: string; field: FieldView }) {
               title={t.detail.openWebsite}
               onClick={() =>
                 void api
-                  .openLoginFieldUrl(itemId, field.id)
+                  .openItemFieldUrl(itemId, field.id)
                   .catch((e) => toast(errorMessage(e, t, t.detail.openWebsiteFailed), "error"))
               }
             >
@@ -150,7 +150,7 @@ function PasswordRow({
 }) {
   const { t } = useI18n();
   const toast = useToast();
-  const secret = useRevealedSecret(useCallback(() => api.revealLoginField(itemId, fieldId), [itemId, fieldId]));
+  const secret = useRevealedSecret(useCallback(() => api.revealItemField(itemId, fieldId), [itemId, fieldId]));
   return (
     <Field
       label={label}

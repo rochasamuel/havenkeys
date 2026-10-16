@@ -607,7 +607,7 @@ function KeptPassword({
   const { t } = useI18n();
   const canReveal = !!itemId && !!fieldId;
   const load = useCallback(
-    () => (itemId && fieldId ? api.revealLoginField(itemId, fieldId) : Promise.reject(new Error("no saved field"))),
+    () => (itemId && fieldId ? api.revealItemField(itemId, fieldId) : Promise.reject(new Error("no saved field"))),
     [itemId, fieldId],
   );
   const secret = useRevealedSecret(load);

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-item-field-url"
+description = "Enables the open_item_field_url command without any pre-configured scope."
+commands.allow = ["open_item_field_url"]
+
+[[permission]]
+identifier = "deny-open-item-field-url"
+description = "Denies the open_item_field_url command without any pre-configured scope."
+commands.deny = ["open_item_field_url"]

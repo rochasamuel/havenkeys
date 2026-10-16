@@ -1,10 +1,10 @@
-//! A login's custom fields in the desktop app (spec
-//! 2026-09-30-login-custom-fields §5.1).
+//! A login's or secure note's custom fields in the desktop app (specs
+//! 2026-09-30-login-custom-fields §5.1, 2026-10-16-secure-note-fields §5.1).
 //!
 //! The core owns the fields and their rules. The renderer gets the view
-//! (Password and OTP reduced to flags) when a login opens; a Password value
-//! comes one at a time on an explicit reveal; copies and URL opens happen
-//! here, from the vault, and never take a value from the renderer.
+//! (Password and OTP reduced to flags) when a login or note opens; a Password
+//! value comes one at a time on an explicit reveal; copies and URL opens
+//! happen here, from the vault, and never take a value from the renderer.
 
 use crate::commands::{copy_from_vault, CopyResult};
 use crate::state::{AppState, CmdError, CmdResult};
@@ -15,14 +15,14 @@ use tauri::State;
 use uuid::Uuid;
 
 #[tauri::command]
-pub fn login_fields(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<SectionView>> {
-    // No `touch()`: loaded whenever a login is shown, including one the
+pub fn item_fields(state: State<'_, AppState>, id: Uuid) -> CmdResult<Vec<SectionView>> {
+    // No `touch()`: loaded whenever a login or note is shown, including one the
     // browser extension opened (DT2, see `commands::reveal_secret`).
     Ok(custom_field::views(state.vault()?.item_sections(&id)?))
 }
 
 #[tauri::command]
-pub fn reveal_login_field(
+pub fn reveal_item_field(
     state: State<'_, AppState>,
     id: Uuid,
     field_id: Uuid,
@@ -32,7 +32,7 @@ pub fn reveal_login_field(
 }
 
 #[tauri::command]
-pub fn login_field_totp(
+pub fn item_field_totp(
     state: State<'_, AppState>,
     id: Uuid,
     field_id: Uuid,
@@ -45,7 +45,7 @@ pub fn login_field_totp(
 }
 
 #[tauri::command]
-pub fn copy_login_field(
+pub fn copy_item_field(
     state: State<'_, AppState>,
     id: Uuid,
     field_id: Uuid,
@@ -61,7 +61,7 @@ pub fn copy_login_field(
 /// Rust opens only that field's saved address, normalised again (http(s)
 /// only), like `open_website`.
 #[tauri::command]
-pub fn open_login_field_url(state: State<'_, AppState>, id: Uuid, field_id: Uuid) -> CmdResult<()> {
+pub fn open_item_field_url(state: State<'_, AppState>, id: Uuid, field_id: Uuid) -> CmdResult<()> {
     state.touch();
     let target = state.vault()?.item_field(&id, &field_id)?.url()?;
     tauri_plugin_opener::open_url(target, None::<&str>).map_err(|_| CmdError::open_website())

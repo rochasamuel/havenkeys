@@ -313,11 +313,11 @@ means a live server session, which a locked vault does not have.
 | `reveal_card` | yes | **a card's holder name, expiry, notes and chosen brand**, when its detail or editor opens; never the number or verification number (only whether they exist). `Denied` for any item that is not a card |
 | `reveal_card_field` | yes | **the card number or verification number**, one at a time, on an explicit eye click; the field is a closed enum |
 | `copy_card_field` | yes | no. Copies the holder name, number, verification number or expiry from Rust, cleared after the clipboard delay |
-| `login_fields` | yes | **the plain values of a login's custom fields** (text, URL, email, phone, date, address parts) and flags: a Password field returns only `hasValue`, an OTP field only `hasOtp`. `NotFound` for an item that is not a login |
-| `reveal_login_field` | yes | **one Password custom field's value**, on an explicit eye click, in the detail view and in the editor for a kept value. By field id; any other field type is refused |
-| `login_field_totp` | yes | **the current code** of one OTP custom field, never its secret |
-| `copy_login_field` | yes | no. Copies one field's value from Rust, read from the vault by field id, cleared after the clipboard delay |
-| `open_login_field_url` | yes | no. Rust reads the URL field's saved value by field id, re-normalises it and opens it only if it is http(s); the renderer supplies no URL |
+| `item_fields` | yes | **the plain values of a login's or secure note's custom fields** (text, URL, email, phone, date, address parts) and flags: a Password field returns only `hasValue`, an OTP field only `hasOtp`. `NotFound` for an item that is neither a login nor a secure note |
+| `reveal_item_field` | yes | **one Password custom field's value**, on an explicit eye click, in the detail view and in the editor for a kept value. By field id; any other field type is refused |
+| `item_field_totp` | yes | **the current code** of one OTP custom field, never its secret |
+| `copy_item_field` | yes | no. Copies one field's value from Rust, read from the vault by field id, cleared after the clipboard delay |
+| `open_item_field_url` | yes | no. Rust reads the URL field's saved value by field id, re-normalises it and opens it only if it is http(s); the renderer supplies no URL |
 | `check_card_number` | no | no. Returns the brand the number's prefix names and whether its check digit passes; keeps nothing |
 | `quick_access_status` | no | no. Whether the shortcut is on and whether it is registered or in use by another app: `enabled`, `inUse`, `keys` (the current chord), `isDefault`, and `candidateInUse` (always false here) |
 | `set_quick_access` | yes (unlocked) | no. Writes `quick-access.json` and registers or unregisters the shortcut |
@@ -332,11 +332,11 @@ convenience only.
 The quick window can call only the commands in `quick.json`; `commands.test.ts`
 and the tests in `quick_window.rs` check both lists.
 
-Custom fields (a login's titled sections of typed fields) are desktop-only and
-live in the login's encrypted details blob, not in its overview. The renderer
-receives plain values and flags through `login_fields`; a Password field's
-value comes only through `reveal_login_field`, and an OTP field's secret never
-leaves Rust (only codes, via `login_field_totp`). Copies and URL opens read the
+Custom fields (a login's or secure note's titled sections of typed fields) are desktop-only and
+live in the item's encrypted details blob, not in its overview. The renderer
+receives plain values and flags through `item_fields`; a Password field's
+value comes only through `reveal_item_field`, and an OTP field's secret never
+leaves Rust (only codes, via `item_field_totp`). Copies and URL opens read the
 value from the vault by field id, so the renderer never supplies the text or
 URL. A save's field ids are checked against the same login: an id may appear
 once and only if it belongs to that login, and keeping a value requires the

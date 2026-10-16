@@ -40,8 +40,8 @@ import { QuickSearch } from "./QuickSearch";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Every api call that hands a secret value (or a code) to JavaScript.
-const SECRET_READS = /^(reveal\w*|totp|loginFieldTotp)$/;
-const SECRET_READS_IN_SOURCE = /api\.(reveal\w*|totp|loginFieldTotp)\b/;
+const SECRET_READS = /^(reveal\w*|totp|itemFieldTotp)$/;
+const SECRET_READS_IN_SOURCE = /api\.(reveal\w*|totp|itemFieldTotp)\b/;
 
 function login(id: string, title: string, extra: Partial<ItemOverview> = {}): ItemOverview {
   return {
@@ -279,7 +279,7 @@ describe("QuickSearch", () => {
   });
 
   it("the secret-read pattern covers every reveal API", () => {
-    for (const name of ["reveal", "revealCard", "revealIdentity", "revealCardField", "revealAccountSecretKey", "revealLoginField", "revealPreviousPassword", "totp", "loginFieldTotp"]) {
+    for (const name of ["reveal", "revealCard", "revealIdentity", "revealCardField", "revealAccountSecretKey", "revealItemField", "revealPreviousPassword", "totp", "itemFieldTotp"]) {
       expect(name).toMatch(SECRET_READS);
       expect(`api.${name}(`).toMatch(SECRET_READS_IN_SOURCE);
     }
