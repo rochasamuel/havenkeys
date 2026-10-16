@@ -125,20 +125,26 @@ fn count(s: &mut ExportSummary, format: ExportFormat, ov: &ItemOverview, d: &Ite
     if format == ExportFormat::Backup {
         return;
     }
-    if let ItemDetails::Login {
-        passkeys,
-        password_history,
-        sections,
-        ..
-    } = d
-    {
-        s.passkeys_left_out += passkeys.len();
-        if format == ExportFormat::Csv {
-            s.password_history_left_out += password_history.len();
-            s.custom_fields_left_out += sections.iter().map(|x| x.fields.len()).sum::<usize>();
+    match d {
+        ItemDetails::Login {
+            passkeys,
+            password_history,
+            sections,
+            ..
+        } => {
+            s.passkeys_left_out += passkeys.len();
+            if format == ExportFormat::Csv {
+                s.password_history_left_out += password_history.len();
+                s.custom_fields_left_out += sections.iter().map(|x| x.fields.len()).sum::<usize>();
+            }
         }
-    } else if format == ExportFormat::Csv {
-        s.items_left_out += 1;
+        _ if format == ExportFormat::Csv => {
+            s.items_left_out += 1;
+            if let ItemDetails::SecureNote { sections, .. } = d {
+                s.custom_fields_left_out += sections.iter().map(|x| x.fields.len()).sum::<usize>();
+            }
+        }
+        _ => {}
     }
 }
 

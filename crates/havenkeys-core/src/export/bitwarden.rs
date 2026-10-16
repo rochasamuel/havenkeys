@@ -3,7 +3,7 @@
 //! always empty).
 
 use super::{count, for_each_item, ExportFormat, ExportSummary, Rendered};
-use crate::custom_field::FieldValue;
+use crate::custom_field::{FieldSection, FieldValue};
 use crate::error::{Error, Result};
 use crate::import::common::format_utc_timestamp_ms;
 use crate::model::{ItemDetails, ItemOverview, MatchType};
@@ -110,6 +110,25 @@ struct SecureNote {
     r#type: u8,
 }
 
+/// Custom fields as Bitwarden fields, flattened across sections (section
+/// titles are lost). A cleared Password or OTP field is left out.
+fn push_custom_fields(it: &mut Item, sections: Vec<FieldSection>) {
+    for f in sections.into_iter().flat_map(|s| s.fields) {
+        let label = f.label.expose().to_owned();
+        match f.value {
+            FieldValue::Text(v)
+            | FieldValue::Url(v)
+            | FieldValue::Email(v)
+            | FieldValue::Phone(v)
+            | FieldValue::Date(v) => it.fields.push(field(&label, v, false)),
+            FieldValue::Address(a) => it.fields.push(field(&label, a.formatted(), false)),
+            FieldValue::Password(Some(p)) => it.fields.push(field(&label, p, true)),
+            FieldValue::Otp(Some(c)) => it.fields.push(field(&label, c.to_otpauth_uri(), true)),
+            FieldValue::Password(None) | FieldValue::Otp(None) => {}
+        }
+    }
+}
+
 fn field(name: &str, value: SecretString, hidden: bool) -> Field {
     Field {
         name: name.to_owned(),
@@ -195,22 +214,7 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
                 r#match: None,
                 uri: format!("androidapp://{p}"),
             }));
-            for f in sections.into_iter().flat_map(|s| s.fields) {
-                let label = f.label.expose().to_owned();
-                match f.value {
-                    FieldValue::Text(v)
-                    | FieldValue::Url(v)
-                    | FieldValue::Email(v)
-                    | FieldValue::Phone(v)
-                    | FieldValue::Date(v) => it.fields.push(field(&label, v, false)),
-                    FieldValue::Address(a) => it.fields.push(field(&label, a.formatted(), false)),
-                    FieldValue::Password(Some(p)) => it.fields.push(field(&label, p, true)),
-                    FieldValue::Otp(Some(c)) => {
-                        it.fields.push(field(&label, c.to_otpauth_uri(), true))
-                    }
-                    FieldValue::Password(None) | FieldValue::Otp(None) => {}
-                }
-            }
+            push_custom_fields(&mut it, sections);
             it.password_history = password_history
                 .into_iter()
                 .map(|h| History {
@@ -227,10 +231,11 @@ fn item(ov: &ItemOverview, details: ItemDetails) -> Item {
                 fido2_credentials: [],
             });
         }
-        ItemDetails::SecureNote { content, .. } => {
+        ItemDetails::SecureNote { content, sections } => {
             it.r#type = 2;
             it.notes = Some(content);
             it.secure_note = Some(SecureNote { r#type: 0 });
+            push_custom_fields(&mut it, sections);
         }
         ItemDetails::Card(f) => {
             let f = *f;

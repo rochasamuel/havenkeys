@@ -1198,3 +1198,113 @@ fn a_restore_takes_the_tag_spelling_this_vault_uses() {
     // Vault A already held one spelling ("dev", the first one saved).
     assert_eq!(tags("Mail"), vec!["dev"]);
 }
+
+use havenkeys_core::custom_field::{FieldInput, FieldValueInput, SectionInput};
+use havenkeys_core::model::SecretUpdate;
+
+fn note_with_all_kinds(v: &mut VaultService) -> uuid::Uuid {
+    let mut input = note("Server", "root box");
+    input.sections = Some(vec![SectionInput {
+        id: None,
+        title: Some(secret("Access")),
+        fields: vec![
+            FieldInput {
+                id: None,
+                label: secret("Host"),
+                value: FieldValueInput::Url(secret("srv.example")),
+            },
+            FieldInput {
+                id: None,
+                label: secret("Root"),
+                value: FieldValueInput::Password(SecretUpdate::Set(secret("r00t"))),
+            },
+            FieldInput {
+                id: None,
+                label: secret("2FA"),
+                value: FieldValueInput::Otp(SecretUpdate::Set(secret("JBSWY3DPEHPK3PXP"))),
+            },
+            FieldInput {
+                id: None,
+                label: secret("Old"),
+                value: FieldValueInput::Password(SecretUpdate::Clear),
+            },
+        ],
+    }]);
+    let staged = v.stage_create(input, NOW).unwrap();
+    v.commit_write(staged, 1).unwrap().unwrap().id
+}
+
+#[test]
+fn bitwarden_export_writes_a_notes_fields() {
+    let (mut v, _) = activated_vault();
+    note_with_all_kinds(&mut v);
+    let out = export::render(&v, ExportFormat::BitwardenJson, NOW).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    let n = json["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["type"] == 2)
+        .unwrap();
+    assert_eq!(n["notes"], "root box");
+    let fields = n["fields"].as_array().unwrap();
+    assert_eq!(fields.len(), 3);
+    let triple = |f: &serde_json::Value| (f["name"].clone(), f["value"].clone(), f["type"].clone());
+    assert_eq!(
+        triple(&fields[0]),
+        ("Host".into(), "https://srv.example/".into(), 0.into())
+    );
+    assert_eq!(triple(&fields[1]), ("Root".into(), "r00t".into(), 1.into()));
+    assert_eq!(fields[2]["name"], "2FA");
+    assert_eq!(fields[2]["type"], 1);
+    assert!(fields[2]["value"]
+        .as_str()
+        .unwrap()
+        .starts_with("otpauth://totp/"));
+}
+
+#[test]
+fn csv_export_counts_a_notes_fields_as_left_out() {
+    let (mut v, _) = activated_vault();
+    note_with_all_kinds(&mut v);
+    let s = export::summarize(&v, ExportFormat::Csv).unwrap();
+    assert_eq!(s.custom_fields_left_out, 4);
+    assert_eq!(s.items_left_out, 1);
+}
+
+#[test]
+fn a_backup_restores_a_notes_fields() {
+    use havenkeys_core::custom_field::FieldValue;
+    use havenkeys_core::model::SecretField;
+
+    let (mut a, _) = activated_vault();
+    let id = note_with_all_kinds(&mut a);
+    let file = backup_of(&a, BACKUP_PW);
+    let (mut b, _) = activated_vault();
+    restore_into(&mut b, &file, 0);
+
+    let sections = b.item_sections(&id).unwrap();
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].title.as_ref().unwrap().expose(), "Access");
+    let labels: Vec<_> = sections[0]
+        .fields
+        .iter()
+        .map(|f| f.label.expose())
+        .collect();
+    assert_eq!(labels, ["Host", "Root", "2FA", "Old"]);
+    assert!(matches!(
+        &sections[0].fields[1].value,
+        FieldValue::Password(Some(p)) if p.expose() == "r00t"
+    ));
+    let code = sections[0].fields[2].totp_code(59).unwrap();
+    assert_eq!(code.code.expose().len(), 6);
+    assert!(matches!(
+        sections[0].fields[3].value,
+        FieldValue::Password(None)
+    ));
+    assert_eq!(section_shape(&b, &id), section_shape(&a, &id));
+    assert_eq!(
+        b.reveal(&id, SecretField::Content).unwrap().expose(),
+        "root box"
+    );
+}
