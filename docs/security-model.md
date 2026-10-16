@@ -348,8 +348,8 @@ set (`status`, `lock`, `find_matches`, `fill_item`, `get_totp`, `open_item`,
 `generate_password`, `check_login`, `save_login`, the four passkey
 requests and the three identity requests, `find_identity`, `fill_identity`
 and `open_identity`, and `show_unlock`), all rate-limited and all origin-bound except
-`show_unlock`, which names no site or item and only raises the desktop
-window. No request can name
+`show_unlock`, which names no site or item and only shows the desktop's
+unlock box. No request can name
 a custom field, so none can read, fill or open one. See `native-messaging.md`.
 
 `open_item` returns nothing: when the item is a login saved for the page,
@@ -357,8 +357,12 @@ the desktop shows its window with that login's editor open. It is in the
 `secret` rate class because it has a visible effect.
 
 `show_unlock` (the popup's "Unlock" button, and the Unlock icon in a locked
-field menu) also returns nothing: the
-desktop brings its window forward, on the unlock screen while locked. It is
+field menu) also returns nothing: while locked, the desktop shows the Quick
+Access window asking for the master password, and hides it once the vault
+unlocks so the keyboard returns to the browser (the main window when there
+is no vault). That window keeps its own narrow capability list; nothing new
+is granted. A field menu the user unlocked from opens again, still showing
+only matches, if its field kept focus. It is
 answered in any lock state because it carries no secret either way, and it
 is in the `secret` rate class for the same reason as `open_item`. The
 master password is still typed only in the desktop app.

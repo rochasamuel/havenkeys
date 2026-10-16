@@ -193,11 +193,18 @@ be omitted, which means null.
 `open_item` shows the desktop window with that login open in the editor; the
 item must be saved for `url`, like `fill_item`. Nothing is returned.
 
-`show_unlock` brings the desktop window forward; while the vault is locked
-that window is the unlock screen, with the password field focused. It is
-the popup's "Unlock" button and the Unlock icon in a locked field menu (the
-background sends it only for a live menu that was opened locked, then closes
-that menu). It carries no secret and returns none
+`show_unlock` shows the desktop's small Quick Access box asking only for the
+master password (the main window instead when this computer has no vault;
+nothing when the vault is already unlocked). Once the vault unlocks, the box
+hides and the keyboard goes back to the browser (on macOS by hiding the
+app, as Quick Access does on Esc). It is the popup's "Unlock" button and the
+Unlock icon in a locked field menu (the background sends it only for a live
+menu that was opened locked, then closes that menu). For the field menu, the
+background then waits up to 2 minutes for the vault to open (the `unlocked`
+event, or `status` every 2 s since the port may close when idle) and sends
+that field's frame `bg_reopen_menu` with only the menu's token; the content
+script opens the menu again only if that field still has focus. Nothing is
+filled until the user picks. It carries no secret and returns none
 (`{"type":"show_unlock"}`), so it is answered in any lock state and never
 touches the vault; the browser-integration switch is sealed in the vault
 and cannot be read while locked. It is in the `secret` rate class because

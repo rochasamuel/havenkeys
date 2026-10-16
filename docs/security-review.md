@@ -3969,3 +3969,45 @@ permission on update.
 - [ ] Chrome and Firefox, signed in to GitHub with Cloudflare already authorized: "Continue with GitHub" on `dash.cloudflare.com/login` redirects to the dashboard and the save question appears.
 - [ ] The private-window flow (GitHub's sign-in page shown) still asks once.
 - [ ] Chrome shows no new install warning; note what Firefox shows on update.
+
+# Security Review: unlocking from the browser in the Quick Access box (2026-10-16)
+
+### QU1. `show_unlock` shows the Quick Access box instead of the main window (Info)
+**Component:** `apps/desktop/src-tauri/src/quick_window.rs`
+(`show_for_browser_unlock`, `after_unlock`), `quick_access.rs`
+(`browser_unlock_target`, `take_browser_unlock`), `src/quick/QuickApp.tsx`.
+**Attack scenario:** a page tries to use the box to pull the desktop to the
+front or to read the password. The request is unchanged: the menu's Unlock
+icon needs a trusted click on a live locked menu, the bridge keeps
+`show_unlock` in the `secret` rate class, and the master password is typed
+only in a desktop window. The quick window keeps exactly its pinned
+capability list (test `the_quick_capability_grants_exactly_the_allowed_list`);
+the `quick://shown` payload carries only `forBrowser`. After any unlock, Rust
+hides the box once (a flag cleared whenever the window hides), so a later
+unlock in the main window does not hide a Quick Access the user opened with
+the shortcut.
+**Remaining limitations:** a Secret Key that is needed first still has to
+be entered in the main window (the box says so).
+
+### QU2. The field menu reopens after unlocking (Info)
+**Component:** `apps/extension/src/background/inline-handler.ts`
+(`menu_show_unlock`, `unlocked`, `watchUnlock`), `content/index.ts`
+(`bg_reopen_menu`), `messaging/inline.ts`.
+**Attack scenario:** a page tries to make the menu appear, or to get a fill,
+without the user. `bg_reopen_menu` comes only from the background, carries
+only the token of the menu the user clicked Unlock in, and is sent once, to
+that menu's frame and document, within 2 minutes; a lock, the desktop going
+away or the tab closing ends the wait. The content script opens the menu
+again only if that field is still connected and focused, through the
+ordinary `cs_open_menu`, so Rust matches the page again and nothing is
+filled until the user picks a row. The wait polls `status` (no secret) every
+2 s.
+
+### Manual checks (owner)
+- [ ] Locked, click a login field's Unlock icon in Firefox and in Chrome: the small box appears (not the main window), says "Enter your master password to fill in your browser."
+- [ ] Unlock there: the box hides, the browser has the keyboard again (Windows and macOS), and the menu reopens on the same field with the matches.
+- [ ] The main window was open behind the browser: after unlocking in the box, note whether the browser or the main window ends up in front (macOS hides the app).
+- [ ] Esc or clicking the browser closes the box without unlocking; unlocking later in the main window does not reopen the menu if focus left the field.
+- [ ] The popup's Unlock opens the same box; after unlocking, reopening the popup shows the matches.
+- [ ] No vault on this computer: Unlock raises the main window.
+- [ ] Quick Access shortcut turned off in Settings: the browser's Unlock still shows the box.
