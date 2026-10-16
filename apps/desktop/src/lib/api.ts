@@ -250,7 +250,8 @@ export const api = {
   /** The vault was unlocked, here or in the Quick Access window. Carries no data. */
   onUnlocked: (handler: () => void): Promise<UnlistenFn> => listen("vault://unlocked", () => handler()),
   /** The Quick Access window was just shown (sent to that window only). */
-  onQuickShown: (handler: () => void): Promise<UnlistenFn> => listen("quick://shown", () => handler()),
+  onQuickShown: (handler: (shown: { forBrowser: boolean }) => void): Promise<UnlistenFn> =>
+    listen<{ forBrowser: boolean }>("quick://shown", (e) => handler(e.payload)),
   /** A login was saved from the browser extension. Carries no data. */
   onItemsChanged: (handler: () => void): Promise<UnlistenFn> => listen("vault://items-changed", () => handler()),
   /** The browser extension asked to edit this item (already checked against the page in Rust). */

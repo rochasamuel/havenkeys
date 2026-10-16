@@ -9,7 +9,7 @@ const status = vi.fn<() => Promise<VaultStatus>>();
 const unlock = vi.fn<(password: string, secretKey?: string) => Promise<VaultStatus>>();
 const hideQuickWindow = vi.fn<() => Promise<void>>();
 const listItems = vi.fn();
-let shown: (() => void) | null = null;
+let shown: ((e: { forBrowser: boolean }) => void) | null = null;
 let locked: ((reason: string) => void) | null = null;
 let unlocked: (() => void) | null = null;
 
@@ -20,7 +20,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     unlock: (p: string, k?: string) => unlock(p, k),
     hideQuickWindow: () => hideQuickWindow(),
     listItems: (q?: string) => listItems(q),
-    onQuickShown: (cb: () => void) => {
+    onQuickShown: (cb: (e: { forBrowser: boolean }) => void) => {
       shown = cb;
       return Promise.resolve(() => undefined);
     },
@@ -169,7 +169,29 @@ describe("QuickApp", () => {
     await render();
     expect(password()).not.toBeNull();
     status.mockResolvedValue(UNLOCKED); // unlocked in the main window meanwhile
-    await act(async () => shown?.());
+    await act(async () => shown?.({ forBrowser: false }));
+    expect(search()).not.toBeNull();
+  });
+
+  it("says what the unlock is for when the browser opened it", async () => {
+    await render();
+    await act(async () => shown?.({ forBrowser: true }));
+    expect(host.textContent).toContain(en.quick.unlockLedeBrowser);
+    expect(host.textContent).not.toContain(en.quick.unlockLede);
+  });
+
+  it("does not move to the search after the browser's unlock (Rust hides the window)", async () => {
+    await render();
+    await act(async () => shown?.({ forBrowser: true }));
+    await act(async () => type("input[type=password]", "correct horse"));
+    await submit();
+    expect(unlock).toHaveBeenCalledWith("correct horse", undefined);
+    status.mockResolvedValue(UNLOCKED);
+    await act(async () => unlocked?.());
+    expect(search()).toBeNull();
+    expect(listItems).not.toHaveBeenCalled();
+    // Shown again by the shortcut: an ordinary Quick Access.
+    await act(async () => shown?.({ forBrowser: false }));
     expect(search()).not.toBeNull();
   });
 

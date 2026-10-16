@@ -48,6 +48,7 @@ impl ClientEvents for DesktopEvents {
             state.notify_unlocked();
         }
         let _ = self.app.emit(UNLOCKED_EVENT, ());
+        crate::quick_window::after_unlock(&self.app);
     }
 
     fn locked(&self, reason: &'static str, was_open: bool) {

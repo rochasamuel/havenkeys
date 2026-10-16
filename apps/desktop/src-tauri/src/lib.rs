@@ -138,12 +138,10 @@ fn browser_bridge(app: &AppHandle, vault: Arc<Mutex<VaultService>>) -> Bridge {
         tray::show_main_window(&open_handle);
         let _ = open_handle.emit(state::OPEN_ITEM_EVENT, id.to_string());
     });
-    // "Unlock" from the extension popup while the vault is locked: raise
-    // the window, which then shows its unlock screen. The master password
-    // is typed there, never in the browser. Nothing else happens when the
-    // vault is already unlocked.
+    // The extension's Unlock: the master password is typed in the quick
+    // window, never in the browser.
     let show_handle = app.clone();
-    bridge.set_show_unlock_hook(move || tray::show_main_window(&show_handle));
+    bridge.set_show_unlock_hook(move || quick_window::show_for_browser_unlock(&show_handle));
     // A repeat password change from the browser (spec 2026-10-13): raise the
     // window and ask. Runs on a bridge thread without the vault lock; any
     // failure is a Deny, and the wait ends at the bridge's deadline.

@@ -3,10 +3,12 @@
 //! The decisions are in quick_access.rs.
 
 use crate::quick_access::{
-    self, HideReason, QuickAccess, QuickSurface, ShortcutTarget, Toggled, QUICK_WINDOW, SHOWN_EVENT,
+    self, BrowserUnlockTarget, HideReason, QuickAccess, QuickSurface, ShortcutTarget, Shown,
+    Toggled, QUICK_WINDOW, SHOWN_EVENT,
 };
 use crate::state::AppState;
 use crate::tray::{self, MAIN_WINDOW};
+use havenkeys_core::vault::VaultState;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, Window, WindowEvent};
 
 struct Surface<'a> {
@@ -19,19 +21,19 @@ impl QuickSurface for Surface<'_> {
         self.window.is_visible().unwrap_or(false)
     }
 
-    fn show_focused(&self) {
+    fn show_focused(&self, shown: Shown) {
         let main_focused = self
             .app
             .get_webview_window(MAIN_WINDOW)
             .and_then(|w| w.is_focused().ok())
             .unwrap_or(false);
         if let Some(qa) = self.app.try_state::<QuickAccess>() {
-            qa.note_opened(main_focused);
+            qa.note_opened(main_focused, shown);
         }
         center_on_cursor_display(&self.window);
         let _ = self.window.show();
         let _ = self.window.set_focus();
-        let _ = self.app.emit_to(QUICK_WINDOW, SHOWN_EVENT, ());
+        let _ = self.app.emit_to(QUICK_WINDOW, SHOWN_EVENT, shown);
     }
 
     fn hide(&self) {
@@ -79,12 +81,42 @@ pub fn toggle_from_shortcut(app: &AppHandle) {
     }
 }
 
+/// The browser's Unlock: the quick window asks for the master password and
+/// hides once the vault unlocks ([`after_unlock`]), returning the keyboard.
+pub fn show_for_browser_unlock(app: &AppHandle) {
+    let status = app
+        .try_state::<AppState>()
+        .and_then(|s| s.vault().ok().and_then(|v| v.status().ok()))
+        .map(|s| (s.vault_exists, s.state == VaultState::Unlocked));
+    match quick_access::browser_unlock_target(status) {
+        BrowserUnlockTarget::Nothing => {}
+        BrowserUnlockTarget::Main => tray::show_main_window(app),
+        BrowserUnlockTarget::Quick => {
+            if let Some(window) = app.get_webview_window(QUICK_WINDOW) {
+                Surface { app, window }.show_focused(Shown { for_browser: true });
+            }
+        }
+    }
+}
+
+pub fn after_unlock(app: &AppHandle) {
+    if app
+        .try_state::<QuickAccess>()
+        .is_some_and(|qa| qa.take_browser_unlock())
+    {
+        hide(app, HideReason::Dismissed);
+    }
+}
+
 /// Hide the quick window if it exists, then hand the keyboard back as
 /// `reason` calls for (macOS: hides the app when focus came from another
 /// app). Runs the focus step even when the window was already hidden.
 pub fn hide(app: &AppHandle, reason: HideReason) {
     if let Some(window) = app.get_webview_window(QUICK_WINDOW) {
         let _ = window.hide();
+    }
+    if let Some(qa) = app.try_state::<QuickAccess>() {
+        qa.note_hidden();
     }
     return_focus(app, reason);
 }

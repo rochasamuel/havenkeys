@@ -11,10 +11,12 @@ type View = "loading" | "locked" | "unlocked";
  * QuickUnlock's field until it is sent, and the search holds overviews.
  * Every show and every lock bumps `session`, which remounts the view and
  * so drops the query, the selection and anything typed.
+ * Opened by the browser's Unlock, it only unlocks; Rust then hides it.
  */
 export function QuickApp() {
   const [view, setView] = useState<View>("loading");
   const [session, setSession] = useState(0);
+  const [forBrowser, setForBrowser] = useState(false);
 
   const refresh = useCallback(() => {
     api.status().then(
@@ -25,7 +27,8 @@ export function QuickApp() {
 
   useEffect(() => {
     refresh();
-    const offShown = api.onQuickShown(() => {
+    const offShown = api.onQuickShown((shown) => {
+      setForBrowser(shown.forBrowser);
       setSession((s) => s + 1);
       refresh();
     });
@@ -48,6 +51,8 @@ export function QuickApp() {
   const hide = useCallback(() => void api.hideQuickWindow().catch(() => undefined), []);
 
   if (view === "loading") return <main className="quick" aria-busy="true" />;
-  if (view === "locked") return <QuickUnlock key={session} onUnlocked={() => setView("unlocked")} onHide={hide} />;
+  if (view === "locked" || forBrowser) {
+    return <QuickUnlock key={session} forBrowser={forBrowser} onUnlocked={() => setView("unlocked")} onHide={hide} />;
+  }
   return <QuickSearch key={session} onHide={hide} />;
 }

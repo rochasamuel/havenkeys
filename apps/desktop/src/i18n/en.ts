@@ -262,6 +262,7 @@ export const en = {
   quick: {
     title: "Quick Access",
     unlockLede: "Enter your master password to search your logins.",
+    unlockLedeBrowser: "Enter your master password to fill in your browser.",
     secretKeyNeeded: "This computer needs your Secret Key first. Open HavenKeys to enter it.",
     searchLabel: "Search logins",
     searchPlaceholder: "Search logins",

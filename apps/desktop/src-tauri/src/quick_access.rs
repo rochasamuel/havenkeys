@@ -16,8 +16,15 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 
 pub const QUICK_WINDOW: &str = "quick";
 /// Sent to the quick window each time it is shown: it re-reads the lock
-/// state, starts empty and focuses its field. Carries nothing.
+/// state, starts empty and focuses its field. Carries [`Shown`].
 pub const SHOWN_EVENT: &str = "quick://shown";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Shown {
+    /// Opened by the browser's Unlock: it only unlocks, then hides.
+    pub for_browser: bool,
+}
 const FILE: &str = "quick-access.json";
 const TMP: &str = "quick-access.json.tmp";
 
@@ -334,6 +341,8 @@ pub struct QuickAccess {
     /// Whether the main window had the keyboard when the quick window
     /// opened (macOS: hiding the app returns focus to the previous app).
     main_was_focused: AtomicBool,
+    /// Showing for the browser's Unlock: the next unlock hides it.
+    for_browser: AtomicBool,
 }
 
 impl QuickAccess {
@@ -349,6 +358,7 @@ impl QuickAccess {
             dir,
             applying: Mutex::new(()),
             main_was_focused: AtomicBool::new(false),
+            for_browser: AtomicBool::new(false),
         }
     }
 
@@ -499,9 +509,19 @@ impl QuickAccess {
         Ok(self.status())
     }
 
-    pub fn note_opened(&self, main_was_focused: bool) {
+    pub fn note_opened(&self, main_was_focused: bool, shown: Shown) {
         self.main_was_focused
             .store(main_was_focused, Ordering::Relaxed);
+        self.for_browser.store(shown.for_browser, Ordering::Relaxed);
+    }
+
+    pub fn note_hidden(&self) {
+        self.for_browser.store(false, Ordering::Relaxed);
+    }
+
+    /// True once after an opening for the browser, until the window hides.
+    pub fn take_browser_unlock(&self) -> bool {
+        self.for_browser.swap(false, Ordering::Relaxed)
     }
 
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -516,7 +536,7 @@ pub trait QuickSurface {
     fn is_visible(&self) -> bool;
     /// Centre on the display under the cursor, show, take the keyboard, and
     /// tell the window it was shown.
-    fn show_focused(&self);
+    fn show_focused(&self, shown: Shown);
     fn hide(&self);
 }
 
@@ -532,7 +552,7 @@ pub fn toggle(w: &impl QuickSurface) -> Toggled {
         w.hide();
         Toggled::Hidden
     } else {
-        w.show_focused();
+        w.show_focused(Shown { for_browser: false });
         Toggled::Shown
     }
 }
@@ -562,6 +582,25 @@ pub enum ShortcutTarget {
     /// main window says what to do.
     Main,
     Quick,
+}
+
+/// Where the browser's Unlock (`show_unlock`) goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserUnlockTarget {
+    /// No vault, or its status is unreadable.
+    Main,
+    Quick,
+    /// Already unlocked.
+    Nothing,
+}
+
+/// `status`: `(vault_exists, unlocked)`.
+pub fn browser_unlock_target(status: Option<(bool, bool)>) -> BrowserUnlockTarget {
+    match status {
+        Some((true, true)) => BrowserUnlockTarget::Nothing,
+        Some((true, false)) => BrowserUnlockTarget::Quick,
+        _ => BrowserUnlockTarget::Main,
+    }
 }
 
 /// `vault_exists`: `None` when the vault's status could not be read.
@@ -669,13 +708,15 @@ mod tests {
         visible: Cell<bool>,
         shows: Cell<u32>,
         hides: Cell<u32>,
+        last: Cell<Option<Shown>>,
     }
 
     impl QuickSurface for FakeSurface {
         fn is_visible(&self) -> bool {
             self.visible.get()
         }
-        fn show_focused(&self) {
+        fn show_focused(&self, shown: Shown) {
+            self.last.set(Some(shown));
             self.shows.set(self.shows.get() + 1);
             self.visible.set(true);
         }
@@ -1329,8 +1370,36 @@ mod tests {
         let w = FakeSurface::default();
         assert_eq!(toggle(&w), Toggled::Shown);
         assert_eq!((w.shows.get(), w.hides.get()), (1, 0));
+        assert_eq!(w.last.get(), Some(Shown { for_browser: false }));
         assert_eq!(toggle(&w), Toggled::Hidden);
         assert_eq!((w.shows.get(), w.hides.get()), (1, 1));
+    }
+
+    #[test]
+    fn the_browser_unlock_opens_the_quick_window_only_when_locked() {
+        use BrowserUnlockTarget::*;
+        assert_eq!(browser_unlock_target(Some((true, false))), Quick);
+        assert_eq!(browser_unlock_target(Some((true, true))), Nothing);
+        assert_eq!(browser_unlock_target(Some((false, false))), Main);
+        assert_eq!(browser_unlock_target(None), Main);
+    }
+
+    #[test]
+    fn only_a_browser_opening_hides_on_the_next_unlock() {
+        let dir = tempfile::tempdir().unwrap();
+        let qa = QuickAccess::new(dir.path().into());
+        assert!(!qa.take_browser_unlock());
+        qa.note_opened(false, Shown { for_browser: true });
+        assert!(qa.take_browser_unlock());
+        assert!(!qa.take_browser_unlock());
+        // Dismissed before unlocking.
+        qa.note_opened(false, Shown { for_browser: true });
+        qa.note_hidden();
+        assert!(!qa.take_browser_unlock());
+        // Reopened by the shortcut.
+        qa.note_opened(false, Shown { for_browser: true });
+        qa.note_opened(false, Shown { for_browser: false });
+        assert!(!qa.take_browser_unlock());
     }
 
     #[test]

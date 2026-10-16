@@ -279,6 +279,7 @@ export const ptBR: Messages = {
   quick: {
     title: "Acesso rápido",
     unlockLede: "Digite sua senha mestra para buscar seus logins.",
+    unlockLedeBrowser: "Digite sua senha mestra para preencher no navegador.",
     secretKeyNeeded: "Este computador precisa da sua Secret Key primeiro. Abra o HavenKeys para digitá-la.",
     searchLabel: "Buscar logins",
     searchPlaceholder: "Buscar logins",

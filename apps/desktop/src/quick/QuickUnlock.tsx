@@ -6,12 +6,13 @@ import { useI18n } from "../i18n/context";
 import { errorMessage } from "../i18n/errors";
 
 interface Props {
+  forBrowser: boolean;
   onUnlocked: () => void;
   onHide: () => void;
 }
 
 /** The master password, typed here and sent to unlock_vault. Never a Secret Key: that is entered in the main window. */
-export function QuickUnlock({ onUnlocked, onHide }: Props) {
+export function QuickUnlock({ forBrowser, onUnlocked, onHide }: Props) {
   const { t } = useI18n();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,7 @@ export function QuickUnlock({ onUnlocked, onHide }: Props) {
     <main className="quick quick-locked" onKeyDown={onKeyDown}>
       <form className="quick-unlock" onSubmit={submit} aria-busy={busy}>
         <Seal open={busy} size={40} />
-        <p className="quick-lede">{t.quick.unlockLede}</p>
+        <p className="quick-lede">{forBrowser ? t.quick.unlockLedeBrowser : t.quick.unlockLede}</p>
         <div key={attempt} className={`unlock-fields${attempt > 0 ? " is-shaking" : ""}`}>
           <label className="unlock-field">
             <span className="sr-only">{t.common.masterPassword}</span>
