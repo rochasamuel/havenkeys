@@ -41,6 +41,38 @@ impl QuickSurface for Surface<'_> {
     }
 }
 
+/// macOS draws no corners on a borderless window: give it a hidden title bar
+/// so the system rounds it like any app window. Windows 11 rounds by itself.
+#[cfg(target_os = "macos")]
+pub fn use_system_corners(app: &AppHandle) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSWindow, NSWindowButton, NSWindowStyleMask, NSWindowTitleVisibility};
+
+    let Some(ptr) = app
+        .get_webview_window(QUICK_WINDOW)
+        .and_then(|w| w.ns_window().ok())
+    else {
+        return;
+    };
+    if MainThreadMarker::new().is_none() {
+        return;
+    }
+    // SAFETY: Tauri's live NSWindow for this window, used on the main thread.
+    let window: &NSWindow = unsafe { &*ptr.cast() };
+    window.setStyleMask(NSWindowStyleMask::Titled | NSWindowStyleMask::FullSizeContentView);
+    window.setTitlebarAppearsTransparent(true);
+    window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+    for button in [
+        NSWindowButton::CloseButton,
+        NSWindowButton::MiniaturizeButton,
+        NSWindowButton::ZoomButton,
+    ] {
+        if let Some(button) = window.standardWindowButton(button) {
+            button.setHidden(true);
+        }
+    }
+}
+
 /// Centre on the display the pointer is on (the one the user is looking
 /// at), falling back to the window's own display, then the primary one.
 fn center_on_cursor_display(window: &WebviewWindow) {

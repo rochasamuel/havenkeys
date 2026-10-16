@@ -2773,6 +2773,8 @@ dependencies = [
  "havenkeys-protocol",
  "havenkeys-sync-client",
  "keyring-core",
+ "objc2",
+ "objc2-app-kit",
  "qrcode",
  "rxing",
  "serde",

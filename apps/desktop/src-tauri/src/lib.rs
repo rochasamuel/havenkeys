@@ -266,6 +266,8 @@ pub fn run() {
             // Quick Access: this computer's shortcut setting (quick-access.json).
             app.manage(quick_access::QuickAccess::new(dir.clone()));
             quick_shortcut::register_in_background(app.handle().clone());
+            #[cfg(target_os = "macos")]
+            quick_window::use_system_corners(app.handle());
             updater::schedule(app.handle().clone());
 
             // The window starts hidden (tauri.conf.json). A login launch

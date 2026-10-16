@@ -22,6 +22,10 @@ body {
   background: var(--pane);
 }
 
+:root[data-platform="mac"] .quick {
+  border: none;
+}
+
 .quick-locked {
   justify-content: center;
   align-items: center;
