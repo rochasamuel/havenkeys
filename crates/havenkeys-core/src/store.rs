@@ -298,6 +298,7 @@ impl Store {
                 tx.commit()?;
             }
             SCHEMA_VERSION => {}
+            v if v > SCHEMA_VERSION => return Err(Error::NewerVault),
             // Vaults from before accounts are not migrated (spec §8.2).
             _ => return Err(Error::UnsupportedVersion),
         }
@@ -1048,7 +1049,7 @@ mod tests {
         let c = Connection::open(&path).unwrap();
         c.pragma_update(None, "user_version", 99).unwrap();
         drop(c);
-        assert_eq!(Store::open(&path).err(), Some(Error::UnsupportedVersion));
+        assert_eq!(Store::open(&path).err(), Some(Error::NewerVault));
     }
 
     #[test]

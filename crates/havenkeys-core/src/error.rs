@@ -24,6 +24,8 @@ pub enum Error {
     Corrupted,
     #[error("This vault was created by an unsupported version.")]
     UnsupportedVersion,
+    #[error("This vault was saved by a newer version of HavenKeys.")]
+    NewerVault,
     #[error("A vault already exists.")]
     VaultExists,
     #[error("No vault exists yet.")]
@@ -60,6 +62,7 @@ impl Error {
             Error::Encryption => "encryption",
             Error::Corrupted => "corrupted",
             Error::UnsupportedVersion => "unsupported_version",
+            Error::NewerVault => "newer_vault",
             Error::VaultExists => "vault_exists",
             Error::NoVault => "no_vault",
             Error::NotFound => "not_found",

@@ -126,9 +126,9 @@ impl MobileVault {
         let path = dir.join("vault.sqlite3");
         let (store, storage_error) = match Store::open(&path) {
             Ok(s) => (s, None),
-            Err(_) => (
+            Err(e) => (
                 Store::open_in_memory()?,
-                Some(ClientError::vault_unreadable(&dir)),
+                Some(ClientError::vault_open_failed(e, &dir)),
             ),
         };
         let vault = Arc::new(Mutex::new(VaultService::new(store)));

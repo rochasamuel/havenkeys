@@ -16,6 +16,7 @@ const codes: Record<ErrorCode, string | null> = {
   encryption: "Falha ao criptografar o item do cofre.",
   corrupted: "O arquivo do cofre está corrompido.",
   unsupported_version: "Este cofre foi criado por uma versão sem suporte.",
+  newer_vault: "Este cofre foi salvo por uma versão mais nova do HavenKeys.",
   vault_exists: "Já existe um cofre.",
   no_vault: "Ainda não existe um cofre.",
   not_found: "Item não encontrado.",
@@ -44,6 +45,7 @@ const codes: Record<ErrorCode, string | null> = {
   pairing_failed: "Não foi possível concluir a entrada. Peça um novo código.",
   // Names the folder the file is in, which only Rust knows.
   vault_unreadable: null,
+  vault_newer: "Este cofre foi salvo por uma versão mais nova do HavenKeys. Atualize o HavenKeys para abri-lo. Seus dados estão seguros; não mova nem apague nada.",
   clipboard: "Não foi possível acessar a área de transferência.",
   open_website: "Não foi possível abrir o site.",
   qr_not_found: "Nenhum QR code encontrado. Verifique se ele está inteiro na tela.",

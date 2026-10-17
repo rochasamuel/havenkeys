@@ -97,9 +97,9 @@ fn vault_path<R: Runtime>(app: &tauri::App<R>) -> Result<PathBuf, &'static str> 
 fn open_store(path: &Path, dir: &Path) -> Result<(Store, Option<state::CmdError>), String> {
     match Store::open(path) {
         Ok(store) => Ok((store, None)),
-        Err(_) => Ok((
+        Err(e) => Ok((
             Store::open_in_memory().map_err(|e| e.to_string())?,
-            Some(state::CmdError::vault_unreadable(dir)),
+            Some(state::CmdError::vault_open_failed(e, dir)),
         )),
     }
 }

@@ -107,6 +107,18 @@ impl ClientError {
         )
     }
 
+    /// Why the vault file at `dir` did not open: a newer build saved it, or
+    /// it cannot be read at all.
+    pub fn vault_open_failed(e: havenkeys_core::Error, dir: &std::path::Path) -> Self {
+        match e {
+            havenkeys_core::Error::NewerVault => Self::fixed(
+                "vault_newer",
+                "This vault was saved by a newer version of HavenKeys. Update HavenKeys to open it. Your data is safe; do not move or delete it.",
+            ),
+            _ => Self::vault_unreadable(dir),
+        }
+    }
+
     /// The vault file exists but this build cannot open it. Carries the
     /// folder so the message can tell the user where their file is; a path
     /// is not a secret, and without it the advice is unfollowable.
@@ -205,6 +217,16 @@ impl ClientError {
 mod tests {
     use super::ClientError;
     use havenkeys_sync_client::SyncError;
+
+    #[test]
+    fn a_vault_from_a_newer_build_says_update_not_move() {
+        let dir = std::path::Path::new("/data");
+        let newer = ClientError::vault_open_failed(havenkeys_core::Error::NewerVault, dir);
+        assert_eq!(newer.code, "vault_newer");
+        assert!(newer.message.contains("Update HavenKeys"));
+        let other = ClientError::vault_open_failed(havenkeys_core::Error::Corrupted, dir);
+        assert_eq!(other.code, "vault_unreadable");
+    }
 
     #[test]
     fn sync_errors_keep_the_codes_the_desktop_ui_knows() {

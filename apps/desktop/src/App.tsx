@@ -182,15 +182,19 @@ export function App() {
 
   if (fatal) {
     return (
-      <main className="welcome" data-tauri-drag-region>
-        <div className="welcome-card">
-          <header className="welcome-head">
-            <Seal />
-            <h1>{t.app.fatalTitle}</h1>
-          </header>
-          <p className="fatal-message">{errorMessage(fatal.cause, t, t.app.fatalFallback)}</p>
-        </div>
-      </main>
+      <div className="app-shell">
+        {/* An update may be the fix: a vault saved by a newer version. */}
+        {updateBanner}
+        <main className="welcome" data-tauri-drag-region>
+          <div className="welcome-card">
+            <header className="welcome-head">
+              <Seal />
+              <h1>{t.app.fatalTitle}</h1>
+            </header>
+            <p className="fatal-message">{errorMessage(fatal.cause, t, t.app.fatalFallback)}</p>
+          </div>
+        </main>
+      </div>
     );
   }
   if (!status) return <main className="unlock" aria-busy="true" />;

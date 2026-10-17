@@ -455,6 +455,13 @@ export const desktopScenarios = [
     shots: [".kit-actions"],
   },
   { name: "fatal", respond: { vault_status: reject("vault_unreadable", "The vault file in /home/user/.local/share/app.havenkeys could not be read.") } },
+  {
+    name: "fatal-newer",
+    respond: {
+      vault_status: reject("vault_newer", "This vault was saved by a newer version of HavenKeys."),
+      update_status: { phase: "available", version: "0.31.0", notes: "", autoCheck: true, canInstallInPlace: true, currentVersion: "0.30.0" },
+    },
+  },
 
   // ---------------------------------------------------------------- unlock
   { name: "unlock", respond: { vault_status: { state: "locked", vaultExists: true, damagedItems: 0, unreadableItems: 0 } } },

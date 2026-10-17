@@ -625,7 +625,8 @@ input::-ms-clear {
   padding: 8px 14px;
 }
 
-.app-shell > .unlock {
+.app-shell > .unlock,
+.app-shell > .welcome {
   flex: 1;
   min-height: 0;
 }

@@ -18,6 +18,8 @@ export type ErrorCode =
   | "encryption"
   | "corrupted"
   | "unsupported_version"
+  | "newer_vault"
+  | "vault_newer"
   | "vault_exists"
   | "no_vault"
   | "not_found"
@@ -84,6 +86,7 @@ const codes: Record<ErrorCode, string | null> = {
   encryption: "Failed to encrypt vault item.",
   corrupted: "The vault file is corrupted.",
   unsupported_version: "This vault was created by an unsupported version.",
+  newer_vault: "This vault was saved by a newer version of HavenKeys.",
   vault_exists: "A vault already exists.",
   no_vault: "No vault exists yet.",
   not_found: "Item not found.",
@@ -108,6 +111,7 @@ const codes: Record<ErrorCode, string | null> = {
   pairing_other_server: "This code is for another server.",
   pairing_failed: "The sign-in could not be completed. Ask for a new code.",
   vault_unreadable: null,
+  vault_newer: "This vault was saved by a newer version of HavenKeys. Update HavenKeys to open it. Your data is safe; do not move or delete it.",
   clipboard: "Could not access the clipboard.",
   open_website: "Could not open the website.",
   qr_not_found: "No QR code found. Make sure it's fully visible on screen.",
