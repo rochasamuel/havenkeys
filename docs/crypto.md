@@ -230,8 +230,9 @@ offset  size  field
 ## OPAQUE sign-in
 
 Devices prove they know the auth key to `havenkeys-server` with OPAQUE
-(RFC 9807), a password-authenticated key exchange, using `opaque-ke` 4.0.1
-(audited by NCC Group in 2021). We implement no cryptography ourselves: the
+(RFC 9807), a password-authenticated key exchange, using `opaque-ke` 4.0.1.
+An earlier version (the audit found issues in 0.5.0, fixed in 1.2.0) was audited
+by NCC Group in 2021; 4.0.1 itself has not been. We implement no cryptography ourselves: the
 suite is fixed in `crates/havenkeys-opaque` and the client reaches it only
 through `havenkeys-core::pake`.
 

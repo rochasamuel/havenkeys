@@ -4062,8 +4062,8 @@ a malformed message is a 400 without detail. The OPAQUE session key and export
 key are never used; the session is the usual random token. The auth key's bytes
 leave `havenkeys-core` only through `pake`.
 **Remaining limitations:** the cryptography is a library's, not independently
-reviewed here; `opaque-ke` has had one external audit (2021) of an earlier
-version.
+reviewed here; `opaque-ke` had one external audit (NCC Group, 2021) of an
+earlier version (issues found in 0.5.0, fixed in 1.2.0); 4.0.1 has not been audited.
 
 ### OP2. Pending exchanges (Low, accepted)
 **Component:** `pake_pending` table, `routes/pake.rs`.
