@@ -85,6 +85,14 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > sharing its sign-in (for example `icloud.com` for `apple.com`), ranked
 > below direct matches. A vault setting turns this off.
 
+> Amended on 2026-10-17 by
+> `docs/superpowers/specs/2026-10-13-pake-login-design.md`: devices sign
+> in to the server with OPAQUE (RFC 9807, crate `opaque-ke`); the auth key
+> derived from the master password and Secret Key no longer leaves the
+> device. Accounts made before this keep the legacy login until the
+> operator's cutoff (`HAVENKEYS_LEGACY_AUTH_UNTIL`, 30 days on the hosted
+> server), and a device that has signed in with OPAQUE never falls back.
+
 ---
 
 # 1. Core philosophy

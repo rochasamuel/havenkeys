@@ -31,8 +31,8 @@ in `crates/havenkeys-core/src/crypto/` and is intentionally small.
         │               info = "havenkeys/v3/kek")            │  same ikm, same salt,
         ▼                                                      │  info = "havenkeys/v3/auth"
  KEK — key encryption key (32 bytes, memory only)               ▼
-        │                                                 auth key (sent to the server
-        │  AES-256-GCM unwrap of header.wrapped_vault_key  at login; unwraps nothing)
+        │                                                 auth key (OPAQUE input, not
+        │  AES-256-GCM unwrap of header.wrapped_vault_key  sent; unwraps nothing)
         ▼
  vault key (32 random bytes from the OS CSPRNG; stored only wrapped)
         │
@@ -103,7 +103,7 @@ Why this shape:
   Secret Key`), with that account-derived salt and info label
   `"havenkeys/v3/kek"`. A second HKDF expansion over that *same* input keying
   material and that *same* salt, with info label `"havenkeys/v3/auth"`,
-  yields an auth key sent to the server at login. One Argon2id run — the
+  yields an auth key that devices use as the OPAQUE password at login. One Argon2id run — the
   expensive step — therefore produces both the KEK and the auth key; the auth
   key authenticates the device to the server and **unwraps nothing**. HKDF's
   info-string separation means it cannot be walked back to the KEK, the
@@ -142,11 +142,12 @@ feeding the KEK derivation.
   LATIN CAPITAL LETTER I WITH DOT ABOVE is one); a future non-Rust client
   must reproduce trim → NFC → lowercase, in that order and nothing more, to
   derive the same key.
-* **Auth key.** Sent to the server at login as proof of possession of the
-  master password and the Secret Key (`derive_auth_key` /
-  `derive_auth_key_from_master`). Its `Debug` implementation prints
-  `AuthKey(<redacted>)`; see "Key hierarchy" above for what it does and does
-  not do.
+* **Auth key.** The proof of possession of the master password and the
+  Secret Key (`derive_auth_key` / `derive_auth_key_from_master`). It is not
+  sent to the server: it is the OPAQUE "password" (see "OPAQUE sign-in"
+  below). Only the legacy login, kept until `HAVENKEYS_LEGACY_AUTH_UNTIL`,
+  still sends it. Its `Debug` implementation prints `AuthKey(<redacted>)`;
+  see "Key hierarchy" above for what it does and does not do.
 * **Changing the master password.** `VaultService::begin_rekey` reads the
   account record from the local store into the `RekeyTicket`, and
   `RekeyTicket::derive_for_account` re-derives both the current and the new
@@ -225,6 +226,36 @@ offset  size  field
   with `bundle_refused`, and the bundle is deleted.
 * `UnlockBundle`'s `Debug` prints `UnlockBundle(<redacted>)`; the encoded
   bytes are a zeroize-on-drop `SecretBytes`.
+
+## OPAQUE sign-in
+
+Devices prove they know the auth key to `havenkeys-server` with OPAQUE
+(RFC 9807), a password-authenticated key exchange, using `opaque-ke` 4.0.1
+(audited by NCC Group in 2021). We implement no cryptography ourselves: the
+suite is fixed in `crates/havenkeys-opaque` and the client reaches it only
+through `havenkeys-core::pake`.
+
+* **Suite.** ristretto255 OPRF, ristretto255 triple-DH key exchange, SHA-512.
+  The key-stretching function is the identity: the input is already 256 bits
+  of HKDF output behind one Argon2id run, so a second stretch would only slow
+  unlock.
+* **Inputs.** Password = the 32 auth-key bytes, verbatim. Credential
+  identifier = the account id's 16 UUID bytes (a decoy id for an unknown
+  email). Key-exchange context = `havenkeys/opaque/v1`, passed on both sides.
+* **What the server stores.** `accounts.opaque_record` (the registration
+  upload) and a `pake_server_setup` row (the server's long-term OPAQUE key,
+  generated once at first start and kept in Postgres so that it is backed up
+  with the records it opens).
+* **What is not used.** OPAQUE's session key and export key are discarded;
+  the session is the usual random 32-byte token issued after the proof.
+* **Pending exchanges.** The server keeps the login state for 60 seconds under
+  the SHA-256 of a random 256-bit id and deletes it on first read.
+* **Wire encoding.** Standard base64 of at most 512 bytes per field;
+  `opaque-ke` checks exact lengths.
+
+Not protected: the vault itself, which never depended on the auth key; a
+server that is already hostile can still withhold or destroy ciphertext; TLS
+is still required.
 
 ## Argon2id parameters
 

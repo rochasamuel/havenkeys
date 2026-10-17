@@ -19,8 +19,9 @@ holds ciphertext it has no key for, plus the metadata needed to route it.
 
 * A Postgres 14 or newer database (Railway's plugin, or any managed Postgres).
 * A host that can run a container and terminate TLS. **Plain HTTP is not an
-  option**: the auth key is a bearer proof of the master password and the
-  Secret Key, and TLS is the only thing protecting it in transit.
+  option**: sign-in no longer sends the auth key (devices prove it with
+  OPAQUE), but the session token, the invites and the legacy sign-in of
+  older apps still travel in the request, and TLS is what protects them.
 * The `havenkeys-server` image, built from the repository root:
 
 ```sh
@@ -33,6 +34,7 @@ docker build -t havenkeys-server .
 |---|---|---|
 | `DATABASE_URL` | yes | `postgres://user:pass@host:5432/db`. TLS is used unless the URL says `sslmode=disable`, and the certificate must be signed by a public root — this client does not accept a self-signed one. Managed databases on a **private** network (Railway's among them) present exactly that, so those URLs need `?sslmode=disable`; the private network is the boundary doing the work there. |
 | `SERVER_SECRET` | yes | 32 random bytes, base64. Used only to derive the decoy account id and salt that keep `auth/params` from revealing whether an email has an account. |
+| `HAVENKEYS_LEGACY_AUTH_UNTIL` | no | RFC 3339 time (e.g. `2026-11-20T00:00:00Z`), the end of the legacy-login window. Unset means no cutoff. After it, every legacy sign-in path (the auth-key login, the auth-key proofs in password change and account deletion, activation with an auth key) answers `426 upgrade_required`, never 410, which old apps read as "account deleted". Hosted server: deploy date plus 30 days. Afterwards `havenkeys-server admin list-accounts` shows who is still `legacy`. |
 | `PORT` | no | Defaults to 8080. Railway sets it. |
 | `HAVENKEYS_CORS_ORIGIN` | no | Exactly one browser origin. Set it to the origin the website is actually served from after any redirect (`https://www.havenkeys.net` on the hosted server, because Vercel redirects the bare domain to `www`) as soon as the site has a Create account page, even with signup off, because the signup page calls `/v1/signup/*` from the browser (with signup off it lets the page show the sign-up-closed message instead of a network error); leave it unset only if no site calls this server. There is no wildcard. |
 | `HAVENKEYS_TRUST_FORWARDED_FOR` | no | `1` only when a proxy you control sets `X-Forwarded-For`. Off by default, because a client could otherwise spread its login attempts over invented addresses and escape the per-IP rate limit. **Known weakness — read the note below before enabling it.** |
@@ -49,7 +51,7 @@ docker build -t havenkeys-server .
 > An attacker can therefore vary it to get a fresh per-IP budget on every
 > request, put a victim's address there to have the victim blocked, or grow the
 > `login_attempts` table without bound. The per-account limit still applies,
-> and the auth key is 256-bit, so this is a rate-limiting and storage problem
+> and the OPAQUE input (the auth key) is 256-bit, so this is a rate-limiting and storage problem
 > rather than a route to guessing a password — but the per-IP limit is the only
 > thing throttling invite guessing on `POST /v1/accounts/activate`. Until the
 > server takes the Nth entry from the right and validates it as an IP, treat
@@ -195,7 +197,16 @@ Other commands, in the same shell:
 ```sh
 havenkeys-server admin list-accounts
 havenkeys-server admin delete-account --email you@example.com   # irreversible
+havenkeys-server admin allow-legacy-sign-in --email you@example.com
 ```
+
+`list-accounts` shows `pake` (enrolled in OPAQUE) or `legacy` per account.
+`allow-legacy-sign-in` is for the legacy window (`HAVENKEYS_LEGACY_AUTH_UNTIL`,
+§2): after the cutoff it grants one account 24 hours of legacy sign-in, so an
+owner who missed the window can sign in once with an updated app, which then
+enrols the account in OPAQUE and ends the grace. It works only for an active
+account that has no OPAQUE record and still has a legacy verifier; otherwise
+it refuses.
 
 Running the same binary locally works too, as long as it is given a
 `DATABASE_URL` that reaches the database (§5 explains the public one).
@@ -244,6 +255,15 @@ psql "$RESTORE_URL" -c "SELECT count(*) FROM items WHERE deleted_at IS NULL;"
 4. Sign in from a device against the restored server and confirm the vault
    unlocks and the items are there. Only that proves the ciphertext, the
    header and the KDF parameters all survived — the row counts do not.
+
+**The `pake_server_setup` table must come back with the dump.** It holds the
+server's OPAQUE long-term key, generated once at first start. If it is lost,
+every enrolled account is locked out of sign-in (the vault ciphertext is
+unaffected, but the server can no longer verify any OPAQUE proof), and a
+freshly generated setup does not repair that. A full `pg_dump` includes it;
+do not restore a partial dump that leaves it out. It is deliberately not
+derived from `SERVER_SECRET`, which can be changed. Extend step 4 of the
+drill: sign in from an **OPAQUE-enrolled** device against the restored copy.
 
 Restoring over a live server sets every vault's revision back. A device
 that had pulled past it sees the server's cursor below its own, pulls the
@@ -311,7 +331,10 @@ invite email already places in it.
 * **Rate limiting** blocks a login after five failures, escalating 1 → 5 → 30
   minutes, counted per account and per address. The counters live in
   `login_attempts` and a successful login clears them. To unblock someone
-  early: `DELETE FROM login_attempts WHERE key = 'acct:<uuid>';`
+  early: `DELETE FROM login_attempts WHERE key = 'acct:<uuid>';`. OPAQUE
+  sign-in is charged at its `start` step, so a wrong password on a device
+  that has never signed in with OPAQUE (which then tries the legacy login
+  too) costs two attempts.
 * **Sessions** last 24 hours and exist only while a device is unlocked. To cut
   a device off immediately, revoke it from the desktop app's Account settings,
   or `UPDATE devices SET revoked_at = now() WHERE id = '<uuid>';` — its
@@ -321,7 +344,8 @@ invite email already places in it.
   has been tested horizontally. Some releases also need the desktops
   upgraded in step; see §6.1.
 * **Restarting** the server drops nothing but sessions. Devices re-derive
-  their auth key at the next unlock and sign in again.
+  their auth key at the next unlock and sign in again (pending OPAQUE
+  exchanges last 60 seconds and are lost; the device simply retries).
 
 ### 6.1 Upgrading to the account-fixes release (desktop schema 5)
 

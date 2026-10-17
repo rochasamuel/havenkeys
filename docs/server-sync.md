@@ -71,8 +71,8 @@ server, deletions included, so an untested backup means the vault has none.
   the server without re-encryption, bound to the vault ID and item ID
   (`docs/crypto.md`, "Associated data"). It cannot derive the KEK or the
   data key: neither the master password nor the Secret Key is ever sent to
-  it (the auth key it does receive authenticates a login and unwraps
-  nothing).
+  it (devices prove they know the auth key with OPAQUE, §6a, and do not send
+  it, except through the legacy login until the cutoff; it unwraps nothing).
 
 ## 3. Secret Key and Recovery Sheet
 
@@ -209,7 +209,8 @@ to undo a master-password change.
 `POST /v1/account/credentials`, rather than through the general header write.
 It replaces the account's KDF parameters, its login verifier and the vault
 header in one server transaction: the caller proves it knows the *current*
-auth key (checked and rate-limited exactly like a login, so a stolen session
+auth key (an OPAQUE re-authentication, or the legacy `currentAuthKey` before
+the cutoff; checked and rate-limited exactly like a login, so a stolen session
 token cannot change the password), `baseHeaderRevision` must match the
 server's, and on success every other session on the account is deleted — a
 password is usually changed because something leaked. The device making the
@@ -238,6 +239,51 @@ shown. No usable answer is reported as `password_change_unknown` ("could not
 confirm … if your current password stops working, use the new one"). In all
 three cases the session is kept, so the next sync can still adopt the new
 header.
+
+## 6a. OPAQUE sign-in and the legacy window
+
+Spec `2026-10-13-pake-login-design.md`; cryptography in `docs/crypto.md`.
+The device proves it knows the auth key without sending it:
+
+* `POST /v1/auth/pake/start` `{email, credentialRequest, deviceId}` answers
+  `{loginId, credentialResponse}` (a fake response, of the same shape, for an
+  unknown email or an unenrolled account) and charges the rate limit. If no
+  active account has the email and `deviceId` belongs to a deleted account it
+  answers `410 account_deleted`; that lookup runs on every request, so timing
+  does not depend on whether the email exists.
+* `POST /v1/auth/pake/finish` `{loginId, credentialFinalization, deviceId,
+  deviceName}` consumes the pending exchange (60 s, single use) and then
+  behaves like the legacy login. A wrong password or Secret Key fails on the
+  device before anything is sent.
+* `POST /v1/account/pake/reauth` is the same exchange inside a session;
+  `account/credentials` and `account/delete` take its result instead of
+  `currentAuthKey`.
+* Registration: `accounts/activate/register` and `account/pake/register`
+  (a stateless OPRF evaluation with the account's key), then
+  `registrationUpload` in `activate` or `credentials`.
+* `POST /v1/account/pake/enroll` `{currentAuthKey, registrationUpload}` enrols
+  an older account right after a legacy sign-in. It needs the legacy key (a
+  stolen session cannot choose the OPAQUE key), works only while there is no
+  record, re-checks the stored credentials under a row lock (a concurrent
+  legacy password change makes it answer 409), and keeps the legacy verifier
+  until the cutoff.
+
+Rules per account (spec 4.4): with no record the legacy proof works until the
+cutoff; with a record and a verifier the legacy proof works for login only,
+and `credentials` and `delete` answer 426; with a record and no verifier a
+legacy proof answers 401. After `HAVENKEYS_LEGACY_AUTH_UNTIL` every legacy
+path answers 426 `upgrade_required` (never 410). A password change made with
+OPAQUE clears the legacy verifier.
+
+Client: OPAQUE first. It falls back to the legacy login only on 401 or 404 and
+only if this device has never confirmed OPAQUE for the account
+(`account.pake_confirmed`, vault schema 8, plaintext 0 or 1). It enrols right
+after a legacy sign-in, and after the first OPAQUE success it never falls
+back. Operator tools: `admin list-accounts` (`pake` or `legacy`) and
+`admin allow-legacy-sign-in --email` (24 hours of legacy sign-in after the
+cutoff, for an active account with no record and a verifier; enrolment ends
+it). Removing the legacy code after the cutoff is tracked in
+`docs/roadmap.md`.
 
 ## 7. Security properties and limitations
 
@@ -333,9 +379,10 @@ header.
 ## 7a. Deleting the account
 
 `POST /v1/account/delete` (spec `2026-10-05-account-deletion-design.md`)
-takes `{ currentAuthKey, email }` with the session. The session alone is not
-enough: the current auth key is verified and rate limited exactly like a
-login or a credential change, so a stolen token cannot delete the account.
+takes the email and a proof of the current auth key (an OPAQUE
+re-authentication, or the legacy `currentAuthKey` before the cutoff) with the
+session. The session alone is not enough: the proof is verified and rate
+limited exactly like a login or a credential change, so a stolen token cannot delete the account.
 The email is a typo guard; it must equal the account's (`400` otherwise).
 
 `erase::erase_account` runs in one transaction, and the admin CLI's

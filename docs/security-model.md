@@ -39,7 +39,7 @@ This document describes *how* HavenKeys enforces the properties listed in
 | Minimal renderer exposure | Command allowlist; secrets only via `reveal_secret` / `reveal_previous_password` / `copy_secret` / `get_totp_code` |
 | Recoverable password changes | A replaced password is kept, encrypted, in the item's password history (5 entries) |
 | Passkey private keys never leave the core | Generated from the OS CSPRNG, sealed inside the login's encrypted details, and used to sign only in `havenkeys-core` (`passkey/`). No protocol message, Tauri command result, log or `Debug` output carries one (§15) |
-| Master-password change is authenticated, not just session-authorized | `POST /v1/account/credentials` requires the *current* auth key, checked against the server's stored verifier under the same rate limiting as login; a stolen session token alone cannot change the password |
+| Master-password change is authenticated, not just session-authorized | `POST /v1/account/credentials` requires a proof of the *current* auth key (an OPAQUE re-authentication; the legacy auth-key proof only until the cutoff) under the same rate limiting as login; a stolen session token alone cannot change the password |
 | Master-password change revokes other sessions | On success the server deletes every other session on the account; other devices must unlock again (locally with the old password, or online with the new one) before they can sync |
 
 ### Trash
@@ -105,7 +105,7 @@ a call to it fails or times out, and Settings → Account shows this
 their limits.
 
 The server's own database holds, in plaintext: the account's email, its KDF
-parameters and salt, an Argon2id hash of the auth key, device names and
+parameters and salt, an OPAQUE record per account (and, until the legacy cutoff, an Argon2id hash of the auth key), the server's OPAQUE setup, device names and
 timestamps, and per item its random UUID, its revision, the size of each
 encrypted blob and when it last changed. That metadata is the price of this
 design; it is listed in `server-sync.md` §6 and in `threat-model.md` T1b.
@@ -523,7 +523,7 @@ Known limitations of export:
 Settings → "Delete account and all data" (desktop and Android) needs the
 vault unlocked and online, the account's email typed, and the master
 password (Android also asks for biometrics or the screen lock). Rust checks
-the password locally, then proves the auth key to the server, which erases
+the password locally, then proves the auth key to the server (OPAQUE), which erases
 the account in one transaction (`docs/server-sync.md` §7a). Only after the
 server's `204` does the device erase its vault file, the Secret Key and its
 device id; the account's other devices do the same when they next sync or
@@ -635,8 +635,10 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   server serves; any one being wrong gives the same message.
 * **The auth key** is a separate HKDF branch from the same Argon2id run as
   the KEK (`info = "havenkeys/v3/auth"`). It authenticates and unwraps
-  nothing, which is what makes handing it to the server safe. The server
-  stores only an Argon2id hash of it.
+  nothing. Devices prove they know it with OPAQUE (RFC 9807) and do not send
+  it; the server stores an OPAQUE record (plus an Argon2id hash of it for
+  accounts still inside the legacy window). See `docs/crypto.md`, "OPAQUE
+  sign-in".
 * **The session token** is 32 random bytes, valid 24 hours, held in memory
   only, and dropped when the vault locks — so a locked vault cannot reach the
   server at all. The server stores only its SHA-256.
@@ -699,7 +701,7 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   (`keychain_unavailable`) instead of asking for the Recovery Sheet.
 * **Changing the master password** (`change_master_password`) is one atomic
   server operation, not a local-first one: the device proves it knows the
-  *current* auth key (rate-limited like login), and the server updates the
+  *current* auth key (OPAQUE, rate-limited like login), and the server updates the
   KDF parameters, the login verifier and the vault header together, then
   deletes every other session on the account. The device making the change
   commits its local rewrap only after the server accepts it. Other devices
@@ -1545,8 +1547,8 @@ hosts whose registrable domain's first label appears in the package name
 * **User-installed CAs are trusted, on purpose:** a self-hosted server signed
   by the user's own CA must work, as it does in the phone's browser. The
   cost: anyone whose CA the user installed (or a device policy installed) can
-  intercept the server connection — it sees ciphertext, the auth key at
-  sign-in and the session token, not the vault — and forge
+  intercept the server connection — it sees ciphertext and the session token, not the vault (and, only on the
+  legacy login of an account not yet enrolled in OPAQUE, the auth key) — and forge
   `assetlinks.json` answers (`security-review.md` AN5). How the verifier
   treats user CAs has not been checked on a device.
 

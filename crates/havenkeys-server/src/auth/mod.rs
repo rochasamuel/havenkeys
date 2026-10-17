@@ -2,9 +2,12 @@
 //! proves which account it speaks for.
 //!
 //! The auth key is 256 bits of HKDF output derived on the client from the
-//! master password and the Secret Key (docs/crypto.md, key scheme 3). The
-//! server sees only that value, never the password, the Secret Key, the KEK
-//! or the vault key, and it stores only an Argon2id hash of it.
+//! master password and the Secret Key (docs/crypto.md, key scheme 3). Devices
+//! prove they know it with OPAQUE (RFC 9807; docs/crypto.md, "OPAQUE
+//! sign-in") and do not send it. Only the legacy login, kept until
+//! `HAVENKEYS_LEGACY_AUTH_UNTIL`, receives it; the server then stores an
+//! Argon2id hash of it (`auth_verifier`) next to the OPAQUE record. The server
+//! never sees the password, the Secret Key, the KEK or the vault key.
 
 pub mod rate_limit;
 

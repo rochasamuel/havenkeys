@@ -18,7 +18,7 @@ adversaries it does **not** defend against.
 | Passkey private keys (P-256) | Critical | Inside a login's encrypted details, like its password. Decrypted and used only in the Rust core (`passkey/`); never in any protocol message, command result, log or `Debug` output. |
 | Usernames, titles, URLs | High (reveals which services a user has) | Encrypted at rest. Decrypted into memory on unlock (for list/search). |
 | Item count, vault creation time, KDF parameters | Low | Plaintext in SQLite (needed to unlock). |
-| Auth key | Critical if reused elsewhere, but it unwraps nothing | Derived at unlock from the master password and the Secret Key; sent to the server over TLS, stored there only as an Argon2id hash. |
+| Auth key | Critical if reused elsewhere, but it unwraps nothing | Derived at unlock from the master password and the Secret Key; the OPAQUE input, so it is not sent to the server (only the legacy login, until its cutoff, sends it over TLS, and the server then keeps an Argon2id hash). The server keeps an OPAQUE record instead. |
 | Session token | High while valid (24 h) | Server memory and the desktop's memory only. Never on disk; dropped when the vault locks. |
 | Account email, device names (the computer's hostname or the phone's name), item count, change times | Low, but visible to the server | Plaintext in the server's Postgres. |
 | Android unlock bundle (vault key + auth key, enrolment time, boot count) | Critical | Only when biometric unlock is on. Sealed by a Keystore AES-256-GCM key that every use must unlock with a strong biometric; `noBackupFilesDir/unlock-bundle.bin`. Refused after 14 days or a reboot (`security-model.md` §22.2). |
@@ -127,8 +127,9 @@ stores, and they see every request.
   * A **splice** of halves from different versions (an old overview with newer
     details, or the reverse) is refused: the details blob's AAD binds the
     SHA-256 of its overview blob, so the pair does not open and is skipped.
-* They **cannot impersonate a device**: the auth key is stored only as an
-  Argon2id hash, and `auth/params` answers identically for addresses that have
+* They **cannot impersonate a device**: the server holds an OPAQUE record (and, for
+  accounts still inside the legacy window, an Argon2id hash of the auth key),
+  neither of which can be replayed to sign in, and `auth/params` answers identically for addresses that have
   no account, so the server is not an account-enumeration oracle either.
 * They **cannot change the account's password with a stolen session token
   alone**: `POST /v1/account/credentials` also requires the *current* auth
@@ -810,7 +811,8 @@ because:
 ### Account deletion
 
 * **A stolen session token** cannot delete the account: the route also
-  needs the current auth key, rate limited like a login.
+  needs a proof of the current auth key (an OPAQUE re-authentication),
+  rate limited like a login.
 * **A malicious or compromised server** can answer `410 account_deleted`
   and make the account's devices erase their local replica. It gains
   nothing it does not already have: it holds the vault ciphertext and can
