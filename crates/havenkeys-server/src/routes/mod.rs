@@ -5,7 +5,7 @@ use crate::limits::{
 };
 use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, Method, Request};
-use axum::routing::{delete, get, post, MethodRouter};
+use axum::routing::{delete, get, post, put, MethodRouter};
 use axum::Router;
 use deadpool_postgres::Pool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -14,6 +14,7 @@ use tower_http::trace::TraceLayer;
 
 pub mod account;
 pub mod accounts;
+pub mod attachments;
 pub mod auth;
 pub mod devices;
 pub mod health;
@@ -117,6 +118,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/sync", get(sync::pull))
         .route("/v1/items", post(items::write))
         .route("/v1/items/fetch", post(items::fetch))
+        .route(
+            "/v1/attachments/{id}",
+            put(attachments::put).get(attachments::get),
+        )
         .route("/v1/devices", get(devices::list))
         .route("/v1/devices/{id}", delete(devices::revoke))
         .route(
@@ -162,7 +167,7 @@ fn build_cors(origin: String) -> Option<CorsLayer> {
     Some(
         CorsLayer::new()
             .allow_origin(AllowOrigin::exact(value))
-            .allow_methods([Method::GET, Method::POST, Method::DELETE])
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
             .allow_headers([
                 HeaderName::from_static("authorization"),
                 HeaderName::from_static("content-type"),

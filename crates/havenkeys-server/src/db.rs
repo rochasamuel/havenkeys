@@ -33,6 +33,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("0004_plans", include_str!("../migrations/0004_plans.sql")),
     ("0005_pake", include_str!("../migrations/0005_pake.sql")),
+    (
+        "0006_attachments",
+        include_str!("../migrations/0006_attachments.sql"),
+    ),
 ];
 
 #[derive(Debug)]

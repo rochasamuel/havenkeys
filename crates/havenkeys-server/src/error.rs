@@ -19,6 +19,9 @@ pub enum ApiError {
     TooLarge,
     /// The write would take the vault past `MAX_VAULT_BYTES` (SV-3).
     VaultFull,
+    /// The upload would take the vault's attachments past
+    /// `MAX_ATTACHMENT_VAULT_BYTES`.
+    AttachmentsFull,
     RateLimited,
     /// The token belonged to an account that was deleted (spec
     /// 2026-10-05-account-deletion §4.4). Only a holder of the token sees it.
@@ -61,6 +64,11 @@ impl ApiError {
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "vault_full",
                 "This vault has reached its storage limit.",
+            ),
+            Self::AttachmentsFull => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "attachments_full",
+                "This vault has reached its attachment storage limit.",
             ),
             Self::RateLimited => (
                 StatusCode::TOO_MANY_REQUESTS,

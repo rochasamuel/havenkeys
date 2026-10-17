@@ -15,6 +15,7 @@ use crate::b64::Blob;
 use crate::error::ApiError;
 use crate::json::Json;
 use crate::limits::{MAX_CHANGES_PER_BATCH, MAX_PAGE_BYTES};
+use crate::routes::attachments::attachment_bytes;
 use crate::routes::sync::{b64_len, change_json, ROW_JSON_BYTES};
 use crate::routes::AppState;
 use axum::extract::State;
@@ -295,13 +296,14 @@ pub async fn fetch(
     ))
 }
 
-/// The bytes of every blob the vault holds. `octet_length` reads a stored
-/// value's size from its header, without loading the value.
-async fn vault_bytes(
+/// The bytes of every blob the vault holds, attachments included.
+/// `octet_length` reads a stored value's size from its header, without
+/// loading the value.
+pub(crate) async fn vault_bytes(
     tx: &deadpool_postgres::Transaction<'_>,
     vault_id: uuid::Uuid,
 ) -> Result<i64, ApiError> {
-    Ok(tx
+    let items: i64 = tx
         .query_one(
             "SELECT (coalesce(sum(octet_length(overview)), 0)
                    + coalesce(sum(octet_length(details)), 0))::bigint
@@ -309,5 +311,6 @@ async fn vault_bytes(
             &[&vault_id],
         )
         .await?
-        .get(0))
+        .get(0);
+    Ok(items + attachment_bytes(tx, vault_id).await?)
 }

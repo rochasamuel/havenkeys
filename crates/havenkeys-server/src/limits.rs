@@ -20,6 +20,21 @@ pub const MAX_HEADER_BYTES: usize = 64 * 1024;
 /// vault above it is refused unless it makes the vault smaller.
 pub const MAX_VAULT_BYTES: i64 = 256 * 1024 * 1024;
 
+/// One sealed attachment: the 5 MiB file limit plus the blob's overhead,
+/// rounded up.
+pub const MAX_ATTACHMENT_BLOB_BYTES: usize = 5 * 1024 * 1024 + 4096;
+
+/// Attachments an item may have (the core enforces the same number).
+pub const MAX_ATTACHMENTS_PER_ITEM: usize = 20;
+
+/// All of one vault's attachment blobs, committed and pending. It leaves at
+/// least 64 MiB of `MAX_VAULT_BYTES` for items, so attachments cannot crowd
+/// out a password edit.
+pub const MAX_ATTACHMENT_VAULT_BYTES: i64 = 192 * 1024 * 1024;
+
+/// An upload no item write has claimed after this long is deleted.
+pub const PENDING_ATTACHMENT_TTL_HOURS: i64 = 24;
+
 /// Item changes in one write batch.
 pub const MAX_CHANGES_PER_BATCH: usize = 500;
 
