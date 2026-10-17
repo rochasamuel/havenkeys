@@ -1192,3 +1192,71 @@ async fn prune_keeps_trashed_items_files() {
     }
     server.cleanup().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_bad_cached_copy_is_evicted_and_refetched() {
+    let server = Server::start().await;
+    let (a, _b, item, _dirs) = two_devices(&server).await;
+    let id = a
+        .add_attachments(item, vec![png("front")])
+        .await
+        .unwrap()
+        .attachments[0]
+        .id;
+    let now = havenkeys_client::now_ms();
+    a.vault()
+        .unwrap()
+        .cache_attachment(&id, b"truncated", now)
+        .unwrap();
+
+    // Online: the bad copy is dropped and the file fetched again.
+    assert!(a
+        .attachment_bytes(item, id)
+        .await
+        .unwrap()
+        .expose()
+        .ends_with(b"front"));
+    assert_ne!(
+        a.vault().unwrap().cached_attachment(&id).unwrap().unwrap(),
+        b"truncated"
+    );
+
+    // Offline: damaged, and the bad copy is gone rather than stuck.
+    a.vault()
+        .unwrap()
+        .cache_attachment(&id, b"truncated", now)
+        .unwrap();
+    server.stop();
+    a.lock("user");
+    a.unlock(SecretString::from(PASSWORD), None).await.unwrap();
+    let err = a.attachment_bytes(item, id).await.unwrap_err();
+    assert_eq!(err.code, "offline");
+    assert!(a.vault().unwrap().cached_attachment(&id).unwrap().is_none());
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn limits_are_checked_before_any_upload() {
+    let server = Server::start().await;
+    let (a, _b, item, _dirs) = two_devices(&server).await;
+    let too_big = (
+        "big.bin".to_string(),
+        zeroize::Zeroizing::new(vec![0u8; 5 * 1024 * 1024 + 1]),
+    );
+    let err = a
+        .add_attachments(item, vec![png("one"), png("two"), too_big])
+        .await
+        .unwrap_err();
+    assert!(err.message.contains("Files can be up to 5 MB"));
+    let many = (0..21).map(|i| png(&i.to_string())).collect();
+    let err = a.add_attachments(item, many).await.unwrap_err();
+    assert!(err.message.contains("An item holds up to 20 files"));
+
+    let db = server.pool.get().await.unwrap();
+    let rows = db
+        .query_one("SELECT count(*) FROM attachments", &[])
+        .await
+        .unwrap();
+    assert_eq!(rows.get::<_, i64>(0), 0);
+    server.cleanup().await;
+}

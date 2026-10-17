@@ -786,6 +786,14 @@ impl Store {
         Ok(())
     }
 
+    pub fn delete_cached_attachment(&self, id: &Uuid) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM attachment_cache WHERE id = ?1",
+            params![id.to_string()],
+        )?;
+        Ok(())
+    }
+
     /// Drop copies no item holds any more, then the least recently used
     /// until what is left fits in `cap_bytes`.
     pub fn prune_attachment_cache(&self, keep: &HashSet<Uuid>, cap_bytes: u64) -> Result<()> {

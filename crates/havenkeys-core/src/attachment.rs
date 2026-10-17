@@ -214,6 +214,11 @@ impl VaultService {
             .put_cached_attachment(attachment_id, blob, now_ms)
     }
 
+    pub fn evict_attachment(&self, attachment_id: &Uuid) -> Result<()> {
+        self.session()?;
+        self.store.delete_cached_attachment(attachment_id)
+    }
+
     /// Forget copies of files no live or trashed item holds, then the least
     /// recently used until the cache fits `cap_bytes`.
     pub fn prune_attachment_cache(&self, cap_bytes: u64) -> Result<()> {

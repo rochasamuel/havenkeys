@@ -4,8 +4,11 @@
 use crate::client::HavenClient;
 use crate::error::{ClientError, ClientResult};
 use crate::now_ms;
-use havenkeys_core::attachment::AttachmentChange;
+use havenkeys_core::attachment::{
+    AttachmentChange, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
+};
 use havenkeys_core::model::ItemOverview;
+use havenkeys_core::Error;
 use havenkeys_core::SecretBytes;
 use havenkeys_sync_client::SyncError;
 use std::sync::atomic::Ordering;
@@ -24,6 +27,7 @@ impl HavenClient {
         self.require_online()?;
         self.require_full()?;
         let (session, server) = (self.session()?, self.server()?);
+        self.check_limits(item_id, &files)?;
         let now = now_ms();
         let mut metas = Vec::with_capacity(files.len());
         for (name, bytes) in &files {
@@ -40,6 +44,29 @@ impl HavenClient {
             self.vault()?
                 .stage_attachments(&item_id, AttachmentChange::Add(metas), now)?;
         self.push(staged).await?.ok_or_else(ClientError::internal)
+    }
+
+    /// Refuse a batch the core would refuse, before anything is uploaded.
+    fn check_limits(
+        &self,
+        item_id: Uuid,
+        files: &[(String, Zeroizing<Vec<u8>>)],
+    ) -> ClientResult<()> {
+        if files
+            .iter()
+            .any(|(_, bytes)| bytes.len() > MAX_ATTACHMENT_BYTES)
+        {
+            return Err(Error::InvalidInput("Files can be up to 5 MB").into());
+        }
+        // A trashed item is not listed; the core still checks it on staging.
+        let held = self
+            .vault()?
+            .get_item(&item_id)
+            .map_or(0, |o| o.attachments.len());
+        if held + files.len() > MAX_ATTACHMENTS_PER_ITEM {
+            return Err(Error::InvalidInput("An item holds up to 20 files").into());
+        }
+        Ok(())
     }
 
     pub async fn remove_attachment(
@@ -59,8 +86,8 @@ impl HavenClient {
         Ok(updated)
     }
 
-    /// The file's bytes: this device's sealed copy if it has one, else a
-    /// download, which is then kept.
+    /// The file's bytes: this device's sealed copy if it opens, else a
+    /// download. Only a copy that opened is kept, so a bad one never sticks.
     pub async fn attachment_bytes(
         &self,
         item_id: Uuid,
@@ -68,13 +95,21 @@ impl HavenClient {
     ) -> ClientResult<SecretBytes> {
         let meta = self.vault()?.attachment_meta(&item_id, &attachment_id)?;
         let cached = self.vault()?.cached_attachment(&attachment_id)?;
-        let blob = match cached {
-            Some(blob) => blob,
-            None => self.download_attachment(item_id, attachment_id).await?,
-        };
-        self.vault()?
+        if let Some(blob) = cached {
+            let opened = self.vault()?.open_attachment(&item_id, &meta, &blob);
+            match opened {
+                Ok(plain) => return Ok(plain),
+                Err(_) => self.vault()?.evict_attachment(&attachment_id)?,
+            }
+        }
+        let blob = self.download_attachment(item_id, attachment_id).await?;
+        let plain = self
+            .vault()?
             .open_attachment(&item_id, &meta, &blob)
-            .map_err(|_| ClientError::attachment_damaged())
+            .map_err(|_| ClientError::attachment_damaged())?;
+        self.vault()?
+            .cache_attachment(&attachment_id, &blob, now_ms())?;
+        Ok(plain)
     }
 
     async fn download_attachment(&self, item_id: Uuid, id: Uuid) -> ClientResult<Vec<u8>> {
@@ -91,7 +126,6 @@ impl HavenClient {
         if owner != item_id {
             return Err(ClientError::attachment_damaged());
         }
-        self.vault()?.cache_attachment(&id, &blob, now_ms())?;
         Ok(blob)
     }
 
