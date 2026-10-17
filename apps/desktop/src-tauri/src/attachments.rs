@@ -6,7 +6,8 @@
 use crate::export::write_private;
 use crate::state::{AppState, CmdError, CmdResult, ITEMS_CHANGED_EVENT};
 use havenkeys_core::attachment::{
-    is_previewable, sanitize_name, sniff, AttachmentMeta, MAX_ATTACHMENT_BYTES,
+    is_previewable, sanitize_name, sniff, AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM,
+    MAX_ATTACHMENT_BYTES,
 };
 use havenkeys_core::model::ItemOverview;
 use havenkeys_core::Error;
@@ -31,6 +32,14 @@ fn read_limited(path: &Path) -> CmdResult<Zeroizing<Vec<u8>>> {
     Ok(buf)
 }
 
+/// Refuse a pick the item has no room for, before any file is read.
+fn ensure_room(held: usize, picked: usize) -> CmdResult<()> {
+    if held + picked > MAX_ATTACHMENTS_PER_ITEM {
+        return Err(Error::InvalidInput("An item holds up to 20 files").into());
+    }
+    Ok(())
+}
+
 /// The name a saved copy is offered under: sanitized again, since the record
 /// came from the vault but the name ends up on disk.
 fn save_name(meta: &AttachmentMeta) -> String {
@@ -50,14 +59,17 @@ fn ensure_previewable(bytes: &[u8]) -> CmdResult<()> {
 /// picker was cancelled.
 #[tauri::command]
 pub async fn add_attachments(app: AppHandle, item_id: Uuid) -> CmdResult<Option<ItemOverview>> {
-    {
+    let held = {
         let state = app.state::<AppState>();
         state.touch();
         state.require_unlocked()?;
         // Checked before the picker opens, as for an import.
         state.require_online()?;
         state.require_full()?;
-    }
+        // A trashed item is not listed; the client checks it again.
+        let vault = state.client().vault()?;
+        vault.get_item(&item_id).map_or(0, |o| o.attachments.len())
+    };
     let handle = app.clone();
     let files = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
         let Some(picked) = handle
@@ -68,6 +80,7 @@ pub async fn add_attachments(app: AppHandle, item_id: Uuid) -> CmdResult<Option<
         else {
             return Ok(None);
         };
+        ensure_room(held, picked.len())?;
         picked
             .into_iter()
             .map(|file| {
@@ -201,6 +214,14 @@ mod tests {
     #[test]
     fn save_name_is_sanitized_again() {
         assert_eq!(save_name(&meta("../\u{202E}gpj.exe")), "gpj.exe");
+    }
+
+    #[test]
+    fn a_pick_over_the_item_limit_is_refused_before_reading() {
+        assert!(ensure_room(19, 1).is_ok());
+        let err = ensure_room(19, 2).unwrap_err();
+        assert!(err.message.contains("An item holds up to 20 files"));
+        assert!(ensure_room(0, MAX_ATTACHMENTS_PER_ITEM + 1).is_err());
     }
 
     #[test]
