@@ -90,6 +90,7 @@ const shortcutRefused: Record<string, string> = {
 const invalidInput: Record<string, string> = {
   "Files can be up to 5 MB": "Os arquivos podem ter até 5 MB",
   "An item holds up to 20 files": "Um item comporta até 20 arquivos.",
+  "This file is no longer available": "Este arquivo não está mais disponível. Anexe-o novamente.",
   "this file cannot be previewed": "Este arquivo não pode ser visualizado. Salve uma cópia para abri-lo.",
   "title is required": "O título é obrigatório.",
   "password is required": "A senha é obrigatória.",

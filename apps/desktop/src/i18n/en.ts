@@ -150,6 +150,7 @@ const codes: Record<ErrorCode, string | null> = {
 const invalidInput: Record<string, string> = {
   "Files can be up to 5 MB": "Files can be up to 5 MB",
   "An item holds up to 20 files": "An item holds up to 20 files.",
+  "This file is no longer available": "This file is no longer available. Attach it again.",
   "this file cannot be previewed": "This file can’t be previewed. Save a copy to open it.",
 };/**
  * "Invalid input: <detail>." rewritten per Rust detail text. English needs

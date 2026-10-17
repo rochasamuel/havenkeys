@@ -35,6 +35,12 @@ describe("errorMessage", () => {
     expect(errorMessage(other, ptBR)).toBe("Invalid input: blob context.");
   });
 
+  it("tells the user to attach a file again once its pending copy is gone", () => {
+    const e = new ApiError("invalid_input", "Invalid input: This file is no longer available.");
+    expect(errorMessage(e, en)).toBe("This file is no longer available. Attach it again.");
+    expect(errorMessage(e, ptBR)).toBe("Este arquivo não está mais disponível. Anexe-o novamente.");
+  });
+
   it("never passes through text that did not come from the core", () => {
     expect(errorMessage(new Error("hunter2"), en)).toBe(en.errors.generic);
     expect(errorMessage("hunter2", ptBR)).toBe(ptBR.errors.generic);

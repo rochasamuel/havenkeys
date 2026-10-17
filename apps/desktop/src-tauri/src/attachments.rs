@@ -109,9 +109,14 @@ pub async fn pick_files(app: AppHandle, held: usize) -> CmdResult<Vec<PendingFil
                 Ok((name, read_limited(&path)?))
             })
             .collect::<CmdResult<Vec<_>>>()?;
-        // A lock while the dialog was open drops the plaintext unheld.
+        // A lock while the dialog was open drops the plaintext unheld. The
+        // vault guard stays held so a lock cannot slip in before the files
+        // are stored, which would leave them past it.
         let state = handle.state::<AppState>();
-        state.require_unlocked()?;
+        let vault = state.vault()?;
+        if !vault.is_unlocked() {
+            return Err(Error::Locked.into());
+        }
         Ok(files
             .into_iter()
             .map(|(name, bytes)| hold(&state.pending_files, &name, bytes))

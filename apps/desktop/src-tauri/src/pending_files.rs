@@ -32,9 +32,7 @@ impl PendingFiles {
         let taken: Vec<_> = tokens.iter().map(|t| files.remove(t)).collect();
         match taken.into_iter().collect::<Option<Vec<_>>>() {
             Some(found) => Ok(found),
-            None => Err(
-                Error::InvalidInput("This file is no longer available. Attach it again.").into(),
-            ),
+            None => Err(Error::InvalidInput("This file is no longer available").into()),
         }
     }
 
@@ -75,7 +73,7 @@ mod tests {
         let store = PendingFiles::default();
         let kept = store.insert("a".into(), bytes(b"1"));
         let err = store.take(&[kept, Uuid::new_v4()]).err().unwrap();
-        assert!(err.message.contains("no longer available"));
+        assert!(err.message.contains("This file is no longer available"));
         // The known token was consumed too: a save never half-keeps files.
         assert!(store.take(&[kept]).is_err());
     }
