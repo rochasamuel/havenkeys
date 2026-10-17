@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import type { ExportFormat, ExportResult, ExportSummary } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
@@ -18,6 +18,7 @@ function leftOut(s: ExportSummary, t: Messages): string[] {
   if (s.customFieldsLeftOut) out.push(t.export.fieldsLeftOut(s.customFieldsLeftOut));
   if (s.itemsLeftOut) out.push(t.export.itemsLeftOut(s.itemsLeftOut));
   if (s.unreadable) out.push(t.export.unreadable(s.unreadable));
+  if (s.attachmentsLeftOut) out.push(t.export.attachmentsLeftOut(s.attachmentsLeftOut));
   return out;
 }
 
@@ -38,12 +39,17 @@ export function ExportSection() {
   const [again, setAgain] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ format: ExportFormat; r: ExportResult } | null>(null);
+  // A backup stopped because some attachments couldn't be fetched (spec
+  // 2026-10-13-encrypted-attachments §4.8): the passwords are kept for the
+  // retry the user chooses, and cleared by it.
+  const [attachmentsFailed, setAttachmentsFailed] = useState(false);
 
   useEffect(() => {
     let live = true;
     setSummary(null);
     setSummaryFailed(false);
     setUnderstood(false);
+    setAttachmentsFailed(false);
     api.exportSummary(format).then(
       (s) => live && setSummary(s),
       () => live && setSummaryFailed(true),
@@ -72,17 +78,23 @@ export function ExportSection() {
     (isBackup ? backup.length >= MIN_BACKUP_PASSWORD && backup === again : understood);
   const lines = summary ? leftOut(summary, t) : [];
 
-  async function runExport() {
+  async function runExport(includeAttachments = true) {
     setBusy(true);
+    setAttachmentsFailed(false);
+    let keepPasswords = false;
     try {
-      const r = await api.exportFile(format, master, isBackup ? backup : null);
+      const r = await api.exportFile(format, master, isBackup ? backup : null, includeAttachments);
       if (r) setResult({ format, r });
     } catch (e) {
-      toast(errorMessage(e, t, t.export.failed), "error");
+      keepPasswords = includeAttachments && e instanceof ApiError && e.code === "attachments_unavailable";
+      if (keepPasswords) setAttachmentsFailed(true);
+      else toast(errorMessage(e, t, t.export.failed), "error");
     } finally {
-      setMaster("");
-      setBackup("");
-      setAgain("");
+      if (!keepPasswords) {
+        setMaster("");
+        setBackup("");
+        setAgain("");
+      }
       setBusy(false);
     }
   }
@@ -119,6 +131,7 @@ export function ExportSection() {
               <div className="row-label">{t.export.contains}</div>
               <div className="row-value">
                 {t.export.includes(summary.logins, summary.secureNotes, summary.cards, summary.identities)}
+                {summary.attachments > 0 && <> {t.export.attachmentsIncluded(summary.attachments)}</>}
               </div>
             </div>
           </div>
@@ -184,17 +197,32 @@ export function ExportSection() {
           <input type="password" name="master-password" autoComplete="current-password" value={master} onChange={(e) => setMaster(e.target.value)} disabled={busy} />
         </label>
       </div>
-      <div className="group-actions">
-        <button className={isBackup ? "btn btn-primary" : "btn btn-danger"} onClick={() => void runExport()} disabled={busy || !ready}>
-          {busy ? t.export.exporting : t.export.export}
-        </button>
-      </div>
+      {attachmentsFailed ? (
+        <div className="group-actions export-retry" role="alert">
+          <p className="form-error">{t.errors.codes.attachments_unavailable}</p>
+          <button className="btn" onClick={() => void runExport(false)} disabled={busy || !ready}>
+            {t.export.withoutAttachments}
+          </button>
+          <button className="btn btn-primary" onClick={() => void runExport()} disabled={busy || !ready}>
+            {t.export.tryAgain}
+          </button>
+        </div>
+      ) : (
+        <div className="group-actions">
+          <button className={isBackup ? "btn btn-primary" : "btn btn-danger"} onClick={() => void runExport()} disabled={busy || !ready}>
+            {busy ? t.export.exporting : t.export.export}
+          </button>
+        </div>
+      )}
 
       {result && (
         <div className="import-result" role="status">
           <p>
             <strong>{t.export.done(exportedCount(result.r.summary, result.format), result.r.fileName)}</strong>
           </p>
+          {result.format === "backup" && result.r.summary.attachmentsLeftOut > 0 && (
+            <p className="muted">{t.export.attachmentsSkipped(result.r.summary.attachmentsLeftOut)}</p>
+          )}
           {result.format !== "backup" && <p className="muted">{t.export.deleteReminder}</p>}
         </div>
       )}

@@ -7,6 +7,7 @@ import { useRevealedSecret } from "../lib/hooks";
 import { CopyButton } from "../components/CopyButton";
 import { Field, IconButton, TotpField } from "../components/Field";
 import { HealthChips } from "../components/HealthChips";
+import { Attachments } from "../components/Attachments";
 import { Icon } from "../components/Icon";
 import { SsoRow } from "../components/SsoRow";
 import { useToast } from "../components/Toast";
@@ -326,6 +327,7 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
           )}
 
           <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
+          <Attachments item={item} readOnly={readOnly} />
 
           {item.hasNotes && (
             <div className="group">
@@ -368,6 +370,7 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
             )
           )}
           <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
+          <Attachments item={item} readOnly={readOnly} />
         </>
       )}
 

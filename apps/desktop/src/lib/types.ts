@@ -62,7 +62,6 @@ export interface CardSummary {
   expiry: CardExpiry | null;
 }
 
-/** Item summary. Contains no passwords, TOTP secrets or note bodies. */
 /** A file attached to an item; its bytes are fetched on demand. */
 export interface AttachmentMeta {
   id: string;
@@ -72,6 +71,7 @@ export interface AttachmentMeta {
   createdAt: number;
 }
 
+/** Item summary. Contains no passwords, TOTP secrets or note bodies. */
 export interface ItemOverview {
   id: string;
   itemType: ItemType;

@@ -1985,6 +1985,64 @@ input::-ms-clear {
   font-size: 12px;
 }
 
+/* Attachments: one row per file (type icon, name, kind and size, actions),
+   then "Add file". A confirmation takes the row's full width under it. */
+.attachment-list > li + li {
+  border-top: 1px solid var(--group-line);
+}
+
+.attachment-row {
+  flex-wrap: wrap;
+}
+
+.attachment-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+/* A name breaks between words and stops after two lines; the full name is its title. */
+.attachment-name {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.attachment-meta {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.attachment-confirm {
+  flex-basis: 100%;
+  padding: 2px 0 4px 30px;
+}
+
+.attachment-confirm > span {
+  flex-basis: 100%;
+}
+
+.attachment-add {
+  min-height: 44px;
+  color: var(--muted);
+}
+
+.attachment-add .row-label-inline {
+  color: inherit;
+}
+
+.attachment-add:hover:not(:disabled) {
+  color: var(--text-strong);
+}
+
+.attachment-add:disabled {
+  opacity: 0.6;
+}
+
 .item-foot {
   display: flex;
   flex-wrap: wrap;
@@ -3249,6 +3307,52 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+/* The attachment preview: the image at its own size, shrunk to fit the window. */
+.preview-modal {
+  display: grid;
+  gap: 12px;
+  width: auto;
+  max-width: min(960px, 100%);
+  padding: 12px 12px 14px;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 6px;
+}
+
+.preview-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 560;
+  color: var(--text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 140px);
+  margin: 0 auto;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.export-retry {
+  align-items: center;
+}
+
+.export-retry .form-error {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 @keyframes modal-scrim-in {

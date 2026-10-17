@@ -140,9 +140,18 @@ const codes: Record<ErrorCode, string | null> = {
 
 /**
  * "Invalid input: <detail>." rewritten per Rust detail text. English needs
+ * only the attachment refusals, whose wording is fixed copy; Rust's other
+ * messages are already English.
+ */
+const invalidInput: Record<string, string> = {
+  "Files can be up to 5 MB": "Files can be up to 5 MB",
+  "An item holds up to 20 files": "An item holds up to 20 files.",
+  "this file cannot be previewed": "This file can’t be previewed. Save a copy to open it.",
+};/**
+ * "Invalid input: <detail>." rewritten per Rust detail text. English needs
  * none: Rust's message is already English.
  */
-const noDetails: Record<string, string> = {};
+
 
 /** Rust's three Quick Access shortcut refusals, keyed by its message. */
 const shortcutRefused: Record<string, string> = {
@@ -351,6 +360,7 @@ export const en = {
     emptyHint: "New items you add appear here.",
     hasTotp: "Has one-time codes",
     hasPasskeys: "Has passkeys",
+    hasAttachments: "Has attachments",
   },
 
   detail: {
@@ -518,6 +528,25 @@ export const en = {
     avoidAmbiguous: "Avoid look-alikes",
   },
 
+  attachments: {
+    title: "Attachments",
+    add: "Add file",
+    adding: "Adding…",
+    preview: (name: string) => `Preview ${name}`,
+    save: (name: string) => `Save ${name} as…`,
+    remove: (name: string) => `Remove ${name}`,
+    confirmRemove: (name: string) => `Remove ${name}? It will be deleted from HavenKeys on all your devices.`,
+    saveWarning: "A saved copy is not protected by HavenKeys.",
+    saveAnyway: "Save as…",
+    saved: "Copy saved.",
+    closePreview: "Close preview",
+    file: "File",
+    addFailed: "Could not add the file.",
+    saveFailed: "Could not save the file.",
+    previewFailed: "Could not open the preview.",
+    removeFailed: "Could not remove the file.",
+  },
+
   trash: {
     title: "Trash",
     explain: "Items here are removed for good after 30 days.",
@@ -534,6 +563,8 @@ export const en = {
     emptyFailed: "Could not empty the Trash.",
     loadFailed: "Could not load the Trash.",
     restoreFirst: "Restore this item to see or use its passwords and codes.",
+    filesUseStorage: "Files in the Trash still use storage.",
+    files: (n: number) => (n === 1 ? "1 file" : `${n} files`),
   },
 
   confirmUpdate: {
@@ -973,6 +1004,12 @@ export const en = {
     fieldsLeftOut: (n: number) => `${n} custom ${n === 1 ? "field is" : "fields are"} not included.`,
     itemsLeftOut: (n: number) => `${n} ${n === 1 ? "item that isn’t a login is" : "items that aren’t logins are"} not included.`,
     unreadable: (n: number) => `${n} ${n === 1 ? "item can’t be read and is" : "items can’t be read and are"} not included.`,
+    attachmentsIncluded: (n: number) => `Plus ${n} ${n === 1 ? "attachment" : "attachments"}.`,
+    attachmentsLeftOut: (n: number) =>
+      `${n} ${n === 1 ? "attachment is" : "attachments are"} not included — use a HavenKeys backup to keep them.`,
+    tryAgain: "Try again",
+    withoutAttachments: "Export without attachments",
+    attachmentsSkipped: (n: number) => `${n} ${n === 1 ? "attachment was" : "attachments were"} left out.`,
     done: (n: number, fileName: string) => `Exported ${n} ${n === 1 ? "item" : "items"} to ${fileName}.`,
     deleteReminder: "This file isn’t encrypted. Delete it once you’re done with it.",
   },
@@ -1010,7 +1047,7 @@ export const en = {
      * text. Only details a person can cause from the UI; any other detail
      * shows Rust's message.
      */
-    invalidInput: noDetails,
+    invalidInput,
     /** Why Rust refused a Quick Access shortcut, keyed by its message. */
     shortcutRefused,
   },

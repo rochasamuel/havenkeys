@@ -4,6 +4,7 @@ import type { IdentityCopyField, IdentityView, ItemOverview } from "../lib/types
 import { formatBirthDate, identityTitle, isEmptyIdentity, visibleSections, type IdentityFieldDef } from "../lib/identity";
 import { formatDate } from "../lib/format";
 import { CopyButton } from "../components/CopyButton";
+import { Attachments } from "../components/Attachments";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
@@ -204,6 +205,8 @@ export function IdentityDetail({ item, readOnly, onTag, onEdit }: Props) {
           )}
         </>
       )}
+
+      <Attachments item={item} readOnly={readOnly} />
 
       <footer className="item-foot">
         <p className="muted">

@@ -91,6 +91,20 @@ describe("TrashView", () => {
     expect(text).toContain("Removed in 28 days");
   });
 
+  it("notes that trashed files still use storage, only when there are some", async () => {
+    await render();
+    expect(host.textContent).not.toContain("Files in the Trash still use storage.");
+    listTrash.mockResolvedValue([
+      { ...entry, attachments: [{ id: "a1", name: "scan.pdf", mime: "application/pdf", size: 10, createdAt: 1 }] },
+    ]);
+    act(() => root.unmount());
+    root = createRoot(host);
+    await render();
+    expect(host.textContent).toContain("Files in the Trash still use storage.");
+    await select();
+    expect(host.querySelector(".detail")!.textContent).toContain("1 file");
+  });
+
   it("says so when the Trash is empty", async () => {
     listTrash.mockResolvedValue([]);
     await render();

@@ -4,6 +4,22 @@
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 8, 20, 14, 30);
 
+/** Attached files on the first login: an image, a PDF, and a long name. */
+const attachments = [
+  { id: "aaaaaaaa-0000-4000-8000-000000000001", name: "Recovery codes.png", mime: "image/png", size: 245_760, createdAt: NOW - 20 * DAY },
+  { id: "aaaaaaaa-0000-4000-8000-000000000002", name: "Invoice 2026-09.pdf", mime: "application/pdf", size: 1_572_864, createdAt: NOW - 9 * DAY },
+  {
+    id: "aaaaaaaa-0000-4000-8000-000000000003",
+    name: "GitHub organisation billing contact and security key backup instructions (final).txt",
+    mime: "application/octet-stream",
+    size: 812,
+    createdAt: NOW - 2 * DAY,
+  },
+];
+
+/** A small receipt-like PNG for the preview (the stub answers raw bytes for it). */
+const PREVIEW_PNG = "iVBORw0KGgoAAAANSUhEUgAAAeAAAAEsCAIAAACUnPcNAAAFnUlEQVR42u3dMQqAMBREwdz/ZCk9SUprryBBFpcMTOsr5LNtxroXAD80/AIAAw2AgQYw0AAYaAADDYCBBsBAAxhoAAw0gIEGwEADYKABDDQABhrAQANgoAEMNAAGGgADDWCgATDQAAYaAAMNgIEGMNAAGGgAAw2AgQYw0AAYaAAMNICBBsBAAxhoAE4d6HnNN7Y/VFZWVv6kbKAdh7KysoE20MrKysoG2kArKysbaAPt7JSVlQ20gVZWVjbQBtpxKCsrG2gDraysrGygDbSysrKBNtDKysrKBtpAKysrG2gD7eyUlZUNtIFWVlZWNtCOQ1lZ2UAbaGVlZWUDbaCVlZUNtIF2dsrKygbaQCsrKxtoT14BYKABDDQABhrAQANgoAEMNAAGGgADDWCgATDQAAYaAAMNgIEGMNAAGGgAAw2AgQYw0GGe21FWVq4oG2jHoaysbKANtLKysrKBNtDKysoG2kA7O2VlZQNtoJWVlQ20gXYcysrKBtpAKysrKxtoA62srGygDbSysrKygTbQysrKBtpAOztlZWUDbaCVlZWVDbTjUFZWNtAGWllZWdlAG2hlZWUDbaCdnbKysoE20MrKygbak1cAGGgAAw2AgQYw0AAYaAADDYCBBsBAAxhoAAw0gIEGwEADYKABDDQABhrAQANgoAEMdJjndpSVlSvKBtpxKCsrG2gDraysrGygDbSysrKBNtDOTllZ2UAbaGVlZQNtoB2HsrKygTbQysrKygbaQCsrKxtoA62srKxsoA20srKygTbQzk5ZWdlAG2hlZWVlA+04lJWVDbSBVlZWVjbQBlpZWdlAG2hnp6ysbKANtLKysoH25BUABhrAQANgoAEMNAAGGsBAA2CgATDQAAYaAAMNYKABMNAAGGgAAw2AgQYw0AAYaAADHea5HWVl5YqygXYcysrKBtpAKysrKxtoA62srGygDbSzU1ZWNtAGWllZ2UAbaMehrKxsoA20srKysoE20MrKygbaQCsrKysbaAOtrKxsoA20s1NWVjbQBlpZWVnZQDsOZWVlA22glZWVlQ20gVZWVjbQBtrZKSsrG2gDraysbKA9eQWAgQYw0AAYaAADDYCBBjDQABhoAAw0gIEGwEADGGgADDQABhrAQANgoAEMNAAGGsBAh3luR1lZuaJsoB2HsrKygTbQysrKygbaQCsrKxtoA+3slJWVDbSBVlZWNtAG2nEoKysbaAOtrKysbKANtLKysoE20MrKysoG2kArKysbaAPt7JSVlQ20gVZWVlY20I5DWVnZQBtoZWVlZQNtoJWVlQ20gXZ2ysrKBtpAKysrG2hPXgFgoAEMNAAGGsBAA2CgAQw0AAYaAAMNYKABMNAABhoAAw2AgQYw0AAYaAADDYCBBjDQYZ7bUVZWrigbaMehrKxsoA20srKysoE20MrKygbaQDs7ZWVlA22glZWVDbSBdhzKysoG2kArKysrG2gDraysbKANtLKysrKBNtDKysoG2kA7O2VlZQNtoJWVlZUNtONQVlY20AZaWVlZ2UAbaGVlZQNtoJ2dsrKygTbQysrKBtqTVwAYaAADDYCBBjDQABhoAAMNgIEGwEADGGgADDSAgQbAQANgoAEMNAAGGsBAA2CgAQx0mOd2lJWVK8oG2nEoKysbaAOtrKysbKANtLKysoE20M5OWVnZQBtoZWVlA22gHYeysrKBNtDKysrKBtpAKysrG2gDraysrGygDbSysrKBNtDOTllZ2UAbaGVlZWUD7TiUlZUNtIFWVlZWNtAGWllZ2UAbaGenrKxsoA20srKygfbkFQAGGsBAA2CgAQw0AAYawEADYKABMNAABhoAAw1goAEw0AAYaAADDYCBBjDQABhoAAMNgIEGwEADGGgADDSAgQbAQANgoAEMNAAGGsBAA2CgAQ72APnCarmBWNa8AAAAAElFTkSuQmCC";
+
 const items = [
   {
     id: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
@@ -19,6 +35,7 @@ const items = [
     hasNotes: true,
     hasPasskey: true,
     autoSignIn: true,
+    attachments,
     createdAt: NOW - 400 * DAY,
     updatedAt: NOW - 3 * DAY,
   },
@@ -213,7 +230,7 @@ function trashEntries() {
   const ago = (days) => Date.now() - days * DAY;
   return [
     { ...items[0], trashedAt: ago(0), daysLeft: 30 },
-    { ...items[1], hasPasskey: false, tags: ["work", "infrastructure"], trashedAt: ago(1), daysLeft: 29 },
+    { ...items[1], hasPasskey: false, tags: ["work", "infrastructure"], attachments: attachments.slice(1, 2), trashedAt: ago(1), daysLeft: 29 },
     {
       id: "99999999-8888-4777-8666-555555555555",
       itemType: "secure_note",
@@ -321,7 +338,11 @@ function baseResponses() {
       customFieldsLeftOut: 0,
       itemsLeftOut: 0,
       unreadable: 0,
+      attachments: 3,
+      attachmentsLeftOut: 0,
     },
+    preview_attachment: { bytesBase64: PREVIEW_PNG },
+    save_attachment: true,
     lock_vault: null,
     health_report: healthReport,
     set_health_ignored: null,
@@ -589,6 +610,47 @@ export const desktopScenarios = [
       await page.waitForTimeout(150);
     },
     shots: [".item .group:has(.totp-code) >> nth=1", ".group-history"],
+  },
+  {
+    name: "detail-attachments",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+    },
+    shots: [".attachment-list"],
+  },
+  {
+    // Remove asks first; Save as… warns once.
+    name: "detail-attachments-confirms",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".attachment-row >> nth=0 >> .icon-btn >> nth=-1");
+      await page.click(".attachment-row >> nth=1 >> .icon-btn >> nth=0");
+      await page.waitForTimeout(200);
+    },
+    shots: [".attachment-list"],
+  },
+  {
+    name: "detail-attachment-preview",
+    respond: {},
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+      await page.click(".attachment-row >> nth=0 >> .icon-btn >> nth=0");
+      await page.waitForTimeout(400);
+    },
+  },
+  {
+    name: "detail-attachments-offline",
+    respond: { device_status: { keyScheme: "account_bound", needsSecretKey: false, online: false, secretKeyStorage: "keychain" } },
+    async act(page) {
+      await page.click(firstItem);
+      await page.waitForTimeout(200);
+    },
+    shots: [".attachment-list"],
   },
   {
     name: "detail-custom-fields-failed",
@@ -1228,6 +1290,23 @@ export const desktopScenarios = [
     shots: ["#export"],
   },
   {
+    // A backup that stopped because attachments couldn't be fetched.
+    name: "settings-export-attachments-failed",
+    respond: { export_file: reject("attachments_unavailable", "Some attachments could not be read. Nothing was exported.") },
+    async act(page) {
+      await page.click(SETTINGS);
+      await page.waitForTimeout(300);
+      await page.click("#export .disclosure-head button");
+      await page.waitForTimeout(150);
+      await page.fill('input[name="backup-password"]', "a long backup passphrase");
+      await page.fill('input[name="backup-password-again"]', "a long backup passphrase");
+      await page.fill('input[name="master-password"]', "master password");
+      await page.click("#export .group-actions .btn-primary");
+      await page.waitForTimeout(350);
+    },
+    shots: ["#export"],
+  },
+  {
     name: "settings-offline",
     respond: { device_status: { keyScheme: "account_bound", needsSecretKey: false, online: false, secretKeyStorage: "file" }, account_status: null, list_devices: reject("offline") },
     async act(page) {
@@ -1319,6 +1398,8 @@ export function tauriStub(setup) {
       if (r === undefined) throw { code: "internal", message: `ui-check: no canned answer for ${cmd}` };
       // `{ byProvider: { google: [...] } }` answers per `provider` argument.
       if (r && typeof r === "object" && "byProvider" in r) return JSON.parse(JSON.stringify(r.byProvider[args.provider] ?? []));
+      // `{ bytesBase64 }` answers raw bytes, as a Tauri ipc::Response does.
+      if (r && typeof r === "object" && "bytesBase64" in r) return Uint8Array.from(atob(r.bytesBase64), (c) => c.charCodeAt(0)).buffer;
       return JSON.parse(JSON.stringify(r));
     },
   };

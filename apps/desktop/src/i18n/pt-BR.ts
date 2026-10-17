@@ -86,6 +86,9 @@ const shortcutRefused: Record<string, string> = {
 
 /** By Rust's InvalidInput detail: the ones a person can cause from the UI. */
 const invalidInput: Record<string, string> = {
+  "Files can be up to 5 MB": "Os arquivos podem ter até 5 MB",
+  "An item holds up to 20 files": "Um item comporta até 20 arquivos.",
+  "this file cannot be previewed": "Este arquivo não pode ser visualizado. Salve uma cópia para abri-lo.",
   "title is required": "O título é obrigatório.",
   "password is required": "A senha é obrigatória.",
   "invalid website address": "Endereço de site inválido.",
@@ -366,6 +369,7 @@ export const ptBR: Messages = {
     emptyHint: "Os novos itens que você adicionar aparecem aqui.",
     hasTotp: "Tem códigos de verificação",
     hasPasskeys: "Tem chaves de acesso",
+    hasAttachments: "Tem anexos",
   },
 
   detail: {
@@ -533,6 +537,25 @@ export const ptBR: Messages = {
     avoidAmbiguous: "Evitar caracteres parecidos",
   },
 
+  attachments: {
+    title: "Anexos",
+    add: "Adicionar arquivo",
+    adding: "Adicionando…",
+    preview: (name: string) => `Visualizar ${name}`,
+    save: (name: string) => `Salvar ${name} como…`,
+    remove: (name: string) => `Remover ${name}`,
+    confirmRemove: (name: string) => `Remover ${name}? Ele será excluído do HavenKeys em todos os seus dispositivos.`,
+    saveWarning: "Uma cópia salva não é protegida pelo HavenKeys.",
+    saveAnyway: "Salvar como…",
+    saved: "Cópia salva.",
+    closePreview: "Fechar visualização",
+    file: "Arquivo",
+    addFailed: "Não foi possível adicionar o arquivo.",
+    saveFailed: "Não foi possível salvar o arquivo.",
+    previewFailed: "Não foi possível abrir a visualização.",
+    removeFailed: "Não foi possível remover o arquivo.",
+  },
+
   trash: {
     title: "Lixeira",
     explain: "Os itens daqui são excluídos de vez depois de 30 dias.",
@@ -549,6 +572,8 @@ export const ptBR: Messages = {
     emptyFailed: "Não foi possível esvaziar a Lixeira.",
     loadFailed: "Não foi possível carregar a Lixeira.",
     restoreFirst: "Restaure o item para ver ou usar as senhas e códigos.",
+    filesUseStorage: "Os arquivos na Lixeira continuam ocupando espaço.",
+    files: (n: number) => (n === 1 ? "1 arquivo" : `${n} arquivos`),
   },
 
   confirmUpdate: {
@@ -1005,6 +1030,12 @@ export const ptBR: Messages = {
     fieldsLeftOut: (n: number) => `${n} ${n === 1 ? "campo personalizado não é incluído" : "campos personalizados não são incluídos"}.`,
     itemsLeftOut: (n: number) => `${n} ${n === 1 ? "item que não é login não é incluído" : "itens que não são logins não são incluídos"}.`,
     unreadable: (n: number) => `${n} ${n === 1 ? "item não pode ser lido e não é incluído" : "itens não podem ser lidos e não são incluídos"}.`,
+    attachmentsIncluded: (n: number) => `Mais ${n} ${n === 1 ? "anexo" : "anexos"}.`,
+    attachmentsLeftOut: (n: number) =>
+      `${n} ${n === 1 ? "anexo não é incluído" : "anexos não são incluídos"} — use um backup do HavenKeys para mantê-los.`,
+    tryAgain: "Tentar de novo",
+    withoutAttachments: "Exportar sem os anexos",
+    attachmentsSkipped: (n: number) => `${n} ${n === 1 ? "anexo ficou" : "anexos ficaram"} de fora.`,
     done: (n: number, fileName: string) => `${n} ${n === 1 ? "item exportado" : "itens exportados"} para ${fileName}.`,
     deleteReminder: "Este arquivo não é criptografado. Apague-o quando terminar.",
   },

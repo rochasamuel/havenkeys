@@ -180,6 +180,7 @@ export function ItemList({
             const sub =
               data ?? (item.itemType === "login" ? t.common.login : item.itemType === "identity" ? t.identity.kind : item.itemType === "card" ? t.card.kind : t.common.secureNote);
             const title = item.itemType === "identity" ? identityTitle(item.title, t.identity.title) : item.title;
+            const hasFiles = (item.attachments?.length ?? 0) > 0;
             return (
               <li key={item.id}>
                 <button
@@ -197,8 +198,8 @@ export function ItemList({
                       {sub}
                     </span>
                   </span>
-                  {(item.hasTotp || item.hasPasskey) && (
-                    // One element, so both flags share the grid's last column.
+                  {(item.hasTotp || item.hasPasskey || hasFiles) && (
+                    // One element, so the flags share the grid's last column.
                     <span className="list-item-flags">
                       {item.hasTotp && (
                         <span className="list-item-flag" title={t.list.hasTotp}>
@@ -208,6 +209,11 @@ export function ItemList({
                       {item.hasPasskey && (
                         <span className="list-item-flag" title={t.list.hasPasskeys}>
                           <Icon name="key" size={13} />
+                        </span>
+                      )}
+                      {hasFiles && (
+                        <span className="list-item-flag" title={t.list.hasAttachments}>
+                          <Icon name="paperclip" size={13} />
                         </span>
                       )}
                     </span>

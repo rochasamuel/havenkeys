@@ -5,6 +5,7 @@ import { BRAND_NAMES, formatExpiry, groupNumber, isExpired, maskedNumber } from 
 import { formatDate } from "../lib/format";
 import { CardBrandLogo } from "../components/CardBrandLogo";
 import { CopyButton } from "../components/CopyButton";
+import { Attachments } from "../components/Attachments";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/Toast";
 import { useI18n } from "../i18n/context";
@@ -214,6 +215,8 @@ export function CardDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
           )}
         </>
       )}
+
+      <Attachments item={item} readOnly={readOnly} />
 
       <footer className="item-foot">
         <p className="muted">

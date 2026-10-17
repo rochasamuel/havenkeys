@@ -31,7 +31,15 @@ export function formatDate(ms: number, locale: string): string {
   return new Date(ms).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
-export type Strength = "weak" | "fair" | "strong" | "excellent";
+/** A file size in binary units (the 5 MB attachment limit is 5 MiB): 820 B, 240 KB, 1.5 MB. */
+export function formatSize(bytes: number, locale: string): string {
+  const n = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
+  if (bytes < 1024) return `${n.format(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${n.format(Math.round(bytes / 1024))} KB`;
+  return `${n.format(bytes / (1024 * 1024))} MB`;
+}
+
+export type Strength ="weak" | "fair" | "strong" | "excellent";
 
 /** Rough strength level for a generator entropy estimate. */
 export function strengthLevel(bits: number): Strength {

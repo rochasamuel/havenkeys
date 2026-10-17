@@ -18,16 +18,17 @@ const summary: ExportSummary = {
   attachmentsLeftOut: 0,
 };
 const exportSummary = vi.fn<(f: ExportFormat) => Promise<ExportSummary>>();
-const exportFile = vi.fn<(f: ExportFormat, m: string, b: string | null) => Promise<ExportResult | null>>();
+const exportFile = vi.fn<(f: ExportFormat, m: string, b: string | null, a?: boolean) => Promise<ExportResult | null>>();
 vi.mock("../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/api")>()),
   api: {
     exportSummary: (f: ExportFormat) => exportSummary(f),
-    exportFile: (f: ExportFormat, m: string, b: string | null) => exportFile(f, m, b),
+    exportFile: (f: ExportFormat, m: string, b: string | null, a?: boolean) => exportFile(f, m, b, a),
     setUiLanguage: () => Promise.resolve(),
   },
 }));
 
+import { ApiError } from "../lib/api";
 import { en } from "../i18n/en";
 import { ExportSection } from "./ExportSection";
 
@@ -71,7 +72,7 @@ describe("ExportSection", () => {
     await act(async () => type('input[name="backup-password-again"]', "backup passphrase"));
     expect(exportButton().disabled).toBe(false);
     await act(async () => exportButton().click());
-    expect(exportFile).toHaveBeenCalledWith("backup", "master pw", "backup passphrase");
+    expect(exportFile).toHaveBeenCalledWith("backup", "master pw", "backup passphrase", true);
   });
 
   it("gates plaintext exports behind the warning and shows what is left out", async () => {
@@ -85,7 +86,7 @@ describe("ExportSection", () => {
     await act(async () => host.querySelector<HTMLInputElement>('input[name="understand"]')!.click());
     expect(exportButton().disabled).toBe(false);
     await act(async () => exportButton().click());
-    expect(exportFile).toHaveBeenCalledWith("csv", "master pw", null);
+    expect(exportFile).toHaveBeenCalledWith("csv", "master pw", null, true);
   });
 
   it("clears every password after an attempt", async () => {
@@ -120,5 +121,40 @@ describe("ExportSection", () => {
     await act(async () => type('input[name="backup-password-again"]', "backup passphrase"));
     expect(host.textContent).toContain(en.export.summaryFailed);
     expect(exportButton().disabled).toBe(true);
+  });
+
+  it("counts attachments: carried by a backup, left out of a plaintext export", async () => {
+    exportSummary.mockImplementation((f) =>
+      Promise.resolve(f === "backup" ? { ...summary, attachments: 3 } : { ...summary, attachmentsLeftOut: 3 }),
+    );
+    await act(async () => root.render(<ExportSection />));
+    expect(host.textContent).toContain(en.export.attachmentsIncluded(3));
+    await act(async () => host.querySelector<HTMLInputElement>('input[value="csv"]')!.click());
+    expect(host.textContent).toContain(
+      "3 attachments are not included — use a HavenKeys backup to keep them.",
+    );
+  });
+
+  it("offers to export without attachments when some can't be fetched", async () => {
+    exportSummary.mockResolvedValue({ ...summary, attachments: 2 });
+    exportFile.mockRejectedValueOnce(new ApiError("attachments_unavailable", "x"));
+    await act(async () => root.render(<ExportSection />));
+    await act(async () => type('input[name="master-password"]', "master pw"));
+    await act(async () => type('input[name="backup-password"]', "backup passphrase"));
+    await act(async () => type('input[name="backup-password-again"]', "backup passphrase"));
+    await act(async () => exportButton().click());
+    const retry = (label: string) => [...host.querySelectorAll("button")].find((b) => b.textContent === label)!;
+    expect(retry(en.export.tryAgain)).toBeDefined();
+    exportFile.mockResolvedValueOnce({
+      fileName: "vault.hkbackup",
+      summary: { ...summary, attachments: 0, attachmentsLeftOut: 2 },
+    });
+    await act(async () => retry(en.export.withoutAttachments).click());
+    expect(exportFile).toHaveBeenLastCalledWith("backup", "master pw", "backup passphrase", false);
+    expect(host.textContent).toContain(en.export.attachmentsSkipped(2));
+    expect(retry(en.export.tryAgain)).toBeUndefined();
+    for (const name of ["master-password", "backup-password", "backup-password-again"]) {
+      expect(host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value).toBe("");
+    }
   });
 });

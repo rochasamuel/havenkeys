@@ -70,8 +70,10 @@ export function TrashView({ readOnly, revision, onChanged }: Props) {
   }, [load, revision]);
 
   const selected = entries?.find((e) => e.id === selectedId) ?? null;
+  const selectedFiles = selected?.attachments?.length ?? 0;
   const count = entries?.length ?? 0;
   const anyPasskey = entries?.some((e) => e.hasPasskey) ?? false;
+  const anyFiles = entries?.some((e) => (e.attachments?.length ?? 0) > 0) ?? false;
 
   async function runAction(run: () => Promise<void>, fallback: string) {
     setBusy(true);
@@ -146,7 +148,10 @@ export function TrashView({ readOnly, revision, onChanged }: Props) {
               {t.trash.emptyTrash}
             </button>
           </header>
-          <p className="trash-explain">{t.trash.explain}</p>
+          <p className="trash-explain">
+            {t.trash.explain}
+            {anyFiles && <> {t.trash.filesUseStorage}</>}
+          </p>
           {confirm?.kind === "empty" && (
             <div className="trash-confirm">{confirmRow(t.trash.confirmEmpty(count), anyPasskey, () => void empty())}</div>
           )}
@@ -202,12 +207,18 @@ export function TrashView({ readOnly, revision, onChanged }: Props) {
               </div>
             </header>
 
-            {(selected.hasPasskey || selected.tags.length > 0) && (
+            {(selected.hasPasskey || selectedFiles > 0 || selected.tags.length > 0) && (
               <div className="detail-tags">
                 {selected.hasPasskey && (
                   <span className="pill trash-pill">
                     <Icon name="key" size={12} />
                     {t.list.hasPasskeys}
+                  </span>
+                )}
+                {selectedFiles > 0 && (
+                  <span className="pill trash-pill">
+                    <Icon name="paperclip" size={12} />
+                    {t.trash.files(selectedFiles)}
                   </span>
                 )}
                 {selected.tags.map((name) => (
