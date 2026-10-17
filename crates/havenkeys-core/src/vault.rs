@@ -1301,6 +1301,15 @@ impl VaultService {
         self.store.set_plan(plan)
     }
 
+    /// Whether this device has signed in with OPAQUE. Safe while locked.
+    pub fn pake_confirmed(&self) -> Result<bool> {
+        self.store.pake_confirmed()
+    }
+
+    pub fn set_pake_confirmed(&mut self) -> Result<()> {
+        self.store.set_pake_confirmed()
+    }
+
     /// Full unless the server said otherwise. Safe while locked.
     pub fn entitlement(&self) -> Result<Entitlement> {
         Ok(self.store.plan()?.entitlement)

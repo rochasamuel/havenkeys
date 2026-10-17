@@ -2825,6 +2825,7 @@ dependencies = [
  "csv",
  "data-encoding",
  "havenkeys-core",
+ "havenkeys-opaque",
  "hkdf 0.13.0",
  "hmac 0.13.0",
  "hpke",

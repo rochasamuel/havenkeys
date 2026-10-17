@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 
 const SCHEMA: &str = "
 CREATE TABLE vault_header (
@@ -38,7 +38,8 @@ CREATE TABLE account (
     plan_status    TEXT,
     entitlement    TEXT    NOT NULL DEFAULT 'full',
     trial_ends_at  TEXT,
-    period_end     TEXT
+    period_end     TEXT,
+    pake_confirmed INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE settings (
     id   INTEGER PRIMARY KEY CHECK (id = 1),
@@ -52,6 +53,18 @@ CREATE TABLE local_blob (
     name TEXT PRIMARY KEY NOT NULL,
     blob BLOB NOT NULL
 );
+";
+
+/// The `account.pake_confirmed` column exactly as `SCHEMA` spells it, so a
+/// test can build a schema-7 database by removing it.
+#[cfg(test)]
+const PAKE_COLUMN_DDL: &str = ",\n    pake_confirmed INTEGER NOT NULL DEFAULT 0";
+
+/// Schema 7 → 8: whether this device has signed in to its account with
+/// OPAQUE (spec 2026-10-13-pake-login §6). Plaintext 0/1: it says only
+/// which login this device speaks, and is read before unlock-time sign-in.
+const MIGRATE_7_TO_8: &str = "
+ALTER TABLE account ADD COLUMN pake_confirmed INTEGER NOT NULL DEFAULT 0;
 ";
 
 /// Schema 6 → 7: the account's plan as the server last reported it (spec
@@ -237,12 +250,20 @@ impl Store {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(MIGRATE_5_TO_6)?;
                 tx.execute_batch(MIGRATE_6_TO_7)?;
+                tx.execute_batch(MIGRATE_7_TO_8)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
             6 => {
                 let tx = conn.unchecked_transaction()?;
                 tx.execute_batch(MIGRATE_6_TO_7)?;
+                tx.execute_batch(MIGRATE_7_TO_8)?;
+                tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+                tx.commit()?;
+            }
+            7 => {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch(MIGRATE_7_TO_8)?;
                 tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
                 tx.commit()?;
             }
@@ -649,6 +670,24 @@ impl Store {
         Ok(())
     }
 
+    /// False for a vault with no account row.
+    pub fn pake_confirmed(&self) -> Result<bool> {
+        self.conn
+            .query_row("SELECT pake_confirmed FROM account WHERE id = 1", [], |r| {
+                r.get::<_, i64>(0)
+            })
+            .optional()
+            .map(|v| v == Some(1))
+            .map_err(Into::into)
+    }
+
+    /// One way only: nothing ever unsets it except replacing the vault.
+    pub fn set_pake_confirmed(&mut self) -> Result<()> {
+        self.conn
+            .execute("UPDATE account SET pake_confirmed = 1 WHERE id = 1", [])?;
+        Ok(())
+    }
+
     pub fn set_cursor(&mut self, cursor: i64, synced_at: i64) -> Result<()> {
         self.conn.execute(
             "UPDATE account SET server_cursor = ?1, last_synced_at = ?2 WHERE id = 1",
@@ -747,6 +786,7 @@ mod tests {
 
     fn strip_plan_columns(schema: &str) -> String {
         let stripped = schema
+            .replace(PAKE_COLUMN_DDL, "")
             .replace("    plan_status    TEXT,\n", "")
             .replace("    entitlement    TEXT    NOT NULL DEFAULT 'full',\n", "")
             .replace("    trial_ends_at  TEXT,\n", "")
@@ -795,6 +835,32 @@ mod tests {
         conn.pragma_update(None, "user_version", 6).unwrap();
         let store = Store::init(conn).unwrap();
         assert_eq!(store.plan().unwrap(), PlanRecord::default());
+        let v: i64 = store
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn a_new_vault_has_not_confirmed_pake() {
+        let mut store = Store::open_in_memory().unwrap();
+        assert!(!store.pake_confirmed().unwrap(), "no account row yet");
+        store.set_account(&sample_account()).unwrap();
+        assert!(!store.pake_confirmed().unwrap());
+        store.set_pake_confirmed().unwrap();
+        assert!(store.pake_confirmed().unwrap());
+    }
+
+    #[test]
+    fn a_schema_7_vault_gains_the_pake_flag_unset() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let schema_7 = SCHEMA.replace(PAKE_COLUMN_DDL, "");
+        assert_ne!(schema_7, SCHEMA, "the replace must have removed the column");
+        conn.execute_batch(&schema_7).unwrap();
+        conn.pragma_update(None, "user_version", 7).unwrap();
+        let store = Store::init(conn).unwrap();
+        assert!(!store.pake_confirmed().unwrap());
         let v: i64 = store
             .conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
