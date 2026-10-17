@@ -52,6 +52,8 @@ impl Server {
             max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
             mailer: None,
             signup_url: None,
+            pake: havenkeys_server::pake::load_or_create(&pool).await.unwrap(),
+            legacy_auth_until: None,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

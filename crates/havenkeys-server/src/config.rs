@@ -29,6 +29,9 @@ pub struct Config {
     /// `SMTP_URL` and `SMTP_FROM`. Required when signup is open; useful
     /// without it for the trial notices of `admin new-account --trial`.
     pub smtp: Option<SmtpConfig>,
+    /// `HAVENKEYS_LEGACY_AUTH_UNTIL` (RFC 3339): after it, legacy auth-key
+    /// sign-in answers 426. Unset: no cutoff.
+    pub legacy_auth_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Config {
@@ -49,6 +52,7 @@ impl Config {
             "HAVENKEYS_PUBLIC_URL",
             "SMTP_URL",
             "SMTP_FROM",
+            "HAVENKEYS_LEGACY_AUTH_UNTIL",
         ]
         .into_iter()
         .filter_map(|name| std::env::var(name).ok().map(|v| (name, v)))
@@ -107,6 +111,13 @@ impl Config {
         if signup_open && public_url.is_none() {
             return Err("HAVENKEYS_SIGNUP=open needs HAVENKEYS_PUBLIC_URL".into());
         }
+        let legacy_auth_until = get("HAVENKEYS_LEGACY_AUTH_UNTIL")
+            .map(|v| {
+                chrono::DateTime::parse_from_rfc3339(&v)
+                    .map(|t| t.with_timezone(&chrono::Utc))
+                    .map_err(|_| "HAVENKEYS_LEGACY_AUTH_UNTIL must be an RFC 3339 time".to_string())
+            })
+            .transpose()?;
         Ok(Self {
             database_url,
             server_secret,
@@ -122,6 +133,7 @@ impl Config {
             signup_open,
             public_url,
             smtp,
+            legacy_auth_until,
         })
     }
 }
@@ -158,6 +170,26 @@ mod tests {
         assert!(check_public_url("http://localhost.evil.com").is_err());
         assert!(check_public_url("http://127.0.0.1.evil.com").is_err());
         assert!(check_public_url("http://localhost@evil.com").is_err());
+    }
+
+    #[test]
+    fn the_legacy_cutoff_is_optional_and_must_be_rfc3339() {
+        let base = || {
+            vec![
+                ("DATABASE_URL", "postgres://x".to_string()),
+                ("SERVER_SECRET", data_encoding::BASE64.encode(&[1u8; 32])),
+            ]
+        };
+        assert!(Config::from_vars(&base())
+            .unwrap()
+            .legacy_auth_until
+            .is_none());
+        let mut v = base();
+        v.push(("HAVENKEYS_LEGACY_AUTH_UNTIL", "2026-12-01T00:00:00Z".into()));
+        assert!(Config::from_vars(&v).unwrap().legacy_auth_until.is_some());
+        let mut v = base();
+        v.push(("HAVENKEYS_LEGACY_AUTH_UNTIL", "next month".into()));
+        assert!(Config::from_vars(&v).is_err());
     }
 
     #[test]

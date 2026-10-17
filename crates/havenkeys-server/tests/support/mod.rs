@@ -26,6 +26,7 @@ pub struct Options {
     pub max_vault_bytes: i64,
     pub signup: bool,
     pub trust_forwarded_for: bool,
+    pub legacy_auth_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Default for Options {
@@ -34,6 +35,7 @@ impl Default for Options {
             max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
             signup: false,
             trust_forwarded_for: false,
+            legacy_auth_until: None,
         }
     }
 }
@@ -83,6 +85,8 @@ impl TestServer {
             max_vault_bytes: opts.max_vault_bytes,
             mailer: Some(mailer.clone()),
             signup_url: opts.signup.then(|| "https://vault.example.com".to_string()),
+            pake: havenkeys_server::pake::load_or_create(&pool).await.unwrap(),
+            legacy_auth_until: opts.legacy_auth_until,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

@@ -34,6 +34,8 @@ pub async fn run_daily(
     let codes_swept = db
         .execute("DELETE FROM signup_codes WHERE expires_at <= now()", &[])
         .await?;
+    db.execute("DELETE FROM pake_pending WHERE expires_at <= now()", &[])
+        .await?;
     // A signup account that was never activated holds nothing but an
     // email; the cascade takes its plan row and its events.
     let signups_abandoned = db

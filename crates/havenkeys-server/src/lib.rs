@@ -26,6 +26,7 @@ pub mod json;
 pub mod limits;
 pub mod locate;
 pub mod mail;
+pub mod pake;
 pub mod routes;
 
 pub use config::Config;

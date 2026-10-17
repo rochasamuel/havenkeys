@@ -48,6 +48,10 @@ pub struct AppState {
     /// carried in the invites it issues; `None` answers the signup routes
     /// with 404.
     pub signup_url: Option<String>,
+    /// The OPAQUE setup, loaded from the database at start.
+    pub pake: std::sync::Arc<havenkeys_opaque::ServerKeys>,
+    /// After this, legacy auth-key sign-in answers 426. None: no cutoff.
+    pub legacy_auth_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// A route anyone may call, without a session: its own, much smaller body

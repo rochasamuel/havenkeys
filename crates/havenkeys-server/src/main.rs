@@ -53,9 +53,16 @@ async fn main() -> std::process::ExitCode {
         eprintln!("{err}");
         return std::process::ExitCode::FAILURE;
     }
+    let pake = match havenkeys_server::pake::load_or_create(&pool).await {
+        Ok(p) => p,
+        Err(message) => {
+            eprintln!("startup error: {message}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
 
     match cli.command.unwrap_or(Command::Serve) {
-        Command::Serve => serve(config, pool).await,
+        Command::Serve => serve(config, pool, pake).await,
         Command::Admin { command } => {
             match admin::run(command, &pool, config.server_secret).await {
                 Ok(output) => {
@@ -72,7 +79,11 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
-async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::ExitCode {
+async fn serve(
+    config: Config,
+    pool: deadpool_postgres::Pool,
+    pake: std::sync::Arc<havenkeys_opaque::ServerKeys>,
+) -> std::process::ExitCode {
     let mailer: Option<std::sync::Arc<dyn havenkeys_server::mail::Mailer>> = match &config.smtp {
         Some(smtp) => match havenkeys_server::mail::Smtp::new(&smtp.url, &smtp.from) {
             Ok(sender) => Some(std::sync::Arc::new(sender)),
@@ -105,6 +116,8 @@ async fn serve(config: Config, pool: deadpool_postgres::Pool) -> std::process::E
         } else {
             None
         },
+        pake,
+        legacy_auth_until: config.legacy_auth_until,
     };
     // Once at start, then daily: expired tombstones of deleted accounts
     // (spec 2026-10-05 §4.5), expired signup codes, abandoned signups and

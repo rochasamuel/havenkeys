@@ -30,6 +30,9 @@ pub enum ApiError {
     /// Every database connection or every key-check slot stayed busy for the
     /// whole wait (SV-4). Nothing happened; the client may retry.
     Unavailable,
+    /// A legacy sign-in after the operator's cutoff (spec
+    /// 2026-10-13-pake-login §6). 426, never 410.
+    UpgradeRequired,
     Internal,
 }
 
@@ -78,6 +81,11 @@ impl ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "unavailable",
                 "The server is busy. Try again shortly.",
+            ),
+            Self::UpgradeRequired => (
+                StatusCode::UPGRADE_REQUIRED,
+                "upgrade_required",
+                "Update HavenKeys to sign in.",
             ),
             Self::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,

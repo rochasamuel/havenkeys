@@ -2975,6 +2975,7 @@ dependencies = [
  "clap",
  "data-encoding",
  "deadpool-postgres",
+ "havenkeys-opaque",
  "hkdf 0.12.4",
  "hmac 0.12.1",
  "lettre",
