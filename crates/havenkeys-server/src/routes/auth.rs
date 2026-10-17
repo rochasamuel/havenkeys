@@ -125,11 +125,16 @@ pub async fn login(
 
     let row = db
         .query_opt(
-            "SELECT id, auth_verifier FROM accounts
+            "SELECT id, auth_verifier, legacy_grace_until FROM accounts
               WHERE email_normalized = $1 AND status = 'active'",
             &[&email],
         )
         .await?;
+    crate::pake::legacy_allowed(
+        &state,
+        row.as_ref()
+            .and_then(|r| r.get::<_, Option<chrono::DateTime<chrono::Utc>>>(2)),
+    )?;
     // The rate-limit key for an unknown email is its decoy id, so probing a
     // non-existent account is throttled exactly like probing a real one.
     let account_id = row
@@ -161,6 +166,18 @@ pub async fn login(
         return Err(ApiError::Unauthorized);
     }
 
+    complete_login(&db, &keys, account_id, req.device_id, &device_name).await
+}
+
+/// Everything a sign-in does once the device has proved the key, shared by
+/// the legacy and the OPAQUE paths.
+async fn complete_login(
+    db: &deadpool_postgres::Object,
+    keys: &rate_limit::AttemptKeys,
+    account_id: Uuid,
+    device_id: Uuid,
+    device_name: &str,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
     let vault_id: Uuid = db
         .query_opt(
             "SELECT id FROM vaults WHERE account_id = $1",
@@ -170,16 +187,16 @@ pub async fn login(
         .ok_or(ApiError::Unauthorized)?
         .get(0);
 
-    keys.clear(&db).await?;
+    keys.clear(db).await?;
     // A frozen account keeps the devices it has and gains none (spec
     // 2026-10-07 §5.4). Decided here, not in `register_device`, which the
     // pairing approval also uses and which must not learn about plans.
-    let subscription = billing::load(&db, account_id).await?;
+    let subscription = billing::load(db, account_id).await?;
     let now = chrono::Utc::now();
     let known = db
         .query_opt(
             "SELECT 1 FROM devices WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
-            &[&req.device_id, &account_id],
+            &[&device_id, &account_id],
         )
         .await?
         .is_some();
@@ -188,21 +205,101 @@ pub async fn login(
         tracing::info!(account_id = %account_id, outcome = "frozen", "login");
         return Err(ApiError::AccountFrozen);
     }
-    register_device(&db, account_id, req.device_id, &device_name).await?;
-    db.execute(
-        "DELETE FROM sessions WHERE device_id = $1",
-        &[&req.device_id],
-    )
-    .await?;
-    let (token, expires) = auth::issue_token(&db, account_id, req.device_id).await?;
+    register_device(db, account_id, device_id, device_name).await?;
+    db.execute("DELETE FROM sessions WHERE device_id = $1", &[&device_id])
+        .await?;
+    let (token, expires) = auth::issue_token(db, account_id, device_id).await?;
 
-    tracing::info!(account_id = %account_id, device_id = %req.device_id, outcome = "accepted", "login");
+    tracing::info!(account_id = %account_id, device_id = %device_id, outcome = "accepted", "login");
     Ok(axum::Json(serde_json::json!({
         "token": token.as_str(),
         "expiresAt": expires.to_rfc3339(),
         "vaultId": vault_id,
         "account": billing::account_json(subscription.as_ref(), now),
     })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PakeStartRequest {
+    email: String,
+    credential_request: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PakeFinishRequest {
+    login_id: String,
+    credential_finalization: String,
+    device_id: Uuid,
+    device_name: String,
+}
+
+pub async fn pake_start(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(req): Json<PakeStartRequest>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    let email =
+        crate::email::normalize(&req.email).unwrap_or_else(|_| req.email.trim().to_string());
+    let request = crate::pake::decode_message(&req.credential_request)?;
+    let mut db = state.pool.get().await?;
+    let row = db
+        .query_opt(
+            "SELECT id, opaque_record FROM accounts
+              WHERE email_normalized = $1 AND status = 'active'",
+            &[&email],
+        )
+        .await?;
+    let account_id = row
+        .as_ref()
+        .map(|r| r.get::<_, Uuid>(0))
+        .unwrap_or_else(|| decoy_account(&state.server_secret, &email));
+    let keys = rate_limit::AttemptKeys::new(account_id, &client_ip(&state, &headers, peer));
+    keys.charge(&mut db).await?;
+    let record: Option<Vec<u8>> = row.as_ref().and_then(|r| r.get(1));
+    // An unenrolled account and an unknown email both get opaque-ke's fake
+    // response for this id: the same shape as a real one.
+    let (pending, response) = state
+        .pake
+        .login_start(record.as_deref(), &request, account_id.as_bytes())
+        .map_err(|_| ApiError::InvalidRequest("message is not valid"))?;
+    let bound = row.as_ref().map(|r| r.get::<_, Uuid>(0));
+    let login_id =
+        crate::pake::put_pending(&db, crate::pake::Purpose::Login, bound, &pending).await?;
+    Ok(axum::Json(serde_json::json!({
+        "loginId": login_id,
+        "credentialResponse": crate::pake::encode(&response),
+    })))
+}
+
+pub async fn pake_finish(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(req): Json<PakeFinishRequest>,
+) -> Result<axum::Json<serde_json::Value>, ApiError> {
+    let finalization = crate::pake::decode_message(&req.credential_finalization)?;
+    let device_name = clean_device_name(&req.device_name)?;
+    let db = state.pool.get().await?;
+    let taken = crate::pake::take_pending(&db, crate::pake::Purpose::Login, &req.login_id).await?;
+    let verified = match &taken {
+        Some((Some(_), pending)) => havenkeys_opaque::login_finish(pending, &finalization).is_ok(),
+        _ => false,
+    };
+    let account_id = match (verified, taken) {
+        (true, Some((Some(id), _))) => id,
+        _ => {
+            tracing::info!(outcome = "rejected", "pake login");
+            if crate::erase::was_deleted_device(&db, req.device_id).await? {
+                return Err(ApiError::AccountDeleted);
+            }
+            return Err(ApiError::Unauthorized);
+        }
+    };
+    let keys = rate_limit::AttemptKeys::new(account_id, &client_ip(&state, &headers, peer));
+    complete_login(&db, &keys, account_id, req.device_id, &device_name).await
 }
 
 pub async fn logout(

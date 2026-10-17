@@ -486,3 +486,71 @@ pub async fn signup(server: &TestServer, mailer: &Recording, email: &str) -> Str
     assert_eq!(status, 200, "{body}");
     body["invite"].as_str().unwrap().to_string()
 }
+
+/// Writes an OPAQUE record for `account` straight into the database, as if
+/// it had enrolled. Tasks 5 and 6 replace uses of this with the real routes.
+pub async fn enrol_directly(server: &TestServer, account: &Account) {
+    let keys = havenkeys_server::pake::load_or_create(server.pool())
+        .await
+        .unwrap();
+    let (reg, request) = havenkeys_opaque::ClientRegistration::start(&account.auth_key).unwrap();
+    let response = keys
+        .register(&request, account.account_id.as_bytes())
+        .unwrap();
+    let upload = reg.finish(&account.auth_key, &response).unwrap();
+    let record = havenkeys_opaque::record_from_upload(&upload).unwrap();
+    server
+        .db()
+        .await
+        .execute(
+            "UPDATE accounts SET opaque_record = $2 WHERE id = $1",
+            &[&account.account_id, &record],
+        )
+        .await
+        .unwrap();
+}
+
+/// A full OPAQUE sign-in; the raw answer of the finish step, or of the
+/// start step if that failed. A client-side failure is reported as 0.
+pub async fn pake_login(
+    server: &TestServer,
+    email: &str,
+    key: &[u8; 32],
+    device_id: Uuid,
+) -> (u16, Value) {
+    let (client, request) = havenkeys_opaque::ClientLogin::start(key).unwrap();
+    let res = server
+        .post("/v1/auth/pake/start")
+        .json(
+            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request) }),
+        )
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    let body: Value = res.json().await.unwrap_or(Value::Null);
+    if status != 200 {
+        return (status, body);
+    }
+    let response = data_encoding::BASE64
+        .decode(body["credentialResponse"].as_str().unwrap().as_bytes())
+        .unwrap();
+    let Ok(finalization) = client.finish(key, &response) else {
+        return (0, Value::Null);
+    };
+    let res = server
+        .post("/v1/auth/pake/finish")
+        .json(&json!({
+            "loginId": body["loginId"],
+            "credentialFinalization": data_encoding::BASE64.encode(&finalization),
+            "deviceId": device_id,
+            "deviceName": "Desktop",
+        }))
+        .send()
+        .await
+        .unwrap();
+    (
+        res.status().as_u16(),
+        res.json().await.unwrap_or(Value::Null),
+    )
+}

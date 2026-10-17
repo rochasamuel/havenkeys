@@ -85,6 +85,14 @@ pub fn router(state: AppState) -> Router {
             "/v1/auth/login",
             small(post(auth::login), MAX_ANONYMOUS_AUTH_BODY_BYTES),
         )
+        .route(
+            "/v1/auth/pake/start",
+            small(post(auth::pake_start), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
+        .route(
+            "/v1/auth/pake/finish",
+            small(post(auth::pake_finish), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
         .route("/v1/auth/logout", post(auth::logout))
         .route("/v1/vault/header", get(vault::get_header))
         .route("/v1/sync", get(sync::pull))
