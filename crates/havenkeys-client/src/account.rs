@@ -204,7 +204,7 @@ impl HavenClient {
             .map_err(|_| ClientError::file())?;
 
         server
-            .activate_legacy(Activation {
+            .activate(Activation {
                 email: account.email.as_str(),
                 invite: &raw_invite,
                 kdf: &kdf,
@@ -284,21 +284,24 @@ impl HavenClient {
         .map_err(|_| ClientError::internal())?;
         let auth_key = auth_key?;
 
-        let session = server
-            .login_legacy(
-                account.email.as_str(),
-                &auth_key,
-                account.id,
-                device_id,
-                &self.config.device_name,
-            )
-            .await
-            .map_err(|e| match e {
-                // Said only after the server checked the password: a frozen
-                // account keeps its devices and gains none.
-                SyncError::AccountFrozen => ClientError::account_frozen_new_device(),
-                _ => ClientError::sign_in_failed(),
-            })?;
+        // No vault yet, so never confirmed: the legacy fallback is open to a
+        // first sign-in (spec 2026-10-13-pake-login §6).
+        let (session, pake_ok) = crate::pake::sign_in_with_key(
+            &server,
+            account.email.as_str(),
+            &auth_key,
+            account.id,
+            device_id,
+            &self.config.device_name,
+            false,
+        )
+        .await
+        .map_err(|e| match e {
+            // Said only after the server checked the password: a frozen
+            // account keeps its devices and gains none.
+            SyncError::AccountFrozen => ClientError::account_frozen_new_device(),
+            _ => ClientError::sign_in_failed(),
+        })?;
         let header = server
             .header(&session)
             .await
@@ -319,6 +322,12 @@ impl HavenClient {
 
         let record = new_account_record(&account, server_url, header_revision);
         let epoch = self.create_vault(prepared, &record)?;
+        if pake_ok {
+            // Not fatal: unset, the next sign-in may fall back once more.
+            // Safe while locked, so a lock since `create_vault` does not
+            // matter here.
+            let _ = self.vault()?.set_pake_confirmed();
+        }
         self.device()?
             .set_secret_key(account.id, &secret_key)
             .map_err(|_| ClientError::file())?;
@@ -568,15 +577,18 @@ impl HavenClient {
         })
         .await
         .map_err(|_| ClientError::internal())??;
-        let session = server
-            .login_legacy(
-                account.email.as_str(),
-                &auth_key,
-                account.id,
-                self.device_id()?,
-                &self.config.device_name,
-            )
-            .await?;
+        // Read while locked, which is safe for this flag.
+        let confirmed = self.vault()?.pake_confirmed().unwrap_or(false);
+        let (session, pake_ok) = crate::pake::sign_in_with_key(
+            &server,
+            account.email.as_str(),
+            &auth_key,
+            account.id,
+            self.device_id()?,
+            &self.config.device_name,
+            confirmed,
+        )
+        .await?;
         drop(auth_key);
         let header = server.header(&session).await?;
         let prepared = spawn_blocking(move || {
@@ -599,6 +611,9 @@ impl HavenClient {
                     return Err(e.into());
                 }
             };
+            if pake_ok {
+                let _ = v.set_pake_confirmed();
+            }
             // As in `unlock`: announced under the vault lock, and the session
             // set there too, so a concurrent lock (which takes the vault lock
             // first) always drops it afterwards.
@@ -661,10 +676,16 @@ impl HavenClient {
         let account_id = account.id;
         // The current KDF parameters, read under the same guard as the
         // ticket.
-        let (ticket, old_kdf) = {
+        let (ticket, old_kdf, pake) = {
             let v = self.vault()?;
             let ticket = v.begin_rekey()?;
-            (ticket, v.kdf()?.ok_or(havenkeys_core::Error::NoVault)?)
+            (
+                ticket,
+                v.kdf()?.ok_or(havenkeys_core::Error::NoVault)?,
+                // Which proof the server wants for the current key, and
+                // which record it replaces (spec 2026-10-13-pake-login §6).
+                v.pake_confirmed()?,
+            )
         };
         // Both Argon2id runs happen without the vault lock, so locking
         // (button, auto-lock, window close) is never delayed; the commit
@@ -689,7 +710,7 @@ impl HavenClient {
                     new_auth_key: rekeyed.new_auth_key(),
                     header: &header,
                     base_header_revision: ticket.base_revision() as i64,
-                    pake: false,
+                    pake,
                 },
             )
             .await;

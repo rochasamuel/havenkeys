@@ -847,3 +847,151 @@ async fn settled_server_items(fx: &Fixture) -> i64 {
     }
     last
 }
+
+// OPAQUE sign-in and the move to it (spec 2026-10-13-pake-login §6).
+
+const NEW_PASSWORD: &str = "a different but equally long passphrase";
+
+fn pake_confirmed(client: &HavenClient) -> bool {
+    client.vault().unwrap().pake_confirmed().unwrap()
+}
+
+async fn has_opaque_record(server: &Server, email: &str) -> bool {
+    server
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT opaque_record IS NOT NULL FROM accounts WHERE email_normalized = $1",
+            &[&email],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_account_signs_in_with_opaque_and_remembers_it() {
+    let fx = fixture().await; // activate, then online
+    assert!(pake_confirmed(&fx.client));
+    // A second device signs in fresh, and is confirmed after that sign-in.
+    let account_id = fx.client.account_status().unwrap().unwrap().account_id;
+    let secret_key = fx
+        .client
+        .device()
+        .unwrap()
+        .secret_key_text(account_id)
+        .unwrap();
+    let dir_b = tempfile::tempdir().unwrap();
+    let (b, _) = device(dir_b.path());
+    b.sign_in(
+        fx.server.base.clone(),
+        "plan@example.com".into(),
+        fx.password(),
+        Some(secret_key),
+    )
+    .await
+    .unwrap();
+    assert!(b.is_online());
+    assert!(pake_confirmed(&b));
+    fx.server.cleanup().await;
+}
+
+/// An account made before OPAQUE (legacy activation) is enrolled by the
+/// first device that signs in, and that device then signs in with OPAQUE.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_older_account_is_enrolled_on_its_first_sign_in() {
+    use havenkeys_core::account::{AccountRef, NormalizedEmail};
+    use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+    use havenkeys_sync_client::{Activation, HttpTransport, SyncClient};
+
+    const EMAIL: &str = "old@example.com";
+    let server = Server::start().await;
+    let raw = server.invite(EMAIL).await;
+    let invite = havenkeys_sync_client::invite::decode(&raw).unwrap();
+    let account = AccountRef::new(invite.account, NormalizedEmail::parse(EMAIL).unwrap());
+    let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
+    let made = havenkeys_core::vault::prepare_new_account_vault(
+        &SecretString::from(PASSWORD),
+        &account,
+        kdf,
+        havenkeys_client::now_ms(),
+    )
+    .unwrap();
+    let header = havenkeys_core::sync::encode_header_for(&made.prepared).unwrap();
+    SyncClient::new(HttpTransport::new(&server.base).unwrap())
+        .activate_legacy(Activation {
+            email: EMAIL,
+            invite: &raw,
+            kdf: made.prepared.kdf(),
+            auth_key: &made.auth_key,
+            vault_id: made.prepared.vault_id(),
+            header: &header,
+        })
+        .await
+        .unwrap();
+    assert!(!has_opaque_record(&server, EMAIL).await);
+
+    let dir = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir.path());
+    a.sign_in(
+        server.base.clone(),
+        EMAIL.into(),
+        SecretString::from(PASSWORD),
+        Some(made.secret_key.to_text()),
+    )
+    .await
+    .unwrap();
+    assert!(a.is_online());
+    assert!(has_opaque_record(&server, EMAIL).await, "enrolled");
+    assert!(pake_confirmed(&a));
+
+    // From now on this device signs in with OPAQUE only.
+    a.lock("user");
+    a.unlock(SecretString::from(PASSWORD), None).await.unwrap();
+    until(|| a.is_online()).await;
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn deleting_an_opaque_account_uses_the_opaque_proof() {
+    let fx = fixture().await;
+    assert!(pake_confirmed(&fx.client));
+    fx.client
+        .delete_account("plan@example.com".into(), fx.password())
+        .await
+        .unwrap();
+    assert!(fx.client.vault().unwrap().account().unwrap().is_none());
+    let left: i64 = fx
+        .server
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one("SELECT count(*) FROM accounts", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(left, 0);
+    fx.server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn changing_the_master_password_keeps_opaque_working() {
+    let fx = fixture().await;
+    fx.client
+        .change_master_password(fx.password(), SecretString::from(NEW_PASSWORD))
+        .await
+        .unwrap();
+    fx.client.lock("user");
+    fx.client
+        .unlock(SecretString::from(NEW_PASSWORD), None)
+        .await
+        .unwrap();
+    // A confirmed device signs in with OPAQUE only: online means the new
+    // record works.
+    until(|| fx.client.is_online()).await;
+    assert!(pake_confirmed(&fx.client));
+    fx.server.cleanup().await;
+}

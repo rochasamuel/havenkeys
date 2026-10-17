@@ -18,6 +18,7 @@ mod health;
 pub mod key_store;
 pub mod kit;
 mod pairing;
+mod pake;
 mod removal;
 mod restore;
 #[cfg(test)]

@@ -16,6 +16,7 @@ use axum::Router;
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_sync_client::wire::KdfDto;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 use uuid::Uuid;
@@ -148,6 +149,16 @@ pub(crate) struct StubServer {
     pub release_login: Arc<Notify>,
     /// While true, login answers 401 at once.
     pub refuse_login: Arc<std::sync::atomic::AtomicBool>,
+    /// Non-zero: the legacy login answers this status at once.
+    pub legacy_status: Arc<AtomicU16>,
+    /// The status `/v1/auth/pake/start` answers; 0 is a server without
+    /// OPAQUE (404). The stub cannot run OPAQUE itself.
+    pub pake_start_status: Arc<AtomicU16>,
+    /// Legacy login requests received.
+    pub legacy_logins: Arc<AtomicUsize>,
+    /// Enrolments received. Stays 0: `register` answers 404, so `enroll`
+    /// fails before it posts.
+    pub enrolls: Arc<AtomicUsize>,
 }
 
 impl StubServer {
@@ -177,18 +188,50 @@ impl StubServer {
         let refuse = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let refuse_for_route = refuse.clone();
         let (entered, release) = (login_entered.clone(), release_login.clone());
+        let legacy_status = Arc::new(AtomicU16::new(0));
+        let pake_start_status = Arc::new(AtomicU16::new(0));
+        let legacy_logins = Arc::new(AtomicUsize::new(0));
+        let enrolls = Arc::new(AtomicUsize::new(0));
+        let (legacy_for_route, logins_for_route) = (legacy_status.clone(), legacy_logins.clone());
+        let (pake_status, enrolls_for_route) = (pake_start_status.clone(), enrolls.clone());
         let app = Router::new()
             .route("/v1/auth/params", post(move || async move { params }))
             .route(
                 "/v1/auth/login",
                 post(move || async move {
                     use axum::response::IntoResponse;
-                    if refuse_for_route.load(std::sync::atomic::Ordering::SeqCst) {
+                    logins_for_route.fetch_add(1, SeqCst);
+                    match legacy_for_route.load(SeqCst) {
+                        0 => {}
+                        s => return axum::http::StatusCode::from_u16(s).unwrap().into_response(),
+                    }
+                    if refuse_for_route.load(SeqCst) {
                         return axum::http::StatusCode::UNAUTHORIZED.into_response();
                     }
                     entered.notify_one();
                     release.notified().await;
                     login.into_response()
+                }),
+            )
+            .route(
+                "/v1/auth/pake/start",
+                post(move || async move {
+                    use axum::response::IntoResponse;
+                    match pake_status.load(SeqCst) {
+                        0 => axum::http::StatusCode::NOT_FOUND.into_response(),
+                        s => axum::http::StatusCode::from_u16(s).unwrap().into_response(),
+                    }
+                }),
+            )
+            .route(
+                "/v1/account/pake/register",
+                post(|| async { axum::http::StatusCode::NOT_FOUND }),
+            )
+            .route(
+                "/v1/account/pake/enroll",
+                post(move || async move {
+                    enrolls_for_route.fetch_add(1, SeqCst);
+                    axum::http::StatusCode::NO_CONTENT
                 }),
             )
             .route("/v1/vault/header", get(move || async move { header }))
@@ -226,6 +269,10 @@ impl StubServer {
             login_entered,
             release_login,
             refuse_login: refuse,
+            legacy_status,
+            pake_start_status,
+            legacy_logins,
+            enrolls,
         }
     }
 }

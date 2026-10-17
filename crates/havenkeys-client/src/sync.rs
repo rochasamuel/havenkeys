@@ -110,13 +110,16 @@ impl HavenClient {
     /// A failure here is not an unlock failure: the vault stays open and
     /// readable, offline.
     pub async fn connect(&self, auth_key: AuthKey) -> ClientResult<()> {
-        let (email, account_id, device_id, server, epoch) = {
+        let (email, account_id, device_id, server, epoch, confirmed) = {
             let vault = self.vault()?;
             if !vault.is_unlocked() {
                 return Err(havenkeys_core::Error::Locked.into());
             }
             let account = vault.account()?.ok_or(havenkeys_core::Error::NoVault)?;
             let epoch = vault.epoch();
+            // Unreadable counts as never confirmed: the fallback is still
+            // only taken on 401 or 404 (spec 2026-10-13-pake-login §6).
+            let confirmed = vault.pake_confirmed().unwrap_or(false);
             drop(vault);
             let server = self.server_for(&account.server_url)?;
             (
@@ -125,26 +128,28 @@ impl HavenClient {
                 self.device_id()?,
                 server,
                 epoch,
+                confirmed,
             )
         };
 
-        let session = server
-            .login_legacy(
-                &email,
-                &auth_key,
-                account_id,
-                device_id,
-                &self.config.device_name,
-            )
-            .await
-            .map_err(|e| {
-                // No session is held here as a rule, so `failed` would not
-                // announce this one.
-                if e == SyncError::Unauthorized {
-                    self.events.signed_out();
-                }
-                self.failed(e)
-            })?;
+        let (session, pake_ok) = crate::pake::sign_in_with_key(
+            &server,
+            &email,
+            &auth_key,
+            account_id,
+            device_id,
+            &self.config.device_name,
+            confirmed,
+        )
+        .await
+        .map_err(|e| {
+            // No session is held here as a rule, so `failed` would not
+            // announce this one.
+            if e == SyncError::Unauthorized {
+                self.events.signed_out();
+            }
+            self.failed(e)
+        })?;
         drop(auth_key);
 
         // A lock that landed while signing in wins: the session is dropped
@@ -152,9 +157,13 @@ impl HavenClient {
         // that started its own sign-in (DT1).
         let plan = session.account.clone();
         {
-            let vault = self.vault()?;
+            let mut vault = self.vault()?;
             if !vault.is_unlocked() || vault.epoch() != epoch {
                 return Err(havenkeys_core::Error::Locked.into());
+            }
+            if pake_ok {
+                // Not fatal: unset, the next sign-in may fall back again.
+                let _ = vault.set_pake_confirmed();
             }
             self.set_online(session);
         }

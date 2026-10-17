@@ -52,7 +52,14 @@ impl HavenClient {
             .device()?
             .secret_key(account.id)
             .ok_or(havenkeys_core::Error::SecretKeyRequired)?;
-        let kdf = self.vault()?.kdf()?.ok_or(havenkeys_core::Error::NoVault)?;
+        let (kdf, pake) = {
+            let v = self.vault()?;
+            (
+                v.kdf()?.ok_or(havenkeys_core::Error::NoVault)?,
+                // OPAQUE proof once this device has signed in with it.
+                v.pake_confirmed()?,
+            )
+        };
         let email = account.email.as_str().to_owned();
         let auth_key = spawn_blocking(move || {
             vault::derive_auth_key(&master_password, &secret_key, &kdf, &account)
@@ -62,7 +69,7 @@ impl HavenClient {
 
         let (session, server) = (self.session()?, self.server()?);
         let sent = server
-            .delete_account(&session, &auth_key, &email, false)
+            .delete_account(&session, &auth_key, &email, pake)
             .await;
         drop(auth_key);
         match sent {
