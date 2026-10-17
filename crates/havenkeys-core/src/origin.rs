@@ -481,6 +481,7 @@ mod tests {
         let item = ItemOverview {
             tags: Vec::new(),
             trashed_at: None,
+            attachments: Vec::new(),
             extra: serde_json::Map::new(),
             id: uuid::Uuid::nil(),
             item_type: crate::model::ItemType::Login,

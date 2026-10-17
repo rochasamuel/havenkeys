@@ -1,8 +1,14 @@
 //! Attachment metadata, file-name sanitizing and type sniffing
 //! (spec 2026-10-13-encrypted-attachments).
 
+use crate::crypto::blob::{self, BlobContext};
+use crate::error::{Error, Result};
+use crate::model::ItemOverview;
+use crate::secret::SecretBytes;
+use crate::vault::{Session, StagedWrite, VaultService};
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fmt;
 use uuid::Uuid;
 use zeroize::Zeroize;
@@ -122,6 +128,121 @@ pub fn is_previewable(mime: &str) -> bool {
         mime,
         "image/png" | "image/jpeg" | "image/webp" | "image/gif"
     )
+}
+
+/// A file sealed for upload: what the item's details record, and the blob the
+/// server stores.
+pub struct SealedAttachment {
+    pub meta: AttachmentMeta,
+    pub blob: Vec<u8>,
+}
+
+/// An edit to an item's list of files.
+pub enum AttachmentChange {
+    Add(Vec<AttachmentMeta>),
+    Remove(Uuid),
+}
+
+impl VaultService {
+    /// Seal one file for `item_id`. The name and type are not trusted: the
+    /// name is sanitized and the type comes from the bytes.
+    pub fn seal_attachment(
+        &self,
+        item_id: &Uuid,
+        name: &str,
+        bytes: &[u8],
+        now_ms: i64,
+    ) -> Result<SealedAttachment> {
+        if bytes.len() > MAX_ATTACHMENT_BYTES {
+            return Err(Error::InvalidInput("Files can be up to 5 MB"));
+        }
+        let session = self.session()?;
+        let id = Uuid::new_v4();
+        let ctx = BlobContext::attachment(session.vault_id, *item_id, id);
+        let blob = blob::seal(&session.data_key, &ctx, bytes)?;
+        let meta = AttachmentMeta {
+            id,
+            name: sanitize_name(name),
+            mime: sniff(bytes).into(),
+            size: bytes.len() as u64,
+            blob_sha256: Sha256::digest(&blob).into(),
+            created_at: now_ms,
+        };
+        Ok(SealedAttachment { meta, blob })
+    }
+
+    /// Open a downloaded blob. A blob the server altered or swapped fails the
+    /// hash check; one that passes it still has to authenticate for this item.
+    pub fn open_attachment(
+        &self,
+        item_id: &Uuid,
+        meta: &AttachmentMeta,
+        blob: &[u8],
+    ) -> Result<SecretBytes> {
+        if Sha256::digest(blob)[..] != meta.blob_sha256 {
+            return Err(Error::Decryption);
+        }
+        let session = self.session()?;
+        let ctx = BlobContext::attachment(session.vault_id, *item_id, meta.id);
+        let plain = blob::open(&session.data_key, &ctx, blob)?;
+        Ok(SecretBytes::new(plain.to_vec()))
+    }
+
+    /// One attached file's record, from a live or trashed item.
+    pub fn attachment_meta(&self, item_id: &Uuid, attachment_id: &Uuid) -> Result<AttachmentMeta> {
+        stored_overview(self.session()?, item_id)?
+            .attachments
+            .iter()
+            .find(|meta| meta.id == *attachment_id)
+            .cloned()
+            .ok_or(Error::NotFound)
+    }
+
+    /// Stage the item with its list of files changed and everything else as
+    /// it was. Carries every id the new list holds.
+    pub fn stage_attachments(
+        &self,
+        item_id: &Uuid,
+        change: AttachmentChange,
+        now_ms: i64,
+    ) -> Result<StagedWrite> {
+        let session = self.session()?;
+        let mut overview = stored_overview(session, item_id)?.clone();
+        match change {
+            AttachmentChange::Add(metas) => {
+                if overview.attachments.len() + metas.len() > MAX_ATTACHMENTS_PER_ITEM {
+                    return Err(Error::InvalidInput("An item holds up to 20 files"));
+                }
+                overview.attachments.extend(metas);
+            }
+            AttachmentChange::Remove(id) => {
+                let before = overview.attachments.len();
+                overview.attachments.retain(|meta| meta.id != id);
+                if overview.attachments.len() == before {
+                    return Err(Error::NotFound);
+                }
+            }
+        }
+        overview.updated_at = now_ms;
+        let ids = overview.attachments.iter().map(|m| m.id).collect();
+        let base = self.item_revision(item_id)?;
+        let details = if overview.trashed_at.is_some() {
+            self.load_trashed_details(item_id)?
+        } else {
+            self.load_details(item_id)?
+        };
+        let mut staged = self.seal_staged(overview, Some(&details), base)?;
+        staged.attachment_ids = Some(ids);
+        Ok(staged)
+    }
+}
+
+fn stored_overview<'a>(session: &'a Session, id: &Uuid) -> Result<&'a ItemOverview> {
+    session
+        .overviews
+        .get(id)
+        .or_else(|| session.trash.get(id))
+        .ok_or(Error::NotFound)
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@
 //! * [`ItemOverview`] — decrypted at unlock and kept in memory (list/search).
 //! * [`ItemDetails`]  — secrets; decrypted per request only.
 
+use crate::attachment::AttachmentMeta;
 use crate::card::{CardFields, CardInput, CardSummary};
 use crate::custom_field::{FieldSection, SectionInput};
 use crate::error::{Error, Result};
@@ -96,6 +97,10 @@ pub struct ItemOverview {
     /// before the Trash existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trashed_at: Option<i64>,
+    /// The files attached to the item (spec 2026-10-13-encrypted-attachments).
+    /// `default`: overviews written before attachments existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<AttachmentMeta>,
     /// Fields written by a newer version that this one does not know. Kept
     /// so an edit made here does not erase them (spec 2026-10-07-item-tags §3.4).
     #[serde(flatten)]
@@ -123,6 +128,9 @@ impl Drop for ItemOverview {
         }
         for tag in &mut self.tags {
             tag.zeroize();
+        }
+        for file in &mut self.attachments {
+            file.name.zeroize();
         }
     }
 }

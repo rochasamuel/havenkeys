@@ -659,6 +659,10 @@ pub struct StagedWrite {
     /// `None` for a deletion.
     pub overview: Option<Vec<u8>>,
     pub details: Option<Vec<u8>>,
+    /// Every attachment the written overview lists; set only by
+    /// [`VaultService::stage_attachments`], so the server can check that the
+    /// blobs exist and release the ones the write drops.
+    pub attachment_ids: Option<Vec<Uuid>>,
     epoch: u64,
     plain: Option<ItemOverview>,
 }
@@ -699,6 +703,7 @@ impl StagedWrite {
             base_revision,
             overview: Some(overview),
             details: Some(details),
+            attachment_ids: None,
             epoch: 0,
             plain: None,
         }
@@ -2146,6 +2151,7 @@ impl VaultService {
         let (mut overview, details) =
             build_item(*id, input, Some(current), existing.created_at, now_ms)?;
         overview.extra = existing.extra.clone();
+        overview.attachments = existing.attachments.clone();
         let base = self.store.item_revision(id)?;
         self.stage(overview, Some(&details), base)
     }
@@ -2179,6 +2185,7 @@ impl VaultService {
             base_revision: self.store.item_revision(id)?,
             overview: None,
             details: None,
+            attachment_ids: None,
             epoch: self.epoch,
             plain: None,
         })
@@ -2379,6 +2386,7 @@ impl VaultService {
             base_revision,
             overview: Some(ov_blob),
             details: det_blob,
+            attachment_ids: None,
             epoch: self.epoch,
             plain: Some(overview),
         })
@@ -2864,6 +2872,7 @@ pub(crate) fn build_item(
         },
         tags: crate::tags::normalize(&tags.unwrap_or_default())?,
         trashed_at: None,
+        attachments: Vec::new(),
         extra: serde_json::Map::new(),
         created_at,
         updated_at: now_ms,
