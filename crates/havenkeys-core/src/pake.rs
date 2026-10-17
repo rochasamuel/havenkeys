@@ -3,7 +3,9 @@
 //! so `AuthKey::as_bytes` stays private to this crate.
 
 use crate::crypto::keys::AuthKey;
-pub use havenkeys_opaque::{ClientLogin, ClientRegistration, Error as PakeError, MAX_MESSAGE_BYTES};
+pub use havenkeys_opaque::{
+    ClientLogin, ClientRegistration, Error as PakeError, MAX_MESSAGE_BYTES,
+};
 
 pub fn login_start(key: &AuthKey) -> Result<(ClientLogin, Vec<u8>), PakeError> {
     ClientLogin::start(key.as_bytes())
