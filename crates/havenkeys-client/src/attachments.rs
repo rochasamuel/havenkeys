@@ -99,14 +99,21 @@ impl HavenClient {
             let opened = self.vault()?.open_attachment(&item_id, &meta, &blob);
             match opened {
                 Ok(plain) => return Ok(plain),
-                Err(_) => self.vault()?.evict_attachment(&attachment_id)?,
+                Err(e) if is_damaged(&e) => self.vault()?.evict_attachment(&attachment_id)?,
+                Err(e) => return Err(e.into()),
             }
         }
         let blob = self.download_attachment(item_id, attachment_id).await?;
         let plain = self
             .vault()?
             .open_attachment(&item_id, &meta, &blob)
-            .map_err(|_| ClientError::attachment_damaged())?;
+            .map_err(|e| {
+                if is_damaged(&e) {
+                    ClientError::attachment_damaged()
+                } else {
+                    e.into()
+                }
+            })?;
         self.vault()?
             .cache_attachment(&attachment_id, &blob, now_ms())?;
         Ok(plain)
@@ -141,6 +148,37 @@ impl HavenClient {
         let cap = self.attachment_cache_cap.load(Ordering::Relaxed);
         if let Ok(vault) = self.vault() {
             let _ = vault.prune_attachment_cache(cap);
+        }
+    }
+}
+
+/// The bytes did not open: the file is damaged, not the vault locked.
+fn is_damaged(e: &Error) -> bool {
+    matches!(
+        e,
+        Error::Decryption | Error::Corrupted | Error::UnsupportedVersion
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_damaged;
+    use havenkeys_core::Error;
+
+    /// Only the bytes failing to open mean a damaged file: a lock or a
+    /// storage error mid-read must neither evict the copy nor call it
+    /// damaged.
+    #[test]
+    fn a_lock_does_not_evict_or_report_damaged() {
+        for e in [
+            Error::Decryption,
+            Error::Corrupted,
+            Error::UnsupportedVersion,
+        ] {
+            assert!(is_damaged(&e), "{e:?}");
+        }
+        for e in [Error::Locked, Error::Storage, Error::NotFound] {
+            assert!(!is_damaged(&e), "{e:?}");
         }
     }
 }
