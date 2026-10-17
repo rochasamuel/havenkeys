@@ -335,7 +335,7 @@ last_used)` next to `local_blob`, never synced:
 * **Restore**: each restored item's attachments are re-sealed under the
   restored item's id (and vault) and uploaded before that item's write. If the
   attachment quota runs out, the item is restored without the files that did
-  not fit, and the restore report names them.
+  not fit, and the restore report counts them (storage skips apart from other skips; 2026-10-17 implementation ruling — files are not named).
 
 ### 4.9 Surfaces
 
