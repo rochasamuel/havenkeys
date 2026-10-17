@@ -936,6 +936,10 @@ export const en = {
     skippedArchived: (n: number) => `${n} ${n === 1 ? "archived item was" : "archived items were"} left out.`,
     attachmentsSkipped: (n: number) =>
       `${n} ${n === 1 ? "file attachment was" : "file attachments were"} left out (not supported yet).`,
+    attachmentsSkippedStorage: (n: number) =>
+      n === 1
+        ? "1 attachment was left out because storage is full. It can be restored again after 24 hours."
+        : `${n} attachments were left out because storage is full. They can be restored again after 24 hours.`,
     passwordHistorySkipped: (n: number) =>
       `${n} ${n === 1 ? "old password" : "old passwords"} from password history ${n === 1 ? "was" : "were"} left out.`,
     urlsMovedToNotes: (n: number) =>

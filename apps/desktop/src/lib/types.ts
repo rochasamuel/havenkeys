@@ -340,6 +340,8 @@ export interface ImportReport {
   skippedArchived: number;
   failed: number;
   attachmentsSkipped: number;
+  /** Restore only: files the server's full storage refused. */
+  attachmentsSkippedStorage: number;
   passwordHistorySkipped: number;
   urlsMovedToNotes: number;
   fieldsToNotes: number;

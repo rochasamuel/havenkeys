@@ -950,6 +950,10 @@ export const ptBR: Messages = {
       n === 1
         ? "1 anexo ficou de fora (ainda não suportado)."
         : `${n} anexos ficaram de fora (ainda não suportados).`,
+    attachmentsSkippedStorage: (n: number) =>
+      n === 1
+        ? "1 anexo ficou de fora porque o armazenamento está cheio. Ele pode ser restaurado de novo depois de 24 horas."
+        : `${n} anexos ficaram de fora porque o armazenamento está cheio. Eles podem ser restaurados de novo depois de 24 horas.`,
     passwordHistorySkipped: (n: number) =>
       n === 1
         ? "1 senha antiga do histórico de senhas ficou de fora."
