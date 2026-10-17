@@ -577,8 +577,9 @@ impl HavenClient {
         })
         .await
         .map_err(|_| ClientError::internal())??;
-        // Read while locked, which is safe for this flag.
-        let confirmed = self.vault()?.pake_confirmed().unwrap_or(false);
+        // Read while locked, which is safe for this flag. Fail closed: an
+        // unreadable flag counts as confirmed and never opens the fallback.
+        let confirmed = self.vault()?.pake_confirmed().unwrap_or(true);
         let (session, pake_ok) = crate::pake::sign_in_with_key(
             &server,
             account.email.as_str(),

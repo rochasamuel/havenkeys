@@ -33,20 +33,36 @@ impl Purpose {
 /// The stored setup, or a new one if this database has none. Two servers
 /// starting at once both insert; `ON CONFLICT DO NOTHING` keeps the first
 /// and both read it back.
+///
+/// A missing setup while some account already has an OPAQUE record is an
+/// error, not a fresh start: a new setup would make every record fail with
+/// no way back, so the server refuses to start until the row is restored.
 pub async fn load_or_create(pool: &Pool) -> Result<Arc<ServerKeys>, String> {
     let db = pool.get().await.map_err(|_| "no database".to_string())?;
     let fresh = ServerKeys::generate();
     let fresh_bytes = fresh.to_bytes();
+    // One statement, so a concurrent start cannot slip between the check
+    // and the insert: it inserts only when no setup row and no enrolled
+    // account exist.
     db.execute(
-        "INSERT INTO pake_server_setup (id, setup) VALUES (1, $1) ON CONFLICT DO NOTHING",
+        "INSERT INTO pake_server_setup (id, setup)
+         SELECT 1, $1
+         WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE opaque_record IS NOT NULL)
+         ON CONFLICT DO NOTHING",
         &[&fresh_bytes.as_slice()],
     )
     .await
     .map_err(|_| "could not store the OPAQUE setup".to_string())?;
     let row = db
-        .query_one("SELECT setup FROM pake_server_setup WHERE id = 1", &[])
+        .query_opt("SELECT setup FROM pake_server_setup WHERE id = 1", &[])
         .await
         .map_err(|_| "could not read the OPAQUE setup".to_string())?;
+    let Some(row) = row else {
+        return Err(
+            "the OPAQUE setup is missing but accounts are enrolled: restore pake_server_setup from the backup"
+                .to_string(),
+        );
+    };
     let bytes: Zeroizing<Vec<u8>> = Zeroizing::new(row.get(0));
     ServerKeys::from_bytes(&bytes)
         .map(Arc::new)

@@ -12,6 +12,29 @@ async fn the_server_setup_is_created_once_and_reloaded() {
 }
 
 #[tokio::test]
+async fn a_lost_setup_with_enrolled_accounts_is_refused_not_regenerated() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    support::enrol_directly(&server, &account).await;
+    let db = server.db().await;
+    db.execute("DELETE FROM pake_server_setup", &[])
+        .await
+        .unwrap();
+    let err = match pake::load_or_create(server.pool()).await {
+        Ok(_) => panic!("a fresh setup would orphan every OPAQUE record"),
+        Err(e) => e,
+    };
+    assert!(err.contains("restore pake_server_setup"), "{err}");
+    let rows: i64 = db
+        .query_one("SELECT count(*) FROM pake_server_setup", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(rows, 0, "the setup row is not recreated");
+    server.cleanup().await;
+}
+
+#[tokio::test]
 async fn a_pending_exchange_is_read_once() {
     let server = support::TestServer::start().await;
     let db = server.db().await;
@@ -539,6 +562,41 @@ async fn a_legacy_account_enrols_with_its_current_key_and_keeps_old_devices_work
         200,
         "the legacy verifier stays until the cutoff"
     );
+    server.cleanup().await;
+}
+
+/// A frozen account is read-only, but enrolment writes no vault data: it
+/// must still enrol, or it loses sign-in and self-deletion at the cutoff.
+#[tokio::test]
+async fn a_frozen_legacy_account_can_still_enrol() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let first = support::login(&server, &account, "Desktop").await;
+    support::set_plan(
+        &server,
+        account.account_id,
+        havenkeys_server::billing::Status::Frozen,
+    )
+    .await;
+    // A known device still signs in with the legacy login while frozen.
+    let (status, body) =
+        support::login_with_device(&server, &account, "Desktop", first.device_id).await;
+    assert_eq!(status, 200, "{body}");
+    let sess = support::Sess {
+        token: body["token"].as_str().unwrap().to_string(),
+        ..first
+    };
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+    let (status, body) =
+        support::pake_login(&server, &account.email, &account.auth_key, sess.device_id).await;
+    assert_eq!(status, 200, "{body}");
     server.cleanup().await;
 }
 

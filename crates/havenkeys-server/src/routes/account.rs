@@ -350,7 +350,8 @@ pub async fn pake_register(
     session: Session,
     Json(req): Json<PakeRegister>,
 ) -> Result<axum::Json<serde_json::Value>, ApiError> {
-    session.require_full()?;
+    // Not gated on the plan: enrolment writes no vault data, and a frozen
+    // account must still be able to enrol so it keeps sign-in and deletion.
     let request = crate::pake::decode_message(&req.registration_request)?;
     let response = state
         .pake
@@ -423,7 +424,8 @@ pub async fn pake_enroll(
     session: Session,
     Json(req): Json<PakeEnroll>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    session.require_full()?;
+    // Not gated on the plan, like `pake_register`: a frozen account that
+    // could not enrol would lose sign-in and deletion at the cutoff.
     let key = auth::decode_auth_key(&req.current_auth_key)?;
     let record = havenkeys_opaque::record_from_upload(&crate::pake::decode_message(
         &req.registration_upload,

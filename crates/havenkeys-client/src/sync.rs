@@ -117,9 +117,9 @@ impl HavenClient {
             }
             let account = vault.account()?.ok_or(havenkeys_core::Error::NoVault)?;
             let epoch = vault.epoch();
-            // Unreadable counts as never confirmed: the fallback is still
-            // only taken on 401 or 404 (spec 2026-10-13-pake-login §6).
-            let confirmed = vault.pake_confirmed().unwrap_or(false);
+            // Fail closed: an unreadable flag counts as confirmed, so it
+            // never opens the legacy fallback (spec 2026-10-13-pake-login §6).
+            let confirmed = vault.pake_confirmed().unwrap_or(true);
             drop(vault);
             let server = self.server_for(&account.server_url)?;
             (
