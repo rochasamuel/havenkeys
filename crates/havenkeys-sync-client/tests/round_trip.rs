@@ -913,3 +913,27 @@ async fn a_legacy_account_enrols_and_then_signs_in_with_opaque() {
         .unwrap();
     server.cleanup().await;
 }
+
+#[tokio::test]
+async fn an_attachment_is_uploaded_committed_with_a_write_and_read_back() {
+    let server = Server::start().await;
+    let client = server.client();
+    let mut device = activate(&server, "user@example.com").await;
+    let (item_id, attachment_id) = (Uuid::new_v4(), Uuid::new_v4());
+
+    client
+        .put_attachment(&device.session, attachment_id, item_id, b"sealed bytes")
+        .await
+        .unwrap();
+    let mut staged = havenkeys_core::vault::StagedWrite::for_test(item_id, None, vec![1], vec![2]);
+    staged.attachment_ids = Some(vec![attachment_id]);
+    client.write(&device.session, &[staged]).await.unwrap();
+
+    let (owner, blob) = client
+        .get_attachment(&device.session, attachment_id)
+        .await
+        .unwrap();
+    assert_eq!((owner, blob.as_slice()), (item_id, &b"sealed bytes"[..]));
+    device.vault.lock();
+    server.cleanup().await;
+}

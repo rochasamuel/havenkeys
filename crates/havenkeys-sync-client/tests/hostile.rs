@@ -561,3 +561,21 @@ async fn a_deleted_device_hears_it_at_pake_start() {
     assert_eq!(err, SyncError::AccountDeleted);
     assert_eq!(script.paths(), vec!["/v1/auth/pake/start"]);
 }
+
+#[tokio::test]
+async fn put_404_is_unsupported() {
+    let client = Stub::status(404, "");
+    let result = client
+        .put_attachment(&session(), Uuid::new_v4(), Uuid::new_v4(), b"sealed")
+        .await;
+    assert_eq!(result, Err(SyncError::Unsupported));
+}
+
+#[tokio::test]
+async fn a_hostile_get_with_oversize_blob_is_refused() {
+    let blob = "A".repeat(12 * 1024 * 1024);
+    let body = format!(r#"{{"itemId":"{}","blob":"{blob}"}}"#, Uuid::new_v4());
+    let client = Stub::ok(&body);
+    let result = client.get_attachment(&session(), Uuid::new_v4()).await;
+    assert_eq!(result, Err(SyncError::TooLarge));
+}

@@ -169,6 +169,31 @@ pub struct ChangeDto {
     pub details: Option<String>,
     #[serde(skip_serializing_if = "is_false")]
     pub deleted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_ids: Option<Vec<Uuid>>,
+}
+
+/// `PUT /v1/attachments/{id}`: one sealed file, owned by one item.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AttachmentPutBody {
+    pub item_id: Uuid,
+    pub blob: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentDto {
+    pub item_id: Uuid,
+    pub blob: String,
+}
+
+impl AttachmentDto {
+    /// The owning item and the sealed bytes, bounded like any other blob.
+    pub fn into_parts(self) -> Result<(Uuid, Vec<u8>)> {
+        let blob = decode_blob(Some(self.blob))?.unwrap_or_default();
+        Ok((self.item_id, blob))
+    }
 }
 
 fn is_false(value: &bool) -> bool {
@@ -193,6 +218,7 @@ impl TryFrom<&StagedWrite> for ChangeDto {
                     overview: Some(BASE64.encode(overview)),
                     details: Some(BASE64.encode(details)),
                     deleted: false,
+                    attachment_ids: staged.attachment_ids.clone(),
                 })
             }
             (None, None) => Ok(Self {
@@ -201,6 +227,7 @@ impl TryFrom<&StagedWrite> for ChangeDto {
                 overview: None,
                 details: None,
                 deleted: true,
+                attachment_ids: None,
             }),
             _ => Err(SyncError::Protocol("malformed staged write")),
         }
@@ -589,5 +616,17 @@ mod pairing_tests {
         assert!(matches!(approved, ClaimDto::Approved { .. }));
         assert!(parse::<ClaimDto>(br#"{"state":"approved"}"#).is_err());
         assert!(parse::<ClaimDto>(br#"{"state":"granted"}"#).is_err());
+    }
+}
+
+#[cfg(test)]
+mod change_tests {
+    use super::*;
+
+    #[test]
+    fn a_change_without_attachment_ids_serializes_without_the_key() {
+        let staged = StagedWrite::for_test(Uuid::nil(), None, vec![1], vec![2]);
+        let json = serde_json::to_string(&ChangeDto::try_from(&staged).unwrap()).unwrap();
+        assert!(!json.contains("attachmentIds"));
     }
 }

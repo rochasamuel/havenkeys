@@ -38,6 +38,10 @@ impl From<SyncError> for ClientError {
                 "rate_limited",
                 "Too many attempts. Try again in a few minutes.",
             ),
+            SyncError::Unsupported => Self::fixed(
+                "server_unsupported",
+                "Your server doesn't support attachments yet — update havenkeys-server.",
+            ),
             SyncError::InvalidServerUrl => Self::fixed(
                 "invalid_server_url",
                 "That server address cannot be used. It must start with https://.",
@@ -181,6 +185,7 @@ mod tests {
             (SyncError::RateLimited, "rate_limited"),
             (SyncError::InvalidServerUrl, "invalid_server_url"),
             (SyncError::TooLarge, "sync_failed"),
+            (SyncError::Unsupported, "server_unsupported"),
             (SyncError::AccountDeleted, "account_deleted"),
             (SyncError::AccountFrozen, "account_frozen"),
         ];

@@ -40,6 +40,8 @@ pub enum SyncError {
     Protocol(&'static str),
     /// The server's answer was larger than anything the protocol allows.
     TooLarge,
+    /// The server has no attachment routes: it is older than this client.
+    Unsupported,
     /// The configured server URL is not one a secret may be sent to.
     InvalidServerUrl,
 }
@@ -57,6 +59,7 @@ impl SyncError {
             Self::Conflict(_) => "conflict",
             Self::Protocol(_) => "protocol",
             Self::TooLarge => "too_large",
+            Self::Unsupported => "unsupported",
             Self::InvalidServerUrl => "invalid_server_url",
         }
     }
@@ -78,6 +81,7 @@ impl std::fmt::Display for SyncError {
             }
             Self::Protocol(what) => write!(f, "the server's answer was not valid: {what}"),
             Self::TooLarge => f.write_str("the server's answer was too large"),
+            Self::Unsupported => f.write_str("the server does not support attachments"),
             Self::InvalidServerUrl => f.write_str("the server address is not usable"),
         }
     }

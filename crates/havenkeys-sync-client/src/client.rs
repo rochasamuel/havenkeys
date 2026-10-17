@@ -656,6 +656,37 @@ impl<T: Transport> SyncClient<T> {
         }
     }
 
+    /// Upload one sealed attachment. The server holds it pending until a
+    /// write lists it. A 404 means the route does not exist: an older server.
+    pub async fn put_attachment(
+        &self,
+        session: &Session,
+        id: Uuid,
+        item_id: Uuid,
+        blob: &[u8],
+    ) -> Result<()> {
+        let body = wire::AttachmentPutBody {
+            item_id,
+            blob: BASE64.encode(blob),
+        };
+        let response = self
+            .put(&format!("/v1/attachments/{id}"), Some(session), &body)
+            .await?;
+        match response.status {
+            200 => Ok(()),
+            404 => Err(SyncError::Unsupported),
+            _ => Err(error_from(&response)),
+        }
+    }
+
+    /// Download one committed attachment: its owning item and sealed bytes.
+    pub async fn get_attachment(&self, session: &Session, id: Uuid) -> Result<(Uuid, Vec<u8>)> {
+        let response = self
+            .get(&format!("/v1/attachments/{id}"), Some(session))
+            .await?;
+        expect_ok::<wire::AttachmentDto>(response)?.into_parts()
+    }
+
     /// Open a pairing request for this (new) device. No session. The device's
     /// public key is not sent: it travels only in the QR code, so the server
     /// cannot seal an envelope of its own to it.
@@ -783,6 +814,17 @@ impl<T: Transport> SyncClient<T> {
     ) -> Result<HttpResponse> {
         let body = serde_json::to_vec(body).map_err(|_| SyncError::Protocol("request encoding"))?;
         self.send(Method::Post, path, session, Some(body)).await
+    }
+
+    /// PUT `body` as JSON.
+    async fn put<B: serde::Serialize>(
+        &self,
+        path: &str,
+        session: Option<&Session>,
+        body: &B,
+    ) -> Result<HttpResponse> {
+        let body = serde_json::to_vec(body).map_err(|_| SyncError::Protocol("request encoding"))?;
+        self.send(Method::Put, path, session, Some(body)).await
     }
 
     async fn send(
