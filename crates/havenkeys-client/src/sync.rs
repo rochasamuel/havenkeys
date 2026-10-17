@@ -334,6 +334,7 @@ impl HavenClient {
         // 2026-10-08-trash §5.3). Best effort: a refused batch (another
         // device purged first) is retried by the next sync, after its pull.
         report.deleted += self.purge_expired_trash().await;
+        self.prune_attachment_cache();
 
         self.mark_sync_attempt();
         self.events.synced(report);

@@ -23,6 +23,7 @@ struct Server {
     admin_url: String,
     db_name: String,
     pool: deadpool_postgres::Pool,
+    task: tokio::task::JoinHandle<()>,
 }
 
 impl Server {
@@ -57,7 +58,7 @@ impl Server {
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let _ = axum::serve(
                 listener,
                 havenkeys_server::router(state)
@@ -70,7 +71,13 @@ impl Server {
             admin_url,
             db_name,
             pool,
+            task,
         }
+    }
+
+    /// Stop answering: devices see an unreachable server.
+    fn stop(&self) {
+        self.task.abort();
     }
 
     async fn invite(&self, email: &str) -> String {
@@ -994,4 +1001,194 @@ async fn changing_the_master_password_keeps_opaque_working() {
     until(|| fx.client.is_online()).await;
     assert!(pake_confirmed(&fx.client));
     fx.server.cleanup().await;
+}
+
+fn png(body: &str) -> (String, zeroize::Zeroizing<Vec<u8>>) {
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    bytes.extend_from_slice(body.as_bytes());
+    ("scan.png".into(), zeroize::Zeroizing::new(bytes))
+}
+
+/// Two devices on one account, and the id of an item A created.
+async fn two_devices(
+    server: &Server,
+) -> (
+    Arc<HavenClient>,
+    Arc<HavenClient>,
+    Uuid,
+    Vec<tempfile::TempDir>,
+) {
+    let invite = server.invite("files@example.com").await;
+    let dir_a = tempfile::tempdir().unwrap();
+    let (a, _) = device(dir_a.path());
+    a.activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| a.is_online()).await;
+    let staged = a
+        .vault()
+        .unwrap()
+        .stage_create(login("Passport"), havenkeys_client::now_ms())
+        .unwrap();
+    let item = a.push(staged).await.unwrap().unwrap().id;
+
+    let account_id = a.account_status().unwrap().unwrap().account_id;
+    let secret_key = a.device().unwrap().secret_key_text(account_id).unwrap();
+    let dir_b = tempfile::tempdir().unwrap();
+    let (b, _) = device(dir_b.path());
+    b.sign_in(
+        server.base.clone(),
+        "files@example.com".into(),
+        SecretString::from(PASSWORD),
+        Some(secret_key),
+    )
+    .await
+    .unwrap();
+    b.sync_now().await.unwrap();
+    (a, b, item, vec![dir_a, dir_b])
+}
+
+fn attachment_ids(client: &HavenClient, item: Uuid) -> Vec<Uuid> {
+    let vault = client.vault().unwrap();
+    let overview = vault
+        .list_items()
+        .unwrap()
+        .into_iter()
+        .find(|o| o.id == item);
+    overview.unwrap().attachments.iter().map(|m| m.id).collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn attach_then_read_on_another_device() {
+    let server = Server::start().await;
+    let (a, b, item, _dirs) = two_devices(&server).await;
+
+    let updated = a.add_attachments(item, vec![png("front")]).await.unwrap();
+    assert_eq!(updated.attachments.len(), 1);
+    assert_eq!(updated.attachments[0].mime, "image/png");
+    let id = updated.attachments[0].id;
+
+    b.sync_now().await.unwrap();
+    assert_eq!(attachment_ids(&b, item), vec![id]);
+    assert!(b.vault().unwrap().cached_attachment(&id).unwrap().is_none());
+    let opened = b.attachment_bytes(item, id).await.unwrap();
+    assert!(opened.expose().ends_with(b"front"));
+    // The download is kept for next time.
+    assert!(b.vault().unwrap().cached_attachment(&id).unwrap().is_some());
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn offline_read_uses_cache_and_misses_cleanly() {
+    let server = Server::start().await;
+    let (a, b, item, _dirs) = two_devices(&server).await;
+    let id = a
+        .add_attachments(item, vec![png("front")])
+        .await
+        .unwrap()
+        .attachments[0]
+        .id;
+    b.sync_now().await.unwrap();
+
+    server.stop();
+    for client in [&a, &b] {
+        client.lock("user");
+        client
+            .unlock(SecretString::from(PASSWORD), None)
+            .await
+            .unwrap();
+    }
+    // A cached its own upload; B never downloaded the file.
+    assert!(a
+        .attachment_bytes(item, id)
+        .await
+        .unwrap()
+        .expose()
+        .ends_with(b"front"));
+    let err = b.attachment_bytes(item, id).await.unwrap_err();
+    assert_eq!(err.code, "offline");
+    assert_eq!(
+        err.message,
+        "You're offline \u{2014} reconnect to open this file."
+    );
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn conflicting_attach_surfaces_item_changed_elsewhere() {
+    let server = Server::start().await;
+    let (a, b, item, _dirs) = two_devices(&server).await;
+
+    let trash = b
+        .vault()
+        .unwrap()
+        .stage_trash(&item, havenkeys_client::now_ms())
+        .unwrap();
+    b.push(trash).await.unwrap();
+
+    let err = a
+        .add_attachments(item, vec![png("front")])
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "item_changed_elsewhere");
+    assert!(attachment_ids(&a, item).is_empty());
+    // The upload stays pending on the server, for its sweep to remove.
+    let db = server.pool.get().await.unwrap();
+    let pending = db
+        .query_one("SELECT count(*) FROM attachments WHERE NOT committed", &[])
+        .await
+        .unwrap();
+    assert_eq!(pending.get::<_, i64>(0), 1);
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn remove_evicts_cache() {
+    let server = Server::start().await;
+    let (a, b, item, _dirs) = two_devices(&server).await;
+    let id = a
+        .add_attachments(item, vec![png("front")])
+        .await
+        .unwrap()
+        .attachments[0]
+        .id;
+    assert!(a.vault().unwrap().cached_attachment(&id).unwrap().is_some());
+
+    let updated = a.remove_attachment(item, id).await.unwrap();
+    assert!(updated.attachments.is_empty());
+    assert!(a.vault().unwrap().cached_attachment(&id).unwrap().is_none());
+
+    b.sync_now().await.unwrap();
+    assert!(attachment_ids(&b, item).is_empty());
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn prune_keeps_trashed_items_files() {
+    let server = Server::start().await;
+    let (a, _b, item, _dirs) = two_devices(&server).await;
+    let id = a
+        .add_attachments(item, vec![png("front")])
+        .await
+        .unwrap()
+        .attachments[0]
+        .id;
+    let trash = a
+        .vault()
+        .unwrap()
+        .stage_trash(&item, havenkeys_client::now_ms())
+        .unwrap();
+    a.push(trash).await.unwrap();
+
+    let stray = Uuid::new_v4();
+    {
+        let vault = a.vault().unwrap();
+        vault
+            .cache_attachment(&stray, b"stray", havenkeys_client::now_ms())
+            .unwrap();
+        vault.prune_attachment_cache(u64::MAX).unwrap();
+        assert!(vault.cached_attachment(&id).unwrap().is_some());
+        assert!(vault.cached_attachment(&stray).unwrap().is_none());
+    }
+    server.cleanup().await;
 }

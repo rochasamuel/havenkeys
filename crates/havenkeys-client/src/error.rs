@@ -117,6 +117,19 @@ impl ClientError {
         }
     }
 
+    /// A file whose bytes do not match what its item recorded, or that the
+    /// server no longer has.
+    pub fn attachment_damaged() -> Self {
+        Self::fixed("decryption", "This attachment is damaged or was changed")
+    }
+
+    pub fn attachment_offline() -> Self {
+        Self::fixed(
+            "offline",
+            "You're offline \u{2014} reconnect to open this file.",
+        )
+    }
+
     pub fn clipboard() -> Self {
         Self::fixed("clipboard", "Could not access the clipboard.")
     }
@@ -201,6 +214,8 @@ mod tests {
             (ClientError::file(), "file"),
             (ClientError::sign_in_failed(), "sign_in_failed"),
             (ClientError::clipboard(), "clipboard"),
+            (ClientError::attachment_damaged(), "decryption"),
+            (ClientError::attachment_offline(), "offline"),
             (ClientError::open_website(), "open_website"),
             (
                 ClientError::account_frozen_new_device(),

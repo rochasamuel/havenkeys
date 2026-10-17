@@ -4,9 +4,11 @@
 use crate::device::Device;
 use crate::error::{ClientError, ClientResult};
 use crate::events::ClientEvents;
+use havenkeys_core::attachment::DESKTOP_CACHE_BYTES;
 use havenkeys_core::vault::VaultService;
 use havenkeys_sync_client::{HttpTransport, Session, SyncClient};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -78,6 +80,8 @@ pub struct HavenClient {
     pub(crate) pairing: Mutex<Option<crate::pairing::PendingPairing>>,
     /// Serialises `poll_pairing` calls.
     pub(crate) pairing_gate: tokio::sync::Mutex<()>,
+    /// Bytes of sealed attachments kept for offline opening.
+    pub(crate) attachment_cache_cap: AtomicU64,
     /// Set when the vault file could not be opened. The app still starts —
     /// it has to, or there is nowhere to show the reason — and every vault
     /// access refuses with this.
@@ -103,6 +107,7 @@ impl HavenClient {
             last_sync_attempt: Mutex::new(None),
             pairing: Mutex::new(None),
             pairing_gate: tokio::sync::Mutex::new(()),
+            attachment_cache_cap: AtomicU64::new(DESKTOP_CACHE_BYTES),
             storage_error,
             events,
             config,
