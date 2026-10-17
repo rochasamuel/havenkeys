@@ -635,10 +635,12 @@ See `server-sync.md` and `crypto.md` for the full design. In summary:
   server serves; any one being wrong gives the same message.
 * **The auth key** is a separate HKDF branch from the same Argon2id run as
   the KEK (`info = "havenkeys/v3/auth"`). It authenticates and unwraps
-  nothing. Devices prove they know it with OPAQUE (RFC 9807) and do not send
+  nothing. Devices prove they know it with OPAQUE (RFC 9807) without sending
   it; the server stores an OPAQUE record (plus an Argon2id hash of it for
-  accounts still inside the legacy window). See `docs/crypto.md`, "OPAQUE
-  sign-in".
+  accounts still inside the legacy window). A device that has never confirmed
+  OPAQUE for the account still falls back to the legacy login, which sends
+  the key, on a 401 or 404 (`security-review.md` OP4). See `docs/crypto.md`,
+  "OPAQUE sign-in".
 * **The session token** is 32 random bytes, valid 24 hours, held in memory
   only, and dropped when the vault locks — so a locked vault cannot reach the
   server at all. The server stores only its SHA-256.
@@ -1547,10 +1549,16 @@ hosts whose registrable domain's first label appears in the package name
 * **User-installed CAs are trusted, on purpose:** a self-hosted server signed
   by the user's own CA must work, as it does in the phone's browser. The
   cost: anyone whose CA the user installed (or a device policy installed) can
-  intercept the server connection — it sees ciphertext and the session token, not the vault (and, only on the
-  legacy login of an account not yet enrolled in OPAQUE, the auth key) — and forge
-  `assetlinks.json` answers (`security-review.md` AN5). How the verifier
-  treats user CAs has not been checked on a device.
+  intercept the server connection — it sees ciphertext and the session token, not the vault — and forge
+  `assetlinks.json` answers (`security-review.md` AN5). It can also capture
+  the auth key from any device that has never confirmed OPAQUE for the
+  account (every first sign-in on a new device or into a replaced vault), on
+  any account, enrolled or not, before or after the cutoff: making the OPAQUE
+  exchange fail pushes that device onto the legacy login, which sends the key
+  before the server could answer 426. The captured key also signs in with
+  OPAQUE until the master password changes. This lasts until the client
+  fallback is removed (`security-review.md` OP4). How the verifier treats
+  user CAs has not been checked on a device.
 
 ### 22.10 Clipboard
 

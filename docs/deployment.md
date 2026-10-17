@@ -260,7 +260,12 @@ psql "$RESTORE_URL" -c "SELECT count(*) FROM items WHERE deleted_at IS NULL;"
 server's OPAQUE long-term key, generated once at first start. If it is lost,
 every enrolled account is locked out of sign-in (the vault ciphertext is
 unaffected, but the server can no longer verify any OPAQUE proof), and a
-freshly generated setup does not repair that. A full `pg_dump` includes it;
+freshly generated setup would not repair that, so the server does not make
+one: if the table is empty while any account has an OPAQUE record, it
+refuses to start ("the OPAQUE setup is missing but accounts are enrolled:
+restore pake_server_setup from the backup"). The only recovery is restoring
+the row; there is no re-enrolment tool, and `admin allow-legacy-sign-in`
+refuses enrolled accounts. A full `pg_dump` includes it;
 do not restore a partial dump that leaves it out. It is deliberately not
 derived from `SERVER_SECRET`, which can be changed. Extend step 4 of the
 drill: sign in from an **OPAQUE-enrolled** device against the restored copy.

@@ -279,7 +279,13 @@ Client: OPAQUE first. It falls back to the legacy login only on 401 or 404 and
 only if this device has never confirmed OPAQUE for the account
 (`account.pake_confirmed`, vault schema 8, plaintext 0 or 1). It enrols right
 after a legacy sign-in, and after the first OPAQUE success it never falls
-back. Operator tools: `admin list-accounts` (`pake` or `legacy`) and
+back. An unreadable flag counts as confirmed. The cutoff is enforced only on
+the server: a device that has never confirmed OPAQUE for the account (every
+first sign-in on a new device or into a replaced vault) still falls back, and
+so sends the auth key, when a man in the middle makes OPAQUE fail, on any
+account and after the cutoff, until the client fallback is removed (spec §6
+step 5). A captured auth key also signs in with OPAQUE until the master
+password changes (`security-review.md` OP4). Operator tools: `admin list-accounts` (`pake` or `legacy`) and
 `admin allow-legacy-sign-in --email` (24 hours of legacy sign-in after the
 cutoff, for an active account with no record and a verifier; enrolment ends
 it). Removing the legacy code after the cutoff is tracked in

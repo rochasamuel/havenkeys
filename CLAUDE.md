@@ -87,11 +87,16 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 
 > Amended on 2026-10-17 by
 > `docs/superpowers/specs/2026-10-13-pake-login-design.md`: devices sign
-> in to the server with OPAQUE (RFC 9807, crate `opaque-ke`); the auth key
-> derived from the master password and Secret Key no longer leaves the
-> device. Accounts made before this keep the legacy login until the
-> operator's cutoff (`HAVENKEYS_LEGACY_AUTH_UNTIL`, 30 days on the hosted
-> server), and a device that has signed in with OPAQUE never falls back.
+> in to the server with OPAQUE (RFC 9807, crate `opaque-ke`), so the auth
+> key derived from the master password and Secret Key is not sent on an
+> OPAQUE sign-in. Accounts made before this keep the legacy login on the
+> server until the operator's cutoff (`HAVENKEYS_LEGACY_AUTH_UNTIL`, 30 days
+> on the hosted server). A device that has signed in with OPAQUE never falls
+> back; a device that never has (every first sign-in on a new device or into
+> a replaced vault) can still be pushed onto the legacy login by a man in the
+> middle and then sends the auth key, on any account and after the cutoff,
+> until the client fallback is removed. A captured auth key also signs in
+> with OPAQUE until the master password changes.
 
 ---
 

@@ -256,7 +256,14 @@ through `havenkeys-core::pake`.
 
 Not protected: the vault itself, which never depended on the auth key; a
 server that is already hostile can still withhold or destroy ciphertext; TLS
-is still required.
+is still required. Nor the auth key on a device that has never confirmed
+OPAQUE for the account (every first sign-in on a new device or into a
+replaced vault): it falls back to the legacy login on a 401 or 404, which a
+man in the middle can cause on any account, enrolled or not, even after the
+server's cutoff, and the legacy login sends the key. This lasts until the
+client fallback is removed (spec §6 step 5, tracked in the roadmap). A
+captured auth key is also the OPAQUE password, so it signs in with OPAQUE
+until the master password changes (`security-review.md` OP4).
 
 ## Argon2id parameters
 

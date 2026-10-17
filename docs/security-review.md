@@ -4025,8 +4025,8 @@ review.
 |---|---|---|---|---|
 | OP1 | Info | Handshake, proofs | What each side verifies; OPAQUE session and export keys unused | By design |
 | OP2 | Low | `pake_pending` | Login state readable in a database dump for up to 60 s | Accepted |
-| OP3 | Medium | `pake_server_setup` | Losing the row locks every enrolled account out; a dump of setup and records allows only offline guessing of a 256-bit value | Restore drill |
-| OP4 | Medium | Migration window, client fallback | Unenrolled accounts are as exposed as before; a man in the middle can push a never-confirmed device onto the legacy path | Confirmed flag, cutoff |
+| OP3 | Medium | `pake_server_setup` | Losing the row locks every enrolled account out (the server refuses to start); a dump of setup and records allows only offline guessing of a 256-bit value | Restore drill |
+| OP4 | Medium | Client legacy fallback | Any device that has never confirmed OPAQUE for the account can be pushed onto the legacy login by a man in the middle, on any account, enrolled or not, before or after the cutoff; the captured key also signs in with OPAQUE | Confirmed flag; open until the fallback is removed |
 | OP5 | Info | `account/pake/enroll` | Enrolment needs the legacy key and re-checks it under a row lock | Mitigated, tested |
 | OP6 | Info | Cutoff | Answers 426, never 410 | By design |
 | OP7 | Low | `auth/pake/start` | Unknown-email equivalence: same shape, timing not equalized beyond curve work | Accepted |
@@ -4042,12 +4042,15 @@ the server's database can be replayed to sign in. This does **not** protect the
 vault contents more than before (they never depended on the auth key), does
 not protect against a server that is already hostile (`threat-model.md`
 T1c: it can withhold or destroy ciphertext anyway), and does not replace TLS.
-Until an account is enrolled and the cutoff has passed, the old exposure
-remains for that account.
+The old exposure remains for an account until it is enrolled and the cutoff
+has passed, and, independently of both, on every device that has not yet
+confirmed OPAQUE for the account (OP4) until the client's legacy fallback is
+removed.
 
 ### OP1. Handshake and proofs (Info, by design)
 **Component:** `crates/havenkeys-opaque`, `havenkeys-core::pake`,
-`crates/havenkeys-server/src/routes/pake.rs`.
+`crates/havenkeys-server/src/pake.rs`, `crates/havenkeys-server/src/routes/auth.rs`,
+`crates/havenkeys-server/src/routes/account.rs`.
 **Attack scenario:** an attacker records a sign-in, or impersonates the
 server, to obtain or replay a credential.
 **Mitigation:** `opaque-ke` 4.0.1 (RFC 9807; ristretto255, triple-DH,
@@ -4059,14 +4062,17 @@ a fake response, fails on the device and nothing more is sent. A recorded
 finalization cannot be replayed: it is bound to a one-time exchange. Every
 field is base64 of at most 512 bytes before `opaque-ke` checks exact lengths;
 a malformed message is a 400 without detail. The OPAQUE session key and export
-key are never used; the session is the usual random token. The auth key's bytes
-leave `havenkeys-core` only through `pake`.
+key are never used; the session is the usual random token. On the OPAQUE path
+the auth key's bytes are only an input to `pake`; they still leave
+`havenkeys-core` through `AuthKey::to_base64` for the legacy login,
+enrolment's `currentAuthKey` and legacy proofs, and inside the Android
+biometric unlock bundle (encrypted by a Keystore key).
 **Remaining limitations:** the cryptography is a library's, not independently
 reviewed here; `opaque-ke` had one external audit (NCC Group, 2021) of an
 earlier version (issues found in 0.5.0, fixed in 1.2.0); 4.0.1 has not been audited.
 
 ### OP2. Pending exchanges (Low, accepted)
-**Component:** `pake_pending` table, `routes/pake.rs`.
+**Component:** `pake_pending` table, `crates/havenkeys-server/src/pake.rs`.
 **Attack scenario:** someone with a database dump reads a pending login state.
 **Mitigation:** rows live 60 seconds, are deleted on first read whatever
 happens next, and are keyed by the SHA-256 of a random 256-bit id, so the id
@@ -4085,25 +4091,43 @@ after restore; it is deliberately not derived from `SERVER_SECRET`, which can
 be changed. (b) With both, an attacker could guess offline, but the guessed
 value is a 256-bit output of Argon2id over the master password and the 128-bit
 Secret Key, so this is negligible. Vault ciphertext is not affected by either.
-**Remaining limitations:** an operator who restores a partial dump without the
-table locks users out until they are re-enrolled by the operator.
+A lost row is never silently regenerated: when `pake_server_setup` is empty but
+some account has an OPAQUE record, `pake::load_or_create` returns an error and
+the server refuses to start (test
+`a_lost_setup_with_enrolled_accounts_is_refused_not_regenerated`).
+**Remaining limitations:** the only recovery from a lost row is restoring it
+from a backup. There is no operator re-enrolment tool, and
+`admin allow-legacy-sign-in` refuses enrolled accounts, so without the row
+every enrolled account stays locked out.
 
-### OP4. Migration window and downgrade (Medium, accepted for 30 days)
-**Component:** `core::pake` fallback, `account.pake_confirmed`,
-`HAVENKEYS_LEGACY_AUTH_UNTIL`.
+### OP4. Client legacy fallback and downgrade (Medium, open until the fallback is removed)
+**Component:** `crates/havenkeys-client/src/pake.rs` (`sign_in_with_key`)
+and its call sites in `crates/havenkeys-client/src/sync.rs` (connect) and
+`crates/havenkeys-client/src/account.rs` (`sign_in`, `unlock_from_server`);
+`account.pake_confirmed`; `HAVENKEYS_LEGACY_AUTH_UNTIL`.
 **Attack scenario:** (a) an unenrolled account is as exposed as before. (b) A
-man in the middle makes the OPAQUE start answer 401 or 404 so a device falls
-back to the legacy login and gets the auth key. (c) On a device that has never
-done OPAQUE a wrong password costs two rate-limit attempts.
-**Mitigation:** the device falls back only on 401 or 404 and only if it has
-never confirmed OPAQUE for that account; the first OPAQUE success sets the
-flag (vault schema 8) and the device never falls back again, so (b) is limited
-to devices that have not yet signed in with OPAQUE once. The operator's cutoff
-ends the legacy paths on the server, answering 426. Enrolment follows a legacy
-sign-in at once.
-**Remaining limitations:** the window is real, and the flag protects only
-devices that already used OPAQUE. TLS is still the barrier against a man in the
-middle during the window.
+man in the middle makes the OPAQUE exchange fail on the device (a forged
+response, which the device reads as a wrong password) or makes the OPAQUE
+start answer 404, so the device falls back and sends `/v1/auth/login
+{authKey}`. This works on any account, enrolled or not, before or after the
+cutoff: the device sends the key before the server could answer 426, so the
+server-side cutoff does not stop the capture. Because the auth key is also the
+OPAQUE password, the captured key signs in over OPAQUE too, until the master
+password changes. (c) On a device that has never done OPAQUE a wrong password
+costs two rate-limit attempts.
+**Mitigation:** the device falls back only on a 401 (including its own
+failure to verify a forged response, reported the same way) or a 404, and only if it has never confirmed OPAQUE for that account; the first
+OPAQUE success sets the flag (vault schema 8) and the device never falls back
+again. An unreadable flag counts as confirmed, so it never opens the fallback.
+`sign_in` always passes `confirmed = false`, so every first sign-in on a new
+device or into a replaced vault can fall back. The operator's cutoff ends the
+legacy paths on the server only (426); it does not stop a device from sending
+the key. Enrolment follows a legacy sign-in at once.
+**Remaining limitations:** the fallback exists for any device that has never
+confirmed OPAQUE for the account, until the client fallback is removed (spec
+§6 step 5, tracked in the roadmap). TLS is the only barrier against a man in
+the middle for those devices. A captured auth key also signs in with OPAQUE
+until the master password changes.
 
 ### OP5. Enrolment needs the legacy key (Info, tested)
 **Component:** `account/pake/enroll`.
@@ -4132,12 +4156,16 @@ does not depend on whether the email exists.
 ### OP7. Unknown-email equivalence (Low, accepted)
 **Component:** `auth/pake/start`.
 **Attack scenario:** an attacker tells known from unknown emails.
-**Mitigation:** the answer has the same shape (`opaque-ke`'s deterministic
-fake credential response per identifier, the decoy id from `SERVER_SECRET`),
-the rate limit is charged either way, and a known account with no OPAQUE record
-gets a fake response too.
+**Mitigation:** the answer has the same shape (`opaque-ke`'s fake credential
+response, the decoy id from `SERVER_SECRET`), the rate limit is charged either
+way, and a known account with no OPAQUE record gets a fake response too.
+`opaque-ke` 4 builds the fake record with fresh randomness on each call; only
+the OPRF evaluation is deterministic per identifier. Two starts for an unknown
+email therefore differ the way two starts for a real one do, and the answers
+stay indistinguishable.
 **Remaining limitations:** timing is equalized only as far as the same curve
-work is done; the legacy path's Argon2id equalization no longer applies here.
+work is done; `pake_finish` skips `login_finish` for a decoy row, a
+microsecond-scale difference at the finish step; the legacy path's Argon2id equalization no longer applies here.
 A timing measurement could in principle separate known from unknown emails.
 `auth/params` already answers both and offers no better oracle.
 
