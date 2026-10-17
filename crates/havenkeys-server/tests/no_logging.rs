@@ -32,6 +32,32 @@ impl<'a> MakeWriter<'a> for Captured {
     }
 }
 
+fn b64(bytes: &[u8]) -> String {
+    data_encoding::BASE64.encode(bytes)
+}
+
+fn unb64(value: &serde_json::Value) -> Vec<u8> {
+    data_encoding::BASE64
+        .decode(value.as_str().unwrap().as_bytes())
+        .unwrap()
+}
+
+/// POST `body`, assert success, and return the JSON answer (Null for 204).
+async fn post_json(
+    server: &support::TestServer,
+    token: Option<&str>,
+    path: &str,
+    body: serde_json::Value,
+) -> serde_json::Value {
+    let mut req = server.post(path).json(&body);
+    if let Some(token) = token {
+        req = req.bearer_auth(token);
+    }
+    let res = req.send().await.unwrap();
+    assert!(res.status().is_success(), "{path}: {}", res.status());
+    res.json().await.unwrap_or(serde_json::Value::Null)
+}
+
 #[tokio::test]
 async fn no_secret_reaches_a_log_line() {
     let buffer = Captured(Arc::new(Mutex::new(Vec::new())));
@@ -112,7 +138,144 @@ async fn no_secret_reaches_a_log_line() {
         .await
         .unwrap();
 
+    // The OPAQUE paths, inline so every message and id can be looked for:
+    // activation, a sign-in, a re-authentication with a credential change,
+    // and one failing sign-in.
+    let mut opaque: Vec<(&str, String)> = Vec::new();
+    let pake_email = "pake-marker@example.com";
+    let pake_key = [43u8; 32];
+    let pake_new_key = [44u8; 32];
+    let pake_invite = support::new_invite(&server, pake_email).await;
+    let (reg, request) = havenkeys_opaque::ClientRegistration::start(&pake_key).unwrap();
+    let body = post_json(
+        &server,
+        None,
+        "/v1/accounts/activate/register",
+        serde_json::json!({ "email": pake_email, "invite": pake_invite,
+                            "registrationRequest": b64(&request) }),
+    )
+    .await;
+    let response = unb64(&body["registrationResponse"]);
+    let upload = reg.finish(&pake_key, &response).unwrap();
+    opaque.push(("the activation registration request", b64(&request)));
+    opaque.push(("the activation registration response", b64(&response)));
+    opaque.push(("the activation registration upload", b64(&upload)));
+    let pake_vault = uuid::Uuid::new_v4();
+    let mut activation = support::activate_body(pake_email, &pake_invite, pake_vault, &pake_key);
+    activation.as_object_mut().unwrap().remove("authKey");
+    activation["registrationUpload"] = serde_json::json!(b64(&upload));
+    post_json(&server, None, "/v1/accounts/activate", activation).await;
+
+    let (client, request) = havenkeys_opaque::ClientLogin::start(&pake_key).unwrap();
+    let body = post_json(
+        &server,
+        None,
+        "/v1/auth/pake/start",
+        serde_json::json!({ "email": pake_email, "credentialRequest": b64(&request) }),
+    )
+    .await;
+    let login_id = body["loginId"].as_str().unwrap().to_string();
+    let response = unb64(&body["credentialResponse"]);
+    let finalization = client.finish(&pake_key, &response).unwrap();
+    opaque.push(("the credential request", b64(&request)));
+    opaque.push(("the credential response", b64(&response)));
+    opaque.push(("the loginId", login_id.clone()));
+    opaque.push(("the credential finalization", b64(&finalization)));
+    let body = post_json(
+        &server,
+        None,
+        "/v1/auth/pake/finish",
+        serde_json::json!({ "loginId": login_id, "credentialFinalization": b64(&finalization),
+                            "deviceId": uuid::Uuid::new_v4(), "deviceName": "Phone" }),
+    )
+    .await;
+    let pake_token = body["token"].as_str().unwrap().to_string();
+    opaque.push(("the OPAQUE session token", pake_token.clone()));
+
+    let (client, request) = havenkeys_opaque::ClientLogin::start(&pake_key).unwrap();
+    let body = post_json(
+        &server,
+        Some(&pake_token),
+        "/v1/account/pake/reauth",
+        serde_json::json!({ "credentialRequest": b64(&request) }),
+    )
+    .await;
+    let reauth_id = body["reauthId"].as_str().unwrap().to_string();
+    let response = unb64(&body["credentialResponse"]);
+    let reauth_finalization = client.finish(&pake_key, &response).unwrap();
+    opaque.push(("the reauth request", b64(&request)));
+    opaque.push(("the reauth response", b64(&response)));
+    opaque.push(("the reauthId", reauth_id.clone()));
+    opaque.push(("the reauth finalization", b64(&reauth_finalization)));
+    let (reg, request) = havenkeys_opaque::ClientRegistration::start(&pake_new_key).unwrap();
+    let body = post_json(
+        &server,
+        Some(&pake_token),
+        "/v1/account/pake/register",
+        serde_json::json!({ "registrationRequest": b64(&request) }),
+    )
+    .await;
+    let response = unb64(&body["registrationResponse"]);
+    let upload = reg.finish(&pake_new_key, &response).unwrap();
+    opaque.push(("the registration request", b64(&request)));
+    opaque.push(("the registration response", b64(&response)));
+    opaque.push(("the registration upload", b64(&upload)));
+    let body = post_json(
+        &server,
+        Some(&pake_token),
+        "/v1/account/credentials",
+        serde_json::json!({
+            "reauthId": reauth_id,
+            "credentialFinalization": b64(&reauth_finalization),
+            "kdf": support::kdf_block(),
+            "registrationUpload": b64(&upload),
+            "header": b64(b"PAKE-HEADER-MARKER"),
+            "baseHeaderRevision": 0,
+        }),
+    )
+    .await;
+    assert_eq!(body["headerRevision"], 1, "{body}");
+
+    // A failing OPAQUE sign-in: the server's half is refused at finish.
+    let (_client, request) = havenkeys_opaque::ClientLogin::start(&pake_key).unwrap();
+    let body = post_json(
+        &server,
+        None,
+        "/v1/auth/pake/start",
+        serde_json::json!({ "email": pake_email, "credentialRequest": b64(&request) }),
+    )
+    .await;
+    let failed_login_id = body["loginId"].as_str().unwrap().to_string();
+    opaque.push(("the failed credential request", b64(&request)));
+    opaque.push((
+        "the failed credential response",
+        body["credentialResponse"].as_str().unwrap().to_string(),
+    ));
+    opaque.push(("the failed loginId", failed_login_id.clone()));
+    let bogus = [5u8; 64];
+    opaque.push(("the bogus finalization", b64(&bogus)));
+    let res = server
+        .post("/v1/auth/pake/finish")
+        .json(&serde_json::json!({ "loginId": failed_login_id,
+                                   "credentialFinalization": b64(&bogus),
+                                   "deviceId": uuid::Uuid::new_v4(), "deviceName": "Phone" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    opaque.push(("the OPAQUE account's key", b64(&pake_key)));
+    opaque.push(("the OPAQUE account's new key", b64(&pake_new_key)));
+    opaque.push(("the OPAQUE email", pake_email.to_string()));
+    opaque.push(("the OPAQUE invite", pake_invite.clone()));
+    opaque.push(("the OPAQUE header", "PAKE-HEADER-MARKER".to_string()));
+
     let logs = String::from_utf8_lossy(&buffer.0.lock().unwrap().clone()).to_string();
+    for (what, value) in &opaque {
+        assert!(
+            !logs.contains(value),
+            "{what} appeared in the logs:\n{logs}"
+        );
+    }
     assert!(
         logs.contains(&account_id),
         "the account id is what logs identify by; without it this test would pass on silence"

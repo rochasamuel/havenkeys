@@ -24,7 +24,8 @@ pub enum AdminCommand {
         #[arg(long)]
         trial: bool,
     },
-    /// List accounts: id, email, status, plan status, activation time.
+    /// List accounts: id, email, status, plan status, login (`pake` or
+    /// `legacy`), activation time.
     ListAccounts,
     /// Delete an account and everything it owns. Irreversible.
     DeleteAccount {
@@ -42,6 +43,12 @@ pub enum AdminCommand {
         /// period end for `active`, the grace end for `past_due`.
         #[arg(long)]
         until: Option<String>,
+    },
+    /// Let one account that never moved to OPAQUE sign in the old way for
+    /// 24 hours after the cutoff, so an updated app can enrol it.
+    AllowLegacySignIn {
+        #[arg(long)]
+        email: String,
     },
 }
 
@@ -65,6 +72,7 @@ pub async fn run(
             status,
             until,
         } => set_plan(pool, &email, status, until.as_deref()).await,
+        AdminCommand::AllowLegacySignIn { email } => allow_legacy_sign_in(pool, &email).await,
     }
 }
 
@@ -121,12 +129,14 @@ async fn new_account(
     }))
 }
 
-/// One line per account: id, email, status, plan status, activation time.
+/// One line per account: id, email, status, plan status, login (`pake` once
+/// the account has an OPAQUE record, `legacy` before), activation time.
 async fn list_accounts(pool: &Pool) -> Result<String, String> {
     let client = pool.get().await.map_err(|_| "no database".to_string())?;
     let rows = client
         .query(
-            "SELECT a.id, a.email_normalized, a.status, coalesce(p.status, '-'), a.activated_at
+            "SELECT a.id, a.email_normalized, a.status, coalesce(p.status, '-'), a.activated_at,
+                    a.opaque_record IS NOT NULL
                FROM accounts a LEFT JOIN subscriptions p ON p.account_id = a.id
               ORDER BY a.created_at",
             &[],
@@ -141,13 +151,45 @@ async fn list_accounts(pool: &Pool) -> Result<String, String> {
             let status: String = row.get(2);
             let plan: String = row.get(3);
             let at: Option<DateTime<Utc>> = row.get(4);
+            let login = if row.get::<_, bool>(5) {
+                "pake"
+            } else {
+                "legacy"
+            };
             format!(
-                "{id}  {email}  {status}  {plan}  {}",
+                "{id}  {email}  {status}  {plan}  {login}  {}",
                 at.map(|t| t.to_rfc3339()).unwrap_or_default()
             )
         })
         .collect::<Vec<_>>()
         .join("\n"))
+}
+
+/// Hours an `allow-legacy-sign-in` grace lasts.
+const LEGACY_GRACE_HOURS: i32 = 24;
+
+/// For an owner who missed the cutoff (spec 2026-10-13-pake-login §6): their
+/// data was never touched; this lets their updated app do the one legacy
+/// sign-in it needs to enrol. Enrolment clears the grace.
+async fn allow_legacy_sign_in(pool: &Pool, email: &str) -> Result<String, String> {
+    let email = crate::email::normalize(email).map_err(|m| m.to_string())?;
+    let client = pool.get().await.map_err(|_| "no database".to_string())?;
+    let updated = client
+        .execute(
+            "UPDATE accounts
+                SET legacy_grace_until = now() + make_interval(hours => $2)
+              WHERE email_normalized = $1 AND status = 'active'
+                AND opaque_record IS NULL AND auth_verifier IS NOT NULL",
+            &[&email, &LEGACY_GRACE_HOURS],
+        )
+        .await
+        .map_err(|_| "could not update the account".to_string())?;
+    match updated {
+        1 => Ok(format!(
+            "{email} may sign in the old way for {LEGACY_GRACE_HOURS} hours, to enrol"
+        )),
+        _ => Err("no active account with that email still on the legacy login".to_string()),
+    }
 }
 
 async fn set_plan(

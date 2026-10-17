@@ -593,3 +593,111 @@ pub async fn pake_login(
         res.json().await.unwrap_or(Value::Null),
     )
 }
+
+/// An OPAQUE sign-in on a new device, as a session.
+pub async fn pake_session(server: &TestServer, account: &Account) -> Sess {
+    let device_id = Uuid::new_v4();
+    let (status, body) = pake_login(server, &account.email, &account.auth_key, device_id).await;
+    assert_eq!(status, 200, "pake login failed: {body}");
+    Sess {
+        token: body["token"].as_str().unwrap().to_string(),
+        device_id,
+        account_id: account.account_id,
+        vault_id: account.vault_id,
+    }
+}
+
+/// A registration through the session route; the base64 upload.
+pub async fn pake_register(server: &TestServer, sess: &Sess, key: &[u8; 32]) -> String {
+    let (reg, request) = havenkeys_opaque::ClientRegistration::start(key).unwrap();
+    let body: Value = server
+        .post_as("/v1/account/pake/register", sess)
+        .json(&json!({ "registrationRequest": data_encoding::BASE64.encode(&request) }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let response = data_encoding::BASE64
+        .decode(body["registrationResponse"].as_str().unwrap().as_bytes())
+        .unwrap();
+    data_encoding::BASE64.encode(&reg.finish(key, &response).unwrap())
+}
+
+/// (reauthId, credentialFinalization); a wrong key yields a finalization
+/// that does not verify, built from a fresh correct-shape exchange.
+pub async fn pake_reauth(server: &TestServer, sess: &Sess, key: &[u8; 32]) -> (String, String) {
+    let (client, request) = havenkeys_opaque::ClientLogin::start(key).unwrap();
+    let body: Value = server
+        .post_as("/v1/account/pake/reauth", sess)
+        .json(&json!({ "credentialRequest": data_encoding::BASE64.encode(&request) }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let response = data_encoding::BASE64
+        .decode(body["credentialResponse"].as_str().unwrap().as_bytes())
+        .unwrap();
+    let finalization = client
+        .finish(key, &response)
+        .unwrap_or_else(|_| vec![0u8; 64]);
+    (
+        body["reauthId"].as_str().unwrap().to_string(),
+        data_encoding::BASE64.encode(&finalization),
+    )
+}
+
+pub fn pake_credentials_body(
+    reauth: &(String, String),
+    upload: &str,
+    base: i64,
+    header: &[u8],
+) -> Value {
+    json!({
+        "reauthId": reauth.0,
+        "credentialFinalization": reauth.1,
+        "kdf": kdf_block(),
+        "registrationUpload": upload,
+        "header": data_encoding::BASE64.encode(header),
+        "baseHeaderRevision": base,
+    })
+}
+
+/// An active account with only a legacy verifier, as accounts made before
+/// OPAQUE are.
+pub async fn seed_legacy_account(server: &TestServer, email: &str, auth_key: [u8; 32]) -> Account {
+    new_invite(server, email).await;
+    let db = server.db().await;
+    let verifier =
+        havenkeys_server::auth::hash_auth_key(zeroize::Zeroizing::new(auth_key.to_vec()))
+            .await
+            .unwrap();
+    let account_id: Uuid = db
+        .query_one(
+            "UPDATE accounts SET status = 'active', auth_verifier = $2, invite_hash = NULL,
+                    kdf_algorithm = 'argon2id', kdf_memory_kib = 131072, kdf_iterations = 4,
+                    kdf_parallelism = 4, kdf_salt = $3, activated_at = now()
+              WHERE email_normalized = $1 RETURNING id",
+            &[&email, &verifier, &vec![3u8; 16]],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    let vault_id = Uuid::new_v4();
+    db.execute(
+        "INSERT INTO vaults (id, account_id, header, header_revision, key_scheme, revision, created_at)
+         VALUES ($1, $2, $3, 0, 3, 0, now())",
+        &[&vault_id, &account_id, &b"header-bytes-v1".to_vec()],
+    )
+    .await
+    .unwrap();
+    Account {
+        email: email.into(),
+        account_id,
+        vault_id,
+        auth_key,
+    }
+}

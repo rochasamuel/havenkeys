@@ -85,6 +85,18 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/account/credentials", post(account::change_credentials))
         .route("/v1/account/delete", post(account::delete_account))
         .route(
+            "/v1/account/pake/register",
+            small(post(account::pake_register), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
+        .route(
+            "/v1/account/pake/reauth",
+            small(post(account::pake_reauth), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
+        .route(
+            "/v1/account/pake/enroll",
+            small(post(account::pake_enroll), MAX_ANONYMOUS_AUTH_BODY_BYTES),
+        )
+        .route(
             "/v1/auth/params",
             small(post(auth::params), MAX_ANONYMOUS_AUTH_BODY_BYTES),
         )

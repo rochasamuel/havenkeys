@@ -290,3 +290,23 @@ async fn set_plan_trialing_defaults_to_fourteen_days_on_an_active_account() {
     assert_eq!(out, "frozen");
     server.cleanup().await;
 }
+
+#[tokio::test]
+async fn list_accounts_shows_which_login_each_account_uses() {
+    let server = support::TestServer::start().await;
+    support::activate_pake(&server, "new@example.com", [9u8; 32]).await;
+    support::activate(&server, "old@example.com", [8u8; 32]).await;
+    let out = admin::run(AdminCommand::ListAccounts, server.pool(), [7u8; 32])
+        .await
+        .unwrap();
+    let line = |email: &str| out.lines().find(|l| l.contains(email)).unwrap().to_string();
+    assert!(
+        line("new@example.com").contains("  complimentary  pake  "),
+        "{out}"
+    );
+    assert!(
+        line("old@example.com").contains("  complimentary  legacy  "),
+        "{out}"
+    );
+    server.cleanup().await;
+}

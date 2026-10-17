@@ -458,3 +458,566 @@ async fn legacy_paths_answer_426_after_the_cutoff_and_never_410() {
     assert_eq!(status, 200, "OPAQUE is unaffected by the cutoff");
     server.cleanup().await;
 }
+
+// ------------------------------------------- enrol, re-authenticate, change
+
+use havenkeys_server::admin::{self, AdminCommand};
+
+fn b64(bytes: &[u8]) -> String {
+    data_encoding::BASE64.encode(bytes)
+}
+
+#[tokio::test]
+async fn a_legacy_account_enrols_with_its_current_key_and_keeps_old_devices_working() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+    assert_eq!(
+        support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4())
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        support::login_with_device(&server, &account, "Old phone", Uuid::new_v4())
+            .await
+            .0,
+        200,
+        "the legacy verifier stays until the cutoff"
+    );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn enroll_without_the_current_key_is_refused() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let attacker = [1u8; 32];
+    let upload = support::pake_register(&server, &sess, &attacker).await;
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&attacker), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let record: Option<Vec<u8>> = server
+        .db()
+        .await
+        .query_one(
+            "SELECT opaque_record FROM accounts WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(record.is_none());
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn enroll_on_an_enrolled_account_is_refused() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    support::enrol_directly(&server, &account).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 409);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_pake_credential_change_clears_the_legacy_verifier() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    support::enrol_directly(&server, &account).await;
+    let sess = support::pake_session(&server, &account).await;
+    let new_key = [77u8; 32];
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let upload = support::pake_register(&server, &sess, &new_key).await;
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::pake_credentials_body(
+            &reauth, &upload, 0, b"HEADER",
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "{}", res.text().await.unwrap());
+    assert_eq!(
+        support::pake_login(&server, &account.email, &new_key, Uuid::new_v4())
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4())
+            .await
+            .0,
+        0
+    );
+    assert_eq!(
+        support::login_with_device(&server, &account, "Old phone", Uuid::new_v4())
+            .await
+            .0,
+        401
+    );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_wrong_reauth_or_a_replayed_reauth_id_is_refused() {
+    let server = support::TestServer::start().await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::pake_session(&server, &account).await;
+    let wrong = support::pake_reauth(&server, &sess, &[1u8; 32]).await;
+    let upload = support::pake_register(&server, &sess, &[77u8; 32]).await;
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::pake_credentials_body(&wrong, &upload, 0, b"H"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let good = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let first = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::pake_credentials_body(&good, &upload, 0, b"H"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first.status(), 200);
+    let again = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::pake_credentials_body(&good, &upload, 1, b"H"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(again.status(), 401, "a reauthId works once");
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_reauth_id_from_another_accounts_session_is_refused() {
+    let server = support::TestServer::start().await;
+    let a = support::activate_pake(&server, "a@example.com", [9u8; 32]).await;
+    let b = support::activate_pake(&server, "b@example.com", [8u8; 32]).await;
+    let sa = support::pake_session(&server, &a).await;
+    let sb = support::pake_session(&server, &b).await;
+    let reauth_a = support::pake_reauth(&server, &sa, &a.auth_key).await;
+    let res = server
+        .post_as("/v1/account/delete", &sb)
+        .json(
+            &json!({ "reauthId": reauth_a.0, "credentialFinalization": reauth_a.1,
+                       "email": "b@example.com" }),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn an_enrolled_account_refuses_legacy_proofs_for_changes_and_deletion() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    support::enrol_directly(&server, &account).await;
+    let sess = support::login(&server, &account, "Old desktop").await;
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::credentials_body(
+            &account.auth_key,
+            &[5u8; 32],
+            0,
+            b"H",
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 426);
+    let res = server
+        .post_as("/v1/account/delete", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "email": account.email }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 426);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn an_enrolled_account_is_deleted_with_an_opaque_proof() {
+    let server = support::TestServer::start().await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::pake_session(&server, &account).await;
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/delete", &sess)
+        .json(
+            &json!({ "reauthId": reauth.0, "credentialFinalization": reauth.1,
+                       "email": account.email }),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+    server.cleanup().await;
+}
+
+/// §4.4 row 3: an account with only an OPAQUE record has no legacy
+/// verifier to check, so a legacy proof is simply wrong (401, not 426).
+#[tokio::test]
+async fn an_opaque_only_account_answers_401_to_a_legacy_proof() {
+    let server = support::TestServer::start().await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::pake_session(&server, &account).await;
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::credentials_body(
+            &account.auth_key,
+            &[5u8; 32],
+            0,
+            b"H",
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let res = server
+        .post_as("/v1/account/delete", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "email": account.email }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    server.cleanup().await;
+}
+
+/// §4.4 row 1: an unenrolled account gets a fake record from `reauth`, so
+/// an OPAQUE proof can never verify.
+#[tokio::test]
+async fn an_unenrolled_account_answers_401_to_an_opaque_proof() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let upload = support::pake_register(&server, &sess, &[77u8; 32]).await;
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::pake_credentials_body(&reauth, &upload, 0, b"H"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/delete", &sess)
+        .json(
+            &json!({ "reauthId": reauth.0, "credentialFinalization": reauth.1,
+                       "email": account.email }),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn proof_and_new_key_shapes_are_checked() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    support::enrol_directly(&server, &account).await;
+    let sess = support::pake_session(&server, &account).await;
+    let upload = support::pake_register(&server, &sess, &[77u8; 32]).await;
+
+    // Both proofs at once.
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let mut body = support::pake_credentials_body(&reauth, &upload, 0, b"H");
+    body["currentAuthKey"] = json!(b64(&account.auth_key));
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+
+    // Neither proof.
+    let mut body = support::pake_credentials_body(&reauth, &upload, 0, b"H");
+    let obj = body.as_object_mut().unwrap();
+    obj.remove("reauthId");
+    obj.remove("credentialFinalization");
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+
+    // An OPAQUE proof with a legacy new key.
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let mut body = support::pake_credentials_body(&reauth, &upload, 0, b"H");
+    let obj = body.as_object_mut().unwrap();
+    obj.remove("registrationUpload");
+    obj.insert("newAuthKey".into(), json!(b64(&[5u8; 32])));
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+
+    // Both new keys.
+    let mut body = support::pake_credentials_body(&reauth, &upload, 0, b"H");
+    body["newAuthKey"] = json!(b64(&[5u8; 32]));
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+
+    // A malformed upload.
+    let reauth = support::pake_reauth(&server, &sess, &account.auth_key).await;
+    let body = support::pake_credentials_body(&reauth, &b64(b"short"), 0, b"H");
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_legacy_change_on_an_unenrolled_account_still_works_and_can_go_to_opaque() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let new_key = [66u8; 32];
+    let upload = support::pake_register(&server, &sess, &new_key).await;
+    // Legacy proof, OPAQUE new key: the account leaves the legacy login.
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&json!({
+            "currentAuthKey": b64(&account.auth_key),
+            "kdf": support::kdf_block(),
+            "registrationUpload": upload,
+            "header": b64(b"H"),
+            "baseHeaderRevision": 0,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "{}", res.text().await.unwrap());
+    let verifier: Option<String> = server
+        .db()
+        .await
+        .query_one(
+            "SELECT auth_verifier FROM accounts WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(verifier.is_none());
+    assert_eq!(
+        support::pake_login(&server, &account.email, &new_key, Uuid::new_v4())
+            .await
+            .0,
+        200
+    );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn register_and_reauth_refuse_malformed_messages() {
+    let server = support::TestServer::start().await;
+    let account = support::activate_pake(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::pake_session(&server, &account).await;
+    for (path, field) in [
+        ("/v1/account/pake/register", "registrationRequest"),
+        ("/v1/account/pake/reauth", "credentialRequest"),
+    ] {
+        for value in [b64(b"short"), "!!!".to_string(), "A".repeat(2000)] {
+            let res = server
+                .post_as(path, &sess)
+                .json(&json!({ field: value }))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 400, "{path}");
+        }
+        let res = server
+            .post(path)
+            .json(&json!({ field: b64(&[0u8; 32]) }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 401, "{path} needs a session");
+    }
+    server.cleanup().await;
+}
+
+async fn past_cutoff() -> support::TestServer {
+    support::TestServer::start_with(support::Options {
+        legacy_auth_until: Some(chrono::Utc::now() - chrono::Duration::seconds(1)),
+        ..Default::default()
+    })
+    .await
+    .0
+}
+
+#[tokio::test]
+async fn an_admin_grace_lets_a_missed_account_enrol_after_the_cutoff() {
+    let server = past_cutoff().await;
+    let account = support::seed_legacy_account(&server, "late@example.com", [9u8; 32]).await;
+    assert_eq!(
+        support::login_with_device(&server, &account, "Desktop", Uuid::new_v4())
+            .await
+            .0,
+        426
+    );
+
+    admin::run(
+        AdminCommand::AllowLegacySignIn {
+            email: account.email.clone(),
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await
+    .unwrap();
+    let sess = support::login(&server, &account, "Desktop").await;
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+
+    let grace: Option<chrono::DateTime<chrono::Utc>> = server
+        .db()
+        .await
+        .query_one(
+            "SELECT legacy_grace_until FROM accounts WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(grace.is_none(), "enrolment ends the grace");
+    assert_eq!(
+        support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4())
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        support::login_with_device(&server, &account, "Other", Uuid::new_v4())
+            .await
+            .0,
+        426
+    );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn the_grace_is_refused_for_an_enrolled_or_unknown_account_and_expires() {
+    let server = past_cutoff().await;
+    let enrolled = support::activate_pake(&server, "new@example.com", [9u8; 32]).await;
+    let refused = admin::run(
+        AdminCommand::AllowLegacySignIn {
+            email: enrolled.email.clone(),
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await;
+    assert!(refused.is_err());
+    let unknown = admin::run(
+        AdminCommand::AllowLegacySignIn {
+            email: "nobody@example.com".into(),
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await;
+    assert!(unknown.is_err());
+
+    let late = support::seed_legacy_account(&server, "late@example.com", [8u8; 32]).await;
+    server
+        .db()
+        .await
+        .execute(
+            "UPDATE accounts SET legacy_grace_until = now() - interval '1 minute' WHERE id = $1",
+            &[&late.account_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        support::login_with_device(&server, &late, "Desktop", Uuid::new_v4())
+            .await
+            .0,
+        426
+    );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn enroll_after_the_cutoff_without_a_grace_is_refused() {
+    let server = past_cutoff().await;
+    let account = support::seed_legacy_account(&server, "late@example.com", [9u8; 32]).await;
+    // A session from a grace that has since been cleared.
+    admin::run(
+        AdminCommand::AllowLegacySignIn {
+            email: account.email.clone(),
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await
+    .unwrap();
+    let sess = support::login(&server, &account, "Desktop").await;
+    server
+        .db()
+        .await
+        .execute(
+            "UPDATE accounts SET legacy_grace_until = NULL WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap();
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 426);
+    server.cleanup().await;
+}
