@@ -484,8 +484,13 @@ a newer version.
   192 MiB attachment quota plus 1 MiB of framing.
 * **Restore.** The items restore first; each attachment is re-sealed under the
   restoring vault's key (new ids, bound to the new item) and uploaded before
-  the item write that lists it. A server that refuses one for quota counts it
-  in `attachments_skipped`; the rest are restored.
+  the item write that lists it. The backup's Identity is never restored over
+  the vault's own, so its files are added to the vault's Identity in one more
+  write after the items (a file it already holds, by name, size and creation
+  time, is not added twice). A file the server refuses for quota counts in
+  `attachments_skipped_storage`; a file whose item is not restored, that does
+  not fit the 20-file limit, or that an older server cannot take counts in
+  `attachments_skipped`. The items are restored either way.
 
 ## Password generator
 

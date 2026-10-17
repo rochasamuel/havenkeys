@@ -4236,7 +4236,8 @@ client breaks an old server.
 **Mitigation:** the list lives in the overview, whose unknown fields older
 builds keep; older clients never send `attachmentIds`; a new client sends it
 only when attaching or removing; an older server answers the upload 404 and
-the client says `server_unsupported`.
+the client says `server_unsupported`, except in a restore, which still
+restores the items and counts their files as left out.
 **Remaining limitations:** an older client cannot show or open the files.
 
 ### AT5. Pending uploads and the sweep (Low, accepted)

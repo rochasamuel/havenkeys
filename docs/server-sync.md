@@ -191,8 +191,9 @@ Migration `0006_attachments.sql`; code `routes/attachments.rs`, `routes/items.rs
   attachments") and rejects unknown fields on item writes, so a new client
   sends `attachmentIds` only when it attaches or removes a file. An older
   client never sends it and keeps the overview's manifest, so nothing is lost.
-* The sync client maps the quota answer to `attachments_full`; the client
-  crate adds `attachment_damaged`, `attachment_offline` and
+* The sync client maps a `413` whose code is `attachments_full` or
+  `vault_full` to an error of that name (any other `413` stays a refusal);
+  the client crate adds `attachment_damaged`, `attachment_offline` and
   `attachments_unavailable`.
 
 ## 6. Syncing
