@@ -1376,7 +1376,7 @@ fn a_v2_backup_round_trips_attachments() {
     let mut plan = b.plan_restore(opened).unwrap();
     let mut blobs = Vec::new();
     for f in &files {
-        let target = plan.target(&f.item_id).unwrap();
+        let target = plan.target(f).unwrap();
         let sealed = b
             .seal_attachment(&target, &f.meta.name, f.bytes.expose(), f.meta.created_at)
             .unwrap();
@@ -1504,4 +1504,62 @@ fn summary_counts_attachments_left_out_of_plaintext_exports() {
     }
     let s = export::summarize(&v, ExportFormat::Backup).unwrap();
     assert_eq!((s.attachments_left_out, s.attachments), (0, 3));
+}
+
+/// The backup's Identity is skipped when this vault has one: its files go
+/// onto this vault's Identity, never twice and never past 20.
+#[test]
+fn the_backups_identity_files_go_onto_this_vaults_identity() {
+    use havenkeys_core::attachment::MAX_ATTACHMENTS_PER_ITEM;
+    use havenkeys_core::export::backup::open_backup_stream;
+    let (mut a, _) = activated_vault();
+    let w = a
+        .stage_identity_if_missing("me@example.com", NOW)
+        .unwrap()
+        .unwrap();
+    let theirs = w.item_id;
+    a.commit_write(w, 1).unwrap();
+    attach(&mut a, theirs, "front.png", PNG, 2);
+    attach(&mut a, theirs, "back.png", PNG, 3);
+    let metas = a.get_item(&theirs).unwrap().attachments.clone();
+    let file = backup_with(&a, &[(theirs, &metas[0], PNG), (theirs, &metas[1], PNG)]);
+
+    let (mut b, _) = activated_vault();
+    let w = b
+        .stage_identity_if_missing("me@example.com", NOW)
+        .unwrap()
+        .unwrap();
+    let ours = w.item_id;
+    b.commit_write(w, 1).unwrap();
+    // "front.png" is already here, restored by an earlier run.
+    let sealed = b.seal_attachment(&ours, "front.png", PNG, NOW).unwrap();
+    let mut held = vec![sealed.meta];
+    for n in 2..MAX_ATTACHMENTS_PER_ITEM {
+        held.push(
+            b.seal_attachment(&ours, &format!("{n}.png"), PNG, NOW)
+                .unwrap()
+                .meta,
+        );
+    }
+    let w = b
+        .stage_attachments(&ours, AttachmentChange::Add(held), NOW)
+        .unwrap();
+    b.commit_write(w, 2).unwrap();
+
+    let (opened, files) = open_backup_stream(&file[..], &secret(BACKUP_PW)).unwrap();
+    let files: Vec<_> = files.map(|f| f.unwrap()).collect();
+    let mut plan = b.plan_restore(opened).unwrap();
+    assert_eq!(
+        (plan.report.identities, plan.report.skipped_existing),
+        (0, 1)
+    );
+    assert_eq!(plan.target(&files[0]), None, "already here");
+    assert_eq!(plan.target(&files[1]), Some(ours));
+    let sealed = b.seal_attachment(&ours, "back.png", PNG, NOW).unwrap();
+    plan.attach(&files[1].item_id, sealed.meta);
+    assert_eq!(plan.target(&files[1]), None, "the 20th file fills it");
+
+    let (id, added) = plan.take_identity_files().unwrap();
+    assert_eq!((id, added.len()), (ours, 1));
+    assert_eq!(added[0].name, "back.png");
 }
