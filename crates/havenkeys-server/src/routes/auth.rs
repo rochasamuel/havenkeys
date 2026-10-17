@@ -263,7 +263,10 @@ pub async fn pake_start(
     // deleted holds no token, and its OPAQUE sign-in fails on the device
     // against the decoy below and sends nothing more. It learns of the
     // deletion here, by its own random id (spec 2026-10-13-pake-login §4.2).
-    if row.is_none() && crate::erase::was_deleted_device(&db, req.device_id).await? {
+    // Asked on every start, so an unknown email costs no extra query: no
+    // timing tells whether an account exists.
+    let deleted = crate::erase::was_deleted_device(&db, req.device_id).await?;
+    if row.is_none() && deleted {
         tracing::info!(outcome = "rejected", "pake login");
         return Err(ApiError::AccountDeleted);
     }
