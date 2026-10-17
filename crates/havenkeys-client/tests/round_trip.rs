@@ -1115,7 +1115,7 @@ async fn offline_read_uses_cache_and_misses_cleanly() {
         .expose()
         .ends_with(b"front"));
     let err = b.attachment_bytes(item, id).await.unwrap_err();
-    assert_eq!(err.code, "offline");
+    assert_eq!(err.code, "attachment_offline");
     assert_eq!(
         err.message,
         "You're offline \u{2014} reconnect to open this file."
@@ -1239,7 +1239,7 @@ async fn a_bad_cached_copy_is_evicted_and_refetched() {
     a.lock("user");
     a.unlock(SecretString::from(PASSWORD), None).await.unwrap();
     let err = a.attachment_bytes(item, id).await.unwrap_err();
-    assert_eq!(err.code, "offline");
+    assert_eq!(err.code, "attachment_offline");
     assert!(a.vault().unwrap().cached_attachment(&id).unwrap().is_none());
     server.cleanup().await;
 }

@@ -73,9 +73,34 @@ mod hex {
     }
 }
 
+const TRIMMED: fn(char) -> bool = |c| c.is_whitespace() || c == '.';
+
 fn is_hidden(c: char) -> bool {
     c.is_control()
-        || matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+        || matches!(
+            c,
+            '\u{61C}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{2028}'..='\u{202E}'
+                | '\u{2060}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{FEFF}'
+        )
+}
+
+/// Windows refuses these as file names, with or without an extension.
+fn is_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default().trim_end();
+    let numbered = |prefix: &str| {
+        stem.len() == 4
+            && stem[..3].eq_ignore_ascii_case(prefix)
+            && matches!(stem.as_bytes()[3], b'1'..=b'9')
+    };
+    ["CON", "PRN", "AUX", "NUL"]
+        .iter()
+        .any(|d| stem.eq_ignore_ascii_case(d))
+        || numbered("COM")
+        || numbered("LPT")
 }
 
 /// A display and save name that is safe to show and to write to disk: the last
@@ -88,11 +113,17 @@ pub fn sanitize_name(raw: &str) -> String {
         .filter(|&c| !is_hidden(c))
         .map(|c| if "<>:\"|?*".contains(c) { '_' } else { c })
         .collect();
-    let name = cleaned.trim_matches(|c: char| c.is_whitespace() || c == '.');
+    let name = cleaned.trim_matches(TRIMMED);
     if name.is_empty() {
         return FALLBACK_NAME.into();
     }
-    cap_length(name)
+    let capped = cap_length(name);
+    let name = capped.trim_end_matches(TRIMMED);
+    if is_device_name(name) {
+        format!("_{name}")
+    } else {
+        name.into()
+    }
 }
 
 fn cap_length(name: &str) -> String {
@@ -304,6 +335,28 @@ mod tests {
     fn sanitize_trims_and_falls_back() {
         assert_eq!(sanitize_name(" . "), "attachment");
         assert_eq!(sanitize_name(""), "attachment");
+    }
+
+    #[test]
+    fn sanitize_strips_invisible_characters() {
+        let name = "a\u{61C}\u{200B}\u{200C}\u{200D}\u{2028}\u{2029}\u{2060}\u{FEFF}b.txt";
+        assert_eq!(sanitize_name(name), "ab.txt");
+    }
+
+    #[test]
+    fn sanitize_retrims_after_truncation() {
+        let name = sanitize_name(&format!("{} {}", "x".repeat(119), "y".repeat(9)));
+        assert_eq!(name, "x".repeat(119));
+    }
+
+    #[test]
+    fn sanitize_prefixes_windows_device_names() {
+        for raw in ["CON", "nul.txt", "Com1.tar", "LPT9", "aux.", "PRN .png"] {
+            assert!(sanitize_name(raw).starts_with('_'), "{raw}");
+        }
+        assert_eq!(sanitize_name("CON.txt"), "_CON.txt");
+        assert_eq!(sanitize_name("console.txt"), "console.txt");
+        assert_eq!(sanitize_name("COM0"), "COM0");
     }
 
     #[test]

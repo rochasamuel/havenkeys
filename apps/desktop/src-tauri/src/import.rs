@@ -166,23 +166,20 @@ pub async fn restore_backup(
     };
     let path = picked.into_path().map_err(|_| CmdError::file())?;
     let read_path = path.clone();
-    let (opened, attachments) = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
+    let client = app.state::<AppState>().client().clone();
+    // The records are read and decrypted one at a time as the restore asks
+    // for them, so the whole run is on a blocking thread and drives the
+    // uploads from there. Pulls first, then sends; an item deleted since the
+    // backup comes back, a live one is never overwritten (havenkeys-client
+    // `restore`).
+    let report = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
         let (file, _) = open_limited(&read_path, backup::MAX_BACKUP_FILE_BYTES)?;
-        Ok(backup::open_backup_stream(
-            std::io::BufReader::new(file),
-            &backup_password,
-        )?)
+        let (opened, attachments) =
+            backup::open_backup_stream(std::io::BufReader::new(file), &backup_password)?;
+        tauri::async_runtime::block_on(client.restore_backup(opened, attachments))
     })
     .await
     .map_err(|_| CmdError::internal())??;
-    // Pulls first, then sends; an item deleted since the backup comes back,
-    // a live one is never overwritten (havenkeys-client `restore`).
-    let report = app
-        .state::<AppState>()
-        .client()
-        .clone()
-        .restore_backup(opened, attachments)
-        .await?;
     let file_name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())

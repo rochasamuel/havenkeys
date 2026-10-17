@@ -63,6 +63,15 @@ export interface CardSummary {
 }
 
 /** Item summary. Contains no passwords, TOTP secrets or note bodies. */
+/** A file attached to an item; its bytes are fetched on demand. */
+export interface AttachmentMeta {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: number;
+}
+
 export interface ItemOverview {
   id: string;
   itemType: ItemType;
@@ -77,6 +86,7 @@ export interface ItemOverview {
   tags: string[];
   signInWith?: SignInWith;
   card?: CardSummary;
+  attachments?: AttachmentMeta[];
   createdAt: number;
   updatedAt: number;
   /** When the item went to the Trash (Unix ms); only on Trash entries. */
@@ -361,6 +371,10 @@ export interface ExportSummary {
   customFieldsLeftOut: number;
   itemsLeftOut: number;
   unreadable: number;
+  /** Backup only: the attached files it carries. */
+  attachments: number;
+  /** Attached files this export does not carry. */
+  attachmentsLeftOut: number;
 }
 
 export interface ExportResult {

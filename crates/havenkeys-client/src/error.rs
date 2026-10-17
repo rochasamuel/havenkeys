@@ -120,13 +120,24 @@ impl ClientError {
     /// A file whose bytes do not match what its item recorded, or that the
     /// server no longer has.
     pub fn attachment_damaged() -> Self {
-        Self::fixed("decryption", "This attachment is damaged or was changed")
+        Self::fixed(
+            "attachment_damaged",
+            "This attachment is damaged or was changed",
+        )
+    }
+
+    /// A backup that should carry its files could not read one of them.
+    pub fn attachments_unavailable() -> Self {
+        Self::fixed(
+            "attachments_unavailable",
+            "Some attachments could not be read. Nothing was exported.",
+        )
     }
 
     pub fn attachment_offline() -> Self {
         Self::fixed(
-            "offline",
-            "You're offline \u{2014} reconnect to open this file.",
+            "attachment_offline",
+            "You're offline — reconnect to open this file.",
         )
     }
 
@@ -214,8 +225,12 @@ mod tests {
             (ClientError::file(), "file"),
             (ClientError::sign_in_failed(), "sign_in_failed"),
             (ClientError::clipboard(), "clipboard"),
-            (ClientError::attachment_damaged(), "decryption"),
-            (ClientError::attachment_offline(), "offline"),
+            (ClientError::attachment_damaged(), "attachment_damaged"),
+            (ClientError::attachment_offline(), "attachment_offline"),
+            (
+                ClientError::attachments_unavailable(),
+                "attachments_unavailable",
+            ),
             (ClientError::open_website(), "open_website"),
             (
                 ClientError::account_frozen_new_device(),

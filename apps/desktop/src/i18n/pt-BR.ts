@@ -26,6 +26,10 @@ const codes: Record<ErrorCode, string | null> = {
   kdf: "Falha na derivação de chave.",
   rng: "Gerador seguro de números aleatórios indisponível.",
   offline: "O HavenKeys está offline — o cofre fica somente leitura até reconectar.",
+  attachment_damaged: "Este anexo está danificado ou foi alterado",
+  attachment_offline: "Você está offline — reconecte para abrir este arquivo.",
+  attachments_unavailable: "Alguns anexos não puderam ser lidos. Nada foi exportado.",
+  server_unsupported: "Seu servidor ainda não oferece suporte a anexos — atualize o havenkeys-server.",
   item_changed_elsewhere: "Este item foi alterado em outro dispositivo.",
   bundle_refused: "Digite sua senha mestra para desbloquear.",
   // Varies only between "Internal error." and the IPC wrapper's "Something

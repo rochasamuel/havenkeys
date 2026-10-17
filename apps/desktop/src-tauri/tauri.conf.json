@@ -52,7 +52,7 @@
       "csp": {
         "default-src": "'self'",
         "script-src": "'self'",
-        "img-src": "'self' data:",
+        "img-src": "'self' data: blob:",
         "font-src": "'self'",
         "connect-src": "ipc: http://ipc.localhost",
         "object-src": "'none'",
@@ -67,7 +67,7 @@
       "devCsp": {
         "default-src": "'self'",
         "script-src": "'self'",
-        "img-src": "'self' data:",
+        "img-src": "'self' data: blob:",
         "font-src": "'self'",
         "connect-src": "ipc: http://ipc.localhost ws://localhost:1420",
         "object-src": "'none'",

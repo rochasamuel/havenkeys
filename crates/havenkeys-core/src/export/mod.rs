@@ -11,6 +11,7 @@ mod restore;
 
 pub use restore::RestorePlan;
 
+use crate::attachment::AttachmentMeta;
 use crate::error::{Error, Result};
 use crate::import::common::format_date;
 use crate::model::{ItemDetails, ItemOverview, ItemType};
@@ -19,6 +20,7 @@ use crate::vault::{
     secrets_equal, VaultService, MAX_MASTER_PASSWORD_CHARS, MIN_MASTER_PASSWORD_CHARS,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 /// The backup password: as long as a master password may be, and not the
@@ -166,6 +168,19 @@ pub fn summarize(vault: &VaultService, format: ExportFormat) -> Result<ExportSum
         Ok(())
     })?;
     Ok(s)
+}
+
+/// Every attached file a backup of the readable items carries, with the id
+/// of the item it belongs to.
+pub fn backup_attachments(vault: &VaultService) -> Result<Vec<(Uuid, AttachmentMeta)>> {
+    let mut files = Vec::new();
+    for_each_item(vault, |ov, details| {
+        if details.is_some() {
+            files.extend(ov.attachments.iter().map(|meta| (ov.id, meta.clone())));
+        }
+        Ok(())
+    })?;
+    Ok(files)
 }
 
 pub fn render(vault: &VaultService, format: ExportFormat, now_ms: i64) -> Result<Rendered> {

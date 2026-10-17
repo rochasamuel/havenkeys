@@ -14,6 +14,8 @@ const summary: ExportSummary = {
   customFieldsLeftOut: 0,
   itemsLeftOut: 1,
   unreadable: 0,
+  attachments: 0,
+  attachmentsLeftOut: 0,
 };
 const exportSummary = vi.fn<(f: ExportFormat) => Promise<ExportSummary>>();
 const exportFile = vi.fn<(f: ExportFormat, m: string, b: string | null) => Promise<ExportResult | null>>();

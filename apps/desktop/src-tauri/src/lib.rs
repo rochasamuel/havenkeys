@@ -6,6 +6,7 @@
 #![cfg_attr(target_os = "macos", deny(unsafe_code))]
 
 mod account;
+mod attachments;
 mod autostart;
 mod card;
 mod clipboard;
@@ -332,6 +333,10 @@ pub fn run() {
             commands::password_history,
             commands::list_passkeys,
             commands::delete_passkey,
+            attachments::add_attachments,
+            attachments::save_attachment,
+            attachments::preview_attachment,
+            attachments::remove_attachment,
             confirm::answer_update_confirmation,
             account::device_status,
             account::account_status,

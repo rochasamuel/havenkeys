@@ -27,6 +27,10 @@ export type ErrorCode =
   | "kdf"
   | "rng"
   | "offline"
+  | "attachment_damaged"
+  | "attachment_offline"
+  | "attachments_unavailable"
+  | "server_unsupported"
   | "item_changed_elsewhere"
   | "bundle_refused"
   | "internal"
@@ -87,6 +91,10 @@ const codes: Record<ErrorCode, string | null> = {
   kdf: "Key derivation failed.",
   rng: "Secure random number generator unavailable.",
   offline: "HavenKeys is offline — the vault is read-only until it reconnects.",
+  attachment_damaged: "This attachment is damaged or was changed",
+  attachment_offline: "You're offline — reconnect to open this file.",
+  attachments_unavailable: "Some attachments could not be read. Nothing was exported.",
+  server_unsupported: "Your server doesn't support attachments yet — update havenkeys-server.",
   item_changed_elsewhere: "This item changed on another device.",
   bundle_refused: "Enter your master password to unlock.",
   internal: null,

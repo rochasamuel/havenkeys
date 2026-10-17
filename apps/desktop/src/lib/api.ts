@@ -113,6 +113,16 @@ export const api = {
   passwordHistory: (id: string) => call<number[]>("password_history", { id }),
   listPasskeys: (id: string) => call<PasskeyInfo[]>("list_passkeys", { id }),
   deletePasskey: (id: string, credentialId: string) => call<ItemOverview>("delete_passkey", { id, credentialId }),
+  /** Rust opens the file picker; `null` when it was cancelled. */
+  addAttachments: (id: string) => call<ItemOverview | null>("add_attachments", { itemId: id }),
+  /** Rust opens the save dialog; `false` when it was cancelled. */
+  saveAttachment: (id: string, attachmentId: string) =>
+    call<boolean>("save_attachment", { itemId: id, attachmentId }),
+  /** The raw bytes of an attached image; Rust refuses anything else. */
+  previewAttachment: (id: string, attachmentId: string) =>
+    call<ArrayBuffer>("preview_attachment", { itemId: id, attachmentId }),
+  removeAttachment: (id: string, attachmentId: string) =>
+    call<ItemOverview>("remove_attachment", { itemId: id, attachmentId }),
   revealPreviousPassword: (id: string, index: number) =>
     call<string>("reveal_previous_password", { id, index }),
   totp: (id: string) => call<TotpCode>("get_totp_code", { id }),
@@ -149,8 +159,18 @@ export const api = {
   deleteImportFile: () => call<void>("delete_import_file"),
   exportSummary: (format: ExportFormat) => call<ExportSummary>("export_summary", { format }),
   /** Rust opens the save dialog; `null` when it was cancelled. */
-  exportFile: (format: ExportFormat, masterPassword: string, backupPassword: string | null) =>
-    call<ExportResult | null>("export_file", { format, masterPassword, backupPassword }),
+  exportFile: (
+    format: ExportFormat,
+    masterPassword: string,
+    backupPassword: string | null,
+    includeAttachments = true,
+  ) =>
+    call<ExportResult | null>("export_file", {
+      format,
+      masterPassword,
+      backupPassword,
+      includeAttachments,
+    }),
   /** Rust opens the file picker; `null` when it was cancelled. */
   restoreBackup: (backupPassword: string) => call<ImportResult | null>("restore_backup", { backupPassword }),
 
