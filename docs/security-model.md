@@ -2229,8 +2229,9 @@ Threats: `threat-model.md` T14. Format: `crypto.md` "Attachments".
 * **Where plaintext exists.** Only in Rust while adding, saving or previewing.
   The renderer never chooses a path: the open and save dialogs run in Rust.
 * **Save as.** Rust re-checks that the vault is still unlocked after the
-  dialog returns, then writes the file with mode 0600 through a temporary file
-  and rename. The renderer gets back only success or failure.
+  dialog returns, then writes the file through a temporary file and rename, with
+  mode 0600 on Unix-like systems (on Windows the file gets the folder's
+  default permissions). The renderer gets back only success or failure.
 * **Preview.** Only for files whose bytes sniff as PNG, JPEG, WebP or GIF
   (the claimed type is ignored). The bytes reach the renderer once, are shown
   through a `blob:` URL (the desktop CSP's `img-src` allows `blob:` and
@@ -2246,8 +2247,9 @@ Threats: `threat-model.md` T14. Format: `crypto.md` "Attachments".
   ciphertext cache (64 MiB, LRU, verified before it is stored) stays on disk
   as ciphertext only.
 * **Hostile server.** It can withhold or delete a blob, or answer with a
-  wrong one. The client reports that as damaged or unavailable
-  (`attachment_damaged`, `attachment_offline`) and never shows wrong bytes:
+  wrong one. The client reports a withheld, deleted or wrong blob as damaged
+  (`attachment_damaged`); `attachment_offline` means only that the device is
+  offline with no cached copy. It never shows wrong bytes:
   the manifest's `blob_sha256` is checked first, then the AEAD. It cannot
   read, swap, replay or move an attachment (AAD binding). It does see, per
   item, how many attachments there are and how big each is, and when they were

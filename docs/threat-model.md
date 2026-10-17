@@ -814,8 +814,8 @@ Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
 
 * **Hostile server.** It can refuse, withhold or delete attachment blobs and
   can answer with another blob. The client checks the manifest hash and then
-  the AEAD, and reports a missing blob as unavailable and a wrong one as
-  damaged; it never shows a wrong file. It cannot read an attachment, swap one
+  the AEAD, and reports a withheld, deleted or wrong blob as damaged
+  ("offline" only means the device is offline with no cached copy); it never shows a wrong file. It cannot read an attachment, swap one
   for another, move one to another item or vault, or replay a blob under a
   new id (the AAD binds vault, item and id). It learns each item's attachment
   ids, sizes and upload times, never names, types or contents. Replaying a

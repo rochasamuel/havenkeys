@@ -4213,7 +4213,9 @@ refused. Tests cover each swap.
 **Component:** `ItemOverview.attachments`, `blob_sha256`.
 **Attack scenario:** the server withholds, truncates or substitutes a blob.
 **Mitigation:** the hash of the sealed blob is checked before the AEAD, so a
-wrong blob is "damaged" without decryption; a missing one is "unavailable".
+wrong blob is "damaged" without decryption; a withheld or deleted one (the
+server answers 404 for a file the item lists) is also "damaged". "Offline" is
+only for a device that is offline with no cached copy.
 **Remaining limitations:** the server can still deny the file.
 
 ### AT3. `attachmentIds` commit and delete semantics (Medium, mitigated)
@@ -4286,7 +4288,8 @@ source did. The URL is revoked on close, unmount, item change and lock.
 **Attack scenario:** a compromised renderer picks the destination or saves
 after a lock.
 **Mitigation:** the dialog runs in Rust; the vault is re-checked after it
-returns; the file is written 0600 via temp file and rename.
+returns; the file is written via temp file and rename, with mode 0600 on Unix-like
+systems (on Windows it gets the folder's default permissions).
 **Remaining limitations:** the saved file is plaintext outside HavenKeys.
 
 ### AT11. Backup version 2 framing (Low, mitigated)
