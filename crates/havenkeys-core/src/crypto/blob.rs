@@ -52,6 +52,8 @@ pub enum Purpose {
     Activity,
     /// An encrypted export file (spec 2026-10-05-export).
     Backup,
+    /// A file attached to an item (spec 2026-10-13-encrypted-attachments).
+    Attachment,
 }
 
 impl Purpose {
@@ -66,6 +68,7 @@ impl Purpose {
             Purpose::AssetLinks => b"asset-links",
             Purpose::Activity => b"activity",
             Purpose::Backup => b"backup",
+            Purpose::Attachment => b"attachment",
         }
     }
 
@@ -78,11 +81,17 @@ impl Purpose {
 
     /// Purposes whose context carries a hash of another value.
     fn needs_binding(self) -> bool {
-        matches!(self, Purpose::ItemDetails | Purpose::Backup)
+        matches!(
+            self,
+            Purpose::ItemDetails | Purpose::Backup | Purpose::Attachment
+        )
     }
 
     fn needs_item_id(self) -> bool {
-        matches!(self, Purpose::ItemOverview | Purpose::ItemDetails)
+        matches!(
+            self,
+            Purpose::ItemOverview | Purpose::ItemDetails | Purpose::Attachment
+        )
     }
 }
 
@@ -136,6 +145,19 @@ impl BlobContext {
         }
     }
 
+    /// A file attached to an item, bound to its own id so the server cannot
+    /// swap one attachment's blob for another's.
+    pub fn attachment(vault_id: Uuid, item_id: Uuid, attachment_id: Uuid) -> Self {
+        use sha2::{Digest, Sha256};
+        let bound = Sha256::new()
+            .chain_update(b"hk-attachment-v1")
+            .chain_update(attachment_id.as_bytes());
+        Self {
+            bound_to: Some(bound.finalize().into()),
+            ..Self::item(Purpose::Attachment, vault_id, item_id)
+        }
+    }
+
     fn aad(&self, version: u8, algorithm: u8) -> Result<Vec<u8>> {
         if self.purpose.needs_item_id() != self.item_id.is_some()
             || self.purpose.needs_binding() != self.bound_to.is_some()
@@ -153,10 +175,10 @@ impl BlobContext {
             aad.extend_from_slice(item_id.as_bytes());
         }
         if let Some(bound) = self.bound_to {
-            aad.extend_from_slice(if self.purpose == Purpose::Backup {
-                b"header\0"
-            } else {
-                b"overview\0"
+            aad.extend_from_slice(match self.purpose {
+                Purpose::Backup => b"header\0".as_slice(),
+                Purpose::Attachment => b"attachment\0",
+                _ => b"overview\0",
             });
             aad.extend_from_slice(&bound);
         }
@@ -465,6 +487,22 @@ mod tests {
     }
 
     #[test]
+    fn attachment_blobs_are_bound_to_vault_item_and_id() {
+        let k = key();
+        let ids = |v, i, a| {
+            BlobContext::attachment(Uuid::from_u128(v), Uuid::from_u128(i), Uuid::from_u128(a))
+        };
+        let blob = seal(&k, &ids(1, 2, 3), &vec![7u8; 5 * 1024 * 1024]).unwrap();
+        assert!(open(&k, &ids(1, 2, 3), &blob).is_ok());
+        for other in [ids(9, 2, 3), ids(1, 9, 3), ids(1, 2, 9)] {
+            assert!(open(&k, &other, &blob).is_err());
+        }
+        let details =
+            BlobContext::item(Purpose::ItemDetails, Uuid::from_u128(1), Uuid::from_u128(2));
+        assert!(open(&k, &details, &blob).is_err());
+    }
+
+    #[test]
     fn only_details_carry_a_binding() {
         let (vault, item) = (Uuid::from_u128(1), Uuid::from_u128(2));
         let bound_overview = BlobContext {
@@ -472,5 +510,7 @@ mod tests {
             ..BlobContext::item(Purpose::ItemOverview, vault, item)
         };
         assert!(seal(&key(), &bound_overview, b"x").is_err());
+        let unbound_attachment = BlobContext::item(Purpose::Attachment, vault, item);
+        assert!(seal(&key(), &unbound_attachment, b"x").is_err());
     }
 }

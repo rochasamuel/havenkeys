@@ -11,6 +11,7 @@ pub mod activity;
 mod app_fill;
 pub mod app_target;
 pub mod asset_links;
+pub mod attachment;
 pub mod card;
 pub mod card_page;
 pub mod crypto;
