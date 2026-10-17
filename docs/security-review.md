@@ -4194,3 +4194,112 @@ state.
       and `admin list-accounts` shows `pake`.
 - [ ] After the cutoff an old app shows a sync failure, not a wipe.
 - [ ] Restore drill: the restored server accepts an OPAQUE sign-in.
+
+# Security Review: Encrypted attachments (2026-10-17)
+
+Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
+
+### AT1. New `attachment` purpose and binding (Info, mitigated)
+**Component:** `crypto/blob.rs` `Purpose::Attachment`, `BlobContext::attachment`.
+**Attack scenario:** a hostile server serves one attachment's blob as another,
+moves it to another item or vault, or has it opened as another purpose.
+**Mitigation:** the AAD binds vault, item and `SHA-256("hk-attachment-v1" ||
+id)`; the purpose label is part of it; a context without the binding is
+refused. Tests cover each swap.
+**Remaining limitations:** whole-item replay of an older genuine version
+(T1b).
+
+### AT2. Manifest hash (Info, mitigated)
+**Component:** `ItemOverview.attachments`, `blob_sha256`.
+**Attack scenario:** the server withholds, truncates or substitutes a blob.
+**Mitigation:** the hash of the sealed blob is checked before the AEAD, so a
+wrong blob is "damaged" without decryption; a missing one is "unavailable".
+**Remaining limitations:** the server can still deny the file.
+
+### AT3. `attachmentIds` commit and delete semantics (Medium, mitigated)
+**Component:** `routes/items.rs` `apply_attachments`.
+**Attack scenario:** a bug or older client deletes a user's attachments, or a
+client commits another item's upload.
+**Mitigation:** absent means untouched; present commits only rows uploaded for
+the same item (an unknown id is refused) and deletes the item's others; a
+tombstone deletes all; it runs in the item write's transaction.
+**Remaining limitations:** a client that sends a wrong list deletes files; the
+list comes from the sealed manifest it just wrote.
+
+### AT4. Older clients and older servers (Low, mitigated)
+**Component:** manifest in the sealed overview, `Change` with
+`deny_unknown_fields`.
+**Attack scenario:** a build without this feature drops attachments, or a new
+client breaks an old server.
+**Mitigation:** the list lives in the overview, whose unknown fields older
+builds keep; older clients never send `attachmentIds`; a new client sends it
+only when attaching or removing; an older server answers the upload 404 and
+the client says `server_unsupported`.
+**Remaining limitations:** an older client cannot show or open the files.
+
+### AT5. Pending uploads and the sweep (Low, accepted)
+**Component:** `attachments.committed`, `run_daily`.
+**Attack scenario:** uploads that no item write lists (a crash, a failed
+restore, an abusive account) hold quota.
+**Mitigation:** pending rows count toward the quotas so they cannot be used to
+exceed them; `run_daily` deletes those older than 24 hours.
+**Remaining limitations:** a failed restore can leave pending uploads counting
+toward the quota for up to 24 hours; until then a retry may hit
+`attachments_full`.
+
+### AT6. Quotas (Low, mitigated)
+**Component:** `limits.rs`, `routes/attachments.rs`.
+**Mitigation:** 5 MiB (+4 KiB sealed) per file, 20 per item, 192 MiB per
+vault, all inside the vault limit; the clients check before uploading; the
+quota check and insert run under the vault row lock.
+**Remaining limitations:** the server sees per-item counts and sizes.
+
+### AT7. Ciphertext cache (Low, mitigated)
+**Component:** `attachment_cache`.
+**Attack scenario:** a corrupted or planted cache entry is shown, or the cache
+reveals contents.
+**Mitigation:** only ciphertext is stored; an entry is cached after its hash
+and AEAD verify, and one that fails later is evicted; LRU at 64 MiB on the
+desktop.
+**Remaining limitations:** the cache reveals file count and sizes to someone
+with the disk.
+
+### AT8. Name and type sanitisation (Medium, mitigated)
+**Component:** `attachment.rs` `sanitize_name`, `sniff`.
+**Attack scenario:** a name with path parts, bidi controls or a Windows device
+name misleads the user or writes outside the folder; a claimed type triggers
+rendering.
+**Mitigation:** see crypto.md; the type is sniffed from the bytes, and only
+PNG, JPEG, WebP and GIF are previewed.
+**Remaining limitations:** a convincing name is still a name the user chose.
+
+### AT9. `blob:` in the CSP (Low, accepted)
+**Component:** desktop `tauri.conf.json` CSP.
+**Attack scenario:** `blob:` widens what the renderer can load.
+**Mitigation:** only `img-src` gained `blob:`; no script, frame or connect
+source did. The URL is revoked on close, unmount, item change and lock.
+**Remaining limitations:** the previewed bytes cross IPC in a non-zeroized
+`Vec` and live in renderer memory until collected.
+
+### AT10. Save-as written by Rust (Low, mitigated)
+**Component:** desktop attachment commands.
+**Attack scenario:** a compromised renderer picks the destination or saves
+after a lock.
+**Mitigation:** the dialog runs in Rust; the vault is re-checked after it
+returns; the file is written 0600 via temp file and rename.
+**Remaining limitations:** the saved file is plaintext outside HavenKeys.
+
+### AT11. Backup version 2 framing (Low, mitigated)
+**Component:** `export/backup.rs`.
+**Attack scenario:** records are dropped, reordered, repeated or appended;
+a v2 file is read as v1.
+**Mitigation:** `record_count` is in the authenticated header; each record's
+AAD binds header and index; trailing data is refused; version 1 and 2 are
+told apart by the authenticated version byte.
+**Remaining limitations:** an older HavenKeys cannot read a v2 backup.
+
+### Manual checks (owner)
+- [ ] Add, preview, save, remove a file on the desktop; sync to a second
+      device and open it there.
+- [ ] Export a backup with attachments and restore it into a new vault.
+- [ ] An older desktop opens an item with attachments without losing them.

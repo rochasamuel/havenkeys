@@ -2216,3 +2216,51 @@ carry no item content. Native messaging and the extension are not touched.
     (`/pricing`, `/signup`); no vault data goes into them.
 - The SMTP provider sees the recipient address, the code and the invite. It
   is an operator under the LGPD and is named in the privacy policy.
+
+## 26. Encrypted attachments
+
+Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
+Threats: `threat-model.md` T14. Format: `crypto.md` "Attachments".
+
+* **What it is.** An item may hold up to 20 files of at most 5 MiB each, 192
+  MiB per vault. Each is sealed in Rust under the vault data key, bound to its
+  vault, item and attachment id. The server stores the ciphertext. Names,
+  types and hashes live in the item's sealed overview.
+* **Where plaintext exists.** Only in Rust while adding, saving or previewing.
+  The renderer never chooses a path: the open and save dialogs run in Rust.
+* **Save as.** Rust re-checks that the vault is still unlocked after the
+  dialog returns, then writes the file with mode 0600 through a temporary file
+  and rename. The renderer gets back only success or failure.
+* **Preview.** Only for files whose bytes sniff as PNG, JPEG, WebP or GIF
+  (the claimed type is ignored). The bytes reach the renderer once, are shown
+  through a `blob:` URL (the desktop CSP's `img-src` allows `blob:` and
+  nothing else new), and the URL is revoked on close, unmount, item change and
+  lock. The bytes cross IPC in an ordinary `Vec` that is not zeroized, and
+  stay in the renderer's memory until the garbage collector frees them. This
+  is a known limitation. Other types are never rendered, only saved.
+* **Names.** Sanitised in Rust when the file is added (crypto.md), so a name
+  such as `..\..\x.exe`, one with bidi controls, or `CON` cannot leave the
+  chosen folder or mislead a viewer. The Save-as dialog proposes the
+  sanitised name; the user picks the path.
+* **Lock.** Locking drops decrypted bytes and revokes preview URLs. The
+  ciphertext cache (64 MiB, LRU, verified before it is stored) stays on disk
+  as ciphertext only.
+* **Hostile server.** It can withhold or delete a blob, or answer with a
+  wrong one. The client reports that as damaged or unavailable
+  (`attachment_damaged`, `attachment_offline`) and never shows wrong bytes:
+  the manifest's `blob_sha256` is checked first, then the AEAD. It cannot
+  read, swap, replay or move an attachment (AAD binding). It does see, per
+  item, how many attachments there are and how big each is, and when they were
+  uploaded.
+* **Export.** Plaintext exports (Bitwarden JSON, CSV) never contain
+  attachments, and the export screen offers "Export without attachments" for
+  the encrypted backup. The encrypted backup carries them (`crypto.md`, backup
+  version 2).
+* **Frozen accounts.** The server refuses uploads and item writes, so files
+  cannot be added or removed; existing ones can be read and exported.
+* **Known limitations.** A file the user saves or previews leaves vault
+  protection. A restore that fails part way can leave uploaded-but-unlisted
+  (pending) blobs that count toward the quotas until the server's sweep
+  removes them, up to 24 hours. A server cannot be told by the client that
+  attachments are unsupported except by the failed upload (`server_unsupported`).
+  Android does not yet read or write attachments.

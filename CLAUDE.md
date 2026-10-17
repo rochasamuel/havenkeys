@@ -98,6 +98,16 @@ Mobile, cloud synchronization, accounts, sharing and other advanced functionalit
 > until the client fallback is removed. A captured auth key also signs in
 > with OPAQUE until the master password changes.
 
+
+> Amended on 2026-10-17 by
+> `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`:
+> items may hold encrypted file attachments up to 5 MiB each, sealed in Rust
+> under the vault data key and bound to their item. The server stores the
+> ciphertext and learns each item's attachment ids and sizes, never names,
+> types or contents. A file the user saves out of HavenKeys is no longer
+> protected by it. Plaintext exports do not contain attachments; the
+> encrypted backup does.
+
 ---
 
 # 1. Core philosophy

@@ -166,6 +166,35 @@ VaultService::commit_write(staged, revision)  →  persists the row locally
 Every mutating desktop command checks `require_online` before it stages, so
 an offline device refuses in the UI rather than failing at the network.
 
+## Attachments
+
+Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
+Migration `0006_attachments.sql`; code `routes/attachments.rs`, `routes/items.rs`.
+
+* `PUT /v1/attachments/{id}` with `{ "itemId", "blob" }` stores a sealed blob
+  uncommitted. A blob over 5 MiB + 4 KiB is `413 too_large`. The same id with
+  the same item and bytes is a no-op; the same id with anything else is
+  `409`. The vault is locked for the quota check, which counts the vault's
+  pending and committed attachment bytes against 192 MiB and then all blobs
+  against the vault limit: `413 attachments_full` or `413 vault_full`. It does
+  not bump the vault revision.
+* `GET /v1/attachments/{id}` returns `{ "itemId", "blob" }` for a committed
+  attachment of the caller's vault; otherwise `404`.
+* `attachmentIds` is an optional list on an item write in `POST /v1/items`.
+  Absent: the item's attachments are untouched (older clients). Present: the
+  listed ids that were uploaded for that item are committed (an unknown id is
+  `400`) and every other attachment of the item is deleted, committed or not.
+  A tombstone deletes all of them. At most 20 ids.
+* `vault_bytes` (the vault limit) counts attachments. Each day `run_daily`
+  deletes uncommitted uploads older than 24 hours.
+* An older server has no such route (`404`, shown as "server doesn't support
+  attachments") and rejects unknown fields on item writes, so a new client
+  sends `attachmentIds` only when it attaches or removes a file. An older
+  client never sends it and keeps the overview's manifest, so nothing is lost.
+* The sync client maps the quota answer to `attachments_full`; the client
+  crate adds `attachment_damaged`, `attachment_offline` and
+  `attachments_unavailable`.
+
 ## 6. Syncing
 
 ```text

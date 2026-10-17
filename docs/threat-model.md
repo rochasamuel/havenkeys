@@ -808,6 +808,32 @@ because:
   the phone seals to that camera-delivered key or seal one of its own to
   the desktop, and cannot make a phone approve without the user's tap.
 
+### T14 — Encrypted attachments
+
+Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
+
+* **Hostile server.** It can refuse, withhold or delete attachment blobs and
+  can answer with another blob. The client checks the manifest hash and then
+  the AEAD, and reports a missing blob as unavailable and a wrong one as
+  damaged; it never shows a wrong file. It cannot read an attachment, swap one
+  for another, move one to another item or vault, or replay a blob under a
+  new id (the AAD binds vault, item and id). It learns each item's attachment
+  ids, sizes and upload times, never names, types or contents. Replaying a
+  whole older item with its older manifest is T1b.
+* **Malicious file.** A name is sanitised in Rust; the type is sniffed from the
+  bytes; only four image types are previewed, and only through a `blob:` URL
+  in an `<img>`. No attachment is executed, opened by the OS or rendered as
+  HTML.
+* **Compromised renderer.** Can ask to preview a file and so receives its
+  bytes; cannot choose a Save-as path, because Rust shows the dialog and
+  writes the file after an unlock re-check.
+* **Disk.** The device cache holds only ciphertext. A saved file is plaintext
+  at a place the user chose and outside HavenKeys's protection; so is a
+  previewed image while the renderer holds it, until it is closed or the
+  vault locks.
+* **Quota abuse.** An account holder can fill the 192 MiB attachment quota
+  with pending uploads; the server sweeps unlisted uploads after 24 hours.
+
 ### Account deletion
 
 * **A stolen session token** cannot delete the account: the route also

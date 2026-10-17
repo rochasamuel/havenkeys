@@ -340,6 +340,7 @@ AAD = "havenkeys" || 0x00 || blob_version || algorithm || purpose || 0x00 || con
 | `sync-header` | vault ID (the account header a device publishes and reads, `crates/havenkeys-core/src/sync.rs`) |
 | `device-settings` | vault ID (Android: the phone's own settings, `local_blob` table) |
 | `asset-links` | vault ID (Android: the Digital Asset Links cache, `local_blob` table) |
+| `attachment` | vault ID, item ID, then `SHA-256("hk-attachment-v1" \|\| attachment ID)` |
 
 Consequences: a blob copied into another item row, another role, or another
 vault fails authentication. Header bytes (version, algorithm) are authenticated
@@ -362,6 +363,44 @@ save of an item re-encrypts with a fresh nonce. NIST SP 800-38D bounds random
 96-bit nonces to 2³² encryptions per key; a personal vault performs many
 orders of magnitude fewer, and the data key changes whenever a new vault is
 created. A test asserts no nonce repeats across a large sample.
+
+## Attachments
+
+Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
+Code: `crates/havenkeys-core/src/attachment.rs`, `BlobContext::attachment`.
+
+A file attached to an item is one `EncryptedBlob` (the format above) sealed
+under the vault data key with `Purpose::Attachment` (label `attachment`).
+Nothing new is invented: it is the same AES-256-GCM, a fresh random nonce per
+seal, and a new purpose label.
+
+* **Binding.** The AAD carries the vault ID, the item ID and
+  `SHA-256("hk-attachment-v1" || attachment ID)`. A hostile server therefore
+  cannot serve one attachment's blob for another, move a blob to another
+  item or vault, or open it as any other purpose; each fails authentication.
+  `BlobContext::attachment` is the only constructor, and a context built for
+  the purpose without the binding is refused when sealing.
+* **Plaintext.** The file's bytes, at most 5 MiB (`MAX_ATTACHMENT_BYTES`). The
+  sealed blob is at most 5 MiB + 4 KiB on the server. The name and type are
+  not in the blob.
+* **Manifest.** The item's sealed *overview* lists its attachments (id, name,
+  type, size, `blob_sha256`, created time). The overview is bound to the
+  details blob as before, so the list cannot be paired with other details.
+  `blob_sha256` is the SHA-256 of the sealed blob; a client compares it
+  **before** the AEAD, so a withheld, truncated or swapped blob is reported
+  as damaged without spending decryption on it, and a blob the manifest does
+  not name is never opened. Replaying an older genuine blob needs the older
+  manifest too, which is whole-item replay (threat model T1b).
+* **Cache.** Each device keeps a ciphertext-only LRU cache of blobs it has
+  downloaded (`attachment_cache`, 64 MiB on the desktop). A blob is cached
+  only after its hash and AEAD verify; a cached copy that no longer verifies
+  is evicted and fetched again. The cache never holds plaintext.
+* **Names and types.** The name is sanitised when the file is added
+  (`sanitize_name`): last path component only; control, bidi and zero-width
+  characters removed; characters reserved on Windows replaced; leading and
+  trailing spaces and dots trimmed; at most 120 characters; Windows device
+  names (`CON`, `NUL`, ...) prefixed with `_`. The type is the one sniffed
+  from the bytes (`sniff`), never the one the file claims.
 
 ## Backup file (`.hkbackup`)
 
@@ -421,6 +460,32 @@ offset  size  field
   envelope or an older payload version says "this backup can't be read by
   this version of HavenKeys". Restoring then rebuilds every item through
   the normal validation (`security-model.md` §10a).
+
+### Version 2 (attachments)
+
+Spec: `docs/superpowers/specs/2026-10-13-encrypted-attachments-design.md`.
+A backup now carries the vault's attachments. Version 1 files still open;
+version 2 is written from now on and an older HavenKeys refuses it as made by
+a newer version.
+
+* **Header.** 42 bytes: the 38 above with the format version 2, plus
+  `record_count` (u32 LE). The count is inside the authenticated header, so
+  dropping or adding a record changes the AAD.
+* **Records.** After the header, `record_count` records, each
+  `u32 length || EncryptedBlob`. Record 0 is the items payload of version 1.
+  Every later record is one attachment: `u32 json_len || {itemId, meta} ||
+  bytes`, sealed as it is written, so a backup never holds the whole vault in
+  memory.
+* **Associated data.** Each record's AAD is `BlobContext::backup_record(header,
+  index)`: `SHA-256(header || index)` in the `backup` purpose. A record cannot
+  be moved, repeated, dropped or replayed from another backup. Nothing may
+  follow the last record.
+* **Size cap.** `MAX_BACKUP_FILE_BYTES`: the version 1 cap plus the vault's
+  192 MiB attachment quota plus 1 MiB of framing.
+* **Restore.** The items restore first; each attachment is re-sealed under the
+  restoring vault's key (new ids, bound to the new item) and uploaded before
+  the item write that lists it. A server that refuses one for quota counts it
+  in `attachments_skipped`; the rest are restored.
 
 ## Password generator
 
