@@ -219,3 +219,38 @@ async fn without_a_mailer_no_notice_is_marked_as_sent() {
     drop(db);
     server.cleanup().await;
 }
+
+#[tokio::test]
+async fn stale_pending_rows_are_swept() {
+    let server = TestServer::start().await;
+    let (account, _) = signed_in(&server, "user@example.com").await;
+    let db = server.db().await;
+    let mut rows = Vec::new();
+    for (age, committed) in [(25, false), (23, false), (25, true)] {
+        let id = Uuid::new_v4();
+        db.execute(
+            "INSERT INTO attachments (vault_id, attachment_id, item_id, blob, committed, uploaded_at)
+             VALUES ($1, $2, $3, decode('00', 'hex'), $4, now() - make_interval(hours => $5))",
+            &[&account.vault_id, &id, &Uuid::new_v4(), &committed, &age],
+        )
+        .await
+        .unwrap();
+        rows.push(id);
+    }
+
+    let report = run_daily(&db, None).await.unwrap();
+    assert_eq!(report.stale_attachments, 1);
+    let mut left: Vec<Uuid> = db
+        .query("SELECT attachment_id FROM attachments", &[])
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    left.sort();
+    let mut expected = vec![rows[1], rows[2]];
+    expected.sort();
+    assert_eq!(left, expected);
+    drop(db);
+    server.cleanup().await;
+}

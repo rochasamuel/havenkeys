@@ -6,6 +6,7 @@
 //! without SMTP sends it the next day instead of never.
 
 use super::note;
+use crate::limits::PENDING_ATTACHMENT_TTL_HOURS;
 use crate::mail::templates::{self, Locale};
 use crate::mail::{Mail, Mailer};
 use crate::routes::signup::ABANDONED_SIGNUP_DAYS;
@@ -23,6 +24,7 @@ pub struct DailyReport {
     pub codes_swept: u64,
     pub signups_abandoned: u64,
     pub counters_swept: u64,
+    pub stale_attachments: u64,
     pub ending_notices: u64,
     pub ended_notices: u64,
 }
@@ -54,10 +56,19 @@ pub async fn run_daily(
             &[],
         )
         .await?;
+    // Uploads no item write claimed (design 2026-10-13-encrypted-attachments §4.4).
+    let stale_attachments = db
+        .execute(
+            "DELETE FROM attachments
+              WHERE NOT committed AND uploaded_at < now() - make_interval(hours => $1::int)",
+            &[&(PENDING_ATTACHMENT_TTL_HOURS as i32)],
+        )
+        .await?;
     let mut report = DailyReport {
         codes_swept,
         signups_abandoned,
         counters_swept,
+        stale_attachments,
         ..DailyReport::default()
     };
     let Some(mailer) = mailer else {

@@ -216,3 +216,191 @@ async fn account_erase_removes_attachments() {
     assert_eq!(rows, 0);
     server.cleanup().await;
 }
+
+/// The (id, committed) rows of an item's attachments, ordered by id.
+async fn rows_of(server: &TestServer, item: Uuid) -> Vec<(Uuid, bool)> {
+    server
+        .db()
+        .await
+        .query(
+            "SELECT attachment_id, committed FROM attachments WHERE item_id = $1 ORDER BY 1",
+            &[&item],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect()
+}
+
+fn ids(n: usize) -> Vec<Uuid> {
+    let mut ids: Vec<Uuid> = (0..n).map(|_| Uuid::new_v4()).collect();
+    ids.sort();
+    ids
+}
+
+#[tokio::test]
+async fn commit_lists_keep_and_delete_the_rest() {
+    let server = TestServer::start().await;
+    let (_, sess) = signed_in(&server, "user@example.com").await;
+    let item = Uuid::new_v4();
+    let [a, b, c] = ids(3)[..] else {
+        unreachable!()
+    };
+    for id in [a, b, c] {
+        assert_eq!(put(&server, &sess, id, item, b"sealed").await.0, 200);
+    }
+
+    let (status, body) = write(
+        &server,
+        &sess,
+        vec![change_with_attachments(item, None, b"o", b"d", &[a, b])],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(rows_of(&server, item).await, [(a, true), (b, true)]);
+
+    let rev = body["applied"][0]["revision"].as_i64();
+    let (status, _) = write(
+        &server,
+        &sess,
+        vec![change_with_attachments(item, rev, b"o", b"d", &[a])],
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(rows_of(&server, item).await, [(a, true)]);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn unknown_or_foreign_id_refuses_the_batch() {
+    let server = TestServer::start().await;
+    let (_, sess) = signed_in(&server, "user@example.com").await;
+    let (item, other) = (Uuid::new_v4(), Uuid::new_v4());
+    let [mine, theirs, unknown] = ids(3)[..] else {
+        unreachable!()
+    };
+    put(&server, &sess, mine, item, b"sealed").await;
+    put(&server, &sess, theirs, other, b"sealed").await;
+    let (id, rev) = create_item(&server, &sess, b"o", b"d").await;
+
+    for bad in [theirs, unknown] {
+        let (status, _) = write(
+            &server,
+            &sess,
+            vec![
+                change_with_attachments(item, None, b"o", b"d", &[mine]),
+                change_with_attachments(id, Some(rev), b"new", b"new", &[bad]),
+            ],
+        )
+        .await;
+        assert_eq!(status, 400);
+    }
+    // Nothing was written: the other item is unchanged and nothing committed.
+    let pulled = pull(&server, &sess, 0).await;
+    assert_eq!(pulled["changes"].as_array().unwrap().len(), 1);
+    assert_eq!(rows_of(&server, item).await, [(mine, false)]);
+    assert_eq!(rows_of(&server, other).await, [(theirs, false)]);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn absent_ids_leave_rows_untouched() {
+    let server = TestServer::start().await;
+    let (_, sess) = signed_in(&server, "user@example.com").await;
+    let item = Uuid::new_v4();
+    let a = Uuid::new_v4();
+    put(&server, &sess, a, item, b"sealed").await;
+    let (_, body) = write(
+        &server,
+        &sess,
+        vec![change_with_attachments(item, None, b"o", b"d", &[a])],
+    )
+    .await;
+
+    let rev = body["applied"][0]["revision"].as_i64();
+    let (status, _) = write(&server, &sess, vec![change(item, rev, b"o2", b"d2")]).await;
+    assert_eq!(status, 200);
+    assert_eq!(rows_of(&server, item).await, [(a, true)]);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn tombstone_deletes_all() {
+    let server = TestServer::start().await;
+    let (_, sess) = signed_in(&server, "user@example.com").await;
+    let item = Uuid::new_v4();
+    let [a, b] = ids(2)[..] else { unreachable!() };
+    put(&server, &sess, a, item, b"sealed").await;
+    put(&server, &sess, b, item, b"sealed").await;
+    let (_, body) = write(
+        &server,
+        &sess,
+        vec![change_with_attachments(item, None, b"o", b"d", &[a])],
+    )
+    .await;
+
+    let rev = body["applied"][0]["revision"].as_i64();
+    let (status, _) = write(&server, &sess, vec![deletion(item, rev)]).await;
+    assert_eq!(status, 200);
+    assert!(rows_of(&server, item).await.is_empty());
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn attachment_ids_on_a_deletion_or_over_20_or_duplicated_is_400() {
+    let server = TestServer::start().await;
+    let (_, sess) = signed_in(&server, "user@example.com").await;
+    let item = Uuid::new_v4();
+    let a = Uuid::new_v4();
+
+    let mut deleting = deletion(item, None);
+    deleting["attachmentIds"] = json!([]);
+    let too_many = change_with_attachments(item, None, b"o", b"d", &ids(21));
+    let twice = change_with_attachments(item, None, b"o", b"d", &[a, a]);
+    for bad in [deleting, too_many, twice] {
+        assert_eq!(write(&server, &sess, vec![bad]).await.0, 400);
+    }
+    // Twenty distinct ids is the most an item may name.
+    let twenty = ids(20);
+    for id in &twenty {
+        put(&server, &sess, *id, item, b"s").await;
+    }
+    let (status, _) = write(
+        &server,
+        &sess,
+        vec![change_with_attachments(item, None, b"o", b"d", &twenty)],
+    )
+    .await;
+    assert_eq!(status, 200);
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn vault_bytes_counts_attachments() {
+    let server = TestServer::start_with_vault_limit(1000).await;
+    let (account, sess) = signed_in(&server, "user@example.com").await;
+    seed(&server, account.vault_id, 990).await;
+
+    let (status, body) = write(
+        &server,
+        &sess,
+        vec![change(Uuid::new_v4(), None, b"0123456", b"0123456")],
+    )
+    .await;
+    assert_eq!(
+        (status, &body["error"]["code"]),
+        (413, &json!("vault_full"))
+    );
+    assert_eq!(
+        write(
+            &server,
+            &sess,
+            vec![change(Uuid::new_v4(), None, b"01234", b"01234")]
+        )
+        .await
+        .0,
+        200
+    );
+    server.cleanup().await;
+}

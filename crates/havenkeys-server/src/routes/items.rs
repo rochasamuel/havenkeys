@@ -14,7 +14,7 @@ use crate::auth::Session;
 use crate::b64::Blob;
 use crate::error::ApiError;
 use crate::json::Json;
-use crate::limits::{MAX_CHANGES_PER_BATCH, MAX_PAGE_BYTES};
+use crate::limits::{MAX_ATTACHMENTS_PER_ITEM, MAX_CHANGES_PER_BATCH, MAX_PAGE_BYTES};
 use crate::routes::attachments::attachment_bytes;
 use crate::routes::sync::{b64_len, change_json, ROW_JSON_BYTES};
 use crate::routes::AppState;
@@ -44,6 +44,10 @@ pub struct Change {
     details: Option<Blob>,
     #[serde(default)]
     deleted: bool,
+    /// The item's attachments after this write (design §4.4). Absent means
+    /// the write does not touch them.
+    #[serde(default)]
+    attachment_ids: Option<Vec<Uuid>>,
 }
 
 impl Change {
@@ -55,11 +59,22 @@ impl Change {
         } else {
             self.overview.is_some() && self.details.is_some()
         };
-        if well_formed {
+        if well_formed && self.attachment_ids_valid() {
             Ok(())
         } else {
             Err(ApiError::InvalidRequest("change is not valid"))
         }
+    }
+}
+
+impl Change {
+    /// Named only by a write, at most `MAX_ATTACHMENTS_PER_ITEM`, each once.
+    fn attachment_ids_valid(&self) -> bool {
+        let Some(ids) = &self.attachment_ids else {
+            return true;
+        };
+        let distinct: HashSet<&Uuid> = ids.iter().collect();
+        !self.deleted && ids.len() <= MAX_ATTACHMENTS_PER_ITEM && distinct.len() == ids.len()
     }
 }
 
@@ -231,6 +246,46 @@ async fn apply_change(
         )
         .await?;
     }
+    apply_attachments(tx, vault_id, change).await
+}
+
+/// Make the item's attachment rows match the write: a deletion drops them
+/// all, a listed set is committed and the rest dropped, and an absent list
+/// leaves them alone. An id that is not one of this item's rows refuses the
+/// batch, and the caller's transaction rolls back.
+async fn apply_attachments(
+    tx: &deadpool_postgres::Transaction<'_>,
+    vault_id: Uuid,
+    change: &Change,
+) -> Result<(), ApiError> {
+    let listed: &[Uuid] = match (&change.attachment_ids, change.deleted) {
+        (_, true) => &[],
+        (Some(ids), false) => ids,
+        (None, false) => return Ok(()),
+    };
+    let known: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM attachments
+              WHERE vault_id = $1 AND item_id = $2 AND attachment_id = ANY($3)",
+            &[&vault_id, &change.item_id, &listed],
+        )
+        .await?
+        .get(0);
+    if known != listed.len() as i64 {
+        return Err(ApiError::InvalidRequest("unknown attachment"));
+    }
+    tx.execute(
+        "UPDATE attachments SET committed = true
+          WHERE vault_id = $1 AND item_id = $2 AND attachment_id = ANY($3)",
+        &[&vault_id, &change.item_id, &listed],
+    )
+    .await?;
+    tx.execute(
+        "DELETE FROM attachments
+          WHERE vault_id = $1 AND item_id = $2 AND NOT attachment_id = ANY($3)",
+        &[&vault_id, &change.item_id, &listed],
+    )
+    .await?;
     Ok(())
 }
 

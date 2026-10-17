@@ -412,6 +412,19 @@ pub fn change(item_id: Uuid, base: Option<i64>, overview: &[u8], details: &[u8])
     })
 }
 
+/// A write that also names the item's attachments.
+pub fn change_with_attachments(
+    item_id: Uuid,
+    base: Option<i64>,
+    overview: &[u8],
+    details: &[u8],
+    attachment_ids: &[Uuid],
+) -> Value {
+    let mut value = change(item_id, base, overview, details);
+    value["attachmentIds"] = json!(attachment_ids);
+    value
+}
+
 pub fn deletion(item_id: Uuid, base: Option<i64>) -> Value {
     json!({ "itemId": item_id, "baseRevision": base, "deleted": true })
 }

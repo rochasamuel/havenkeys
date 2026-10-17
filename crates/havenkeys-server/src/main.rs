@@ -146,6 +146,7 @@ async fn serve(
                 Ok(report) => tracing::info!(
                     codes = report.codes_swept,
                     signups = report.signups_abandoned,
+                    attachments = report.stale_attachments,
                     ending = report.ending_notices,
                     ended = report.ended_notices,
                     "daily task"
