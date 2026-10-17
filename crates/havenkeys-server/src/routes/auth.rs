@@ -224,6 +224,7 @@ async fn complete_login(
 pub struct PakeStartRequest {
     email: String,
     credential_request: String,
+    device_id: Uuid,
 }
 
 #[derive(Deserialize)]
@@ -258,6 +259,14 @@ pub async fn pake_start(
         .unwrap_or_else(|| decoy_account(&state.server_secret, &email));
     let keys = rate_limit::AttemptKeys::new(account_id, &client_ip(&state, &headers, peer));
     keys.charge(&mut db).await?;
+    // As in the legacy login: a device that was locked when its account was
+    // deleted holds no token, and its OPAQUE sign-in fails on the device
+    // against the decoy below and sends nothing more. It learns of the
+    // deletion here, by its own random id (spec 2026-10-13-pake-login §4.2).
+    if row.is_none() && crate::erase::was_deleted_device(&db, req.device_id).await? {
+        tracing::info!(outcome = "rejected", "pake login");
+        return Err(ApiError::AccountDeleted);
+    }
     let record: Option<Vec<u8>> = row.as_ref().and_then(|r| r.get(1));
     // An unenrolled account and an unknown email both get opaque-ke's fake
     // response for this id: the same shape as a real one.

@@ -74,6 +74,9 @@ pub struct ActivateRegisterBody<'a> {
 pub struct PakeStartBody<'a> {
     pub email: &'a str,
     pub credential_request: String,
+    /// So a device whose account was deleted while it was locked hears 410
+    /// here (spec 2026-10-13-pake-login §4.2 step 2).
+    pub device_id: Uuid,
 }
 
 #[derive(Serialize)]

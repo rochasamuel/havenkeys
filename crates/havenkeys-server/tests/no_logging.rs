@@ -171,7 +171,7 @@ async fn no_secret_reaches_a_log_line() {
         &server,
         None,
         "/v1/auth/pake/start",
-        serde_json::json!({ "email": pake_email, "credentialRequest": b64(&request) }),
+        serde_json::json!({ "email": pake_email, "credentialRequest": b64(&request), "deviceId": uuid::Uuid::new_v4() }),
     )
     .await;
     let login_id = body["loginId"].as_str().unwrap().to_string();
@@ -242,7 +242,7 @@ async fn no_secret_reaches_a_log_line() {
         &server,
         None,
         "/v1/auth/pake/start",
-        serde_json::json!({ "email": pake_email, "credentialRequest": b64(&request) }),
+        serde_json::json!({ "email": pake_email, "credentialRequest": b64(&request), "deviceId": uuid::Uuid::new_v4() }),
     )
     .await;
     let failed_login_id = body["loginId"].as_str().unwrap().to_string();

@@ -545,3 +545,19 @@ async fn a_426_maps_to_refused_and_never_to_account_deleted() {
     .unwrap_err();
     assert_eq!(err, SyncError::Refused("upgrade required"));
 }
+
+/// A device whose account was deleted while it was locked hears it at
+/// `pake/start` (spec 2026-10-13-pake-login §4.2 step 2), and sends nothing
+/// more.
+#[tokio::test]
+async fn a_deleted_device_hears_it_at_pake_start() {
+    let (auth_key, _, _) = credential_keys();
+    let script = Script::new(&[(410, r#"{"error":{"code":"account_deleted","message":"x"}}"#)]);
+    let client = SyncClient::new(Shared(script.clone()));
+    let err = client
+        .login_pake("a@example.com", &auth_key, Uuid::nil(), Uuid::new_v4(), "D")
+        .await
+        .unwrap_err();
+    assert_eq!(err, SyncError::AccountDeleted);
+    assert_eq!(script.paths(), vec!["/v1/auth/pake/start"]);
+}

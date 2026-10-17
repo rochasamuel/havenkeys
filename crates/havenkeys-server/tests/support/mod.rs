@@ -561,7 +561,7 @@ pub async fn pake_login(
     let res = server
         .post("/v1/auth/pake/start")
         .json(
-            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request) }),
+            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request), "deviceId": device_id }),
         )
         .send()
         .await

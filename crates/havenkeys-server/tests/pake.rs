@@ -121,7 +121,7 @@ async fn an_unknown_email_and_an_unenrolled_account_look_like_a_real_one() {
         let (_, request) = havenkeys_opaque::ClientLogin::start(&[9u8; 32]).unwrap();
         let res = server
             .post("/v1/auth/pake/start")
-            .json(&json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request) }))
+            .json(&json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request), "deviceId": Uuid::new_v4() }))
             .send()
             .await
             .unwrap();
@@ -150,7 +150,7 @@ async fn started(
     let body: serde_json::Value = server
         .post("/v1/auth/pake/start")
         .json(
-            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request) }),
+            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request), "deviceId": Uuid::new_v4() }),
         )
         .send()
         .await
@@ -232,7 +232,7 @@ async fn malformed_and_oversized_messages_are_400_without_detail() {
     ] {
         let res = server
             .post("/v1/auth/pake/start")
-            .json(&json!({ "email": "a@example.com", "credentialRequest": request }))
+            .json(&json!({ "email": "a@example.com", "credentialRequest": request, "deviceId": Uuid::new_v4() }))
             .send()
             .await
             .unwrap();
@@ -288,6 +288,46 @@ async fn a_frozen_account_refuses_a_new_device_over_opaque() {
     server.cleanup().await;
 }
 
+/// A device locked when its account was deleted holds no token, and its
+/// OPAQUE sign-in would fail on the device against the decoy: `start`
+/// itself tells it, by its own device id, and tells nobody else.
+#[tokio::test]
+async fn pake_start_tells_a_deleted_device_and_only_it() {
+    use havenkeys_server::admin::{self, AdminCommand};
+    let server = support::TestServer::start().await;
+    let account = support::activate_pake(&server, "gone@example.com", [9u8; 32]).await;
+    let device = Uuid::new_v4();
+    let (status, _) = support::pake_login(&server, &account.email, &account.auth_key, device).await;
+    assert_eq!(status, 200);
+    admin::run(
+        AdminCommand::DeleteAccount {
+            email: account.email.clone(),
+        },
+        server.pool(),
+        [7u8; 32],
+    )
+    .await
+    .unwrap();
+    let start = |device: Uuid| {
+        let (_, request) = havenkeys_opaque::ClientLogin::start(&[9u8; 32]).unwrap();
+        server.post("/v1/auth/pake/start").json(&json!({
+            "email": account.email,
+            "credentialRequest": data_encoding::BASE64.encode(&request),
+            "deviceId": device,
+        }))
+    };
+    let res = start(device).send().await.unwrap();
+    assert_eq!(res.status(), 410);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "account_deleted");
+
+    let res = start(Uuid::new_v4()).send().await.unwrap();
+    assert_eq!(res.status(), 200, "a fresh device gets the decoy");
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert!(body["loginId"].is_string() && body["credentialResponse"].is_string());
+    server.cleanup().await;
+}
+
 #[tokio::test]
 async fn a_device_of_a_deleted_account_signing_in_over_opaque_gets_410() {
     use havenkeys_server::admin::{self, AdminCommand};
@@ -306,8 +346,14 @@ async fn a_device_of_a_deleted_account_signing_in_over_opaque_gets_410() {
     )
     .await
     .unwrap();
-    // No record exists any more, so the client cannot finish.
-    let (status, _) = support::pake_login(&server, &account.email, &account.auth_key, device).await;
+    // The device learns of the deletion at start (spec §4.2 step 2).
+    let (status, body) =
+        support::pake_login(&server, &account.email, &account.auth_key, device).await;
+    assert_eq!(status, 410);
+    assert_eq!(body["error"]["code"], "account_deleted");
+    // Any other device gets the decoy, so the client cannot finish.
+    let (status, _) =
+        support::pake_login(&server, &account.email, &account.auth_key, Uuid::new_v4()).await;
     assert_eq!(status, 0);
     // A well-formed finalization from another account's exchange fails
     // verification against the deleted account's (decoy) exchange.
@@ -348,7 +394,7 @@ async fn decoy_start(server: &support::TestServer, email: &str) -> (serde_json::
     let body: serde_json::Value = server
         .post("/v1/auth/pake/start")
         .json(
-            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request) }),
+            &json!({ "email": email, "credentialRequest": data_encoding::BASE64.encode(&request), "deviceId": Uuid::new_v4() }),
         )
         .send()
         .await

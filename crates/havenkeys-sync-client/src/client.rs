@@ -271,6 +271,7 @@ impl<T: Transport> SyncClient<T> {
         let body = wire::PakeStartBody {
             email,
             credential_request: BASE64.encode(&request),
+            device_id,
         };
         let response = self.post("/v1/auth/pake/start", None, &body).await?;
         let started: wire::PakeStartDto = expect_ok(response)?;
