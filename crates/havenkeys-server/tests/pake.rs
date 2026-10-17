@@ -496,6 +496,104 @@ async fn a_legacy_account_enrols_with_its_current_key_and_keeps_old_devices_work
     server.cleanup().await;
 }
 
+/// A legacy password change that commits while enroll is verifying the old
+/// key must win: no OPAQUE record built from the old key may be installed.
+/// The test holds the account row locked and rotates the verifier inside
+/// that transaction, so enroll checks the old key against the committed
+/// (old) verifier and only reaches its write after the rotation commits.
+#[tokio::test]
+async fn enroll_racing_a_legacy_password_change_installs_no_record_from_the_old_key() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+
+    let mut lock_conn = server.db().await;
+    let tx = lock_conn.transaction().await.unwrap();
+    tx.query_one(
+        "SELECT 1 FROM accounts WHERE id = $1 FOR UPDATE",
+        &[&account.account_id],
+    )
+    .await
+    .unwrap();
+    let rotated = havenkeys_server::auth::hash_auth_key(zeroize::Zeroizing::new(vec![5u8; 32]))
+        .await
+        .unwrap();
+    tx.execute(
+        "UPDATE accounts SET auth_verifier = $2 WHERE id = $1",
+        &[&account.account_id, &rotated],
+    )
+    .await
+    .unwrap();
+
+    let enroll = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send();
+    let commit = async {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        tx.commit().await.unwrap();
+    };
+    let (res, ()) = tokio::join!(enroll, commit);
+    let status = res.unwrap().status();
+    assert_ne!(status, 204, "an enrolment from the old key won the race");
+    assert!(status == 409 || status == 401, "{status}");
+
+    let record: Option<Vec<u8>> = server
+        .db()
+        .await
+        .query_one(
+            "SELECT opaque_record FROM accounts WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(record.is_none());
+    server.cleanup().await;
+}
+
+/// The observable contract behind the race: after a legacy change to a new
+/// key, enrolling with the old key is refused.
+#[tokio::test]
+async fn enroll_with_the_key_from_before_a_legacy_password_change_is_refused() {
+    let server = support::TestServer::start().await;
+    let account = support::activate(&server, "user@example.com", [9u8; 32]).await;
+    let sess = support::login(&server, &account, "Desktop").await;
+    let upload = support::pake_register(&server, &sess, &account.auth_key).await;
+    let res = server
+        .post_as("/v1/account/credentials", &sess)
+        .json(&support::credentials_body(
+            &account.auth_key,
+            &[5u8; 32],
+            0,
+            b"H",
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let res = server
+        .post_as("/v1/account/pake/enroll", &sess)
+        .json(&json!({ "currentAuthKey": b64(&account.auth_key), "registrationUpload": upload }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let record: Option<Vec<u8>> = server
+        .db()
+        .await
+        .query_one(
+            "SELECT opaque_record FROM accounts WHERE id = $1",
+            &[&account.account_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(record.is_none());
+    server.cleanup().await;
+}
+
 #[tokio::test]
 async fn enroll_without_the_current_key_is_refused() {
     let server = support::TestServer::start().await;

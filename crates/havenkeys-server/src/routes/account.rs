@@ -443,16 +443,19 @@ pub async fn pake_enroll(
             tracing::info!(account_id = %session.account_id, outcome = "rejected", "pake enrol")
         })?;
     keys.clear(&db).await?;
-    let updated = db
-        .execute(
-            "UPDATE accounts SET opaque_record = $2, legacy_grace_until = NULL
-              WHERE id = $1 AND opaque_record IS NULL",
-            &[&session.account_id, &record],
-        )
-        .await?;
-    if updated != 1 {
+    // Compared again under the lock, like credentials and delete: a legacy
+    // change that committed during the Argon2 run rotated the verifier, and
+    // a record built from the old key must not survive it.
+    let tx = db.transaction().await?;
+    if load_stored(&tx, session.account_id, true).await? != stored {
         return Err(ApiError::Conflict);
     }
+    tx.execute(
+        "UPDATE accounts SET opaque_record = $2, legacy_grace_until = NULL WHERE id = $1",
+        &[&session.account_id, &record],
+    )
+    .await?;
+    tx.commit().await?;
     tracing::info!(account_id = %session.account_id, "account enrolled in OPAQUE");
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
