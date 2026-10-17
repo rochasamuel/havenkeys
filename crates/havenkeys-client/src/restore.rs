@@ -75,9 +75,9 @@ impl HavenClient {
             .await
         {
             Ok(()) => plan.attach(&file.item_id, sealed.meta),
-            // A sealed file is always under the server's blob cap, so a 413
-            // is the vault's or the attachments' quota.
-            Err(SyncError::Refused("too large")) => plan.report.attachments_skipped += 1,
+            Err(SyncError::AttachmentsFull | SyncError::VaultFull) => {
+                plan.report.attachments_skipped += 1
+            }
             Err(e) => return Err(self.failed(e)),
         }
         Ok(())

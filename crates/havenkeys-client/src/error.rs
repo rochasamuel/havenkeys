@@ -42,6 +42,13 @@ impl From<SyncError> for ClientError {
                 "server_unsupported",
                 "Your server doesn't support attachments yet — update havenkeys-server.",
             ),
+            SyncError::AttachmentsFull => {
+                Self::fixed("attachments_full", "Attachment storage is full (192 MB).")
+            }
+            SyncError::VaultFull => Self::fixed(
+                "vault_full",
+                "This vault has reached its storage limit.",
+            ),
             SyncError::InvalidServerUrl => Self::fixed(
                 "invalid_server_url",
                 "That server address cannot be used. It must start with https://.",
@@ -210,6 +217,8 @@ mod tests {
             (SyncError::InvalidServerUrl, "invalid_server_url"),
             (SyncError::TooLarge, "sync_failed"),
             (SyncError::Unsupported, "server_unsupported"),
+            (SyncError::AttachmentsFull, "attachments_full"),
+            (SyncError::VaultFull, "vault_full"),
             (SyncError::AccountDeleted, "account_deleted"),
             (SyncError::AccountFrozen, "account_frozen"),
         ];
@@ -249,6 +258,14 @@ mod tests {
         for (err, code) in cases {
             assert_eq!(err.code, code);
         }
+    }
+
+    #[test]
+    fn a_full_quota_says_which_storage_is_full() {
+        let files = ClientError::from(SyncError::AttachmentsFull);
+        assert_eq!(files.message, "Attachment storage is full (192 MB).");
+        let vault = ClientError::from(SyncError::VaultFull);
+        assert_eq!(vault.message, "This vault has reached its storage limit.");
     }
 
     #[test]

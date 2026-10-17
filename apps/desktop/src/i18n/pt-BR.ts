@@ -30,6 +30,8 @@ const codes: Record<ErrorCode, string | null> = {
   attachment_offline: "Você está offline — reconecte para abrir este arquivo.",
   attachments_unavailable: "Alguns anexos não puderam ser lidos. Nada foi exportado.",
   server_unsupported: "Seu servidor ainda não oferece suporte a anexos — atualize o havenkeys-server.",
+  attachments_full: "O espaço para anexos está cheio (192 MB).",
+  vault_full: "Este cofre atingiu o limite de armazenamento.",
   item_changed_elsewhere: "Este item foi alterado em outro dispositivo.",
   bundle_refused: "Digite sua senha mestra para desbloquear.",
   // Varies only between "Internal error." and the IPC wrapper's "Something

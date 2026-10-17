@@ -579,3 +579,28 @@ async fn a_hostile_get_with_oversize_blob_is_refused() {
     let result = client.get_attachment(&session(), Uuid::new_v4()).await;
     assert_eq!(result, Err(SyncError::TooLarge));
 }
+
+#[tokio::test]
+async fn a_full_quota_is_told_apart_only_by_the_servers_code() {
+    for (body, expected) in [
+        (
+            r#"{"error":{"code":"attachments_full","message":"x"}}"#,
+            SyncError::AttachmentsFull,
+        ),
+        (
+            r#"{"error":{"code":"vault_full","message":"x"}}"#,
+            SyncError::VaultFull,
+        ),
+        (
+            r#"{"error":{"code":"too_large","message":"x"}}"#,
+            SyncError::Refused("too large"),
+        ),
+        ("<html>Too large</html>", SyncError::Refused("too large")),
+    ] {
+        let client = Stub::status(413, body);
+        let result = client
+            .put_attachment(&session(), Uuid::new_v4(), Uuid::new_v4(), b"sealed")
+            .await;
+        assert_eq!(result, Err(expected), "{body}");
+    }
+}

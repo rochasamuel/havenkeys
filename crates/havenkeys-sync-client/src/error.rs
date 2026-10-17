@@ -42,6 +42,10 @@ pub enum SyncError {
     TooLarge,
     /// The server has no attachment routes: it is older than this client.
     Unsupported,
+    /// The vault's attachment storage is full.
+    AttachmentsFull,
+    /// The vault has reached its storage limit.
+    VaultFull,
     /// The configured server URL is not one a secret may be sent to.
     InvalidServerUrl,
 }
@@ -60,6 +64,8 @@ impl SyncError {
             Self::Protocol(_) => "protocol",
             Self::TooLarge => "too_large",
             Self::Unsupported => "unsupported",
+            Self::AttachmentsFull => "attachments_full",
+            Self::VaultFull => "vault_full",
             Self::InvalidServerUrl => "invalid_server_url",
         }
     }
@@ -82,6 +88,8 @@ impl std::fmt::Display for SyncError {
             Self::Protocol(what) => write!(f, "the server's answer was not valid: {what}"),
             Self::TooLarge => f.write_str("the server's answer was too large"),
             Self::Unsupported => f.write_str("the server does not support attachments"),
+            Self::AttachmentsFull => f.write_str("the vault's attachment storage is full"),
+            Self::VaultFull => f.write_str("the vault has reached its storage limit"),
             Self::InvalidServerUrl => f.write_str("the server address is not usable"),
         }
     }

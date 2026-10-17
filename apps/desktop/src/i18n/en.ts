@@ -31,6 +31,8 @@ export type ErrorCode =
   | "attachment_offline"
   | "attachments_unavailable"
   | "server_unsupported"
+  | "attachments_full"
+  | "vault_full"
   | "item_changed_elsewhere"
   | "bundle_refused"
   | "internal"
@@ -95,6 +97,8 @@ const codes: Record<ErrorCode, string | null> = {
   attachment_offline: "You're offline — reconnect to open this file.",
   attachments_unavailable: "Some attachments could not be read. Nothing was exported.",
   server_unsupported: "Your server doesn't support attachments yet — update havenkeys-server.",
+  attachments_full: "Attachment storage is full (192 MB).",
+  vault_full: "This vault has reached its storage limit.",
   item_changed_elsewhere: "This item changed on another device.",
   bundle_refused: "Enter your master password to unlock.",
   internal: null,

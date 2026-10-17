@@ -874,19 +874,14 @@ fn error_from(response: &HttpResponse) -> SyncError {
     struct Code {
         code: String,
     }
-    if response.status == 410 {
-        let said = serde_json::from_slice::<Body>(&response.body).ok();
-        if said.is_some_and(|b| b.error.code == "account_deleted") {
-            return SyncError::AccountDeleted;
-        }
+    let said = serde_json::from_slice::<Body>(&response.body).ok();
+    match (response.status, said.as_ref().map(|b| b.error.code.as_str())) {
+        (410, Some("account_deleted")) => SyncError::AccountDeleted,
+        (402, Some("account_frozen")) => SyncError::AccountFrozen,
+        (413, Some("attachments_full")) => SyncError::AttachmentsFull,
+        (413, Some("vault_full")) => SyncError::VaultFull,
+        (status, _) => error_for(status),
     }
-    if response.status == 402 {
-        let said = serde_json::from_slice::<Body>(&response.body).ok();
-        if said.is_some_and(|b| b.error.code == "account_frozen") {
-            return SyncError::AccountFrozen;
-        }
-    }
-    error_for(response.status)
 }
 
 /// Map a status to an error. The server's own message is never used: it
