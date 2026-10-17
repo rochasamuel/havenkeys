@@ -93,6 +93,7 @@ fn is_device_name(name: &str) -> bool {
     let stem = name.split('.').next().unwrap_or_default().trim_end();
     let numbered = |prefix: &str| {
         stem.len() == 4
+            && stem.is_ascii()
             && stem[..3].eq_ignore_ascii_case(prefix)
             && matches!(stem.as_bytes()[3], b'1'..=b'9')
     };
@@ -357,6 +358,19 @@ mod tests {
         assert_eq!(sanitize_name("CON.txt"), "_CON.txt");
         assert_eq!(sanitize_name("console.txt"), "console.txt");
         assert_eq!(sanitize_name("COM0"), "COM0");
+    }
+
+    #[test]
+    fn sanitize_handles_multibyte_short_stems() {
+        for raw in [
+            "abé.pdf",
+            "çon.txt",
+            "éé.png",
+            "a\u{1F512}.txt",
+            "ab\u{1F512}",
+        ] {
+            assert_eq!(sanitize_name(raw), raw);
+        }
     }
 
     #[test]

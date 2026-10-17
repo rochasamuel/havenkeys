@@ -128,6 +128,8 @@ pub async fn save_attachment(
         return Ok(false);
     };
     let path = picked.into_path().map_err(|_| CmdError::file())?;
+    // A lock while the dialog was open drops the plaintext unwritten.
+    app.state::<AppState>().require_unlocked()?;
     tauri::async_runtime::spawn_blocking(move || write_private(&path, bytes.expose()))
         .await
         .map_err(|_| CmdError::internal())??;
