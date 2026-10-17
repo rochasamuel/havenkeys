@@ -197,9 +197,11 @@ impl std::fmt::Debug for ServerKeys {
 
 /// What the server stores for an account, from the client's upload.
 pub fn record_from_upload(upload: &[u8]) -> Result<Vec<u8>, Error> {
-    let upload = RegistrationUpload::<Suite>::deserialize(checked(upload)?)
-        .map_err(|_| Error::Malformed)?;
-    Ok(ServerRegistration::<Suite>::finish(upload).serialize().to_vec())
+    let upload =
+        RegistrationUpload::<Suite>::deserialize(checked(upload)?).map_err(|_| Error::Malformed)?;
+    Ok(ServerRegistration::<Suite>::finish(upload)
+        .serialize()
+        .to_vec())
 }
 
 /// Checks the client's proof against a pending state from `login_start`.
@@ -244,7 +246,10 @@ mod tests {
     fn a_wrong_key_fails_on_the_client() {
         let server = ServerKeys::generate();
         let record = enrolled(&server, &KEY);
-        assert_eq!(login(&server, Some(&record), &[8u8; 32]), Err(Error::InvalidLogin));
+        assert_eq!(
+            login(&server, Some(&record), &[8u8; 32]),
+            Err(Error::InvalidLogin)
+        );
     }
 
     #[test]
@@ -267,7 +272,10 @@ mod tests {
         let finalization = client.finish(&KEY, &response).unwrap();
         let (_, request2) = ClientLogin::start(&KEY).unwrap();
         let (state2, _) = server.login_start(Some(&record), &request2, ID).unwrap();
-        assert_eq!(login_finish(&state2, &finalization), Err(Error::InvalidLogin));
+        assert_eq!(
+            login_finish(&state2, &finalization),
+            Err(Error::InvalidLogin)
+        );
     }
 
     #[test]
@@ -300,11 +308,20 @@ mod tests {
         let upload = state.finish(&KEY, &response).unwrap();
         let record = record_from_upload(&upload).unwrap();
         let (client, credential_request) = ClientLogin::start(&KEY).unwrap();
-        let (pending, credential_response) =
-            server.login_start(Some(&record), &credential_request, ID).unwrap();
+        let (pending, credential_response) = server
+            .login_start(Some(&record), &credential_request, ID)
+            .unwrap();
         let finalization = client.finish(&KEY, &credential_response).unwrap();
-        for m in [&request, &response, &upload, &record, &credential_request,
-                  &credential_response, &finalization, &*pending] {
+        for m in [
+            &request,
+            &response,
+            &upload,
+            &record,
+            &credential_request,
+            &credential_response,
+            &finalization,
+            &*pending,
+        ] {
             assert!(m.len() <= MAX_MESSAGE_BYTES, "{} bytes", m.len());
         }
     }
@@ -313,6 +330,9 @@ mod tests {
     fn debug_never_prints_state() {
         let (client, _) = ClientLogin::start(&KEY).unwrap();
         assert_eq!(format!("{client:?}"), "ClientLogin(<redacted>)");
-        assert_eq!(format!("{:?}", ServerKeys::generate()), "ServerKeys(<redacted>)");
+        assert_eq!(
+            format!("{:?}", ServerKeys::generate()),
+            "ServerKeys(<redacted>)"
+        );
     }
 }
