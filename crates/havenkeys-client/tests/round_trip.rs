@@ -4,7 +4,6 @@
 use havenkeys_client::device::Device;
 use havenkeys_client::key_store::MemoryKeyStore;
 use havenkeys_client::{ClientConfig, ClientEvents, HavenClient, NewFile};
-use havenkeys_core::attachment::FileEdits;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
 use havenkeys_core::store::Store;
 use havenkeys_core::sync::SyncReport;
@@ -1258,11 +1257,7 @@ async fn limits_are_checked_before_any_upload() {
         bytes: zeroize::Zeroizing::new(vec![0u8; 5 * 1024 * 1024 + 1]),
     };
     let save = |files: Vec<NewFile>| {
-        a.save_with_files(item, files, |vault, metas| {
-            let files = FileEdits {
-                added: metas,
-                removed: vec![],
-            };
+        a.save_with_files(item, files, vec![], |vault, files| {
             vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
         })
     };
@@ -1284,6 +1279,46 @@ async fn limits_are_checked_before_any_upload() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn an_item_near_the_limit_is_refused_before_any_upload() {
+    let server = Server::start().await;
+    let (a, _b, item, _dirs) = two_devices(&server).await;
+    let held = (0..19).map(|i| png(&i.to_string())).collect();
+    let held = a.add_attachments(item, held).await.unwrap();
+    let first = held.attachments[0].id;
+    let cached = |client: &HavenClient| {
+        client
+            .vault()
+            .unwrap()
+            .cached_attachment(&first)
+            .unwrap()
+            .is_some()
+    };
+    assert!(cached(&a));
+
+    let err = a
+        .save_with_files(
+            item,
+            vec![new_file(png("x")), new_file(png("y"))],
+            vec![],
+            |vault, files| {
+                vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(err.message.contains("An item holds up to 20 files"));
+
+    let db = server.pool.get().await.unwrap();
+    let rows = db
+        .query_one("SELECT count(*) FROM attachments", &[])
+        .await
+        .unwrap();
+    assert_eq!(rows.get::<_, i64>(0), 19);
+    assert_eq!(attachment_ids(&a, item).len(), 19);
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn create_with_files_round_trips() {
     let server = Server::start().await;
     let (a, b, _item, _dirs) = two_devices(&server).await;
@@ -1292,11 +1327,8 @@ async fn create_with_files_round_trips() {
         .save_with_files(
             id,
             vec![new_file(png("front")), new_file(png("back"))],
-            |vault, metas| {
-                let files = FileEdits {
-                    added: metas,
-                    removed: vec![],
-                };
+            vec![],
+            |vault, files| {
                 vault.stage_create_with(id, login("Visa"), files, havenkeys_client::now_ms())
             },
         )
@@ -1326,13 +1358,14 @@ async fn update_removes_and_adds_in_one_save() {
     let (gone, kept) = (first.attachments[0].id, first.attachments[1].id);
 
     let saved = a
-        .save_with_files(item, vec![new_file(png("new"))], |vault, metas| {
-            let files = FileEdits {
-                added: metas,
-                removed: vec![gone],
-            };
-            vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
-        })
+        .save_with_files(
+            item,
+            vec![new_file(png("new"))],
+            vec![gone],
+            |vault, files| {
+                vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
+            },
+        )
         .await
         .unwrap();
     let now: Vec<Uuid> = saved.attachments.iter().map(|m| m.id).collect();
