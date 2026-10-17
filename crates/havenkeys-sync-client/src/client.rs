@@ -112,6 +112,13 @@ impl std::fmt::Debug for Claim {
 }
 
 /// `/v1/pairings/{id}{suffix}`, only for an id that cannot change the path.
+fn pake_error(e: havenkeys_core::pake::PakeError) -> SyncError {
+    match e {
+        havenkeys_core::pake::PakeError::InvalidLogin => SyncError::Unauthorized,
+        havenkeys_core::pake::PakeError::Malformed => SyncError::Protocol("pake"),
+    }
+}
+
 fn pairing_path(pairing_id: &str, suffix: &str) -> Result<String> {
     if !havenkeys_core::pairing::valid_pairing_id(pairing_id) {
         return Err(SyncError::Refused("not found"));
@@ -141,6 +148,9 @@ pub struct CredentialChange<'a> {
     /// The attested `header.json`, re-wrapped under the new credentials.
     pub header: &'a [u8],
     pub base_header_revision: i64,
+    /// Prove the current key and register the new one with OPAQUE (the
+    /// account has a record) instead of sending auth keys.
+    pub pake: bool,
 }
 
 pub struct SyncClient<T: Transport> {
@@ -162,13 +172,59 @@ impl<T: Transport> SyncClient<T> {
         }
     }
 
+    /// Activate with OPAQUE; a server that predates it has no registration
+    /// route, and the account is then activated the old way.
     pub async fn activate(&self, activation: Activation<'_>) -> Result<Activated> {
+        check_header(activation.header)?;
+        let (state, request) =
+            havenkeys_core::pake::register_start(activation.auth_key).map_err(pake_error)?;
+        let body = wire::ActivateRegisterBody {
+            email: activation.email,
+            invite: activation.invite,
+            registration_request: BASE64.encode(&request),
+        };
+        let upload = match self
+            .register(
+                "/v1/accounts/activate/register",
+                None,
+                &body,
+                state,
+                activation.auth_key,
+            )
+            .await
+        {
+            Ok(upload) => upload,
+            Err(SyncError::Refused("not found")) => return self.activate_legacy(activation).await,
+            Err(e) => return Err(e),
+        };
+        let body = wire::ActivateBody {
+            email: activation.email,
+            invite: activation.invite,
+            kdf: activation.kdf.into(),
+            auth_key: None,
+            registration_upload: Some(upload),
+            vault_id: activation.vault_id,
+            header: BASE64.encode(activation.header),
+            key_scheme: KEY_SCHEME,
+        };
+        let response = self.post("/v1/accounts/activate", None, &body).await?;
+        let dto: wire::ActivatedDto = expect_ok(response)?;
+        Ok(Activated {
+            account_id: dto.account_id,
+            vault_id: dto.vault_id,
+        })
+    }
+
+    /// Activate by sending the auth key itself: servers without OPAQUE, and
+    /// tests that need a pre-OPAQUE account.
+    pub async fn activate_legacy(&self, activation: Activation<'_>) -> Result<Activated> {
         check_header(activation.header)?;
         let body = wire::ActivateBody {
             email: activation.email,
             invite: activation.invite,
             kdf: activation.kdf.into(),
-            auth_key: &activation.auth_key.to_base64(),
+            auth_key: Some(&activation.auth_key.to_base64()),
+            registration_upload: None,
             vault_id: activation.vault_id,
             header: BASE64.encode(activation.header),
             key_scheme: KEY_SCHEME,
@@ -199,7 +255,130 @@ impl<T: Transport> SyncClient<T> {
     /// rather than read from the answer, because the server saying "you are
     /// account X" would be the server choosing which account a device
     /// believes it is signed in to.
-    pub async fn login(
+    /// Sign in with OPAQUE (spec 2026-10-13-pake-login §4.2). The auth key
+    /// never leaves this function; a wrong key or a response the server
+    /// could not have made for this account stops here, before the second
+    /// request.
+    pub async fn login_pake(
+        &self,
+        email: &str,
+        auth_key: &AuthKey,
+        account_id: Uuid,
+        device_id: Uuid,
+        device_name: &str,
+    ) -> Result<Session> {
+        let (state, request) = havenkeys_core::pake::login_start(auth_key).map_err(pake_error)?;
+        let body = wire::PakeStartBody {
+            email,
+            credential_request: BASE64.encode(&request),
+        };
+        let response = self.post("/v1/auth/pake/start", None, &body).await?;
+        let started: wire::PakeStartDto = expect_ok(response)?;
+        if started.login_id.is_empty() || started.login_id.len() > 64 {
+            return Err(SyncError::Protocol("pake"));
+        }
+        let credential_response = wire::message(&started.credential_response)?;
+        let finalization =
+            havenkeys_core::pake::login_finish(state, auth_key, &credential_response)
+                .map_err(pake_error)?;
+        let body = wire::PakeFinishBody {
+            login_id: &started.login_id,
+            credential_finalization: BASE64.encode(&finalization),
+            device_id,
+            device_name,
+        };
+        let response = self.post("/v1/auth/pake/finish", None, &body).await?;
+        self.session_from(response, account_id)
+    }
+
+    /// The session in a sign-in answer, whichever way the sign-in went.
+    fn session_from(&self, response: HttpResponse, account_id: Uuid) -> Result<Session> {
+        let dto: wire::LoginDto = expect_ok(response)?;
+        if dto.token.is_empty() || dto.token.len() > 128 {
+            return Err(SyncError::Protocol("token"));
+        }
+        let mut session = Session::new(dto.token, dto.expires_at, account_id, dto.vault_id);
+        session.account = dto.account.map(AccountInfo::from);
+        Ok(session)
+    }
+
+    /// The upload for `auth_key` from the server's registration response.
+    async fn register(
+        &self,
+        path: &str,
+        session: Option<&Session>,
+        body: &impl serde::Serialize,
+        state: havenkeys_core::pake::ClientRegistration,
+        auth_key: &AuthKey,
+    ) -> Result<String> {
+        let response = self.post(path, session, body).await?;
+        let dto: wire::RegistrationDto = expect_ok(response)?;
+        let upload = havenkeys_core::pake::register_finish(
+            state,
+            auth_key,
+            &wire::message(&dto.registration_response)?,
+        )
+        .map_err(pake_error)?;
+        Ok(BASE64.encode(&upload))
+    }
+
+    async fn register_in_session(&self, session: &Session, auth_key: &AuthKey) -> Result<String> {
+        let (state, request) =
+            havenkeys_core::pake::register_start(auth_key).map_err(pake_error)?;
+        let body = wire::RegisterBody {
+            registration_request: BASE64.encode(&request),
+        };
+        self.register(
+            "/v1/account/pake/register",
+            Some(session),
+            &body,
+            state,
+            auth_key,
+        )
+        .await
+    }
+
+    /// (reauthId, finalization) proving `auth_key` inside `session`.
+    async fn reauth(&self, session: &Session, auth_key: &AuthKey) -> Result<(String, String)> {
+        let (state, request) = havenkeys_core::pake::login_start(auth_key).map_err(pake_error)?;
+        let body = wire::ReauthBody {
+            credential_request: BASE64.encode(&request),
+        };
+        let response = self
+            .post("/v1/account/pake/reauth", Some(session), &body)
+            .await?;
+        let dto: wire::ReauthDto = expect_ok(response)?;
+        if dto.reauth_id.is_empty() || dto.reauth_id.len() > 64 {
+            return Err(SyncError::Protocol("pake"));
+        }
+        let finalization = havenkeys_core::pake::login_finish(
+            state,
+            auth_key,
+            &wire::message(&dto.credential_response)?,
+        )
+        .map_err(pake_error)?;
+        Ok((dto.reauth_id, BASE64.encode(&finalization)))
+    }
+
+    /// Gives a pre-OPAQUE account its record, proving the legacy key once
+    /// more (spec §6). Only after a legacy sign-in on this same key.
+    pub async fn enroll(&self, session: &Session, auth_key: &AuthKey) -> Result<()> {
+        let upload = self.register_in_session(session, auth_key).await?;
+        let current = auth_key.to_base64();
+        let body = wire::EnrollBody {
+            current_auth_key: &current,
+            registration_upload: upload,
+        };
+        let response = self
+            .post("/v1/account/pake/enroll", Some(session), &body)
+            .await?;
+        match response.status {
+            204 | 200 => Ok(()),
+            _ => Err(error_from(&response)),
+        }
+    }
+
+    pub async fn login_legacy(
         &self,
         email: &str,
         auth_key: &AuthKey,
@@ -214,13 +393,7 @@ impl<T: Transport> SyncClient<T> {
             device_name,
         };
         let response = self.post("/v1/auth/login", None, &body).await?;
-        let dto: wire::LoginDto = expect_ok(response)?;
-        if dto.token.is_empty() || dto.token.len() > 128 {
-            return Err(SyncError::Protocol("token"));
-        }
-        let mut session = Session::new(dto.token, dto.expires_at, account_id, dto.vault_id);
-        session.account = dto.account.map(AccountInfo::from);
-        Ok(session)
+        self.session_from(response, account_id)
     }
 
     pub async fn logout(&self, session: &Session) -> Result<()> {
@@ -262,14 +435,35 @@ impl<T: Transport> SyncClient<T> {
         // `to_base64` returns `Zeroizing<String>`; bound here so the copies
         // are wiped when this function returns rather than living for as
         // long as the caller's `CredentialChange`.
-        let current = change.current_auth_key.to_base64();
-        let new = change.new_auth_key.to_base64();
-        let body = wire::CredentialsBody {
-            current_auth_key: &current,
-            kdf: change.kdf.into(),
-            new_auth_key: &new,
-            header: BASE64.encode(change.header),
-            base_header_revision: change.base_header_revision,
+        let (current, new);
+        let body = if change.pake {
+            let (reauth_id, finalization) = self.reauth(session, change.current_auth_key).await?;
+            let upload = self
+                .register_in_session(session, change.new_auth_key)
+                .await?;
+            wire::CredentialsBody {
+                current_auth_key: None,
+                reauth_id: Some(reauth_id),
+                credential_finalization: Some(finalization),
+                kdf: change.kdf.into(),
+                new_auth_key: None,
+                registration_upload: Some(upload),
+                header: BASE64.encode(change.header),
+                base_header_revision: change.base_header_revision,
+            }
+        } else {
+            current = change.current_auth_key.to_base64();
+            new = change.new_auth_key.to_base64();
+            wire::CredentialsBody {
+                current_auth_key: Some(&current),
+                reauth_id: None,
+                credential_finalization: None,
+                kdf: change.kdf.into(),
+                new_auth_key: Some(&new),
+                registration_upload: None,
+                header: BASE64.encode(change.header),
+                base_header_revision: change.base_header_revision,
+            }
         };
         let response = self
             .post("/v1/account/credentials", Some(session), &body)
@@ -291,11 +485,25 @@ impl<T: Transport> SyncClient<T> {
         session: &Session,
         current_auth_key: &AuthKey,
         email: &str,
+        pake: bool,
     ) -> Result<()> {
-        let current = current_auth_key.to_base64();
-        let body = wire::AccountDeletionBody {
-            current_auth_key: &current,
-            email,
+        let current;
+        let body = if pake {
+            let (reauth_id, finalization) = self.reauth(session, current_auth_key).await?;
+            wire::AccountDeletionBody {
+                current_auth_key: None,
+                reauth_id: Some(reauth_id),
+                credential_finalization: Some(finalization),
+                email,
+            }
+        } else {
+            current = current_auth_key.to_base64();
+            wire::AccountDeletionBody {
+                current_auth_key: Some(&current),
+                reauth_id: None,
+                credential_finalization: None,
+                email,
+            }
         };
         let response = self
             .post("/v1/account/delete", Some(session), &body)
@@ -645,6 +853,7 @@ fn error_for(status: u16) -> SyncError {
     match status {
         401 | 403 => SyncError::Unauthorized,
         404 => SyncError::Refused("not found"),
+        426 => SyncError::Refused("upgrade required"),
         409 => SyncError::Conflict(Vec::new()),
         413 => SyncError::Refused("too large"),
         429 => SyncError::RateLimited,

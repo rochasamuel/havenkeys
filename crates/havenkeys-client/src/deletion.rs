@@ -61,7 +61,9 @@ impl HavenClient {
         .map_err(|_| ClientError::internal())??;
 
         let (session, server) = (self.session()?, self.server()?);
-        let sent = server.delete_account(&session, &auth_key, &email).await;
+        let sent = server
+            .delete_account(&session, &auth_key, &email, false)
+            .await;
         drop(auth_key);
         match sent {
             // Already gone (deleted from another device meanwhile): same end.

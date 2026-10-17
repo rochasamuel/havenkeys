@@ -32,6 +32,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-platform-verifier = { version = "0.7", optional = true }
 
 [dev-dependencies]
+havenkeys-opaque = { path = "../havenkeys-opaque" }
 # test-util exposes StagedWrite::for_test, used only by this crate's tests to
 # put malformed data on a test server; never enabled by the normal dependency
 # above, so the desktop build never gets it.

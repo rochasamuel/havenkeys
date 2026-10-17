@@ -3010,6 +3010,7 @@ dependencies = [
  "data-encoding",
  "deadpool-postgres",
  "havenkeys-core",
+ "havenkeys-opaque",
  "havenkeys-server",
  "reqwest 0.12.28",
  "rustls",

@@ -129,7 +129,7 @@ impl HavenClient {
         };
 
         let session = server
-            .login(
+            .login_legacy(
                 &email,
                 &auth_key,
                 account_id,

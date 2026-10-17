@@ -7,6 +7,7 @@
 
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::KdfParams;
+use havenkeys_core::crypto::keys::AuthKey;
 use havenkeys_core::crypto::secret_key::SecretKey;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretField, SecretUpdate, UrlRule};
 use havenkeys_core::store::{AccountRecord, Store};
@@ -171,9 +172,22 @@ struct Device {
     secret_key: SecretKey,
     account: AccountRef,
     session: Session,
+    email: String,
+    auth_key: AuthKey,
 }
 
+/// Activates and signs in with OPAQUE, as the current app does.
 async fn activate(server: &Server, email: &str) -> Device {
+    activate_with(server, email, false).await
+}
+
+/// Activates and signs in the way a release-N-1 app does, with the auth key
+/// itself: an account with no OPAQUE record.
+async fn activate_legacy_device(server: &Server, email: &str) -> Device {
+    activate_with(server, email, true).await
+}
+
+async fn activate_with(server: &Server, email: &str, legacy: bool) -> Device {
     let invite = server.invite(email).await;
     let parsed = havenkeys_server::invite::decode(&invite).unwrap();
     let account = AccountRef::new(parsed.account, NormalizedEmail::parse(email).unwrap());
@@ -203,24 +217,34 @@ async fn activate(server: &Server, email: &str) -> Device {
     let header = vault.encode_account_header().unwrap();
 
     let client = server.client();
-    let activated = client
-        .activate(Activation {
-            email,
-            invite: &invite,
-            kdf: &kdf,
-            auth_key: &auth_key,
-            vault_id,
-            header: &header,
-        })
-        .await
-        .unwrap();
+    let activation = Activation {
+        email,
+        invite: &invite,
+        kdf: &kdf,
+        auth_key: &auth_key,
+        vault_id,
+        header: &header,
+    };
+    let activated = if legacy {
+        client.activate_legacy(activation).await
+    } else {
+        client.activate(activation).await
+    }
+    .unwrap();
     assert_eq!(activated.account_id, account.id);
     assert_eq!(activated.vault_id, vault_id);
 
-    let session = client
-        .login(email, &auth_key, account.id, Uuid::new_v4(), "Desktop")
-        .await
-        .unwrap();
+    let device_id = Uuid::new_v4();
+    let session = if legacy {
+        client
+            .login_legacy(email, &auth_key, account.id, device_id, "Desktop")
+            .await
+    } else {
+        client
+            .login_pake(email, &auth_key, account.id, device_id, "Desktop")
+            .await
+    }
+    .unwrap();
     assert_eq!(session.vault_id, vault_id);
 
     Device {
@@ -228,6 +252,8 @@ async fn activate(server: &Server, email: &str) -> Device {
         secret_key,
         account,
         session,
+        email: email.into(),
+        auth_key,
     }
 }
 
@@ -257,7 +283,7 @@ async fn an_item_written_on_one_device_opens_on_another() {
     )
     .unwrap();
     let second_session = client
-        .login(
+        .login_pake(
             "user@example.com",
             &auth_key,
             first.account.id,
@@ -357,10 +383,10 @@ async fn a_write_that_lost_a_race_comes_back_as_a_conflict() {
 }
 
 #[tokio::test]
-async fn a_password_change_reaches_the_second_device() {
+async fn a_legacy_password_change_reaches_the_second_device() {
     let server = Server::start().await;
     let client = server.client();
-    let mut one = activate(&server, "rekey@example.com").await;
+    let mut one = activate_legacy_device(&server, "rekey@example.com").await;
 
     // Device two signs in with the original password.
     let params = client.auth_params("rekey@example.com").await.unwrap();
@@ -372,7 +398,7 @@ async fn a_password_change_reaches_the_second_device() {
     )
     .unwrap();
     let session_two = client
-        .login(
+        .login_legacy(
             "rekey@example.com",
             &auth,
             one.account.id,
@@ -404,6 +430,7 @@ async fn a_password_change_reaches_the_second_device() {
                 new_auth_key: rekeyed.new_auth_key(),
                 header: &header,
                 base_header_revision: 0,
+                pake: false,
             },
         )
         .await
@@ -424,7 +451,7 @@ async fn a_password_change_reaches_the_second_device() {
     )
     .unwrap();
     assert!(client
-        .login(
+        .login_legacy(
             "rekey@example.com",
             &old,
             one.account.id,
@@ -445,7 +472,126 @@ async fn a_password_change_reaches_the_second_device() {
     )
     .unwrap();
     let session_two = client
-        .login(
+        .login_legacy(
+            "rekey@example.com",
+            &auth,
+            one.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
+        .await
+        .unwrap();
+    let served = client.header(&session_two).await.unwrap();
+    assert_eq!(served.revision, 1);
+    prepare_sign_in(
+        &served.bytes,
+        &SecretString::from(NEW),
+        &one.secret_key,
+        &one.account,
+    )
+    .unwrap();
+
+    // Device one kept its session and can still write.
+    let staged = one
+        .vault
+        .stage_create(login_item("After", "pw"), NOW)
+        .unwrap();
+    push(&client, &mut one, vec![staged]).await.unwrap();
+
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_pake_password_change_reaches_the_second_device() {
+    let server = Server::start().await;
+    let client = server.client();
+    let mut one = activate(&server, "rekey@example.com").await;
+
+    // Device two signs in with the original password.
+    let params = client.auth_params("rekey@example.com").await.unwrap();
+    let auth = derive_auth_key(
+        &SecretString::from(PASSWORD),
+        &one.secret_key,
+        &params.kdf,
+        &one.account,
+    )
+    .unwrap();
+    let session_two = client
+        .login_pake(
+            "rekey@example.com",
+            &auth,
+            one.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
+        .await
+        .unwrap();
+
+    // Device one changes it, server first.
+    const NEW: &str = "a much better master password";
+    let ticket = one.vault.begin_rekey().unwrap();
+    let rekeyed = ticket
+        .derive_for_account(
+            &SecretString::from(PASSWORD),
+            &SecretString::from(NEW),
+            cheap_kdf(),
+            &one.secret_key,
+            &one.account,
+        )
+        .unwrap();
+    let header = one.vault.encode_rekeyed_header(&ticket, &rekeyed).unwrap();
+    let revision = client
+        .change_credentials(
+            &one.session,
+            CredentialChange {
+                current_auth_key: rekeyed.current_auth_key(),
+                kdf: rekeyed.kdf(),
+                new_auth_key: rekeyed.new_auth_key(),
+                header: &header,
+                base_header_revision: 0,
+                pake: true,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(revision, 1);
+    one.vault.commit_rekey(ticket, Ok(rekeyed), 1).unwrap();
+
+    // Device two's session is gone; the old password no longer logs in.
+    assert_eq!(
+        client.pull(&session_two, 0).await.unwrap_err(),
+        SyncError::Unauthorized
+    );
+    let old = derive_auth_key(
+        &SecretString::from(PASSWORD),
+        &one.secret_key,
+        &params.kdf,
+        &one.account,
+    )
+    .unwrap();
+    assert!(client
+        .login_pake(
+            "rekey@example.com",
+            &old,
+            one.account.id,
+            Uuid::new_v4(),
+            "Laptop",
+        )
+        .await
+        .is_err());
+
+    // The new password, with the parameters the server now serves, does,
+    // and the header it serves opens with it.
+    let params = client.auth_params("rekey@example.com").await.unwrap();
+    let auth = derive_auth_key(
+        &SecretString::from(NEW),
+        &one.secret_key,
+        &params.kdf,
+        &one.account,
+    )
+    .unwrap();
+    let session_two = client
+        .login_pake(
             "rekey@example.com",
             &auth,
             one.account.id,
@@ -500,6 +646,7 @@ async fn a_lost_response_heals_on_the_next_sync() {
                 new_auth_key: rekeyed.new_auth_key(),
                 header: &header,
                 base_header_revision: 0,
+                pake: true,
             },
         )
         .await
@@ -593,7 +740,7 @@ async fn second_device(server: &Server, first: &Device, email: &str) -> Device {
     )
     .unwrap();
     let session = client
-        .login(email, &auth_key, first.account.id, Uuid::new_v4(), "Laptop")
+        .login_pake(email, &auth_key, first.account.id, Uuid::new_v4(), "Laptop")
         .await
         .unwrap();
     let header = client.header(&session).await.unwrap();
@@ -627,6 +774,8 @@ async fn second_device(server: &Server, first: &Device, email: &str) -> Device {
         secret_key: SecretKey::parse(first.secret_key.to_text().expose()).unwrap(),
         account: first.account.clone(),
         session,
+        email: email.into(),
+        auth_key,
     }
 }
 
@@ -722,5 +871,45 @@ async fn login_and_pull_carry_the_account_and_a_frozen_write_is_named() {
         pulled.account.as_ref().map(|a| a.entitlement),
         Some(Entitlement::Frozen)
     );
+    server.cleanup().await;
+}
+
+#[tokio::test]
+async fn a_legacy_account_enrols_and_then_signs_in_with_opaque() {
+    let server = Server::start().await;
+    let device = activate_legacy_device(&server, "legacy@example.com").await;
+    let client = server.client();
+    let err = client
+        .login_pake(
+            &device.email,
+            &device.auth_key,
+            device.account.id,
+            Uuid::new_v4(),
+            "Desktop",
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err, SyncError::Unauthorized, "no record yet");
+    let session = client
+        .login_legacy(
+            &device.email,
+            &device.auth_key,
+            device.account.id,
+            Uuid::new_v4(),
+            "Desktop",
+        )
+        .await
+        .unwrap();
+    client.enroll(&session, &device.auth_key).await.unwrap();
+    client
+        .login_pake(
+            &device.email,
+            &device.auth_key,
+            device.account.id,
+            Uuid::new_v4(),
+            "Desktop",
+        )
+        .await
+        .unwrap();
     server.cleanup().await;
 }

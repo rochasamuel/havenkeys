@@ -2,6 +2,7 @@
 //! broken server could send. None of them may panic, allocate without bound,
 //! or be mistaken for a valid answer.
 
+use data_encoding::BASE64;
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::KdfParams;
 use havenkeys_core::crypto::keys::AuthKey;
@@ -40,6 +41,47 @@ impl Transport for Stub {
             status: self.status,
             body: self.body.clone(),
         })
+    }
+}
+
+/// Answers requests in order and records each path, for multi-step flows.
+struct Script {
+    answers: std::sync::Mutex<std::collections::VecDeque<(u16, Vec<u8>)>>,
+    paths: std::sync::Mutex<Vec<String>>,
+}
+
+impl Script {
+    fn new(answers: &[(u16, &str)]) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
+            answers: std::sync::Mutex::new(
+                answers
+                    .iter()
+                    .map(|(s, b)| (*s, b.as_bytes().to_vec()))
+                    .collect(),
+            ),
+            paths: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+
+    fn paths(&self) -> Vec<String> {
+        self.paths.lock().unwrap().clone()
+    }
+}
+
+/// `Transport` is foreign to this test crate, so `Arc<Script>` needs a local wrapper.
+struct Shared(std::sync::Arc<Script>);
+
+impl Transport for Shared {
+    async fn send(&self, request: HttpRequest) -> Result<HttpResponse> {
+        self.0.paths.lock().unwrap().push(request.path.clone());
+        let (status, body) = self
+            .0
+            .answers
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or((500, Vec::new()));
+        Ok(HttpResponse { status, body })
     }
 }
 
@@ -91,6 +133,7 @@ fn change(base: i64) -> CredentialChange<'static> {
         new_auth_key: new,
         header: b"header",
         base_header_revision: base,
+        pake: false,
     }
 }
 
@@ -438,4 +481,67 @@ async fn a_fetch_request_is_bounded() {
     assert!(Stub::ok("{}").fetch_items(&session(), &[]).await.is_err());
     let many: Vec<Uuid> = (0..501).map(Uuid::from_u128).collect();
     assert!(Stub::ok("{}").fetch_items(&session(), &many).await.is_err());
+}
+
+#[tokio::test]
+async fn a_malformed_or_oversized_credential_response_stops_before_finish() {
+    let (auth_key, _, _) = credential_keys();
+    for response in ["AAAA", &BASE64.encode(&[0u8; 600]), "%%%"] {
+        let script = Script::new(&[(
+            200,
+            &format!(r#"{{"loginId":"x","credentialResponse":"{response}"}}"#),
+        )]);
+        let client = SyncClient::new(Shared(script.clone()));
+        let err = client
+            .login_pake("a@example.com", &auth_key, Uuid::nil(), Uuid::nil(), "D")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, SyncError::Protocol(_) | SyncError::Unauthorized),
+            "{err:?}"
+        );
+        assert_eq!(
+            script.paths(),
+            vec!["/v1/auth/pake/start"],
+            "nothing is sent after a bad response"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_well_formed_but_fake_response_is_unauthorized_and_nothing_is_finished() {
+    let (auth_key, _, _) = credential_keys();
+    // A real response for a different key, from a real server setup.
+    let server = havenkeys_opaque::ServerKeys::generate();
+    let (_, request) = havenkeys_opaque::ClientLogin::start(&[3u8; 32]).unwrap();
+    let (_, response) = server.login_start(None, &request, &[0u8; 16]).unwrap();
+    let body = format!(
+        r#"{{"loginId":"x","credentialResponse":"{}"}}"#,
+        BASE64.encode(&response)
+    );
+    let script = Script::new(&[(200, &body)]);
+    let err = SyncClient::new(Shared(script.clone()))
+        .login_pake("a@example.com", &auth_key, Uuid::nil(), Uuid::nil(), "D")
+        .await
+        .unwrap_err();
+    assert_eq!(err, SyncError::Unauthorized);
+    assert_eq!(script.paths().len(), 1);
+}
+
+#[tokio::test]
+async fn a_426_maps_to_refused_and_never_to_account_deleted() {
+    let err = Stub::status(
+        426,
+        r#"{"error":{"code":"upgrade_required","message":"Update"}}"#,
+    )
+    .login_legacy(
+        "a@example.com",
+        &credential_keys().0,
+        Uuid::nil(),
+        Uuid::nil(),
+        "D",
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err, SyncError::Refused("upgrade required"));
 }

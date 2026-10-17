@@ -204,7 +204,7 @@ impl HavenClient {
             .map_err(|_| ClientError::file())?;
 
         server
-            .activate(Activation {
+            .activate_legacy(Activation {
                 email: account.email.as_str(),
                 invite: &raw_invite,
                 kdf: &kdf,
@@ -285,7 +285,7 @@ impl HavenClient {
         let auth_key = auth_key?;
 
         let session = server
-            .login(
+            .login_legacy(
                 account.email.as_str(),
                 &auth_key,
                 account.id,
@@ -569,7 +569,7 @@ impl HavenClient {
         .await
         .map_err(|_| ClientError::internal())??;
         let session = server
-            .login(
+            .login_legacy(
                 account.email.as_str(),
                 &auth_key,
                 account.id,
@@ -689,6 +689,7 @@ impl HavenClient {
                     new_auth_key: rekeyed.new_auth_key(),
                     header: &header,
                     base_header_revision: ticket.base_revision() as i64,
+                    pake: false,
                 },
             )
             .await;

@@ -52,10 +52,56 @@ pub struct ActivateBody<'a> {
     pub email: &'a str,
     pub invite: &'a str,
     pub kdf: KdfDto,
-    pub auth_key: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_upload: Option<String>,
     pub vault_id: Uuid,
     pub header: String,
     pub key_scheme: i16,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ActivateRegisterBody<'a> {
+    pub email: &'a str,
+    pub invite: &'a str,
+    pub registration_request: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PakeStartBody<'a> {
+    pub email: &'a str,
+    pub credential_request: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PakeFinishBody<'a> {
+    pub login_id: &'a str,
+    pub credential_finalization: String,
+    pub device_id: Uuid,
+    pub device_name: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RegisterBody {
+    pub registration_request: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReauthBody {
+    pub credential_request: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EnrollBody<'a> {
+    pub current_auth_key: &'a str,
+    pub registration_upload: String,
 }
 
 #[derive(Serialize)]
@@ -76,9 +122,17 @@ pub struct LoginBody<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CredentialsBody<'a> {
-    pub current_auth_key: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_auth_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reauth_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_finalization: Option<String>,
     pub kdf: KdfDto,
-    pub new_auth_key: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_auth_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_upload: Option<String>,
     pub header: String,
     pub base_header_revision: i64,
 }
@@ -86,7 +140,12 @@ pub struct CredentialsBody<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AccountDeletionBody<'a> {
-    pub current_auth_key: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_auth_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reauth_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_finalization: Option<String>,
     pub email: &'a str,
 }
 
@@ -146,6 +205,37 @@ impl TryFrom<&StagedWrite> for ChangeDto {
 }
 
 // ----------------------------------------------------------------- responses
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PakeStartDto {
+    pub login_id: String,
+    pub credential_response: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistrationDto {
+    pub registration_response: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReauthDto {
+    pub reauth_id: String,
+    pub credential_response: String,
+}
+
+/// An OPAQUE message from the server: base64, at most the suite's limit.
+pub fn message(raw: &str) -> Result<Vec<u8>> {
+    let max = havenkeys_core::pake::MAX_MESSAGE_BYTES.div_ceil(3) * 4;
+    if raw.is_empty() || raw.len() > max {
+        return Err(SyncError::Protocol("pake"));
+    }
+    BASE64
+        .decode(raw.as_bytes())
+        .map_err(|_| SyncError::Protocol("pake"))
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
