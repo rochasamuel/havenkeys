@@ -30,7 +30,7 @@ const FALLBACK_NAME: &str = "attachment";
 /// What an item's details record about one attached file. The file itself is a
 /// separate blob, identified by `id` and checked against `blob_sha256`.
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct AttachmentMeta {
     pub id: Uuid,
     pub name: String,
@@ -39,6 +39,10 @@ pub struct AttachmentMeta {
     #[serde(with = "hex")]
     pub blob_sha256: [u8; 32],
     pub created_at: i64,
+    /// Fields written by a newer version that this one does not know. Kept
+    /// so an edit made here does not erase them.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl fmt::Debug for AttachmentMeta {
@@ -203,6 +207,7 @@ impl VaultService {
             size: bytes.len() as u64,
             blob_sha256: Sha256::digest(&blob).into(),
             created_at: now_ms,
+            extra: serde_json::Map::new(),
         };
         Ok(SealedAttachment { meta, blob })
     }

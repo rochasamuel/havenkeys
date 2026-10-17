@@ -184,6 +184,7 @@ mod tests {
             size: 0,
             blob_sha256: [0; 32],
             created_at: 0,
+            extra: Default::default(),
         }
     }
 

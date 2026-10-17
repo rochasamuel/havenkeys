@@ -253,3 +253,19 @@ fn an_overview_manifest_survives_an_edit_by_an_older_build() {
     assert_eq!(back.title, "Renamed");
     assert_eq!(ids(&back), ids_of(&metas));
 }
+
+/// A field a newer build adds to a file's record is kept, not refused, and
+/// rides along when this build edits the item.
+#[test]
+fn an_unknown_attachment_field_survives_an_edit() {
+    let (mut v, _) = activated_vault();
+    let id = create(&mut v, login("GitHub", "me", "pw", "github.com"));
+    attach(&mut v, &id, 1, 2);
+
+    let mut json = serde_json::to_value(v.get_item(&id).unwrap()).unwrap();
+    json["attachments"][0]["fromTheFuture"] = serde_json::json!(7);
+    let mut edited: ItemOverview = serde_json::from_value(json).unwrap();
+    edited.title = "Renamed".into();
+    let back = serde_json::to_value(&edited).unwrap();
+    assert_eq!(back["attachments"][0]["fromTheFuture"], 7);
+}
