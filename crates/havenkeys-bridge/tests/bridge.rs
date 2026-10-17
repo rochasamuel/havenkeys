@@ -422,6 +422,36 @@ fn responses_carry_only_what_the_operation_needs() {
     assert!(!t.contains("gh-password"));
 }
 
+/// Attachments never reach the extension: no answer about a login with a
+/// file names the file or lists the item's files.
+#[test]
+fn responses_never_carry_attachments() {
+    use havenkeys_core::attachment::AttachmentChange;
+    let f = fixture();
+    {
+        let mut v = f.vault.lock().unwrap();
+        let sealed = v
+            .seal_attachment(&f.github, "passport-scan.pdf", b"%PDF-1.7 body", NOW)
+            .unwrap();
+        let staged = v
+            .stage_attachments(&f.github, AttachmentChange::Add(vec![sealed.meta]), NOW)
+            .unwrap();
+        v.commit_write(staged, 10).unwrap();
+    }
+    let answers = [
+        find(&f, "https://github.com/"),
+        fill(&f, f.github, "https://github.com/"),
+        totp(&f, f.github, "https://github.com/"),
+    ];
+    assert_eq!(answers[0]["result"]["matches"][0]["title"], "GitHub");
+    assert!(answers[1]["error"].is_null(), "the fill still works");
+    for answer in answers {
+        let text = answer.to_string();
+        assert!(!text.contains("passport-scan"), "{text}");
+        assert!(!text.contains("attachments"), "{text}");
+    }
+}
+
 /// Final review (tags): 50 logins with the longest titles, usernames and 20
 /// tags each made a find_matches answer over MAX_RESPONSE_BYTES, so the
 /// frame could not be written and the extension lost its connection. Tags
