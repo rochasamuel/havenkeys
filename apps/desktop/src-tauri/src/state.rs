@@ -6,6 +6,7 @@
 
 use crate::clipboard::ClipboardGuard;
 use crate::item_input::ItemInputWire;
+use crate::pending_files::PendingFiles;
 use crate::qr_scan::ScannedCode;
 use crate::scan_slot::{ScanSlot, ScannedTotp};
 use havenkeys_bridge::Bridge;
@@ -44,6 +45,8 @@ pub struct AppState {
     /// A repeat password change from the browser waiting for the user
     /// (confirm.rs).
     pub confirm: crate::confirm::PendingConfirmation,
+    /// Files picked for an item and not saved yet (pending_files.rs).
+    pub pending_files: PendingFiles,
     origin: Instant,
 }
 
@@ -58,6 +61,7 @@ impl AppState {
             last_import: Mutex::new(None),
             totp_scan: Mutex::new(ScanSlot::default()),
             confirm: Default::default(),
+            pending_files: Default::default(),
             origin: Instant::now(),
         }
     }
@@ -166,6 +170,8 @@ impl AppState {
         }
         // Scanned TOTP codes waiting to be saved are vault secrets too.
         self.clear_totp_scan();
+        // Picked files are plaintext waiting for a save.
+        self.pending_files.clear();
         // A repeat password change waiting for the user is refused: its
         // dialog closes, and the bridge answers `denied`.
         self.confirm.cancel();

@@ -9,6 +9,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AccountField,
   AccountStatus,
+  FilesEdit,
+  PendingFile,
   InvitePreview,
   PasswordStrength,
   AddressPart,
@@ -113,16 +115,16 @@ export const api = {
   passwordHistory: (id: string) => call<number[]>("password_history", { id }),
   listPasskeys: (id: string) => call<PasskeyInfo[]>("list_passkeys", { id }),
   deletePasskey: (id: string, credentialId: string) => call<ItemOverview>("delete_passkey", { id, credentialId }),
-  /** Rust opens the file picker; `null` when it was cancelled. */
-  addAttachments: (id: string) => call<ItemOverview | null>("add_attachments", { itemId: id }),
+  /** Rust opens the file picker and keeps the bytes; empty when it was cancelled. */
+  pickFiles: (held: number) => call<PendingFile[]>("pick_files", { held }),
+  /** Let go of picked files that will not be saved. */
+  discardPendingFiles: (tokens: string[]) => call<void>("discard_pending_files", { tokens }),
   /** Rust opens the save dialog; `false` when it was cancelled. */
   saveAttachment: (id: string, attachmentId: string) =>
     call<boolean>("save_attachment", { itemId: id, attachmentId }),
   /** The raw bytes of an attached image; Rust refuses anything else. */
   previewAttachment: (id: string, attachmentId: string) =>
     call<ArrayBuffer>("preview_attachment", { itemId: id, attachmentId }),
-  removeAttachment: (id: string, attachmentId: string) =>
-    call<ItemOverview>("remove_attachment", { itemId: id, attachmentId }),
   revealPreviousPassword: (id: string, index: number) =>
     call<string>("reveal_previous_password", { id, index }),
   totp: (id: string) => call<TotpCode>("get_totp_code", { id }),
@@ -141,8 +143,9 @@ export const api = {
   openItemFieldUrl: (id: string, fieldId: string) => call<void>("open_item_field_url", { id, fieldId }),
   /** Rust reads the clipboard image, then the screen; returns tokens and labels, never the secret. */
   scanTotpQr: () => call<ScannedTotp[]>("scan_totp_qr"),
-  createItem: (input: ItemInput) => call<ItemOverview>("create_item", { input }),
-  updateItem: (id: string, input: ItemInput) => call<ItemOverview>("update_item", { id, input }),
+  createItem: (input: ItemInput, files?: FilesEdit) => call<ItemOverview>("create_item", { input, files: files ?? null }),
+  updateItem: (id: string, input: ItemInput, files?: FilesEdit) =>
+    call<ItemOverview>("update_item", { id, input, files: files ?? null }),
   /** Moves the item to the Trash; `false` when it was deleted for good (its details did not open). */
   trashItem: (id: string) => call<boolean>("trash_item", { id }),
   restoreItem: (id: string) => call<ItemOverview>("restore_item", { id }),

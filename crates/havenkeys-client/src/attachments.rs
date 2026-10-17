@@ -5,7 +5,7 @@ use crate::client::HavenClient;
 use crate::error::{ClientError, ClientResult};
 use crate::now_ms;
 use havenkeys_core::attachment::{
-    AttachmentChange, AttachmentMeta, FileEdits, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
+    AttachmentMeta, FileEdits, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
 };
 use havenkeys_core::model::ItemOverview;
 use havenkeys_core::vault::{StagedWrite, VaultService};
@@ -94,39 +94,6 @@ impl HavenClient {
             metas.push(sealed.meta);
         }
         Ok(metas)
-    }
-
-    /// Add files to an existing item, alone.
-    pub async fn add_attachments(
-        &self,
-        item_id: Uuid,
-        files: Vec<(String, Zeroizing<Vec<u8>>)>,
-    ) -> ClientResult<ItemOverview> {
-        let added = files
-            .into_iter()
-            .map(|(name, bytes)| NewFile { name, bytes })
-            .collect();
-        self.save_with_files(item_id, added, Vec::new(), |vault, files| {
-            vault.stage_attachments(&item_id, AttachmentChange::Add(files.added), now_ms())
-        })
-        .await
-    }
-
-    pub async fn remove_attachment(
-        &self,
-        item_id: Uuid,
-        attachment_id: Uuid,
-    ) -> ClientResult<ItemOverview> {
-        self.require_online()?;
-        self.require_full()?;
-        let staged = self.vault()?.stage_attachments(
-            &item_id,
-            AttachmentChange::Remove(attachment_id),
-            now_ms(),
-        )?;
-        let updated = self.push(staged).await?.ok_or_else(ClientError::internal)?;
-        self.prune_attachment_cache();
-        Ok(updated)
     }
 
     /// The file's bytes: this device's sealed copy if it opens, else a

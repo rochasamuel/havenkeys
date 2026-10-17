@@ -1,19 +1,21 @@
 //! Attachment commands (spec 2026-10-13-encrypted-attachments §5). The
 //! renderer never supplies a path or bytes: Rust opens the native dialogs,
-//! reads and writes the files, and hands the renderer only an item's updated
-//! overview, a yes/no, or the bytes of an image it may show.
+//! reads and writes the files, and hands the renderer only a token, name,
+//! size and type per picked file, a yes/no, or the bytes of an image it may
+//! show.
 
 use crate::export::write_private;
-use crate::state::{AppState, CmdError, CmdResult, ITEMS_CHANGED_EVENT};
+use crate::pending_files::PendingFiles;
+use crate::state::{AppState, CmdError, CmdResult};
 use havenkeys_core::attachment::{
     is_previewable, sanitize_name, sniff, AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM,
     MAX_ATTACHMENT_BYTES,
 };
-use havenkeys_core::model::ItemOverview;
 use havenkeys_core::Error;
+use serde::Serialize;
 use std::io::Read;
 use std::path::Path;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -55,33 +57,49 @@ fn ensure_previewable(bytes: &[u8]) -> CmdResult<()> {
     }
 }
 
-/// Let the user pick files and attach them to the item. `None` if the
-/// picker was cancelled.
+/// A picked file as the renderer sees it: a token for the bytes Rust holds,
+/// never the bytes.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingFileWire {
+    token: Uuid,
+    name: String,
+    size: u64,
+    mime: &'static str,
+}
+
+fn hold(store: &PendingFiles, name: &str, bytes: Zeroizing<Vec<u8>>) -> PendingFileWire {
+    let (name, size, mime) = (sanitize_name(name), bytes.len() as u64, sniff(&bytes));
+    PendingFileWire {
+        token: store.insert(name.clone(), bytes),
+        name,
+        size,
+        mime,
+    }
+}
+
+/// Let the user pick files for an item that already holds `held`. They wait
+/// in Rust until a save names their tokens. Empty if the picker was
+/// cancelled.
 #[tauri::command]
-pub async fn add_attachments(app: AppHandle, item_id: Uuid) -> CmdResult<Option<ItemOverview>> {
-    let held = {
+pub async fn pick_files(app: AppHandle, held: usize) -> CmdResult<Vec<PendingFileWire>> {
+    {
         let state = app.state::<AppState>();
         state.touch();
         state.require_unlocked()?;
-        // Checked before the picker opens, as for an import.
-        state.require_online()?;
-        state.require_full()?;
-        // A trashed item is not listed; the client checks it again.
-        let vault = state.client().vault()?;
-        vault.get_item(&item_id).map_or(0, |o| o.attachments.len())
-    };
+    }
     let handle = app.clone();
-    let files = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
+    tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
         let Some(picked) = handle
             .dialog()
             .file()
             .set_title("Attach files")
             .blocking_pick_files()
         else {
-            return Ok(None);
+            return Ok(Vec::new());
         };
         ensure_room(held, picked.len())?;
-        picked
+        let files = picked
             .into_iter()
             .map(|file| {
                 let path = file.into_path().map_err(|_| CmdError::file())?;
@@ -90,22 +108,24 @@ pub async fn add_attachments(app: AppHandle, item_id: Uuid) -> CmdResult<Option<
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
                 Ok((name, read_limited(&path)?))
             })
-            .collect::<CmdResult<Vec<_>>>()
-            .map(Some)
+            .collect::<CmdResult<Vec<_>>>()?;
+        // A lock while the dialog was open drops the plaintext unheld.
+        let state = handle.state::<AppState>();
+        state.require_unlocked()?;
+        Ok(files
+            .into_iter()
+            .map(|(name, bytes)| hold(&state.pending_files, &name, bytes))
+            .collect())
     })
     .await
-    .map_err(|_| CmdError::internal())??;
-    let Some(files) = files.filter(|f| !f.is_empty()) else {
-        return Ok(None);
-    };
-    let item = app
-        .state::<AppState>()
-        .client()
-        .clone()
-        .add_attachments(item_id, files)
-        .await?;
-    let _ = app.emit(ITEMS_CHANGED_EVENT, ());
-    Ok(Some(item))
+    .map_err(|_| CmdError::internal())?
+}
+
+/// Let go of files the user picked and then removed or cancelled.
+#[tauri::command]
+pub fn discard_pending_files(state: State<'_, AppState>, tokens: Vec<Uuid>) -> CmdResult<()> {
+    state.pending_files.discard(&tokens);
+    Ok(())
 }
 
 /// Save a decrypted copy where the user chooses. `false` if the save dialog
@@ -168,23 +188,6 @@ pub async fn preview_attachment(
     Ok(tauri::ipc::Response::new(bytes.expose().to_vec()))
 }
 
-#[tauri::command]
-pub async fn remove_attachment(
-    app: AppHandle,
-    item_id: Uuid,
-    attachment_id: Uuid,
-) -> CmdResult<ItemOverview> {
-    app.state::<AppState>().touch();
-    let item = app
-        .state::<AppState>()
-        .client()
-        .clone()
-        .remove_attachment(item_id, attachment_id)
-        .await?;
-    let _ = app.emit(ITEMS_CHANGED_EVENT, ());
-    Ok(item)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +225,22 @@ mod tests {
         let err = ensure_room(19, 2).unwrap_err();
         assert!(err.message.contains("An item holds up to 20 files"));
         assert!(ensure_room(0, MAX_ATTACHMENTS_PER_ITEM + 1).is_err());
+    }
+
+    #[test]
+    fn hold_describes_the_file_without_its_bytes() {
+        let store = PendingFiles::default();
+        let file = hold(
+            &store,
+            "../a.png",
+            Zeroizing::new(b"\x89PNG\r\n\x1a\nrest".to_vec()),
+        );
+        assert_eq!(
+            (file.name.as_str(), file.size, file.mime),
+            ("a.png", 12, "image/png")
+        );
+        let taken = store.take(&[file.token]).unwrap();
+        assert_eq!(taken[0].name, "a.png");
     }
 
     #[test]

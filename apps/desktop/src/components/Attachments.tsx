@@ -38,7 +38,7 @@ function rememberSaveWarned() {
 
 const isImage = (a: AttachmentMeta) => Object.hasOwn(IMAGE_KINDS, a.mime);
 
-type Confirm = { kind: "remove" | "save"; id: string } | null;
+type Confirm = { kind: "save"; id: string } | null;
 
 /**
  * An item's attached files (spec 2026-10-13-encrypted-attachments §4.9).
@@ -46,7 +46,7 @@ type Confirm = { kind: "remove" | "save"; id: string } | null;
  * image the user asks to preview. Picking, saving and reading files is done
  * by Rust behind its own dialogs.
  */
-export function Attachments({ item, readOnly }: { item: ItemOverview; readOnly: boolean }) {
+export function Attachments({ item }: { item: ItemOverview }) {
   const { t, dateLocale } = useI18n();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -65,8 +65,6 @@ export function Attachments({ item, readOnly }: { item: ItemOverview; readOnly: 
     }
   }
 
-  const add = () => run(() => api.addAttachments(item.id), t.attachments.addFailed);
-
   const save = (a: AttachmentMeta) => {
     if (!saveWarned()) return setConfirm({ kind: "save", id: a.id });
     setConfirm(null);
@@ -75,16 +73,10 @@ export function Attachments({ item, readOnly }: { item: ItemOverview; readOnly: 
     }, t.attachments.saveFailed);
   };
 
-  const remove = (a: AttachmentMeta) =>
-    run(async () => {
-      await api.removeAttachment(item.id, a.id);
-      setConfirm(null);
-    }, t.attachments.removeFailed);
-
   const kind = (a: AttachmentMeta) =>
     IMAGE_KINDS[a.mime] ?? (a.mime === "application/pdf" ? "PDF" : t.attachments.file);
 
-  if (files.length === 0 && readOnly) return null;
+  if (files.length === 0) return null;
   return (
     <section aria-label={t.attachments.title}>
       {files.length > 0 && <h3 className="group-title">{t.attachments.title}</h3>}
@@ -109,47 +101,27 @@ export function Attachments({ item, readOnly }: { item: ItemOverview; readOnly: 
                 />
               )}
               <IconButton icon="download" label={t.attachments.save(a.name)} onClick={() => void save(a)} disabled={busy} />
-              <IconButton
-                icon="trash"
-                label={t.attachments.remove(a.name)}
-                onClick={() => setConfirm({ kind: "remove", id: a.id })}
-                disabled={readOnly || busy}
-              />
             </div>
             {confirm?.id === a.id && (
               <div className="confirm attachment-confirm" role="alert">
-                <span>{confirm.kind === "remove" ? t.attachments.confirmRemove(a.name) : t.attachments.saveWarning}</span>
+                <span>{t.attachments.saveWarning}</span>
                 <button className="btn btn-small" onClick={() => setConfirm(null)} autoFocus>
                   {t.common.cancel}
                 </button>
-                {confirm.kind === "remove" ? (
-                  <button className="btn btn-small btn-danger" onClick={() => void remove(a)} disabled={busy || readOnly}>
-                    {t.common.remove}
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-small btn-primary"
-                    onClick={() => {
-                      rememberSaveWarned();
-                      void save(a);
-                    }}
-                    disabled={busy}
-                  >
-                    {t.attachments.saveAnyway}
-                  </button>
-                )}
+                <button
+                  className="btn btn-small btn-primary"
+                  onClick={() => {
+                    rememberSaveWarned();
+                    void save(a);
+                  }}
+                  disabled={busy}
+                >
+                  {t.attachments.saveAnyway}
+                </button>
               </div>
             )}
           </li>
         ))}
-        {!readOnly && (
-          <li>
-            <button className="row row-button attachment-add" onClick={() => void add()} disabled={busy}>
-              <Icon name="paperclip" size={16} />
-              <span className="row-label-inline">{busy ? t.attachments.adding : t.attachments.add}</span>
-            </button>
-          </li>
-        )}
       </ul>
       {preview.shown && <PreviewModal name={preview.shown.name} url={preview.shown.url} onClose={preview.close} />}
     </section>

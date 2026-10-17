@@ -327,7 +327,7 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
           )}
 
           <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
-          <Attachments item={item} readOnly={readOnly} />
+          <Attachments item={item} />
 
           {item.hasNotes && (
             <div className="group">
@@ -370,7 +370,7 @@ export function ItemDetail({ item, revision, health, readOnly, onTag, onEdit, on
             )
           )}
           <CustomSections itemId={item.id} updatedAt={item.updatedAt} />
-          <Attachments item={item} readOnly={readOnly} />
+          <Attachments item={item} />
         </>
       )}
 

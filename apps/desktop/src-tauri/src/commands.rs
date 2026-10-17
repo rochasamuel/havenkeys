@@ -12,7 +12,8 @@
 use crate::item_input::ItemInputWire;
 use crate::qr_scan;
 use crate::scan_slot::ScannedTotp;
-use crate::state::{AppState, CmdError, CmdResult};
+use crate::state::{AppState, CmdError, CmdResult, ITEMS_CHANGED_EVENT};
+use havenkeys_core::attachment::FileEdits;
 use havenkeys_core::generator::{self, GeneratedPassword, GeneratorOptions};
 use havenkeys_core::model::{ItemInput, ItemOverview, SecretField, Settings, TrashEntry};
 use havenkeys_core::password_strength::{self, PasswordStrength};
@@ -311,13 +312,26 @@ pub async fn scan_totp_qr(app: AppHandle) -> CmdResult<Vec<ScannedTotp>> {
     app.state::<AppState>().store_totp_scan(codes)
 }
 
+/// The files a save adds (tokens from `pick_files`) and removes.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FilesWire {
+    added: Vec<Uuid>,
+    removed: Vec<Uuid>,
+}
+
 /// Create an item: seal it under the vault lock, let the server assign its
-/// revision, then record it locally. Nothing is stored until the server has
+/// revision, then record it. Nothing is stored until the server has
 /// accepted it, so the replica is never ahead of the authority.
 #[tauri::command]
-pub async fn create_item(app: AppHandle, input: ItemInputWire) -> CmdResult<ItemOverview> {
-    save_item(&app, input, |v, input| {
-        v.stage_create(input, AppState::now_ms())
+pub async fn create_item(
+    app: AppHandle,
+    input: ItemInputWire,
+    files: Option<FilesWire>,
+) -> CmdResult<ItemOverview> {
+    let id = Uuid::new_v4();
+    save_item(&app, id, input, files, |v, input, files| {
+        v.stage_create_with(id, input, files, AppState::now_ms())
     })
     .await
 }
@@ -327,9 +341,10 @@ pub async fn update_item(
     app: AppHandle,
     id: Uuid,
     input: ItemInputWire,
+    files: Option<FilesWire>,
 ) -> CmdResult<ItemOverview> {
-    save_item(&app, input, |v, input| {
-        v.stage_update(&id, input, AppState::now_ms())
+    save_item(&app, id, input, files, |v, input, files| {
+        v.stage_update_with(&id, input, files, AppState::now_ms())
     })
     .await
 }
@@ -382,10 +397,7 @@ pub fn list_trash(state: State<'_, AppState>) -> CmdResult<Vec<TrashEntry>> {
 
 /// Stage a change for the server. Counts as activity and needs a session;
 /// the vault guard ends with `stage`, before anything is sent.
-fn stage_write(
-    app: &AppHandle,
-    stage: impl FnOnce(&AppState) -> CmdResult<StagedWrite>,
-) -> CmdResult<StagedWrite> {
+fn stage_write<T>(app: &AppHandle, stage: impl FnOnce(&AppState) -> CmdResult<T>) -> CmdResult<T> {
     let state = app.state::<AppState>();
     state.touch();
     state.require_online()?;
@@ -393,25 +405,30 @@ fn stage_write(
     stage(&state)
 }
 
-/// Create or update an item: seal it with `stage`, let the server assign
-/// its revision, then record it. A scanned TOTP code it used is let go once
-/// the save has gone through.
+/// Create or update item `id`: seal it with `stage` together with its file
+/// edits, let the server assign its revision, then record it. The picked
+/// files are taken out of the store first and gone whether or not the save
+/// succeeds. A scanned TOTP code it used is let go once the save has gone
+/// through.
 async fn save_item(
     app: &AppHandle,
+    id: Uuid,
     input: ItemInputWire,
-    stage: impl FnOnce(&mut VaultService, ItemInput) -> havenkeys_core::Result<StagedWrite>,
+    files: Option<FilesWire>,
+    stage: impl FnOnce(&VaultService, ItemInput, FileEdits) -> havenkeys_core::Result<StagedWrite>,
 ) -> CmdResult<ItemOverview> {
     let uses_scan = input.uses_scan();
-    let staged = stage_write(app, |state| {
-        let input = state.resolve_item_input(input)?;
-        let staged = stage(&mut *state.vault()?, input)?;
-        Ok(staged)
-    })?;
+    let FilesWire { added, removed } = files.unwrap_or_default();
+    let added = app.state::<AppState>().pending_files.take(&added)?;
+    let input = stage_write(app, |state| state.resolve_item_input(input))?;
     let client = app.state::<AppState>().client().clone();
-    let saved = client.push(staged).await?.ok_or_else(CmdError::internal)?;
+    let saved = client
+        .save_with_files(id, added, removed, |v, files| stage(v, input, files))
+        .await?;
     if uses_scan {
         app.state::<AppState>().clear_totp_scan();
     }
+    let _ = app.emit(ITEMS_CHANGED_EVENT, ());
     Ok(saved)
 }
 

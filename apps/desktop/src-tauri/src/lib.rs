@@ -25,6 +25,7 @@ mod import;
 mod item_input;
 mod native_host;
 mod pairing;
+mod pending_files;
 mod qr_scan;
 mod quick_access;
 mod quick_shortcut;
@@ -333,10 +334,10 @@ pub fn run() {
             commands::password_history,
             commands::list_passkeys,
             commands::delete_passkey,
-            attachments::add_attachments,
+            attachments::pick_files,
+            attachments::discard_pending_files,
             attachments::save_attachment,
             attachments::preview_attachment,
-            attachments::remove_attachment,
             confirm::answer_update_confirmation,
             account::device_status,
             account::account_status,

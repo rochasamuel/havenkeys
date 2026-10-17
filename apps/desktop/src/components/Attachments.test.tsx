@@ -5,17 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AttachmentMeta, ItemOverview } from "../lib/types";
 
 let locked: ((reason: string) => void) | null = null;
-const addAttachments = vi.fn<(id: string) => Promise<ItemOverview | null>>();
 const saveAttachment = vi.fn<(id: string, a: string) => Promise<boolean>>();
 const previewAttachment = vi.fn<(id: string, a: string) => Promise<ArrayBuffer>>();
-const removeAttachment = vi.fn<(id: string, a: string) => Promise<ItemOverview>>();
 vi.mock("../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/api")>()),
   api: {
-    addAttachments: (id: string) => addAttachments(id),
     saveAttachment: (id: string, a: string) => saveAttachment(id, a),
     previewAttachment: (id: string, a: string) => previewAttachment(id, a),
-    removeAttachment: (id: string, a: string) => removeAttachment(id, a),
     onLocked: (h: (reason: string) => void) => ((locked = h), Promise.resolve(() => void (locked = null))),
   },
 }));
@@ -39,10 +35,9 @@ let host: HTMLElement;
 let root: Root;
 
 beforeEach(() => {
-  for (const f of [addAttachments, saveAttachment, previewAttachment, removeAttachment]) f.mockReset();
+  for (const f of [saveAttachment, previewAttachment]) f.mockReset();
   saveAttachment.mockResolvedValue(true);
   previewAttachment.mockResolvedValue(new Uint8Array([0x89, 0x50]).buffer);
-  removeAttachment.mockResolvedValue(item);
   createObjectURL.mockClear();
   revokeObjectURL.mockClear();
   Object.assign(URL, { createObjectURL, revokeObjectURL });
@@ -61,8 +56,8 @@ function button(label: string): HTMLButtonElement | undefined {
   return [...document.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === label || b.textContent === label);
 }
 
-async function render(readOnly = false) {
-  await act(async () => root.render(<Attachments item={item} readOnly={readOnly} />));
+async function render() {
+  await act(async () => root.render(<Attachments item={item} />));
 }
 
 describe("Attachments", () => {
@@ -72,15 +67,8 @@ describe("Attachments", () => {
     expect(host.textContent).toContain("receipt.pdf");
     expect(host.textContent).toContain("240 KB");
     expect(host.textContent).toContain("1.5 MB");
-    expect(button(en.attachments.add)).toBeDefined();
     expect(previewAttachment).not.toHaveBeenCalled();
     expect(saveAttachment).not.toHaveBeenCalled();
-  });
-
-  it("hides Add file when read-only", async () => {
-    await render(true);
-    expect(button(en.attachments.add)).toBeUndefined();
-    expect(button(en.attachments.remove("receipt.pdf"))?.disabled).toBe(true);
   });
 
   it("preview_only_for_images", async () => {
@@ -111,17 +99,6 @@ describe("Attachments", () => {
     act(() => root.unmount());
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
     root = createRoot(host);
-  });
-
-  it("remove_asks_first", async () => {
-    await render();
-    await act(async () => button(en.attachments.remove("receipt.pdf"))!.click());
-    expect(host.textContent).toContain(
-      "Remove receipt.pdf? It will be deleted from HavenKeys on all your devices.",
-    );
-    expect(removeAttachment).not.toHaveBeenCalled();
-    await act(async () => button(en.common.remove)!.click());
-    expect(removeAttachment).toHaveBeenCalledWith("i1", "a2");
   });
 
   it("save_warns_once_per_session", async () => {

@@ -206,7 +206,7 @@ export function IdentityDetail({ item, readOnly, onTag, onEdit }: Props) {
         </>
       )}
 
-      <Attachments item={item} readOnly={readOnly} />
+      <Attachments item={item} />
 
       <footer className="item-foot">
         <p className="muted">

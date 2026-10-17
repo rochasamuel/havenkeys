@@ -4,7 +4,8 @@
 use havenkeys_client::device::Device;
 use havenkeys_client::key_store::MemoryKeyStore;
 use havenkeys_client::{ClientConfig, ClientEvents, HavenClient, NewFile};
-use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
+use havenkeys_core::attachment::AttachmentChange;
+use havenkeys_core::model::{ItemInput, ItemOverview, ItemType, MatchType, SecretUpdate, UrlRule};
 use havenkeys_core::store::Store;
 use havenkeys_core::sync::SyncReport;
 use havenkeys_core::vault::VaultService;
@@ -1072,7 +1073,7 @@ async fn attach_then_read_on_another_device() {
     let server = Server::start().await;
     let (a, b, item, _dirs) = two_devices(&server).await;
 
-    let updated = a.add_attachments(item, vec![png("front")]).await.unwrap();
+    let updated = add_files(&a, item, vec![png("front")]).await.unwrap();
     assert_eq!(updated.attachments.len(), 1);
     assert_eq!(updated.attachments[0].mime, "image/png");
     let id = updated.attachments[0].id;
@@ -1091,8 +1092,7 @@ async fn attach_then_read_on_another_device() {
 async fn offline_read_uses_cache_and_misses_cleanly() {
     let server = Server::start().await;
     let (a, b, item, _dirs) = two_devices(&server).await;
-    let id = a
-        .add_attachments(item, vec![png("front")])
+    let id = add_files(&a, item, vec![png("front")])
         .await
         .unwrap()
         .attachments[0]
@@ -1135,10 +1135,7 @@ async fn conflicting_attach_surfaces_item_changed_elsewhere() {
         .unwrap();
     b.push(trash).await.unwrap();
 
-    let err = a
-        .add_attachments(item, vec![png("front")])
-        .await
-        .unwrap_err();
+    let err = add_files(&a, item, vec![png("front")]).await.unwrap_err();
     assert_eq!(err.code, "item_changed_elsewhere");
     assert!(attachment_ids(&a, item).is_empty());
     // The upload stays pending on the server, for its sweep to remove.
@@ -1155,15 +1152,14 @@ async fn conflicting_attach_surfaces_item_changed_elsewhere() {
 async fn remove_evicts_cache() {
     let server = Server::start().await;
     let (a, b, item, _dirs) = two_devices(&server).await;
-    let id = a
-        .add_attachments(item, vec![png("front")])
+    let id = add_files(&a, item, vec![png("front")])
         .await
         .unwrap()
         .attachments[0]
         .id;
     assert!(a.vault().unwrap().cached_attachment(&id).unwrap().is_some());
 
-    let updated = a.remove_attachment(item, id).await.unwrap();
+    let updated = remove_file(&a, item, id).await.unwrap();
     assert!(updated.attachments.is_empty());
     assert!(a.vault().unwrap().cached_attachment(&id).unwrap().is_none());
 
@@ -1176,8 +1172,7 @@ async fn remove_evicts_cache() {
 async fn prune_keeps_trashed_items_files() {
     let server = Server::start().await;
     let (a, _b, item, _dirs) = two_devices(&server).await;
-    let id = a
-        .add_attachments(item, vec![png("front")])
+    let id = add_files(&a, item, vec![png("front")])
         .await
         .unwrap()
         .attachments[0]
@@ -1206,8 +1201,7 @@ async fn prune_keeps_trashed_items_files() {
 async fn a_bad_cached_copy_is_evicted_and_refetched() {
     let server = Server::start().await;
     let (a, _b, item, _dirs) = two_devices(&server).await;
-    let id = a
-        .add_attachments(item, vec![png("front")])
+    let id = add_files(&a, item, vec![png("front")])
         .await
         .unwrap()
         .attachments[0]
@@ -1248,6 +1242,34 @@ fn new_file((name, bytes): (String, zeroize::Zeroizing<Vec<u8>>)) -> NewFile {
     NewFile { name, bytes }
 }
 
+/// Attach files to an existing item, alone.
+async fn add_files(
+    client: &HavenClient,
+    item: Uuid,
+    files: Vec<(String, zeroize::Zeroizing<Vec<u8>>)>,
+) -> havenkeys_client::ClientResult<ItemOverview> {
+    let added = files.into_iter().map(new_file).collect();
+    client
+        .save_with_files(item, added, vec![], |vault, files| {
+            let change = AttachmentChange::Add(files.added);
+            vault.stage_attachments(&item, change, havenkeys_client::now_ms())
+        })
+        .await
+}
+
+async fn remove_file(
+    client: &HavenClient,
+    item: Uuid,
+    id: Uuid,
+) -> havenkeys_client::ClientResult<ItemOverview> {
+    client
+        .save_with_files(item, vec![], vec![id], |vault, _| {
+            let change = AttachmentChange::Remove(id);
+            vault.stage_attachments(&item, change, havenkeys_client::now_ms())
+        })
+        .await
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn limits_are_checked_before_any_upload() {
     let server = Server::start().await;
@@ -1283,7 +1305,7 @@ async fn an_item_near_the_limit_is_refused_before_any_upload() {
     let server = Server::start().await;
     let (a, _b, item, _dirs) = two_devices(&server).await;
     let held = (0..19).map(|i| png(&i.to_string())).collect();
-    let held = a.add_attachments(item, held).await.unwrap();
+    let held = add_files(&a, item, held).await.unwrap();
     let first = held.attachments[0].id;
     let cached = |client: &HavenClient| {
         client
@@ -1351,8 +1373,7 @@ async fn create_with_files_round_trips() {
 async fn update_removes_and_adds_in_one_save() {
     let server = Server::start().await;
     let (a, b, item, _dirs) = two_devices(&server).await;
-    let first = a
-        .add_attachments(item, vec![png("front"), png("back")])
+    let first = add_files(&a, item, vec![png("front"), png("back")])
         .await
         .unwrap();
     let (gone, kept) = (first.attachments[0].id, first.attachments[1].id);
@@ -1436,9 +1457,7 @@ async fn restore_reports_skipped_attachments_when_quota_is_full() {
         "big.bin".to_string(),
         zeroize::Zeroizing::new(vec![7u8; 64 * 1024]),
     );
-    a.add_attachments(item, vec![png("small"), big])
-        .await
-        .unwrap();
+    add_files(&a, item, vec![png("small"), big]).await.unwrap();
     let password = SecretString::from("a separate backup passphrase");
     let file = backup_with_files(&a, item, &password).await;
 
@@ -1483,9 +1502,7 @@ async fn identity_attachments_restore_into_a_new_account() {
     let source = Server::start().await;
     let (a, _b, _item, _dirs) = two_devices(&source).await;
     let theirs = identity_of(&a);
-    a.add_attachments(theirs, vec![png("passport")])
-        .await
-        .unwrap();
+    add_files(&a, theirs, vec![png("passport")]).await.unwrap();
     let password = SecretString::from("a separate backup passphrase");
     let file = backup_with_files(&a, theirs, &password).await;
 

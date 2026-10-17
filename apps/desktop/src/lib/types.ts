@@ -71,6 +71,20 @@ export interface AttachmentMeta {
   createdAt: number;
 }
 
+/** A picked file waiting to be saved; Rust holds its bytes under `token`. */
+export interface PendingFile {
+  token: string;
+  name: string;
+  size: number;
+  mime: string;
+}
+
+/** The files a save adds (tokens from `pickFiles`) and removes (attachment ids). */
+export interface FilesEdit {
+  added: string[];
+  removed: string[];
+}
+
 /** Item summary. Contains no passwords, TOTP secrets or note bodies. */
 export interface ItemOverview {
   id: string;

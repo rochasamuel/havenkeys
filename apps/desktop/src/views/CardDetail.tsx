@@ -216,7 +216,7 @@ export function CardDetail({ item, readOnly, onTag, onEdit, onDelete }: Props) {
         </>
       )}
 
-      <Attachments item={item} readOnly={readOnly} />
+      <Attachments item={item} />
 
       <footer className="item-foot">
         <p className="muted">
