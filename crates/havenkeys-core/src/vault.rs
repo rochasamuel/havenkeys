@@ -5,6 +5,7 @@
 //! overview cache.
 
 use crate::account::AccountRef;
+use crate::attachment::FileEdits;
 use crate::card::{CardField, CardFields};
 use crate::crypto::blob::{self, BlobContext, Purpose};
 use crate::crypto::kdf::{derive_master_key, KdfParams};
@@ -2122,22 +2123,43 @@ impl VaultService {
     /// disk; the server must accept the write before [`commit_write`](Self::commit_write)
     /// records it.
     pub fn stage_create(&self, input: ItemInput, now_ms: i64) -> Result<StagedWrite> {
+        self.stage_create_with(Uuid::new_v4(), input, FileEdits::default(), now_ms)
+    }
+
+    /// [`stage_create`](Self::stage_create) under a chosen ID, with the files
+    /// already sealed for that ID.
+    pub fn stage_create_with(
+        &self,
+        id: Uuid,
+        input: ItemInput,
+        files: FileEdits,
+        now_ms: i64,
+    ) -> Result<StagedWrite> {
         // The one identity is only ever created by `stage_identity_if_missing`,
         // under its derived ID.
         if input.item_type == ItemType::Identity {
             return Err(Error::Denied);
         }
-        let id = Uuid::new_v4();
-        let (overview, details) = build_item(id, input, None, now_ms, now_ms)?;
-        self.stage(overview, Some(&details), None)
+        let (mut overview, details) = build_item(id, input, None, now_ms, now_ms)?;
+        let ids = files.apply(&mut overview)?;
+        let mut staged = self.stage(overview, Some(&details), None)?;
+        staged.attachment_ids = ids;
+        Ok(staged)
     }
 
     /// Seal an updated item's blobs, carrying the revision this device last
     /// saw for it so the server can detect a conflicting edit.
-    pub fn stage_update(
+    pub fn stage_update(&self, id: &Uuid, input: ItemInput, now_ms: i64) -> Result<StagedWrite> {
+        self.stage_update_with(id, input, FileEdits::default(), now_ms)
+    }
+
+    /// [`stage_update`](Self::stage_update) that also adds and removes files
+    /// in the same write.
+    pub fn stage_update_with(
         &self,
         id: &Uuid,
         mut input: ItemInput,
+        files: FileEdits,
         now_ms: i64,
     ) -> Result<StagedWrite> {
         let existing = self.get_item(id)?;
@@ -2153,8 +2175,11 @@ impl VaultService {
             build_item(*id, input, Some(current), existing.created_at, now_ms)?;
         overview.extra = existing.extra.clone();
         overview.attachments = existing.attachments.clone();
+        let ids = files.apply(&mut overview)?;
         let base = self.store.item_revision(id)?;
-        self.stage(overview, Some(&details), base)
+        let mut staged = self.stage(overview, Some(&details), base)?;
+        staged.attachment_ids = ids;
+        Ok(staged)
     }
 
     /// The server revision this device holds for `id` (`None` before the

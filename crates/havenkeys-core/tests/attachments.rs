@@ -4,7 +4,7 @@ mod common;
 
 use common::{activated_vault, login, note, secret, NOW};
 use havenkeys_core::attachment::{
-    AttachmentChange, AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
+    AttachmentChange, AttachmentMeta, FileEdits, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
 };
 use havenkeys_core::card::{CardExpiry, CardInput};
 use havenkeys_core::identity::IdentityFields;
@@ -131,6 +131,113 @@ fn stage_remove_drops_one() {
         v.stage_attachments(&id, AttachmentChange::Remove(metas[0].id), NOW),
         Err(Error::NotFound)
     ));
+}
+
+fn seal(v: &VaultService, id: &Uuid, n: usize) -> Vec<AttachmentMeta> {
+    (0..n)
+        .map(|_| v.seal_attachment(id, "a.bin", b"x", NOW).unwrap().meta)
+        .collect()
+}
+
+#[test]
+fn update_with_adds_and_removes_in_one_write() {
+    let (mut v, _) = activated_vault();
+    let id = create(&mut v, login("GitHub", "me", "pw", "github.com"));
+    let kept = attach(&mut v, &id, 3, 2);
+    let added = seal(&v, &id, 2);
+    let want: Vec<Uuid> = [kept[0].id, kept[2].id]
+        .into_iter()
+        .chain(added.iter().map(|m| m.id))
+        .collect();
+    let files = FileEdits {
+        added,
+        removed: vec![kept[1].id],
+    };
+
+    let input = login("GitHub 2", "me", "pw", "github.com");
+    let staged = v.stage_update_with(&id, input, files, NOW + 3).unwrap();
+    assert_eq!(staged.attachment_ids, Some(want.clone()));
+    v.commit_write(staged, 3).unwrap();
+
+    let item = v.get_item(&id).unwrap();
+    assert_eq!(ids(&item), want);
+    assert_eq!(item.title, "GitHub 2");
+    assert_eq!(v.reveal(&id, SecretField::Password).unwrap().expose(), "pw");
+}
+
+#[test]
+fn a_plain_edit_sends_no_attachment_ids() {
+    let (mut v, _) = activated_vault();
+    let id = create(&mut v, login("GitHub", "me", "pw", "github.com"));
+    attach(&mut v, &id, 2, 2);
+    let input = login("GitHub 2", "me", "pw", "github.com");
+    let staged = v
+        .stage_update_with(&id, input, FileEdits::default(), NOW + 3)
+        .unwrap();
+    assert_eq!(staged.attachment_ids, None);
+}
+
+#[test]
+fn removing_every_file_sends_an_empty_list() {
+    let (mut v, _) = activated_vault();
+    let id = create(&mut v, login("GitHub", "me", "pw", "github.com"));
+    let metas = attach(&mut v, &id, 2, 2);
+    let files = FileEdits {
+        added: vec![],
+        removed: ids_of(&metas),
+    };
+    let input = login("GitHub", "me", "pw", "github.com");
+    let staged = v.stage_update_with(&id, input, files, NOW + 3).unwrap();
+    assert_eq!(staged.attachment_ids, Some(vec![]));
+}
+
+#[test]
+fn removing_an_unknown_file_is_not_found() {
+    let (mut v, _) = activated_vault();
+    let id = create(&mut v, login("GitHub", "me", "pw", "github.com"));
+    let files = FileEdits {
+        added: vec![],
+        removed: vec![Uuid::new_v4()],
+    };
+    let input = login("GitHub", "me", "pw", "github.com");
+    assert!(matches!(
+        v.stage_update_with(&id, input, files, NOW + 3),
+        Err(Error::NotFound)
+    ));
+}
+
+#[test]
+fn the_21st_file_is_refused() {
+    let (mut v, _) = activated_vault();
+    let id = create(&mut v, login("GitHub", "me", "pw", "github.com"));
+    attach(&mut v, &id, MAX_ATTACHMENTS_PER_ITEM, 2);
+    let files = FileEdits {
+        added: seal(&v, &id, 1),
+        removed: vec![],
+    };
+    let input = login("GitHub", "me", "pw", "github.com");
+    assert!(matches!(
+        v.stage_update_with(&id, input, files, NOW + 3),
+        Err(Error::InvalidInput("An item holds up to 20 files"))
+    ));
+}
+
+#[test]
+fn create_with_files_uses_the_given_id() {
+    let (mut v, _) = activated_vault();
+    let id = Uuid::new_v4();
+    let added = seal(&v, &id, 2);
+    let want = ids_of(&added);
+    let files = FileEdits {
+        added,
+        removed: vec![],
+    };
+    let input = login("GitHub", "me", "pw", "github.com");
+    let staged = v.stage_create_with(id, input, files, NOW).unwrap();
+    assert_eq!(staged.item_id, id);
+    assert_eq!(staged.attachment_ids, Some(want.clone()));
+    v.commit_write(staged, 1).unwrap();
+    assert_eq!(ids(&v.get_item(&id).unwrap()), want);
 }
 
 fn card_input() -> ItemInput {

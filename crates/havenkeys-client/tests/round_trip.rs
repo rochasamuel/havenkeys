@@ -3,7 +3,8 @@
 
 use havenkeys_client::device::Device;
 use havenkeys_client::key_store::MemoryKeyStore;
-use havenkeys_client::{ClientConfig, ClientEvents, HavenClient};
+use havenkeys_client::{ClientConfig, ClientEvents, HavenClient, NewFile};
+use havenkeys_core::attachment::FileEdits;
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
 use havenkeys_core::store::Store;
 use havenkeys_core::sync::SyncReport;
@@ -1244,21 +1245,33 @@ async fn a_bad_cached_copy_is_evicted_and_refetched() {
     server.cleanup().await;
 }
 
+fn new_file((name, bytes): (String, zeroize::Zeroizing<Vec<u8>>)) -> NewFile {
+    NewFile { name, bytes }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn limits_are_checked_before_any_upload() {
     let server = Server::start().await;
     let (a, _b, item, _dirs) = two_devices(&server).await;
-    let too_big = (
-        "big.bin".to_string(),
-        zeroize::Zeroizing::new(vec![0u8; 5 * 1024 * 1024 + 1]),
-    );
-    let err = a
-        .add_attachments(item, vec![png("one"), png("two"), too_big])
+    let too_big = NewFile {
+        name: "big.bin".into(),
+        bytes: zeroize::Zeroizing::new(vec![0u8; 5 * 1024 * 1024 + 1]),
+    };
+    let save = |files: Vec<NewFile>| {
+        a.save_with_files(item, files, |vault, metas| {
+            let files = FileEdits {
+                added: metas,
+                removed: vec![],
+            };
+            vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
+        })
+    };
+    let err = save(vec![new_file(png("one")), new_file(png("two")), too_big])
         .await
         .unwrap_err();
     assert!(err.message.contains("Files can be up to 5 MB"));
-    let many = (0..21).map(|i| png(&i.to_string())).collect();
-    let err = a.add_attachments(item, many).await.unwrap_err();
+    let many = (0..21).map(|i| new_file(png(&i.to_string()))).collect();
+    let err = save(many).await.unwrap_err();
     assert!(err.message.contains("An item holds up to 20 files"));
 
     let db = server.pool.get().await.unwrap();
@@ -1267,6 +1280,84 @@ async fn limits_are_checked_before_any_upload() {
         .await
         .unwrap();
     assert_eq!(rows.get::<_, i64>(0), 0);
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn create_with_files_round_trips() {
+    let server = Server::start().await;
+    let (a, b, _item, _dirs) = two_devices(&server).await;
+    let id = Uuid::new_v4();
+    let saved = a
+        .save_with_files(
+            id,
+            vec![new_file(png("front")), new_file(png("back"))],
+            |vault, metas| {
+                let files = FileEdits {
+                    added: metas,
+                    removed: vec![],
+                };
+                vault.stage_create_with(id, login("Visa"), files, havenkeys_client::now_ms())
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(saved.id, id);
+    assert_eq!(saved.attachments.len(), 2);
+
+    b.sync_now().await.unwrap();
+    let ids = attachment_ids(&b, id);
+    assert_eq!(ids.len(), 2);
+    let opened = b.attachment_bytes(id, ids[0]).await.unwrap();
+    assert!(opened.expose().ends_with(b"front"));
+    let opened = b.attachment_bytes(id, ids[1]).await.unwrap();
+    assert!(opened.expose().ends_with(b"back"));
+    server.cleanup().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn update_removes_and_adds_in_one_save() {
+    let server = Server::start().await;
+    let (a, b, item, _dirs) = two_devices(&server).await;
+    let first = a
+        .add_attachments(item, vec![png("front"), png("back")])
+        .await
+        .unwrap();
+    let (gone, kept) = (first.attachments[0].id, first.attachments[1].id);
+
+    let saved = a
+        .save_with_files(item, vec![new_file(png("new"))], |vault, metas| {
+            let files = FileEdits {
+                added: metas,
+                removed: vec![gone],
+            };
+            vault.stage_update_with(&item, login("Passport"), files, havenkeys_client::now_ms())
+        })
+        .await
+        .unwrap();
+    let now: Vec<Uuid> = saved.attachments.iter().map(|m| m.id).collect();
+    assert_eq!(now.len(), 2);
+    assert_eq!(now[0], kept);
+    assert!(a
+        .vault()
+        .unwrap()
+        .cached_attachment(&gone)
+        .unwrap()
+        .is_none());
+
+    b.sync_now().await.unwrap();
+    assert_eq!(attachment_ids(&b, item), now);
+    // The server holds exactly the committed files.
+    let db = server.pool.get().await.unwrap();
+    let rows = db
+        .query_one(
+            "SELECT count(*) FILTER (WHERE committed) AS live, count(*) AS total FROM attachments",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows.get::<_, i64>(0), 2);
+    assert_eq!(rows.get::<_, i64>(1), 2);
     server.cleanup().await;
 }
 

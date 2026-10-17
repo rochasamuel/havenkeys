@@ -1,13 +1,14 @@
-//! Adding, removing and opening an item's attached files (spec
+//! Saving, removing and opening an item's attached files (spec
 //! 2026-10-13-encrypted-attachments §5).
 
 use crate::client::HavenClient;
 use crate::error::{ClientError, ClientResult};
 use crate::now_ms;
 use havenkeys_core::attachment::{
-    AttachmentChange, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
+    AttachmentChange, AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM, MAX_ATTACHMENT_BYTES,
 };
 use havenkeys_core::model::ItemOverview;
+use havenkeys_core::vault::{StagedWrite, VaultService};
 use havenkeys_core::Error;
 use havenkeys_core::SecretBytes;
 use havenkeys_sync_client::SyncError;
@@ -15,23 +16,65 @@ use std::sync::atomic::Ordering;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+/// Refuse a batch the core would refuse, before anything is uploaded. The
+/// core also checks the item's whole list once the edit is staged.
+fn check_limits(files: &[NewFile]) -> ClientResult<()> {
+    if files.iter().any(|f| f.bytes.len() > MAX_ATTACHMENT_BYTES) {
+        return Err(Error::InvalidInput("Files can be up to 5 MB").into());
+    }
+    if files.len() > MAX_ATTACHMENTS_PER_ITEM {
+        return Err(Error::InvalidInput("An item holds up to 20 files").into());
+    }
+    Ok(())
+}
+
+/// A picked file waiting to be sealed with the item it is saved on.
+pub struct NewFile {
+    pub name: String,
+    pub bytes: Zeroizing<Vec<u8>>,
+}
+
 impl HavenClient {
-    /// Seal, upload and cache each file, then record them all on the item in
-    /// one write. Uploads whose write is refused stay pending on the server
-    /// until its sweep removes them.
-    pub async fn add_attachments(
+    /// Save an item together with its file edits in one write. Each file is
+    /// sealed for `item_id`, uploaded and cached first; `stage` then builds
+    /// the write from their records. An upload whose write is refused stays
+    /// pending on the server until its sweep removes it.
+    pub async fn save_with_files(
         &self,
         item_id: Uuid,
-        files: Vec<(String, Zeroizing<Vec<u8>>)>,
+        added: Vec<NewFile>,
+        stage: impl FnOnce(&VaultService, Vec<AttachmentMeta>) -> havenkeys_core::Result<StagedWrite>,
     ) -> ClientResult<ItemOverview> {
-        self.require_online()?;
         self.require_full()?;
+        check_limits(&added)?;
+        let metas = self.upload_files(item_id, &added).await?;
+        let staged = stage(&*self.vault()?, metas)?;
+        let files_changed = staged.attachment_ids.is_some();
+        let saved = self.push(staged).await?.ok_or_else(ClientError::internal)?;
+        if files_changed {
+            self.prune_attachment_cache();
+        }
+        Ok(saved)
+    }
+
+    /// Seal, upload and cache each file. Nothing is sealed or sent when one
+    /// is too large or the list is too long.
+    async fn upload_files(
+        &self,
+        item_id: Uuid,
+        files: &[NewFile],
+    ) -> ClientResult<Vec<AttachmentMeta>> {
+        if files.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.require_online()?;
         let (session, server) = (self.session()?, self.server()?);
-        self.check_limits(item_id, &files)?;
         let now = now_ms();
         let mut metas = Vec::with_capacity(files.len());
-        for (name, bytes) in &files {
-            let sealed = self.vault()?.seal_attachment(&item_id, name, bytes, now)?;
+        for file in files {
+            let sealed = self
+                .vault()?
+                .seal_attachment(&item_id, &file.name, &file.bytes, now)?;
             server
                 .put_attachment(&session, sealed.meta.id, item_id, &sealed.blob)
                 .await
@@ -40,33 +83,23 @@ impl HavenClient {
                 .cache_attachment(&sealed.meta.id, &sealed.blob, now)?;
             metas.push(sealed.meta);
         }
-        let staged =
-            self.vault()?
-                .stage_attachments(&item_id, AttachmentChange::Add(metas), now)?;
-        self.push(staged).await?.ok_or_else(ClientError::internal)
+        Ok(metas)
     }
 
-    /// Refuse a batch the core would refuse, before anything is uploaded.
-    fn check_limits(
+    /// Add files to an existing item, alone.
+    pub async fn add_attachments(
         &self,
         item_id: Uuid,
-        files: &[(String, Zeroizing<Vec<u8>>)],
-    ) -> ClientResult<()> {
-        if files
-            .iter()
-            .any(|(_, bytes)| bytes.len() > MAX_ATTACHMENT_BYTES)
-        {
-            return Err(Error::InvalidInput("Files can be up to 5 MB").into());
-        }
-        // A trashed item is not listed; the core still checks it on staging.
-        let held = self
-            .vault()?
-            .get_item(&item_id)
-            .map_or(0, |o| o.attachments.len());
-        if held + files.len() > MAX_ATTACHMENTS_PER_ITEM {
-            return Err(Error::InvalidInput("An item holds up to 20 files").into());
-        }
-        Ok(())
+        files: Vec<(String, Zeroizing<Vec<u8>>)>,
+    ) -> ClientResult<ItemOverview> {
+        let added = files
+            .into_iter()
+            .map(|(name, bytes)| NewFile { name, bytes })
+            .collect();
+        self.save_with_files(item_id, added, |vault, metas| {
+            vault.stage_attachments(&item_id, AttachmentChange::Add(metas), now_ms())
+        })
+        .await
     }
 
     pub async fn remove_attachment(

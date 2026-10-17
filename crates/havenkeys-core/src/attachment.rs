@@ -183,6 +183,39 @@ pub enum AttachmentChange {
     Remove(Uuid),
 }
 
+/// Files an edit adds to and removes from an item, applied with the edit.
+#[derive(Default)]
+pub struct FileEdits {
+    pub added: Vec<AttachmentMeta>,
+    pub removed: Vec<Uuid>,
+}
+
+impl FileEdits {
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.removed.is_empty()
+    }
+
+    /// Make `overview` list its files, less the removed, plus the added.
+    /// Returns every id it now holds when the list changed, for the server.
+    pub(crate) fn apply(self, overview: &mut ItemOverview) -> Result<Option<Vec<Uuid>>> {
+        if self.is_empty() {
+            return Ok(None);
+        }
+        for id in &self.removed {
+            let before = overview.attachments.len();
+            overview.attachments.retain(|meta| meta.id != *id);
+            if overview.attachments.len() == before {
+                return Err(Error::NotFound);
+            }
+        }
+        overview.attachments.extend(self.added);
+        if overview.attachments.len() > MAX_ATTACHMENTS_PER_ITEM {
+            return Err(Error::InvalidInput("An item holds up to 20 files"));
+        }
+        Ok(Some(overview.attachments.iter().map(|m| m.id).collect()))
+    }
+}
+
 impl VaultService {
     /// Seal one file for `item_id`. The name and type are not trusted: the
     /// name is sanitized and the type comes from the bytes.

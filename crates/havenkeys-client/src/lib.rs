@@ -29,6 +29,7 @@ mod sync;
 pub mod testing;
 
 pub use account::{AccountField, AccountStatus, DeviceEntry, DeviceStatus, InvitePreview};
+pub use attachments::NewFile;
 pub use client::{device_label, ClientConfig, HavenClient, RETRY_INTERVAL};
 pub use error::{ClientError, ClientResult};
 pub use events::ClientEvents;
