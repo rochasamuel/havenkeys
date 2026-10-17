@@ -660,8 +660,9 @@ pub struct StagedWrite {
     pub overview: Option<Vec<u8>>,
     pub details: Option<Vec<u8>>,
     /// Every attachment the written overview lists; set only by
-    /// [`VaultService::stage_attachments`], so the server can check that the
-    /// blobs exist and release the ones the write drops.
+    /// [`VaultService::stage_attachments`] and by a restore that carries
+    /// files, so the server can check that the blobs exist and release the
+    /// ones the write drops.
     pub attachment_ids: Option<Vec<Uuid>>,
     epoch: u64,
     plain: Option<ItemOverview>,

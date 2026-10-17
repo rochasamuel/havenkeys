@@ -146,7 +146,8 @@ pub struct ImportReport {
     pub skipped_archived: usize,
     /// Items that could not be imported (e.g. a field over the size limits).
     pub failed: usize,
-    /// File attachments are not supported and were left out.
+    /// File attachments left out: an import does not bring them; a restore
+    /// skips those whose item was not restored or that did not fit.
     pub attachments_skipped: usize,
     /// Old passwords from password history were left out.
     pub password_history_skipped: usize,

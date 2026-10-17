@@ -145,6 +145,20 @@ impl BlobContext {
         }
     }
 
+    /// Record `index` of a version 2 backup, bound to the file header (which
+    /// holds the record count) and to its place, so records cannot be
+    /// dropped, reordered or moved between files.
+    pub fn backup_record(header: &[u8], index: u32) -> Self {
+        use sha2::{Digest, Sha256};
+        let bound = Sha256::new()
+            .chain_update(header)
+            .chain_update(index.to_le_bytes());
+        Self {
+            bound_to: Some(bound.finalize().into()),
+            ..Self::vault(Purpose::Backup, Uuid::nil())
+        }
+    }
+
     /// A file attached to an item, bound to its own id so the server cannot
     /// swap one attachment's blob for another's.
     pub fn attachment(vault_id: Uuid, item_id: Uuid, attachment_id: Uuid) -> Self {

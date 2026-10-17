@@ -172,7 +172,7 @@ fn an_unreadable_item_is_counted_not_fatal() {
     assert_eq!(out.bytes.iter().filter(|&&b| b == b'\n').count(), 2);
 }
 
-use havenkeys_core::export::backup::{open_backup, seal_backup, HEADER_LEN};
+use havenkeys_core::export::backup::{seal_backup, HEADER_LEN};
 
 fn backup_of(vault: &VaultService, password: &str) -> Vec<u8> {
     let payload = export::render(vault, ExportFormat::Backup, NOW).unwrap();
@@ -246,7 +246,7 @@ fn malformed_backups_are_refused_with_a_fixed_message() {
         );
     }
     let mut newer = file.clone();
-    newer[8] = 2;
+    newer[8] = 3;
     assert!(matches!(
         open_backup(&newer, &secret(BACKUP_PW)),
         Err(Error::InvalidInput(
@@ -285,21 +285,23 @@ fn a_payload_with_unknown_fields_is_refused() {
 
 #[test]
 fn the_size_limit_is_enforced_on_both_sides() {
-    use havenkeys_core::crypto::blob::MIN_BLOB_LEN;
-    use havenkeys_core::export::backup::MAX_BACKUP_BYTES;
-    let largest = MAX_BACKUP_BYTES as usize - HEADER_LEN - MIN_BLOB_LEN;
+    use havenkeys_core::crypto::blob::{MAX_BACKUP_BLOB_LEN, MIN_BLOB_LEN};
+    use havenkeys_core::export::backup::MAX_BACKUP_FILE_BYTES;
+    let largest = MAX_BACKUP_BLOB_LEN - MIN_BLOB_LEN;
     let file = seal_backup(&vec![b'x'; largest], &secret(BACKUP_PW), &fast_kdf()).unwrap();
-    assert!(file.len() as u64 <= MAX_BACKUP_BYTES);
+    assert!(file.len() as u64 <= MAX_BACKUP_FILE_BYTES);
     assert!(matches!(
         seal_backup(&vec![b'x'; largest + 1], &secret(BACKUP_PW), &fast_kdf()),
         Err(Error::InvalidInput("backup file is too large"))
     ));
+    // A record that claims more than the items record may hold.
+    let mut greedy = file[..HEADER_LEN + 4].to_vec();
+    greedy.extend_from_slice(&(MAX_BACKUP_BLOB_LEN as u32 + 1).to_le_bytes());
     assert!(matches!(
-        open_backup(
-            &vec![0u8; MAX_BACKUP_BYTES as usize + 1],
-            &secret(BACKUP_PW)
-        ),
-        Err(Error::InvalidInput("backup file is too large"))
+        open_backup(&greedy, &secret(BACKUP_PW)),
+        Err(Error::InvalidInput(
+            "wrong backup password, or the file is damaged"
+        ))
     ));
 }
 
@@ -328,7 +330,7 @@ fn restore_into(
     base: i64,
 ) -> havenkeys_core::import::ImportReport {
     let opened = open_backup(file, &secret(BACKUP_PW)).unwrap();
-    let staged = vault.stage_restore(opened, NOW).unwrap();
+    let staged = stage_restore(vault, opened);
     let mut rev = base;
     for w in staged.writes {
         rev += 1;
@@ -1307,4 +1309,199 @@ fn a_backup_restores_a_notes_fields() {
         b.reveal(&id, SecretField::Content).unwrap().expose(),
         "root box"
     );
+}
+
+// ------------------------------------------- backup v2: attachment records
+
+use havenkeys_core::attachment::{AttachmentChange, AttachmentMeta};
+use havenkeys_core::export::backup::BackupWriter;
+
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\nfront of the passport";
+
+/// Seal `bytes` onto `item` and commit it at `revision`.
+fn attach(v: &mut VaultService, item: uuid::Uuid, name: &str, bytes: &[u8], revision: i64) {
+    let sealed = v.seal_attachment(&item, name, bytes, NOW).unwrap();
+    let change = AttachmentChange::Add(vec![sealed.meta]);
+    let w = v.stage_attachments(&item, change, NOW).unwrap();
+    v.commit_write(w, revision).unwrap();
+}
+
+/// A v2 backup of `v` carrying `files` as (item, meta, bytes).
+fn backup_with(v: &VaultService, files: &[(uuid::Uuid, &AttachmentMeta, &[u8])]) -> Vec<u8> {
+    let payload = export::render(v, ExportFormat::Backup, NOW).unwrap();
+    let count = files.len() as u32;
+    let mut w = BackupWriter::new(Vec::new(), &secret(BACKUP_PW), &fast_kdf(), count).unwrap();
+    w.items(&payload.bytes).unwrap();
+    for (item, meta, bytes) in files {
+        w.attachment(*item, meta, bytes).unwrap();
+    }
+    w.finish().unwrap()
+}
+
+/// A login with two files, and a v2 backup of it.
+fn vault_with_files() -> (VaultService, uuid::Uuid, Vec<u8>) {
+    let (mut v, _) = activated_vault();
+    commit_all(
+        &mut v,
+        vec![login("Passport", "me", "pw", "https://gov.example")],
+    );
+    let item = v.list_items().unwrap()[0].id;
+    attach(&mut v, item, "front.png", PNG, 2);
+    attach(&mut v, item, "notes.txt", b"plain notes", 3);
+    let metas = v.get_item(&item).unwrap().attachments.clone();
+    let file = backup_with(
+        &v,
+        &[(item, &metas[0], PNG), (item, &metas[1], b"plain notes")],
+    );
+    (v, item, file)
+}
+
+#[test]
+fn a_v2_backup_round_trips_attachments() {
+    let (_a, item, file) = vault_with_files();
+    assert_eq!(file[8], 2, "file version");
+    assert!(!file.windows(5).any(|w| w == b"front"));
+    let (opened, files) = open_all(&file, &secret(BACKUP_PW)).unwrap();
+    assert_eq!(opened.items.len(), 1);
+    assert_eq!(files.len(), 2);
+    assert!(files.iter().all(|f| f.item_id == item));
+    assert_eq!(files[0].meta.name, "front.png");
+    assert_eq!(files[0].bytes.expose(), PNG);
+    assert_eq!(files[1].bytes.expose(), b"plain notes");
+    assert_eq!(format!("{:?}", files[0]), "BackupAttachment(<redacted>)");
+
+    // Restored into another vault: each file re-sealed under the restored
+    // item, and listed on it in the same write.
+    let (mut b, _) = activated_vault();
+    let mut plan = b.plan_restore(opened).unwrap();
+    let mut blobs = Vec::new();
+    for f in &files {
+        let target = plan.target(&f.item_id).unwrap();
+        let sealed = b
+            .seal_attachment(&target, &f.meta.name, f.bytes.expose(), f.meta.created_at)
+            .unwrap();
+        blobs.push((sealed.meta.clone(), sealed.blob));
+        plan.attach(&f.item_id, sealed.meta);
+    }
+    let staged = b.stage_restore(plan).unwrap();
+    let write = staged
+        .writes
+        .into_iter()
+        .find(|w| w.item_id == item)
+        .unwrap();
+    let ids: Vec<_> = blobs.iter().map(|(m, _)| m.id).collect();
+    assert_eq!(write.attachment_ids.as_deref(), Some(&ids[..]));
+    b.commit_write(write, 1).unwrap();
+    assert_eq!(b.get_item(&item).unwrap().attachments.len(), 2);
+    let (meta, blob) = &blobs[0];
+    assert_eq!(b.open_attachment(&item, meta, blob).unwrap().expose(), PNG);
+}
+
+#[test]
+fn the_writer_refuses_records_out_of_order() {
+    let (v, item, _) = vault_with_files();
+    let meta = v.get_item(&item).unwrap().attachments[0].clone();
+    let order = Error::InvalidInput("backup records out of order");
+    let payload = export::render(&v, ExportFormat::Backup, NOW).unwrap();
+    let writer = || BackupWriter::new(Vec::new(), &secret(BACKUP_PW), &fast_kdf(), 1).unwrap();
+
+    let mut w = writer();
+    assert_eq!(w.attachment(item, &meta, PNG).unwrap_err(), order);
+    let mut w = writer();
+    w.items(&payload.bytes).unwrap();
+    assert_eq!(w.items(&payload.bytes).unwrap_err(), order);
+    assert_eq!(w.finish().unwrap_err(), order, "one attachment short");
+    let mut w = writer();
+    w.items(&payload.bytes).unwrap();
+    w.attachment(item, &meta, PNG).unwrap();
+    assert_eq!(w.attachment(item, &meta, PNG).unwrap_err(), order);
+}
+
+/// Each record of a v2 file, length prefix included, after the header.
+fn records(file: &[u8]) -> Vec<Vec<u8>> {
+    let mut at = HEADER_LEN + 4;
+    let mut out = Vec::new();
+    while at < file.len() {
+        let len = u32::from_le_bytes(file[at..at + 4].try_into().unwrap()) as usize;
+        out.push(file[at..at + 4 + len].to_vec());
+        at += 4 + len;
+    }
+    out
+}
+
+#[test]
+fn reordered_truncated_spliced_or_trailing_records_are_refused() {
+    let (_, _, file) = vault_with_files();
+    let (_, _, other) = vault_with_files();
+    let head = &file[..HEADER_LEN + 4];
+    let [r0, r1, r2] = <[Vec<u8>; 3]>::try_from(records(&file)).unwrap();
+    let spliced = records(&other).swap_remove(1);
+    let mut trailing = file.clone();
+    trailing.push(0);
+    for bad in [
+        [head, &r0[..], &r2, &r1].concat(),
+        [head, &r0[..], &r1].concat(),
+        [head, &r0[..], &spliced, &r2].concat(),
+        trailing,
+    ] {
+        let err = open_all(&bad, &secret(BACKUP_PW)).unwrap_err().to_string();
+        assert!(
+            [
+                "Invalid input: wrong backup password, or the file is damaged.",
+                "Invalid input: not a HavenKeys backup file.",
+            ]
+            .contains(&err.as_str()),
+            "{err}"
+        );
+    }
+    assert!(open_all(&file, &secret(BACKUP_PW)).is_ok());
+}
+
+#[test]
+fn a_v1_backup_still_opens() {
+    use havenkeys_core::crypto::blob::{self, BlobContext};
+    use havenkeys_core::crypto::kdf::derive_master_key;
+    let (mut a, _) = activated_vault();
+    commit_all(
+        &mut a,
+        vec![login("Bank", "me", "pw", "https://bank.example")],
+    );
+    let payload = export::render(&a, ExportFormat::Backup, NOW).unwrap();
+    let kdf = fast_kdf();
+    let mut file = b"HKBACKUP\x01\x01".to_vec();
+    for n in [kdf.memory_kib, kdf.iterations, kdf.parallelism] {
+        file.extend_from_slice(&n.to_le_bytes());
+    }
+    file.extend_from_slice(&kdf.salt);
+    let key = derive_master_key(&secret(BACKUP_PW), &kdf).unwrap();
+    let sealed = blob::seal(&key, &BlobContext::backup(&file), &payload.bytes).unwrap();
+    file.extend_from_slice(&sealed);
+
+    let (opened, files) = open_all(&file, &secret(BACKUP_PW)).unwrap();
+    assert_eq!(opened.items.len(), 1);
+    assert!(files.is_empty());
+    let (mut b, _) = activated_vault();
+    let report = restore_into(&mut b, &file, 0);
+    assert_eq!(report.logins, 1);
+}
+
+#[test]
+fn summary_counts_attachments_left_out_of_plaintext_exports() {
+    let (mut v, item, _) = vault_with_files();
+    let w = v.stage_create(note("Recovery", "codes"), NOW).unwrap();
+    let note_id = v.commit_write(w, 4).unwrap().unwrap().id;
+    attach(&mut v, note_id, "codes.pdf", b"%PDF-1.7", 5);
+    assert_eq!(v.get_item(&item).unwrap().attachments.len(), 2);
+
+    for format in [ExportFormat::BitwardenJson, ExportFormat::Csv] {
+        let s = export::summarize(&v, format).unwrap();
+        assert_eq!(
+            (s.attachments_left_out, s.attachments),
+            (3, 0),
+            "{format:?}"
+        );
+        assert_eq!(export::render(&v, format, NOW).unwrap().summary, s);
+    }
+    let s = export::summarize(&v, ExportFormat::Backup).unwrap();
+    assert_eq!((s.attachments_left_out, s.attachments), (0, 3));
 }

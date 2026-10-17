@@ -16,12 +16,17 @@
 //!
 //! The batch is then resent without the live ones, so one conflicting item
 //! never sinks the rest.
+//!
+//! A backup's attachments are re-sealed under the restored item and
+//! uploaded before any item is written, so each item's write lists its
+//! files. A file whose item is not restored, or that the server's quota
+//! refuses, is counted as `attachments_skipped`.
 
 use crate::client::HavenClient;
 use crate::error::ClientResult;
-use crate::now_ms;
 use crate::sync::{revision_for, MAX_BATCH};
-use havenkeys_core::export::backup::OpenedBackup;
+use havenkeys_core::export::backup::{BackupAttachment, OpenedBackup};
+use havenkeys_core::export::RestorePlan;
 use havenkeys_core::import::ImportReport;
 use havenkeys_core::vault::{StagedImport, StagedWrite};
 use havenkeys_sync_client::SyncError;
@@ -29,14 +34,53 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 impl HavenClient {
-    /// Pull, stage every backup item not already here, and send them. The
-    /// report counts what the server accepted.
-    pub async fn restore_backup(&self, backup: OpenedBackup) -> ClientResult<ImportReport> {
+    /// Pull, upload the files of every backup item not already here, then
+    /// send the items. The report counts what the server accepted. A record
+    /// that does not open stops the restore before any item is written.
+    pub async fn restore_backup(
+        &self,
+        backup: OpenedBackup,
+        attachments: impl IntoIterator<Item = havenkeys_core::Result<BackupAttachment>>,
+    ) -> ClientResult<ImportReport> {
         self.require_full()?;
         // Fresh first: "already here" is decided against the replica.
         self.sync_now().await?;
-        let staged = self.vault()?.stage_restore(backup, now_ms())?;
+        let mut plan = self.vault()?.plan_restore(backup)?;
+        for attachment in attachments {
+            self.restore_attachment(&mut plan, attachment?).await?;
+        }
+        let staged = self.vault()?.stage_restore(plan)?;
         self.push_restore(staged).await
+    }
+
+    /// Re-seal one file under its restored item and upload it.
+    async fn restore_attachment(
+        &self,
+        plan: &mut RestorePlan,
+        file: BackupAttachment,
+    ) -> ClientResult<()> {
+        let Some(item_id) = plan.target(&file.item_id) else {
+            plan.report.attachments_skipped += 1;
+            return Ok(());
+        };
+        let sealed = self.vault()?.seal_attachment(
+            &item_id,
+            &file.meta.name,
+            file.bytes.expose(),
+            file.meta.created_at,
+        )?;
+        let (session, server) = (self.session()?, self.server()?);
+        match server
+            .put_attachment(&session, sealed.meta.id, item_id, &sealed.blob)
+            .await
+        {
+            Ok(()) => plan.attach(&file.item_id, sealed.meta),
+            // A sealed file is always under the server's blob cap, so a 413
+            // is the vault's or the attachments' quota.
+            Err(SyncError::Refused("too large")) => plan.report.attachments_skipped += 1,
+            Err(e) => return Err(self.failed(e)),
+        }
+        Ok(())
     }
 
     /// Send staged restore writes in batches, resolving conflicts per item
@@ -138,7 +182,7 @@ pub(crate) mod tests {
     use crate::stub_server::{StubAccount, StubRow, StubServer};
     use havenkeys_core::account::{AccountRef, NormalizedEmail};
     use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
-    use havenkeys_core::export::backup::{open_backup, seal_backup, OpenedBackup};
+    use havenkeys_core::export::backup::{open_backup_stream, seal_backup, OpenedBackup};
     use havenkeys_core::export::{self, ExportFormat};
     use havenkeys_core::model::{ItemInput, ItemType, SecretField, SecretUpdate};
     use havenkeys_core::store::AccountRecord;
@@ -221,7 +265,9 @@ pub(crate) mod tests {
     }
 
     fn open(file: &[u8]) -> OpenedBackup {
-        open_backup(file, &SecretString::from(BACKUP_PW)).unwrap()
+        let (opened, mut files) = open_backup_stream(file, &SecretString::from(BACKUP_PW)).unwrap();
+        assert!(files.next().is_none());
+        opened
     }
 
     fn password_of(client: &HavenClient, id: Uuid) -> String {
@@ -245,7 +291,10 @@ pub(crate) mod tests {
             "a tombstone"
         );
 
-        let report = client.restore_backup(open(&file)).await.unwrap();
+        let report = client
+            .restore_backup(open(&file), std::iter::empty())
+            .await
+            .unwrap();
         // The Identity and "Mail" are still here; "Bank" is revived.
         assert_eq!(
             (report.imported, report.logins, report.skipped_existing),
@@ -262,7 +311,10 @@ pub(crate) mod tests {
             .stage_update(&gone, edit, 2)
             .unwrap();
         client.push(w).await.unwrap();
-        let again = client.restore_backup(open(&file)).await.unwrap();
+        let again = client
+            .restore_backup(open(&file), std::iter::empty())
+            .await
+            .unwrap();
         assert_eq!(
             (again.imported, again.skipped_existing, again.failed),
             (0, 3, 0)
@@ -285,11 +337,11 @@ pub(crate) mod tests {
             delete(&client, id).await;
         }
         client.sync_now().await.unwrap();
-        let staged = client
-            .vault()
-            .unwrap()
-            .stage_restore(open(&file), 3)
-            .unwrap();
+        let staged = {
+            let vault = client.vault().unwrap();
+            vault.stage_restore(vault.plan_restore(open(&file)).unwrap())
+        }
+        .unwrap();
         assert_eq!(staged.writes.len(), 3);
 
         // Behind this device's back, "B" comes back live elsewhere.

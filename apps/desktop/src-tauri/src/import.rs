@@ -7,6 +7,7 @@
 //! batches of at most 500 (spec 2026-09-20 §8.4).
 
 use crate::state::{AppState, CmdError, CmdResult};
+use havenkeys_core::export::backup;
 use havenkeys_core::import::{self, ImportReport, ImportSource};
 use havenkeys_core::SecretString;
 use serde::Serialize;
@@ -23,7 +24,12 @@ pub struct ImportResult {
     file_name: String,
 }
 
-fn read_limited(path: &std::path::Path, limit: u64) -> CmdResult<Zeroizing<Vec<u8>>> {
+/// The file at `path` and its length, if it is a regular file of at most
+/// `limit` bytes. Reads stop past `limit` even if the file grows.
+fn open_limited(
+    path: &std::path::Path,
+    limit: u64,
+) -> CmdResult<(std::io::Take<std::fs::File>, u64)> {
     let meta = std::fs::metadata(path).map_err(|_| CmdError::file())?;
     if !meta.is_file() {
         return Err(CmdError::file());
@@ -32,10 +38,13 @@ fn read_limited(path: &std::path::Path, limit: u64) -> CmdResult<Zeroizing<Vec<u
         return Err(havenkeys_core::Error::InvalidInput("export file is too large").into());
     }
     let file = std::fs::File::open(path).map_err(|_| CmdError::file())?;
-    let mut buf = Zeroizing::new(Vec::with_capacity(meta.len() as usize));
-    file.take(limit + 1)
-        .read_to_end(&mut buf)
-        .map_err(|_| CmdError::file())?;
+    Ok((file.take(limit + 1), meta.len()))
+}
+
+fn read_limited(path: &std::path::Path, limit: u64) -> CmdResult<Zeroizing<Vec<u8>>> {
+    let (mut file, len) = open_limited(path, limit)?;
+    let mut buf = Zeroizing::new(Vec::with_capacity(len as usize));
+    file.read_to_end(&mut buf).map_err(|_| CmdError::file())?;
     Ok(buf)
 }
 
@@ -157,10 +166,10 @@ pub async fn restore_backup(
     };
     let path = picked.into_path().map_err(|_| CmdError::file())?;
     let read_path = path.clone();
-    let opened = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
-        let bytes = read_limited(&read_path, havenkeys_core::export::backup::MAX_BACKUP_BYTES)?;
-        Ok(havenkeys_core::export::backup::open_backup(
-            &bytes,
+    let (opened, attachments) = tauri::async_runtime::spawn_blocking(move || -> CmdResult<_> {
+        let (file, _) = open_limited(&read_path, backup::MAX_BACKUP_FILE_BYTES)?;
+        Ok(backup::open_backup_stream(
+            std::io::BufReader::new(file),
             &backup_password,
         )?)
     })
@@ -172,7 +181,7 @@ pub async fn restore_backup(
         .state::<AppState>()
         .client()
         .clone()
-        .restore_backup(opened)
+        .restore_backup(opened, attachments)
         .await?;
     let file_name = path
         .file_name()

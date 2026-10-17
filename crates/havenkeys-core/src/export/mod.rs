@@ -9,6 +9,8 @@ mod bitwarden;
 mod csv;
 mod restore;
 
+pub use restore::RestorePlan;
+
 use crate::error::{Error, Result};
 use crate::import::common::format_date;
 use crate::model::{ItemDetails, ItemOverview, ItemType};
@@ -84,6 +86,10 @@ pub struct ExportSummary {
     pub items_left_out: usize,
     /// Items whose encrypted details no longer open; not exported.
     pub unreadable: usize,
+    /// Attached files, which only a backup carries.
+    pub attachments_left_out: usize,
+    /// Backup only: the attached files it carries.
+    pub attachments: usize,
 }
 
 pub struct Rendered {
@@ -123,8 +129,10 @@ fn count(s: &mut ExportSummary, format: ExportFormat, ov: &ItemOverview, d: &Ite
         ItemType::Identity => s.identities += 1,
     }
     if format == ExportFormat::Backup {
+        s.attachments += ov.attachments.len();
         return;
     }
+    s.attachments_left_out += ov.attachments.len();
     match d {
         ItemDetails::Login {
             passkeys,

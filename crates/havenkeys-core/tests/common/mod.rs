@@ -3,9 +3,10 @@
 use havenkeys_core::account::{AccountRef, NormalizedEmail};
 use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
 use havenkeys_core::crypto::secret_key::SecretKey;
+use havenkeys_core::export::backup::{open_backup_stream, BackupAttachment, OpenedBackup};
 use havenkeys_core::model::{ItemInput, ItemType, MatchType, SecretUpdate, UrlRule};
 use havenkeys_core::store::{AccountRecord, Store};
-use havenkeys_core::vault::{prepare_new_account_vault, VaultService};
+use havenkeys_core::vault::{prepare_new_account_vault, StagedImport, VaultService};
 use havenkeys_core::SecretString;
 use std::path::Path;
 use uuid::Uuid;
@@ -147,4 +148,23 @@ pub fn add_login(v: &mut VaultService, title: &str, url: &str, match_type: Match
     let id = staged.item_id;
     v.commit_write(staged, revision).unwrap();
     id
+}
+
+/// Open a backup held in memory, reading every record to the end.
+pub fn open_all(
+    file: &[u8],
+    password: &SecretString,
+) -> havenkeys_core::Result<(OpenedBackup, Vec<BackupAttachment>)> {
+    let (opened, attachments) = open_backup_stream(file, password)?;
+    Ok((opened, attachments.collect::<havenkeys_core::Result<_>>()?))
+}
+
+/// The items of a backup held in memory, once every record has been read.
+pub fn open_backup(file: &[u8], password: &SecretString) -> havenkeys_core::Result<OpenedBackup> {
+    open_all(file, password).map(|(opened, _)| opened)
+}
+
+/// Stage a backup's items for restore, without attachments.
+pub fn stage_restore(v: &VaultService, opened: OpenedBackup) -> StagedImport {
+    v.stage_restore(v.plan_restore(opened).unwrap()).unwrap()
 }

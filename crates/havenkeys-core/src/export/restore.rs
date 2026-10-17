@@ -6,6 +6,7 @@
 
 use super::backup::{BackupItem, OpenedBackup};
 use crate::app_target::valid_package;
+use crate::attachment::{AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM};
 use crate::card::CardInput;
 use crate::custom_field::{FieldInput, FieldSection, FieldValue, FieldValueInput, SectionInput};
 use crate::error::{Error, Result};
@@ -19,6 +20,8 @@ use crate::passkey::{
     MAX_USER_HANDLE_BYTES,
 };
 use crate::vault::{build_item, StagedImport, VaultService};
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 
 const BAD: Error = Error::InvalidInput("backup item is not valid");
 
@@ -105,7 +108,7 @@ fn check_bindings(bindings: &[AppBinding]) -> Result<()> {
 }
 
 /// Rebuild one backup item as if it were typed in, under `id`.
-fn rebuild(id: uuid::Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetails)> {
+fn rebuild(id: Uuid, item: BackupItem) -> Result<(ItemOverview, ItemDetails)> {
     let BackupItem {
         overview: ov,
         details,
@@ -208,38 +211,66 @@ impl ImportReport {
     }
 }
 
+/// Backup items rebuilt for this vault and not yet sealed, so the restore
+/// can add each item's re-sealed attachments before it is written.
+pub struct RestorePlan {
+    items: Vec<(ItemOverview, ItemDetails)>,
+    /// The backup's item ID → its place in `items`.
+    places: HashMap<Uuid, usize>,
+    pub report: ImportReport,
+}
+
+impl std::fmt::Debug for RestorePlan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RestorePlan")
+            .field("items", &self.items.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl RestorePlan {
+    /// The ID that backup item `backup_id` is restored under, if it is
+    /// restored and has room for another file.
+    pub fn target(&self, backup_id: &Uuid) -> Option<Uuid> {
+        let (overview, _) = &self.items[*self.places.get(backup_id)?];
+        (overview.attachments.len() < MAX_ATTACHMENTS_PER_ITEM).then_some(overview.id)
+    }
+
+    /// List an uploaded file on the item restored from `backup_id`.
+    pub fn attach(&mut self, backup_id: &Uuid, meta: AttachmentMeta) {
+        if let Some(&at) = self.places.get(backup_id) {
+            self.items[at].0.attachments.push(meta);
+        }
+    }
+}
+
 impl VaultService {
-    /// Seal every backup item not already here (spec 2026-10-05-export §6).
-    /// Items keep their IDs; the Identity takes this vault's identity ID.
-    /// Nothing is ever overwritten. Items the file held but this version
+    /// Rebuild every backup item not already here (spec 2026-10-05-export
+    /// §6). Items keep their IDs; the Identity takes this vault's identity
+    /// ID. Nothing is ever overwritten. Items the file held but this version
     /// could not read count as `failed`.
-    ///
-    /// Every write is staged as new (`base_revision = None`). An item deleted
-    /// since the backup was made still has a tombstone on the server, which
-    /// refuses such a write; the client resolves that per item when it sends
-    /// these (`HavenClient::push_restore`), so pull first: "already here" is
-    /// only as fresh as the replica.
-    pub fn stage_restore(&self, backup: OpenedBackup, _now_ms: i64) -> Result<StagedImport> {
+    pub fn plan_restore(&self, backup: OpenedBackup) -> Result<RestorePlan> {
         let session = self.session()?;
         let identity_id = session.identity_id;
         let mut report = ImportReport {
             failed: backup.unreadable,
             ..ImportReport::default()
         };
-        let mut writes = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        let mut spellings = self.tag_spellings(None)?;
+        let mut items = Vec::new();
+        let mut places = HashMap::new();
+        let mut seen = HashSet::new();
         for item in backup.items {
+            let backup_id = item.overview.id;
             let id = match item.overview.item_type {
                 ItemType::Identity => identity_id,
                 // Only the Identity may live under the identity ID: anything
                 // else there would squat the slot the account's Identity
                 // is created in.
-                _ if item.overview.id == identity_id => {
+                _ if backup_id == identity_id => {
                     report.failed += 1;
                     continue;
                 }
-                _ => item.overview.id,
+                _ => backup_id,
             };
             if session.overviews.contains_key(&id)
                 || session.trash.contains_key(&id)
@@ -248,17 +279,44 @@ impl VaultService {
                 report.skipped_existing += 1;
                 continue;
             }
-            let Ok((overview, details)) = rebuild(id, item) else {
+            let Ok(rebuilt) = rebuild(id, item) else {
                 report.failed += 1;
                 continue;
             };
-            match overview.item_type {
+            match rebuilt.0.item_type {
                 ItemType::Login => report.logins += 1,
                 ItemType::SecureNote => report.secure_notes += 1,
                 ItemType::Card => report.cards += 1,
                 ItemType::Identity => report.identities += 1,
             }
-            writes.push(self.stage_in_batch(overview, Some(&details), None, &mut spellings)?);
+            places.insert(backup_id, items.len());
+            items.push(rebuilt);
+        }
+        Ok(RestorePlan {
+            items,
+            places,
+            report,
+        })
+    }
+
+    /// Seal every planned item, with the files attached to it.
+    ///
+    /// Every write is staged as new (`base_revision = None`). An item deleted
+    /// since the backup was made still has a tombstone on the server, which
+    /// refuses such a write; the client resolves that per item when it sends
+    /// these (`HavenClient::push_restore`), so pull first: "already here" is
+    /// only as fresh as the replica.
+    pub fn stage_restore(&self, plan: RestorePlan) -> Result<StagedImport> {
+        let RestorePlan {
+            items, mut report, ..
+        } = plan;
+        let mut writes = Vec::with_capacity(items.len());
+        let mut spellings = self.tag_spellings(None)?;
+        for (overview, details) in items {
+            let ids: Vec<Uuid> = overview.attachments.iter().map(|m| m.id).collect();
+            let mut write = self.stage_in_batch(overview, Some(&details), None, &mut spellings)?;
+            write.attachment_ids = (!ids.is_empty()).then_some(ids);
+            writes.push(write);
         }
         report.imported = writes.len();
         Ok(StagedImport { writes, report })
@@ -317,15 +375,13 @@ mod tests {
             BackupItem { overview, details }
         };
         let other = uuid::Uuid::new_v4();
-        let staged = vault
-            .stage_restore(
-                OpenedBackup {
-                    items: vec![note(identity_id), note(other)],
-                    unreadable: 0,
-                },
-                1,
-            )
+        let plan = vault
+            .plan_restore(OpenedBackup {
+                items: vec![note(identity_id), note(other)],
+                unreadable: 0,
+            })
             .unwrap();
+        let staged = vault.stage_restore(plan).unwrap();
         assert_eq!((staged.report.imported, staged.report.failed), (1, 1));
         assert_eq!(staged.writes.len(), 1);
         assert_eq!(staged.writes[0].item_id, other);

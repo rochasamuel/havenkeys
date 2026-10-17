@@ -2,14 +2,10 @@
 
 mod common;
 
-use common::{account, activated_vault, login, secret, NOW, PASSWORD};
+use common::{account, activated_vault, login, open_backup, secret, NOW, PASSWORD};
 use havenkeys_core::sync::RemoteChange;
 
-use havenkeys_core::export::{
-    self,
-    backup::{open_backup, seal_backup},
-    ExportFormat,
-};
+use havenkeys_core::export::{self, backup::seal_backup, ExportFormat};
 use havenkeys_core::model::SecretField;
 use havenkeys_core::trash::TRASH_RETENTION_MS;
 use havenkeys_core::Error;
@@ -340,7 +336,7 @@ fn a_backup_restore_skips_items_in_the_trash() {
     v.commit_write(t, 2).unwrap();
 
     let opened = open_backup(&file, &secret("a separate backup passphrase")).unwrap();
-    let staged = v.stage_restore(opened, NOW).unwrap();
+    let staged = common::stage_restore(&v, opened);
     assert_eq!(staged.report.skipped_existing, 1);
     assert!(staged.writes.iter().all(|w| w.item_id != id));
 }

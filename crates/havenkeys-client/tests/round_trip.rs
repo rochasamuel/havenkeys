@@ -28,6 +28,11 @@ struct Server {
 
 impl Server {
     async fn start() -> Self {
+        Self::start_with_vault_limit(havenkeys_server::limits::MAX_VAULT_BYTES).await
+    }
+
+    /// A server whose vaults may hold at most `max_vault_bytes` of blobs.
+    async fn start_with_vault_limit(max_vault_bytes: i64) -> Self {
         let admin_url =
             std::env::var("HAVENKEYS_TEST_DATABASE_URL").unwrap_or_else(|_| DEFAULT_URL.into());
         let db_name = format!("hk_rt_{}", Uuid::new_v4().simple());
@@ -50,7 +55,7 @@ impl Server {
             trust_forwarded_for: false,
             cors_origin: None,
             locator: None,
-            max_vault_bytes: havenkeys_server::limits::MAX_VAULT_BYTES,
+            max_vault_bytes,
             mailer: None,
             signup_url: None,
             pake: havenkeys_server::pake::load_or_create(&pool).await.unwrap(),
@@ -826,7 +831,11 @@ async fn a_frozen_client_refuses_a_restore_before_any_request() {
         items: vec![],
         unreadable: 0,
     };
-    let err = fx.client.restore_backup(backup).await.unwrap_err();
+    let err = fx
+        .client
+        .restore_backup(backup, std::iter::empty())
+        .await
+        .unwrap_err();
     assert_eq!(err.code, "account_frozen");
     assert_eq!(server_items(&fx).await, before);
 
@@ -1259,4 +1268,68 @@ async fn limits_are_checked_before_any_upload() {
         .unwrap();
     assert_eq!(rows.get::<_, i64>(0), 0);
     server.cleanup().await;
+}
+
+/// A device signed in to a new account on `server`.
+async fn signed_in(server: &Server, email: &str) -> (Arc<HavenClient>, tempfile::TempDir) {
+    let invite = server.invite(email).await;
+    let dir = tempfile::tempdir().unwrap();
+    let (client, _) = device(dir.path());
+    client
+        .activate(invite, SecretString::from(PASSWORD))
+        .await
+        .unwrap();
+    until(|| client.is_online()).await;
+    (client, dir)
+}
+
+/// A backup of `client`'s vault carrying every file of `item`.
+async fn backup_with_files(client: &HavenClient, item: Uuid, password: &SecretString) -> Vec<u8> {
+    use havenkeys_core::crypto::kdf::{KdfParams, MIN_ITERATIONS, MIN_MEMORY_KIB};
+    use havenkeys_core::export::backup::BackupWriter;
+    use havenkeys_core::export::{self, ExportFormat};
+    let (payload, metas) = {
+        let vault = client.vault().unwrap();
+        let payload = export::render(&vault, ExportFormat::Backup, 1).unwrap();
+        (payload, vault.get_item(&item).unwrap().attachments.clone())
+    };
+    let kdf = KdfParams::with_cost(MIN_MEMORY_KIB, MIN_ITERATIONS, 1).unwrap();
+    let mut writer = BackupWriter::new(Vec::new(), password, &kdf, metas.len() as u32).unwrap();
+    writer.items(&payload.bytes).unwrap();
+    for meta in &metas {
+        let bytes = client.attachment_bytes(item, meta.id).await.unwrap();
+        writer.attachment(item, meta, bytes.expose()).unwrap();
+    }
+    writer.finish().unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn restore_reports_skipped_attachments_when_quota_is_full() {
+    use havenkeys_core::export::backup::open_backup_stream;
+    let source = Server::start().await;
+    let (a, _b, item, _dirs) = two_devices(&source).await;
+    let big = (
+        "big.bin".to_string(),
+        zeroize::Zeroizing::new(vec![7u8; 64 * 1024]),
+    );
+    a.add_attachments(item, vec![png("small"), big])
+        .await
+        .unwrap();
+    let password = SecretString::from("a separate backup passphrase");
+    let file = backup_with_files(&a, item, &password).await;
+
+    // Room for the items and the small file, not the big one.
+    let target = Server::start_with_vault_limit(32 * 1024).await;
+    let (c, _dir) = signed_in(&target, "restore@example.com").await;
+    let (opened, files) = open_backup_stream(&file[..], &password).unwrap();
+    let report = c.restore_backup(opened, files).await.unwrap();
+    assert_eq!((report.logins, report.attachments_skipped), (1, 1));
+
+    // The restored item lists the file that fit, re-sealed for this vault.
+    let kept = attachment_ids(&c, item);
+    assert_eq!(kept.len(), 1);
+    let bytes = c.attachment_bytes(item, kept[0]).await.unwrap();
+    assert!(bytes.expose().ends_with(b"small"));
+    source.cleanup().await;
+    target.cleanup().await;
 }

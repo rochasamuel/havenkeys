@@ -565,7 +565,7 @@ fn fuzz_asset_links_parser() {
 
 #[test]
 fn fuzz_backup_file() {
-    use havenkeys_core::export::backup::{open_backup, seal_backup};
+    use havenkeys_core::export::backup::seal_backup;
     let pw = secret("fuzzing backup passphrase");
     let valid = seal_backup(
         br#"{"version":1,"exportedAt":0,"items":[]}"#,
@@ -584,6 +584,37 @@ fn fuzz_backup_file() {
         // Must never panic; a mutated file must never open.
         if input != valid {
             assert!(open_backup(&input, &pw).is_err());
+        }
+    }
+}
+
+/// A two-record v2 file (the items and one attachment): no mutation opens to
+/// anything but the original content.
+#[test]
+fn fuzz_backup_v2_records() {
+    use havenkeys_core::attachment::AttachmentMeta;
+    use havenkeys_core::export::backup::BackupWriter;
+    let pw = secret("fuzzing backup passphrase");
+    let meta: AttachmentMeta = serde_json::from_value(serde_json::json!({
+        "id": Uuid::from_u128(7), "name": "a.txt", "mime": "text/plain", "size": 5,
+        "blobSha256": "00".repeat(32), "createdAt": 1,
+    }))
+    .unwrap();
+    let mut w = BackupWriter::new(Vec::new(), &pw, &fast_kdf(), 1).unwrap();
+    w.items(br#"{"version":1,"exportedAt":0,"items":[]}"#)
+        .unwrap();
+    w.attachment(Uuid::from_u128(9), &meta, b"bytes").unwrap();
+    let valid = w.finish().unwrap();
+    let mut rng = Rng::new(0x5ec0_04d5);
+    // Each open runs Argon2id at the cheapest cost; keep the count modest.
+    for _ in 0..200 {
+        let input = mutate(&mut rng, &valid);
+        if let Ok((opened, files)) = open_all(&input, &pw) {
+            assert!(opened.items.is_empty() && opened.unreadable == 0);
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0].item_id, Uuid::from_u128(9));
+            assert_eq!(files[0].meta.id, meta.id);
+            assert_eq!(files[0].bytes.expose(), b"bytes");
         }
     }
 }
