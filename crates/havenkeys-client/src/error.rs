@@ -45,10 +45,9 @@ impl From<SyncError> for ClientError {
             SyncError::AttachmentsFull => {
                 Self::fixed("attachments_full", "Attachment storage is full (192 MB).")
             }
-            SyncError::VaultFull => Self::fixed(
-                "vault_full",
-                "This vault has reached its storage limit.",
-            ),
+            SyncError::VaultFull => {
+                Self::fixed("vault_full", "This vault has reached its storage limit.")
+            }
             SyncError::InvalidServerUrl => Self::fixed(
                 "invalid_server_url",
                 "That server address cannot be used. It must start with https://.",

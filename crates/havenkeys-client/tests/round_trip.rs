@@ -1323,13 +1323,61 @@ async fn restore_reports_skipped_attachments_when_quota_is_full() {
     let (c, _dir) = signed_in(&target, "restore@example.com").await;
     let (opened, files) = open_backup_stream(&file[..], &password).unwrap();
     let report = c.restore_backup(opened, files).await.unwrap();
-    assert_eq!((report.logins, report.attachments_skipped), (1, 1));
+    assert_eq!(
+        (
+            report.logins,
+            report.attachments_skipped_storage,
+            report.attachments_skipped
+        ),
+        (1, 1, 0)
+    );
 
     // The restored item lists the file that fit, re-sealed for this vault.
     let kept = attachment_ids(&c, item);
     assert_eq!(kept.len(), 1);
     let bytes = c.attachment_bytes(item, kept[0]).await.unwrap();
     assert!(bytes.expose().ends_with(b"small"));
+    source.cleanup().await;
+    target.cleanup().await;
+}
+
+fn identity_of(client: &HavenClient) -> Uuid {
+    let vault = client.vault().unwrap();
+    let items = vault.list_items().unwrap();
+    items
+        .iter()
+        .find(|o| o.item_type == ItemType::Identity)
+        .unwrap()
+        .id
+}
+
+/// Every account has its own Identity, so the backup's is never restored
+/// as an item: its files are added to this account's Identity, once.
+#[tokio::test(flavor = "multi_thread")]
+async fn identity_attachments_restore_into_a_new_account() {
+    use havenkeys_core::export::backup::open_backup_stream;
+    let source = Server::start().await;
+    let (a, _b, _item, _dirs) = two_devices(&source).await;
+    let theirs = identity_of(&a);
+    a.add_attachments(theirs, vec![png("passport")])
+        .await
+        .unwrap();
+    let password = SecretString::from("a separate backup passphrase");
+    let file = backup_with_files(&a, theirs, &password).await;
+
+    let target = Server::start().await;
+    let (c, _dir) = signed_in(&target, "restore@example.com").await;
+    for _ in 0..2 {
+        let (opened, files) = open_backup_stream(&file[..], &password).unwrap();
+        let report = c.restore_backup(opened, files).await.unwrap();
+        assert_eq!(report.identities, 0, "this account's Identity is kept");
+    }
+
+    let ours = identity_of(&c);
+    let kept = attachment_ids(&c, ours);
+    assert_eq!(kept.len(), 1, "a second restore adds nothing");
+    let bytes = c.attachment_bytes(ours, kept[0]).await.unwrap();
+    assert!(bytes.expose().ends_with(b"passport"));
     source.cleanup().await;
     target.cleanup().await;
 }

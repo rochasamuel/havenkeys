@@ -19,12 +19,18 @@
 //!
 //! A backup's attachments are re-sealed under the restored item and
 //! uploaded before any item is written, so each item's write lists its
-//! files. A file whose item is not restored, or that the server's quota
-//! refuses, is counted as `attachments_skipped`.
+//! files. The backup's Identity is never restored over this vault's, so its
+//! files are added to this vault's Identity in one more write, after the
+//! items. A file the server's quota refuses is counted as
+//! `attachments_skipped_storage`; one whose item is not restored, that does
+//! not fit, or that a server without attachments cannot take, as
+//! `attachments_skipped`.
 
 use crate::client::HavenClient;
 use crate::error::ClientResult;
+use crate::now_ms;
 use crate::sync::{revision_for, MAX_BATCH};
+use havenkeys_core::attachment::AttachmentChange;
 use havenkeys_core::export::backup::{BackupAttachment, OpenedBackup};
 use havenkeys_core::export::RestorePlan;
 use havenkeys_core::import::ImportReport;
@@ -46,22 +52,39 @@ impl HavenClient {
         // Fresh first: "already here" is decided against the replica.
         self.sync_now().await?;
         let mut plan = self.vault()?.plan_restore(backup)?;
+        let mut supported = true;
         for attachment in attachments {
-            self.restore_attachment(&mut plan, attachment?).await?;
+            let file = attachment?;
+            if supported {
+                supported = self.restore_attachment(&mut plan, file).await?;
+            } else {
+                plan.report.attachments_skipped += 1;
+            }
         }
+        let identity_files = plan.take_identity_files();
         let staged = self.vault()?.stage_restore(plan)?;
-        self.push_restore(staged).await
+        let report = self.push_restore(staged).await?;
+        if let Some((identity_id, metas)) = identity_files {
+            let staged = self.vault()?.stage_attachments(
+                &identity_id,
+                AttachmentChange::Add(metas),
+                now_ms(),
+            )?;
+            self.push(staged).await?;
+        }
+        Ok(report)
     }
 
-    /// Re-seal one file under its restored item and upload it.
+    /// Re-seal one file under its restored item and upload it. `false` when
+    /// the server has no attachment routes, so no other file is sent.
     async fn restore_attachment(
         &self,
         plan: &mut RestorePlan,
         file: BackupAttachment,
-    ) -> ClientResult<()> {
-        let Some(item_id) = plan.target(&file.item_id) else {
+    ) -> ClientResult<bool> {
+        let Some(item_id) = plan.target(&file) else {
             plan.report.attachments_skipped += 1;
-            return Ok(());
+            return Ok(true);
         };
         let sealed = self.vault()?.seal_attachment(
             &item_id,
@@ -76,11 +99,15 @@ impl HavenClient {
         {
             Ok(()) => plan.attach(&file.item_id, sealed.meta),
             Err(SyncError::AttachmentsFull | SyncError::VaultFull) => {
-                plan.report.attachments_skipped += 1
+                plan.report.attachments_skipped_storage += 1
+            }
+            Err(SyncError::Unsupported) => {
+                plan.report.attachments_skipped += 1;
+                return Ok(false);
             }
             Err(e) => return Err(self.failed(e)),
         }
-        Ok(())
+        Ok(true)
     }
 
     /// Send staged restore writes in batches, resolving conflicts per item
@@ -321,6 +348,39 @@ pub(crate) mod tests {
         );
         assert_eq!(password_of(&client, gone), "pw-edited");
         assert_eq!(password_of(&client, kept), "pw-mail");
+    }
+
+    /// A server without attachment routes (404) still gets the items; their
+    /// files are counted as left out.
+    #[tokio::test]
+    async fn an_older_server_restores_the_items_without_their_files() {
+        use havenkeys_core::export::backup::BackupWriter;
+        let (_dir, client, server) = online().await;
+        let gone = create(&client, login("Bank", "pw-bank")).await;
+        let sealed = client
+            .vault()
+            .unwrap()
+            .seal_attachment(&gone, "scan.pdf", b"%PDF-1.7 body", 1)
+            .unwrap();
+        let file = {
+            let payload =
+                export::render(&client.vault().unwrap(), ExportFormat::Backup, 1).unwrap();
+            let password = SecretString::from(BACKUP_PW);
+            let mut writer = BackupWriter::new(Vec::new(), &password, &fast_kdf(), 1).unwrap();
+            writer.items(&payload.bytes).unwrap();
+            writer
+                .attachment(gone, &sealed.meta, b"%PDF-1.7 body")
+                .unwrap();
+            writer.finish().unwrap()
+        };
+        delete(&client, gone).await;
+
+        let (opened, files) =
+            open_backup_stream(&file[..], &SecretString::from(BACKUP_PW)).unwrap();
+        let report = client.restore_backup(opened, files).await.unwrap();
+        assert_eq!((report.imported, report.attachments_skipped), (1, 1));
+        assert_eq!(password_of(&client, gone), "pw-bank");
+        assert!(server.items.lock().unwrap().rows[&gone].blobs.is_some());
     }
 
     /// Another device writes an item between this device's pull and its

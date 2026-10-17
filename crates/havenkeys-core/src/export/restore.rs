@@ -4,7 +4,7 @@
 //! cannot carry — passkeys, password history, app bindings — is checked
 //! here before it is put back.
 
-use super::backup::{BackupItem, OpenedBackup};
+use super::backup::{BackupAttachment, BackupItem, OpenedBackup};
 use crate::app_target::valid_package;
 use crate::attachment::{AttachmentMeta, MAX_ATTACHMENTS_PER_ITEM};
 use crate::card::CardInput;
@@ -217,7 +217,23 @@ pub struct RestorePlan {
     items: Vec<(ItemOverview, ItemDetails)>,
     /// The backup's item ID → its place in `items`.
     places: HashMap<Uuid, usize>,
+    /// The backup's Identity, when this vault already has one: its files go
+    /// onto this vault's Identity instead.
+    identity: Option<IdentityFiles>,
     pub report: ImportReport,
+}
+
+struct IdentityFiles {
+    backup_id: Uuid,
+    id: Uuid,
+    held: Vec<AttachmentMeta>,
+    added: Vec<AttachmentMeta>,
+}
+
+/// The same file restored before: a backup's files keep their name, size
+/// and creation time when re-sealed.
+fn same_file(a: &AttachmentMeta, b: &AttachmentMeta) -> bool {
+    (&a.name, a.size, a.created_at) == (&b.name, b.size, b.created_at)
 }
 
 impl std::fmt::Debug for RestorePlan {
@@ -229,18 +245,39 @@ impl std::fmt::Debug for RestorePlan {
 }
 
 impl RestorePlan {
-    /// The ID that backup item `backup_id` is restored under, if it is
-    /// restored and has room for another file.
-    pub fn target(&self, backup_id: &Uuid) -> Option<Uuid> {
-        let (overview, _) = &self.items[*self.places.get(backup_id)?];
-        (overview.attachments.len() < MAX_ATTACHMENTS_PER_ITEM).then_some(overview.id)
+    /// The item `file` goes onto: the one restored from its backup item, or
+    /// this vault's Identity for the backup's. `None` when that item is not
+    /// restored, has no room for another file, or already holds this one.
+    pub fn target(&self, file: &BackupAttachment) -> Option<Uuid> {
+        if let Some(&at) = self.places.get(&file.item_id) {
+            let overview = &self.items[at].0;
+            return (overview.attachments.len() < MAX_ATTACHMENTS_PER_ITEM).then_some(overview.id);
+        }
+        let identity = self
+            .identity
+            .as_ref()
+            .filter(|i| i.backup_id == file.item_id)?;
+        let room = identity.held.len() + identity.added.len() < MAX_ATTACHMENTS_PER_ITEM;
+        let new = !identity.held.iter().any(|m| same_file(m, &file.meta));
+        (room && new).then_some(identity.id)
     }
 
-    /// List an uploaded file on the item restored from `backup_id`.
+    /// List an uploaded file on the item `target` chose for backup item
+    /// `backup_id`.
     pub fn attach(&mut self, backup_id: &Uuid, meta: AttachmentMeta) {
         if let Some(&at) = self.places.get(backup_id) {
             self.items[at].0.attachments.push(meta);
+        } else if let Some(identity) = self.identity.as_mut().filter(|i| i.backup_id == *backup_id)
+        {
+            identity.added.push(meta);
         }
+    }
+
+    /// The files uploaded for this vault's existing Identity, to add to it
+    /// once the restored items are written.
+    pub fn take_identity_files(&mut self) -> Option<(Uuid, Vec<AttachmentMeta>)> {
+        let identity = self.identity.take()?;
+        (!identity.added.is_empty()).then(|| (identity.id, identity.added))
     }
 }
 
@@ -258,6 +295,7 @@ impl VaultService {
         };
         let mut items = Vec::new();
         let mut places = HashMap::new();
+        let mut identity = None;
         let mut seen = HashSet::new();
         for item in backup.items {
             let backup_id = item.overview.id;
@@ -276,6 +314,16 @@ impl VaultService {
                 || session.trash.contains_key(&id)
                 || !seen.insert(id)
             {
+                if let (ItemType::Identity, Some(ours)) =
+                    (item.overview.item_type, session.overviews.get(&id))
+                {
+                    identity.get_or_insert_with(|| IdentityFiles {
+                        backup_id,
+                        id,
+                        held: ours.attachments.clone(),
+                        added: Vec::new(),
+                    });
+                }
                 report.skipped_existing += 1;
                 continue;
             }
@@ -295,6 +343,7 @@ impl VaultService {
         Ok(RestorePlan {
             items,
             places,
+            identity,
             report,
         })
     }

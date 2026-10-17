@@ -149,6 +149,8 @@ pub struct ImportReport {
     /// File attachments left out: an import does not bring them; a restore
     /// skips those whose item was not restored or that did not fit.
     pub attachments_skipped: usize,
+    /// Restore only: files the server refused because its storage was full.
+    pub attachments_skipped_storage: usize,
     /// Old passwords from password history were left out.
     pub password_history_skipped: usize,
     /// Passkeys in the export were left out (importing them is not
